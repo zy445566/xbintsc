@@ -649,8 +649,10 @@ static void xt_inspect(xt_value v, FILE *out) {
     fputc('[', out);
     for (uint32_t i = 0; i < array->length; i++) {
       if (i > 0) fputs(", ", out);
+      else fputc(' ', out);
       xt_inspect(array->items[i], out);
     }
+    if (array->length > 0) fputc(' ', out);
     fputc(']', out);
     return;
   }
@@ -659,10 +661,12 @@ static void xt_inspect(xt_value v, FILE *out) {
     fputc('{', out);
     for (uint32_t i = 0; i < obj->count; i++) {
       if (i > 0) fputs(", ", out);
+      else fputc(' ', out);
       fwrite(obj->properties[i].key->data, 1, obj->properties[i].key->length, out);
       fputs(": ", out);
       xt_inspect(obj->properties[i].value, out);
     }
+    if (obj->count > 0) fputc(' ', out);
     fputc('}', out);
     return;
   }

@@ -151,7 +151,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     clang,
     objectPaths: [objectPath, runtimeObject, ...extensionObjects],
     outputPath,
-    linkerFlags: ["-lm", ...registry.linkerFlags()],
+    linkerFlags: [...(process.platform === "win32" ? [] : ["-lm"]), ...registry.linkerFlags()],
     optimize,
   });
 

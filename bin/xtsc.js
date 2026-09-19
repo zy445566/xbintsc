@@ -16,7 +16,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const compiled = join(root, "dist", "src", "cli", "main.js");
 
 if (existsSync(compiled)) {
-  await import(pathToFileURL(compiled).href);
+  const { run } = await import(pathToFileURL(compiled).href);
+  process.exit(run(process.argv.slice(2)));
 } else {
   const tsx = join(root, "node_modules", ".bin", process.platform === "win32" ? "tsx.cmd" : "tsx");
   const entry = join(root, "src", "cli", "main.ts");

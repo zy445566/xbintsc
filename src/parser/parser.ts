@@ -1425,6 +1425,17 @@ export class Parser {
     let left = this.parseUnaryExpression();
     for (;;) {
       const token = this.token;
+      // `expr as Type` / `expr satisfies Type` bind at the relational level.
+      if (token.kind === TokenKind.AsKeyword || token.kind === TokenKind.SatisfiesKeyword) {
+        if (AS_PRECEDENCE < minPrecedence) break;
+        this.nextToken();
+        const type = this.parseType();
+        left =
+          token.kind === TokenKind.AsKeyword
+            ? { kind: SyntaxKind.AsExpression, expression: left, type, start: left.start, end: type.end }
+            : { kind: SyntaxKind.SatisfiesExpression, expression: left, type, start: left.start, end: type.end };
+        continue;
+      }
       if (token.kind === TokenKind.InKeyword && noIn) break;
       const op = binaryOperator(token.kind);
       if (!op) break;
@@ -2244,6 +2255,9 @@ function assignmentOperator(kind: TokenKind): AssignmentOperator | undefined {
       return undefined;
   }
 }
+
+/** `as` / `satisfies` share the relational precedence level. */
+const AS_PRECEDENCE = 8;
 
 function binaryOperator(kind: TokenKind): BinaryOperator | undefined {
   switch (kind) {

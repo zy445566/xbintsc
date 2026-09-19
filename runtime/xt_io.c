@@ -18,6 +18,12 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+#include <winsock2.h>
+#endif
+
 /* ------------------------------------------------------------------------- */
 /* Exceptions and output                                                     */
 /* ------------------------------------------------------------------------- */
@@ -41,6 +47,15 @@ int32_t xt_program_argc = 0;
 char **xt_program_argv = NULL;
 
 void xt_set_program_args(int32_t argc, char **argv) {
+#if defined(_WIN32)
+  /* Keep stdout/stderr in binary mode so `\n` is not translated to `\r\n`,
+     matching Node's output, and initialise Winsock before any extension uses
+     sockets (the generated `main` calls this before running the program). */
+  _setmode(_fileno(stdout), _O_BINARY);
+  _setmode(_fileno(stderr), _O_BINARY);
+  WSADATA wsaData;
+  WSAStartup(MAKEWORD(2, 2), &wsaData);
+#endif
   xt_program_argc = argc;
   xt_program_argv = argv;
 }

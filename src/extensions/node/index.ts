@@ -42,7 +42,8 @@ export const nodeExtension: Extension = {
   description: "Node.js host APIs (fs, path, os, process, buffer, stream, net, dgram, http)",
   // `http` reuses the `net` sources; de-duplicate so each C file links once.
   runtimeSources: () => [...new Set(modules.flatMap((module) => module.runtimeSources()))],
-  linkerFlags: () => (process.platform === "win32" ? ["-lws2_32"] : []),
+  // ws2_32 is linked unconditionally by the driver (the core event loop uses
+  // winsock on Windows), so the extension does not add it again.
   // Node APIs are reached through `import ... from "fs"` (or the `node:`
   // scheme) rather than as bare globals, so each module is exposed for the
   // code generator to resolve imported bindings against.

@@ -179,7 +179,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     clang,
     objectPaths: [objectPath, ...runtimeObjects, ...extensionObjects],
     outputPath,
-    linkerFlags: [...(process.platform === "win32" ? [] : ["-lm"]), ...registry.linkerFlags()],
+    linkerFlags: [...(process.platform === "win32" ? ["-lws2_32"] : ["-lm"]), ...registry.linkerFlags()],
     optimize,
   });
 

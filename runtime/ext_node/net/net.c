@@ -32,6 +32,13 @@ typedef socklen_t xt_socklen_t;
 #define xt_close_socket close
 #endif
 
+/* Winsock reports socket errors through WSAGetLastError, not errno. */
+#if defined(_WIN32)
+#define xt_net_would_block() (WSAGetLastError() == WSAEWOULDBLOCK)
+#else
+#define xt_net_would_block() (errno == EAGAIN || errno == EWOULDBLOCK)
+#endif
+
 /* Byte access helpers exported by the Buffer module. */
 int xt_node_is_buffer(xt_value value);
 unsigned char *xt_node_buffer_bytes(xt_value value, size_t *outLength);
@@ -85,7 +92,7 @@ static int xt_net_send_all(int fd, const unsigned char *data, size_t length) {
       sent += (size_t)written;
       continue;
     }
-    if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+    if (written < 0 && xt_net_would_block()) {
       fd_set writeSet;
       FD_ZERO(&writeSet);
       FD_SET(fd, &writeSet);
@@ -129,7 +136,7 @@ static void xt_net_socket_read(void *userdata, int events) {
     xt_node_emit0(socket, "close");
     return;
   }
-  if (errno == EAGAIN || errno == EWOULDBLOCK) return;
+  if (xt_net_would_block()) return;
   xt_loop_remove(fd);
   xt_close_socket(fd);
   xt_node_set(socket, "__fd", xt_number(-1));

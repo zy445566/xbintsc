@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { compileToIr } from "../helpers.js";
 import { numberLiteral } from "../../src/codegen/values.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
-import { nodeExtension } from "../../src/extensions/node.js";
+import { nodeExtension } from "../../src/extensions/node/index.js";
 
 function defineNames(ir: string): string[] {
   return [...ir.matchAll(/^define i64 @([A-Za-z0-9_.]+)/gm)].map((match) => match[1]!);

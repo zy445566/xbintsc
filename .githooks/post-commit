@@ -1,0 +1,3 @@
+#!/bin/sh
+# 每次提交完成后自动递增 patch 版本号
+npm version patch --no-git-tag-version

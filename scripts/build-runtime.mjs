@@ -19,7 +19,7 @@ const clang = process.env.xbintsc_CLANG ?? "clang";
 
 const sources = [
   ["xt_runtime.c", "xt_runtime.o"],
-  ["ext_node.c", "ext_node.o"],
+  ["ext_node/fs/read_file.c", "ext_node_fs_read_file.o"],
 ];
 
 for (const [source, object] of sources) {

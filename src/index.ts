@@ -29,5 +29,6 @@ export {
   booleanLiteral,
 } from "./codegen/values.js";
 export { ExtensionRegistry, createDefaultRegistry, coreExtension, type Extension } from "./extensions/registry.js";
-export { nodeExtension } from "./extensions/node.js";
+export { nodeExtension } from "./extensions/node/index.js";
+export type { NodeModule } from "./extensions/node/module.js";
 export * from "./driver/index.js";

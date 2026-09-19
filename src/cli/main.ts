@@ -18,7 +18,7 @@ import { DiagnosticBag, formatDiagnostic, type Diagnostic } from "../diagnostics
 import { SourceFile } from "../diagnostics/source.js";
 import { build, compileString, COMPILER_VERSION, type EmitKind } from "../driver/compiler.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
-import { nodeExtension } from "../extensions/node.js";
+import { nodeExtension } from "../extensions/node/index.js";
 
 export interface CliIo {
   readonly stdout: (text: string) => void;

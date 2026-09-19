@@ -1,8 +1,9 @@
 /*
- * Node.js compatibility extension for xbintsc.
+ * Node.js `fs` module for xbintsc.
  *
- * Compiled and linked only when the `node` extension is registered. Each
- * builtin follows the runtime calling convention: (int32_t argc, xt_value *argv).
+ * Compiled and linked only when the `node` extension is registered. Following
+ * the runtime calling convention, every builtin is:
+ *     xt_value fn(int32_t argc, xt_value *argv)
  */
 
 #include "rt.h"

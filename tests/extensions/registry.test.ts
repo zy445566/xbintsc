@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ExtensionRegistry, createDefaultRegistry, coreExtension, type Extension } from "../../src/extensions/registry.js";
-import { nodeExtension } from "../../src/extensions/node.js";
+import { nodeExtension } from "../../src/extensions/node/index.js";
 
 const demoExtension: Extension = {
   name: "demo",
@@ -49,6 +49,6 @@ describe("ExtensionRegistry", () => {
   it("node extension points at the ext C source", () => {
     const sources = nodeExtension.runtimeSources?.() ?? [];
     expect(sources).toHaveLength(1);
-    expect(sources[0]).toMatch(/ext_node\.c$/);
+    expect(sources[0]).toMatch(/ext_node[\\/]fs[\\/]read_file\.c$/);
   });
 });

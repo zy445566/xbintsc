@@ -96,7 +96,7 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 
 扩展是普通对象（见 `src/extensions/registry.ts`）：声明额外的 C 运行时代码、
 链接参数，以及把全局函数映射到运行时符号（统一 `(argc, argv)` ABI）。Node 的
-`readFileSync` 就是通过 `src/extensions/node.ts` + `runtime/ext_node.c` 接入的，
+`readFileSync` 就是通过 `src/extensions/node/fs` + `runtime/ext_node/fs` 接入的，
 核心编译器无需了解任何平台细节。
 
 ## 自举路线

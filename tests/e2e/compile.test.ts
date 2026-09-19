@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
-import { nodeExtension } from "../../src/extensions/node.js";
+import { nodeExtension } from "../../src/extensions/node/index.js";
 import { hasClang } from "../helpers.js";
 
 const describeWithClang = hasClang() ? describe : describe.skip;

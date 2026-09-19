@@ -148,19 +148,35 @@ sources are compiled once and cached on the same principle.
 
 ## Extensions
 
-An extension is a plain object (`src/extensions/registry.ts`):
+An extension is a plain object (`src/extensions/registry.ts`). The `node`
+extension is itself split into one folder per Node module, each pairing its
+builtins with the C sources that implement them:
+
+```
+src/extensions/node/       runtime/ext_node/
+  index.ts   # nodeExtension  fs/read_file.c
+  fs/index.ts               
+  fs/read-file.ts           
+```
 
 ```ts
+// src/extensions/node/index.ts
+const modules: readonly NodeModule[] = [fsModule];
+
 export const nodeExtension: Extension = {
   name: "node",
-  runtimeSources: () => ["runtime/ext_node.c"],
-  builtins: () => ({ readFileSync: { symbol: "xt_node_read_text_file" } }),
+  runtimeSources: () => modules.flatMap((m) => m.runtimeSources()),
+  builtins: () => modules.reduce(
+    (merged, m) => Object.assign(merged, m.builtins()),
+    {} as Record<string, BuiltinFunction>,
+  ),
 };
 ```
 
-Registering it links the extra C source and makes `readFileSync(...)` resolve to
-the C symbol with the uniform `(argc, argv)` calling convention. Builtins can be
-added without changing the core compiler.
+Registering it links the extra C sources and makes `readFileSync(...)` resolve
+to the C symbol with the uniform `(argc, argv)` calling convention. Adding a
+module means dropping a folder under `src/extensions/node/` and its C
+counterpart under `runtime/ext_node/`; the core compiler never changes.
 
 ## Tests
 

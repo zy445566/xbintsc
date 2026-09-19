@@ -196,12 +196,6 @@ Tests are organised by module under `tests/` (`lexer`, `parser`, `binder`,
 
 ## Language subset
 
-Implemented today: functions, arrow functions and closures, `let`/`const`/`var`,
-all common operators, `if`/`while`/`do`/`for`/`for…of`/`for…in`, `break`/
-`continue`/`return`/`throw`, objects, arrays, member/element access, assignments,
-template literals, `console.log`, extension builtins, and the TypeScript type
-syntax is parsed and ignored (types are erased).
 
-Not yet implemented: classes, enums, `switch`, `try`/`catch`, `new`, `this`,
-object spread, `async`/generators, and most standard library methods (`Array`
-methods other than `push`, `Math`, etc.).
+- [Implemented features](./doc/implemented.md)
+- [Unimplemented features](./doc/unimplemented.md)

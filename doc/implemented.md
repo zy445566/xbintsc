@@ -1,0 +1,307 @@
+# xbintsc 已实现语法与功能
+
+本文档基于对源码（`src/`、`runtime/`）与测试（`tests/`）的逐文件核对整理，仅列出**当前真正可用**的语法与功能。标注了对应实现位置，便于溯源。
+
+> 说明：本编译器「解析」的范围远大于「生成代码」的范围。许多 TypeScript 语法可以被解析、甚至被绑定，但代码生成阶段会报 `UnsupportedFeature`。这些内容**不**列在这里，见 [未实现文档](unimplemented.md)。
+
+---
+
+## 1. 编译流水线（整体已实现）
+
+```
+source.ts
+   │  词法分析  src/lexer/scanner.ts + token.ts
+   ▼
+ tokens
+   │  语法分析  src/parser/parser.ts  →  AST  src/ast/
+   ▼
+ AST
+   │  名字绑定  src/binder/binder.ts  →  作用域/符号/闭包捕获
+   ▼
+ bound AST
+   │  代码生成  src/codegen/llvm.ts + values.ts  →  LLVM IR 文本
+   ▼
+ module.ll ── clang ──► module.o ──链接──► 可执行文件
+                                   ▲
+                          runtime/xt_runtime.c（C 运行时）
+```
+
+- 前端与后端、运行时、扩展完全解耦。
+- 流程由 `src/driver/compiler.ts` 串起：`读取 → 解析 → 绑定 → IR → 目标文件 → 链接`。
+
+---
+
+## 2. 词法分析（Lexer，已实现）
+
+实现位置：`src/lexer/scanner.ts`、`src/lexer/token.ts`
+
+- 完整 Token 分类：标识符、关键字、私有标识符、数字、字符串、模板、正则（扫描）、所有标点与运算符。
+- 完整关键字表：`abstract any as asserts async await bigint boolean break case catch class const constructor continue debugger declare default delete do else enum export extends false finally for from function get if implements import in infer instanceof interface is keyof let module namespace never new null number object package private protected public readonly return satisfies set static string super switch symbol this throw true try type typeof undefined unique unknown var void while with yield`
+- 数字字面量：
+  - 十进制、`0x` 十六进制、`0o` 八进制、`0b` 二进制
+  - 下划线分隔 `1_000_000`
+  - 小数、指数 `1.5e3`
+  - BigInt 字面量（`10n`、`0xFFn`）
+- 字符串字面量：
+  - 单引号 / 双引号
+  - 转义：`\n \t \r \b \f \0 \\ \' \"`、`\xHH`、`\uHHHH`、`\u{...}`
+- 模板字面量（词法层）：无替换模板、模板头 `TemplateHead`、模板中 `TemplateMiddle`、模板尾 `TemplateTail`，支持 `${}` 与转义。
+- 正则字面量扫描（`/pattern/flags`），并区分除法 `/`。
+- 私有标识符 `#name`。
+- 注释：单行 `//` 与块注释 `/* */`（含未闭合诊断）。
+- 换行与空白跟踪（用于 ASI），BOM / CRLF 规范化（`SourceFile`）。
+- 词法诊断：未终止字符串 / 模板 / 注释、非法字符、非法数字、非法转义。
+
+---
+
+## 3. 语法分析（Parser，已实现）
+
+实现位置：`src/parser/parser.ts`、`src/ast/nodes.ts`
+
+### 3.1 语句
+
+- 变量声明：`var` / `let` / `const`，支持多声明符 `const a = 1, b = 2;`
+- 函数声明（含 `async` 修饰解析、生成器 `*` 标记解析）
+- `if` / `else`
+- `while`、`do...while`
+- `for`（初始化、条件、增量均可省略）
+- `for...of`、`for...in`（见 3.5 语义限制）
+- `return`、`break`、`continue`、`throw`
+- 块语句 `{}`、空语句 `;`、`debugger;`
+- 表达式语句
+
+### 3.2 表达式
+
+- 全部常见运算符及优先级 / 结合性（见第 5 节）
+- 赋值表达式与全部复合赋值（见第 5 节）
+- 条件（三元）表达式 `a ? b : c`
+- 箭头函数 `() => expr` / `() => { ... }`（含类型参数、返回类型注解）
+- 函数表达式 `function () {}` 与命名函数表达式 `function g() {}`
+- 调用表达式 `f(...)`、成员访问 `a.b`、元素访问 `a[i]`
+- 数组字面量 `[1, 2]`、稀疏数组 elision、数组展开 `[...a]`
+- 对象字面量 `{ a: 1 }`、简写属性 `{ a }`、方法简写 `{ m() {} }`
+- 模板字面量 `${}` 替换
+- 括号表达式、`as` / `satisfies` / 非空断言 `!`（类型擦除）
+- 一元：`+ - ! ~`、前缀 / 后缀 `++ --`
+- 可选链 `?.`（**仅解析**，见[未实现文档](unimplemented.md)）
+
+### 3.3 TypeScript 类型语法（仅解析、结构保留后擦除）
+
+- 类型注解、返回类型注解、类型参数 `<T>` 与约束 `<T extends U>`、类型参数默认值
+- 类型引用、限定名 `A.B`
+- 联合 `|`、交叉 `&`、数组 `T[]`、元组 `[T, U]`、可选元组成员 `T?`、剩余元组成员 `...T`
+- 函数类型 `(a: T) => U`、构造签名 `new () => T`
+- 对象类型字面量、属性签名、方法签名、索引签名 `[k: string]: T`
+- 条件类型 `T extends U ? X : Y`、映射类型 `{ [K in T]: U }`、`infer`
+- 类型运算符 `keyof`、`unique`、`readonly`
+- `typeof`（类型查询）、索引访问类型 `T[K]`
+- 字面量类型、`this` 类型
+- 类型谓词 `x is T` / `asserts x is T`
+- 接口、类型别名、枚举、命名空间 / 模块声明
+- `import` / `export` 的各种形式（结构解析）
+
+### 3.4 模块语法（结构解析）
+
+- `import default, { named } from "..."`、`import * as ns from "..."`、`import type`
+- `export default`、`export { a as b }`、`export *`、`export =`
+- import attributes（`with` / `assert`）
+
+### 3.5 ASI
+
+- 自动分号插入（Automatic Semicolon Insertion），依据 `precededByLineBreak` / `}` / EOF。
+
+---
+
+## 4. 名字绑定与作用域（Binder，已实现）
+
+实现位置：`src/binder/binder.ts`
+
+- 作用域种类：模块、函数、块、`for`、`catch`
+- 符号种类：`var` / `let` / `const` / `function` / `parameter` / `class` / `interface` / `type` / `enum` / `import` / `namespace`
+- `var` 与函数声明提升到函数作用域；`let` / `const` 保持块作用域
+- 标识符 → 声明 的解析；未解析标识符收集（`CannotFindName`）
+- 闭包捕获分析：被内层函数引用的外部变量标记 `captured` / `boxed`，并穿过中间闭包传递捕获索引
+- 参数登记为局部符号；命名函数表达式自名登记为 `const`
+- 类型专用声明（interface / type alias）不参与值捕获
+
+---
+
+## 5. 运算符与赋值（代码生成已实现）
+
+实现位置：`src/codegen/llvm.ts`（`BINARY_RUNTIME`、`emitPrefix`、`emitPostfix`、`emitAssignment`）
+
+### 5.1 算术
+
+`+ - * / % **`（`**` 右结合）
+
+### 5.2 比较与相等
+
+`< <= > >=`、`== !=`（宽松相等）、`=== !==`（严格相等）
+
+### 5.3 逻辑与短路
+
+`&& || ??`（含短路求值）、`!`
+
+### 5.4 位运算
+
+`& | ^ ~ << >> >>>`
+
+### 5.5 一元
+
+`+ - ! ~`、前缀 / 后缀 `++ --`
+
+### 5.6 赋值
+
+`= += -= *= /= %= **= <<= >>= >>>= &= |= ^= &&= ||= ??=`
+
+### 5.7 其他表达式运算符
+
+- 逗号表达式 `,`
+
+> 未实现：`in`、`instanceof`、值级 `typeof` / `void` / `delete`（见[未实现文档](unimplemented.md)）。
+
+---
+
+## 6. 值模型与调用约定（已实现）
+
+实现位置：`src/codegen/values.ts`、`runtime/rt.h`
+
+- 所有 JS 值统一为 64 位 `xt_value`（NaN-boxing）。
+- 双精度浮点不装箱；其它类型为高 16 位 tag + 48 位 payload 的带标签指针。
+- Tag：`undefined` / `null` / `false` / `true` / `string` / `object` / `array` / `function`。
+- 统一函数 ABI：
+
+```c
+xt_value fn(xt_value env, int32_t argc, xt_value *argv);
+```
+
+- 闭包通过 `env` 线程化捕获变量（引用传递，box 包装），直接调用与闭包调用共用同一代码路径。
+
+---
+
+## 7. LLVM IR 代码生成（Codegen，已实现）
+
+实现位置：`src/codegen/llvm.ts`
+
+- 生成 LLVM IR 文本（`.ll`），无需自建寄存器分配（依赖 `alloca` + mem2reg）。
+- 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
+- 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`break` / `continue` / `return`。
+- 表达式：
+  - 标识符、数字、BigInt（按数字处理）、字符串、模板、布尔、`null`、`undefined`
+  - 算术 / 比较 / 逻辑 / 短路 / 条件 / 位运算 / 一元 / 前后缀增减 / 复合赋值 / 逻辑赋值
+  - 数组字面量（含展开 `[...]`）、对象字面量（含简写 / 方法）
+  - 属性访问（含 `length` 特判）、元素访问、调用
+  - 闭包（箭头函数 / 函数表达式）与捕获环境构建
+- 全局字符串池（`@.str.N` 私有常量，UTF-8 转义）。
+- 内置调用：`console.log`（走 `@xt_console_log`）、扩展 builtins（统一 `(argc, argv)` ABI）。
+- `main` 入口（返回 0，调用模块函数）。
+- 未支持节点统一报 `UnsupportedFeature`，不会崩溃。
+
+---
+
+## 8. C 运行时（Runtime，已实现）
+
+实现位置：`runtime/xt_runtime.c`、`runtime/rt.h`
+
+- 分配器：bump arena，`calloc` 分配，永不释放（GC 已隔离在 `xt_alloc` 之后）。
+- 值构造：`xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`。
+- 字符串：UTF-8 存储、拼接、相等比较、格式化数字转字符串。
+- 类型转换：`xt_truthy`、`xt_to_number`、`xt_to_string`、`xt_typeof`。
+- 算术：`add/sub/mul/div/mod/pow/neg/pos`。
+- 位运算：`and/or/xor/not/shl/shr/ushr`（含 `ToInt32` 语义）。
+- 比较：`lt/le/gt/ge`、宽松 / 严格相等、`not`、`is_nullish`。
+- 对象：线性属性列表，`object_new/get/set/has/keys`。
+- 数组：`array_new/get/set/push/length/spread`。
+- 通用成员访问：`xt_get` / `xt_set`（对数组 / 对象 / 字符串分发）。
+- Box：`box_new/get/set`（用于闭包捕获变量）。
+- 函数与闭包：`arg`、`closure_new/call/env/arity`。
+- 异常：`xt_throw`（打印 `Uncaught ...` 后退出）。
+- 输出：`xt_print/xt_println/xt_console_log`（Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`）。
+
+---
+
+## 9. 扩展机制（Extensions，已实现）
+
+实现位置：`src/extensions/registry.ts`、`src/extensions/node/`
+
+- 扩展是普通对象：`runtimeSources()`（额外 C 源）、`linkerFlags()`（额外链接参数）、`builtins()`（全局标识符 → 运行时符号，统一 `(argc, argv)` ABI）。
+- `ExtensionRegistry`：注册 / 注销 / 查询 / 汇总 builtins、runtime 源、链接参数。
+- 内置核心扩展 `core`：暴露 `print`（映射 `xt_println`），始终注册。
+- Node 扩展 `node`：
+  - 模块化组织：`src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
+  - 暴露 `readFileSync`、`readTextFile`（映射 `xt_node_read_text_file`）
+- 添加新模块只需新增目录 + C 实现，核心编译器无需改动。
+
+---
+
+## 10. 驱动、增量编译与工具链（已实现）
+
+实现位置：`src/driver/compiler.ts`、`src/driver/cache.ts`、`src/driver/toolchain.ts`、`src/driver/paths.ts`
+
+- 编译流水线：读源 → 解析 → 绑定/检查 → IR → 目标文件 → 链接。
+- 增量缓存：以「编译器版本 + 源码哈希 + emit 类型 + 优化级别 + 平台 + 扩展集合」为键，产物存在且新鲜则跳过构建。
+- C 运行时与扩展源按内容哈希缓存目标文件，只编译一次。
+- 工具链封装：查找 `clang`（可用 `xbintsc_CLANG` 覆盖）、编译 IR、编译 C、链接。
+- 链接参数：非 Windows 自动加 `-lm`；扩展可追加链接参数。
+
+---
+
+## 11. CLI 与编程接口（已实现）
+
+实现位置：`src/cli/main.ts`、`src/index.ts`、`bin/xbintsc.js`
+
+### 11.1 CLI 命令
+
+```
+xbintsc build <file.ts> [options]   编译为原生二进制
+xbintsc run   <file.ts> [-- args]   编译并执行
+xbintsc emit  <file.ts>             打印 LLVM IR
+xbintsc version                     打印版本
+xbintsc help                        帮助
+```
+
+### 11.2 CLI 选项
+
+```
+-o, --output <path>   输出路径
+    --out <dir>       输出目录（默认 build/）
+    --emit <kind>     exe | obj | ir（默认 exe）
+-O0..-O3              优化级别（默认 -O2）
+    --ext <names>     逗号分隔扩展（如 node）
+    --force           忽略增量缓存
+    --verbose         打印进度信息
+```
+
+### 11.3 编程接口
+
+```ts
+import { build, compileString } from "xbintsc";
+
+const { ir } = compileString("console.log(1 + 1);");
+const result = build("program.ts", { emit: "exe", outDir: "build" });
+```
+
+---
+
+## 12. 测试（已实现）
+
+实现位置：`tests/`（`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`）
+
+- 各模块单元测试；e2e 在存在 `clang` 时真正编译并运行二进制，否则自动跳过。
+- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `readFileSync` 扩展。
+
+---
+
+## 13. 已实现特性速查表
+
+| 类别 | 内容 |
+| --- | --- |
+| 声明 | `var` `let` `const`、函数声明、函数表达式、箭头函数、接口 / 类型别名（擦除） |
+| 控制流 | `if/else`、`while`、`do...while`、`for`、`for...of`、`break`、`continue`、`return`、`throw` |
+| 表达式 | 标识符、字面量、模板字符串、数组 / 对象字面量、调用、成员 / 元素访问、闭包 |
+| 运算符 | 算术、比较、相等、逻辑、位运算、移位、一元、前后缀增减、复合赋值、逻辑赋值 |
+| 值模型 | 64 位 NaN-boxing、统一函数 ABI、闭包环境 |
+| 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 异常 / `console.log` |
+| 扩展 | 扩展注册表、`core`（print）、`node`（fs：readFileSync） |
+| 工具链 | clang 编译 IR/C、链接、增量缓存 |
+| 平台 | macOS / Linux / Windows（构建层面已适配，CI 见 `.github/workflows`） |

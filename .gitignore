@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.xtsc-cache/
+*.o
+*.obj
+*.ll
+*.exe
+*.out
+coverage/
+.DS_Store
+scratch/

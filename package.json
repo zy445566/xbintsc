@@ -1,0 +1,40 @@
+{
+  "name": "xtsc",
+  "version": "0.1.0",
+  "description": "xtsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "xtsc": "./bin/xtsc.js"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./driver": "./src/driver/index.ts"
+  },
+  "files": [
+    "src",
+    "runtime",
+    "scripts",
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "runtime": "bash scripts/build-runtime.sh",
+    "runtime:clean": "rm -rf build/runtime",
+    "xtsc": "tsx src/cli/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run tests/e2e",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

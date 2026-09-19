@@ -19,6 +19,21 @@
 #include <string.h>
 #include <time.h>
 
+/*
+ * `timegm` and `gmtime_r` are POSIX extensions that MSVC's CRT does not
+ * provide. Wrap the platform-specific equivalents so the Date implementation
+ * below compiles everywhere.
+ */
+#if defined(_WIN32) && !defined(__MINGW32__) && !defined(__MINGW64__)
+static time_t xt_timegm(struct tm *tm) { return (time_t)_mkgmtime64(tm); }
+static struct tm *xt_gmtime_r(const time_t *timer, struct tm *buf) {
+  return gmtime_s(buf, timer) == 0 ? buf : NULL;
+}
+#else
+static time_t xt_timegm(struct tm *tm) { return timegm(tm); }
+static struct tm *xt_gmtime_r(const time_t *timer, struct tm *buf) { return gmtime_r(timer, buf); }
+#endif
+
 int xt_value_equals(xt_value a, xt_value b) {
   if (XT_IS_NUMBER(a) && XT_IS_NUMBER(b)) {
     double x = xt_to_double(a);
@@ -943,7 +958,7 @@ xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv) {
     tm.tm_year = xt_to_int32(xt_arg_at(argc, argv, 0)) - 1900;
     tm.tm_mon = xt_to_int32(xt_arg_at(argc, argv, 1));
     tm.tm_mday = argc > 2 ? xt_to_int32(xt_arg_at(argc, argv, 2)) : 1;
-    return xt_number((double)timegm(&tm) * 1000.0);
+    return xt_number((double)xt_timegm(&tm) * 1000.0);
   }
   return XT_UNDEFINED;
 }
@@ -953,7 +968,7 @@ static xt_value xt_date_method(xt_value target, const char *method, int32_t argc
   xt_date *date = (xt_date *)XT_GET_PTR(target);
   time_t seconds = (time_t)(date->time / 1000.0);
   struct tm tm;
-  gmtime_r(&seconds, &tm);
+  xt_gmtime_r(&seconds, &tm);
   if (strcmp(method, "getTime") == 0 || strcmp(method, "valueOf") == 0) return xt_number(date->time);
   const char *name = method;
   char utc[32];

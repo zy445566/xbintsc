@@ -362,8 +362,10 @@ export class Scanner {
 
   /** Called by the parser after a template substitution expression. */
   continueTemplate(offset: number): Token {
-    this.pos = Math.max(0, Math.min(offset, this.text.length));
-    this._token = this.scanTemplate(offset, false, /* isHead */ false);
+    // `offset` points at the `}` that closes the substitution; skip it so the
+    // following characters are scanned as template text.
+    this.pos = Math.max(0, Math.min(offset + 1, this.text.length));
+    this._token = this.scanTemplate(this.pos, false, /* isHead */ false);
     return this._token;
   }
 

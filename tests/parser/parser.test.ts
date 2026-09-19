@@ -106,8 +106,12 @@ describe("parser", () => {
     const statement = first("const s = `a${x}b${y}c`;");
     const template = statement.declarationList.declarations[0].initializer;
     expect(template.kind).toBe(SyntaxKind.TemplateLiteral);
+    expect(template.head).toBe("a");
     expect(template.spans).toHaveLength(2);
     expect(template.spans[0].expression.kind).toBe(SyntaxKind.Identifier);
+    expect(template.spans[0].literal).toBe("b");
+    expect(template.spans[1].literal).toBe("c");
+    expect(template.spans[1].isTail).toBe(true);
   });
 
   it("parses type-only declarations", () => {

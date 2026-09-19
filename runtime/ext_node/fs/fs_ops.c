@@ -14,14 +14,101 @@
 #include "rt.h"
 #include "fs_common.h"
 
-#include <dirent.h>
 #include <errno.h>
+
+#if defined(_WIN32)
+#include <direct.h>
+#include <io.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+typedef struct _stat xt_fs_stat_t;
+#define xt_fs_stat_fn _stat
+#define xt_fs_lstat_fn _stat
+#define xt_fs_access _access
+
+#ifndef F_OK
+#define F_OK 0
+#endif
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+#endif
+#ifndef S_ISLNK
+#define S_ISLNK(m) 0
+#endif
+#ifndef S_ISFIFO
+#define S_ISFIFO(m) 0
+#endif
+#ifndef S_ISSOCK
+#define S_ISSOCK(m) 0
+#endif
+#ifndef S_ISBLK
+#define S_ISBLK(m) 0
+#endif
+#ifndef S_ISCHR
+#define S_ISCHR(m) (((m) & _S_IFMT) == _S_IFCHR)
+#endif
+
+/* Directory iteration backed by the CRT's _findfirst/_findnext. */
+typedef struct {
+  intptr_t handle;
+  struct _finddata_t entry;
+} xt_fs_dir;
+
+static int xt_fs_dir_open(xt_fs_dir *dir, const char *path) {
+  size_t length = strlen(path);
+  char *pattern = (char *)malloc(length + 3);
+  if (!pattern) return 0;
+  memcpy(pattern, path, length);
+  pattern[length] = '/';
+  pattern[length + 1] = '*';
+  pattern[length + 2] = '\0';
+  dir->handle = _findfirst(pattern, &dir->entry);
+  free(pattern);
+  return dir->handle != -1;
+}
+
+static int xt_fs_dir_next(xt_fs_dir *dir) { return _findnext(dir->handle, &dir->entry) == 0; }
+
+static const char *xt_fs_dir_name(xt_fs_dir *dir) { return dir->entry.name; }
+
+static void xt_fs_dir_close(xt_fs_dir *dir) { _findclose(dir->handle); }
+#else
+#include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+typedef struct stat xt_fs_stat_t;
+#define xt_fs_stat_fn stat
+#define xt_fs_lstat_fn lstat
+#define xt_fs_access access
+
+typedef struct {
+  DIR *handle;
+  struct dirent *entry;
+} xt_fs_dir;
+
+static int xt_fs_dir_open(xt_fs_dir *dir, const char *path) {
+  dir->handle = opendir(path);
+  dir->entry = NULL;
+  return dir->handle != NULL;
+}
+
+static int xt_fs_dir_next(xt_fs_dir *dir) {
+  dir->entry = readdir(dir->handle);
+  return dir->entry != NULL;
+}
+
+static const char *xt_fs_dir_name(xt_fs_dir *dir) { return dir->entry->d_name; }
+
+static void xt_fs_dir_close(xt_fs_dir *dir) { closedir(dir->handle); }
+#endif
+
 #if defined(_WIN32)
-#include <direct.h>
 #define xt_fs_mkdir_one(path) _mkdir(path)
 #define xt_fs_rmdir_one(path) _rmdir(path)
 #else
@@ -37,7 +124,7 @@ xt_value xt_node_exists(int32_t argc, xt_value *argv) {
   if (argc < 1) return xt_bool(0);
   const char *path = xt_string_data(xt_to_string(argv[0]));
   if (!path) return xt_bool(0);
-  return xt_bool(access(path, F_OK) == 0);
+  return xt_bool(xt_fs_access(path, F_OK) == 0);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -49,8 +136,8 @@ xt_value xt_node_read_dir(int32_t argc, xt_value *argv) {
   const char *path = xt_string_data(xt_to_string(argv[0]));
   if (!path) return xt_undefined();
 
-  DIR *dir = opendir(path);
-  if (!dir) {
+  xt_fs_dir dir;
+  if (!xt_fs_dir_open(&dir, path)) {
     xt_fs_error("open directory", path);
     return xt_undefined();
   }
@@ -59,22 +146,22 @@ xt_value xt_node_read_dir(int32_t argc, xt_value *argv) {
   size_t capacity = 16;
   xt_value *items = (xt_value *)malloc(sizeof(xt_value) * capacity);
   if (!items) {
-    closedir(dir);
+    xt_fs_dir_close(&dir);
     return xt_undefined();
   }
 
-  struct dirent *entry;
-  while ((entry = readdir(dir)) != NULL) {
-    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+  while (xt_fs_dir_next(&dir)) {
+    const char *name = xt_fs_dir_name(&dir);
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
     if (count == capacity) {
       capacity *= 2;
       xt_value *grown = (xt_value *)realloc(items, sizeof(xt_value) * capacity);
       if (!grown) break;
       items = grown;
     }
-    items[count++] = xt_string_from_cstr(entry->d_name);
+    items[count++] = xt_string_from_cstr(name);
   }
-  closedir(dir);
+  xt_fs_dir_close(&dir);
 
   xt_value result = xt_array_new((int32_t)count, items);
   free(items);
@@ -131,23 +218,23 @@ xt_value xt_node_mkdir(int32_t argc, xt_value *argv) {
 /* ------------------------------------------------------------------------- */
 
 static int xt_fs_remove_recursive(const char *path) {
-  struct stat info;
-  if (lstat(path, &info) != 0) return -1;
+  xt_fs_stat_t info;
+  if (xt_fs_lstat_fn(path, &info) != 0) return -1;
   if (!S_ISDIR(info.st_mode)) return remove(path);
 
-  DIR *dir = opendir(path);
-  if (!dir) return -1;
-  struct dirent *entry;
-  while ((entry = readdir(dir)) != NULL) {
-    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
-    size_t size = strlen(path) + strlen(entry->d_name) + 2;
+  xt_fs_dir dir;
+  if (!xt_fs_dir_open(&dir, path)) return -1;
+  while (xt_fs_dir_next(&dir)) {
+    const char *name = xt_fs_dir_name(&dir);
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
+    size_t size = strlen(path) + strlen(name) + 2;
     char *child = (char *)malloc(size);
     if (!child) continue;
-    snprintf(child, size, "%s/%s", path, entry->d_name);
+    snprintf(child, size, "%s/%s", path, name);
     xt_fs_remove_recursive(child);
     free(child);
   }
-  closedir(dir);
+  xt_fs_dir_close(&dir);
   return xt_fs_rmdir_one(path);
 }
 
@@ -278,7 +365,7 @@ static double xt_fs_seconds_ms(long seconds, long nanoseconds) {
   return (double)seconds * 1000.0 + (double)nanoseconds / 1000000.0;
 }
 
-static xt_value xt_node_stat_result(const struct stat *info) {
+static xt_value xt_node_stat_result(const xt_fs_stat_t *info) {
   xt_value object = xt_object_new();
   xt_object_set(object, xt_string_from_cstr("size"), xt_number((double)info->st_size));
   xt_object_set(object, xt_string_from_cstr("mode"), xt_number((double)info->st_mode));
@@ -328,8 +415,8 @@ static xt_value xt_node_stat_common(int32_t argc, xt_value *argv, int followLink
   const char *path = xt_string_data(xt_to_string(argv[0]));
   if (!path) return xt_undefined();
 
-  struct stat info;
-  int status = followLinks ? stat(path, &info) : lstat(path, &info);
+  xt_fs_stat_t info;
+  int status = followLinks ? xt_fs_stat_fn(path, &info) : xt_fs_lstat_fn(path, &info);
   if (status != 0) {
     xt_fs_error("stat", path);
     return xt_undefined();

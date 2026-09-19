@@ -14,7 +14,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <direct.h>
+#define xt_path_getcwd _getcwd
+#else
 #include <unistd.h>
+#define xt_path_getcwd getcwd
+#endif
 
 #define XT_PATH_MAX 4096
 
@@ -95,7 +101,7 @@ static void xt_path_absolute(const char *path, char *out, size_t size) {
     snprintf(out, size, "%s", path);
   } else {
     char cwd[XT_PATH_MAX];
-    if (!getcwd(cwd, sizeof(cwd))) cwd[0] = '\0';
+    if (!xt_path_getcwd(cwd, sizeof(cwd))) cwd[0] = '\0';
     snprintf(out, size, "%s/%s", cwd, path);
   }
   char normalized[XT_PATH_MAX];
@@ -187,10 +193,10 @@ static xt_value xt_path_resolve(int32_t argc, xt_value *argv) {
     }
   }
   if (result[0] == '\0') {
-    if (!getcwd(result, sizeof(result))) result[0] = '\0';
+    if (!xt_path_getcwd(result, sizeof(result))) result[0] = '\0';
   } else if (!xt_path_is_absolute(result)) {
     char cwd[XT_PATH_MAX];
-    if (!getcwd(cwd, sizeof(cwd))) cwd[0] = '\0';
+    if (!xt_path_getcwd(cwd, sizeof(cwd))) cwd[0] = '\0';
     char combined[XT_PATH_MAX];
     snprintf(combined, sizeof(combined), "%s/%s", cwd, result);
     snprintf(result, sizeof(result), "%s", combined);

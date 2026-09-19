@@ -57,6 +57,15 @@ describeWithClang("end-to-end compilation", () => {
     expect(runProgram('console.log("sum", 2 + 3 * 4);')).toBe("sum 14");
   });
 
+  it("interpolates template literals", () => {
+    const source = `
+      const name = "world";
+      console.log(\`Hello, \${name}!\`);
+      console.log(\`\${1 + 1}-\${2 + 2}\`, \`plain\`, "[" + \`\` + "]");
+    `;
+    expect(runProgram(source)).toBe("Hello, world!\n2-4 plain []");
+  });
+
   it("runs recursive functions", () => {
     const source = `
       function fib(n: number): number {

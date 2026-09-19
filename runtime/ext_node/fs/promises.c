@@ -11,7 +11,16 @@
 
 #include <errno.h>
 #include <string.h>
+#if defined(_WIN32)
+#include <io.h>
+#ifndef F_OK
+#define F_OK 0
+#endif
+#define xt_node_access _access
+#else
 #include <unistd.h>
+#define xt_node_access access
+#endif
 
 /* Synchronous implementations provided by the sibling `fs` translation units. */
 extern xt_value xt_node_read_text_file(int32_t argc, xt_value *argv);
@@ -50,7 +59,7 @@ xt_value xt_node_p_access(int32_t argc, xt_value *argv) {
   if (argc < 1) return xt_promise_resolve(xt_undefined());
   const char *path = xt_string_data(xt_to_string(argv[0]));
   if (!path) return xt_promise_resolve(xt_undefined());
-  if (access(path, F_OK) == 0) return xt_promise_resolve(xt_undefined());
+  if (xt_node_access(path, F_OK) == 0) return xt_promise_resolve(xt_undefined());
   xt_value error = xt_object_new();
   xt_node_set(error, "code", xt_string_from_cstr("ENOENT"));
   xt_node_set(error, "errno", xt_number(-2));

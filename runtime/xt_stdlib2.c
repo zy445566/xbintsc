@@ -9,7 +9,11 @@
 
 #include <ctype.h>
 #include <math.h>
+#if defined(_WIN32)
+#include "xt_regex.h"
+#else
 #include <regex.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

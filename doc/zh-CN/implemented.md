@@ -200,7 +200,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
 - 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`switch`，`try/catch/finally`，`break` / `continue` / `return`。
   - `switch` 以严格相等逐 `case` 测试，命中后执行并在 `break` 前穿透。
-  - `try/catch/finally` 通过运行时 `setjmp` 帧实现：`xt_try_enter` 入栈、`setjmp` 捕获、`xt_throw` 长跳转；含 `try` 的函数会强制局部变量驻留内存（内联汇编逃生点）以保证长跳转后值不丢失。
+  - `try/catch/finally` 通过运行时 `_setjmp` 帧实现：`xt_try_enter` 入栈、`_setjmp` 捕获、`xt_throw` 长跳转；使用 `_setjmp`（而非 `setjmp`）是因为 Windows UCRT 把 `setjmp` 定义成 `_setjmp` 的宏，而导出的 `setjmp` 符号是不兼容的双参数 ABI。含 `try` 的函数会强制局部变量驻留内存（内联汇编逃生点）以保证长跳转后值不丢失。
   - `for...in` 复用 `xt_object_keys` 枚举键（数组 / 字符串得到字符串下标）。
 - 表达式：
   - 标识符、数字、BigInt（按数字处理）、字符串、模板、布尔、`null`、`undefined`、`arguments`
@@ -241,7 +241,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 运算符辅助：`xt_in`（`in`）、`xt_delete`（`delete`）、`xt_rest_args`（剩余参数 / `arguments`）。
 - Box：`box_new/get/set`（用于闭包捕获变量）。
 - 函数与闭包：`arg`、`closure_new/call/env/arity`。
-- 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。
+- 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `_setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。
 - 输出：`xt_print/xt_println/xt_console_log/info/warn/error`（Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`；`info`/`log` 到 stdout，`warn`/`error` 到 stderr），以及 `dir/trace/assert/count/countReset/group/groupEnd/table/time/timeEnd/timeLog`。
 - 对象 / 函数：`xt_object` 带原型链，`xt_function` 带属性包（静态成员与 `prototype`）；`xt_new`（实例化）、`xt_instance_of`（原型链）、`xt_object_freeze/is_frozen/from_entries`。
 - 标准库扩展（`xt_stdlib2.c`）：数组 / 字符串 / 数字 / 对象的扩展方法；`Object` / `Array` / `Number` / `String` 静态方法；`JSON.parse` / `JSON.stringify`；`Map` / `Set`；`Date`（`gmtime_r`）；`RegExp`（POSIX ERE `regcomp`/`regexec` 的 `test`/`exec`）。

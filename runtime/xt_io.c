@@ -5,9 +5,14 @@
  * innermost frame when one is active and otherwise prints + exits. Also holds
  * `print`/`console` output and the Node-like value inspector.
  *
- * We use the standard `setjmp`/`longjmp` pair (rather than the XSI/BSD
- * `_setjmp`/`_longjmp`) so the same symbols resolve on Linux, macOS and the
- * Windows UCRT, which does not provide `_longjmp`.
+ * The generated IR calls `_setjmp` (paired with `longjmp` here), not
+ * `setjmp`: on Windows the UCRT `<setjmp.h>` makes `setjmp` a macro for
+ * `_setjmp`, and the exported `setjmp` symbol is a legacy two-argument
+ * routine. Calling that symbol with one argument saved a corrupt context whose
+ * `longjmp` unwound to a bogus address (`STATUS_BAD_FUNCTION_TABLE`,
+ * 0xC00000FF). `_setjmp` is the real one-argument routine on Linux, macOS and
+ * the Windows UCRT alike (and pairs with `longjmp`, which does exist there;
+ * the XSI `_longjmp` does not).
  */
 
 #include "rt_internal.h"
@@ -30,7 +35,7 @@
 
 /*
  * `try`/`catch` is implemented with a stack of setjmp frames. The compiler
- * allocates a frame with `xt_try_enter`, calls `setjmp` on it, and pops it
+ * allocates a frame with `xt_try_enter`, calls `_setjmp` on it, and pops it
  * with `xt_try_leave`. `xt_throw` longjmps into the innermost frame when one
  * is active, and only prints + exits when the exception is uncaught.
  */

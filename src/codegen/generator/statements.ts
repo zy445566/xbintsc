@@ -383,7 +383,7 @@ export const statementMethods: StatementMethods = {
     this.emit(`  store i8* ${frame}, i8** ${frameSlot}`);
     this.emit(`  store i64 0, i64* ${flagSlot}`);
     const jump = this.reg();
-    this.emit(`  ${jump} = call i32 @setjmp(i8* ${frame})`);
+    this.emit(`  ${jump} = call i32 @_setjmp(i8* ${frame})`);
     const isThrow = this.reg();
     this.emit(`  ${isThrow} = icmp ne i32 ${jump}, 0`);
     const exceptionTarget = hasCatch ? catchLabel : exceptionLabel;

@@ -205,7 +205,7 @@ Location: `src/codegen/llvm.ts`
 - Statement / block boundary values live in `alloca`; conditionals and short-circuits materialize into temporary slots instead of `phi`.
 - Control flow: `if` / `while` / `do` / `for` / `for...of` / `for...in`, `switch`, `try/catch/finally`, `break` / `continue` / `return`.
   - `switch` tests each `case` with strict equality, executes on a hit, and falls through until `break`.
-  - `try/catch/finally` is implemented with a runtime `setjmp` frame: `xt_try_enter` pushes, `setjmp` catches, `xt_throw` long-jumps. Functions containing `try` force local variables to stay in memory (inline-asm escape points) so values survive a long jump.
+  - `try/catch/finally` is implemented with a runtime `_setjmp` frame: `xt_try_enter` pushes, `_setjmp` catches, `xt_throw` long-jumps. `_setjmp` (not `setjmp`) is used because the Windows UCRT makes `setjmp` a macro for `_setjmp` while the exported `setjmp` symbol has an incompatible (two-argument) ABI. Functions containing `try` force local variables to stay in memory (inline-asm escape points) so values survive a long jump.
   - `for...in` reuses `xt_object_keys` to enumerate keys (arrays / strings yield string indices).
 - Expressions:
   - Identifiers, numbers, BigInt (treated as numbers), strings, templates, booleans, `null`, `undefined`, `arguments`
@@ -246,7 +246,7 @@ Location: `runtime/xt_alloc.c`, `runtime/xt_values.c`, `runtime/xt_containers.c`
 - Operator helpers: `xt_in` (`in`), `xt_delete` (`delete`), `xt_rest_args` (rest parameters / `arguments`).
 - Box: `box_new/get/set` (for closure-captured variables).
 - Functions and closures: `arg`, `closure_new/call/env/arity`.
-- Exceptions: `xt_try_enter` / `xt_try_exception` / `xt_try_leave` maintain the `setjmp` frame stack; `xt_throw` long-jumps to the nearest `try` when a frame exists, otherwise prints `Uncaught ...` and exits.
+- Exceptions: `xt_try_enter` / `xt_try_exception` / `xt_try_leave` maintain the `_setjmp` frame stack; `xt_throw` long-jumps to the nearest `try` when a frame exists, otherwise prints `Uncaught ...` and exits.
 - Output: `xt_print/xt_println/xt_console_log/info/warn/error` (Node-style inspect: arrays `[ a, b ]`, objects `{ k: v }`; `info`/`log` to stdout, `warn`/`error` to stderr), plus `dir/trace/assert/count/countReset/group/groupEnd/table/time/timeEnd/timeLog`.
 - Objects / functions: `xt_object` with a prototype chain, `xt_function` with a property bag (static members and `prototype`); `xt_new` (instantiation), `xt_instance_of` (prototype chain), `xt_object_freeze/is_frozen/from_entries`.
 - Standard library extensions (`xt_stdlib2.c`): extended array / string / number / object methods; `Object` / `Array` / `Number` / `String` statics; `JSON.parse` / `JSON.stringify`; `Map` / `Set`; `Date` (`gmtime_r`); `RegExp` (POSIX ERE `regcomp`/`regexec` `test`/`exec`).

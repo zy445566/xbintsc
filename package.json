@@ -4,6 +4,10 @@
   "description": "xbintsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zy445566/xbintsc.git"
+  },
   "bin": {
     "xbintsc": "./bin/xbintsc.js"
   },

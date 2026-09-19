@@ -1,0 +1,4 @@
+#!/bin/sh
+# 提交前自动递增 patch 版本号，并将版本变更纳入本次提交
+npm version patch --no-git-tag-version >/dev/null 2>&1
+git add package.json package-lock.json 2>/dev/null || true

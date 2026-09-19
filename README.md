@@ -1,6 +1,6 @@
-# xbtsc
+# xbintsc
 
-`xbtsc` compiles a practical subset of **TypeScript directly to native binaries**.
+`xbintsc` compiles a practical subset of **TypeScript directly to native binaries**.
 It parses TypeScript itself, binds names, lowers the program to **LLVM IR text**,
 and hands the IR to **clang**, which produces a standalone executable linked
 against a small C runtime.
@@ -63,11 +63,48 @@ behind `xt_alloc`, so it can be replaced without touching the compiler.
 
 ## Usage
 
+There are two ways to invoke the CLI:
+
+- **As a user** — the package is installed and the `xbintsc` command is available
+  (via the `bin` entry `./bin/xbintsc.js`).
+- **As a developer** — running directly from a source checkout, before building.
+
+### As a user
+
+```bash
+# Install globally
+npm install -g xbintsc
+
+# ...or use it on demand without installing
+npx xbintsc version
+
+# Compile and run a program
+xbintsc run examples/hello.ts
+
+# Produce a native binary
+xbintsc build examples/hello.ts --out build/examples
+./build/examples/hello
+
+# Inspect the generated LLVM IR
+xbintsc emit examples/hello.ts | head
+
+# Use an optional extension (here, Node's readFileSync)
+xbintsc run examples/read-file.ts --ext node
+```
+
+### As a developer (from source)
+
+In a source checkout, run the TypeScript sources directly through `tsx` (or use
+`npm run xbintsc`). The `bin` launcher also works here: without a `dist/` build it
+falls back to `tsx` automatically.
+
 ```bash
 # Install dependencies
 npm install
 
 # Compile and run a program
+npm run xbintsc -- run examples/hello.ts
+# equivalently
 npx tsx src/cli/main.ts run examples/hello.ts
 
 # Produce a native binary
@@ -96,7 +133,7 @@ CLI options:
 ### Programmatic API
 
 ```ts
-import { build, compileString } from "xbtsc";
+import { build, compileString } from "xbintsc";
 
 const { ir } = compileString("console.log(1 + 1);");
 const result = build("program.ts", { emit: "exe", outDir: "build" });
@@ -139,7 +176,7 @@ Tests are organised by module under `tests/` (`lexer`, `parser`, `binder`,
 ## Requirements
 
 - Node.js 20+
-- A `clang`-compatible C compiler on `PATH` (override with `XBTSC_CLANG`)
+- A `clang`-compatible C compiler on `PATH` (override with `xbintsc_CLANG`)
 
 ## Language subset
 

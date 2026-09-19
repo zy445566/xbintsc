@@ -1,8 +1,8 @@
 node_modules/
 dist/
 build/
-.xbtsc-cache/
-.xbtsc/
+.xbintsc-cache/
+.xbintsc/
 *.o
 *.obj
 *.ll

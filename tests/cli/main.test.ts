@@ -7,7 +7,7 @@ import { run, type CliIo } from "../../src/cli/main.js";
 const directories: string[] = [];
 
 function temporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), "xbtsc-cli-"));
+  const directory = mkdtempSync(join(tmpdir(), "xbintsc-cli-"));
   directories.push(directory);
   return directory;
 }
@@ -32,7 +32,7 @@ describe("cli", () => {
   it("prints the version", () => {
     const { io, out } = capture();
     expect(run(["version"], io)).toBe(0);
-    expect(out.join("")).toMatch(/xbtsc \d+\.\d+\.\d+/);
+    expect(out.join("")).toMatch(/xbintsc \d+\.\d+\.\d+/);
   });
 
   it("rejects unknown commands", () => {

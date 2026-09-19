@@ -1,5 +1,5 @@
 /**
- * Token taxonomy for the xbtsc lexer. Kept close to the TypeScript grammar so
+ * Token taxonomy for the xbintsc lexer. Kept close to the TypeScript grammar so
  * the parser can stay a direct recursive-descent transcription of the spec.
  */
 
@@ -78,7 +78,7 @@ export enum TokenKind {
   Hash = "#",
   Backtick = "`",
 
-  // Keywords (subset that xbtsc understands today, but the full set is tokenized
+  // Keywords (subset that xbintsc understands today, but the full set is tokenized
   // so the parser can produce good "unsupported" diagnostics rather than
   // confusing "unexpected token" errors).
   AbstractKeyword = "abstract",

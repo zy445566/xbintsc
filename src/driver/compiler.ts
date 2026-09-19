@@ -79,7 +79,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const runner = options.runner ?? realRunner;
   const registry = options.extensions ?? createDefaultRegistry();
   const outDir = resolve(options.outDir ?? join(process.cwd(), "build"));
-  const cacheDir = resolve(options.cacheDir ?? join(process.cwd(), ".xbtsc"));
+  const cacheDir = resolve(options.cacheDir ?? join(process.cwd(), ".xbintsc"));
   const emit: EmitKind = options.emit ?? "exe";
   const optimize = options.optimize ?? "2";
 
@@ -117,7 +117,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const { ir } = generate(sourceFile, diagnostics, { builtins: registry.builtins() });
 
   if (options.verbose) {
-    process.stderr.write(`xbtsc: generated ${ir.length} bytes of LLVM IR\n`);
+    process.stderr.write(`xbintsc: generated ${ir.length} bytes of LLVM IR\n`);
   }
 
   if (diagnostics.hasErrors) {

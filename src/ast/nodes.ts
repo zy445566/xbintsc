@@ -1,5 +1,5 @@
 /**
- * The xbtsc abstract syntax tree.
+ * The xbintsc abstract syntax tree.
  *
  * The AST is a faithful, lossless-enough representation of the TypeScript
  * source. Nodes are discriminated unions keyed by `kind` so the binder, checker

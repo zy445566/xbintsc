@@ -1,18 +1,25 @@
 {
-  "name": "xbtsc",
+  "name": "xbintsc",
   "version": "0.1.0",
-  "description": "xbtsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
+  "description": "xbintsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "xbtsc": "./bin/xbtsc.js"
+    "xbintsc": "./bin/xbintsc.js"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./driver": "./src/driver/index.ts"
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./driver": {
+      "types": "./dist/src/driver/index.d.ts",
+      "import": "./dist/src/driver/index.js"
+    }
   },
   "files": [
     "src",
+    "dist",
     "runtime",
     "scripts",
     "bin",
@@ -20,9 +27,10 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
     "runtime": "node scripts/build-runtime.mjs",
     "runtime:clean": "node -e \"require('fs').rmSync('build/runtime',{recursive:true,force:true})\"",
-    "xbtsc": "tsx src/cli/main.ts",
+    "xbintsc": "tsx src/cli/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -15,7 +15,7 @@ const runtimeDir = join(root, "runtime");
 const outDir = join(root, "build", "runtime");
 mkdirSync(outDir, { recursive: true });
 
-const clang = process.env.XBTSC_CLANG ?? "clang";
+const clang = process.env.xbintsc_CLANG ?? "clang";
 
 const sources = [
   ["xt_runtime.c", "xt_runtime.o"],
@@ -26,9 +26,9 @@ for (const [source, object] of sources) {
   const args = ["-O2", "-c", join(runtimeDir, source), "-o", join(outDir, object), `-I${runtimeDir}`];
   const result = spawnSync(clang, args, { stdio: "inherit" });
   if (result.status !== 0) {
-    console.error(`xbtsc: failed to compile ${source}`);
+    console.error(`xbintsc: failed to compile ${source}`);
     process.exit(result.status ?? 1);
   }
 }
 
-console.log(`xbtsc: runtime objects written to ${outDir}`);
+console.log(`xbintsc: runtime objects written to ${outDir}`);

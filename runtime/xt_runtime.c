@@ -1,5 +1,5 @@
 /*
- * xbtsc runtime implementation.
+ * xbintsc runtime implementation.
  *
  * Design notes
  * ------------
@@ -12,7 +12,7 @@
  *  * Strings are UTF-8. JavaScript measures string length in UTF-16 code
  *    units; `xt_string_length` currently reports code points (see README).
  *  * Objects use a small linear property list. Fine for the language subset
- *    xbtsc targets today; swap for a hash map when the profile demands it.
+ *    xbintsc targets today; swap for a hash map when the profile demands it.
  */
 
 #include "rt.h"
@@ -83,7 +83,7 @@ static xt_header *g_heap_head = NULL;
 static void *xt_alloc(size_t size, int kind) {
   xt_header *header = (xt_header *)calloc(1, size);
   if (!header) {
-    fprintf(stderr, "xbtsc: out of memory allocating %zu bytes\n", size);
+    fprintf(stderr, "xbintsc: out of memory allocating %zu bytes\n", size);
     abort();
   }
   header->kind = (uint8_t)kind;
@@ -113,7 +113,7 @@ static xt_string *xt_string_alloc(size_t length) {
   s->capacity = (uint32_t)length + 1;
   s->data = (char *)malloc(s->capacity);
   if (!s->data) {
-    fprintf(stderr, "xbtsc: out of memory allocating string\n");
+    fprintf(stderr, "xbintsc: out of memory allocating string\n");
     abort();
   }
   s->data[length] = '\0';
@@ -385,7 +385,7 @@ static void xt_object_reserve(xt_object *obj, uint32_t needed) {
   while (capacity < needed) capacity *= 2;
   obj->properties = (xt_property *)realloc(obj->properties, sizeof(xt_property) * capacity);
   if (!obj->properties) {
-    fprintf(stderr, "xbtsc: out of memory growing object\n");
+    fprintf(stderr, "xbintsc: out of memory growing object\n");
     abort();
   }
   obj->capacity = capacity;
@@ -463,7 +463,7 @@ static void xt_array_reserve(xt_array *array, uint32_t needed) {
   while (capacity < needed) capacity *= 2;
   array->items = (xt_value *)realloc(array->items, sizeof(xt_value) * capacity);
   if (!array->items) {
-    fprintf(stderr, "xbtsc: out of memory growing array\n");
+    fprintf(stderr, "xbintsc: out of memory growing array\n");
     abort();
   }
   for (uint32_t i = array->capacity; i < capacity; i++) array->items[i] = XT_UNDEFINED;

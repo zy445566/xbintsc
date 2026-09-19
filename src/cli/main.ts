@@ -4,10 +4,10 @@
  * Commands are intentionally small and composable so the same operations are
  * available programmatically through the driver API:
  *
- *   xbtsc build <file> [-o out] [--emit ir|obj|exe] [-O0..3] [--ext node]
- *   xbtsc run   <file> [-- args...]
- *   xbtsc emit  <file>            # print LLVM IR to stdout
- *   xbtsc version
+ *   xbintsc build <file> [-o out] [--emit ir|obj|exe] [-O0..3] [--ext node]
+ *   xbintsc run   <file> [-- args...]
+ *   xbintsc emit  <file>            # print LLVM IR to stdout
+ *   xbintsc version
  */
 
 import { spawnSync } from "node:child_process";
@@ -113,14 +113,14 @@ function printDiagnostics(diagnostics: readonly Diagnostic[], fileName: string, 
   }
 }
 
-const HELP = `xbtsc ${COMPILER_VERSION} - TypeScript binary compiler
+const HELP = `xbintsc ${COMPILER_VERSION} - TypeScript binary compiler
 
 Usage:
-  xbtsc build <file.ts> [options]   Compile to a native binary
-  xbtsc run <file.ts> [-- args]     Compile and execute
-  xbtsc emit <file.ts>              Print LLVM IR
-  xbtsc version                     Print the version
-  xbtsc help                        Show this message
+  xbintsc build <file.ts> [options]   Compile to a native binary
+  xbintsc run <file.ts> [-- args]     Compile and execute
+  xbintsc emit <file.ts>              Print LLVM IR
+  xbintsc version                     Print the version
+  xbintsc help                        Show this message
 
 Options:
   -o, --output <path>   Output path
@@ -142,14 +142,14 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   }
 
   if (command === "version" || args.flags.has("version")) {
-    io.stdout(`xbtsc ${COMPILER_VERSION}\n`);
+    io.stdout(`xbintsc ${COMPILER_VERSION}\n`);
     return 0;
   }
 
   if (command === "emit") {
     const entry = args.positionals[0];
     if (!entry) {
-      io.stderr("xbtsc: emit requires a source file\n");
+      io.stderr("xbintsc: emit requires a source file\n");
       return 1;
     }
     const source = readFileSync(resolve(entry), "utf8");
@@ -166,7 +166,7 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   if (command === "build" || command === "run") {
     const entry = args.positionals[0];
     if (!entry) {
-      io.stderr(`xbtsc: ${command} requires a source file\n`);
+      io.stderr(`xbintsc: ${command} requires a source file\n`);
       return 1;
     }
     const emit = (args.flags.get("emit") as EmitKind | undefined) ?? "exe";
@@ -187,19 +187,19 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
     }
 
     if (command === "build") {
-      io.stdout(`xbtsc: wrote ${result.outputPath}${result.cached ? " (cached)" : ""}\n`);
+      io.stdout(`xbintsc: wrote ${result.outputPath}${result.cached ? " (cached)" : ""}\n`);
       return 0;
     }
 
     if (emit !== "exe") {
-      io.stderr("xbtsc: run requires --emit exe\n");
+      io.stderr("xbintsc: run requires --emit exe\n");
       return 1;
     }
     const executed = spawnSync(result.outputPath, args.passthrough, { stdio: "inherit" });
     return executed.status ?? 0;
   }
 
-  io.stderr(`xbtsc: unknown command '${command}'\n\n${HELP}`);
+  io.stderr(`xbintsc: unknown command '${command}'\n\n${HELP}`);
   return 1;
 }
 

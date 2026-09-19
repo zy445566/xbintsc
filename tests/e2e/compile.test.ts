@@ -20,7 +20,7 @@ describeWithClang("end-to-end compilation", () => {
   let cacheDir: string;
 
   beforeAll(() => {
-    workdir = mkdtempSync(join(tmpdir(), "xbtsc-e2e-"));
+    workdir = mkdtempSync(join(tmpdir(), "xbintsc-e2e-"));
     cacheDir = join(workdir, ".cache");
   });
 

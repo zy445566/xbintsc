@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * xbtsc launcher.
+ * xbintsc launcher.
  *
  * Prefers the compiled CLI in `dist/` (production installs run `npm run build`
  * first). In a checkout, falls back to running the TypeScript sources through
- * `tsx` so `npx xbtsc` works without a build step.
+ * `tsx` so `npx xbintsc` works without a build step.
  */
 
 import { existsSync } from "node:fs";

@@ -43,5 +43,5 @@ export function compileToIr(text: string, extensions?: ExtensionRegistry) {
 }
 
 export function hasClang(): boolean {
-  return realRunner.run(process.env.XBTSC_CLANG ?? "clang", ["--version"]).status === 0;
+  return realRunner.run(process.env.xbintsc_CLANG ?? "clang", ["--version"]).status === 0;
 }

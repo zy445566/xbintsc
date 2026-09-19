@@ -46,10 +46,10 @@ export class ToolchainError extends Error {
   }
 }
 
-/** Locate a clang-compatible C compiler, honouring `XBTSC_CLANG`. */
+/** Locate a clang-compatible C compiler, honouring `xbintsc_CLANG`. */
 export function findClang(runner: Runner = realRunner): string {
   const candidates = [
-    process.env.XBTSC_CLANG,
+    process.env.xbintsc_CLANG,
     "clang",
     "clang-18",
     "clang-17",
@@ -60,7 +60,7 @@ export function findClang(runner: Runner = realRunner): string {
     const result = runner.run(candidate, ["--version"]);
     if (result.status === 0) return candidate;
   }
-  throw new ToolchainError("clang --version", 1, "No C compiler found. Set XBTSC_CLANG to a clang binary.");
+  throw new ToolchainError("clang --version", 1, "No C compiler found. Set xbintsc_CLANG to a clang binary.");
 }
 
 export interface CompileIrOptions {

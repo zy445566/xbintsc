@@ -4,7 +4,7 @@
  * This guards a class of bug that only shows up off the developer's machine:
  * whether `bin`/`main` actually dispatches `run()` when the file is executed as
  * the program entry point (the previous string-built `file://` comparison never
- * matched on Windows, so `xbtsc build` silently did nothing).
+ * matched on Windows, so `xbintsc build` silently did nothing).
  */
 
 import { spawnSync } from "node:child_process";
@@ -20,7 +20,7 @@ const cliEntry = join(projectRoot, "src", "cli", "main.ts");
 const directories: string[] = [];
 
 function temporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), "xbtsc-process-"));
+  const directory = mkdtempSync(join(tmpdir(), "xbintsc-process-"));
   directories.push(directory);
   return directory;
 }
@@ -41,7 +41,7 @@ describe("cli process entry point", () => {
   it("actually runs when invoked as the entry point", () => {
     const { status, stdout } = runCli(["version"]);
     expect(status).toBe(0);
-    expect(stdout).toMatch(/xbtsc \d+\.\d+\.\d+/);
+    expect(stdout).toMatch(/xbintsc \d+\.\d+\.\d+/);
   });
 
   it("emits IR to stdout", () => {

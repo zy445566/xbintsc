@@ -1,5 +1,5 @@
 /*
- * xbtsc runtime ABI.
+ * xbintsc runtime ABI.
  *
  * The runtime is the boundary between generated LLVM IR and the operating
  * system. Every JavaScript value that flows through generated code is an
@@ -11,8 +11,8 @@
  * extension module (node/bun shims, ...) agree on representation without
  * sharing implementation details.
  */
-#ifndef XBTSC_RUNTIME_H
-#define XBTSC_RUNTIME_H
+#ifndef xbintsc_RUNTIME_H
+#define xbintsc_RUNTIME_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -174,4 +174,4 @@ size_t xt_heap_allocations(void);
 }
 #endif
 
-#endif /* XBTSC_RUNTIME_H */
+#endif /* xbintsc_RUNTIME_H */

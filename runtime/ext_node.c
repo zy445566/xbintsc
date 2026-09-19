@@ -1,5 +1,5 @@
 /*
- * Node.js compatibility extension for xbtsc.
+ * Node.js compatibility extension for xbintsc.
  *
  * Compiled and linked only when the `node` extension is registered. Each
  * builtin follows the runtime calling convention: (int32_t argc, xt_value *argv).
@@ -18,7 +18,7 @@ xt_value xt_node_read_text_file(int32_t argc, xt_value *argv) {
 
   FILE *file = fopen(path, "rb");
   if (!file) {
-    fprintf(stderr, "xbtsc: cannot open '%s'\n", path);
+    fprintf(stderr, "xbintsc: cannot open '%s'\n", path);
     return xt_undefined();
   }
   fseek(file, 0, SEEK_END);

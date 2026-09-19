@@ -7,7 +7,7 @@ import { BuildCache, hashParts, hashString } from "../../src/driver/cache.js";
 const directories: string[] = [];
 
 function temporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), "xbtsc-cache-"));
+  const directory = mkdtempSync(join(tmpdir(), "xbintsc-cache-"));
   directories.push(directory);
   return directory;
 }

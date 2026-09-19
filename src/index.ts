@@ -1,5 +1,5 @@
 /**
- * xbtsc public API surface.
+ * xbintsc public API surface.
  *
  * Re-exports the compiler pipeline so the CLI, tests and embedding tools can
  * compose stages (lex, parse, bind, generate) without depending on internals.

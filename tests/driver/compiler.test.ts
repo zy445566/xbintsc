@@ -8,7 +8,7 @@ import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
 const directories: string[] = [];
 
 function temporaryDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), "xtsc-build-"));
+  const directory = mkdtempSync(join(tmpdir(), "xbtsc-build-"));
   directories.push(directory);
   return directory;
 }

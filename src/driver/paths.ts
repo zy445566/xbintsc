@@ -16,7 +16,7 @@ export function findRuntimeDir(): string {
   for (const candidate of candidates) {
     if (existsSync(join(candidate, "rt.h"))) return candidate;
   }
-  throw new Error("Unable to locate the xtsc runtime directory (missing runtime/rt.h)");
+  throw new Error("Unable to locate the xbtsc runtime directory (missing runtime/rt.h)");
 }
 
 export function findPackageRoot(): string {

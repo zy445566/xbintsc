@@ -12,7 +12,7 @@ concurrency:
 
 env:
   # Keep the runtime builds deterministic across the matrix.
-  XTSC_CLANG: clang
+  XBTSC_CLANG: clang
 
 jobs:
   test:

@@ -1,4 +1,4 @@
-// A small showcase of the language subset xtsc compiles today.
+// A small showcase of the language subset xbtsc compiles today.
 
 function fib(n: number): number {
   if (n < 2) return n;

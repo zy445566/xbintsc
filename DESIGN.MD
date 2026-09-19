@@ -1,4 +1,4 @@
-# xtsc 设计
+# xbtsc 设计
 
 实现一个 TypeScript 的二进制编译器。
 
@@ -102,7 +102,7 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 ## 自举路线
 
 编译器本身使用 TypeScript 编写并输出 IR 文本，`runtime` 已与编译器解耦。后续可
-用 TS 重写运行时，并由 xtsc 编译自身，逐步达成自举。
+用 TS 重写运行时，并由 xbtsc 编译自身，逐步达成自举。
 
 ## 测试
 

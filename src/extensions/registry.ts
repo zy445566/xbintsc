@@ -1,7 +1,7 @@
 /**
  * Pluggable compile modules ("extensions").
  *
- * An extension teaches xtsc about a host platform: additional C runtime
+ * An extension teaches xbtsc about a host platform: additional C runtime
  * sources to link, libraries to pass to the linker, and global functions that
  * resolve to runtime symbols. Node's `fs`, Bun's `Bun.file`, ... all fit this
  * shape, so the core compiler never has to grow platform specific branches.
@@ -18,7 +18,7 @@ export interface BuiltinFunction {
 
 export interface Extension {
   readonly name: string;
-  /** Description shown by `xtsc ext list`. */
+  /** Description shown by `xbtsc ext list`. */
   readonly description?: string;
   /** C/asm sources compiled and linked alongside the generated module. */
   runtimeSources?(): readonly string[];

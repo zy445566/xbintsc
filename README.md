@@ -1,6 +1,6 @@
-# xtsc
+# xbtsc
 
-`xtsc` compiles a practical subset of **TypeScript directly to native binaries**.
+`xbtsc` compiles a practical subset of **TypeScript directly to native binaries**.
 It parses TypeScript itself, binds names, lowers the program to **LLVM IR text**,
 and hands the IR to **clang**, which produces a standalone executable linked
 against a small C runtime.
@@ -96,7 +96,7 @@ CLI options:
 ### Programmatic API
 
 ```ts
-import { build, compileString } from "xtsc";
+import { build, compileString } from "xbtsc";
 
 const { ir } = compileString("console.log(1 + 1);");
 const result = build("program.ts", { emit: "exe", outDir: "build" });
@@ -139,7 +139,7 @@ Tests are organised by module under `tests/` (`lexer`, `parser`, `binder`,
 ## Requirements
 
 - Node.js 20+
-- A `clang`-compatible C compiler on `PATH` (override with `XTSC_CLANG`)
+- A `clang`-compatible C compiler on `PATH` (override with `XBTSC_CLANG`)
 
 ## Language subset
 

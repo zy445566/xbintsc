@@ -1,11 +1,11 @@
 {
-  "name": "xtsc",
+  "name": "xbtsc",
   "version": "0.1.0",
-  "description": "xtsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
+  "description": "xbtsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "xtsc": "./bin/xtsc.js"
+    "xbtsc": "./bin/xbtsc.js"
   },
   "exports": {
     ".": "./src/index.ts",
@@ -22,7 +22,7 @@
     "build": "tsc -p tsconfig.json",
     "runtime": "node scripts/build-runtime.mjs",
     "runtime:clean": "node -e \"require('fs').rmSync('build/runtime',{recursive:true,force:true})\"",
-    "xtsc": "tsx src/cli/main.ts",
+    "xbtsc": "tsx src/cli/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

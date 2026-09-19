@@ -26,16 +26,16 @@ function recordingRunner(status = 0): { runner: Runner; calls: Recorded[] } {
 }
 
 describe("toolchain", () => {
-  it("honours XTSC_CLANG when locating a compiler", () => {
+  it("honours XBTSC_CLANG when locating a compiler", () => {
     const { runner, calls } = recordingRunner();
-    const previous = process.env.XTSC_CLANG;
-    process.env.XTSC_CLANG = "my-clang";
+    const previous = process.env.XBTSC_CLANG;
+    process.env.XBTSC_CLANG = "my-clang";
     try {
       expect(findClang(runner)).toBe("my-clang");
       expect(calls[0]!.command).toBe("my-clang");
     } finally {
-      if (previous === undefined) delete process.env.XTSC_CLANG;
-      else process.env.XTSC_CLANG = previous;
+      if (previous === undefined) delete process.env.XBTSC_CLANG;
+      else process.env.XBTSC_CLANG = previous;
     }
   });
 

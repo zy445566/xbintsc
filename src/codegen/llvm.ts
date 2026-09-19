@@ -188,7 +188,7 @@ class Generator {
   run(): string {
     for (const fn of this.binding.functions) this.emitFunction(fn);
     this.emitMain();
-    const header = ["; ModuleID = 'xtsc'", "source_filename = \"" + this.sourceFile.fileName + "\"", ""];
+    const header = ["; ModuleID = 'xbtsc'", "source_filename = \"" + this.sourceFile.fileName + "\"", ""];
     return [...header, ...RUNTIME_DECLARATIONS, ...this.extraDeclarations, "", ...this.globals, "", ...this.functions, ""].join("\n");
   }
 
@@ -1195,7 +1195,7 @@ class Generator {
     const label = kindName(node.kind);
     this.diagnostics.error(
       DiagnosticCode.UnsupportedFeature,
-      `xtsc does not yet support this ${what} (${label})`,
+      `xbtsc does not yet support this ${what} (${label})`,
       node,
       this.sourceFile.fileName,
     );

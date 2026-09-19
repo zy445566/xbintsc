@@ -943,7 +943,7 @@ export class Parser {
       this.parseExpected(TokenKind.CloseBracket);
       const name = expressionToPropertyName(expr);
       if (name) return name;
-      this.error(DiagnosticCode.InvalidTypeSyntax, "Computed property names are not supported by xtsc");
+      this.error(DiagnosticCode.InvalidTypeSyntax, "Computed property names are not supported by xbtsc");
       return { kind: SyntaxKind.Identifier, text: "<computed>", start: expr.start, end: expr.end };
     }
     return this.parseIdentifierName();

@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write # required by npm provenance (--provenance)
+      id-token: write # required by npm OIDC publishing / provenance
     steps:
       - uses: actions/checkout@v4
 
@@ -32,7 +32,7 @@ jobs:
       - name: Preview package contents
         run: npm pack --dry-run
 
+      # No NODE_AUTH_TOKEN needed: npm authenticates via GitHub OIDC
+      # (id-token: write) against the npm trusted publisher config.
       - name: Publish
         run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

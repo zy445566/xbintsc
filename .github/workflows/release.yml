@@ -1,0 +1,94 @@
+name: Release
+
+# Creates a GitHub Release (and pushes the matching git tag) only when the
+# *middle* (minor) version number of package.json changed compared to the
+# previous GitHub Release.
+#
+#   0.1.20 -> 0.2.0   => minor changed (1 -> 2)      => release
+#   0.1.20 -> 1.1.21  => minor unchanged (1 -> 1)     => no release
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Serialize runs so two quick pushes cannot race on the same tag.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub release on minor bump
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # fetch tags so the existing-tag check is accurate
+
+      - name: Detect minor version bump
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          current="$(node -p "require('./package.json').version")"
+          tag="v${current}"
+
+          # Baseline = the most recent *GitHub Release* (empty on the first run).
+          prev_tag="$(gh release list --limit 1 --json tagName \
+            --jq '.[0].tagName // empty' 2>/dev/null || true)"
+          prev="${prev_tag#v}"
+
+          echo "current version : ${current}"
+          echo "previous release: ${prev_tag:-<none>}"
+
+          cur_minor="$(cut -d. -f2 <<<"${current}")"
+          prev_minor=""
+          if [ -n "${prev_tag}" ]; then
+            prev_minor="$(cut -d. -f2 <<<"${prev}")"
+          fi
+
+          already="$(gh release view "${tag}" --json tagName \
+            --jq .tagName 2>/dev/null || true)"
+
+          should_release=true
+          if [ -n "${already}" ]; then
+            echo "Release ${tag} already exists; nothing to do."
+            should_release=false
+          elif [ -n "${prev_minor}" ] && [ "${cur_minor}" = "${prev_minor}" ]; then
+            echo "Minor version unchanged (${prev_minor} -> ${cur_minor}); skipping release."
+            should_release=false
+          else
+            echo "Minor version changed (${prev_minor:-<none>} -> ${cur_minor}); creating release ${tag}."
+          fi
+
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "should_release=${should_release}" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          TAG_EXISTS: ${{ steps.version.outputs.tag_exists }}
+        run: |
+          if [ "${TAG_EXISTS}" = "true" ]; then
+            # Reuse the existing tag instead of trying to recreate it.
+            gh release create "${TAG}" --title "${TAG}" --generate-notes
+          else
+            gh release create "${TAG}" \
+              --target "${{ github.sha }}" \
+              --title "${TAG}" \
+              --generate-notes
+          fi

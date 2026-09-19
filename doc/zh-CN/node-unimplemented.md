@@ -60,10 +60,11 @@
 | `__dirname` / `__filename` | 无 |
 | `require` / `module` / `exports` | 无（xbintsc 无 CommonJS 模块运行时） |
 | `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask` | 无定时器 |
-| `fs.readFileSync(...)` 命名空间式调用 | ✗ 不支持。`fs` 内置函数只能以裸全局标识符调用，如 `readFileSync(...)`；`fs/promises` 同理 |
-| `import { readFileSync } from "fs"` | ✗ 无法运行。`import` 语句本身在代码生成阶段报 `UnsupportedFeature`（见 [unimplemented.md](unimplemented.md)）；扩展内置函数是全局符号映射，与 import 无关 |
+| `fs.readFileSync(...)` 命名空间式调用 | ✗ 不支持。`fs` 不提供默认/命名空间对象；请使用具名导入，如 `import { readFileSync } from "fs"` |
 
-已支持的命名空间调用：`path.*`、`os.*`、`process.*`（方法）、`Buffer.*`、`stream.*`、`net.*`、`dgram.*`、`http.*`，以及 `process.platform` / `process.argv` 等属性。`Readable` / `Writable` / `Duplex` / `Transform` / `PassThrough` / `Buffer` 亦可用作全局构造函数。
+Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { readFileSync } from "fs"`、`import path from "path"`、`import { platform } from "node:os"`）。具名与命名空间导入都会解析到扩展模块的运行时入口。
+
+已支持的命名空间调用：`path.*`、`os.*`、`process.*`（方法，需先导入或使用全局名）、`Buffer.*`、`stream.*`、`net.*`、`dgram.*`、`http.*`，以及 `process.platform` / `process.argv` 等属性。`Readable` / `Writable` / `Duplex` / `Transform` / `PassThrough` / `Buffer` 亦可用作全局构造函数。
 
 ---
 

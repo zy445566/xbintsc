@@ -11,6 +11,7 @@ import { resolveFrom } from "../module.js";
 
 export const netModule: NodeModule = {
   name: "net",
+  namespace: "net",
   runtimeSources: () => [resolveFrom(import.meta.url, "../../../../runtime/ext_node/net/net.c")],
   builtins: () => ({}),
 };

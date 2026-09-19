@@ -109,7 +109,7 @@ source.ts
 
 ### 3.4 模块语法（结构解析 + 驱动打包）
 
-- `import default, { named } from "..."`、`import * as ns from "..."`（命名空间导入仅解析，未实现）、`import type`
+- `import default, { named } from "..."`、`import * as ns from "..."`（相对模块的命名空间导入仅解析，扩展模块如 `path` 已支持）、`import type`
 - `export default`、`export { a as b }`、`export *`、`export =`
 - import attributes（`with` / `assert`）
 - `import` / `export` 的**运行时语义**由 `src/driver/modules.ts` 在驱动层完成：递归解析相对依赖、按模块前缀重命名顶层符号、改写引用，合并为单文件后重新绑定。循环依赖报错。
@@ -253,12 +253,12 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 
 实现位置：`src/extensions/registry.ts`、`src/extensions/node/`
 
-- 扩展是普通对象：`runtimeSources()`（额外 C 源）、`linkerFlags()`（额外链接参数）、`builtins()`（全局标识符 → 运行时符号，统一 `(argc, argv)` ABI）。
-- `ExtensionRegistry`：注册 / 注销 / 查询 / 汇总 builtins、runtime 源、链接参数。
+- 扩展是普通对象：`runtimeSources()`（额外 C 源）、`linkerFlags()`（额外链接参数）、`builtins()`（全局标识符 → 运行时符号，统一 `(argc, argv)` ABI）与 `modules()`（导入说明符 → 命名导出 / 命名空间）。
+- `ExtensionRegistry`：注册 / 注销 / 查询 / 汇总 builtins、modules、runtime 源、链接参数。
 - 内置核心扩展 `core`：暴露 `print`（映射 `xt_println`），始终注册。
 - Node 扩展 `node`：
   - 模块化组织：`src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
-  - 暴露 `readFileSync`、`readTextFile`（映射 `xt_node_read_text_file`）
+  - 暴露可导入模块（`fs`、`fs/promises`、`path`、`os`、`process` 等），同时支持裸名称与 `node:` 前缀；`import { readFileSync } from "fs"` 解析到 `xt_node_read_text_file`，`path`/`os`/`process` 的导出映射到命名空间分发器。
 - 添加新模块只需新增目录 + C 实现，核心编译器无需改动。
 
 ---
@@ -317,7 +317,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 实现位置：`tests/`（`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`）
 
 - 各模块单元测试；e2e 在存在 `clang` 时真正编译并运行二进制，否则自动跳过。
-- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `readFileSync` 扩展、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、多文件 `import`/`export`。
+- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、多文件 `import`/`export`。
 
 ---
 
@@ -332,10 +332,10 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 函数 | 默认参数、剩余参数、捕获闭包、`this` 绑定、箭头函数词法 `this` |
 | 类 / OO | 构造函数、实例字段、方法、`static`、继承 `extends`/`super`、原型链、`instanceof` |
 | 异步 | `async`/`await`、`Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`）、同步微任务队列 |
-| 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包 |
+| 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包，裸说明符解析到扩展模块 |
 | 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`Object/Array/Number/String` 静态、`console.*` |
 | 值模型 | 64 位 NaN-boxing、统一函数 ABI（含 `this`）、闭包环境、对象原型链 |
 | 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / `console` |
-| 扩展 | 扩展注册表、`core`（print）、`node`（fs：readFileSync） |
+| 扩展 | 扩展注册表、`core`（print）、`node`（fs / path / os / process / buffer / stream / net / dgram / http，按说明符导入） |
 | 工具链 | clang 编译 IR/C、链接、增量缓存 |
 | 平台 | macOS / Linux / Windows（构建层面已适配，CI 见 `.github/workflows`） |

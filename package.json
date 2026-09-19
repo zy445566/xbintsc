@@ -1,6 +1,6 @@
 {
   "name": "xbintsc",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "xbintsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
   "type": "module",
   "license": "MIT",
@@ -42,12 +42,12 @@
     "coverage": "vitest run --coverage"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.20.4",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

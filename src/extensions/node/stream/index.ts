@@ -12,6 +12,7 @@ import { resolveFrom } from "../module.js";
 
 export const streamModule: NodeModule = {
   name: "stream",
+  namespace: "stream",
   runtimeSources: () => [resolveFrom(import.meta.url, "../../../../runtime/ext_node/stream/stream.c")],
   builtins: () => ({}),
 };

@@ -50,7 +50,8 @@ src/extensions/node/           runtime/ext_node/
 - The `NodeModule` interface:
   - `name`: the module name (e.g. `fs`)
   - `runtimeSources()`: the module's C sources
-  - `builtins()`: global identifier → runtime symbol mapping (`path` / `os` / `process` dispatch through namespaces, so they return an empty table)
+  - `builtins()`: global identifier → runtime symbol mapping (`fs` returns its exports here; `path` / `os` / `process` dispatch through namespaces, so they return an empty table)
+  - `namespace` / `exports()`: the module's importable namespace and named exports (`import { join } from "path"`, `import path from "path"`)
 - `resolveFrom(importMetaUrl, relative)`: resolves a path relative to the current module's directory into an absolute path, used to locate C sources.
 
 ---
@@ -59,9 +60,9 @@ src/extensions/node/           runtime/ext_node/
 
 Location: `src/extensions/node/fs/*.ts`, `runtime/ext_node/fs/*.c`
 
-### 2.1 Available functions (bare global identifiers)
+### 2.1 Available functions (imported from `fs`)
 
-| Global function | Runtime symbol | Notes |
+| Imported function | Runtime symbol | Notes |
 | --- | --- | --- |
 | `readFileSync(path[, options])` | `xt_node_read_text_file` | synchronously read a file, returns a string; supports encoding options |
 | `readTextFile(path)` | `xt_node_read_text_file` | alias of `readFileSync` (same symbol) |
@@ -99,9 +100,12 @@ Methods (native closures, callable): `isFile()`, `isDirectory()`, `isSymbolicLin
 
 ### 2.4 How to call
 
-`fs` builtins are exposed as **bare global identifiers** (not `fs.readFileSync(...)`):
+`fs` exports are reached through an `import` (or the `node:fs` alias), not as bare
+globals:
 
 ```ts
+import { readFileSync, writeFileSync, existsSync } from "fs";
+
 const text = readFileSync("examples/data.txt");
 writeFileSync("/tmp/out.txt", text);
 console.log(existsSync("/tmp/out.txt"));
@@ -121,6 +125,8 @@ Location: `src/extensions/node/path/index.ts`, `runtime/ext_node/path/path.c`
 
 Uses `path.<name>(...)` namespace calls, which the compiler lowers to
 `xt_path_static(<name>, argc, argv)`. The semantics are POSIX (`/` separator).
+Import the module as a namespace (`import path from "path"` / `import * as path
+from "path"`) or pull in individual methods (`import { join } from "path"`).
 
 | Method | Notes |
 | --- | --- |
@@ -134,8 +140,11 @@ Uses `path.<name>(...)` namespace calls, which the compiler lowers to
 | `path.relative(from, to)` | relative path |
 
 ```ts
+import path from "path";
+import { basename } from "path";
+
 console.log(path.join("a", "b", "..", "c")); // a/c
-console.log(path.basename("/x/y/z.txt"));    // z.txt
+console.log(basename("/x/y/z.txt"));          // z.txt
 ```
 
 ---
@@ -145,6 +154,8 @@ console.log(path.basename("/x/y/z.txt"));    // z.txt
 Location: `src/extensions/node/os/index.ts`, `runtime/ext_node/os/os.c`
 
 Uses `os.<name>(...)` namespace calls, lowered to `xt_os_static(<name>, argc, argv)`.
+Import the module as a namespace (`import os from "os"`) or pull in individual
+functions (`import { platform } from "os"`).
 
 | Method | Notes |
 | --- | --- |
@@ -166,6 +177,7 @@ Uses `os.<name>(...)` namespace calls, lowered to `xt_os_static(<name>, argc, ar
 Location: `src/extensions/node/process/index.ts`, `runtime/ext_node/process/process.c`
 
 Method calls lower to `xt_process_call(<name>, argc, argv)`, property access to `xt_process_get(<name>)`.
+Import the object (`import process from "process"`) to reach these.
 
 | Method / property | Notes |
 | --- | --- |
@@ -295,12 +307,14 @@ closes.
 Location: `src/extensions/node/fs-promises/index.ts`, `runtime/ext_node/fs/promises.c`
 
 There is no asynchronous I/O scheduler, so each function wraps the corresponding
-synchronous `fs` implementation in an **already-settled Promise**, exposed as
-bare global identifiers: `readFile`, `writeFile`, `appendFile`, `mkdir`,
+synchronous `fs` implementation in an **already-settled Promise**, exported from
+the `fs/promises` module: `readFile`, `writeFile`, `appendFile`, `mkdir`,
 `readdir`, `rm`, `unlink`, `rmdir`, `rename`, `copyFile`, `realpath`, `stat`,
 `lstat`, `access`.
 
 ```ts
+import { readFile, writeFile } from "fs/promises";
+
 async function main(): Promise<void> {
   await writeFile("/tmp/a.txt", "hi");
   console.log(await readFile("/tmp/a.txt"));

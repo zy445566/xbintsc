@@ -66,7 +66,8 @@ export const statementMethods: StatementMethods = {
       case SyntaxKind.FunctionDeclaration:
       case SyntaxKind.InterfaceDeclaration:
       case SyntaxKind.TypeAliasDeclaration:
-        return; // functions are emitted at module scope
+      case SyntaxKind.ImportDeclaration:
+        return; // functions are emitted at module scope; imports are resolved at call sites
       case SyntaxKind.ClassDeclaration: {
         const info = this.binding.classOfNode.get(statement);
         if (info) this.emitClassSetup(info);

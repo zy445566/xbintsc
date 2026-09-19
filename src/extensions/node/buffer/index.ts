@@ -12,6 +12,7 @@ import { resolveFrom } from "../module.js";
 
 export const bufferModule: NodeModule = {
   name: "buffer",
+  namespace: "Buffer",
   runtimeSources: () => [resolveFrom(import.meta.url, "../../../../runtime/ext_node/buffer/buffer.c")],
   builtins: () => ({}),
 };

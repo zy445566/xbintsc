@@ -115,13 +115,14 @@ describeWithClang("end-to-end compilation", () => {
   it("reads files through the node extension", () => {
     const dataPath = join(workdir, "data.txt");
     writeFileSync(dataPath, "from a file");
-    const source = `console.log(readFileSync(${JSON.stringify(dataPath)}));`;
+    const source = `import { readFileSync } from "fs";\nconsole.log(readFileSync(${JSON.stringify(dataPath)}));`;
     expect(runProgram(source, { extensions: true })).toBe("from a file");
   });
 
   it("writes and manages files through the node extension", () => {
     const base = join(workdir, `fsops_${Math.random().toString(36).slice(2)}`);
     const source = `
+      import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
       const base = ${JSON.stringify(base)};
       mkdirSync(base + "/a/b", { recursive: true });
       writeFileSync(base + "/a/b/file.txt", "hello");
@@ -145,6 +146,7 @@ describeWithClang("end-to-end compilation", () => {
   it("supports hex and base64 encodings for fs reads and writes", () => {
     const base = workdir;
     const source = `
+      import { readFileSync, rmSync, writeFileSync } from "fs";
       const base = ${JSON.stringify(base)};
       const hexPath = base + "/encoding_${Math.random().toString(36).slice(2)}.hex.txt";
       const b64Path = base + "/encoding_${Math.random().toString(36).slice(2)}.b64.txt";
@@ -171,6 +173,17 @@ describeWithClang("end-to-end compilation", () => {
     expect(runProgram(source, { extensions: true })).toBe(
       "a/c\n/tmp/b\n/x/y z.txt .txt\nbar.test\n/a/b/d\ntrue false\n../../d",
     );
+  });
+
+  it("imports node modules by specifier", () => {
+    const source = `
+      import { readFileSync } from "node:fs";
+      import path from "path";
+      import { join as joinPath, basename } from "path";
+      console.log(path.join("a", "b"));
+      console.log(joinPath("a", "b", "..", "c"), basename("/x/y.txt"));
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("a/b\na/c y.txt");
   });
 
   it("provides the os and process modules", () => {

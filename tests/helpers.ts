@@ -38,7 +38,10 @@ export function compileToIr(text: string, extensions?: ExtensionRegistry) {
   const diagnostics = new DiagnosticBag();
   diagnostics.addAll(parseDiagnostics);
   const registry = extensions ?? createDefaultRegistry();
-  const { ir, binding } = generate(file, diagnostics, { builtins: registry.builtins() });
+  const { ir, binding } = generate(file, diagnostics, {
+    builtins: registry.builtins(),
+    modules: registry.modules(),
+  });
   return { ir, binding, diagnostics: diagnostics.diagnostics };
 }
 

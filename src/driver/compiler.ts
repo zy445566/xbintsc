@@ -66,7 +66,10 @@ export function compileString(source: string, fileName = "input.ts", extensions?
   const parser = new Parser(file, diagnostics);
   const sourceFile = parser.parseSourceFile();
   const registry = extensions ?? createDefaultRegistry();
-  const { ir } = generate(sourceFile, diagnostics, { builtins: registry.builtins() });
+  const { ir } = generate(sourceFile, diagnostics, {
+    builtins: registry.builtins(),
+    modules: registry.modules(),
+  });
   return { ir, diagnostics: diagnostics.diagnostics };
 }
 
@@ -133,7 +136,10 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, cached: true, diagnostics: [] };
   }
 
-  const { ir } = generate(sourceFile, diagnostics, { builtins: registry.builtins() });
+  const { ir } = generate(sourceFile, diagnostics, {
+    builtins: registry.builtins(),
+    modules: registry.modules(),
+  });
 
   if (options.verbose) {
     process.stderr.write(`xbintsc: generated ${ir.length} bytes of LLVM IR\n`);

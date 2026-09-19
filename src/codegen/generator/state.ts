@@ -4,7 +4,7 @@
 
 import type { FunctionInfo } from "../../binder/binder.js";
 import type { BindResult } from "../../binder/binder.js";
-import type { BuiltinFunction } from "../../extensions/registry.js";
+import type { BuiltinFunction, ExtensionModule } from "../../extensions/registry.js";
 
 export interface Slot {
   /** Register holding the `i64*` to the storage. */
@@ -44,6 +44,8 @@ export interface CodegenResult {
 export interface CodegenOptions {
   /** Global names supplied by registered extensions. */
   readonly builtins?: Readonly<Record<string, BuiltinFunction>>;
+  /** Importable modules supplied by registered extensions. */
+  readonly modules?: Readonly<Record<string, ExtensionModule>>;
 }
 
 export const RUNTIME_DECLARATIONS: readonly string[] = [

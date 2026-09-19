@@ -113,11 +113,11 @@ Criteria (ordered by severity):
 | Named import/export | ✓ `import { a, b as c }` / `export { a as b }` / `export const/let/var/function/class` |
 | Default import/export | ✓ `export default` / `import d from` |
 | Re-export `export { x } from` / `export * from` | ✓ (`export *` is an approximate copy) |
-| Namespace import `import * as ns` | ✗ not implemented |
+| Namespace import `import * as ns` | ✗ not implemented for relative modules (extension modules such as `path` support it: `import * as path from "path"`) |
 | Circular dependencies | ✗ errors out (no circular initialization semantics) |
 | Third-party / npm dependencies | ✗ not implemented (relative `.ts` files only) |
 
-> Extension builtins (such as `readFileSync`) are static mappings from "global symbol → C symbol", not real module imports.
+> Extension modules (such as `fs`) are importable by bare or `node:`-prefixed specifier — `import { readFileSync } from "fs"` / `import path from "path"` — and resolve to their runtime entries (named, default and namespace forms). Relative modules are still bundled at the driver layer.
 
 ---
 
@@ -196,7 +196,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously, and pending promises are driven by the runtime microtask queue at `await` and program exit; there is no real event loop, so timers / I/O cannot be awaited |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
 | Classes | No `get`/`set` accessor semantics, no access control, no automatic parameter property assignment |
-| `import` / `export` | Driver-layer AST bundling, top-level symbols renamed by module prefix; namespace imports `import * as` are unimplemented, circular dependencies error out, `export *` is approximate |
+| `import` / `export` | Driver-layer AST bundling, top-level symbols renamed by module prefix; extension modules importable by bare/`node:` specifier; namespace imports `import * as` of relative modules are unimplemented, circular dependencies error out, `export *` is approximate |
 
 ---
 
@@ -208,7 +208,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Self-hosting | ✗ roadmap planned (see [DESIGN.md](./DESIGN.md) / [README](../README.md)), not yet implemented: the runtime is still C, and the compiler does not compile itself with xbintsc |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
 | Full standard library (Math / JSON / Date / collections, etc.) | partial: Math / JSON / Date / Map / Set / RegExp implemented; Symbol / BigInt / Error not implemented |
-| Multi-file module bundling | partial: relative-path `.ts` import bundling implemented; namespace imports / circular dependencies / npm not implemented |
+| Multi-file module bundling | partial: relative-path `.ts` import bundling implemented, plus bare-specifier extension module imports; namespace imports of relative modules / circular dependencies / npm not implemented |
 | A real async runtime / event loop | ✗ (Promise is a synchronous microtask model) |
 | Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), but needs CI verification (`.github/workflows` is configured) |
 | Precise ECMAScript number / string / comparison semantics | ✗ see section 8 |
@@ -229,7 +229,7 @@ Unimplemented (classes/OO): get/set accessors, access control, parameter propert
 
 Unimplemented (standard library): Symbol, BigInt arbitrary precision, Error constructor, iterator protocol
 
-Unimplemented (modules): namespace imports import * as, circular dependencies, npm dependencies
+Unimplemented (modules): namespace imports import * as of relative modules, circular dependencies, npm dependencies
 
 Unimplemented (type system): type checking, generic instantiation, assertion semantics, optional-chaining narrowing
 

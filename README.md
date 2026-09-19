@@ -93,7 +93,7 @@ xbintsc build examples/hello.ts --out build/examples
 # Inspect the generated LLVM IR
 xbintsc emit examples/hello.ts | head
 
-# Use an optional extension (here, Node's readFileSync)
+# Use an optional extension (here, Node's fs via import)
 xbintsc run examples/read-file.ts --ext node
 ```
 
@@ -119,7 +119,7 @@ npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
 # Inspect the generated LLVM IR
 npx tsx src/cli/main.ts emit examples/hello.ts | head
 
-# Use an optional extension (here, Node's readFileSync)
+# Use an optional extension (here, Node's fs via import)
 npx tsx src/cli/main.ts run examples/read-file.ts --ext node
 ```
 
@@ -155,7 +155,7 @@ sources are compiled once and cached on the same principle.
 
 An extension is a plain object (`src/extensions/registry.ts`). The `node`
 extension is itself split into one folder per Node module, each pairing its
-builtins with the C sources that implement them:
+exports with the C sources that implement them:
 
 ```
 src/extensions/node/       runtime/ext_node/
@@ -173,20 +173,24 @@ const modules: readonly NodeModule[] = [fsModule, pathModule, osModule, processM
 
 export const nodeExtension: Extension = {
   name: "node",
-  runtimeSources: () => modules.flatMap((m) => m.runtimeSources()),
-  builtins: () => modules.reduce(
-    (merged, m) => Object.assign(merged, m.builtins()),
-    {} as Record<string, BuiltinFunction>,
+  runtimeSources: () => [...new Set(modules.flatMap((m) => m.runtimeSources()))],
+  modules: () => Object.fromEntries(
+    modules.flatMap((m) => {
+      const entry = { namespace: m.namespace, exports: m.exports?.() ?? m.builtins() };
+      return [[m.name, entry], [`node:${m.name}`, entry]];
+    }),
   ),
 };
 ```
 
-Registering it links the extra C sources and makes `readFileSync(...)` resolve
-to the C symbol with the uniform `(argc, argv)` calling convention. `path`,
-`os` and `process` additionally hook into namespace dispatch, so `path.join(...)`
-and `process.cwd()` lower to their runtime entries. Adding a module means
-dropping a folder under `src/extensions/node/` and its C counterpart under
-`runtime/ext_node/`; the core compiler never changes.
+Registering it links the extra C sources and makes the Node APIs available to
+`import`: `import { readFileSync } from "fs"` resolves to the C symbol with the
+uniform `(argc, argv)` calling convention. `path`, `os` and `process`
+additionally hook into namespace dispatch, so `import path from "path"` (or
+`import * as path from "path"`) makes `path.join(...)` and `process.cwd()` lower
+to their runtime entries. Adding a module means dropping a folder under
+`src/extensions/node/` and its C counterpart under `runtime/ext_node/`; the core
+compiler never changes.
 
 Node module coverage:
 

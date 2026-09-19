@@ -103,8 +103,9 @@ content hash in the same way.
 ## Extension mechanism
 
 An extension is a plain object (see `src/extensions/registry.ts`): it declares
-extra C runtime code, linker flags, and maps global functions to runtime symbols
-with the uniform `(argc, argv)` ABI. Node's `readFileSync` is wired in through
+extra C runtime code, linker flags, and the modules it makes importable, mapping
+exported bindings to runtime symbols with the uniform `(argc, argv)` ABI. Node's
+`import { readFileSync } from "fs"` is wired in through
 `src/extensions/node/fs` + `runtime/ext_node/fs`, and the core compiler never
 needs to know any platform details.
 

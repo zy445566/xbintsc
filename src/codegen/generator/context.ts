@@ -6,12 +6,16 @@
  * helpers every group relies on.
  */
 
-import { bind, type BindResult, type ClassInfo, type SymbolInfo } from "../../binder/binder.js";
+import { bind, SymbolKind, type BindResult, type ClassInfo, type SymbolInfo } from "../../binder/binder.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
-import type { SourceFileNode, Node } from "../../ast/nodes.js";
+import { SyntaxKind, type ImportDeclaration, type SourceFileNode, type Node } from "../../ast/nodes.js";
 import { i64, XT_UNDEFINED } from "../values.js";
-import type { BuiltinFunction } from "../../extensions/registry.js";
+import type {
+  BuiltinFunction,
+  ExtensionModule,
+  ModuleExport,
+} from "../../extensions/registry.js";
 import type { CodegenOptions, FunctionState } from "./state.js";
 import { escapeBytes, kindName, utf8Bytes } from "./tables.js";
 
@@ -20,6 +24,11 @@ export class GeneratorContext {
   readonly sourceFile: SourceFileNode;
   readonly diagnostics: DiagnosticBag;
   readonly builtins: Readonly<Record<string, BuiltinFunction>>;
+  readonly modules: Readonly<Record<string, ExtensionModule>>;
+  /** Imported symbol id -> the module binding it refers to. */
+  readonly importExports = new Map<number, ModuleExport>();
+  /** Imported symbol id -> the namespace it aliases (e.g. `path`). */
+  readonly importNamespaces = new Map<number, string>();
   readonly globals: string[] = [];
   readonly functions: string[] = [];
   readonly strings = new Map<string, { label: string; length: number }>();
@@ -34,6 +43,47 @@ export class GeneratorContext {
     this.diagnostics = diagnostics;
     this.binding = bind(sourceFile);
     this.builtins = options.builtins ?? {};
+    this.modules = options.modules ?? {};
+    this.resolveImports();
+  }
+
+  /**
+   * Map every imported binding to the module binding it names, so calls can be
+   * lowered to the extension's runtime symbol and namespace aliases can reuse
+   * the namespace dispatch tables.
+   */
+  private resolveImports(): void {
+    if (Object.keys(this.modules).length === 0) return;
+    for (const statement of this.sourceFile.statements) {
+      if (statement.kind !== SyntaxKind.ImportDeclaration) continue;
+      const declaration = statement as ImportDeclaration;
+      const module = this.modules[declaration.moduleSpecifier.value];
+      if (!module) continue;
+      const clause = declaration.importClause;
+      if (!clause) continue;
+      if (clause.name && module.namespace) {
+        const symbol = this.binding.symbolOfDeclaration.get(clause.name);
+        if (symbol) this.importNamespaces.set(symbol.id, module.namespace);
+      }
+      const bindings = clause.namedBindings;
+      if (bindings && bindings.kind === SyntaxKind.NamedImports) {
+        for (const specifier of bindings.elements) {
+          const importedName = specifier.propertyName?.text ?? specifier.name.text;
+          const exported = module.exports?.[importedName];
+          const symbol = this.binding.symbolOfDeclaration.get(specifier.name);
+          if (symbol && exported) this.importExports.set(symbol.id, exported);
+        }
+      } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport && module.namespace) {
+        const symbol = this.binding.symbolOfDeclaration.get(bindings.name);
+        if (symbol) this.importNamespaces.set(symbol.id, module.namespace);
+      }
+    }
+  }
+
+  /** Namespace name an imported alias refers to, if any. */
+  namespaceOfSymbol(symbol: SymbolInfo | undefined): string | undefined {
+    if (!symbol || symbol.kind !== SymbolKind.Import) return undefined;
+    return this.importNamespaces.get(symbol.id);
   }
 
   // -- emission primitives -------------------------------------------------

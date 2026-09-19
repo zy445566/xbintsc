@@ -94,11 +94,17 @@ describe("codegen", () => {
     expect(ir).toContain("@xt_array_push");
   });
 
-  it("calls extension builtins with the uniform argv ABI", () => {
+  it("resolves imported extension builtins to their runtime symbols", () => {
     const registry = createDefaultRegistry().register(nodeExtension);
-    const { ir } = compileToIr('readFileSync("f.txt");', registry);
+    const { ir } = compileToIr('import { readFileSync } from "fs";\nreadFileSync("f.txt");', registry);
     expect(ir).toContain("declare i64 @xt_node_read_text_file(i32, i64*)");
     expect(ir).toMatch(/call i64 @xt_node_read_text_file\(i32 \d+, i64\* %\w+\)/);
+  });
+
+  it("resolves namespace imports to the namespace dispatcher", () => {
+    const registry = createDefaultRegistry().register(nodeExtension);
+    const { ir } = compileToIr('import * as path from "path";\npath.join("a", "b");', registry);
+    expect(ir).toMatch(/call i64 @xt_path_static\(i64 %\w+, i32 2, i64\* %\w+\)/);
   });
 
   it("reports unsupported syntax instead of crashing", () => {

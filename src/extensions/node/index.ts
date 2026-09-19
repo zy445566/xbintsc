@@ -2,7 +2,7 @@
  * Node.js compatibility extension.
  *
  * Registering it links the C sources under `runtime/ext_node/` and exposes the
- * builtins each module implements, so `readFileSync("...")` in TypeScript
+ * modules each implements, so `import { readFileSync } from "fs"` in TypeScript
  * resolves to the C implementation without the core compiler knowing anything
  * about Node. Every Node module lives in its own subfolder next to this file
  * (`fs/`, `path/`, `os/`, `process/`, `buffer/`, `stream/`, `net/`, `dgram/`,
@@ -10,7 +10,7 @@
  * `runtime/ext_node/`.
  */
 
-import type { BuiltinFunction, Extension } from "../registry.js";
+import type { Extension, ExtensionModule } from "../registry.js";
 import type { NodeModule } from "./module.js";
 import { fsModule } from "./fs/index.js";
 import { fsPromisesModule } from "./fs-promises/index.js";
@@ -43,9 +43,19 @@ export const nodeExtension: Extension = {
   // `http` reuses the `net` sources; de-duplicate so each C file links once.
   runtimeSources: () => [...new Set(modules.flatMap((module) => module.runtimeSources()))],
   linkerFlags: () => (process.platform === "win32" ? ["-lws2_32"] : []),
-  builtins: () => {
-    const merged: Record<string, BuiltinFunction> = {};
-    for (const module of modules) Object.assign(merged, module.builtins());
-    return merged;
+  // Node APIs are reached through `import ... from "fs"` (or the `node:`
+  // scheme) rather than as bare globals, so each module is exposed for the
+  // code generator to resolve imported bindings against.
+  modules: () => {
+    const exposed: Record<string, ExtensionModule> = {};
+    for (const module of modules) {
+      const entry: ExtensionModule = {
+        namespace: module.namespace,
+        exports: module.exports ? module.exports() : module.builtins(),
+      };
+      exposed[module.name] = entry;
+      exposed[`node:${module.name}`] = entry;
+    }
+    return exposed;
   },
 };

@@ -16,6 +16,7 @@ import {
   type PropertyAccessExpression,
 } from "../../ast/nodes.js";
 import { SymbolKind, type FunctionInfo } from "../../binder/binder.js";
+import type { ModuleExport } from "../../extensions/registry.js";
 import { i64, numberLiteral, XT_TRUE, XT_UNDEFINED } from "../values.js";
 import {
   BUILTIN_METHODS,
@@ -45,6 +46,7 @@ export interface CallMethods {
   emitClosureValue(this: Generator, fn: FunctionInfo): string;
   emitSuperConstructor(this: Generator, node: CallExpression): string;
   emitSuperCall(this: Generator, node: CallExpression, access: PropertyAccessExpression): string;
+  emitModuleExport(this: Generator, node: CallExpression, exported: ModuleExport): string;
 }
 
 export const callMethods: CallMethods = {
@@ -107,6 +109,10 @@ export const callMethods: CallMethods = {
     if (callee.kind === SyntaxKind.Identifier) {
       if ((callee as Identifier).text === "super") return this.emitSuperConstructor(node);
       const symbol = this.binding.symbolOfIdentifier.get(callee as Identifier);
+      if (symbol && symbol.kind === SymbolKind.Import) {
+        const exported = this.importExports.get(symbol.id);
+        if (exported) return this.emitModuleExport(node, exported);
+      }
       if (symbol && symbol.kind === SymbolKind.Function) {
         const declaration = symbol.declarations[0];
         const fn = declaration ? this.binding.functionOfNode.get(declaration) : undefined;
@@ -200,8 +206,54 @@ export const callMethods: CallMethods = {
       }
     }
 
+    // `import * as ns from "path"` (or a default import) aliases a runtime
+    // namespace: `ns.join(...)` lowers to the same dispatcher as `path.join`.
+    if (targetIdentifier) {
+      const namespace = this.namespaceOfSymbol(targetSymbol);
+      if (namespace) {
+        const dispatcher = NAMESPACE_STATICS[namespace];
+        if (dispatcher) {
+          const name = this.stringValue(method);
+          const args = this.emitArguments(node.arguments);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @${dispatcher}(i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`);
+          return result;
+        }
+      }
+    }
+
     void BUILTIN_METHODS;
     return undefined;
+  },
+
+  /** Lower a call to an imported module binding to its runtime symbol. */
+  emitModuleExport(node: CallExpression, exported: ModuleExport): string {
+    const args = this.emitArguments(node.arguments);
+    if (exported.symbol) {
+      this.extraDeclarations.add(
+        exported.returnVoid
+          ? `declare void @${exported.symbol}(i32, i64*)`
+          : `declare i64 @${exported.symbol}(i32, i64*)`,
+      );
+      if (exported.returnVoid) {
+        this.emit(`  call void @${exported.symbol}(i32 ${args.argc}, i64* ${args.ptr})`);
+        return i64(XT_UNDEFINED);
+      }
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @${exported.symbol}(i32 ${args.argc}, i64* ${args.ptr})`);
+      return result;
+    }
+    if (exported.namespace && exported.method) {
+      const dispatcher = NAMESPACE_STATICS[exported.namespace];
+      if (dispatcher) {
+        const name = this.stringValue(exported.method);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @${dispatcher}(i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`);
+        return result;
+      }
+    }
+    this.unsupported(node, "imported function");
+    return i64(XT_UNDEFINED);
   },
 
   runtimeCall(name: string, args: readonly string[]): string {
@@ -270,6 +322,20 @@ export const callMethods: CallMethods = {
         const result = this.reg();
         this.emit(`  ${result} = call i64 @${getter}(i64 ${key})`);
         return result;
+      }
+    }
+    if (node.expression.kind === SyntaxKind.Identifier) {
+      const namespace = this.namespaceOfSymbol(
+        this.binding.symbolOfIdentifier.get(node.expression as Identifier),
+      );
+      if (namespace) {
+        const getter = NAMESPACE_PROPERTIES[namespace];
+        if (getter) {
+          const key = this.stringValue(node.name.text);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @${getter}(i64 ${key})`);
+          return result;
+        }
       }
     }
     const object = this.emitExpression(node.expression);

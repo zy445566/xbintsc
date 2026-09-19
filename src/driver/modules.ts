@@ -12,7 +12,7 @@
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import {
   ModifierKind,
   SyntaxKind,
@@ -53,6 +53,15 @@ export interface BundleResult {
 }
 
 const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".cts", "/index.ts", "/index.tsx"];
+
+/**
+ * Bare module specifiers (`fs`, `node:fs`, `@scope/pkg`) are not files to
+ * bundle: they are resolved at code generation time against the registered
+ * extension modules.
+ */
+function isExternalSpecifier(specifier: string): boolean {
+  return !specifier.startsWith(".") && !isAbsolute(specifier);
+}
 
 function resolveModule(fromDir: string, specifier: string): string | undefined {
   const base = resolve(fromDir, specifier);
@@ -126,6 +135,7 @@ function loadGraph(entryPath: string, diagnostics: DiagnosticBag): ModuleRecord[
     for (const statement of sourceFile.statements) {
       const specifier = moduleSpecifierOf(statement);
       if (!specifier) continue;
+      if (isExternalSpecifier(specifier)) continue;
       const dependency = resolveModule(dirname(path), specifier);
       if (!dependency) {
         diagnostics.error(
@@ -292,7 +302,13 @@ export function bundleModules(entryPath: string, diagnostics: DiagnosticBag): Bu
   const first = records[records.length - 1]!;
   for (const record of records) {
     for (const statement of record.sourceFile.statements) {
-      if (statement.kind === SyntaxKind.ImportDeclaration) continue;
+      if (statement.kind === SyntaxKind.ImportDeclaration) {
+        // External (extension) imports stay in place for code generation.
+        if (isExternalSpecifier((statement as ImportDeclaration).moduleSpecifier.value)) {
+          merged.push(statement);
+        }
+        continue;
+      }
       if (statement.kind === SyntaxKind.ExportDeclaration) {
         const declaration = statement as ExportDeclaration;
         const inner = (declaration as unknown as { declaration?: Statement }).declaration;

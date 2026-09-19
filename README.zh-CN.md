@@ -87,7 +87,7 @@ xbintsc build examples/hello.ts --out build/examples
 # 查看生成的 LLVM IR
 xbintsc emit examples/hello.ts | head
 
-# 使用可选扩展（这里为 Node 的 readFileSync）
+# 使用可选扩展（这里为 Node 的 fs，通过 import 引入）
 xbintsc run examples/read-file.ts --ext node
 ```
 
@@ -112,7 +112,7 @@ npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
 # 查看生成的 LLVM IR
 npx tsx src/cli/main.ts emit examples/hello.ts | head
 
-# 使用可选扩展（这里为 Node 的 readFileSync）
+# 使用可选扩展（这里为 Node 的 fs，通过 import 引入）
 npx tsx src/cli/main.ts run examples/read-file.ts --ext node
 ```
 
@@ -146,7 +146,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 ## 扩展
 
 扩展是一个普通对象（`src/extensions/registry.ts`）。`node` 扩展本身按每个 Node
-模块拆分目录，每个模块把其 builtins 与实现它们的 C 源配对：
+模块拆分目录，每个模块把它对外导出的绑定与实现它们的 C 源配对：
 
 ```
 src/extensions/node/       runtime/ext_node/
@@ -164,18 +164,22 @@ const modules: readonly NodeModule[] = [fsModule, pathModule, osModule, processM
 
 export const nodeExtension: Extension = {
   name: "node",
-  runtimeSources: () => modules.flatMap((m) => m.runtimeSources()),
-  builtins: () => modules.reduce(
-    (merged, m) => Object.assign(merged, m.builtins()),
-    {} as Record<string, BuiltinFunction>,
+  runtimeSources: () => [...new Set(modules.flatMap((m) => m.runtimeSources()))],
+  modules: () => Object.fromEntries(
+    modules.flatMap((m) => {
+      const entry = { namespace: m.namespace, exports: m.exports?.() ?? m.builtins() };
+      return [[m.name, entry], [`node:${m.name}`, entry]];
+    }),
   ),
 };
 ```
 
-注册它会链接额外的 C 源，并使 `readFileSync(...)` 解析到具有统一 `(argc, argv)`
-调用约定的 C 符号。`path`、`os` 与 `process` 还会接入命名空间分发，因此
-`path.join(...)` 与 `process.cwd()` 会下降为各自的运行时入口。新增一个模块意味着
-在 `src/extensions/node/` 下放入一个目录、并在 `runtime/ext_node/` 下放入对应的 C
+注册它会链接额外的 C 源，并通过 `import` 暴露 Node API：
+`import { readFileSync } from "fs"` 会解析到具有统一 `(argc, argv)` 调用约定的 C
+符号。`path`、`os` 与 `process` 还会接入命名空间分发，因此
+`import path from "path"`（或 `import * as path from "path"`）会让 `path.join(...)`
+与 `process.cwd()` 下降为各自的运行时入口。新增一个模块意味着在
+`src/extensions/node/` 下放入一个目录、并在 `runtime/ext_node/` 下放入对应的 C
 实现；核心编译器永不改动。
 
 Node 模块覆盖情况：

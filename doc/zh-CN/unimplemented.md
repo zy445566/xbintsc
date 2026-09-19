@@ -110,11 +110,11 @@
 | 具名导入导出 | ✓ `import { a, b as c }` / `export { a as b }` / `export const/let/var/function/class` |
 | 默认导入导出 | ✓ `export default` / `import d from` |
 | 再导出 `export { x } from` / `export * from` | ✓（`export *` 为近似复制） |
-| 命名空间导入 `import * as ns` | ✗ 未实现 |
+| 命名空间导入 `import * as ns` | ✗ 相对模块未实现（扩展模块如 `path` 已支持：`import * as path from "path"`） |
 | 循环依赖 | ✗ 直接报错（不做循环初始化语义） |
 | 第三方 / npm 依赖 | ✗ 未实现（仅相对路径 `.ts` 文件） |
 
-> 扩展 builtins（如 `readFileSync`）是「全局符号 → C 符号」的静态映射，不是真正的模块导入。
+> 扩展模块（如 `fs`）可通过裸名称或 `node:` 前缀的 `import` 引入 —— `import { readFileSync } from "fs"` / `import path from "path"` —— 并解析到运行时入口（具名、默认与命名空间形式均可）。相对模块仍在驱动层打包。
 
 ---
 
@@ -192,7 +192,7 @@
 | `async` / `await` | **同步微任务模型**：`await` 在已 settle 的 promise 上同步继续，pending promise 通过运行时微任务队列在 `await` 与程序结束时驱动；无真正的事件循环，无法等待定时器 / I/O |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
 | 类 | 无 `get`/`set` 访问器语义，无访问控制，无参数属性自动赋值 |
-| `import` / `export` | 驱动层 AST 打包、顶层符号按模块前缀重命名；命名空间导入 `import * as` 未实现，循环依赖报错，`export *` 为近似 |
+| `import` / `export` | 驱动层 AST 打包、顶层符号按模块前缀重命名；扩展模块可按裸/`node:` 说明符导入；相对模块的命名空间导入 `import * as` 未实现，循环依赖报错，`export *` 为近似 |
 
 ---
 
@@ -204,7 +204,7 @@
 | 自举（self-hosting） | ✗ 路线已规划（见 [DESIGN.md](DESIGN.md) / [README](../../README.zh-CN.md)），尚未实现：运行时仍为 C，编译器自身尚未用 xbintsc 编译 |
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
 | 完整标准库（Math / JSON / Date / 集合等） | 部分：Math / JSON / Date / Map / Set / RegExp 已实现；Symbol / BigInt / Error 未实现 |
-| 多文件模块打包 | 部分：相对路径 `.ts` 导入打包已实现；命名空间导入 / 循环依赖 / npm 未实现 |
+| 多文件模块打包 | 部分：相对路径 `.ts` 导入打包已实现，另支持裸说明符的扩展模块导入；相对模块的命名空间导入 / 循环依赖 / npm 未实现 |
 | 真正的异步运行时 / 事件循环 | ✗（Promise 为同步微任务模型） |
 | Windows 二进制产物验证 | 构建层已适配（`.exe` 后缀、链接参数分支），但需 CI 验证（`.github/workflows` 已配置） |
 | 精确的 ECMAScript 数值 / 字符串 / 比较语义 | ✗ 见第 8 节 |
@@ -224,7 +224,7 @@
 
 未实现（标准库）：Symbol、BigInt 任意精度、Error 构造器、迭代器协议
 
-未实现（模块）：命名空间导入 import * as、循环依赖、npm 依赖
+未实现（模块）：相对模块的命名空间导入 import * as、循环依赖、npm 依赖
 
 未实现（类型系统）：类型检查、泛型实例化、断言语义、可选链类型窄化
 

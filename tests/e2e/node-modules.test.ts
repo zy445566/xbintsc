@@ -65,6 +65,7 @@ describeWithClang("node compatibility modules", () => {
   it("wraps fs operations in promises", () => {
     const target = join(workdir, `promise_${Math.random().toString(36).slice(2)}.txt`);
     const source = `
+      import { readFile, rm, stat, writeFile } from "fs/promises";
       async function main(): Promise<void> {
         await writeFile(${JSON.stringify(target)}, "hello promises");
         const data = await readFile(${JSON.stringify(target)});

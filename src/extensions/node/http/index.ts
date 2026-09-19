@@ -12,6 +12,7 @@ import { resolveFrom } from "../module.js";
 
 export const httpModule: NodeModule = {
   name: "http",
+  namespace: "http",
   runtimeSources: () => [
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/net/net.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/http/http.c"),

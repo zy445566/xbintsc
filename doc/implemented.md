@@ -114,7 +114,7 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 
 ### 3.4 Module syntax (structural parsing + driver bundling)
 
-- `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports parsed only, not implemented), `import type`
+- `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules parsed only; extension modules such as `path` are supported), `import type`
 - `export default`, `export { a as b }`, `export *`, `export =`
 - Import attributes (`with` / `assert`)
 - The **runtime semantics** of `import` / `export` are handled at the driver layer by `src/driver/modules.ts`: it recursively resolves relative dependencies, renames top-level symbols with a per-module prefix, rewrites references, merges into a single file and rebinds. Circular dependencies error out.
@@ -258,12 +258,12 @@ Location: `runtime/xt_alloc.c`, `runtime/xt_values.c`, `runtime/xt_containers.c`
 
 Location: `src/extensions/registry.ts`, `src/extensions/node/`
 
-- An extension is a plain object: `runtimeSources()` (extra C sources), `linkerFlags()` (extra link flags), `builtins()` (global identifier → runtime symbol, uniform `(argc, argv)` ABI).
-- `ExtensionRegistry`: register / unregister / lookup / aggregate builtins, runtime sources and link flags.
+- An extension is a plain object: `runtimeSources()` (extra C sources), `linkerFlags()` (extra link flags), `builtins()` (global identifier → runtime symbol, uniform `(argc, argv)` ABI) and `modules()` (import specifier → named exports / namespace).
+- `ExtensionRegistry`: register / unregister / lookup / aggregate builtins, modules, runtime sources and link flags.
 - The built-in core extension `core`: exposes `print` (mapped to `xt_println`), always registered.
 - The Node extension `node`:
   - Modular organisation: `src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
-  - Exposes `readFileSync`, `readTextFile` (mapped to `xt_node_read_text_file`)
+  - Exposes importable modules (`fs`, `fs/promises`, `path`, `os`, `process`, …) under both bare and `node:`-prefixed specifiers; `import { readFileSync } from "fs"` resolves to `xt_node_read_text_file`, and `path`/`os`/`process` map exports onto the namespace dispatchers.
 - Adding a new module only requires a new directory plus a C implementation; the core compiler never changes.
 
 ---
@@ -322,7 +322,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`)
 
 - Per-module unit tests; when `clang` is present, e2e really compiles and runs binaries, otherwise it is skipped automatically.
-- e2e coverage: arithmetic and printing, recursive functions, loops / arrays / string concatenation, closures capturing by reference, JS-style printing of objects / arrays, the Node `readFileSync` extension, `switch` fall-through, array / string methods, `Math` and global functions and all `console` levels, default / rest parameters and `arguments`, `Object` helpers and spread and `in`/`delete`, `for...in` object key enumeration, `try/catch/finally`, optional chaining, classes and `new`/`this`/`static`/`extends`/`super`/`instanceof`, `async`/`await` and `Promise`, `Map`/`Set`/`JSON` and extended standard library, multi-file `import`/`export`.
+- e2e coverage: arithmetic and printing, recursive functions, loops / arrays / string concatenation, closures capturing by reference, JS-style printing of objects / arrays, the Node `fs` extension via `import`, `switch` fall-through, array / string methods, `Math` and global functions and all `console` levels, default / rest parameters and `arguments`, `Object` helpers and spread and `in`/`delete`, `for...in` object key enumeration, `try/catch/finally`, optional chaining, classes and `new`/`this`/`static`/`extends`/`super`/`instanceof`, `async`/`await` and `Promise`, `Map`/`Set`/`JSON` and extended standard library, multi-file `import`/`export`.
 
 ---
 
@@ -337,10 +337,10 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 | Functions | Default parameters, rest parameters, capturing closures, `this` binding, lexical `this` in arrow functions |
 | Classes / OO | Constructors, instance fields, methods, `static`, inheritance `extends`/`super`, prototype chain, `instanceof` |
 | Async | `async`/`await`, `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), synchronous microtask queue |
-| Modules | `import`/`export` (named / default / re-export / `export *`), multi-file bundling over relative paths |
+| Modules | `import`/`export` (named / default / re-export / `export *`), multi-file bundling over relative paths, bare specifiers resolved to extension modules |
 | Standard library | Array / string / number / object extension methods, `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `Object/Array/Number/String` statics, `console.*` |
 | Value model | 64-bit NaN-boxing, uniform function ABI (including `this`), closure environments, object prototype chains |
 | Runtime | Strings / objects / arrays / closures / arithmetic / comparison / catchable exceptions / Promise / collections / `console` |
-| Extensions | Extension registry, `core` (print), `node` (fs: readFileSync) |
+| Extensions | Extension registry, `core` (print), `node` (fs / path / os / process / buffer / stream / net / dgram / http imported by specifier) |
 | Toolchain | clang compiles IR/C, linking, incremental cache |
 | Platforms | macOS / Linux / Windows (adapted at the build level, CI in `.github/workflows`) |

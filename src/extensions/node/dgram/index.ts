@@ -10,6 +10,7 @@ import { resolveFrom } from "../module.js";
 
 export const dgramModule: NodeModule = {
   name: "dgram",
+  namespace: "dgram",
   runtimeSources: () => [resolveFrom(import.meta.url, "../../../../runtime/ext_node/dgram/dgram.c")],
   builtins: () => ({}),
 };

@@ -3,8 +3,8 @@
  *
  * There is no asynchronous I/O scheduler, so each function wraps the matching
  * synchronous `fs` implementation in an already-resolved promise. `readFile`,
- * `writeFile`, `mkdir`, `readdir`, `stat`, `rm`, ... are therefore exposed as
- * bare globals returning promises.
+ * `writeFile`, `mkdir`, `readdir`, `stat`, `rm`, ... are therefore importable
+ * from `fs/promises`, returning promises.
  */
 
 import type { NodeModule } from "../module.js";

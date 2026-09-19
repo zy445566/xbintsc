@@ -29,12 +29,20 @@ describe("ExtensionRegistry", () => {
   });
 
   it("merges builtins from every extension", () => {
-    const registry = createDefaultRegistry().register(nodeExtension);
+    const registry = createDefaultRegistry().register(demoExtension);
     const builtins = registry.builtins();
     expect(builtins.print?.symbol).toBe("xt_println");
-    expect(builtins.readFileSync?.symbol).toBe("xt_node_read_text_file");
-    expect(builtins.writeFileSync?.symbol).toBe("xt_node_write_file");
-    expect(builtins.existsSync?.symbol).toBe("xt_node_exists");
+    expect(builtins.demo?.symbol).toBe("xt_demo");
+  });
+
+  it("exposes importable modules from every extension", () => {
+    const registry = createDefaultRegistry().register(nodeExtension);
+    const modules = registry.modules();
+    expect(modules.fs?.exports?.readFileSync?.symbol).toBe("xt_node_read_text_file");
+    expect(modules["node:fs"]?.exports?.writeFileSync?.symbol).toBe("xt_node_write_file");
+    expect(modules["fs/promises"]?.exports?.readFile?.symbol).toBe("xt_node_p_read_file");
+    expect(modules.path?.namespace).toBe("path");
+    expect(modules["node:path"]?.exports?.join?.namespace).toBe("path");
   });
 
   it("collects runtime sources and linker flags", () => {

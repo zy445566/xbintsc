@@ -2,9 +2,10 @@
  * Pluggable compile modules ("extensions").
  *
  * An extension teaches xbintsc about a host platform: additional C runtime
- * sources to link, libraries to pass to the linker, and global functions that
- * resolve to runtime symbols. Node's `fs`, Bun's `Bun.file`, ... all fit this
- * shape, so the core compiler never has to grow platform specific branches.
+ * sources to link, libraries to pass to the linker, global functions that
+ * resolve to runtime symbols, and modules that can be pulled in with `import`.
+ * Node's `fs`, Bun's `Bun.file`, ... all fit this shape, so the core compiler
+ * never has to grow platform specific branches.
  *
  * The default registry ships an empty baseline; callers register the
  * extensions they need before invoking the driver.
@@ -14,6 +15,29 @@ export interface BuiltinFunction {
   /** Exported C symbol, called as `xt_value symbol(int32_t argc, xt_value *argv)`. */
   readonly symbol: string;
   readonly returnVoid?: boolean;
+}
+
+/**
+ * One binding a Node-style module exports. It is either a direct runtime
+ * function with the uniform `(argc, argv)` ABI (`symbol`), or a named method
+ * dispatched through a namespace table (`namespace` + `method`), e.g.
+ * `path.join` -> `xt_path_static("join", ...)`.
+ */
+export interface ModuleExport {
+  readonly symbol?: string;
+  readonly returnVoid?: boolean;
+  readonly namespace?: string;
+  readonly method?: string;
+}
+
+export type ModuleExports = Readonly<Record<string, ModuleExport>>;
+
+/** A module an extension makes importable (e.g. `import { x } from "fs"`). */
+export interface ExtensionModule {
+  /** Named exports for `import { x } from "..."`. */
+  readonly exports?: ModuleExports;
+  /** Namespace name for `import * as ns` / `import ns from`, e.g. `path`. */
+  readonly namespace?: string;
 }
 
 export interface Extension {
@@ -26,6 +50,8 @@ export interface Extension {
   linkerFlags?(): readonly string[];
   /** Global identifiers that resolve to runtime symbols when called. */
   builtins?(): Readonly<Record<string, BuiltinFunction>>;
+  /** Modules importable as `import ... from "<specifier>"`. */
+  modules?(): Readonly<Record<string, ExtensionModule>>;
 }
 
 export class ExtensionRegistry {
@@ -61,6 +87,23 @@ export class ExtensionRegistry {
     for (const extension of this.extensions.values()) {
       const builtins = extension.builtins?.();
       if (builtins) Object.assign(merged, builtins);
+    }
+    return merged;
+  }
+
+  /** Flatten every registered extension's importable modules. */
+  modules(): Readonly<Record<string, ExtensionModule>> {
+    const merged: Record<string, ExtensionModule> = {};
+    for (const extension of this.extensions.values()) {
+      const modules = extension.modules?.();
+      if (!modules) continue;
+      for (const [specifier, module] of Object.entries(modules)) {
+        const existing = merged[specifier];
+        merged[specifier] = {
+          namespace: module.namespace ?? existing?.namespace,
+          exports: { ...existing?.exports, ...module.exports },
+        };
+      }
     }
     return merged;
   }

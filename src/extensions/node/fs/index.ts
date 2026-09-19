@@ -1,7 +1,8 @@
 /**
  * Node's `fs` module: synchronous file and directory operations backed by
  * `runtime/ext_node/fs`. Asynchronous callbacks are not supported (xbintsc has
- * no event loop), so only the `*Sync` API is exposed.
+ * no event loop), so only the `*Sync` API is exposed. Import the functions, e.g.
+ * `import { readFileSync } from "fs"`.
  */
 
 import type { NodeModule } from "../module.js";

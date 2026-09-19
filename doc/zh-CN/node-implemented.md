@@ -48,6 +48,7 @@ src/extensions/node/           runtime/ext_node/
   - `name`：模块名（如 `fs`）
   - `runtimeSources()`：该模块的 C 源
   - `builtins()`：全局标识符 → 运行时符号的映射（`path` / `os` / `process` 通过命名空间分发，故返回空表）
+  - `namespace` / `exports()`：该模块的可导入命名空间与命名导出（`import { join } from "path"`、`import path from "path"`）
 - `resolveFrom(importMetaUrl, relative)`：把相对于当前模块目录的路径解析为绝对路径，用于定位 C 源。
 
 ---
@@ -56,9 +57,9 @@ src/extensions/node/           runtime/ext_node/
 
 实现位置：`src/extensions/node/fs/*.ts`、`runtime/ext_node/fs/*.c`
 
-### 2.1 可用函数（裸全局标识符）
+### 2.1 可用函数（从 `fs` 导入）
 
-| 全局函数 | 运行时符号 | 说明 |
+| 导入函数 | 运行时符号 | 说明 |
 | --- | --- | --- |
 | `readFileSync(path[, options])` | `xt_node_read_text_file` | 同步读取文件，返回字符串；支持编码选项 |
 | `readTextFile(path)` | `xt_node_read_text_file` | `readFileSync` 的别名（同一符号） |
@@ -95,9 +96,11 @@ src/extensions/node/           runtime/ext_node/
 
 ### 2.4 调用方式
 
-`fs` 内置函数以**裸全局标识符**形式暴露（不是 `fs.readFileSync(...)`）：
+`fs` 的导出通过 `import` 引入（也可用 `node:fs` 别名），不再以裸全局标识符暴露：
 
 ```ts
+import { readFileSync, writeFileSync, existsSync } from "fs";
+
 const text = readFileSync("examples/data.txt");
 writeFileSync("/tmp/out.txt", text);
 console.log(existsSync("/tmp/out.txt"));
@@ -113,7 +116,7 @@ console.log(existsSync("/tmp/out.txt"));
 
 实现位置：`src/extensions/node/path/index.ts`、`runtime/ext_node/path/path.c`
 
-采用 `path.<name>(...)` 命名空间调用，编译器将其降为 `xt_path_static(<name>, argc, argv)`。语义为 POSIX（`/` 分隔符）。
+采用 `path.<name>(...)` 命名空间调用，编译器将其降为 `xt_path_static(<name>, argc, argv)`。语义为 POSIX（`/` 分隔符）。以命名空间方式导入（`import path from "path"` / `import * as path from "path"`），或单独导入方法（`import { join } from "path"`）。
 
 | 方法 | 说明 |
 | --- | --- |
@@ -127,8 +130,11 @@ console.log(existsSync("/tmp/out.txt"));
 | `path.relative(from, to)` | 相对路径 |
 
 ```ts
+import path from "path";
+import { basename } from "path";
+
 console.log(path.join("a", "b", "..", "c")); // a/c
-console.log(path.basename("/x/y/z.txt"));    // z.txt
+console.log(basename("/x/y/z.txt"));          // z.txt
 ```
 
 ---
@@ -138,6 +144,7 @@ console.log(path.basename("/x/y/z.txt"));    // z.txt
 实现位置：`src/extensions/node/os/index.ts`、`runtime/ext_node/os/os.c`
 
 采用 `os.<name>(...)` 命名空间调用，降为 `xt_os_static(<name>, argc, argv)`。
+以命名空间方式导入（`import os from "os"`），或单独导入函数（`import { platform } from "os"`）。
 
 | 方法 | 说明 |
 | --- | --- |
@@ -159,6 +166,7 @@ console.log(path.basename("/x/y/z.txt"));    // z.txt
 实现位置：`src/extensions/node/process/index.ts`、`runtime/ext_node/process/process.c`
 
 方法调用降为 `xt_process_call(<name>, argc, argv)`，属性访问降为 `xt_process_get(<name>)`。
+通过 `import process from "process"` 导入后使用。
 
 | 方法 / 属性 | 说明 |
 | --- | --- |
@@ -275,9 +283,11 @@ UDP 套接字。`dgram.createSocket(type | options[, cb])` 返回 EventEmitter�
 
 实现位置：`src/extensions/node/fs-promises/index.ts`、`runtime/ext_node/fs/promises.c`
 
-无异步 I/O 调度器，故每个函数把对应的同步 `fs` 实现包进**已 settle 的 Promise**，以裸全局标识符暴露：`readFile`、`writeFile`、`appendFile`、`mkdir`、`readdir`、`rm`、`unlink`、`rmdir`、`rename`、`copyFile`、`realpath`、`stat`、`lstat`、`access`。
+无异步 I/O 调度器，故每个函数把对应的同步 `fs` 实现包进**已 settle 的 Promise**，由 `fs/promises` 模块导出：`readFile`、`writeFile`、`appendFile`、`mkdir`、`readdir`、`rm`、`unlink`、`rmdir`、`rename`、`copyFile`、`realpath`、`stat`、`lstat`、`access`。
 
 ```ts
+import { readFile, writeFile } from "fs/promises";
+
 async function main(): Promise<void> {
   await writeFile("/tmp/a.txt", "hi");
   console.log(await readFile("/tmp/a.txt"));

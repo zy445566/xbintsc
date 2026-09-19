@@ -140,6 +140,18 @@ export const expressionMethods: ExpressionMethods = {
       if (symbol.kind === SymbolKind.Function && !this.current.slots.has(symbol.id)) {
         return this.emitFunctionValue(symbol);
       }
+      if (symbol.kind === SymbolKind.Import) {
+        // Imported runtime bindings have no first-class value: they are meant
+        // to be called (`readFileSync(...)`) or used as a namespace
+        // (`path.join(...)`), both handled before identifier lowering.
+        this.diagnostics.error(
+          DiagnosticCode.CodegenError,
+          `Imported binding '${identifier.text}' cannot be used as a value`,
+          identifier,
+          this.sourceFile.fileName,
+        );
+        return i64(XT_UNDEFINED);
+      }
       return this.readSlot(symbol);
     }
     switch (identifier.text) {

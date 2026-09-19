@@ -1,5 +1,7 @@
 # xbintsc
 
+> Language: **English** | [简体中文](./README.zh-CN.md)
+
 `xbintsc` compiles a practical subset of **TypeScript directly to native binaries**.
 It parses TypeScript itself, binds names, lowers the program to **LLVM IR text**,
 and hands the IR to **clang**, which produces a standalone executable linked

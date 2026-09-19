@@ -1,5 +1,7 @@
 # xbintsc 设计
 
+> 语言 / Language：[English](../DESIGN.md) | **简体中文**
+
 实现一个 TypeScript 的二进制编译器。
 
 ## 原始需求

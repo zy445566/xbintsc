@@ -18,7 +18,14 @@ mkdirSync(outDir, { recursive: true });
 const clang = process.env.xbintsc_CLANG ?? "clang";
 
 const sources = [
-  ["xt_runtime.c", "xt_runtime.o"],
+  // Core runtime, split into translation units (see runtime/rt_internal.h).
+  ["xt_alloc.c", "xt_alloc.o"],
+  ["xt_values.c", "xt_values.o"],
+  ["xt_containers.c", "xt_containers.o"],
+  ["xt_stdlib.c", "xt_stdlib.o"],
+  ["xt_builtins.c", "xt_builtins.o"],
+  ["xt_io.c", "xt_io.o"],
+  // Node extension sources.
   ["ext_node/fs/read_file.c", "ext_node_fs_read_file.o"],
 ];
 

@@ -139,7 +139,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const runtimeDir = findRuntimeDir();
   mkdirSync(cacheDir, { recursive: true });
 
-  const { runtimeObject, extensionObjects } = ensureRuntimeObjects(runner, clang, runtimeDir, cacheDir, registry);
+  const { runtimeObjects, extensionObjects } = ensureRuntimeObjects(runner, clang, runtimeDir, cacheDir, registry);
 
   const objectPath = emit === "obj" ? outputPath : resolve(outDir, baseName + ".o");
   compileIr(runner, { clang, irPath, objectPath, optimize });
@@ -152,7 +152,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   link(runner, {
     clang,
-    objectPaths: [objectPath, runtimeObject, ...extensionObjects],
+    objectPaths: [objectPath, ...runtimeObjects, ...extensionObjects],
     outputPath,
     linkerFlags: [...(process.platform === "win32" ? [] : ["-lm"]), ...registry.linkerFlags()],
     optimize,
@@ -164,9 +164,19 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 }
 
 interface RuntimeObjects {
-  readonly runtimeObject: string;
+  readonly runtimeObjects: readonly string[];
   readonly extensionObjects: readonly string[];
 }
+
+/** Core runtime translation units (each compiled and cached independently). */
+const RUNTIME_SOURCES = [
+  "xt_alloc.c",
+  "xt_values.c",
+  "xt_containers.c",
+  "xt_stdlib.c",
+  "xt_builtins.c",
+  "xt_io.c",
+] as const;
 
 /**
  * Compile the core runtime and every extension source, reusing cached object
@@ -189,9 +199,11 @@ function ensureRuntimeObjects(
     return objectPath;
   };
 
-  const runtimeObject = compileOne(join(runtimeDir, "xt_runtime.c"), "xt_runtime");
+  const runtimeObjects = RUNTIME_SOURCES.map((source) =>
+    compileOne(join(runtimeDir, source), basename(source, ".c")),
+  );
   const extensionObjects = registry
     .runtimeSources()
     .map((sourcePath, index) => compileOne(sourcePath, `ext_${index}_${basename(sourcePath, ".c")}`));
-  return { runtimeObject, extensionObjects };
+  return { runtimeObjects, extensionObjects };
 }

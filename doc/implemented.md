@@ -23,7 +23,7 @@ source.ts
    ▼
  module.ll ── clang ──► module.o ──链接──► 可执行文件
                                    ▲
-                          runtime/xt_runtime.c（C 运行时）
+                          runtime/*.c（C 运行时，按功能拆分）
 ```
 
 - 前端与后端、运行时、扩展完全解耦。
@@ -214,7 +214,9 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 
 ## 8. C 运行时（Runtime，已实现）
 
-实现位置：`runtime/xt_runtime.c`、`runtime/rt.h`
+实现位置：`runtime/xt_alloc.c`、`runtime/xt_values.c`、`runtime/xt_containers.c`、
+`runtime/xt_stdlib.c`、`runtime/xt_builtins.c`、`runtime/xt_io.c`，共享私有头
+`runtime/rt_internal.h`；公开 ABI 见 `runtime/rt.h`。
 
 - 分配器：bump arena，`calloc` 分配，永不释放（GC 已隔离在 `xt_alloc` 之后）。
 - 值构造：`xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`。

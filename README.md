@@ -56,10 +56,13 @@ delegated to `@xt_*` runtime calls.
 
 ### Runtime
 
-`runtime/xt_runtime.c` implements strings, objects, arrays, closures, arithmetic,
-comparison, exceptions and Node-like `console.log` inspection. It uses a bump
-arena and never frees — garbage collection is deliberately deferred and isolated
-behind `xt_alloc`, so it can be replaced without touching the compiler.
+`runtime/` implements strings, objects, arrays, closures, arithmetic,
+comparison, exceptions and Node-like `console.log` inspection. The C code is
+split by function across translation units (`xt_alloc.c`, `xt_values.c`,
+`xt_containers.c`, `xt_stdlib.c`, `xt_builtins.c`, `xt_io.c`) sharing the
+private `runtime/rt_internal.h`. It uses a bump arena and never frees — garbage
+collection is deliberately deferred and isolated behind `xt_alloc`, so it can
+be replaced without touching the compiler.
 
 ## Usage
 

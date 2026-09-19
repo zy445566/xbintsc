@@ -86,10 +86,13 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const absoluteEntry = resolve(entryPath);
   const sourceText = readFileSync(absoluteEntry, "utf8");
 
+  const baseName = basename(absoluteEntry, extname(absoluteEntry));
   const outputPath =
     emit === "ir"
-      ? resolve(options.output ?? join(outDir, basename(absoluteEntry, extname(absoluteEntry)) + ".ll"))
-      : executableName(absoluteEntry, outDir, options.output);
+      ? resolve(options.output ?? join(outDir, baseName + ".ll"))
+      : emit === "obj"
+        ? resolve(options.output ?? join(outDir, baseName + ".o"))
+        : executableName(absoluteEntry, outDir, options.output);
 
   const cacheKey = hashParts([
     COMPILER_VERSION,
@@ -138,13 +141,13 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   const { runtimeObject, extensionObjects } = ensureRuntimeObjects(runner, clang, runtimeDir, cacheDir, registry);
 
-  const objectPath = resolve(outDir, basename(absoluteEntry, extname(absoluteEntry)) + ".o");
+  const objectPath = emit === "obj" ? outputPath : resolve(outDir, baseName + ".o");
   compileIr(runner, { clang, irPath, objectPath, optimize });
 
   if (emit === "obj") {
     cache.record(cacheKey, outputs);
     cache.save();
-    return { outputPath: objectPath, irPath, cached: false, diagnostics: [], ir };
+    return { outputPath, irPath, cached: false, diagnostics: [], ir };
   }
 
   link(runner, {

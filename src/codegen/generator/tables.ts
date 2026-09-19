@@ -31,6 +31,7 @@ export const BINARY_RUNTIME: Record<string, string | undefined> = {
   [BinaryOperator.GreaterThanGreaterThan]: "xt_shr",
   [BinaryOperator.GreaterThanGreaterThanGreaterThan]: "xt_ushr",
   [BinaryOperator.In]: "xt_in",
+  [BinaryOperator.InstanceOf]: "xt_instance_of",
 };
 
 export const CONSOLE_METHODS: Record<string, string> = {
@@ -38,11 +39,23 @@ export const CONSOLE_METHODS: Record<string, string> = {
   info: "xt_console_info",
   warn: "xt_console_warn",
   error: "xt_console_error",
+  dir: "xt_console_dir",
+  trace: "xt_console_trace",
+  assert: "xt_console_assert",
+  count: "xt_console_count",
+  countReset: "xt_console_count_reset",
+  group: "xt_console_group",
+  groupEnd: "xt_console_group_end",
+  table: "xt_console_table",
+  time: "xt_console_time",
+  timeEnd: "xt_console_time_end",
+  timeLog: "xt_console_time_log",
 };
 
 export const MATH_FUNCTIONS = new Set<string>([
   "abs", "floor", "ceil", "round", "trunc", "sqrt", "cbrt", "pow", "exp", "log", "log2", "log10",
   "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "hypot", "sign", "random", "min", "max",
+  "log1p", "expm1", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "fround", "imul", "clz32",
 ]);
 
 export const MATH_CONSTANTS: Record<string, number> = {
@@ -64,6 +77,28 @@ export const GLOBAL_FUNCTIONS: Record<string, string> = {
   Number: "xt_number_ctor",
   String: "xt_string_ctor",
   Boolean: "xt_boolean_ctor",
+};
+
+/** Global namespaces whose static methods map to runtime dispatchers. */
+export const NAMESPACE_STATICS: Record<string, string> = {
+  Math: "xt_math_call",
+  JSON: "xt_json",
+  Array: "xt_array_static",
+  Object: "xt_object_static",
+  Number: "xt_number_static",
+  String: "xt_string_static",
+  Date: "xt_date_static",
+  Promise: "xt_promise_static",
+};
+
+/** Global constructors called as `new X(...)` (all have signature `(i32, i64*)`). */
+export const CTOR_FUNCTIONS: Record<string, string> = {
+  Array: "xt_array_new",
+  Map: "xt_map_ctor",
+  Set: "xt_set_ctor",
+  Date: "xt_date_ctor",
+  RegExp: "xt_regexp_ctor",
+  Promise: "xt_promise_ctor",
 };
 
 export const BUILTIN_METHODS = new Set<string>([

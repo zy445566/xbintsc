@@ -9,14 +9,21 @@
  * cached, serialized for the incremental build, and unit tested in isolation.
  */
 
+import { NodeFlags, ModifierKind } from "../ast/kinds.js";
 import {
   SyntaxKind,
   type ArrowFunction,
   type Block,
+  type ClassDeclaration,
+  type ClassExpression,
+  type ConstructorDeclaration,
   type FunctionDeclaration,
   type FunctionExpression,
   type Identifier,
+  type MethodDeclaration,
   type Node,
+  type PropertyDeclaration,
+  type PropertyName,
   type SourceFileNode,
   type Statement,
   type Expression,
@@ -76,6 +83,40 @@ export interface FunctionInfo {
   readonly captureIndex: Map<number, number>;
   readonly isModule: boolean;
   readonly isArrow: boolean;
+  /** True when the function was declared `async`. */
+  readonly isAsync: boolean;
+  /** True when this function's body mentions `this` directly. */
+  usesThis: boolean;
+  /** True when an arrow function must receive `this` from its enclosing scope. */
+  capturesThis: boolean;
+  /** Set for class methods/constructors; carries the owning class. */
+  classInfo?: ClassInfo;
+  /** True for `static` class members. */
+  isStatic?: boolean;
+  /** True for an explicit `constructor`. */
+  isConstructor?: boolean;
+}
+
+export interface ClassInfo {
+  readonly id: number;
+  readonly name: string;
+  readonly node: Node;
+  readonly scope: Scope;
+  readonly parent?: ClassInfo;
+  readonly parentExpression?: Expression;
+  /** `this`-bearing fields declared on the class. */
+  readonly fields: ClassFieldInfo[];
+  readonly methods: FunctionInfo[];
+  readonly statics: FunctionInfo[];
+  ctor?: FunctionInfo;
+  /** The symbol the class name binds to, when there is one. */
+}
+
+export interface ClassFieldInfo {
+  readonly name: string;
+  readonly initializer: Expression | undefined;
+  readonly fn: FunctionInfo;
+  readonly isStatic: boolean;
 }
 
 export enum ScopeKind {
@@ -98,6 +139,9 @@ export interface Scope {
 export interface BindResult {
   readonly moduleFunction: FunctionInfo;
   readonly functions: FunctionInfo[];
+  readonly classes: ClassInfo[];
+  /** Maps a class-like AST node to the ClassInfo the binder built. */
+  readonly classOfNode: Map<Node, ClassInfo>;
   /** Maps a function-like AST node to the FunctionInfo the binder built for it. */
   readonly functionOfNode: Map<Node, FunctionInfo>;
   readonly symbolOfDeclaration: Map<Node, SymbolInfo>;
@@ -120,12 +164,15 @@ export function bind(sourceFile: SourceFileNode): BindResult {
 
 class Binder {
   private readonly functions: FunctionInfo[] = [];
+  private readonly classes: ClassInfo[] = [];
+  private readonly classOfNode = new Map<Node, ClassInfo>();
   private readonly symbolOfDeclaration = new Map<Node, SymbolInfo>();
   private readonly symbolOfIdentifier = new Map<Identifier, SymbolInfo>();
   private readonly scopes = new Map<Node, Scope>();
   private readonly unresolved: Identifier[] = [];
   private nextSymbolId = 1;
   private nextFunctionId = 1;
+  private nextClassId = 1;
   private current!: MutableFunction;
 
   constructor(private readonly sourceFile: SourceFileNode) {}
@@ -140,9 +187,22 @@ class Binder {
     this.collectFunctionScoped(this.sourceFile.statements, this.current);
     this.bindStatements(this.sourceFile.statements, scope);
 
+    // Arrows inherit `this` lexically: propagate the need to capture it up the
+    // chain of arrow functions until reaching a regular function.
+    for (let index = this.functions.length - 1; index >= 0; index--) {
+      const fn = this.functions[index]! as MutableFunction;
+      if (fn.usesThis && fn.isArrow) {
+        fn.capturesThis = true;
+        const parent = fn.parent as MutableFunction | undefined;
+        if (parent && parent.isArrow) parent.usesThis = true;
+      }
+    }
+
     return {
       moduleFunction: this.current,
       functions: this.functions,
+      classes: this.classes,
+      classOfNode: this.classOfNode,
       functionOfNode: new Map(this.functions.map((fn) => [fn.node as Node, fn])),
       symbolOfDeclaration: this.symbolOfDeclaration,
       symbolOfIdentifier: this.symbolOfIdentifier,
@@ -172,6 +232,9 @@ class Binder {
       captureIndex: new Map(),
       isModule,
       isArrow,
+      isAsync: (((node as { flags?: number }).flags ?? 0) & NodeFlags.Async) !== 0,
+      usesThis: false,
+      capturesThis: false,
     };
     this.functions.push(fn);
     return fn;
@@ -369,6 +432,13 @@ class Binder {
       case SyntaxKind.Identifier:
         this.reference(node as Identifier, scope);
         return;
+      case SyntaxKind.ThisKeyword:
+        this.current.usesThis = true;
+        return;
+      case SyntaxKind.ClassDeclaration:
+      case SyntaxKind.ClassExpression:
+        this.bindClass(node as ClassDeclaration | ClassExpression, scope);
+        return;
       case SyntaxKind.InterfaceDeclaration:
       case SyntaxKind.TypeAliasDeclaration:
         // Type-only: skip the body entirely.
@@ -490,7 +560,118 @@ class Binder {
     this.current = parentFn;
   }
 
+  private bindClass(node: ClassDeclaration | ClassExpression, scope: Scope): void {
+    const parentFn = this.current;
+    const name = node.name ? node.name.text : "(anonymous)";
+
+    let parentExpression: Expression | undefined;
+    let parentClass: ClassInfo | undefined;
+    const heritage = node.heritage.find((clause) => clause.token === "extends");
+    if (heritage && heritage.types.length > 0) {
+      parentExpression = heritage.types[0]!.expression;
+      this.bindNode(parentExpression, scope);
+      if (parentExpression.kind === SyntaxKind.Identifier) {
+        const symbol = this.symbolOfIdentifier.get(parentExpression as Identifier);
+        const declaration = symbol?.declarations[0];
+        if (declaration) parentClass = this.classOfNode.get(declaration);
+      }
+    }
+
+    const info: ClassInfo = {
+      id: this.nextClassId++,
+      name,
+      node,
+      scope,
+      parent: parentClass,
+      parentExpression,
+      fields: [],
+      methods: [],
+      statics: [],
+    };
+    this.classes.push(info);
+    this.classOfNode.set(node, info);
+
+    const classScope = this.createScope(ScopeKind.Block, node, scope);
+    this.scopes.set(node, classScope);
+
+    let constructor: FunctionInfo | undefined;
+    for (const member of node.members) {
+      if (member.kind === SyntaxKind.ConstructorDeclaration) {
+        const ctor = member as ConstructorDeclaration;
+        constructor = this.createClassFunction(ctor, "constructor", ctor.parameters, ctor.body, classScope, info, false, true);
+      } else if (member.kind === SyntaxKind.MethodDeclaration) {
+        const method = member as MethodDeclaration;
+        const isStatic = method.modifiers.some((modifier) => modifier.modifierKind === ModifierKind.Static);
+        const fn = this.createClassFunction(method, classMemberName(method.name), method.parameters, method.body, classScope, info, isStatic, false);
+        if (isStatic) (info.statics as FunctionInfo[]).push(fn);
+        else (info.methods as FunctionInfo[]).push(fn);
+      }
+    }
+    if (!constructor) {
+      constructor = this.createClassFunction(node, "constructor", [], undefined, classScope, info, false, true);
+    }
+    info.ctor = constructor;
+
+    // Field initializers run in the constructor's context so they can capture
+    // enclosing variables.
+    for (const member of node.members) {
+      if (member.kind === SyntaxKind.PropertyDeclaration) {
+        const property = member as PropertyDeclaration;
+        const isStatic = property.modifiers.some((modifier) => modifier.modifierKind === ModifierKind.Static);
+        const owner = this.current;
+        this.current = constructor as MutableFunction;
+        if (property.initializer) this.bindNode(property.initializer, classScope);
+        this.current = owner;
+        info.fields.push({ name: classMemberName(property.name), initializer: property.initializer, fn: constructor, isStatic });
+      }
+    }
+
+    this.current = parentFn;
+  }
+
+  private createClassFunction(
+    member: Node,
+    name: string,
+    parameters: readonly import("../ast/declarations.js").Parameter[],
+    body: Block | undefined,
+    parentScope: Scope,
+    info: ClassInfo,
+    isStatic: boolean,
+    isConstructor: boolean,
+  ): FunctionInfo {
+    const parentFn = this.current;
+    const fn = this.createFunction(name, member as unknown as FunctionNode, parentFn, false, false);
+    (fn as MutableFunction & { classInfo: ClassInfo }).classInfo = info;
+    (fn as MutableFunction & { isStatic: boolean }).isStatic = isStatic;
+    (fn as MutableFunction & { isConstructor: boolean }).isConstructor = isConstructor;
+    this.current = fn as MutableFunction;
+    const scope = this.createScope(ScopeKind.Function, member, parentScope);
+    (fn as { scope: Scope }).scope = scope;
+    this.scopes.set(member, scope);
+
+    const params: SymbolInfo[] = [];
+    for (const parameter of parameters) {
+      const paramSymbol = this.declare(parameter.name.text, SymbolKind.Parameter, parameter, scope, true);
+      params.push(paramSymbol);
+      if (parameter.initializer) this.bindNode(parameter.initializer, scope);
+    }
+    (fn as { params: SymbolInfo[] }).params = params;
+
+    if (body) {
+      this.collectFunctionScoped([body], fn as MutableFunction);
+      this.predeclareStatements(body.statements, scope);
+      this.bindStatements(body.statements, scope);
+    }
+
+    this.current = parentFn;
+    return fn;
+  }
+
   private reference(identifier: Identifier, scope: Scope): void {
+    if (identifier.text === "super") {
+      this.current.usesThis = true;
+      return;
+    }
     let current: Scope | undefined = scope;
     while (current) {
       const symbol = current.symbols.get(identifier.text);
@@ -546,4 +727,19 @@ function isCapturable(kind: SymbolKind): boolean {
     kind === SymbolKind.Const ||
     kind === SymbolKind.Parameter
   );
+}
+
+/** Extract the textual name of a class member (`method`, `"key"`, `0`). */
+function classMemberName(name: PropertyName): string {
+  switch (name.kind) {
+    case SyntaxKind.Identifier:
+    case SyntaxKind.PrivateIdentifier:
+      return (name as unknown as { text: string }).text;
+    case SyntaxKind.StringLiteral:
+      return (name as unknown as { value: string }).value;
+    case SyntaxKind.NumericLiteral:
+      return String((name as unknown as { value: number }).value);
+    default:
+      return "";
+  }
 }

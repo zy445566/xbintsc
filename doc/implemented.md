@@ -62,6 +62,7 @@ source.ts
 
 - 变量声明：`var` / `let` / `const`，支持多声明符 `const a = 1, b = 2;`
 - 函数声明（含 `async` 修饰解析、生成器 `*` 标记解析）
+- `class` 声明 / 类表达式（构造函数、字段、方法、`static`、`extends`）
 - `if` / `else`
 - `while`、`do...while`
 - `for`（初始化、条件、增量均可省略）
@@ -104,11 +105,12 @@ source.ts
 - 接口、类型别名、枚举、命名空间 / 模块声明
 - `import` / `export` 的各种形式（结构解析）
 
-### 3.4 模块语法（结构解析）
+### 3.4 模块语法（结构解析 + 驱动打包）
 
-- `import default, { named } from "..."`、`import * as ns from "..."`、`import type`
+- `import default, { named } from "..."`、`import * as ns from "..."`（命名空间导入仅解析，未实现）、`import type`
 - `export default`、`export { a as b }`、`export *`、`export =`
 - import attributes（`with` / `assert`）
+- `import` / `export` 的**运行时语义**由 `src/driver/modules.ts` 在驱动层完成：递归解析相对依赖、按模块前缀重命名顶层符号、改写引用，合并为单文件后重新绑定。循环依赖报错。
 
 ### 3.5 ASI
 
@@ -163,8 +165,9 @@ source.ts
 - 逗号表达式 `,`
 - `in` 运算符（`key in obj`，映射 `xt_in`）
 - `delete obj.key` / `delete obj[key]`（映射 `xt_delete`）
+- `instanceof`（映射 `xt_instance_of`，沿原型链判断）
 
-> 未实现：`instanceof`（见[未实现文档](unimplemented.md)）。`typeof` / `void` 作为一元运算符已实现。
+> `typeof` / `void` 作为一元运算符已实现。
 
 ---
 
@@ -178,10 +181,12 @@ source.ts
 - 统一函数 ABI：
 
 ```c
-xt_value fn(xt_value env, int32_t argc, xt_value *argv);
+xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 ```
 
+- `thisValue` 作为首个 ABI 参数线程化（异常安全、支持嵌套）；箭头函数从环境额外槽位词法继承 `this`。
 - 闭包通过 `env` 线程化捕获变量（引用传递，box 包装），直接调用与闭包调用共用同一代码路径。
+- `xt_object` 带原型字段，属性查找沿原型链；`xt_function` 带 `prototype` 与属性包（静态成员）。
 
 ---
 
@@ -201,13 +206,15 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
   - 数组字面量（含展开 `[...]`）、对象字面量（含简写 / 方法 / 对象展开 `{...obj}`）
   - 属性访问（含 `length` 特判、`Math` 常量）、元素访问、调用
   - 可选链 `?.` / `?.[]` / `?.()`：以空值判断短路到 `undefined`
-  - `delete`、`in`
+  - `delete`、`in`、`instanceof`
+  - `this`（保存到函数 `%saved.this`；箭头函数从环境槽读）、`super`（`super.x` / `super(...)`）、`new`、`await`
   - 闭包（箭头函数 / 函数表达式）与捕获环境构建
-- 函数参数：默认参数（缺参或 `undefined` 时求值初始器）、剩余参数（`xt_rest_args`）。
-- 标准库调用：`console.*`、`Math.*`、`Object.*`、数组 / 字符串方法统一走 `xt_call_method` / `xt_math_call` / `xt_object_*`；全局函数（`parseInt` 等）走 `xt_parse_int` 等。
+- 类：构造器闭包 + 原型对象，存入 LLVM 全局（`@class.<id>`）；实例字段在构造器体前初始化；`static` 成员存于构造器属性包；`extends` 设置原型链；`super(...)` 通过原型上的隐藏 `__ctor` 调用。
+- `async`：返回前用 `xt_promise_resolve` 包装；`await` 调用 `xt_await`（驱动微任务队列，遇 rejection 抬出异常）。
+- 标准库调用：`console.*`、`Math.*`、`Object.*`、数组 / 字符串方法统一走 `xt_call_method` / `xt_math_call` / `xt_object_*`；`JSON`/`Date`/`Map`/`Set`/`RegExp`/`Promise` 静态与构造走对应 `xt_*`；全局函数（`parseInt` 等）走 `xt_parse_int` 等。
 - 全局字符串池（`@.str.N` 私有常量，UTF-8 转义）。
 - 内置调用：`console.log` / `info` / `warn` / `error`、`Math.*`、`Object.*`、数组 / 字符串方法、全局函数、扩展 builtins（统一 `(argc, argv)` ABI）。
-- `main` 入口（返回 0，调用模块函数）。
+- `main` 入口（返回 0，调用模块函数，并在返回前 `xt_drain_microtasks`）。
 - 未支持节点统一报 `UnsupportedFeature`，不会崩溃。
 
 ---
@@ -215,8 +222,8 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 ## 8. C 运行时（Runtime，已实现）
 
 实现位置：`runtime/xt_alloc.c`、`runtime/xt_values.c`、`runtime/xt_containers.c`、
-`runtime/xt_stdlib.c`、`runtime/xt_builtins.c`、`runtime/xt_io.c`，共享私有头
-`runtime/rt_internal.h`；公开 ABI 见 `runtime/rt.h`。
+`runtime/xt_stdlib.c`、`runtime/xt_stdlib2.c`、`runtime/xt_promise.c`、`runtime/xt_builtins.c`、
+`runtime/xt_io.c`，共享私有头 `runtime/rt_internal.h`；公开 ABI 见 `runtime/rt.h`。
 
 - 分配器：bump arena，`calloc` 分配，永不释放（GC 已隔离在 `xt_alloc` 之后）。
 - 值构造：`xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`。
@@ -233,7 +240,10 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 - Box：`box_new/get/set`（用于闭包捕获变量）。
 - 函数与闭包：`arg`、`closure_new/call/env/arity`。
 - 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。
-- 输出：`xt_print/xt_println/xt_console_log/info/warn/error`（Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`；`info`/`log` 到 stdout，`warn`/`error` 到 stderr）。
+- 输出：`xt_print/xt_println/xt_console_log/info/warn/error`（Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`；`info`/`log` 到 stdout，`warn`/`error` 到 stderr），以及 `dir/trace/assert/count/countReset/group/groupEnd/table/time/timeEnd/timeLog`。
+- 对象 / 函数：`xt_object` 带原型链，`xt_function` 带属性包（静态成员与 `prototype`）；`xt_new`（实例化）、`xt_instance_of`（原型链）、`xt_object_freeze/is_frozen/from_entries`。
+- 标准库扩展（`xt_stdlib2.c`）：数组 / 字符串 / 数字 / 对象的扩展方法；`Object` / `Array` / `Number` / `String` 静态方法；`JSON.parse` / `JSON.stringify`；`Map` / `Set`；`Date`（`gmtime_r`）；`RegExp`（POSIX ERE `regcomp`/`regexec` 的 `test`/`exec`）。
+- Promise（`xt_promise.c`）：同步微任务队列（`xt_microtasks`）；`xt_promise_ctor/resolve/reject/static`、实例 `then/catch/finally`；`xt_await` 驱动队列直到 settle，rejection 触发 `xt_throw`；程序结束时 `xt_drain_microtasks` 清空队列。
 
 ---
 
@@ -255,7 +265,7 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 
 实现位置：`src/driver/compiler.ts`、`src/driver/cache.ts`、`src/driver/toolchain.ts`、`src/driver/paths.ts`
 
-- 编译流水线：读源 → 解析 → 绑定/检查 → IR → 目标文件 → 链接。
+- 编译流水线：读源 → 模块打包（`src/driver/modules.ts`，当入口含 `import`/`export` 时）→ 解析 → 绑定/检查 → IR → 目标文件 → 链接。
 - 增量缓存：以「编译器版本 + 源码哈希 + emit 类型 + 优化级别 + 平台 + 扩展集合」为键，产物存在且新鲜则跳过构建。
 - C 运行时与扩展源按内容哈希缓存目标文件，只编译一次。
 - 工具链封装：查找 `clang`（可用 `xbintsc_CLANG` 覆盖）、编译 IR、编译 C、链接。
@@ -305,7 +315,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 实现位置：`tests/`（`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`）
 
 - 各模块单元测试；e2e 在存在 `clang` 时真正编译并运行二进制，否则自动跳过。
-- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `readFileSync` 扩展、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链。
+- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `readFileSync` 扩展、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、多文件 `import`/`export`。
 
 ---
 
@@ -313,14 +323,17 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 
 | 类别 | 内容 |
 | --- | --- |
-| 声明 | `var` `let` `const`、函数声明、函数表达式、箭头函数、接口 / 类型别名（擦除） |
+| 声明 | `var` `let` `const`、函数声明、函数表达式、箭头函数、`class`（声明 / 表达式）、接口 / 类型别名（擦除） |
 | 控制流 | `if/else`、`while`、`do...while`、`for`、`for...of`、`for...in`、`switch`、`try/catch/finally`、`break`、`continue`、`return`、`throw` |
-| 表达式 | 标识符、字面量、模板字符串、数组 / 对象字面量（含展开）、调用、成员 / 元素访问、可选链、闭包、`arguments` |
-| 运算符 | 算术、比较、相等、逻辑、位运算、移位、一元（含 `typeof`/`void`）、前后缀增减、复合赋值、逻辑赋值、`in`、`delete` |
-| 函数 | 默认参数、剩余参数、捕获闭包 |
-| 标准库 | 数组 / 字符串方法、`Math`、`Object.keys/values/entries/assign`、`parseInt` 等全局函数、`console.*` |
-| 值模型 | 64 位 NaN-boxing、统一函数 ABI、闭包环境 |
-| 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 可捕获异常 / `console` |
+| 表达式 | 标识符、字面量、模板字符串、数组 / 对象字面量（含展开）、调用、成员 / 元素访问、可选链、闭包、`arguments`、`this`、`new`、`super`、`await` |
+| 运算符 | 算术、比较、相等、逻辑、位运算、移位、一元（含 `typeof`/`void`）、前后缀增减、复合赋值、逻辑赋值、`in`、`delete`、`instanceof` |
+| 函数 | 默认参数、剩余参数、捕获闭包、`this` 绑定、箭头函数词法 `this` |
+| 类 / OO | 构造函数、实例字段、方法、`static`、继承 `extends`/`super`、原型链、`instanceof` |
+| 异步 | `async`/`await`、`Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`）、同步微任务队列 |
+| 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包 |
+| 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`Object/Array/Number/String` 静态、`console.*` |
+| 值模型 | 64 位 NaN-boxing、统一函数 ABI（含 `this`）、闭包环境、对象原型链 |
+| 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / `console` |
 | 扩展 | 扩展注册表、`core`（print）、`node`（fs：readFileSync） |
 | 工具链 | clang 编译 IR/C、链接、增量缓存 |
 | 平台 | macOS / Linux / Windows（构建层面已适配，CI 见 `.github/workflows`） |

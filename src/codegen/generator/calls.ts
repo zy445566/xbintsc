@@ -15,14 +15,16 @@ import {
   type ObjectLiteralExpression,
   type PropertyAccessExpression,
 } from "../../ast/nodes.js";
-import { SymbolKind } from "../../binder/binder.js";
+import { SymbolKind, type FunctionInfo } from "../../binder/binder.js";
 import { i64, numberLiteral, XT_TRUE, XT_UNDEFINED } from "../values.js";
 import {
   BUILTIN_METHODS,
   CONSOLE_METHODS,
+  CTOR_FUNCTIONS,
   GLOBAL_FUNCTIONS,
   MATH_CONSTANTS,
   MATH_FUNCTIONS,
+  NAMESPACE_STATICS,
   propertyNameText,
 } from "./tables.js";
 import type { Generator } from "./generator.js";
@@ -39,6 +41,9 @@ export interface CallMethods {
   emitArrayLiteral(this: Generator, node: ArrayLiteralExpression): string;
   emitObjectLiteral(this: Generator, node: ObjectLiteralExpression): string;
   emitClosure(this: Generator, node: ArrowFunction | FunctionExpression): string;
+  emitClosureValue(this: Generator, fn: FunctionInfo): string;
+  emitSuperConstructor(this: Generator, node: CallExpression): string;
+  emitSuperCall(this: Generator, node: CallExpression, access: PropertyAccessExpression): string;
 }
 
 export const callMethods: CallMethods = {
@@ -76,10 +81,30 @@ export const callMethods: CallMethods = {
       });
     }
     if (callee.kind === SyntaxKind.PropertyAccessExpression) {
-      const special = this.tryEmitBuiltinCall(node, callee as PropertyAccessExpression);
+      const access = callee as PropertyAccessExpression;
+      const special = this.tryEmitBuiltinCall(node, access);
       if (special) return special;
+      if (access.expression.kind === SyntaxKind.Identifier && (access.expression as Identifier).text === "super") {
+        return this.emitSuperCall(node, access);
+      }
+      const object = this.emitExpression(access.expression);
+      const name = this.stringValue(access.name.text);
+      const args = this.emitArguments(node.arguments);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`);
+      return result;
+    }
+    if (callee.kind === SyntaxKind.ElementAccessExpression) {
+      const access = callee as ElementAccessExpression;
+      const object = this.emitExpression(access.expression);
+      const name = this.emitExpression(access.argumentExpression);
+      const args = this.emitArguments(node.arguments);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`);
+      return result;
     }
     if (callee.kind === SyntaxKind.Identifier) {
+      if ((callee as Identifier).text === "super") return this.emitSuperConstructor(node);
       const symbol = this.binding.symbolOfIdentifier.get(callee as Identifier);
       if (symbol && symbol.kind === SymbolKind.Function) {
         const declaration = symbol.declarations[0];
@@ -88,7 +113,7 @@ export const callMethods: CallMethods = {
           const args = this.emitArguments(node.arguments);
           const result = this.reg();
           this.emit(
-            `  ${result} = call i64 @${this.functionName(fn)}(i64 ${i64(XT_UNDEFINED)}, i32 ${args.argc}, i64* ${args.ptr})`,
+            `  ${result} = call i64 @${this.functionName(fn)}(i64 ${i64(XT_UNDEFINED)}, i64 ${i64(XT_UNDEFINED)}, i32 ${args.argc}, i64* ${args.ptr})`,
           );
           return result;
         }
@@ -112,6 +137,13 @@ export const callMethods: CallMethods = {
         }
         const result = this.reg();
         this.emit(`  ${result} = call i64 @${builtin.symbol}(i32 ${args.argc}, i64* ${args.ptr})`);
+        return result;
+      }
+      const ctor = !symbol ? CTOR_FUNCTIONS[(callee as Identifier).text] : undefined;
+      if (ctor) {
+        const args = this.emitArguments(node.arguments);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @${ctor}(i32 ${args.argc}, i64* ${args.ptr})`);
         return result;
       }
     }
@@ -147,31 +179,27 @@ export const callMethods: CallMethods = {
       return result;
     }
 
-    if (targetIdentifier && targetIdentifier.text === "Object" && !targetSymbol) {
-      if (method === "keys" || method === "values" || method === "entries") {
-        const argument = node.arguments.length > 0 ? this.emitExpression(node.arguments[0]!) : i64(XT_UNDEFINED);
-        const fn = method === "keys" ? "xt_object_keys" : method === "values" ? "xt_object_values" : "xt_object_entries";
-        return this.runtimeCall(fn, [argument]);
-      }
-      if (method === "assign") {
-        const args = this.emitArguments(node.arguments);
-        const result = this.reg();
-        this.emit(`  ${result} = call i64 @xt_object_assign(i32 ${args.argc}, i64* ${args.ptr})`);
-        return result;
-      }
-      return undefined;
-    }
-
-    if (BUILTIN_METHODS.has(method)) {
-      const object = this.emitExpression(target);
-      const name = this.stringValue(method);
+    if (targetIdentifier && targetIdentifier.text === "JSON" && !targetSymbol) {
+      const fn = method === "parse" ? "xt_json_parse" : method === "stringify" ? "xt_json_stringify" : undefined;
+      if (!fn) return undefined;
       const args = this.emitArguments(node.arguments);
       const result = this.reg();
-      this.emit(
-        `  ${result} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`,
-      );
+      this.emit(`  ${result} = call i64 @${fn}(i32 ${args.argc}, i64* ${args.ptr})`);
       return result;
     }
+
+    if (targetIdentifier && !targetSymbol) {
+      const dispatcher = NAMESPACE_STATICS[targetIdentifier.text];
+      if (dispatcher && targetIdentifier.text !== "Math" && targetIdentifier.text !== "JSON") {
+        const name = this.stringValue(method);
+        const args = this.emitArguments(node.arguments);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @${dispatcher}(i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`);
+        return result;
+      }
+    }
+
+    void BUILTIN_METHODS;
     return undefined;
   },
 
@@ -212,6 +240,17 @@ export const callMethods: CallMethods = {
   },
 
   emitPropertyAccess(node: PropertyAccessExpression): string {
+    if (node.expression.kind === SyntaxKind.Identifier && (node.expression as Identifier).text === "super") {
+      const thisValue = this.emitThis();
+      const proto = this.reg();
+      this.emit(`  ${proto} = call i64 @xt_object_get_prototype(i64 ${thisValue})`);
+      const parentProto = this.reg();
+      this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${proto})`);
+      const key = this.stringValue(node.name.text);
+      const value = this.reg();
+      this.emit(`  ${value} = call i64 @xt_get(i64 ${parentProto}, i64 ${key})`);
+      return value;
+    }
     if (
       node.name.text in MATH_CONSTANTS &&
       node.expression.kind === SyntaxKind.Identifier &&
@@ -323,33 +362,72 @@ export const callMethods: CallMethods = {
       this.unsupported(node, "closure");
       return i64(XT_UNDEFINED);
     }
+    return this.emitClosureValue(fn);
+  },
+
+  emitClosureValue(fn: FunctionInfo): string {
+    const count = fn.captures.length + (fn.capturesThis ? 1 : 0);
     let envPtr = "null";
-    if (fn.captures.length > 0) {
+    if (count > 0) {
       envPtr = `%env${this.current.allocas.length}`;
-      this.current.allocas.push(`${envPtr} = alloca i64, i32 ${fn.captures.length}`);
+      this.current.allocas.push(`${envPtr} = alloca i64, i32 ${count}`);
       for (let index = 0; index < fn.captures.length; index++) {
         const symbol = fn.captures[index]!;
-        // The current function must be able to read the capture: either from
-        // its own slot (local) or from one of its own capture slots.
         const slot = this.current.slots.get(symbol.id);
-        let raw: string;
+        let raw = i64(XT_UNDEFINED);
         if (slot) {
           raw = this.reg();
           this.emit(`  ${raw} = load i64, i64* ${slot.ptr}`);
-        } else {
-          const outer = this.binding.functionOfNode.get(node);
-          void outer;
-          raw = i64(XT_UNDEFINED);
         }
         const target = this.reg();
         this.emit(`  ${target} = getelementptr i64, i64* ${envPtr}, i32 ${index}`);
         this.emit(`  store i64 ${raw}, i64* ${target}`);
       }
+      if (fn.capturesThis) {
+        let thisValue = i64(XT_UNDEFINED);
+        if (this.current.thisPtr) {
+          thisValue = this.reg();
+          this.emit(`  ${thisValue} = load i64, i64* ${this.current.thisPtr}`);
+        }
+        const target = this.reg();
+        this.emit(`  ${target} = getelementptr i64, i64* ${envPtr}, i32 ${fn.captures.length}`);
+        this.emit(`  store i64 ${thisValue}, i64* ${target}`);
+      }
     }
     const cast = this.reg();
-    this.emit(`  ${cast} = bitcast i64 (i64, i32, i64*)* @${this.functionName(fn)} to i8*`);
+    this.emit(`  ${cast} = bitcast i64 (i64, i64, i32, i64*)* @${this.functionName(fn)} to i8*`);
     const closure = this.reg();
-    this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 ${fn.captures.length}, i64* ${envPtr})`);
+    this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 ${count}, i64* ${envPtr})`);
     return closure;
+  },
+
+  emitSuperConstructor(node: CallExpression): string {
+    const thisValue = this.emitThis();
+    const proto = this.reg();
+    this.emit(`  ${proto} = call i64 @xt_object_get_prototype(i64 ${thisValue})`);
+    const parentProto = this.reg();
+    this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${proto})`);
+    const key = this.stringValue("__ctor");
+    const ctor = this.reg();
+    this.emit(`  ${ctor} = call i64 @xt_get(i64 ${parentProto}, i64 ${key})`);
+    const args = this.emitArguments(node.arguments);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_call_with_this(i64 ${ctor}, i64 ${thisValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+    return result;
+  },
+
+  emitSuperCall(node: CallExpression, access: PropertyAccessExpression): string {
+    const thisValue = this.emitThis();
+    const proto = this.reg();
+    this.emit(`  ${proto} = call i64 @xt_object_get_prototype(i64 ${thisValue})`);
+    const parentProto = this.reg();
+    this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${proto})`);
+    const key = this.stringValue(access.name.text);
+    const method = this.reg();
+    this.emit(`  ${method} = call i64 @xt_get(i64 ${parentProto}, i64 ${key})`);
+    const args = this.emitArguments(node.arguments);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_call_with_this(i64 ${method}, i64 ${thisValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+    return result;
   },
 };

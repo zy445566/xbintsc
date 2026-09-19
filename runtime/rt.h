@@ -89,16 +89,23 @@ int32_t xt_string_length_value(xt_value value);
 
 /* -- function calling convention ----------------------------------------- */
 /* Every compiled function has the signature:
- *     xt_value fn(xt_value env, int32_t argc, xt_value *argv);
- * `env` carries captured values for closures (XT_UNDEFINED when there are
- * none) and `argv` carries the actual arguments. */
-typedef xt_value (*xt_code_fn)(xt_value env, int32_t argc, xt_value *argv);
+ *     xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
+ * `thisValue` is the JavaScript `this` binding (XT_UNDEFINED for plain calls),
+ * `env` is the closure value carrying captured variables, and `argv` carries
+ * the actual arguments. */
+typedef xt_value (*xt_code_fn)(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 
 xt_value xt_arg(int32_t argc, xt_value *argv, int32_t index);
 xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env);
 xt_value xt_closure_call(xt_value fn, int32_t argc, xt_value *argv);
+xt_value xt_call_with_this(xt_value fn, xt_value thisValue, int32_t argc, xt_value *argv);
 xt_value xt_closure_env(xt_value fn, int32_t index);
 int32_t xt_closure_arity(xt_value fn);
+xt_value xt_this(void);
+xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv);
+xt_value xt_instance_of(xt_value value, xt_value ctor);
+xt_value xt_function_set_prototype(xt_value fn, xt_value proto);
+xt_value xt_function_get_prototype(xt_value fn);
 
 /* -- conversions ---------------------------------------------------------- */
 int xt_truthy(xt_value v);
@@ -136,7 +143,14 @@ xt_value xt_not(xt_value a);
 
 /* -- objects -------------------------------------------------------------- */
 xt_value xt_object_new(void);
+xt_value xt_object_new_with_proto(xt_value proto);
 xt_value xt_object_get(xt_value obj, xt_value key);
+xt_value xt_object_get_prototype(xt_value obj);
+xt_value xt_object_set_prototype(xt_value obj, xt_value proto);
+xt_value xt_object_freeze(xt_value obj);
+int xt_object_is_frozen(xt_value obj);
+xt_value xt_object_from_entries(xt_value entries);
+xt_value xt_object_has_own(xt_value obj, xt_value key);
 xt_value xt_object_get_cstr(xt_value obj, const char *key);
 xt_value xt_object_set(xt_value obj, xt_value key, xt_value value);
 xt_value xt_object_has(xt_value obj, xt_value key);
@@ -151,6 +165,32 @@ xt_value xt_object_spread(xt_value target, xt_value source);
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv);
 /** Implements `Math.<name>(...)`; the name is interned by the compiler. */
 xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv);
+/** Implements `JSON.parse` / `JSON.stringify`. */
+xt_value xt_json_parse(int32_t argc, xt_value *argv);
+xt_value xt_json_stringify(int32_t argc, xt_value *argv);
+/** Implements `Array.<name>(...)` statics and the `Array(...)` constructor. */
+xt_value xt_array_static(xt_value name, int32_t argc, xt_value *argv);
+/** Implements `Object.<name>(...)` statics. */
+xt_value xt_object_static(xt_value name, int32_t argc, xt_value *argv);
+/** Implements `Number.<name>(...)` / `String.<name>(...)` statics. */
+xt_value xt_number_static(xt_value name, int32_t argc, xt_value *argv);
+xt_value xt_string_static(xt_value name, int32_t argc, xt_value *argv);
+/** Map / Set constructors and dispatch. */
+xt_value xt_map_ctor(int32_t argc, xt_value *argv);
+xt_value xt_set_ctor(int32_t argc, xt_value *argv);
+xt_value xt_date_ctor(int32_t argc, xt_value *argv);
+xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv);
+xt_value xt_regexp_ctor(int32_t argc, xt_value *argv);
+
+/* -- promises / async ----------------------------------------------------- */
+xt_value xt_promise_resolve(xt_value value);
+xt_value xt_promise_reject(xt_value value);
+xt_value xt_promise_ctor(int32_t argc, xt_value *argv);
+xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv);
+/** Unwrap an awaited value: promises yield their value, everything else is itself. */
+xt_value xt_await(xt_value value);
+/** Run queued promise reactions; called once the program body finishes. */
+void xt_drain_microtasks(void);
 
 /* -- global functions ------------------------------------------------------ */
 xt_value xt_parse_int(int32_t argc, xt_value *argv);
@@ -195,6 +235,17 @@ void xt_console_log(int32_t argc, xt_value *argv);
 void xt_console_info(int32_t argc, xt_value *argv);
 void xt_console_warn(int32_t argc, xt_value *argv);
 void xt_console_error(int32_t argc, xt_value *argv);
+xt_value xt_console_dir(int32_t argc, xt_value *argv);
+xt_value xt_console_trace(int32_t argc, xt_value *argv);
+xt_value xt_console_assert(int32_t argc, xt_value *argv);
+xt_value xt_console_count(int32_t argc, xt_value *argv);
+xt_value xt_console_count_reset(int32_t argc, xt_value *argv);
+xt_value xt_console_group(int32_t argc, xt_value *argv);
+xt_value xt_console_group_end(int32_t argc, xt_value *argv);
+xt_value xt_console_table(int32_t argc, xt_value *argv);
+xt_value xt_console_time(int32_t argc, xt_value *argv);
+xt_value xt_console_time_end(int32_t argc, xt_value *argv);
+xt_value xt_console_time_log(int32_t argc, xt_value *argv);
 void xt_print(xt_value v);
 void xt_println(xt_value v);
 

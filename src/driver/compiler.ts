@@ -13,6 +13,8 @@ import { DiagnosticBag, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { Parser } from "../parser/parser.js";
 import { generate } from "../codegen/llvm.js";
+import { SyntaxKind } from "../ast/nodes.js";
+import { bundleModules } from "./modules.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { BuildCache, hashParts } from "./cache.js";
 import { findRuntimeDir } from "./paths.js";
@@ -94,9 +96,31 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
         ? resolve(options.output ?? join(outDir, baseName + ".o"))
         : executableName(absoluteEntry, outDir, options.output);
 
+  // -- front end -----------------------------------------------------------
+  const file = new SourceFile(absoluteEntry, sourceText);
+  const diagnostics = new DiagnosticBag();
+  const parser = new Parser(file, diagnostics);
+  let sourceFile = parser.parseSourceFile();
+
+  // Lower `import`/`export` by merging every reachable module into one file.
+  const isModule = sourceFile.statements.some(
+    (statement) =>
+      statement.kind === SyntaxKind.ImportDeclaration ||
+      statement.kind === SyntaxKind.ExportDeclaration ||
+      statement.kind === SyntaxKind.ExportAssignment,
+  );
+  let cacheText = sourceText;
+  if (isModule) {
+    const bundled = bundleModules(absoluteEntry, diagnostics);
+    if (bundled) {
+      sourceFile = bundled.sourceFile;
+      cacheText = bundled.text;
+    }
+  }
+
   const cacheKey = hashParts([
     COMPILER_VERSION,
-    sourceText,
+    cacheText,
     emit,
     optimize,
     process.platform,
@@ -105,15 +129,10 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   const cache = new BuildCache(cacheDir);
   const outputs = [outputPath];
-  if (!options.force && cache.isFresh(cacheKey, outputs)) {
+  if (!options.force && !diagnostics.hasErrors && cache.isFresh(cacheKey, outputs)) {
     return { outputPath, cached: true, diagnostics: [] };
   }
 
-  // -- front end -----------------------------------------------------------
-  const file = new SourceFile(absoluteEntry, sourceText);
-  const diagnostics = new DiagnosticBag();
-  const parser = new Parser(file, diagnostics);
-  const sourceFile = parser.parseSourceFile();
   const { ir } = generate(sourceFile, diagnostics, { builtins: registry.builtins() });
 
   if (options.verbose) {
@@ -174,6 +193,8 @@ const RUNTIME_SOURCES = [
   "xt_values.c",
   "xt_containers.c",
   "xt_stdlib.c",
+  "xt_stdlib2.c",
+  "xt_promise.c",
   "xt_builtins.c",
   "xt_io.c",
 ] as const;

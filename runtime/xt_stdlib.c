@@ -379,7 +379,8 @@ static xt_value xt_string_concat_args(xt_value value, int32_t argc, xt_value *ar
 
 /* -- method dispatch ------------------------------------------------------ */
 
-static xt_value xt_array_method(xt_value target, const char *method, int32_t argc, xt_value *argv) {
+static xt_value xt_array_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled) {
+  *handled = 1;
   if (strcmp(method, "push") == 0) {
     xt_value result = xt_number(0);
     for (int32_t i = 0; i < argc; i++) result = xt_array_push(target, argv[i]);
@@ -410,10 +411,12 @@ static xt_value xt_array_method(xt_value target, const char *method, int32_t arg
     }
     return target;
   }
+  *handled = 0;
   return XT_UNDEFINED;
 }
 
-static xt_value xt_string_method(xt_value target, const char *method, int32_t argc, xt_value *argv) {
+static xt_value xt_string_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled) {
+  *handled = 1;
   if (strcmp(method, "charAt") == 0) return xt_string_char_at(target, xt_arg_at(argc, argv, 0));
   if (strcmp(method, "charCodeAt") == 0) return xt_string_char_code_at(target, xt_arg_at(argc, argv, 0));
   if (strcmp(method, "indexOf") == 0) return xt_string_index_of(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
@@ -430,18 +433,52 @@ static xt_value xt_string_method(xt_value target, const char *method, int32_t ar
   if (strcmp(method, "startsWith") == 0) return xt_string_starts_with(target, xt_arg_at(argc, argv, 0));
   if (strcmp(method, "endsWith") == 0) return xt_string_ends_with(target, xt_arg_at(argc, argv, 0));
   if (strcmp(method, "concat") == 0) return xt_string_concat_args(target, argc, argv);
+  *handled = 0;
   return XT_UNDEFINED;
 }
 
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv) {
   const char *method = xt_string_data(name);
   if (!method) return XT_UNDEFINED;
+  int handled = 0;
   if (XT_IS_OBJECT(target)) {
+    xt_object *obj = (xt_object *)XT_GET_PTR(target);
+    int kind = obj->header.kind;
+    if (kind == XT_OBJECT_KIND_PROMISE) {
+      xt_value result = xt_promise_method(target, method, argc, argv, &handled);
+      if (handled) return result;
+    }
+    if (kind != XT_OBJECT_KIND_OBJECT && kind != XT_OBJECT_KIND_FUNCTION) {
+      xt_value result = xt_ext_container_method(target, method, argc, argv, &handled);
+      if (handled) return result;
+    }
     xt_value fn = xt_object_get(target, name);
-    if (XT_IS_FUNCTION(fn)) return xt_closure_call(fn, argc, argv);
+    if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
+    xt_value result = xt_ext_object_method(target, method, argc, argv, &handled);
+    if (handled) return result;
+    xt_throw(xt_string_from_cstr("TypeError: target does not have a callable property of that name"));
+    return XT_UNDEFINED;
   }
-  if (XT_IS_ARRAY(target)) return xt_array_method(target, method, argc, argv);
-  if (XT_IS_STRING(target)) return xt_string_method(target, method, argc, argv);
+  if (XT_IS_FUNCTION(target)) {
+    xt_value fn = xt_object_get(target, name);
+    if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
+    xt_throw(xt_string_from_cstr("TypeError: target does not have a callable property of that name"));
+    return XT_UNDEFINED;
+  }
+  if (XT_IS_ARRAY(target)) {
+    xt_value result = xt_ext_array_method(target, method, argc, argv, &handled);
+    if (handled) return result;
+    return xt_array_method(target, method, argc, argv, &handled);
+  }
+  if (XT_IS_STRING(target)) {
+    xt_value result = xt_ext_string_method(target, method, argc, argv, &handled);
+    if (handled) return result;
+    return xt_string_method(target, method, argc, argv, &handled);
+  }
+  if (XT_IS_NUMBER(target)) {
+    xt_value result = xt_ext_number_method(target, method, argc, argv, &handled);
+    if (handled) return result;
+  }
   return XT_UNDEFINED;
 }
 
@@ -466,6 +503,23 @@ xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
   if (strcmp(fn, "log") == 0) return xt_number(log(a));
   if (strcmp(fn, "log2") == 0) return xt_number(log2(a));
   if (strcmp(fn, "log10") == 0) return xt_number(log10(a));
+  if (strcmp(fn, "log1p") == 0) return xt_number(log1p(a));
+  if (strcmp(fn, "expm1") == 0) return xt_number(expm1(a));
+  if (strcmp(fn, "sinh") == 0) return xt_number(sinh(a));
+  if (strcmp(fn, "cosh") == 0) return xt_number(cosh(a));
+  if (strcmp(fn, "tanh") == 0) return xt_number(tanh(a));
+  if (strcmp(fn, "asinh") == 0) return xt_number(asinh(a));
+  if (strcmp(fn, "acosh") == 0) return xt_number(acosh(a));
+  if (strcmp(fn, "atanh") == 0) return xt_number(atanh(a));
+  if (strcmp(fn, "fround") == 0) return xt_number((double)(float)a);
+  if (strcmp(fn, "imul") == 0) return xt_number((double)((int32_t)xt_to_int32(xt_arg_at(argc, argv, 0)) * (int32_t)xt_to_int32(xt_arg_at(argc, argv, 1))));
+  if (strcmp(fn, "clz32") == 0) {
+    uint32_t v = (uint32_t)xt_to_int32(xt_arg_at(argc, argv, 0));
+    int count = 0;
+    if (v == 0) count = 32;
+    else { while (!(v & 0x80000000u)) { v <<= 1; count++; } }
+    return xt_number((double)count);
+  }
   if (strcmp(fn, "sin") == 0) return xt_number(sin(a));
   if (strcmp(fn, "cos") == 0) return xt_number(cos(a));
   if (strcmp(fn, "tan") == 0) return xt_number(tan(a));

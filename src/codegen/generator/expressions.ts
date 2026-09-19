@@ -7,14 +7,17 @@ import {
   SyntaxKind,
   type ArrayLiteralExpression,
   type ArrowFunction,
+  type AwaitExpression,
   type BinaryExpression,
   type CallExpression,
+  type ClassExpression,
   type ConditionalExpression,
   type DeleteExpression,
   type ElementAccessExpression,
   type Expression,
   type FunctionExpression,
   type Identifier,
+  type NewExpression,
   type ObjectLiteralExpression,
   type PostfixUnaryExpression,
   type PrefixUnaryExpression,
@@ -30,7 +33,7 @@ import {
 import { SymbolKind, type SymbolInfo } from "../../binder/binder.js";
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_FALSE, XT_NULL, XT_TRUE, XT_UNDEFINED } from "../values.js";
-import { BINARY_RUNTIME, compoundToBinary, isAssignmentOperator } from "./tables.js";
+import { BINARY_RUNTIME, compoundToBinary, isAssignmentOperator, CTOR_FUNCTIONS } from "./tables.js";
 import type { Generator } from "./generator.js";
 
 export interface ExpressionMethods {
@@ -46,6 +49,9 @@ export interface ExpressionMethods {
   emitAssignment(this: Generator, node: BinaryExpression): string;
   emitLogicalAssignment(this: Generator, node: BinaryExpression): string;
   emitAssignmentTarget(this: Generator, target: Expression, value: string): void;
+  emitThis(this: Generator): string;
+  emitNew(this: Generator, node: NewExpression): string;
+  emitAwait(this: Generator, node: AwaitExpression): string;
 }
 
 export const expressionMethods: ExpressionMethods = {
@@ -81,6 +87,21 @@ export const expressionMethods: ExpressionMethods = {
         return this.emitExpression((node as { expression: Expression }).expression);
       case SyntaxKind.DeleteExpression:
         return this.emitDelete(node as DeleteExpression);
+      case SyntaxKind.ThisKeyword:
+        return this.emitThis();
+      case SyntaxKind.NewExpression:
+        return this.emitNew(node as NewExpression);
+      case SyntaxKind.AwaitExpression:
+        return this.emitAwait(node as AwaitExpression);
+      case SyntaxKind.ClassExpression: {
+        const info = this.binding.classOfNode.get(node);
+        if (!info) {
+          this.unsupported(node, "class expression");
+          return i64(XT_UNDEFINED);
+        }
+        this.emitClassSetup(info);
+        return this.emitClassReference(info);
+      }
       case SyntaxKind.BinaryExpression:
         return this.emitBinaryOrAssignment(node as BinaryExpression);
       case SyntaxKind.PrefixUnaryExpression:
@@ -111,6 +132,11 @@ export const expressionMethods: ExpressionMethods = {
   emitIdentifier(identifier: Identifier): string {
     const symbol = this.binding.symbolOfIdentifier.get(identifier);
     if (symbol) {
+      if (symbol.kind === SymbolKind.Class) {
+        const declaration = symbol.declarations[0];
+        const info = declaration ? this.binding.classOfNode.get(declaration) : undefined;
+        if (info) return this.emitClassReference(info);
+      }
       if (symbol.kind === SymbolKind.Function && !this.current.slots.has(symbol.id)) {
         return this.emitFunctionValue(symbol);
       }
@@ -150,10 +176,61 @@ export const expressionMethods: ExpressionMethods = {
     const fn = declaration ? this.binding.functionOfNode.get(declaration) : undefined;
     if (!fn) return i64(XT_UNDEFINED);
     const cast = this.reg();
-    this.emit(`  ${cast} = bitcast i64 (i64, i32, i64*)* @${this.functionName(fn)} to i8*`);
+    this.emit(`  ${cast} = bitcast i64 (i64, i64, i32, i64*)* @${this.functionName(fn)} to i8*`);
     const closure = this.reg();
     this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 0, i64* null)`);
     return closure;
+  },
+
+  emitThis(): string {
+    if (!this.current.thisPtr) return i64(XT_UNDEFINED);
+    const value = this.reg();
+    this.emit(`  ${value} = load i64, i64* ${this.current.thisPtr}`);
+    return value;
+  },
+
+  emitAwait(node: AwaitExpression): string {
+    const value = this.emitExpression(node.expression);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_await(i64 ${value})`);
+    return result;
+  },
+
+  emitNew(node: NewExpression): string {
+    const callee = node.expression;
+    if (callee.kind === SyntaxKind.Identifier) {
+      const identifier = callee as Identifier;
+      const symbol = this.binding.symbolOfIdentifier.get(identifier);
+      if (symbol && symbol.kind === SymbolKind.Class) {
+        const declaration = symbol.declarations[0];
+        const info = declaration ? this.binding.classOfNode.get(declaration) : undefined;
+        if (info) {
+          const ctor = this.emitClassReference(info);
+          const args = this.emitArguments(node.arguments);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @xt_new(i64 ${ctor}, i32 ${args.argc}, i64* ${args.ptr})`);
+          return result;
+        }
+      }
+      if (!symbol) {
+        const ctor = CTOR_FUNCTIONS[identifier.text];
+        if (ctor) {
+          const args = this.emitArguments(node.arguments);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @${ctor}(i32 ${args.argc}, i64* ${args.ptr})`);
+          return result;
+        }
+        if (identifier.text === "Object") {
+          if (node.arguments.length > 0) return this.emitExpression(node.arguments[0]!);
+          return this.runtimeCall("xt_object_new", []);
+        }
+      }
+    }
+    const ctorValue = this.emitExpression(callee);
+    const args = this.emitArguments(node.arguments);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_new(i64 ${ctorValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+    return result;
   },
 
   emitTemplate(node: TemplateLiteral): string {

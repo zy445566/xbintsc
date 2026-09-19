@@ -348,6 +348,9 @@ export const expressionMethods: ExpressionMethods = {
       case TokenKind.ThisKeyword:
         this.nextToken();
         return { kind: SyntaxKind.ThisKeyword, start: token.start, end: token.end };
+      case TokenKind.SuperKeyword:
+        this.nextToken();
+        return { kind: SyntaxKind.Identifier, text: "super", start: token.start, end: token.end };
       case TokenKind.OpenParen: {
         this.nextToken();
         const expression = this.parseExpression();

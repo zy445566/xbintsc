@@ -233,4 +233,99 @@ describeWithClang("end-to-end compilation", () => {
     `;
     expect(runProgram(source)).toBe("5 undefined 11 undefined\n3 2,4,6 undefined");
   });
+
+  it("supports classes with new, this, statics, inheritance and instanceof", () => {
+    const source = `
+      class Animal {
+        name: string;
+        constructor(name: string) {
+          this.name = name;
+        }
+        speak(): string {
+          return this.name + " makes a sound";
+        }
+        static kind(): string {
+          return "animal";
+        }
+      }
+      class Dog extends Animal {
+        constructor(name: string) {
+          super(name);
+        }
+        speak(): string {
+          return super.speak() + " (woof)";
+        }
+      }
+      const dog = new Dog("Rex");
+      console.log(dog.speak());
+      console.log(Animal.kind(), dog instanceof Dog, dog instanceof Animal);
+    `;
+    expect(runProgram(source)).toBe("Rex makes a sound (woof)\nanimal true true");
+  });
+
+  it("supports async/await and promises", () => {
+    const source = `
+      async function greet(name: string): Promise<string> {
+        return "hello " + name;
+      }
+      async function main(): Promise<void> {
+        const message = await greet("world");
+        console.log(message);
+        const all = await Promise.all([Promise.resolve(1), Promise.resolve(2)]);
+        console.log(all[0] + all[1]);
+        const settled = await Promise.allSettled([Promise.resolve(1), Promise.reject("no")]);
+        console.log(settled[0].status, settled[1].status);
+        try {
+          await Promise.reject("boom");
+        } catch (err) {
+          console.log("caught", err);
+        }
+      }
+      main();
+      Promise.resolve(10).then((x) => console.log("then", x + 1));
+    `;
+    expect(runProgram(source)).toBe("hello world\n3\nfulfilled rejected\ncaught boom\nthen 11");
+  });
+
+  it("supports Map, Set, JSON and extended standard library methods", () => {
+    const source = `
+      const map = new Map<string, number>();
+      map.set("a", 1);
+      map.set("b", 2);
+      const nums = new Set<number>();
+      nums.add(3);
+      nums.add(3);
+      console.log(map.get("a"), map.size, nums.has(3), nums.size);
+      const obj = { x: 1, y: [2, 3] };
+      console.log(JSON.stringify(obj));
+      console.log(JSON.parse('{"k":5}').k);
+      console.log([3, 1, 2].sort().join(","), [1, 2, 3].find((n) => n > 1));
+      console.log("abc".padStart(5, "*"), (255).toString(16), (3.14159).toFixed(2));
+      console.log(Number.isInteger(3), Array.isArray([1]), Math.imul(2, 3));
+    `;
+    expect(runProgram(source)).toBe(
+      "1 2 true 1\n{\"x\":1,\"y\":[2,3]}\n5\n1,2,3 2\n**abc ff 3.14\ntrue true 6",
+    );
+  });
+
+  it("supports import and export across modules", () => {
+    writeFileSync(
+      join(workdir, "math_dep.ts"),
+      `
+      export const PI = 3.14;
+      export function add(a: number, b: number): number {
+        return a + b;
+      }
+      export default function greet(name: string): string {
+        return "hi " + name;
+      }
+      `,
+    );
+    const source = `
+      import greet, { add, PI } from "./math_dep";
+      console.log(add(2, 3), PI);
+      console.log(greet("ada"));
+    `;
+    expect(runProgram(source)).toBe("5 3.14\nhi ada");
+  });
 });

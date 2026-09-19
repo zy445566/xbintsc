@@ -160,6 +160,7 @@ xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env) {
   function->arity = -1;
   function->properties = NULL;
   function->environment = NULL;
+  function->prototype = XT_UNDEFINED;
   if (env_count > 0) {
     function->environment = (xt_value *)malloc(sizeof(xt_value) * (size_t)env_count);
     for (int32_t i = 0; i < env_count; i++) function->environment[i] = env[i];
@@ -168,6 +169,10 @@ xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env) {
 }
 
 xt_value xt_closure_call(xt_value value, int32_t argc, xt_value *argv) {
+  return xt_call_with_this(value, XT_UNDEFINED, argc, argv);
+}
+
+xt_value xt_call_with_this(xt_value value, xt_value thisValue, int32_t argc, xt_value *argv) {
   if (!XT_IS_FUNCTION(value)) {
     xt_throw(xt_string_from_cstr("TypeError: value is not a function"));
     return XT_UNDEFINED;
@@ -175,7 +180,48 @@ xt_value xt_closure_call(xt_value value, int32_t argc, xt_value *argv) {
   xt_function *function = (xt_function *)XT_GET_PTR(value);
   /* The closure value itself is threaded through as `env` so the callee can
    * read its captures with xt_closure_env(env, i). */
-  return function->code(value, argc, argv);
+  return function->code(thisValue, value, argc, argv);
+}
+
+xt_value xt_this(void) { return XT_UNDEFINED; }
+
+xt_value xt_function_set_prototype(xt_value value, xt_value proto) {
+  if (XT_IS_FUNCTION(value)) ((xt_function *)XT_GET_PTR(value))->prototype = proto;
+  return value;
+}
+
+xt_value xt_function_get_prototype(xt_value value) {
+  if (XT_IS_FUNCTION(value)) return ((xt_function *)XT_GET_PTR(value))->prototype;
+  return XT_UNDEFINED;
+}
+
+xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv) {
+  if (!XT_IS_FUNCTION(ctor)) {
+    xt_throw(xt_string_from_cstr("TypeError: constructor is not a function"));
+    return XT_UNDEFINED;
+  }
+  xt_function *function = (xt_function *)XT_GET_PTR(ctor);
+  xt_value proto = function->prototype;
+  xt_value instance = xt_object_new_with_proto(XT_IS_OBJECT(proto) ? proto : XT_UNDEFINED);
+  xt_value result = function->code(instance, ctor, argc, argv);
+  if (XT_IS_OBJECT(result) || XT_IS_ARRAY(result)) return result;
+  return instance;
+}
+
+xt_value xt_instance_of(xt_value value, xt_value ctor) {
+  if (!XT_IS_FUNCTION(ctor)) return XT_FALSE;
+  xt_value proto = ((xt_function *)XT_GET_PTR(ctor))->prototype;
+  if (!XT_IS_OBJECT(proto)) return XT_FALSE;
+  if (!XT_IS_OBJECT(value)) return XT_FALSE;
+  xt_object *cur = (xt_object *)XT_GET_PTR(value);
+  xt_object *target = (xt_object *)XT_GET_PTR(proto);
+  cur = (xt_object *)XT_GET_PTR(XT_IS_OBJECT(cur->prototype) ? cur->prototype : XT_UNDEFINED);
+  while (cur) {
+    if (cur == target) return XT_TRUE;
+    if (!XT_IS_OBJECT(cur->prototype)) break;
+    cur = (xt_object *)XT_GET_PTR(cur->prototype);
+  }
+  return XT_FALSE;
 }
 
 xt_value xt_closure_env(xt_value value, int32_t index) {

@@ -6,7 +6,7 @@
  * helpers every group relies on.
  */
 
-import { bind, type BindResult, type SymbolInfo } from "../../binder/binder.js";
+import { bind, type BindResult, type ClassInfo, type SymbolInfo } from "../../binder/binder.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import type { SourceFileNode, Node } from "../../ast/nodes.js";
@@ -23,6 +23,8 @@ export class GeneratorContext {
   readonly globals: string[] = [];
   readonly functions: string[] = [];
   readonly strings = new Map<string, { label: string; length: number }>();
+  readonly classGlobals = new Map<number, string>();
+  readonly moduleGlobals = new Map<number, string>();
   readonly extraDeclarations = new Set<string>();
   stringCounter = 0;
   current!: FunctionState;
@@ -72,6 +74,18 @@ export class GeneratorContext {
   // -- variables -----------------------------------------------------------
 
   declareSlot(symbol: SymbolInfo, initial: string): void {
+    const globalName = this.moduleGlobals.get(symbol.id);
+    if (globalName) {
+      if (symbol.boxed) {
+        const box = this.reg();
+        this.emit(`  ${box} = call i64 @xt_box_new(i64 ${initial})`);
+        this.emit(`  store i64 ${box}, i64* ${globalName}`);
+      } else {
+        this.emit(`  store i64 ${initial}, i64* ${globalName}`);
+      }
+      this.current.slots.set(symbol.id, { ptr: globalName, boxed: symbol.boxed });
+      return;
+    }
     const ptr = this.alloca();
     if (symbol.boxed) {
       const box = this.reg();
@@ -91,6 +105,15 @@ export class GeneratorContext {
   }
 
   readSlot(symbol: SymbolInfo): string {
+    const globalName = this.moduleGlobals.get(symbol.id);
+    if (globalName) {
+      const value = this.reg();
+      this.emit(`  ${value} = load i64, i64* ${globalName}`);
+      if (!symbol.boxed) return value;
+      const unboxed = this.reg();
+      this.emit(`  ${unboxed} = call i64 @xt_box_get(i64 ${value})`);
+      return unboxed;
+    }
     const slot = this.current.slots.get(symbol.id);
     if (!slot) {
       // Referenced from an inner function without a capture slot: this should
@@ -110,6 +133,17 @@ export class GeneratorContext {
   }
 
   writeSlot(symbol: SymbolInfo, value: string): void {
+    const globalName = this.moduleGlobals.get(symbol.id);
+    if (globalName) {
+      if (!symbol.boxed) {
+        this.emit(`  store i64 ${value}, i64* ${globalName}`);
+        return;
+      }
+      const box = this.reg();
+      this.emit(`  ${box} = load i64, i64* ${globalName}`);
+      this.emit(`  call i64 @xt_box_set(i64 ${box}, i64 ${value})`);
+      return;
+    }
     const slot = this.current.slots.get(symbol.id);
     if (!slot) {
       this.diagnostics.error(DiagnosticCode.CodegenError, `Internal: no slot for '${symbol.name}'`);

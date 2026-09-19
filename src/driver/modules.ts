@@ -1,0 +1,377 @@
+/**
+ * Source-level module bundler.
+ *
+ * xbintsc does not run a linker for modules, so `import`/`export` are lowered
+ * at the driver by merging every reachable module into a single source file.
+ * Each module's top-level bindings are renamed to a globally unique name and
+ * imported names are rewritten to the (renamed) exported binding.
+ *
+ * This is intentionally simple: it supports named imports/exports, `export
+ * default` for declarations, and `export ... from`. Namespace imports and
+ * `export *` are approximated, and circular graphs are reported as an error.
+ */
+
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import {
+  ModifierKind,
+  SyntaxKind,
+  type ExportAssignment,
+  type ExportDeclaration,
+  type Identifier,
+  type ImportDeclaration,
+  type Node,
+  type SourceFileNode,
+  type Statement,
+  type VariableDeclaration,
+  type VariableDeclarationList,
+  type VariableStatement,
+} from "../ast/nodes.js";
+import { bind, SymbolKind, type BindResult, type SymbolInfo } from "../binder/binder.js";
+import { DiagnosticBag, DiagnosticCode } from "../diagnostics/diagnostic.js";
+import { SourceFile } from "../diagnostics/source.js";
+import { Parser } from "../parser/parser.js";
+
+interface ModuleRecord {
+  readonly path: string;
+  readonly text: string;
+  readonly sourceFile: SourceFileNode;
+  readonly bind: BindResult;
+  readonly prefix: string;
+  /** exported name -> final (renamed) local name */
+  readonly exports: Map<string, string>;
+  /** original local name of every top-level symbol */
+  readonly originalNames: Map<number, string>;
+  /** final name of every top-level symbol */
+  readonly finalNames: Map<number, string>;
+}
+
+export interface BundleResult {
+  readonly sourceFile: SourceFileNode;
+  readonly text: string;
+  readonly moduleCount: number;
+}
+
+const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".cts", "/index.ts", "/index.tsx"];
+
+function resolveModule(fromDir: string, specifier: string): string | undefined {
+  const base = resolve(fromDir, specifier);
+  for (const suffix of RESOLVE_SUFFIXES) {
+    const candidate = base + suffix;
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  return undefined;
+}
+
+function hasModifier(node: Node, kind: ModifierKind): boolean {
+  const modifiers = (node as { modifiers?: { modifierKind: ModifierKind }[] }).modifiers;
+  return !!modifiers && modifiers.some((modifier) => modifier.modifierKind === kind);
+}
+
+function declarationName(node: Node): Identifier | undefined {
+  switch (node.kind) {
+    case SyntaxKind.FunctionDeclaration:
+    case SyntaxKind.ClassDeclaration:
+    case SyntaxKind.EnumDeclaration:
+    case SyntaxKind.InterfaceDeclaration:
+    case SyntaxKind.TypeAliasDeclaration:
+    case SyntaxKind.ModuleDeclaration:
+      return (node as { name?: Identifier }).name;
+    case SyntaxKind.VariableDeclaration:
+      return (node as VariableDeclaration).name;
+    default:
+      return undefined;
+  }
+}
+
+/** Load, parse and bind the entry module and every module it imports. */
+function loadGraph(entryPath: string, diagnostics: DiagnosticBag): ModuleRecord[] | undefined {
+  const records = new Map<string, ModuleRecord>();
+  const order: ModuleRecord[] = [];
+  const visiting = new Set<string>();
+  let counter = 0;
+  let failed = false;
+
+  const load = (path: string): ModuleRecord | undefined => {
+    const existing = records.get(path);
+    if (existing) return existing;
+    if (visiting.has(path)) {
+      diagnostics.error(DiagnosticCode.CodegenError, `Circular import detected involving '${path}'`);
+      failed = true;
+      return undefined;
+    }
+    if (!existsSync(path)) {
+      diagnostics.error(DiagnosticCode.CodegenError, `Cannot find module '${path}'`);
+      failed = true;
+      return undefined;
+    }
+    visiting.add(path);
+    const text = readFileSync(path, "utf8");
+    const file = new SourceFile(path, text);
+    const parser = new Parser(file, diagnostics);
+    const sourceFile = parser.parseSourceFile();
+    const bindResult = bind(sourceFile);
+    const record: ModuleRecord = {
+      path,
+      text,
+      sourceFile,
+      bind: bindResult,
+      prefix: `m${counter++}_`,
+      exports: new Map(),
+      originalNames: new Map(),
+      finalNames: new Map(),
+    };
+    records.set(path, record);
+
+    for (const statement of sourceFile.statements) {
+      const specifier = moduleSpecifierOf(statement);
+      if (!specifier) continue;
+      const dependency = resolveModule(dirname(path), specifier);
+      if (!dependency) {
+        diagnostics.error(
+          DiagnosticCode.CodegenError,
+          `Cannot resolve module '${specifier}' from '${path}'`,
+          statement,
+          path,
+        );
+        failed = true;
+        continue;
+      }
+      load(dependency);
+    }
+    visiting.delete(path);
+    order.push(record);
+    return record;
+  };
+
+  load(entryPath);
+  if (failed) return undefined;
+  return order;
+}
+
+function moduleSpecifierOf(statement: Statement): string | undefined {
+  if (statement.kind === SyntaxKind.ImportDeclaration) {
+    return (statement as ImportDeclaration).moduleSpecifier.value;
+  }
+  if (statement.kind === SyntaxKind.ExportDeclaration) {
+    const specifier = (statement as ExportDeclaration).moduleSpecifier;
+    if (specifier) return specifier.value;
+  }
+  return undefined;
+}
+
+/** Rewrite a symbol's declaration and every reference to `finalName`. */
+function renameSymbol(symbol: SymbolInfo, finalName: string): void {
+  for (const declaration of symbol.declarations) {
+    const name = declarationName(declaration);
+    if (name) (name as { text: string }).text = finalName;
+  }
+  for (const reference of symbol.references) (reference as { text: string }).text = finalName;
+}
+
+/** Rewrite just the references of a symbol (used for imported names). */
+function renameReferences(symbol: SymbolInfo, finalName: string): void {
+  for (const reference of symbol.references) (reference as { text: string }).text = finalName;
+}
+
+function moduleScope(record: ModuleRecord) {
+  return record.bind.scopes.get(record.sourceFile);
+}
+
+function topLevelSymbols(record: ModuleRecord): SymbolInfo[] {
+  const scope = moduleScope(record);
+  if (!scope) return [];
+  return [...scope.symbols.values()];
+}
+
+/**
+ * Merge every module's statements into a single file. Dependencies come first
+ * (post-order over the import graph), the entry module last.
+ */
+export function bundleModules(entryPath: string, diagnostics: DiagnosticBag): BundleResult | undefined {
+  const records = loadGraph(entryPath, diagnostics);
+  if (!records) return undefined;
+
+  const byPath = new Map(records.map((record) => [record.path, record]));
+  const dependencyOf = (record: ModuleRecord, specifier: string): ModuleRecord | undefined => {
+    const resolved = resolveModule(dirname(record.path), specifier);
+    return resolved ? byPath.get(resolved) : undefined;
+  };
+
+  // Phase 1: record every top-level binding and pick a unique final name.
+  for (const record of records) {
+    for (const symbol of topLevelSymbols(record)) {
+      record.originalNames.set(symbol.id, symbol.name);
+      if (symbol.kind === SymbolKind.Import) continue;
+      record.finalNames.set(symbol.id, record.prefix + symbol.name);
+    }
+  }
+
+  // Phase 2: collect each module's exported names.
+  for (const record of records) {
+    const scope = moduleScope(record);
+    if (!scope) continue;
+    const symbolByName = scope.symbols;
+    for (const statement of record.sourceFile.statements) {
+      if (statement.kind === SyntaxKind.ExportDeclaration) {
+        const declaration = statement as ExportDeclaration;
+        if (declaration.exportClause && declaration.exportClause.kind === SyntaxKind.NamedExports) {
+          for (const specifier of declaration.exportClause.elements) {
+            const localName = specifier.propertyName?.text ?? specifier.name.text;
+            const exportedName = specifier.name.text;
+            if (declaration.moduleSpecifier) {
+              const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
+              const target = dependency?.exports.get(localName);
+              if (target) record.exports.set(exportedName, target);
+            } else {
+              const symbol = symbolByName.get(localName);
+              if (symbol) {
+                const finalName = record.finalNames.get(symbol.id) ?? symbol.name;
+                record.exports.set(exportedName, finalName);
+              }
+            }
+          }
+        } else if (!declaration.exportClause && declaration.moduleSpecifier) {
+          // `export * from "..."`: copy every re-exported name.
+          const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
+          if (dependency) for (const [name, value] of dependency.exports) record.exports.set(name, value);
+        }
+        continue;
+      }
+      if (statement.kind === SyntaxKind.ExportAssignment) {
+        record.exports.set("default", `${record.prefix}default`);
+        continue;
+      }
+      if (hasModifier(statement, ModifierKind.Default)) {
+        const name = declarationName(statement) ?? declarationName((statement as { declaration?: Node }).declaration ?? statement);
+        if (name) {
+          const symbol = symbolByName.get(name.text);
+          if (symbol) record.exports.set("default", record.finalNames.get(symbol.id) ?? symbol.name);
+        }
+        continue;
+      }
+      if (hasModifier(statement, ModifierKind.Export)) {
+        const names = exportedNames(statement);
+        for (const name of names) {
+          const symbol = symbolByName.get(name);
+          if (symbol) record.exports.set(name, record.finalNames.get(symbol.id) ?? symbol.name);
+        }
+      }
+    }
+  }
+
+  // Phase 3: rewrite imported names and record re-exports.
+  for (const record of records) {
+    const scope = moduleScope(record);
+    if (!scope) continue;
+    for (const statement of record.sourceFile.statements) {
+      if (statement.kind !== SyntaxKind.ImportDeclaration) continue;
+      const declaration = statement as ImportDeclaration;
+      const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
+      const clause = declaration.importClause;
+      if (!clause || !dependency) continue;
+      if (clause.name) {
+        const target = dependency.exports.get("default") ?? dependency.exports.get("default");
+        const local = scope.symbols.get(clause.name.text);
+        if (target && local) renameReferences(local, target);
+      }
+      const bindings = clause.namedBindings;
+      if (bindings && bindings.kind === SyntaxKind.NamedImports) {
+        for (const specifier of bindings.elements) {
+          const importedName = specifier.propertyName?.text ?? specifier.name.text;
+          const target = dependency.exports.get(importedName);
+          const local = scope.symbols.get(specifier.name.text);
+          if (target && local) renameReferences(local, target);
+        }
+      }
+    }
+  }
+
+  // Phase 4: concatenate statements, dropping imports and pure export wrappers.
+  const merged: Statement[] = [];
+  const first = records[records.length - 1]!;
+  for (const record of records) {
+    for (const statement of record.sourceFile.statements) {
+      if (statement.kind === SyntaxKind.ImportDeclaration) continue;
+      if (statement.kind === SyntaxKind.ExportDeclaration) {
+        const declaration = statement as ExportDeclaration;
+        const inner = (declaration as unknown as { declaration?: Statement }).declaration;
+        if (inner) merged.push(inner);
+        continue;
+      }
+      if (statement.kind === SyntaxKind.ExportAssignment) {
+        const assignment = statement as ExportAssignment;
+        merged.push(exportAssignmentToStatement(record, assignment));
+        continue;
+      }
+      merged.push(statement);
+    }
+  }
+
+  // Phase 5: rename every top-level binding (declaration + references) to its
+  // unique final name, now that import references have been rewritten.
+  for (const record of records) {
+    for (const symbol of topLevelSymbols(record)) {
+      if (symbol.kind === SymbolKind.Import) continue;
+      const finalName = record.finalNames.get(symbol.id);
+      if (finalName) renameSymbol(symbol, finalName);
+    }
+  }
+
+  const sourceFile: SourceFileNode = {
+    kind: SyntaxKind.SourceFile,
+    statements: merged,
+    fileName: first.path,
+    text: records.map((record) => record.text).join("\n"),
+    start: 0,
+    end: 0,
+  };
+  return { sourceFile, text: sourceFile.text, moduleCount: records.length };
+}
+
+function exportedNames(statement: Statement): string[] {
+  const names: string[] = [];
+  if (statement.kind === SyntaxKind.VariableStatement) {
+    for (const declaration of (statement as VariableStatement).declarationList.declarations) {
+      if (declaration.name) names.push(declaration.name.text);
+    }
+  } else {
+    const name = declarationName(statement);
+    if (name) names.push(name.text);
+  }
+  return names;
+}
+
+/** Turn `export default expr` into a synthetic `const` declaration. */
+function exportAssignmentToStatement(record: ModuleRecord, assignment: ExportAssignment): Statement {
+  const name: Identifier = {
+    kind: SyntaxKind.Identifier,
+    text: `${record.prefix}default`,
+    start: assignment.start,
+    end: assignment.start,
+  };
+  record.exports.set("default", name.text);
+  const declaration: VariableDeclaration = {
+    kind: SyntaxKind.VariableDeclaration,
+    name,
+    exclamation: false,
+    initializer: assignment.expression,
+    start: assignment.start,
+    end: assignment.end,
+  };
+  const list: VariableDeclarationList = {
+    kind: SyntaxKind.VariableDeclarationList,
+    declarationKind: "const" as const,
+    declarations: [declaration],
+    start: assignment.start,
+    end: assignment.end,
+  };
+  const statement: VariableStatement = {
+    kind: SyntaxKind.VariableStatement,
+    declarationList: list,
+    modifiers: [],
+    start: assignment.start,
+    end: assignment.end,
+  };
+  return statement;
+}

@@ -67,6 +67,11 @@ export const statementMethods: StatementMethods = {
       case SyntaxKind.InterfaceDeclaration:
       case SyntaxKind.TypeAliasDeclaration:
         return; // functions are emitted at module scope
+      case SyntaxKind.ClassDeclaration: {
+        const info = this.binding.classOfNode.get(statement);
+        if (info) this.emitClassSetup(info);
+        return;
+      }
       case SyntaxKind.IfStatement:
         this.emitIf(statement as IfStatement);
         return;
@@ -457,7 +462,8 @@ export const statementMethods: StatementMethods = {
   },
 
   emitReturn(statement: ReturnStatement): void {
-    const value = statement.expression ? this.emitExpression(statement.expression) : i64(XT_UNDEFINED);
+    let value = statement.expression ? this.emitExpression(statement.expression) : i64(XT_UNDEFINED);
+    if (this.current.fn.isAsync) value = this.wrapAsync(value);
     this.popTryFramesTo(0);
     this.terminate(`ret i64 ${value}`);
   },

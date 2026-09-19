@@ -40,6 +40,12 @@
 #define XT_OBJECT_KIND_OBJECT 2
 #define XT_OBJECT_KIND_ARRAY 3
 #define XT_OBJECT_KIND_FUNCTION 4
+#define XT_OBJECT_KIND_PROMISE 5
+#define XT_OBJECT_KIND_MAP 6
+#define XT_OBJECT_KIND_SET 7
+#define XT_OBJECT_KIND_DATE 8
+#define XT_OBJECT_KIND_REGEXP 9
+#define XT_OBJECT_KIND_SYMBOL 10
 
 /* Common header for every heap object. */
 typedef struct xt_header {
@@ -67,6 +73,10 @@ typedef struct {
   uint32_t count;
   uint32_t capacity;
   xt_property *properties;
+  xt_value prototype;
+  uint8_t frozen;
+  uint8_t is_array_base;
+  uint16_t reserved2;
 } xt_object;
 
 typedef struct {
@@ -84,6 +94,7 @@ typedef struct {
   int32_t arity;
   xt_string *name;
   xt_object *properties;
+  xt_value prototype;
 } xt_function;
 
 /* Allocation (xt_alloc.c). */
@@ -98,6 +109,58 @@ int32_t xt_to_int32(xt_value v);
 
 /* Container helper (xt_containers.c). */
 void xt_array_reserve(xt_array *array, uint32_t needed);
+
+/* Object helpers used by the standard library. */
+xt_object *xt_as_object(xt_value value);
+xt_property *xt_object_find_property(xt_object *obj, xt_string *key);
+
+/* Map / Set / Promise / Date / RegExp live in xt_stdlib.c and xt_promise.c. */
+int xt_is_promise(xt_value value);
+int xt_is_map(xt_value value);
+int xt_is_set(xt_value value);
+int xt_is_date(xt_value value);
+int xt_is_regexp(xt_value value);
+int32_t xt_map_size(xt_value value);
+int32_t xt_set_size(xt_value value);
+
+/* -- collection / date / regexp representations --------------------------- */
+typedef struct {
+  xt_header header;
+  xt_value *keys;
+  xt_value *values;
+  uint32_t count;
+  uint32_t capacity;
+} xt_map;
+
+typedef struct {
+  xt_header header;
+  xt_value *values;
+  uint32_t count;
+  uint32_t capacity;
+} xt_set_object;
+
+typedef struct {
+  xt_header header;
+  double time;
+} xt_date;
+
+typedef struct {
+  xt_header header;
+  xt_value source;
+  xt_value flags;
+} xt_regexp;
+
+/* Extended method dispatch (xt_stdlib2.c). `*handled` is set when the method
+ * was recognised, allowing an intentional `undefined` result to be returned. */
+xt_value xt_ext_array_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+xt_value xt_ext_string_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+xt_value xt_ext_number_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+xt_value xt_ext_object_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+xt_value xt_ext_container_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+
+/* JSON helpers used by Promise / Map immutability checks. */
+int xt_value_equals(xt_value a, xt_value b);
 
 /* Standard-library helpers (xt_stdlib.c). */
 xt_array *xt_as_array(xt_value value);

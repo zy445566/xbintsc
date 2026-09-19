@@ -102,7 +102,7 @@ describe("codegen", () => {
   });
 
   it("reports unsupported syntax instead of crashing", () => {
-    const { diagnostics } = compileToIr("class Foo {}");
+    const { diagnostics } = compileToIr("tag`x`;");
     expect(diagnostics.some((d) => d.category === "error")).toBe(true);
   });
 });

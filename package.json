@@ -19,8 +19,9 @@
     "README.md"
   ],
   "scripts": {
-    "runtime": "bash scripts/build-runtime.sh",
-    "runtime:clean": "rm -rf build/runtime",
+    "build": "tsc -p tsconfig.json",
+    "runtime": "node scripts/build-runtime.mjs",
+    "runtime:clean": "node -e \"require('fs').rmSync('build/runtime',{recursive:true,force:true})\"",
     "xtsc": "tsx src/cli/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

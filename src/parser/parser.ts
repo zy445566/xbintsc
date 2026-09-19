@@ -90,6 +90,8 @@ export class Parser {
   private readonly source: SourceFile;
   private tokens: Token[];
   private index = 0;
+  /** Non-zero while a speculative parse is running; errors abort the attempt. */
+  private speculating = 0;
   /** Monotonic count of tokens consumed; used to detect lack of progress. */
   private consumed = 0;
 
@@ -150,6 +152,34 @@ export class Parser {
 
   private error(code: DiagnosticCode, message: string, token: Token = this.token): void {
     this.diagnostics.error(code, message, { start: token.start, end: token.end }, this.source.fileName);
+    if (this.speculating > 0) throw new SpeculationError();
+  }
+
+  /**
+   * Run `fn` speculatively. Any diagnostic raised while it runs (which aborts
+   * the attempt via `SpeculationError`) is rolled back along with the scanner
+   * position, so the parser can try a different production cleanly.
+   */
+  private tryParse<T>(fn: () => T): T | undefined {
+    const mark = this.diagnostics.mark();
+    const state = this.saveState();
+    this.speculating++;
+    let result: T | undefined;
+    let ok = false;
+    try {
+      result = fn();
+      ok = true;
+    } catch (error) {
+      if (!(error instanceof SpeculationError)) throw error;
+    } finally {
+      this.speculating--;
+    }
+    if (!ok) {
+      this.diagnostics.reset(mark);
+      this.restoreState(state);
+      return undefined;
+    }
+    return result;
   }
 
   private isIdentifierLike(token: Token): boolean {
@@ -1236,14 +1266,15 @@ export class Parser {
 
   // -- state save / restore (for speculative parsing) -----------------------
 
-  private saveState(): { index: number; tokens: Token[]; pos: number } {
-    return { index: this.index, tokens: this.tokens.slice(), pos: this.scanner.position };
+  private saveState(): { index: number; tokens: Token[]; pos: number; consumed: number } {
+    return { index: this.index, tokens: this.tokens.slice(), pos: this.scanner.position, consumed: this.consumed };
   }
 
-  private restoreState(state: { index: number; tokens: Token[]; pos: number }): void {
+  private restoreState(state: { index: number; tokens: Token[]; pos: number; consumed: number }): void {
     this.index = state.index;
     this.tokens = state.tokens;
     this.scanner.seek(state.pos);
+    this.consumed = state.consumed;
   }
 
   // -- expressions ----------------------------------------------------------
@@ -1446,14 +1477,12 @@ export class Parser {
       return { kind: SyntaxKind.YieldExpression, expression, delegate, start: token.start, end: expression?.end ?? token.end };
     }
     if (token.kind === TokenKind.LessThan) {
-      const state = this.saveState();
-      try {
+      const assertion = this.tryParse<Expression>(() => {
         const type = this.parseType();
         const expression = this.parseUnaryExpression();
         return { kind: SyntaxKind.AsExpression, expression, type, start: token.start, end: expression.end };
-      } catch {
-        this.restoreState(state);
-      }
+      });
+      if (assertion) return assertion;
     }
     return this.parsePostfixExpression();
   }
@@ -1584,18 +1613,16 @@ export class Parser {
         continue;
       }
       if (token.kind === TokenKind.LessThan) {
-        const state = this.saveState();
-        try {
+        const call = this.tryParse<Expression>(() => {
           const typeArguments = this.parseTypeArguments();
-          if (this.at(TokenKind.OpenParen)) {
-            const args = this.parseArguments();
-            expression = { kind: SyntaxKind.CallExpression, expression, typeArguments, arguments: args, optional: false, start: expression.start, end: this.previousEnd(args, this.token.start) };
-            continue;
-          }
-        } catch {
-          /* not a type argument list */
+          if (!this.at(TokenKind.OpenParen)) throw new SpeculationError();
+          const args = this.parseArguments();
+          return { kind: SyntaxKind.CallExpression, expression, typeArguments, arguments: args, optional: false, start: expression.start, end: this.previousEnd(args, this.token.start) };
+        });
+        if (call) {
+          expression = call;
+          continue;
         }
-        this.restoreState(state);
       }
       if (this.at(TokenKind.Backtick) || this.at(TokenKind.TemplateHead) || this.at(TokenKind.NoSubstitutionTemplateLiteral)) {
         const template = this.parseTemplateLiteral();
@@ -2343,5 +2370,13 @@ function prefixUnaryOperator(kind: TokenKind): PrefixUnaryOperator | undefined {
       return PrefixUnaryOperator.Await;
     default:
       return undefined;
+  }
+}
+
+/** Thrown internally to unwind a speculative parse; never escapes the parser. */
+class SpeculationError extends Error {
+  constructor() {
+    super("speculation failed");
+    this.name = "SpeculationError";
   }
 }

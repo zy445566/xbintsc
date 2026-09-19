@@ -73,6 +73,16 @@ export class DiagnosticBag {
     return this.items.some((d) => d.category === "error");
   }
 
+  /** Snapshot the current size so a speculative parse can roll back. */
+  mark(): number {
+    return this.items.length;
+  }
+
+  /** Discard every diagnostic added after `mark()` was taken. */
+  reset(mark: number): void {
+    this.items.length = mark;
+  }
+
   error(code: DiagnosticCode, message: string, range?: { start: number; end: number }, fileName?: string): void {
     this.items.push({ category: "error", code, message, fileName, start: range?.start, end: range?.end });
   }

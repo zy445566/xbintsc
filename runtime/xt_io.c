@@ -32,6 +32,15 @@ typedef struct xt_try_frame {
 
 static xt_try_frame *g_try_top = NULL;
 
+/* Program arguments, captured once by `xt_set_program_args` from `main`. */
+int32_t xt_program_argc = 0;
+char **xt_program_argv = NULL;
+
+void xt_set_program_args(int32_t argc, char **argv) {
+  xt_program_argc = argc;
+  xt_program_argv = argv;
+}
+
 void *xt_try_enter(void) {
   xt_try_frame *frame = (xt_try_frame *)calloc(1, sizeof(xt_try_frame));
   if (!frame) abort();

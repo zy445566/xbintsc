@@ -33,6 +33,8 @@ describe("ExtensionRegistry", () => {
     const builtins = registry.builtins();
     expect(builtins.print?.symbol).toBe("xt_println");
     expect(builtins.readFileSync?.symbol).toBe("xt_node_read_text_file");
+    expect(builtins.writeFileSync?.symbol).toBe("xt_node_write_file");
+    expect(builtins.existsSync?.symbol).toBe("xt_node_exists");
   });
 
   it("collects runtime sources and linker flags", () => {
@@ -46,9 +48,13 @@ describe("ExtensionRegistry", () => {
     expect(createDefaultRegistry().has("core")).toBe(true);
   });
 
-  it("node extension points at the ext C source", () => {
+  it("node extension points at the ext C sources", () => {
     const sources = nodeExtension.runtimeSources?.() ?? [];
-    expect(sources).toHaveLength(1);
-    expect(sources[0]).toMatch(/ext_node[\\/]fs[\\/]read_file\.c$/);
+    expect(sources.length).toBeGreaterThanOrEqual(6);
+    expect(sources.some((s) => /ext_node[\\/]fs[\\/]read_file\.c$/.test(s))).toBe(true);
+    expect(sources.some((s) => /ext_node[\\/]fs[\\/]fs_ops\.c$/.test(s))).toBe(true);
+    expect(sources.some((s) => /ext_node[\\/]path[\\/]path\.c$/.test(s))).toBe(true);
+    expect(sources.some((s) => /ext_node[\\/]os[\\/]os\.c$/.test(s))).toBe(true);
+    expect(sources.some((s) => /ext_node[\\/]process[\\/]process\.c$/.test(s))).toBe(true);
   });
 });

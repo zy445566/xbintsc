@@ -207,6 +207,12 @@ xt_value xt_delete(xt_value obj, xt_value key);
 /** Collect `argv[start..argc)` into a new array (rest parameters). */
 xt_value xt_rest_args(int32_t argc, xt_value *argv, int32_t start);
 
+/* -- program arguments ---------------------------------------------------- */
+/* Captured from `main` so host extensions can expose `process.argv`. */
+void xt_set_program_args(int32_t argc, char **argv);
+extern int32_t xt_program_argc;
+extern char **xt_program_argv;
+
 /* -- arrays --------------------------------------------------------------- */
 xt_value xt_array_new(int32_t count, xt_value *items);
 xt_value xt_array_get(xt_value arr, xt_value index);

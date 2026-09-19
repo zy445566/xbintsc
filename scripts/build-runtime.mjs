@@ -27,6 +27,11 @@ const sources = [
   ["xt_io.c", "xt_io.o"],
   // Node extension sources.
   ["ext_node/fs/read_file.c", "ext_node_fs_read_file.o"],
+  ["ext_node/fs/write_file.c", "ext_node_fs_write_file.o"],
+  ["ext_node/fs/fs_ops.c", "ext_node_fs_fs_ops.o"],
+  ["ext_node/path/path.c", "ext_node_path_path.o"],
+  ["ext_node/os/os.c", "ext_node_os_os.o"],
+  ["ext_node/process/process.c", "ext_node_process_process.o"],
 ];
 
 for (const [source, object] of sources) {

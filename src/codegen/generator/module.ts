@@ -155,6 +155,7 @@ export const moduleMethods: ModuleMethods = {
     this.functions.push(
       [
         "define i32 @main(i32 %argc, i8** %argv) {",
+        "  call void @xt_set_program_args(i32 %argc, i8** %argv)",
         `  %result = call i64 @${moduleName}(i64 ${i64(XT_UNDEFINED)}, i64 ${i64(XT_UNDEFINED)}, i32 0, i64* null)`,
         "  call void @xt_drain_microtasks()",
         "  ret i32 0",

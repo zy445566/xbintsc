@@ -5,19 +5,23 @@
  * builtins each module implements, so `readFileSync("...")` in TypeScript
  * resolves to the C implementation without the core compiler knowing anything
  * about Node. Every Node module lives in its own subfolder next to this file
- * (currently `fs/`), with the runtime counterpart under `runtime/ext_node/`.
+ * (`fs/`, `path/`, `os/`, `process/`), with the runtime counterpart under
+ * `runtime/ext_node/`.
  */
 
 import type { BuiltinFunction, Extension } from "../registry.js";
 import type { NodeModule } from "./module.js";
 import { fsModule } from "./fs/index.js";
+import { pathModule } from "./path/index.js";
+import { osModule } from "./os/index.js";
+import { processModule } from "./process/index.js";
 
 /** Every Node module the extension currently provides. */
-const modules: readonly NodeModule[] = [fsModule];
+const modules: readonly NodeModule[] = [fsModule, pathModule, osModule, processModule];
 
 export const nodeExtension: Extension = {
   name: "node",
-  description: "Node.js host APIs (fs, ...)",
+  description: "Node.js host APIs (fs, path, os, process)",
   runtimeSources: () => modules.flatMap((module) => module.runtimeSources()),
   builtins: () => {
     const merged: Record<string, BuiltinFunction> = {};

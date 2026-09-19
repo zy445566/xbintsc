@@ -10,41 +10,32 @@
 
 ## 1. `fs` 模块未实现
 
-当前 `fs` 仅实现 `readFileSync` / `readTextFile`（同一 C 符号），其余全部未实现：
+当前 `fs` 已实现同步读写、目录操作与 `statSync`（见 [node-implemented.md](node-implemented.md)），其余仍未实现：
 
 | 未实现 API | 类别 |
 | --- | --- |
-| `readFile` | 异步读取 |
-| `writeFileSync` / `writeFile` | 写入 |
-| `appendFileSync` / `appendFile` | 追加写入 |
-| `existsSync` / `exists` | 存在性检查 |
-| `statSync` / `stat` / `lstatSync` / `fstatSync` | 文件元信息 |
-| `readdirSync` / `readdir` | 目录读取 |
-| `mkdirSync` / `mkdir` / `mkdtempSync` | 目录创建 |
-| `rmSync` / `rmdirSync` / `unlinkSync` | 删除 |
-| `renameSync` / `copyFileSync` / `linkSync` / `symlinkSync` | 重命名 / 复制 / 链接 |
-| `truncateSync` / `chmodSync` / `chownSync` / `utimesSync` | 元数据修改 |
+| `readFile` / `writeFile` / `appendFile` | 异步回调式读写 |
 | `watch` / `watchFile` | 文件监听 |
 | `openSync` / `closeSync` / `readSync` / `writeSync` | 文件描述符级操作 |
-| `realpathSync` / `readlinkSync` | 路径解析 |
+| `mkdtempSync` | 临时目录创建 |
+| `linkSync` / `symlinkSync` / `readlinkSync` | 硬链接 / 符号链接 |
+| `truncateSync` / `chmodSync` / `chownSync` / `utimesSync` | 元数据修改 |
+| `createReadStream` / `createWriteStream` | 流 |
+| `fs/promises` | Promise 版 API |
 
 ### 1.1 读取语义缺口
 
-- 无 `encoding` 选项：始终按 UTF-8 文本返回，不支持 `'utf8'` / `'ascii'` / `'base64'` / `'hex'` 等参数。
-- 无 `Buffer` / 二进制返回：`readFileSync` 无法返回 `Buffer`（xbintsc 目前没有 `Buffer` 值类型）。
+- `readFileSync` 支持编码选项（默认/`utf8`/`ascii`/`latin1`/`binary`/`hex`/`base64`），但**无法返回 `Buffer`/二进制**（xbintsc 目前没有 `Buffer` 值类型）。
 - 错误处理与 Node 不符：打开失败只打印 stderr 并返回 `undefined`，不会抛出 `Error` / `ENOENT` 等异常（xbintsc 尚无可捕获异常体系）。
 
 ---
 
 ## 2. 其它 Node 模块完全未实现
 
-以下 Node 内置模块没有任何对应扩展 / 内置函数：
+以下 Node 内置模块没有任何对应扩展 / 内置函数（`fs` / `path` / `os` / `process` 已实现，见 [node-implemented.md](node-implemented.md)）：
 
 | 模块 | 说明 |
 | --- | --- |
-| `path` | `join` `resolve` `dirname` `basename` `extname` 等 |
-| `os` | `platform` `arch` `homedir` `cpus` 等 |
-| `process` | 进程信息、`argv` `env` `exit` `cwd` 等 |
 | `crypto` | 哈希、随机数、加密 |
 | `http` / `https` | HTTP 客户端 / 服务端 |
 | `net` | TCP / IPC 网络 |
@@ -63,23 +54,25 @@
 
 ---
 
-## 3. Node 全局对象 / 命名空间未实现
+## 3. Node 全局对象 / 命名空间
 
 | 未实现 | 说明 |
 | --- | --- |
-| `process` 全局对象 | 无 `process.argv` / `process.env` / `process.cwd()` / `process.exit()` |
 | `global` / `globalThis` | 无 |
 | `__dirname` / `__filename` | 无 |
 | `require` / `module` / `exports` | 无（xbintsc 无 CommonJS 模块运行时） |
 | `Buffer` / `TypedArray` | 无二进制值类型 |
-| 命名空间式调用 `fs.readFileSync(...)` | ✗ 不支持。内置函数只能以裸全局标识符调用，如 `readFileSync(...)`，不能写成 `fs.readFileSync(...)`（`fs` 这个对象并不存在） |
+| `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask` | 无定时器 |
+| 命名空间式调用 `fs.readFileSync(...)` | ✗ 不支持。`fs` 内置函数只能以裸全局标识符调用，如 `readFileSync(...)` |
 | `import { readFileSync } from "fs"` | ✗ 无法运行。`import` 语句本身在代码生成阶段报 `UnsupportedFeature`（见 [unimplemented.md](unimplemented.md)）；扩展内置函数是全局符号映射，与 import 无关 |
+
+已支持的命名空间调用：`path.*`、`os.*`、`process.*`（方法），以及 `process.platform` / `process.argv` 等属性。
 
 ---
 
 ## 4. 异步 / 事件循环模型未实现
 
-- 无回调 / Promise 异步模型：`readFile` 等异步 API 无运行时支撑（xbintsc 无事件循环、无 `Promise`）。
+- 无回调 / Promise 异步模型：`readFile` 等异步 API 无运行时支撑（无事件循环、无回调注册；核心 `Promise` 无法用于 I/O 回调）。
 - 无 `async` / `await`（见核心 [unimplemented.md](unimplemented.md)）。
 - 无定时器 `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask`。
 
@@ -97,20 +90,25 @@
 ## 6. 速查：Node 扩展未实现清单
 
 ```
-已实现：readFileSync、readTextFile（均映射 xt_node_read_text_file）
+已实现（fs）：readFileSync（含编码）、readTextFile、writeFileSync、appendFileSync、
+              existsSync、readdirSync、mkdirSync、rmSync、unlinkSync、rmdirSync、
+              renameSync、copyFileSync、realpathSync、statSync、lstatSync
+已实现（其它模块）：path（join/resolve/normalize/dirname/basename/extname/isAbsolute/relative）、
+                    os（platform/arch/type/release/endianness/homedir/tmpdir/hostname/totalmem/freemem/cpus）、
+                    process（cwd/exit/uptime/hrtime/getuid/platform/arch/pid/ppid/argv/env/version/title）
 
-未实现（fs）：readFile、writeFile(Sync)、appendFile(Sync)、exists(Sync)、
-              stat(Sync)、readdir(Sync)、mkdir(Sync)、rm(Sync)、rename(Sync)、
-              copyFile(Sync)、watch、open/read/write/close、encoding 选项、Buffer 返回
+未实现（fs）：readFile、writeFile、appendFile、watch/watchFile、open/read/write/close、
+              mkdtempSync、link/symlink/readlink、chmod/chown/utimes/truncate、
+              createReadStream/createWriteStream、Buffer 返回
 
-未实现（其它模块）：path、os、process、crypto、http、net、child_process、
-                    util、stream、events、buffer、url、querystring、zlib、
-                    readline、worker_threads、fs/promises
+未实现（其它模块）：crypto、http/https、net、dgram、child_process、util、stream、
+                    events、buffer、url、querystring、zlib、readline、
+                    worker_threads、fs/promises
 
-未实现（全局/命名空间）：process、global/globalThis、__dirname、__filename、
+未实现（全局/命名空间）：global/globalThis、__dirname、__filename、
                         require/module/exports、Buffer、fs.readFileSync(...) 命名空间调用
 
-未实现（异步）：回调 / Promise / 事件循环 / setTimeout / async-await
+未实现（异步）：回调 / Promise I/O / 事件循环 / setTimeout / async-await
 
 未实现（平台）：Bun 扩展（仅设计示例）
 ```

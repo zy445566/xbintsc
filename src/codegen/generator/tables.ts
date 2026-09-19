@@ -89,6 +89,14 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   String: "xt_string_static",
   Date: "xt_date_static",
   Promise: "xt_promise_static",
+  path: "xt_path_static",
+  os: "xt_os_static",
+  process: "xt_process_call",
+};
+
+/** Namespace identifiers whose property access maps to a runtime getter. */
+export const NAMESPACE_PROPERTIES: Record<string, string> = {
+  process: "xt_process_get",
 };
 
 /** Global constructors called as `new X(...)` (all have signature `(i32, i64*)`). */

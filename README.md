@@ -157,14 +157,17 @@ builtins with the C sources that implement them:
 
 ```
 src/extensions/node/       runtime/ext_node/
-  index.ts   # nodeExtension  fs/read_file.c
-  fs/index.ts               
-  fs/read-file.ts           
+  index.ts   # nodeExtension  fs/read_file.c   fs/write_file.c   fs/fs_ops.c
+  fs/index.ts                path/path.c      os/os.c           process/process.c
+  fs/read-file.ts
+  path/index.ts
+  os/index.ts
+  process/index.ts
 ```
 
 ```ts
 // src/extensions/node/index.ts
-const modules: readonly NodeModule[] = [fsModule];
+const modules: readonly NodeModule[] = [fsModule, pathModule, osModule, processModule];
 
 export const nodeExtension: Extension = {
   name: "node",
@@ -177,9 +180,11 @@ export const nodeExtension: Extension = {
 ```
 
 Registering it links the extra C sources and makes `readFileSync(...)` resolve
-to the C symbol with the uniform `(argc, argv)` calling convention. Adding a
-module means dropping a folder under `src/extensions/node/` and its C
-counterpart under `runtime/ext_node/`; the core compiler never changes.
+to the C symbol with the uniform `(argc, argv)` calling convention. `path`,
+`os` and `process` additionally hook into namespace dispatch, so `path.join(...)`
+and `process.cwd()` lower to their runtime entries. Adding a module means
+dropping a folder under `src/extensions/node/` and its C counterpart under
+`runtime/ext_node/`; the core compiler never changes.
 
 Node module coverage:
 

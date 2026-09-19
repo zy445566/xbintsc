@@ -24,6 +24,7 @@ import {
   GLOBAL_FUNCTIONS,
   MATH_CONSTANTS,
   MATH_FUNCTIONS,
+  NAMESPACE_PROPERTIES,
   NAMESPACE_STATICS,
   propertyNameText,
 } from "./tables.js";
@@ -258,6 +259,18 @@ export const callMethods: CallMethods = {
       !this.binding.symbolOfIdentifier.get(node.expression as Identifier)
     ) {
       return numberLiteral(MATH_CONSTANTS[node.name.text]!);
+    }
+    if (
+      node.expression.kind === SyntaxKind.Identifier &&
+      !this.binding.symbolOfIdentifier.get(node.expression as Identifier)
+    ) {
+      const getter = NAMESPACE_PROPERTIES[(node.expression as Identifier).text];
+      if (getter) {
+        const key = this.stringValue(node.name.text);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @${getter}(i64 ${key})`);
+        return result;
+      }
     }
     const object = this.emitExpression(node.expression);
     const access = (): string => {

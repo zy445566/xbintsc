@@ -205,7 +205,7 @@ Location: `src/codegen/llvm.ts`
 - Statement / block boundary values live in `alloca`; conditionals and short-circuits materialize into temporary slots instead of `phi`.
 - Control flow: `if` / `while` / `do` / `for` / `for...of` / `for...in`, `switch`, `try/catch/finally`, `break` / `continue` / `return`.
   - `switch` tests each `case` with strict equality, executes on a hit, and falls through until `break`.
-  - `try/catch/finally` is implemented with a runtime `setjmp` frame: `xt_try_enter` pushes, `_setjmp` catches, `xt_throw` long-jumps. Functions containing `try` force local variables to stay in memory (inline-asm escape points) so values survive a long jump.
+  - `try/catch/finally` is implemented with a runtime `setjmp` frame: `xt_try_enter` pushes, `setjmp` catches, `xt_throw` long-jumps. Functions containing `try` force local variables to stay in memory (inline-asm escape points) so values survive a long jump.
   - `for...in` reuses `xt_object_keys` to enumerate keys (arrays / strings yield string indices).
 - Expressions:
   - Identifiers, numbers, BigInt (treated as numbers), strings, templates, booleans, `null`, `undefined`, `arguments`

@@ -4,6 +4,10 @@
  * `try`/`catch` is a stack of setjmp frames; `xt_throw` longjmps into the
  * innermost frame when one is active and otherwise prints + exits. Also holds
  * `print`/`console` output and the Node-like value inspector.
+ *
+ * We use the standard `setjmp`/`longjmp` pair (rather than the XSI/BSD
+ * `_setjmp`/`_longjmp`) so the same symbols resolve on Linux, macOS and the
+ * Windows UCRT, which does not provide `_longjmp`.
  */
 
 #include "rt_internal.h"
@@ -20,7 +24,7 @@
 
 /*
  * `try`/`catch` is implemented with a stack of setjmp frames. The compiler
- * allocates a frame with `xt_try_enter`, calls `_setjmp` on it, and pops it
+ * allocates a frame with `xt_try_enter`, calls `setjmp` on it, and pops it
  * with `xt_try_leave`. `xt_throw` longjmps into the innermost frame when one
  * is active, and only prints + exits when the exception is uncaught.
  */
@@ -63,7 +67,7 @@ void xt_try_leave(void *framePtr) {
 void xt_throw(xt_value v) {
   if (g_try_top) {
     g_try_top->exception = v;
-    _longjmp(g_try_top->buf, 1);
+    longjmp(g_try_top->buf, 1);
   }
   xt_value message = xt_to_string(v);
   xt_string *s = xt_as_string(message);
@@ -184,7 +188,7 @@ static int xt_console_find_label(const char *label) {
   if (xt_console_label_count >= XT_CONSOLE_MAX_LABELS) return -1;
   int index = xt_console_label_count++;
   xt_console_labels[index] = (char *)malloc(strlen(label) + 1);
-  strcpy(xt_console_labels[index], label);
+  memcpy(xt_console_labels[index], label, strlen(label) + 1);
   xt_console_counts[index] = 0;
   xt_console_timers[index] = 0;
   return index;

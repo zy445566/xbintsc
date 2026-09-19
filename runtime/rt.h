@@ -141,6 +141,31 @@ xt_value xt_object_get_cstr(xt_value obj, const char *key);
 xt_value xt_object_set(xt_value obj, xt_value key, xt_value value);
 xt_value xt_object_has(xt_value obj, xt_value key);
 xt_value xt_object_keys(xt_value obj);
+xt_value xt_object_values(xt_value obj);
+xt_value xt_object_entries(xt_value obj);
+xt_value xt_object_assign(int32_t argc, xt_value *argv);
+xt_value xt_object_spread(xt_value target, xt_value source);
+
+/* -- standard library dispatch -------------------------------------------- */
+/** Call `target[name](...)`, falling back to built-in Array/String methods. */
+xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv);
+/** Implements `Math.<name>(...)`; the name is interned by the compiler. */
+xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv);
+
+/* -- global functions ------------------------------------------------------ */
+xt_value xt_parse_int(int32_t argc, xt_value *argv);
+xt_value xt_parse_float(int32_t argc, xt_value *argv);
+xt_value xt_is_nan(int32_t argc, xt_value *argv);
+xt_value xt_is_finite(int32_t argc, xt_value *argv);
+xt_value xt_number_ctor(int32_t argc, xt_value *argv);
+xt_value xt_string_ctor(int32_t argc, xt_value *argv);
+xt_value xt_boolean_ctor(int32_t argc, xt_value *argv);
+/** `key in obj` (the key is the left operand). */
+xt_value xt_in(xt_value key, xt_value obj);
+/** `delete obj[key]`; removes object properties, clears array elements. */
+xt_value xt_delete(xt_value obj, xt_value key);
+/** Collect `argv[start..argc)` into a new array (rest parameters). */
+xt_value xt_rest_args(int32_t argc, xt_value *argv, int32_t start);
 
 /* -- arrays --------------------------------------------------------------- */
 xt_value xt_array_new(int32_t count, xt_value *items);
@@ -162,7 +187,14 @@ xt_value xt_is_nullish(xt_value value);
 
 /* -- exceptions / output -------------------------------------------------- */
 void xt_throw(xt_value v);
+/** Allocate and push a `try` frame; the returned pointer is the `setjmp` buffer. */
+void *xt_try_enter(void);
+xt_value xt_try_exception(void *frame);
+void xt_try_leave(void *frame);
 void xt_console_log(int32_t argc, xt_value *argv);
+void xt_console_info(int32_t argc, xt_value *argv);
+void xt_console_warn(int32_t argc, xt_value *argv);
+void xt_console_error(int32_t argc, xt_value *argv);
 void xt_print(xt_value v);
 void xt_println(xt_value v);
 

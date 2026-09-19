@@ -41,6 +41,10 @@ import {
   type ForStatement,
   type ForOfStatement,
   type ForInStatement,
+  type SwitchStatement,
+  type CaseClause,
+  type TryStatement,
+  type DeleteExpression,
   type ReturnStatement,
   type ThrowStatement,
   type ObjectLiteralExpression,
@@ -77,6 +81,8 @@ interface Slot {
 interface LoopLabels {
   readonly breakLabel: string;
   readonly continueLabel: string;
+  /** Number of enclosing `try` frames when the loop was entered. */
+  readonly tryDepth?: number;
 }
 
 interface FunctionState {
@@ -88,6 +94,10 @@ interface FunctionState {
   label: number;
   terminated: boolean;
   readonly loops: LoopLabels[];
+  readonly tryFrames: string[];
+  readonly escapePointers: string[];
+  /** Set when the function contains a `try`, forcing locals to live in memory. */
+  usesTry: boolean;
 }
 
 const RUNTIME_DECLARATIONS: readonly string[] = [
@@ -133,6 +143,23 @@ const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_object_get_cstr(i64, i8*)",
   "declare i64 @xt_object_set(i64, i64, i64)",
   "declare i64 @xt_object_has(i64, i64)",
+  "declare i64 @xt_object_keys(i64)",
+  "declare i64 @xt_object_values(i64)",
+  "declare i64 @xt_object_entries(i64)",
+  "declare i64 @xt_object_assign(i32, i64*)",
+  "declare i64 @xt_object_spread(i64, i64)",
+  "declare i64 @xt_call_method(i64, i64, i32, i64*)",
+  "declare i64 @xt_math_call(i64, i32, i64*)",
+  "declare i64 @xt_parse_int(i32, i64*)",
+  "declare i64 @xt_parse_float(i32, i64*)",
+  "declare i64 @xt_is_nan(i32, i64*)",
+  "declare i64 @xt_is_finite(i32, i64*)",
+  "declare i64 @xt_number_ctor(i32, i64*)",
+  "declare i64 @xt_string_ctor(i32, i64*)",
+  "declare i64 @xt_boolean_ctor(i32, i64*)",
+  "declare i64 @xt_in(i64, i64)",
+  "declare i64 @xt_delete(i64, i64)",
+  "declare i64 @xt_rest_args(i32, i64*, i32)",
   "declare i64 @xt_array_new(i32, i64*)",
   "declare i64 @xt_array_push(i64, i64)",
   "declare i64 @xt_array_length(i64)",
@@ -144,7 +171,14 @@ const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_box_set(i64, i64)",
   "declare i64 @xt_is_nullish(i64)",
   "declare void @xt_throw(i64)",
+  "declare i32 @_setjmp(i8*) returns_twice",
+  "declare i8* @xt_try_enter()",
+  "declare i64 @xt_try_exception(i8*)",
+  "declare void @xt_try_leave(i8*)",
   "declare void @xt_console_log(i32, i64*)",
+  "declare void @xt_console_info(i32, i64*)",
+  "declare void @xt_console_warn(i32, i64*)",
+  "declare void @xt_console_error(i32, i64*)",
 ];
 
 export interface CodegenResult {
@@ -205,6 +239,9 @@ class Generator {
       label: 0,
       terminated: false,
       loops: [],
+      tryFrames: [],
+      escapePointers: [],
+      usesTry: false,
     };
     this.current = state;
 
@@ -217,11 +254,20 @@ class Generator {
     this.emit(`store i64* %argv, i64** %saved.argv`);
 
     // Parameters.
+    const parameterNodes = (fn.node as { parameters?: Parameter[] }).parameters ?? [];
     for (let index = 0; index < fn.params.length; index++) {
       const symbol = fn.params[index]!;
+      const parameter = parameterNodes[index];
+      if (parameter?.dotDotDotToken) {
+        const rest = this.reg();
+        this.emit(`  ${rest} = call i64 @xt_rest_args(i32 %argc, i64* %argv, i32 ${index})`);
+        this.declareSlot(symbol, rest);
+        continue;
+      }
       const value = this.reg();
       this.emit(`  ${value} = call i64 @xt_arg(i32 %argc, i64* %argv, i32 ${index})`);
       this.declareSlot(symbol, value);
+      if (parameter?.initializer) this.emitDefaultParameter(symbol, value, parameter.initializer);
     }
 
     // Captures threaded through the environment.
@@ -245,7 +291,10 @@ class Generator {
 
     if (!this.current.terminated) this.terminate(`ret i64 ${i64(XT_UNDEFINED)}`);
 
-    const lines = [...state.allocas.map((a) => `  ${a}`), ...state.buffer];
+    const escapes = state.usesTry
+      ? state.escapePointers.map((ptr) => `  call void asm sideeffect "", "r"(i64* ${ptr})`)
+      : [];
+    const lines = [...state.allocas.map((a) => `  ${a}`), ...escapes, ...state.buffer];
     this.functions.push([header, ...lines, "}", ""].join("\n"));
   }
 
@@ -293,6 +342,7 @@ class Generator {
   private alloca(): string {
     const ptr = `%slot${this.current.allocas.length}`;
     this.current.allocas.push(`${ptr} = alloca i64`);
+    this.current.escapePointers.push(ptr);
     return ptr;
   }
 
@@ -355,6 +405,23 @@ class Generator {
     this.emit(`  call i64 @xt_box_set(i64 ${box}, i64 ${value})`);
   }
 
+  private emitDefaultParameter(symbol: SymbolInfo, value: string, initializer: Expression): void {
+    const isUndefined = this.reg();
+    this.emit(`  ${isUndefined} = call i64 @xt_seq(i64 ${value}, i64 ${i64(XT_UNDEFINED)})`);
+    const truthy = this.reg();
+    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${isUndefined})`);
+    const condition = this.reg();
+    this.emit(`  ${condition} = icmp ne i32 ${truthy}, 0`);
+    const applyLabel = this.label("param.default");
+    const endLabel = this.label("param.end");
+    this.terminate(`br i1 ${condition}, label %${applyLabel}, label %${endLabel}`);
+    this.startBlock(applyLabel);
+    const fallback = this.emitExpression(initializer);
+    this.writeSlot(symbol, fallback);
+    this.terminate(`br label %${endLabel}`);
+    this.startBlock(endLabel);
+  }
+
   // -- statements ----------------------------------------------------------
 
   private emitStatements(statements: readonly Statement[]): void {
@@ -397,17 +464,29 @@ class Generator {
       case SyntaxKind.ForInStatement:
         this.emitForOf(statement as ForOfStatement | ForInStatement);
         return;
+      case SyntaxKind.SwitchStatement:
+        this.emitSwitch(statement as SwitchStatement);
+        return;
+      case SyntaxKind.TryStatement:
+        this.emitTry(statement as TryStatement);
+        return;
       case SyntaxKind.ReturnStatement:
         this.emitReturn(statement as ReturnStatement);
         return;
       case SyntaxKind.BreakStatement: {
         const loop = this.current.loops[this.current.loops.length - 1];
-        if (loop) this.terminate(`br label %${loop.breakLabel}`);
+        if (loop) {
+          this.popTryFramesTo(loop.tryDepth ?? 0);
+          this.terminate(`br label %${loop.breakLabel}`);
+        }
         return;
       }
       case SyntaxKind.ContinueStatement: {
         const loop = this.current.loops[this.current.loops.length - 1];
-        if (loop) this.terminate(`br label %${loop.continueLabel}`);
+        if (loop) {
+          this.popTryFramesTo(loop.tryDepth ?? 0);
+          this.terminate(`br label %${loop.continueLabel}`);
+        }
         return;
       }
       case SyntaxKind.ThrowStatement: {
@@ -476,7 +555,7 @@ class Generator {
     this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);
 
     this.startBlock(bodyLabel);
-    this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel });
+    this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel, tryDepth: this.current.tryFrames.length });
     this.emitStatement(statement.statement);
     this.current.loops.pop();
     if (!this.current.terminated) this.terminate(`br label %${condLabel}`);
@@ -489,7 +568,7 @@ class Generator {
     const endLabel = this.label("do.end");
     this.terminate(`br label %${bodyLabel}`);
     this.startBlock(bodyLabel);
-    this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel });
+    this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel, tryDepth: this.current.tryFrames.length });
     this.emitStatement(statement.statement);
     this.current.loops.pop();
     if (!this.current.terminated) this.terminate(`br label %${condLabel}`);
@@ -535,7 +614,7 @@ class Generator {
     }
 
     this.startBlock(bodyLabel);
-    this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel });
+    this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel, tryDepth: this.current.tryFrames.length });
     this.emitStatement(statement.statement);
     this.current.loops.pop();
     if (!this.current.terminated) this.terminate(`br label %${updateLabel}`);
@@ -546,9 +625,13 @@ class Generator {
     this.startBlock(endLabel);
   }
 
-  /** `for (const x of xs)` / `for (const k in obj)` over arrays and objects. */
+  /** `for (const x of xs)` / `for (const k in obj)` over arrays, strings and objects. */
   private emitForOf(statement: ForOfStatement | ForInStatement): void {
-    const iterable = this.emitExpression(statement.expression);
+    const source = this.emitExpression(statement.expression);
+    const isForIn = statement.kind === SyntaxKind.ForInStatement;
+    // `for...in` iterates the enumerable keys (indices become strings);
+    // `for...of` iterates the values at each index.
+    const iterable = isForIn ? this.runtimeCall("xt_object_keys", [source]) : source;
     const indexPtr = this.alloca();
     this.emit(`  store i64 ${numberLiteral(0)}, i64* ${indexPtr}`);
     const lengthValue = this.reg();
@@ -575,7 +658,7 @@ class Generator {
     const element = this.reg();
     this.emit(`  ${element} = call i64 @xt_get(i64 ${iterable}, i64 ${index})`);
     this.bindLoopVariable(statement.initializer, element);
-    this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel });
+    this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel, tryDepth: this.current.tryFrames.length });
     this.emitStatement(statement.statement);
     this.current.loops.pop();
     if (!this.current.terminated) this.terminate(`br label %${updateLabel}`);
@@ -602,9 +685,172 @@ class Generator {
     this.emitAssignmentTarget(initializer as Expression, value);
   }
 
+  /**
+   * JavaScript `switch`: test each `case` with strict equality, then run the
+   * matched clause and fall through into the following clauses until `break`.
+   */
+  private emitSwitch(statement: SwitchStatement): void {
+    const discriminant = this.emitExpression(statement.expression);
+    const endLabel = this.label("switch.end");
+    const clauses = statement.clauses;
+    const labels = clauses.map(() => this.label("switch.case"));
+    const testLabels = clauses.map((clause) =>
+      clause.kind === SyntaxKind.CaseClause ? this.label("switch.test") : undefined,
+    );
+    const defaultIndex = clauses.findIndex((clause) => clause.kind === SyntaxKind.DefaultClause);
+    const defaultLabel = defaultIndex >= 0 ? labels[defaultIndex]! : endLabel;
+    const caseIndexes = clauses
+      .map((clause, index) => ({ clause, index }))
+      .filter((entry) => entry.clause.kind === SyntaxKind.CaseClause);
+
+    this.terminate(`br label %${caseIndexes.length > 0 ? testLabels[caseIndexes[0]!.index]! : defaultLabel}`);
+    for (let test = 0; test < caseIndexes.length; test++) {
+      const entry = caseIndexes[test]!;
+      this.startBlock(testLabels[entry.index]!);
+      const caseValue = this.emitExpression((entry.clause as CaseClause).expression);
+      const equals = this.reg();
+      this.emit(`  ${equals} = call i64 @xt_seq(i64 ${discriminant}, i64 ${caseValue})`);
+      const truthy = this.reg();
+      this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${equals})`);
+      const condition = this.reg();
+      this.emit(`  ${condition} = icmp ne i32 ${truthy}, 0`);
+      const next = test + 1 < caseIndexes.length ? testLabels[caseIndexes[test + 1]!.index]! : defaultLabel;
+      this.terminate(`br i1 ${condition}, label %${labels[entry.index]}, label %${next}`);
+    }
+
+    for (let index = 0; index < clauses.length; index++) {
+      this.startBlock(labels[index]!);
+      const enclosing = this.current.loops[this.current.loops.length - 1];
+      this.current.loops.push({ breakLabel: endLabel, continueLabel: enclosing?.continueLabel ?? endLabel, tryDepth: this.current.tryFrames.length });
+      for (const child of clauses[index]!.statements) {
+        if (this.current.terminated) break;
+        this.emitStatement(child);
+      }
+      this.current.loops.pop();
+      if (!this.current.terminated) {
+        const next = index + 1 < clauses.length ? labels[index + 1]! : endLabel;
+        this.terminate(`br label %${next}`);
+      }
+    }
+    this.startBlock(endLabel);
+  }
+
+  /**
+   * `try`/`catch`/`finally` via a runtime setjmp frame. The runtime keeps a
+   * stack of frames; `xt_throw` longjmps into the innermost one. A `return`
+   * that exits the protected region skips `finally` (a known limitation).
+   */
+  private emitTry(statement: TryStatement): void {
+    this.current.usesTry = true;
+    const frameSlot = this.alloca();
+    const exceptionSlot = this.alloca();
+    const flagSlot = this.alloca();
+    const tryLabel = this.label("try.body");
+    const catchLabel = this.label("try.catch");
+    const exceptionLabel = this.label("try.exception");
+    const rethrowLabel = this.label("try.rethrow");
+    const finallyLabel = statement.finallyBlock ? this.label("try.finally") : undefined;
+    const endLabel = this.label("try.end");
+    const hasCatch = !!statement.catchClause;
+
+    const frame = this.reg();
+    this.emit(`  ${frame} = call i8* @xt_try_enter()`);
+    this.emit(`  store i8* ${frame}, i8** ${frameSlot}`);
+    this.emit(`  store i64 0, i64* ${flagSlot}`);
+    const jump = this.reg();
+    this.emit(`  ${jump} = call i32 @_setjmp(i8* ${frame})`);
+    const isThrow = this.reg();
+    this.emit(`  ${isThrow} = icmp ne i32 ${jump}, 0`);
+    const exceptionTarget = hasCatch ? catchLabel : exceptionLabel;
+    this.terminate(`br i1 ${isThrow}, label %${exceptionTarget}, label %${tryLabel}`);
+
+    // Normal completion of the try block.
+    this.startBlock(tryLabel);
+    this.current.tryFrames.push(frameSlot);
+    this.emitStatements(statement.tryBlock.statements);
+    this.current.tryFrames.pop();
+    if (!this.current.terminated) {
+      const currentFrame = this.reg();
+      this.emit(`  ${currentFrame} = load i8*, i8** ${frameSlot}`);
+      this.emit(`  call void @xt_try_leave(i8* ${currentFrame})`);
+      this.terminate(`br label %${finallyLabel ?? endLabel}`);
+    }
+
+    if (hasCatch) {
+      this.startBlock(catchLabel);
+      const currentFrame = this.reg();
+      this.emit(`  ${currentFrame} = load i8*, i8** ${frameSlot}`);
+      const exception = this.reg();
+      this.emit(`  ${exception} = call i64 @xt_try_exception(i8* ${currentFrame})`);
+      this.emit(`  call void @xt_try_leave(i8* ${currentFrame})`);
+      this.bindCatchVariable(statement.catchClause!.variable, exception);
+      this.emitStatements(statement.catchClause!.block.statements);
+      if (!this.current.terminated) this.terminate(`br label %${finallyLabel ?? endLabel}`);
+    } else {
+      // Without a catch clause the exception is remembered, then rethrown
+      // after `finally` runs.
+      this.startBlock(exceptionLabel);
+      const currentFrame = this.reg();
+      this.emit(`  ${currentFrame} = load i8*, i8** ${frameSlot}`);
+      const exception = this.reg();
+      this.emit(`  ${exception} = call i64 @xt_try_exception(i8* ${currentFrame})`);
+      this.emit(`  call void @xt_try_leave(i8* ${currentFrame})`);
+      this.emit(`  store i64 ${exception}, i64* ${exceptionSlot}`);
+      this.emit(`  store i64 1, i64* ${flagSlot}`);
+      this.terminate(`br label %${finallyLabel ?? rethrowLabel}`);
+    }
+
+    if (finallyLabel) {
+      this.startBlock(finallyLabel);
+      this.emitStatements(statement.finallyBlock!.statements);
+      if (!this.current.terminated) {
+        if (hasCatch) {
+          this.terminate(`br label %${endLabel}`);
+        } else {
+          const flag = this.reg();
+          this.emit(`  ${flag} = load i64, i64* ${flagSlot}`);
+          const truthy = this.reg();
+          this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${flag})`);
+          const shouldRethrow = this.reg();
+          this.emit(`  ${shouldRethrow} = icmp ne i32 ${truthy}, 0`);
+          this.terminate(`br i1 ${shouldRethrow}, label %${rethrowLabel}, label %${endLabel}`);
+        }
+      }
+    }
+
+    if (!hasCatch) {
+      this.startBlock(rethrowLabel);
+      const exception = this.reg();
+      this.emit(`  ${exception} = load i64, i64* ${exceptionSlot}`);
+      this.emit(`  call void @xt_throw(i64 ${exception})`);
+      this.terminate("unreachable");
+    }
+
+    this.startBlock(endLabel);
+  }
+
+  private bindCatchVariable(variable: Identifier | undefined, value: string): void {
+    if (!variable) return;
+    const symbol = this.binding.symbolOfDeclaration.get(variable);
+    if (!symbol) return;
+    if (this.current.slots.has(symbol.id)) this.writeSlot(symbol, value);
+    else this.declareSlot(symbol, value);
+  }
+
   private emitReturn(statement: ReturnStatement): void {
     const value = statement.expression ? this.emitExpression(statement.expression) : i64(XT_UNDEFINED);
+    this.popTryFramesTo(0);
     this.terminate(`ret i64 ${value}`);
+  }
+
+  /** Emit `xt_try_leave` for every active frame above `depth` (innermost first). */
+  private popTryFramesTo(depth: number): void {
+    for (let index = this.current.tryFrames.length - 1; index >= depth; index--) {
+      const slot = this.current.tryFrames[index]!;
+      const frame = this.reg();
+      this.emit(`  ${frame} = load i8*, i8** ${slot}`);
+      this.emit(`  call void @xt_try_leave(i8* ${frame})`);
+    }
   }
 
   // -- expressions ---------------------------------------------------------
@@ -639,6 +885,8 @@ class Generator {
       case SyntaxKind.SatisfiesExpression:
       case SyntaxKind.NonNullExpression:
         return this.emitExpression((node as { expression: Expression }).expression);
+      case SyntaxKind.DeleteExpression:
+        return this.emitDelete(node as DeleteExpression);
       case SyntaxKind.BinaryExpression:
         return this.emitBinaryOrAssignment(node as BinaryExpression);
       case SyntaxKind.PrefixUnaryExpression:
@@ -683,6 +931,15 @@ class Generator {
         return numberLiteral(Infinity);
       case "console":
         return i64(XT_UNDEFINED);
+      case "arguments": {
+        const argc = this.reg();
+        this.emit(`  ${argc} = load i32, i32* %saved.argc`);
+        const argv = this.reg();
+        this.emit(`  ${argv} = load i64*, i64** %saved.argv`);
+        const rest = this.reg();
+        this.emit(`  ${rest} = call i64 @xt_rest_args(i32 ${argc}, i64* ${argv}, i32 0)`);
+        return rest;
+      }
       default:
         this.diagnostics.error(
           DiagnosticCode.CannotFindName,
@@ -980,6 +1237,37 @@ class Generator {
 
   private emitCall(node: CallExpression): string {
     const callee = node.expression;
+    if (node.optional) {
+      const calleeValue = this.emitExpression(callee);
+      return this.emitOptional(calleeValue, () => {
+        const args = this.emitArguments(node.arguments);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_closure_call(i64 ${calleeValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+        return result;
+      });
+    }
+    if (
+      (callee.kind === SyntaxKind.PropertyAccessExpression || callee.kind === SyntaxKind.ElementAccessExpression) &&
+      (callee as PropertyAccessExpression | ElementAccessExpression).optional
+    ) {
+      // `obj?.method(args)` / `obj?.[key](args)`: guard the receiver, then
+      // dispatch through the runtime, which understands object methods as well
+      // as the built-in array/string methods.
+      const access = callee as PropertyAccessExpression | ElementAccessExpression;
+      const object = this.emitExpression(access.expression);
+      return this.emitOptional(object, () => {
+        const name =
+          access.kind === SyntaxKind.PropertyAccessExpression
+            ? this.stringValue((access as PropertyAccessExpression).name.text)
+            : this.emitExpression((access as ElementAccessExpression).argumentExpression);
+        const args = this.emitArguments(node.arguments);
+        const result = this.reg();
+        this.emit(
+          `  ${result} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`,
+        );
+        return result;
+      });
+    }
     if (callee.kind === SyntaxKind.PropertyAccessExpression) {
       const special = this.tryEmitBuiltinCall(node, callee as PropertyAccessExpression);
       if (special) return special;
@@ -997,6 +1285,13 @@ class Generator {
           );
           return result;
         }
+      }
+      const globalFunction = !symbol ? GLOBAL_FUNCTIONS[(callee as Identifier).text] : undefined;
+      if (globalFunction) {
+        const args = this.emitArguments(node.arguments);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @${globalFunction}(i32 ${args.argc}, i64* ${args.ptr})`);
+        return result;
       }
       const builtin = this.builtins[(callee as Identifier).text];
       if (!symbol && builtin) {
@@ -1023,31 +1318,52 @@ class Generator {
   private tryEmitBuiltinCall(node: CallExpression, callee: PropertyAccessExpression): string | undefined {
     const target = callee.expression;
     const method = callee.name.text;
-    if (target.kind === SyntaxKind.Identifier && (target as Identifier).text === "console") {
-      const args = this.emitArguments(node.arguments);
-      this.emit(`  call void @xt_console_log(i32 ${args.argc}, i64* ${args.ptr})`);
-      return i64(XT_UNDEFINED);
-    }
-    // Array and string methods.
-    if (method === "push" || method === "pop" || method === "shift" || method === "unshift" || method === "join" || method === "slice" || method === "indexOf" || method === "includes" || method === "map" || method === "forEach" || method === "filter" || method === "reduce") {
-      if (method === "push") {
-        const object = this.emitExpression(target);
+    const targetIdentifier = target.kind === SyntaxKind.Identifier ? (target as Identifier) : undefined;
+    const targetSymbol = targetIdentifier ? this.binding.symbolOfIdentifier.get(targetIdentifier) : undefined;
+
+    if (targetIdentifier && targetIdentifier.text === "console" && !targetSymbol) {
+      const consoleFn = CONSOLE_METHODS[method];
+      if (consoleFn) {
         const args = this.emitArguments(node.arguments);
-        let last = object;
-        if (args.argc === 0) return this.runtimeCall("xt_array_length", [object]);
-        for (let index = 0; index < args.argc; index++) {
-          const ptr = this.reg();
-          this.emit(`  ${ptr} = getelementptr i64, i64* ${args.ptr}, i32 ${index}`);
-          const element = this.reg();
-          this.emit(`  ${element} = load i64, i64* ${ptr}`);
-          const previous = last;
-          last = this.reg();
-          this.emit(`  ${last} = call i64 @xt_array_push(i64 ${previous}, i64 ${element})`);
-        }
-        return last;
+        this.emit(`  call void @${consoleFn}(i32 ${args.argc}, i64* ${args.ptr})`);
+        return i64(XT_UNDEFINED);
       }
-      this.unsupported(node, `array method '${method}'`);
-      return i64(XT_UNDEFINED);
+      return undefined;
+    }
+
+    if (targetIdentifier && targetIdentifier.text === "Math" && !targetSymbol) {
+      if (!MATH_FUNCTIONS.has(method)) return undefined;
+      const name = this.stringValue(method);
+      const args = this.emitArguments(node.arguments);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_math_call(i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`);
+      return result;
+    }
+
+    if (targetIdentifier && targetIdentifier.text === "Object" && !targetSymbol) {
+      if (method === "keys" || method === "values" || method === "entries") {
+        const argument = node.arguments.length > 0 ? this.emitExpression(node.arguments[0]!) : i64(XT_UNDEFINED);
+        const fn = method === "keys" ? "xt_object_keys" : method === "values" ? "xt_object_values" : "xt_object_entries";
+        return this.runtimeCall(fn, [argument]);
+      }
+      if (method === "assign") {
+        const args = this.emitArguments(node.arguments);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_object_assign(i32 ${args.argc}, i64* ${args.ptr})`);
+        return result;
+      }
+      return undefined;
+    }
+
+    if (BUILTIN_METHODS.has(method)) {
+      const object = this.emitExpression(target);
+      const name = this.stringValue(method);
+      const args = this.emitArguments(node.arguments);
+      const result = this.reg();
+      this.emit(
+        `  ${result} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`,
+      );
+      return result;
     }
     return undefined;
   }
@@ -1071,26 +1387,82 @@ class Generator {
     return { argc: args.length, ptr };
   }
 
+  private emitDelete(node: DeleteExpression): string {
+    const target = node.expression;
+    if (target.kind === SyntaxKind.PropertyAccessExpression) {
+      const access = target as PropertyAccessExpression;
+      const object = this.emitExpression(access.expression);
+      const key = this.stringValue(access.name.text);
+      return this.runtimeCall("xt_delete", [object, key]);
+    }
+    if (target.kind === SyntaxKind.ElementAccessExpression) {
+      const access = target as ElementAccessExpression;
+      const object = this.emitExpression(access.expression);
+      const key = this.emitExpression(access.argumentExpression);
+      return this.runtimeCall("xt_delete", [object, key]);
+    }
+    return i64(XT_TRUE);
+  }
+
   private emitPropertyAccess(node: PropertyAccessExpression): string {
-    if (node.name.text === "length") {
-      const object = this.emitExpression(node.expression);
-      const result = this.reg();
-      this.emit(`  ${result} = call i64 @xt_array_length(i64 ${object})`);
-      return result;
+    if (
+      node.name.text in MATH_CONSTANTS &&
+      node.expression.kind === SyntaxKind.Identifier &&
+      (node.expression as Identifier).text === "Math" &&
+      !this.binding.symbolOfIdentifier.get(node.expression as Identifier)
+    ) {
+      return numberLiteral(MATH_CONSTANTS[node.name.text]!);
     }
     const object = this.emitExpression(node.expression);
-    const key = this.stringValue(node.name.text);
-    const result = this.reg();
-    this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
-    return result;
+    const access = (): string => {
+      if (node.name.text === "length") {
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_array_length(i64 ${object})`);
+        return result;
+      }
+      const key = this.stringValue(node.name.text);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
+      return result;
+    };
+    return node.optional ? this.emitOptional(object, access) : access();
   }
 
   private emitElementAccess(node: ElementAccessExpression): string {
     const object = this.emitExpression(node.expression);
-    const key = this.emitExpression(node.argumentExpression);
-    const result = this.reg();
-    this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
-    return result;
+    const access = (): string => {
+      const key = this.emitExpression(node.argumentExpression);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
+      return result;
+    };
+    return node.optional ? this.emitOptional(object, access) : access();
+  }
+
+  /**
+   * Evaluate `object` once and, when it is neither `null` nor `undefined`, run
+   * `compute` to produce the value; otherwise short-circuit to `undefined`.
+   */
+  private emitOptional(objectValue: string, compute: () => string): string {
+    const result = this.alloca();
+    this.emit(`  store i64 ${i64(XT_UNDEFINED)}, i64* ${result}`);
+    const nullish = this.reg();
+    this.emit(`  ${nullish} = call i64 @xt_is_nullish(i64 ${objectValue})`);
+    const truthy = this.reg();
+    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${nullish})`);
+    const condition = this.reg();
+    this.emit(`  ${condition} = icmp ne i32 ${truthy}, 0`);
+    const someLabel = this.label("opt.some");
+    const endLabel = this.label("opt.end");
+    this.terminate(`br i1 ${condition}, label %${endLabel}, label %${someLabel}`);
+    this.startBlock(someLabel);
+    const value = compute();
+    this.emit(`  store i64 ${value}, i64* ${result}`);
+    this.terminate(`br label %${endLabel}`);
+    this.startBlock(endLabel);
+    const merged = this.reg();
+    this.emit(`  ${merged} = load i64, i64* ${result}`);
+    return merged;
   }
 
   private emitArrayLiteral(node: ArrayLiteralExpression): string {
@@ -1128,6 +1500,9 @@ class Generator {
         const key = this.stringValue(identifier.text);
         const value = this.emitIdentifier(identifier);
         this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
+      } else if (property.kind === SyntaxKind.SpreadElement) {
+        const spread = this.emitExpression((property as { expression: Expression }).expression);
+        this.emit(`  call i64 @xt_object_spread(i64 ${object}, i64 ${spread})`);
       } else {
         this.unsupported(property, "object spread");
       }
@@ -1223,7 +1598,47 @@ const BINARY_RUNTIME: Record<string, string | undefined> = {
   [BinaryOperator.LessThanLessThan]: "xt_shl",
   [BinaryOperator.GreaterThanGreaterThan]: "xt_shr",
   [BinaryOperator.GreaterThanGreaterThanGreaterThan]: "xt_ushr",
+  [BinaryOperator.In]: "xt_in",
 };
+
+const CONSOLE_METHODS: Record<string, string> = {
+  log: "xt_console_log",
+  info: "xt_console_info",
+  warn: "xt_console_warn",
+  error: "xt_console_error",
+};
+
+const MATH_FUNCTIONS = new Set<string>([
+  "abs", "floor", "ceil", "round", "trunc", "sqrt", "cbrt", "pow", "exp", "log", "log2", "log10",
+  "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "hypot", "sign", "random", "min", "max",
+]);
+
+const MATH_CONSTANTS: Record<string, number> = {
+  PI: Math.PI,
+  E: Math.E,
+  LN2: Math.LN2,
+  LN10: Math.LN10,
+  LOG2E: Math.LOG2E,
+  LOG10E: Math.LOG10E,
+  SQRT2: Math.SQRT2,
+  SQRT1_2: Math.SQRT1_2,
+};
+
+const GLOBAL_FUNCTIONS: Record<string, string> = {
+  parseInt: "xt_parse_int",
+  parseFloat: "xt_parse_float",
+  isNaN: "xt_is_nan",
+  isFinite: "xt_is_finite",
+  Number: "xt_number_ctor",
+  String: "xt_string_ctor",
+  Boolean: "xt_boolean_ctor",
+};
+
+const BUILTIN_METHODS = new Set<string>([
+  "push", "pop", "shift", "unshift", "join", "slice", "indexOf", "includes", "map", "forEach", "filter",
+  "reduce", "concat", "reverse", "charAt", "charCodeAt", "substring", "substr", "split", "toUpperCase",
+  "toLowerCase", "trim", "replace", "repeat", "startsWith", "endsWith",
+]);
 
 const ASSIGNMENT_OPERATORS = new Set<string>([
   "=",

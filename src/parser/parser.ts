@@ -394,6 +394,10 @@ export class Parser {
 
   private parseStatementWithModifiers(modifiers: Modifier[]): Statement {
     switch (this.token.kind) {
+      case TokenKind.VarKeyword:
+      case TokenKind.LetKeyword:
+      case TokenKind.ConstKeyword:
+        return this.parseVariableStatement(modifiers);
       case TokenKind.FunctionKeyword:
         return this.parseFunctionDeclaration(modifiers);
       case TokenKind.ClassKeyword:

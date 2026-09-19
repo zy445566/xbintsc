@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "../helpers.js";
-import { SyntaxKind, type Node } from "../../src/ast/nodes.js";
+import { SyntaxKind, ModifierKind, type Node } from "../../src/ast/nodes.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 function first(text: string): any {
@@ -155,5 +155,14 @@ describe("parser", () => {
   it("does not emit phantom diagnostics for valid arrow with as-expression", () => {
     const { diagnostics } = parse("const f = (x: unknown) => (x as number) + 1;");
     expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
+  it("parses exported variable declarations", () => {
+    expect(kindsOf("export const a = 1;")).toEqual([SyntaxKind.VariableStatement]);
+    expect(kindsOf("export let b = 2;")).toEqual([SyntaxKind.VariableStatement]);
+    expect(kindsOf("export var c = 3;")).toEqual([SyntaxKind.VariableStatement]);
+    const statement = first("export const a = 1;");
+    expect(statement.modifiers).toHaveLength(1);
+    expect(statement.modifiers[0].modifierKind).toBe(ModifierKind.Export);
   });
 });

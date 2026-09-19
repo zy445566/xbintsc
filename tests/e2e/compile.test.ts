@@ -29,6 +29,15 @@ describeWithClang("end-to-end compilation", () => {
   });
 
   function runProgram(source: string, options: { extensions?: boolean; name?: string } = {}): string {
+    const result = runProgramFull(source, options);
+    expect(result.status).toBe(0);
+    return result.stdout.trim();
+  }
+
+  function runProgramFull(
+    source: string,
+    options: { extensions?: boolean; name?: string } = {},
+  ): { stdout: string; stderr: string; status: number | null } {
     const name = options.name ?? `program_${Math.random().toString(36).slice(2)}`;
     const entry = join(workdir, `${name}.ts`);
     writeFileSync(entry, source);
@@ -41,8 +50,7 @@ describeWithClang("end-to-end compilation", () => {
     });
     expect(result.diagnostics.filter((d) => d.category === "error")).toEqual([]);
     const executed = spawnSync(result.outputPath, [], { encoding: "utf8" });
-    expect(executed.status).toBe(0);
-    return executed.stdout.trim();
+    return { stdout: executed.stdout, stderr: executed.stderr, status: executed.status };
   }
 
   it("evaluates arithmetic and prints results", () => {
@@ -100,5 +108,129 @@ describeWithClang("end-to-end compilation", () => {
     writeFileSync(dataPath, "from a file");
     const source = `console.log(readFileSync(${JSON.stringify(dataPath)}));`;
     expect(runProgram(source, { extensions: true })).toBe("from a file");
+  });
+
+  it("supports switch statements with fall-through", () => {
+    const source = `
+      function size(n: number): string {
+        switch (n) {
+          case 0:
+            return "none";
+          case 1:
+          case 2:
+            return "few";
+          default:
+            return "many";
+        }
+      }
+      console.log(size(0), size(1), size(2), size(7));
+    `;
+    expect(runProgram(source)).toBe("none few few many");
+  });
+
+  it("provides common array and string methods", () => {
+    const source = `
+      const xs = [3, 1, 2];
+      xs.push(4);
+      const doubled = xs.map((x) => x * 2).filter((x) => x > 4);
+      const total = xs.reduce((a, x) => a + x, 0);
+      console.log(xs.join("-"), doubled.join(","), total, xs.includes(2), xs.indexOf(1));
+      const s = "  Hello World  ";
+      console.log(s.trim().toUpperCase(), s.trim().slice(0, 5), "a,b,c".split(",").join("|"));
+    `;
+    expect(runProgram(source)).toBe("3-1-2-4 6,8 10 true 1\nHELLO WORLD Hello a|b|c");
+  });
+
+  it("supports Math, global functions and console levels", () => {
+    const source = `
+      console.log(Math.max(1, 9, 4), Math.abs(-3), Math.floor(2.9), Math.pow(2, 8), Math.PI > 3.14);
+      console.log(parseInt("42px"), parseFloat("2.5x"), isNaN(NaN), isFinite(1), Number("7"), String(9), Boolean(0));
+      console.warn("warned");
+      console.error("failed");
+    `;
+    const result = runProgramFull(source);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe("9 3 2 256 true\n42 2.5 true true 7 9 false");
+    expect(result.stderr.trim()).toBe("warned\nfailed");
+  });
+
+  it("supports default parameters, rest parameters and arguments", () => {
+    const source = `
+      function greet(name: string = "world", mark: string = "!"): string {
+        return "hi " + name + mark;
+      }
+      function total(...nums: number[]): number {
+        let sum = 0;
+        for (const n of nums) sum += n;
+        return sum;
+      }
+      function countArgs(): number {
+        return arguments.length;
+      }
+      console.log(greet(), greet("ada"), total(1, 2, 3), countArgs(1, 2, 3, 4));
+    `;
+    expect(runProgram(source)).toBe("hi world! hi ada! 6 4");
+  });
+
+  it("supports Object helpers, spread, in and delete", () => {
+    const source = `
+      const base = { a: 1, b: 2 };
+      const merged = Object.assign({}, base, { c: 3 });
+      const copy = { ...base, a: 9 };
+      console.log(Object.keys(base).join(","), Object.values(base).join(","));
+      console.log(Object.entries(base).map((e) => e[0] + "=" + e[1]).join(","));
+      console.log(merged.a, merged.b, merged.c, copy.a, "a" in base, "z" in base);
+      delete base.a;
+      console.log("a" in base, Object.keys(base).join(","));
+    `;
+    expect(runProgram(source)).toBe("a,b 1,2\na=1,b=2\n1 2 3 9 true false\nfalse b");
+  });
+
+  it("iterates object keys with for...in", () => {
+    const source = `
+      const obj = { x: 1, y: 2 };
+      let out = "";
+      for (const key in obj) out += key + "=" + obj[key] + ";";
+      console.log(out);
+    `;
+    expect(runProgram(source)).toBe("x=1;y=2;");
+  });
+
+  it("supports try/catch/finally including returns and loop breaks", () => {
+    const source = `
+      function safe(n: number): number {
+        try {
+          if (n < 0) throw "negative";
+          return n * 2;
+        } catch (err) {
+          return -1;
+        }
+      }
+      function cleanup(): string {
+        let log = "";
+        try {
+          log += "try;";
+          throw "boom";
+        } catch (e) {
+          log += "catch:" + e + ";";
+        } finally {
+          log += "finally";
+        }
+        return log;
+      }
+      console.log(safe(5), safe(-2), cleanup());
+    `;
+    expect(runProgram(source)).toBe("10 -1 try;catch:boom;finally");
+  });
+
+  it("supports optional chaining", () => {
+    const source = `
+      const obj = { a: { b: 5 }, m: (x: number) => x + 1 };
+      const empty = null;
+      console.log(obj?.a?.b, empty?.a?.b, obj?.m?.(10), empty?.m?.(10));
+      const arr = [1, 2, 3];
+      console.log(arr?.length, arr?.map((x) => x * 2).join(","), empty?.length);
+    `;
+    expect(runProgram(source)).toBe("5 undefined 11 undefined\n3 2,4,6 undefined");
   });
 });

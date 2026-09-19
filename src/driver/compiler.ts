@@ -195,6 +195,7 @@ const RUNTIME_SOURCES = [
   "xt_stdlib.c",
   "xt_stdlib2.c",
   "xt_promise.c",
+  "xt_loop.c",
   "xt_builtins.c",
   "xt_io.c",
 ] as const;

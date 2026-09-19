@@ -192,6 +192,19 @@ xt_value xt_await(xt_value value);
 /** Run queued promise reactions; called once the program body finishes. */
 void xt_drain_microtasks(void);
 
+/* -- host event loop ------------------------------------------------------ */
+/* A small select(2) reactor for host extensions (node's net/dgram/http). The
+ * generated `main` calls `xt_run_event_loop()` after the program body so I/O
+ * callbacks can fire; it returns once no descriptors remain registered. */
+#define XT_IO_READ 1
+#define XT_IO_WRITE 2
+typedef void (*xt_io_handler)(void *userdata, int events);
+int xt_loop_add(int fd, int events, xt_io_handler handler, void *userdata);
+void xt_loop_update(int fd, int events);
+void xt_loop_remove(int fd);
+void xt_run_event_loop(void);
+int xt_loop_has_work(void);
+
 /* -- global functions ------------------------------------------------------ */
 xt_value xt_parse_int(int32_t argc, xt_value *argv);
 xt_value xt_parse_float(int32_t argc, xt_value *argv);

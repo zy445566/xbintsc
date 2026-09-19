@@ -27,12 +27,20 @@ src/extensions/node/           runtime/ext_node/
   module.ts   # NodeModule 接口    fs/write_file.c
   fs/index.ts                      fs/fs_ops.c
   fs/read-file.ts                  fs/fs_common.h
-  fs/write-file.ts                 path/path.c
-  fs/fs-ops.ts                     os/os.c
-  path/index.ts                    process/process.c
-  os/index.ts
-  process/index.ts
+  fs/write-file.ts                 fs/promises.c
+  fs/fs-ops.ts                     path/path.c
+  path/index.ts                    os/os.c
+  os/index.ts                      process/process.c
+  process/index.ts                 buffer/buffer.c
+  buffer/index.ts                  stream/stream.c
+  stream/index.ts                  net/net.c
+  net/index.ts                     dgram/dgram.c
+  dgram/index.ts                   http/http.c
+  http/index.ts                    node_common.h（事件发射器 / 编码助手）
+  fs-promises/index.ts
 ```
+
+- 核心事件循环：`runtime/xt_loop.c`（`select(2)` 反应堆），生成模块的 `main` 在微任务清空后调用 `xt_run_event_loop()`；无可注册 fd 时立即返回，因此纯计算程序不受影响。
 
 - `NodeModule` 接口：
   - `name`：模块名（如 `fs`）
@@ -167,7 +175,117 @@ console.log(path.basename("/x/y/z.txt"));    // z.txt
 
 ---
 
-## 6. 已实现 Node 能力速查
+## 6. `buffer` 模块（已实现）
+
+实现位置：`src/extensions/node/buffer/index.ts`、`runtime/ext_node/buffer/buffer.c`
+
+xbintsc 没有原生的二进制值类型，`Buffer` 以**普通对象**表示：每个字节是数字属性 `"0".."n-1"`，再加一个 `length` 属性，并共享 `xt_buffer_proto()` 原型提供实例方法。`xt_node_is_buffer` / `xt_node_buffer_bytes` 供其它模块跨模块访问字节。
+
+| 静态方法 | 说明 |
+| --- | --- |
+| `Buffer.from(value[, encoding])` | 从字符串（hex / base64 / utf8）、数组或 Buffer 构造 |
+| `Buffer.alloc(size[, fill])` | 分配并填充 |
+| `Buffer.allocUnsafe(size)` | 分配 |
+| `Buffer.isBuffer(value)` | 判定 |
+| `Buffer.byteLength(value[, encoding])` | 字节长度 |
+| `Buffer.concat(list[, totalLength])` | 拼接 |
+| `Buffer.compare(a, b)` | 比较 |
+
+实例方法：`toString([encoding])`、`toJSON()`、`slice(start, end)`、`subarray(...)`、`equals(other)`、`compare(other)`、`copy(target[, targetStart, sourceStart, sourceEnd])`、`write(string[, offset[, length[, encoding]]])`、`fill(value)`、`reverse()`、`indexOf(value)`、`lastIndexOf(value)`、`includes(value)`、`keys()`、`values()`，以及 `readUInt8/UInt16LE/UInt16BE/UInt32LE/UInt32BE`、`writeUInt8/UInt16LE/UInt16BE/UInt32LE/UInt32BE`。
+
+```ts
+const buf = Buffer.from("hello");
+console.log(buf.toString(), buf.length);      // hello 5
+console.log(Buffer.alloc(4, 65).toString());  // AAAA
+```
+
+---
+
+## 7. `stream` 模块（已实现）
+
+实现位置：`src/extensions/node/stream/index.ts`、`runtime/ext_node/stream/stream.c`
+
+`Readable` / `Writable` / `Duplex` / `Transform` / `PassThrough` 作为**全局构造函数**使用（`new Readable()` 等）；`stream.Readable.from(...)` 等静态方法通过 `stream` 命名空间解析。流是 EventEmitter，采用**同步事件模型**：`on('data')` 时冲刷 `push` 缓冲，`write` 即时投递。
+
+| 方法 | 说明 |
+| --- | --- |
+| `push(chunk)` / `read([n])` | Readable 端 |
+| `write(chunk)` / `end([chunk])` | Writable 端 |
+| `pipe(destination)` | 数据转发 |
+| `on('data' / 'end' / 'finish')` | 事件 |
+| `pause()` / `resume()` / `setEncoding(enc)` / `destroy()` | 流控制 |
+
+---
+
+## 8. `net` 模块（已实现）
+
+实现位置：`src/extensions/node/net/index.ts`、`runtime/ext_node/net/net.c`
+
+TCP 服务端与客户端，基于核心事件循环。
+
+| API | 说明 |
+| --- | --- |
+| `net.createServer([connectionListener])` | 创建 TCP 服务端（`Server` 构造函数等价） |
+| `net.connect(...)` / `net.createConnection(...)` | 连接（阻塞式 connect，之后注册事件循环） |
+| `net.isIP(s)` / `net.isIPv4(s)` / `net.isIPv6(s)` | 地址判定 |
+
+`Server`：`listen(port[, host][, cb])`、`close([cb])`、`address()`、`getConnections(cb)`，事件 `listening` / `connection` / `close`。
+
+`Socket`：`write(data[, cb])`、`end([data])`、`destroy()`、`address()`、`setEncoding(enc)`、`pause()` / `resume()`，事件 `data` / `end` / `close` / `connect` / `error`。
+
+---
+
+## 9. `dgram` 模块（已实现）
+
+实现位置：`src/extensions/node/dgram/index.ts`、`runtime/ext_node/dgram/dgram.c`
+
+UDP 套接字。`dgram.createSocket(type | options[, cb])` 返回 EventEmitter。
+
+| 方法 | 说明 |
+| --- | --- |
+| `bind([port][, address][, cb])` | 绑定（未绑定时 `send` 会自动绑定） |
+| `send(msg[, offset, length,] port[, address][, cb])` | 发送数据报 |
+| `close([cb])` / `address()` | 关闭 / 查询地址 |
+| `setBroadcast(b)` / `setTTL(n)` / `setMulticastTTL(n)` | 套接字选项 |
+| `on('message', (msg, rinfo) => ...)` | 收到数据报，`rinfo` 含 `address` / `port` / `family` / `size` |
+
+---
+
+## 10. `http` 模块（已实现）
+
+实现位置：`src/extensions/node/http/index.ts`、`runtime/ext_node/http/http.c`
+
+服务端包裹一个 `net` 服务端：每个连接累积字节直到完整请求（请求行 + 头 + `Content-Length` body）可用，再以 `req`/`res` 调用 `request` 监听器。客户端包裹一个 `net` 套接字，写出 HTTP/1.1 请求并在连接关闭后解析响应。
+
+| API | 说明 |
+| --- | --- |
+| `http.createServer([requestListener])` | 创建 HTTP 服务端 |
+| `http.request(options[, cb])` | 创建 `ClientRequest`（`write` / `end` / `setHeader`） |
+| `http.get(url[, cb])` | 发起 GET |
+
+`IncomingMessage`（`req` / 响应）：`method`、`url`、`httpVersion`、`headers`、`statusCode`、`data` / `end` 事件、`setEncoding`。
+
+`ServerResponse`（`res`）：`writeHead(status[, message][, headers])`、`setHeader` / `getHeader` / `removeHeader` / `getHeaders`、`write(chunk)`、`end([chunk])`，事件 `finish` / `close`。响应固定带 `Connection: close`（不做 keep-alive）。
+
+---
+
+## 11. `fs/promises` 模块（已实现）
+
+实现位置：`src/extensions/node/fs-promises/index.ts`、`runtime/ext_node/fs/promises.c`
+
+无异步 I/O 调度器，故每个函数把对应的同步 `fs` 实现包进**已 settle 的 Promise**，以裸全局标识符暴露：`readFile`、`writeFile`、`appendFile`、`mkdir`、`readdir`、`rm`、`unlink`、`rmdir`、`rename`、`copyFile`、`realpath`、`stat`、`lstat`、`access`。
+
+```ts
+async function main(): Promise<void> {
+  await writeFile("/tmp/a.txt", "hi");
+  console.log(await readFile("/tmp/a.txt"));
+}
+main();
+```
+
+---
+
+## 12. 已实现 Node 能力速查
 
 | 类别 | 内容 |
 | --- | --- |
@@ -179,5 +297,12 @@ console.log(path.basename("/x/y/z.txt"));    // z.txt
 | path | `join` `resolve` `normalize` `dirname` `basename` `extname` `isAbsolute` `relative` |
 | os | `platform` `arch` `type` `release` `endianness` `homedir` `tmpdir` `hostname` `totalmem` `freemem` `cpus` |
 | process | `cwd` `exit` `uptime` `hrtime` `getuid`；`platform` `arch` `pid` `ppid` `argv` `env` `version` `title` |
+| buffer | `Buffer.from/alloc/allocUnsafe/isBuffer/byteLength/concat/compare`；实例 `toString/toJSON/slice/.../readUInt32BE/writeUInt32BE` |
+| stream | `Readable` `Writable` `Duplex` `Transform` `PassThrough`；`push/read/write/end/pipe/on` |
+| net | `createServer` `connect` `createConnection` `isIP/isIPv4/isIPv6`；`Server` `Socket` |
+| dgram | `createSocket`；`bind/send/close/address/setBroadcast/setTTL` |
+| http | `createServer` `request` `get`；`ClientRequest`、`IncomingMessage`、`ServerResponse` |
+| fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `realpath` `stat` `lstat` `access` |
+| 事件循环 | `xt_loop`（`select` 反应堆）、`xt_run_event_loop()`、`xt_loop_add/update/remove` |
 | 调用约定 | 统一 `(argc, argv)` ABI，返回 `xt_value` |
 | 链接方式 | 注册后编译 `runtime/ext_node/**` 并随运行时一起链接 |

@@ -23,15 +23,24 @@ const sources = [
   ["xt_values.c", "xt_values.o"],
   ["xt_containers.c", "xt_containers.o"],
   ["xt_stdlib.c", "xt_stdlib.o"],
+  ["xt_stdlib2.c", "xt_stdlib2.o"],
+  ["xt_promise.c", "xt_promise.o"],
   ["xt_builtins.c", "xt_builtins.o"],
   ["xt_io.c", "xt_io.o"],
+  ["xt_loop.c", "xt_loop.o"],
   // Node extension sources.
   ["ext_node/fs/read_file.c", "ext_node_fs_read_file.o"],
   ["ext_node/fs/write_file.c", "ext_node_fs_write_file.o"],
   ["ext_node/fs/fs_ops.c", "ext_node_fs_fs_ops.o"],
+  ["ext_node/fs/promises.c", "ext_node_fs_promises.o"],
   ["ext_node/path/path.c", "ext_node_path_path.o"],
   ["ext_node/os/os.c", "ext_node_os_os.o"],
   ["ext_node/process/process.c", "ext_node_process_process.o"],
+  ["ext_node/buffer/buffer.c", "ext_node_buffer_buffer.o"],
+  ["ext_node/stream/stream.c", "ext_node_stream_stream.o"],
+  ["ext_node/net/net.c", "ext_node_net_net.o"],
+  ["ext_node/dgram/dgram.c", "ext_node_dgram_dgram.o"],
+  ["ext_node/http/http.c", "ext_node_http_http.o"],
 ];
 
 for (const [source, object] of sources) {

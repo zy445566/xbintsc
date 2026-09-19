@@ -242,6 +242,8 @@ xt_value xt_array_push(xt_value value, xt_value newValue) {
 xt_value xt_array_length(xt_value value) {
   if (XT_IS_ARRAY(value)) return xt_number((double)((xt_array *)XT_GET_PTR(value))->length);
   if (XT_IS_STRING(value)) return xt_number((double)xt_string_length(xt_as_string(value)));
+  /* Objects such as Buffers expose a `length` property of their own. */
+  if (XT_IS_OBJECT(value)) return xt_object_get_cstr(value, "length");
   return XT_UNDEFINED;
 }
 

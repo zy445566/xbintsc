@@ -92,6 +92,16 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   path: "xt_path_static",
   os: "xt_os_static",
   process: "xt_process_call",
+  Buffer: "xt_buffer_static",
+  stream: "xt_stream_static",
+  Readable: "xt_stream_static",
+  Writable: "xt_stream_static",
+  Duplex: "xt_stream_static",
+  Transform: "xt_stream_static",
+  PassThrough: "xt_stream_static",
+  net: "xt_net_static",
+  dgram: "xt_dgram_static",
+  http: "xt_http_static",
 };
 
 /** Namespace identifiers whose property access maps to a runtime getter. */
@@ -107,6 +117,14 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   Date: "xt_date_ctor",
   RegExp: "xt_regexp_ctor",
   Promise: "xt_promise_ctor",
+  Buffer: "xt_buffer_ctor",
+  Readable: "xt_readable_ctor",
+  Writable: "xt_writable_ctor",
+  Duplex: "xt_duplex_ctor",
+  Transform: "xt_transform_ctor",
+  PassThrough: "xt_pass_through_ctor",
+  Socket: "xt_net_socket_ctor",
+  Server: "xt_net_server_ctor",
 };
 
 export const BUILTIN_METHODS = new Set<string>([

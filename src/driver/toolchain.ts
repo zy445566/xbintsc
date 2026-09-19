@@ -98,6 +98,6 @@ export function link(runner: Runner, options: LinkOptions): void {
 
 /** Compile a C source to an object file (used for the runtime and extensions). */
 export function compileC(runner: Runner, clang: string, sourcePath: string, objectPath: string, includeDir: string): void {
-  const result = runner.run(clang, ["-O2", "-c", sourcePath, "-o", objectPath, `-I${includeDir}`]);
+  const result = runner.run(clang, ["-O2", "-D_CRT_SECURE_NO_WARNINGS", "-c", sourcePath, "-o", objectPath, `-I${includeDir}`]);
   if (result.status !== 0) throw new ToolchainError(`${clang} ${sourcePath}`, result.status, result.stderr);
 }

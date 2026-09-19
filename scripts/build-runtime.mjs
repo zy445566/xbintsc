@@ -44,7 +44,7 @@ const sources = [
 ];
 
 for (const [source, object] of sources) {
-  const args = ["-O2", "-c", join(runtimeDir, source), "-o", join(outDir, object), `-I${runtimeDir}`];
+  const args = ["-O2", "-D_CRT_SECURE_NO_WARNINGS", "-c", join(runtimeDir, source), "-o", join(outDir, object), `-I${runtimeDir}`];
   const result = spawnSync(clang, args, { stdio: "inherit" });
   if (result.status !== 0) {
     console.error(`xbintsc: failed to compile ${source}`);

@@ -59,7 +59,7 @@ describe("toolchain", () => {
   it("compiles C sources with an include directory", () => {
     const { runner, calls } = recordingRunner();
     compileC(runner, "clang", "runtime.c", "runtime.o", "runtime");
-    expect(calls[0]!.args).toEqual(["-O2", "-c", "runtime.c", "-o", "runtime.o", "-Iruntime"]);
+    expect(calls[0]!.args).toEqual(["-O2", "-D_CRT_SECURE_NO_WARNINGS", "-c", "runtime.c", "-o", "runtime.o", "-Iruntime"]);
   });
 
   it("throws a ToolchainError carrying stderr on failure", () => {

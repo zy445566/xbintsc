@@ -65,6 +65,17 @@ static xt_value xt_os_string(const char *value) {
   return value ? xt_string_from_cstr(value) : xt_undefined();
 }
 
+/* Logical processor count, used to size the `os.cpus()` array. */
+static long xt_os_cpu_count(void) {
+#if defined(_WIN32)
+  SYSTEM_INFO info;
+  GetSystemInfo(&info);
+  return (long)info.dwNumberOfProcessors;
+#else
+  return sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+}
+
 static xt_value xt_os_totalmem(void) {
 #if defined(_WIN32)
   MEMORYSTATUSEX status;
@@ -147,7 +158,7 @@ xt_value xt_os_static(xt_value name, int32_t argc, xt_value *argv) {
   if (strcmp(method, "freemem") == 0) return xt_os_freemem();
   if (strcmp(method, "cpus") == 0) {
     /* No per-core details yet; report the logical processor count as length. */
-    long processors = sysconf(_SC_NPROCESSORS_ONLN);
+    long processors = xt_os_cpu_count();
     if (processors <= 0) processors = 1;
     xt_value *items = (xt_value *)malloc(sizeof(xt_value) * (size_t)processors);
     if (!items) return xt_array_new(0, NULL);

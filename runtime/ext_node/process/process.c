@@ -17,13 +17,17 @@
 #if defined(_WIN32)
 extern char **_environ;
 #define XT_ENVIRON _environ
+#include <direct.h>
 #include <process.h>
+#include <windows.h>
 #define xt_getpid _getpid
+#define xt_process_getcwd _getcwd
 #else
 extern char **environ;
 #define XT_ENVIRON environ
 #include <unistd.h>
 #define xt_getpid getpid
+#define xt_process_getcwd getcwd
 #endif
 
 static const char *xt_process_platform(void) {
@@ -81,7 +85,7 @@ xt_value xt_process_call(xt_value name, int32_t argc, xt_value *argv) {
 
   if (strcmp(method, "cwd") == 0) {
     char buffer[4096];
-    if (!getcwd(buffer, sizeof(buffer))) return xt_undefined();
+    if (!xt_process_getcwd(buffer, sizeof(buffer))) return xt_undefined();
     return xt_string_from_cstr(buffer);
   }
   if (strcmp(method, "exit") == 0) {
@@ -93,6 +97,15 @@ xt_value xt_process_call(xt_value name, int32_t argc, xt_value *argv) {
     return xt_number((double)clock() / (double)CLOCKS_PER_SEC);
   }
   if (strcmp(method, "hrtime") == 0) {
+    xt_value items[2];
+#if defined(_WIN32)
+    LARGE_INTEGER frequency;
+    LARGE_INTEGER counter;
+    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceCounter(&counter);
+    items[0] = xt_number((double)(counter.QuadPart / frequency.QuadPart));
+    items[1] = xt_number((double)((counter.QuadPart % frequency.QuadPart) * 1000000000LL / frequency.QuadPart));
+#else
     struct timespec now;
 #if defined(CLOCK_MONOTONIC)
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -100,9 +113,9 @@ xt_value xt_process_call(xt_value name, int32_t argc, xt_value *argv) {
     now.tv_sec = (long)time(NULL);
     now.tv_nsec = 0;
 #endif
-    xt_value items[2];
     items[0] = xt_number((double)now.tv_sec);
     items[1] = xt_number((double)now.tv_nsec);
+#endif
     return xt_array_new(2, items);
   }
   if (strcmp(method, "getuid") == 0) {

@@ -13,6 +13,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { DiagnosticBag, formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { build, compileString, COMPILER_VERSION, type EmitKind } from "../driver/compiler.js";
@@ -202,7 +203,8 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   return 1;
 }
 
-const isMain = process.argv[1] && import.meta.url === `file://${resolve(process.argv[1])}`;
+const isMain =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   process.exit(run(process.argv.slice(2)));
 }

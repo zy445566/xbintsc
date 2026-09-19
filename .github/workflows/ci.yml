@@ -35,12 +35,18 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang
 
-      - name: Install a C compiler (Windows)
+      - name: Install clang (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           choco install llvm --no-progress -y
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # clang on Windows needs the MSVC/SDK environment (INCLUDE, LIB, PATH)
+      # to find the C standard library headers and the linker.
+      - name: Set up the MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Verify the toolchain
         shell: bash
@@ -77,22 +83,24 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang
 
-      - name: Install a C compiler (Windows)
+      - name: Install clang (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           choco install llvm --no-progress -y
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Set up the MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - run: npm ci
 
       - name: Build the hello example
         run: npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
 
-      - name: Run the hello example (POSIX)
-        if: runner.os != 'Windows'
-        run: ./build/examples/hello
+      - name: Run the hello example (the CLI resolves the executable path per OS)
+        run: npx tsx src/cli/main.ts run examples/hello.ts --out build/examples
 
-      - name: Run the hello example (Windows)
-        if: runner.os == 'Windows'
-        run: ./build/examples/hello.exe
+      - name: Build and run the file-reading example with the node extension
+        run: npx tsx src/cli/main.ts run examples/read-file.ts --ext node --out build/examples

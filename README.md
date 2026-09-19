@@ -178,6 +178,11 @@ to the C symbol with the uniform `(argc, argv)` calling convention. Adding a
 module means dropping a folder under `src/extensions/node/` and its C
 counterpart under `runtime/ext_node/`; the core compiler never changes.
 
+Node module coverage:
+
+- [Node extension: implemented](./doc/node-implemented.md)
+- [Node extension: unimplemented](./doc/node-unimplemented.md)
+
 ## Tests
 
 ```bash
@@ -195,7 +200,6 @@ Tests are organised by module under `tests/` (`lexer`, `parser`, `binder`,
 - A `clang`-compatible C compiler on `PATH` (override with `xbintsc_CLANG`)
 
 ## Language subset
-
 
 - [Implemented features](./doc/implemented.md)
 - [Unimplemented features](./doc/unimplemented.md)

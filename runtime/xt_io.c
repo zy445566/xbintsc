@@ -5,14 +5,18 @@
  * innermost frame when one is active and otherwise prints + exits. Also holds
  * `print`/`console` output and the Node-like value inspector.
  *
- * The generated IR calls `_setjmp` (paired with `longjmp` here), not
- * `setjmp`: on Windows the UCRT `<setjmp.h>` makes `setjmp` a macro for
- * `_setjmp`, and the exported `setjmp` symbol is a legacy two-argument
- * routine. Calling that symbol with one argument saved a corrupt context whose
- * `longjmp` unwound to a bogus address (`STATUS_BAD_FUNCTION_TABLE`,
- * 0xC00000FF). `_setjmp` is the real one-argument routine on Linux, macOS and
- * the Windows UCRT alike (and pairs with `longjmp`, which does exist there;
- * the XSI `_longjmp` does not).
+ * The generated IR calls `_setjmp` with two arguments — the jmp_buf and the
+ * caller's frame address (`@llvm.frameaddress(0)`) — paired with `longjmp`
+ * here. This is exactly what clang lowers a C `_setjmp(buf)` call to on MSVC.
+ * On Windows the UCRT `_setjmp` takes the frame as a second argument and
+ * stores it in `_JUMP_BUFFER.Frame`; `longjmp` passes that frame to
+ * `RtlUnwind` to run the unwind. Calling `_setjmp` with only one argument left
+ * `Frame` as garbage, so `longjmp` unwound to a bogus target
+ * (`STATUS_BAD_FUNCTION_TABLE`, 0xC00000FF). `_setjmp` is used rather than the
+ * exported `setjmp` symbol, which is a legacy two-argument routine with an
+ * incompatible ABI; on Linux/macOS `_setjmp` simply ignores the extra
+ * argument and pairs with `longjmp` (the XSI `_longjmp` does not exist on
+ * Windows).
  */
 
 #include "rt_internal.h"

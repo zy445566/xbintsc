@@ -382,8 +382,14 @@ export const statementMethods: StatementMethods = {
     this.emit(`  ${frame} = call i8* @xt_try_enter()`);
     this.emit(`  store i8* ${frame}, i8** ${frameSlot}`);
     this.emit(`  store i64 0, i64* ${flagSlot}`);
+    // MSVC's `_setjmp` takes the caller's frame address as a second argument
+    // (`_JUMP_BUFFER.Frame`); `longjmp` uses it to run the unwind. clang lowers
+    // a C call to `_setjmp` exactly like this. The extra argument is ignored by
+    // the one-argument `_setjmp` on Linux/macOS.
+    const frameAddress = this.reg();
+    this.emit(`  ${frameAddress} = call i8* @llvm.frameaddress(i32 0)`);
     const jump = this.reg();
-    this.emit(`  ${jump} = call i32 @_setjmp(i8* ${frame})`);
+    this.emit(`  ${jump} = call i32 @_setjmp(i8* ${frame}, i8* ${frameAddress})`);
     const isThrow = this.reg();
     this.emit(`  ${isThrow} = icmp ne i32 ${jump}, 0`);
     const exceptionTarget = hasCatch ? catchLabel : exceptionLabel;

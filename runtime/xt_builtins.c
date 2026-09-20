@@ -60,11 +60,45 @@ xt_value xt_object_spread(xt_value target, xt_value source) {
 
 xt_value xt_parse_int(int32_t argc, xt_value *argv) {
   xt_string *s = xt_as_string(xt_to_string(xt_arg_at(argc, argv, 0)));
-  int32_t radix = argc >= 2 ? xt_to_int32(argv[1]) : 0;
-  char *end = NULL;
-  long value = strtol(s->data, &end, radix);
-  if (end == s->data) return xt_number(NAN);
-  return xt_number((double)value);
+  const char *p = s->data;
+  /* JavaScript `parseInt` semantics: skip leading whitespace, accept an
+     optional sign, pick the radix (auto-detecting a `0x` prefix), read the
+     longest run of valid digits and accumulate into a double. Accumulating as
+     a double (instead of `strtol` into a `long`) keeps large literals exact on
+     every platform -- Windows `long` is only 32 bits. */
+  while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == '\f' || *p == '\v') p++;
+  int sign = 1;
+  if (*p == '+') {
+    p++;
+  } else if (*p == '-') {
+    sign = -1;
+    p++;
+  }
+  int radix = argc >= 2 ? xt_to_int32(argv[1]) : 0;
+  if (radix != 0) {
+    if (radix < 2 || radix > 36) return xt_number(NAN);
+  } else if (p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) {
+    radix = 16;
+  } else {
+    radix = 10;
+  }
+  if (radix == 16 && p[0] == '0' && (p[1] == 'x' || p[1] == 'X')) p += 2;
+  double value = 0;
+  int digits = 0;
+  for (;;) {
+    unsigned char c = (unsigned char)*p;
+    int digit;
+    if (c >= '0' && c <= '9') digit = c - '0';
+    else if (c >= 'a' && c <= 'z') digit = c - 'a' + 10;
+    else if (c >= 'A' && c <= 'Z') digit = c - 'A' + 10;
+    else break;
+    if (digit >= radix) break;
+    value = value * radix + digit;
+    p++;
+    digits++;
+  }
+  if (digits == 0) return xt_number(NAN);
+  return xt_number(sign * value);
 }
 
 xt_value xt_parse_float(int32_t argc, xt_value *argv) {

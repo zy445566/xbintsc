@@ -256,6 +256,21 @@ describeWithClang("end-to-end compilation", () => {
     expect(result.stderr.trim()).toBe("warned\nfailed");
   });
 
+  it("parses large integer literals without 32-bit clamping", () => {
+    // Regression: `parseInt` used to go through `strtol`, whose `long` is only
+    // 32 bits on Windows, so hex literals above INT32_MAX (used by the
+    // compiler's own `hashText`) were clamped to 2147483647.
+    const source = `
+      console.log(parseInt("cbf29ce4", 16), parseInt("80000000", 16), parseInt("100000000", 16));
+      console.log(parseInt("0xcbf29ce4"), parseInt("0x80000000"), parseInt("4503599627370496"));
+      console.log(parseInt("-42"), parseInt("0x10", 10), parseInt("42px"));
+      console.log(isNaN(parseInt("xyz")));
+    `;
+    expect(runProgram(source)).toBe(
+      "3421674724 2147483648 4294967296\n3421674724 2147483648 4503599627370496\n-42 0 42\ntrue",
+    );
+  });
+
   it("supports default parameters, rest parameters and arguments", () => {
     const source = `
       function greet(name: string = "world", mark: string = "!"): string {

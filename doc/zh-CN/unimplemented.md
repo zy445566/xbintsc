@@ -12,6 +12,8 @@
 
 > 最新批次：**自举（self-hosting）** —— `xbintsc` 已能用自身编译 `src/cli/main.ts` 生成可运行的原生二进制，且产出的 LLVM IR 达到不动点（源码 ≡ 第 1 代 ≡ 第 2 代 ≡ 第 3 代，逐字节一致）。同时运行期补齐了数组 `length` 赋值（截断 / 扩展）、可迭代对象展开（`[...set]`、`[...map]`、`"abc"`）、对 `Map` / `Set` 的 `for...of`，binder 也补齐了计算属性名（`{ [E.A]: 1 }`）。
 
+> Windows 自举：C 端 `path` 模块现在识别 Windows 原生分隔符（`/` 与 `\`）和盘符前缀（`C:`），输出仍统一为 `/`；`parseInt` 改为累加到 `double`（不再用 `strtol`），因此大整数常量（如 `0xcbf29ce4`、`0x100000000`）不会被 Windows 的 32 位 `long` 截断为 `INT32_MAX`；产出的 `source_filename` 统一为 `/`，保证自举 IR 不动点在各平台逐字节一致。
+
 > 近期已补齐（本批次）：`class` 声明 / 类表达式、`new` / `this`、继承 `extends` / `super`、`instanceof`、方法 / 静态成员 / 实例字段、`async` / `await` + `Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`）、`import` / `export` 多文件打包、`Map` / `Set` / `Date` / `RegExp` / `JSON`、以及大量数组 / 字符串 / 数字 / 对象 / 控制台扩展方法。详见 [已实现文档](implemented.md)。
 
 > 更早已补齐：`switch`、`try/catch/finally`、对象展开、`delete`、`in`、数组 / 字符串方法、`Math`、`Object.keys/values/entries/assign`、全局函数、`console.error/warn/info`、`arguments`、默认 / 剩余参数、可选链短路、`for...in` 对象键枚举。

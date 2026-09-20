@@ -124,7 +124,11 @@ returns `undefined` (`existsSync` returns `false`); it does not throw `Error` /
 Location: `src/extensions/node/path/index.ts`, `runtime/ext_node/path/path.c`
 
 Uses `path.<name>(...)` namespace calls, which the compiler lowers to
-`xt_path_static(<name>, argc, argv)`. The semantics are POSIX (`/` separator).
+`xt_path_static(<name>, argc, argv)`. Results are produced with the POSIX `/`
+separator on every platform (Windows accepts `/`), while inputs may use native
+Windows separators: on Windows both `/` and `\` are recognised and drive
+prefixes (`C:`) are preserved, so the self-hosted compiler resolves
+drive-letter paths correctly.
 Import the module as a namespace (`import path from "path"` / `import * as path
 from "path"`) or pull in individual methods (`import { join } from "path"`).
 

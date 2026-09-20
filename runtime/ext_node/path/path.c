@@ -2,8 +2,13 @@
  * Node.js `path` module for xbintsc.
  *
  * Exposed through namespace dispatch: the compiler lowers `path.<name>(...)`
- * to `xt_path_static(<name>, argc, argv)`. Paths are handled with POSIX
- * semantics (`/` separator), matching Node's `path.posix` on every platform.
+ * to `xt_path_static(<name>, argc, argv)`. Paths are produced with the POSIX
+ * separator (`/`) on every platform, which Windows accepts everywhere, so the
+ * rest of the compiler can treat results uniformly.
+ *
+ * On Windows the inputs may still arrive in native form (`C:\dir\file.ts`),
+ * so both `/` and `\` are recognised as separators there and a drive prefix
+ * (`C:`) is preserved. On POSIX only `/` separates path segments.
  *
  * Implemented: join, resolve, normalize, dirname, basename, extname,
  *              isAbsolute, relative.
@@ -24,17 +29,61 @@
 
 #define XT_PATH_MAX 4096
 
-static int xt_path_is_absolute(const char *path) { return path && path[0] == '/'; }
+/** True when `c` separates path segments on this platform. */
+static int xt_path_is_sep(char c) {
+#if defined(_WIN32)
+  return c == '/' || c == '\\';
+#else
+  return c == '/';
+#endif
+}
+
+/** Length of the leading root (`/`, `C:/` or `C:\`) or 0 when there is none. */
+static size_t xt_path_root_len(const char *path) {
+#if defined(_WIN32)
+  if (path[0] == '\0') return 0;
+  int drive = ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) &&
+              path[1] == ':';
+  if (drive) return xt_path_is_sep(path[2]) ? 3 : 2;
+#endif
+  return xt_path_is_sep(path[0]) ? 1 : 0;
+}
+
+static int xt_path_is_absolute(const char *path) {
+  if (!path || path[0] == '\0') return 0;
+#if defined(_WIN32)
+  size_t root = xt_path_root_len(path);
+  /* A drive without a following separator (`C:`) is drive-relative, not absolute. */
+  if (path[0] != '\0' && path[1] == ':') return root == 3;
+  return xt_path_is_sep(path[0]) ? 1 : 0;
+#else
+  return path[0] == '/';
+#endif
+}
 
 static void xt_path_normalize(const char *input, char *out, size_t size) {
-  int absolute = input[0] == '/';
-  size_t length = strlen(input);
+  size_t prefixLen = 0;
+  char prefix[4] = {0};
+  const char *body = input;
+
+#if defined(_WIN32)
+  if (((input[0] >= 'A' && input[0] <= 'Z') || (input[0] >= 'a' && input[0] <= 'z')) &&
+      input[1] == ':') {
+    prefix[0] = input[0];
+    prefix[1] = ':';
+    prefixLen = 2;
+    body = input + 2;
+  }
+#endif
+
+  int absolute = xt_path_is_sep(body[0]);
+  size_t length = strlen(body);
   char *copy = (char *)malloc(length + 1);
   if (!copy) {
     out[0] = '\0';
     return;
   }
-  memcpy(copy, input, length + 1);
+  memcpy(copy, body, length + 1);
 
   size_t capacity = 8;
   size_t count = 0;
@@ -47,10 +96,10 @@ static void xt_path_normalize(const char *input, char *out, size_t size) {
 
   size_t i = 0;
   while (i < length) {
-    while (i < length && copy[i] == '/') i++;
+    while (i < length && xt_path_is_sep(copy[i])) i++;
     if (i >= length) break;
     size_t start = i;
-    while (i < length && copy[i] != '/') i++;
+    while (i < length && !xt_path_is_sep(copy[i])) i++;
     if (i < length) {
       copy[i] = '\0';
       i++;
@@ -79,7 +128,8 @@ static void xt_path_normalize(const char *input, char *out, size_t size) {
   }
 
   size_t position = 0;
-  if (absolute && position < size) out[position++] = '/';
+  for (size_t p = 0; p < prefixLen && position + 1 < size; p++) out[position++] = prefix[p];
+  if (absolute && position + 1 < size) out[position++] = '/';
   for (size_t s = 0; s < count; s++) {
     size_t segmentLength = strlen(segments[s]);
     if (position + segmentLength + 2 > size) break;
@@ -129,10 +179,10 @@ static void xt_path_split(const char *path, xt_path_parts *parts) {
 
   size_t i = 0;
   while (i < length) {
-    while (i < length && parts->storage[i] == '/') i++;
+    while (i < length && xt_path_is_sep(parts->storage[i])) i++;
     if (i >= length) break;
     size_t start = i;
-    while (i < length && parts->storage[i] != '/') i++;
+    while (i < length && !xt_path_is_sep(parts->storage[i])) i++;
     if (i < length) {
       parts->storage[i] = '\0';
       i++;
@@ -208,22 +258,27 @@ static xt_value xt_path_resolve(int32_t argc, xt_value *argv) {
 
 static xt_value xt_path_dirname(const char *path) {
   size_t length = strlen(path);
-  while (length > 1 && path[length - 1] == '/') length--;
-  size_t i = length;
-  while (i > 0 && path[i - 1] != '/') i--;
-  if (i == 0) return xt_string_from_cstr(".");
-  size_t end = i - 1;
-  if (end == 0) return xt_string_from_cstr("/");
-  while (end > 1 && path[end - 1] == '/') end--;
-  return xt_string_new(path, end);
+  size_t root = xt_path_root_len(path);
+  size_t end = length;
+  while (end > root && xt_path_is_sep(path[end - 1])) end--;
+  if (end <= root) {
+    if (root == 0) return xt_string_from_cstr(".");
+    return xt_string_new(path, root);
+  }
+  size_t i = end;
+  while (i > root && !xt_path_is_sep(path[i - 1])) i--;
+  size_t dirEnd = i;
+  while (dirEnd > root && xt_path_is_sep(path[dirEnd - 1])) dirEnd--;
+  if (dirEnd == 0) return xt_string_from_cstr(".");
+  return xt_string_new(path, dirEnd);
 }
 
 static xt_value xt_path_basename(const char *path, const char *extension) {
   size_t length = strlen(path);
-  while (length > 0 && path[length - 1] == '/') length--;
+  while (length > 0 && xt_path_is_sep(path[length - 1])) length--;
   if (length == 0) return xt_string_from_cstr("");
   size_t start = length;
-  while (start > 0 && path[start - 1] != '/') start--;
+  while (start > 0 && !xt_path_is_sep(path[start - 1])) start--;
   size_t end = length;
   if (extension && extension[0] != '\0') {
     size_t extensionLength = strlen(extension);
@@ -239,7 +294,7 @@ static xt_value xt_path_extname(const char *path) {
   size_t length = strlen(path);
   size_t start = 0;
   for (size_t i = 0; i < length; i++) {
-    if (path[i] == '/') start = i + 1;
+    if (xt_path_is_sep(path[i])) start = i + 1;
   }
   size_t dot = length;
   for (size_t i = start; i < length; i++) {

@@ -175,6 +175,23 @@ describeWithClang("end-to-end compilation", () => {
     );
   });
 
+  it("resolves native Windows paths (drive letters and backslashes)", () => {
+    // The C path module keeps POSIX semantics on POSIX hosts; the backslash and
+    // drive-letter handling only exists on Windows, so this case is skipped
+    // elsewhere. Results are reported with the canonical `/` separator, which
+    // Windows accepts, so the compiler can treat paths uniformly.
+    if (process.platform !== "win32") return;
+    const source = `
+      console.log(path.isAbsolute("C:\\\\a"), path.isAbsolute("C:"));
+      console.log(path.dirname("C:\\\\a\\\\b\\\\c.ts"));
+      console.log(path.resolve("C:\\\\a\\\\b", "..\\\\c"));
+      console.log(path.normalize("C:\\\\a\\\\.\\\\b\\\\..\\\\c"));
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      "true false\nC:\\a\\b\nC:/a/c\nC:/a/c",
+    );
+  });
+
   it("imports node modules by specifier", () => {
     const source = `
       import { readFileSync } from "node:fs";

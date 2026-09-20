@@ -116,7 +116,7 @@ console.log(existsSync("/tmp/out.txt"));
 
 实现位置：`src/extensions/node/path/index.ts`、`runtime/ext_node/path/path.c`
 
-采用 `path.<name>(...)` 命名空间调用，编译器将其降为 `xt_path_static(<name>, argc, argv)`。语义为 POSIX（`/` 分隔符）。以命名空间方式导入（`import path from "path"` / `import * as path from "path"`），或单独导入方法（`import { join } from "path"`）。
+采用 `path.<name>(...)` 命名空间调用，编译器将其降为 `xt_path_static(<name>, argc, argv)`。结果在所有平台上都以 POSIX `/` 分隔符输出（Windows 也接受 `/`），但输入可以使用 Windows 原生分隔符：在 Windows 上 `/` 与 `\` 都被识别，并保留盘符前缀（`C:`），因此自举后的编译器能正确解析带盘符的路径。以命名空间方式导入（`import path from "path"` / `import * as path from "path"`），或单独导入方法（`import { join } from "path"`）。
 
 | 方法 | 说明 |
 | --- | --- |

@@ -66,7 +66,16 @@ export const moduleMethods: ModuleMethods = {
     }
     for (const fn of this.binding.functions) this.emitFunction(fn);
     this.emitMain();
-    const header = ["; ModuleID = 'xbintsc'", "source_filename = \"" + this.sourceFile.fileName + "\"", ""];
+    // Path separators are normalised to `/` so the emitted IR (and therefore
+    // the self-hosting fixpoint) is identical whether the compiler runs on
+    // Node (which uses `\` on Windows) or as a compiled binary (which always
+    // produces `/`).
+    const sourceName = this.sourceFile.fileName.split("\\").join("/");
+    const header = [
+      "; ModuleID = 'xbintsc'",
+      "source_filename = \"" + sourceName + "\"",
+      "",
+    ];
     return [...header, ...RUNTIME_DECLARATIONS, ...this.extraDeclarations, "", ...this.globals, "", ...this.functions, ""].join("\n");
   },
 

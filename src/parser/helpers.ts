@@ -13,6 +13,8 @@ export function expressionToPropertyName(expr: Expression): PropertyName | undef
       return expr;
     case SyntaxKind.Identifier:
       return expr;
+    case SyntaxKind.PropertyAccessExpression:
+      return expr.name;
     default:
       return undefined;
   }

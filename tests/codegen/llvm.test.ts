@@ -94,6 +94,25 @@ describe("codegen", () => {
     expect(ir).toContain("@xt_array_push");
   });
 
+  it("lowers enum declarations to an object with reverse mapping", () => {
+    const { ir, diagnostics } = compileToIr("enum E { A, B = 5, C }\nconsole.log(E.A, E[5]);");
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    expect(ir).toContain("@xt_object_new");
+    expect(ir).toContain("@xt_set");
+  });
+
+  it("lowers destructuring bindings via runtime reads", () => {
+    const { ir, diagnostics } = compileToIr("const p = [1, 2];\nconst [a, b] = p;\nconst o = { c: 3 };\nconst { c } = o;\nconsole.log(a, b, c);");
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    expect(ir).toMatch(/call i64 @xt_get\(i64 %\w+, i64 %\w+\)/);
+  });
+
+  it("lowers typeof and void expressions", () => {
+    const { ir, diagnostics } = compileToIr("const x = 1;\nconst t = typeof x;\nconst v = void 0;");
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    expect(ir).toContain("@xt_typeof");
+  });
+
   it("resolves imported extension builtins to their runtime symbols", () => {
     const registry = createDefaultRegistry().register(nodeExtension);
     const { ir } = compileToIr('import { readFileSync } from "fs";\nreadFileSync("f.txt");', registry);

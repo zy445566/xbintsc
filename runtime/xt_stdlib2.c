@@ -1016,6 +1016,17 @@ xt_value xt_regexp_ctor(int32_t argc, xt_value *argv) {
   return XT_FROM_PTR(XT_TAG_OBJECT, regexp);
 }
 
+xt_value xt_error_ctor(int32_t argc, xt_value *argv) {
+  xt_value error = xt_object_new();
+  xt_value name = xt_arg_at(argc, argv, 1);
+  xt_value message = xt_arg_at(argc, argv, 0);
+  xt_object_set(error, xt_string_from_cstr("name"),
+                name == XT_UNDEFINED ? xt_string_from_cstr("Error") : name);
+  xt_object_set(error, xt_string_from_cstr("message"),
+                message == XT_UNDEFINED ? xt_string_from_cstr("") : message);
+  return error;
+}
+
 static xt_value xt_regexp_test(xt_value target, xt_value input) {
   xt_regexp *regexp = (xt_regexp *)XT_GET_PTR(target);
   xt_string *pattern = xt_as_string(regexp->source);

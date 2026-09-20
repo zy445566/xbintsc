@@ -13,7 +13,9 @@ Criteria (ordered by severity):
 
 > Language: **English** | [简体中文](./zh-CN/unimplemented.md)
 
-> Recently completed (this batch): `class` declarations / class expressions, `new` / `this`, inheritance `extends` / `super`, `instanceof`, methods / static members / instance fields, `async` / `await` + `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), multi-file `import` / `export` bundling, `Map` / `Set` / `Date` / `RegExp` / `JSON`, and a large set of array / string / number / object / console extension methods. See the [implemented document](./implemented.md).
+> Recently completed (this batch): `class` declarations / class expressions, `new` / `this`, inheritance `extends` / `super`, `instanceof`, methods / static members / instance fields, `async` / `await` + `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), multi-file `import` / `export` bundling (including `.js` → `.ts` specifier resolution), `Map` / `Set` / `Date` / `RegExp` / `JSON`, and a large set of array / string / number / object / console extension methods.
+
+> Most recent batch: array / object **destructuring bindings** (declarations, parameters, `for...of`, defaults, rest, nested and computed keys), **`enum` / `const enum`** declarations (forward + reverse mapping, usable across modules), **regular-expression literals** (`/re/flags`, lowered to `xt_regexp_ctor`), **`typeof` / `void`** expression codegen, `new Error(...)` (`xt_error_ctor`) and `extends Error`, plus parser support for `import.meta`, keyword property names, `as const`, `this` parameters, getter/setter accessors and `export type` re-exports.
 
 > Completed earlier: `switch`, `try/catch/finally`, object spread, `delete`, `in`, array / string methods, `Math`, `Object.keys/values/entries/assign`, global functions, `console.error/warn/info`, `arguments`, default / rest parameters, optional chaining short-circuit, `for...in` object key enumeration.
 
@@ -25,7 +27,6 @@ Criteria (ordered by severity):
 
 | Syntax | Status | Notes |
 | --- | --- | --- |
-| `enum` declarations | parse ✓, codegen ✗ | `enum E { A, B }` → "does not yet support this statement (enum declaration)" |
 | `namespace` / `module` declarations | parse ✓, codegen ✗ | → "does not yet support this statement (module declaration)" |
 | `label: statement` | parse ✓, codegen ✗ | no labeled jump semantics |
 
@@ -47,15 +48,13 @@ Criteria (ordered by severity):
 | --- | --- | --- |
 | Tagged templates `` f`...` `` | parse ✓, codegen ✗ | → "does not yet support this expression (tagged template)" |
 | `yield` expressions (generators) | parse ✓, codegen ✗ | → "does not yet support this expression (yield expression)" |
-| Array destructuring / object destructuring | parse ✓, codegen ✗ | neither destructuring bindings nor destructuring assignment are implemented |
 
 ### 2.2 Not supported by the parser
 
 | Syntax | Status | Notes |
 | --- | --- | --- |
-| Regex literal as an expression | not parsed | the scanner can scan `/re/`, but `parsePrimaryExpression` has no `RegularExpressionLiteral` branch and reports "Unexpected token '/…/'"; use `new RegExp(...)` instead |
 | `Promise.any` / type keywords as property names (e.g. `.any`, `.get` in some cases) | partially unparsed | contextual keywords as member names occasionally report "Expected identifier" |
-| Spread in call arguments `f(...args)` / `Math.max(...xs)` | not parsed | `SpreadElement` in argument position reports unsupported |
+| Spread in call arguments `f(...args)` / `Math.max(...xs)` | parsed but codegen unsupported | `SpreadElement` in argument position reports unsupported |
 
 ### 2.3 Unimplemented operators (codegen errors)
 

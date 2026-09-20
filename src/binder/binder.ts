@@ -13,6 +13,7 @@ import { NodeFlags, ModifierKind } from "../ast/kinds.js";
 import {
   SyntaxKind,
   type ArrowFunction,
+  type BindingName,
   type Block,
   type ClassDeclaration,
   type ClassExpression,
@@ -244,6 +245,27 @@ class Binder {
     return { kind, node, parent, fn: this.current, symbols: new Map() };
   }
 
+  /** Declare every identifier introduced by a (possibly destructured) binding. */
+  private declareBinding(
+    name: BindingName,
+    kind: SymbolKind,
+    declaration: Node,
+    scope: Scope,
+    mutable: boolean,
+  ): SymbolInfo | undefined {
+    if (name.kind === SyntaxKind.Identifier) {
+      return this.declare(name.text, kind, declaration, scope, mutable);
+    }
+    let first: SymbolInfo | undefined;
+    const pattern = name as import("../ast/declarations.js").ArrayBindingPattern | import("../ast/declarations.js").ObjectBindingPattern;
+    for (const element of pattern.elements) {
+      if (!element) continue;
+      const symbol = this.declareBinding(element.name, kind, element.name, scope, mutable);
+      if (!first) first = symbol;
+    }
+    return first;
+  }
+
   private declare(
     name: string,
     kind: SymbolKind,
@@ -334,7 +356,7 @@ class Binder {
           ? SymbolKind.Var
           : SymbolKind.Let;
     for (const declaration of list.declarations) {
-      this.declare(declaration.name.text, kind, declaration, scope, kind !== SymbolKind.Const);
+      this.declareBinding(declaration.name, kind, declaration, scope, kind !== SymbolKind.Const);
     }
   }
 
@@ -369,9 +391,9 @@ class Binder {
           const decl = node as VariableStatement;
           if (decl.declarationList.declarationKind === "var") {
             for (const d of decl.declarationList.declarations) {
-              const existing = fn.scope.symbols.get(d.name.text);
-              if (!existing) this.declare(d.name.text, SymbolKind.Var, d, fn.scope, true);
-              else this.symbolOfDeclaration.set(d, existing);
+              const existing = d.name.kind === SyntaxKind.Identifier ? fn.scope.symbols.get(d.name.text) : undefined;
+              if (!existing) this.declareBinding(d.name, SymbolKind.Var, d, fn.scope, true);
+              else if (d.name.kind === SyntaxKind.Identifier) this.symbolOfDeclaration.set(d, existing);
             }
           }
           return;
@@ -506,8 +528,23 @@ class Binder {
   private bindVariableList(list: VariableDeclarationList, scope: Scope): void {
     for (const declaration of list.declarations) {
       const symbol = this.symbolOfDeclaration.get(declaration);
-      if (declaration.name) this.symbolOfDeclaration.set(declaration.name, symbol ?? this.symbolOfDeclaration.get(declaration) as SymbolInfo);
+      if (declaration.name.kind === SyntaxKind.Identifier) {
+        this.symbolOfDeclaration.set(declaration.name, symbol ?? this.symbolOfDeclaration.get(declaration) as SymbolInfo);
+      } else {
+        this.bindBindingPattern(declaration.name, scope);
+      }
       this.bindNode(declaration.initializer, scope);
+    }
+  }
+
+  /** Bind default-value expressions inside a binding pattern. */
+  private bindBindingPattern(name: BindingName, scope: Scope): void {
+    if (name.kind === SyntaxKind.Identifier) return;
+    const pattern = name as import("../ast/declarations.js").ArrayBindingPattern | import("../ast/declarations.js").ObjectBindingPattern;
+    for (const element of pattern.elements) {
+      if (!element) continue;
+      if (element.initializer) this.bindNode(element.initializer, scope);
+      this.bindBindingPattern(element.name, scope);
     }
   }
 
@@ -533,8 +570,8 @@ class Binder {
     // Parameters live in the function scope.
     const params: SymbolInfo[] = [];
     for (const parameter of node.parameters) {
-      const paramSymbol = this.declare(parameter.name.text, SymbolKind.Parameter, parameter, scope, true);
-      params.push(paramSymbol);
+      const paramSymbol = this.declareBinding(parameter.name, SymbolKind.Parameter, parameter, scope, true);
+      if (paramSymbol) params.push(paramSymbol);
       if (parameter.initializer) this.bindNode(parameter.initializer, scope);
     }
     (fn as { params: SymbolInfo[] }).params = params;
@@ -651,8 +688,8 @@ class Binder {
 
     const params: SymbolInfo[] = [];
     for (const parameter of parameters) {
-      const paramSymbol = this.declare(parameter.name.text, SymbolKind.Parameter, parameter, scope, true);
-      params.push(paramSymbol);
+      const paramSymbol = this.declareBinding(parameter.name, SymbolKind.Parameter, parameter, scope, true);
+      if (paramSymbol) params.push(paramSymbol);
       if (parameter.initializer) this.bindNode(parameter.initializer, scope);
     }
     (fn as { params: SymbolInfo[] }).params = params;

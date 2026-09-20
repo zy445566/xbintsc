@@ -65,6 +65,18 @@ function isExternalSpecifier(specifier: string): boolean {
 
 function resolveModule(fromDir: string, specifier: string): string | undefined {
   const base = resolve(fromDir, specifier);
+  // TypeScript sources are imported using their emitted `.js` extension
+  // (`import ... from "./foo.js"`), so map the extension back to the source
+  // file before probing the usual suffixes.
+  const candidates = [base];
+  const jsExtension = /\.(?:m|c)?jsx?$/.exec(base);
+  if (jsExtension) {
+    const stem = base.slice(0, jsExtension.index);
+    candidates.push(`${stem}.ts`, `${stem}.tsx`, `${stem}.mts`, `${stem}.cts`);
+  }
+  for (const candidate of candidates) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
   for (const suffix of RESOLVE_SUFFIXES) {
     const candidate = base + suffix;
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
@@ -86,8 +98,10 @@ function declarationName(node: Node): Identifier | undefined {
     case SyntaxKind.TypeAliasDeclaration:
     case SyntaxKind.ModuleDeclaration:
       return (node as { name?: Identifier }).name;
-    case SyntaxKind.VariableDeclaration:
-      return (node as VariableDeclaration).name;
+    case SyntaxKind.VariableDeclaration: {
+      const name = (node as VariableDeclaration).name;
+      return name.kind === SyntaxKind.Identifier ? name : undefined;
+    }
     default:
       return undefined;
   }
@@ -349,13 +363,24 @@ function exportedNames(statement: Statement): string[] {
   const names: string[] = [];
   if (statement.kind === SyntaxKind.VariableStatement) {
     for (const declaration of (statement as VariableStatement).declarationList.declarations) {
-      if (declaration.name) names.push(declaration.name.text);
+      collectBindingIdentifiers(declaration.name, names);
     }
   } else {
     const name = declarationName(statement);
     if (name) names.push(name.text);
   }
   return names;
+}
+
+function collectBindingIdentifiers(name: import("../ast/declarations.js").BindingName, out: string[]): void {
+  if (name.kind === SyntaxKind.Identifier) {
+    out.push(name.text);
+    return;
+  }
+  const elements = name.kind === SyntaxKind.ArrayBindingPattern ? name.elements : name.elements;
+  for (const element of elements) {
+    if (element) collectBindingIdentifiers(element.name, out);
+  }
 }
 
 /** Turn `export default expr` into a synthetic `const` declaration. */

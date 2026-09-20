@@ -16,7 +16,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DiagnosticBag, formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
-import { build, compileString, COMPILER_VERSION, type EmitKind } from "../driver/compiler.js";
+import { build, compileEntry, COMPILER_VERSION, type EmitKind } from "../driver/compiler.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { nodeExtension } from "../extensions/node/index.js";
 
@@ -152,9 +152,8 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
       io.stderr("xbintsc: emit requires a source file\n");
       return 1;
     }
-    const source = readFileSync(resolve(entry), "utf8");
     const registry = buildRegistry(args.flags);
-    const { ir, diagnostics } = compileString(source, entry, registry);
+    const { ir, diagnostics } = compileEntry(entry, registry);
     if (diagnostics.some((d) => d.category === "error")) {
       printDiagnostics(diagnostics, entry, io);
       return 1;

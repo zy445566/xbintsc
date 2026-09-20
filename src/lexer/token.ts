@@ -264,3 +264,76 @@ export const CONTEXTUAL_KEYWORDS: ReadonlySet<TokenKind> = new Set([
 export function isOfKeyword(token: Token): boolean {
   return token.kind === TokenKind.Identifier && token.text === "of";
 }
+
+/** Every keyword token kind, derived from the scanner's keyword table. */
+export const KEYWORD_KINDS: ReadonlySet<TokenKind> = new Set(KEYWORDS.values());
+
+/**
+ * True for the hard/contextual keywords the scanner emits. Property names and
+ * member access allow any of these (`obj.default`, `{ type: 1 }`), so the
+ * parser consults this instead of maintaining a hand-written allow list.
+ */
+export function isKeywordKind(kind: TokenKind): boolean {
+  return KEYWORD_KINDS.has(kind);
+}
+
+/**
+ * Keywords that can never be used as a plain binding/identifier. Everything
+ * else the scanner recognizes is a TypeScript contextual keyword (`type`,
+ * `async`, `module`, `namespace`, `readonly`, …) and may legally name a
+ * variable, parameter or property.
+ */
+const RESERVED_KEYWORDS: ReadonlySet<TokenKind> = new Set([
+  TokenKind.BreakKeyword,
+  TokenKind.CaseKeyword,
+  TokenKind.CatchKeyword,
+  TokenKind.ClassKeyword,
+  TokenKind.ConstKeyword,
+  TokenKind.ContinueKeyword,
+  TokenKind.DebuggerKeyword,
+  TokenKind.DefaultKeyword,
+  TokenKind.DeleteKeyword,
+  TokenKind.DoKeyword,
+  TokenKind.ElseKeyword,
+  TokenKind.EnumKeyword,
+  TokenKind.ExportKeyword,
+  TokenKind.ExtendsKeyword,
+  TokenKind.FalseKeyword,
+  TokenKind.FinallyKeyword,
+  TokenKind.ForKeyword,
+  TokenKind.FunctionKeyword,
+  TokenKind.IfKeyword,
+  TokenKind.ImportKeyword,
+  TokenKind.InKeyword,
+  TokenKind.InstanceOfKeyword,
+  TokenKind.NewKeyword,
+  TokenKind.NullKeyword,
+  TokenKind.ReturnKeyword,
+  TokenKind.SuperKeyword,
+  TokenKind.SwitchKeyword,
+  TokenKind.ThisKeyword,
+  TokenKind.ThrowKeyword,
+  TokenKind.TrueKeyword,
+  TokenKind.TryKeyword,
+  TokenKind.TypeOfKeyword,
+  TokenKind.VarKeyword,
+  TokenKind.VoidKeyword,
+  TokenKind.WhileKeyword,
+  TokenKind.WithKeyword,
+  // Strict-mode / module reserved words.
+  TokenKind.LetKeyword,
+  TokenKind.StaticKeyword,
+  TokenKind.YieldKeyword,
+  TokenKind.AwaitKeyword,
+  TokenKind.ImplementsKeyword,
+  TokenKind.InterfaceKeyword,
+  TokenKind.PackageKeyword,
+  TokenKind.PrivateKeyword,
+  TokenKind.ProtectedKeyword,
+  TokenKind.PublicKeyword,
+]);
+
+/** True when the scanner token may be used as an identifier/binding name. */
+export function isIdentifierNameToken(kind: TokenKind): boolean {
+  return kind === TokenKind.Identifier || (isKeywordKind(kind) && !RESERVED_KEYWORDS.has(kind));
+}

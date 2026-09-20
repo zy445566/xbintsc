@@ -37,6 +37,7 @@ import {
   type TypeParameterDeclaration,
 } from "../ast/nodes.js";
 import { expressionToPropertyName } from "./helpers.js";
+import { SpeculationError } from "./speculation.js";
 import type { Parser } from "./parser.js";
 
 export interface DeclarationMethods {
@@ -44,6 +45,8 @@ export interface DeclarationMethods {
   parseTypeParameters(this: Parser): TypeParameterDeclaration[];
   parseGreaterThan(this: Parser): void;
   parseParameters(this: Parser): Parameter[];
+  parseBindingName(this: Parser): import("../ast/declarations.js").BindingName;
+  parseBindingElement(this: Parser, allowPropertyName: boolean): import("../ast/declarations.js").BindingElement;
   parseReturnType(this: Parser): TypeNode;
   parseClassDeclaration(this: Parser, modifiers: Modifier[]): ClassDeclaration;
   parseHeritageClauses(this: Parser): HeritageClause[];
@@ -153,7 +156,13 @@ export const declarationMethods: DeclarationMethods = {
         this.nextToken();
         dotDotDotToken = true;
       }
-      const name = this.parseIdentifier();
+      let name: import("../ast/declarations.js").BindingName;
+      if (this.at(TokenKind.ThisKeyword)) {
+        const thisToken = this.nextToken();
+        name = { kind: SyntaxKind.Identifier, text: "this", start: thisToken.start, end: thisToken.end };
+      } else {
+        name = this.parseBindingName();
+      }
       let questionToken = false;
       if (this.at(TokenKind.Question)) {
         this.nextToken();
@@ -175,6 +184,76 @@ export const declarationMethods: DeclarationMethods = {
     }
     this.parseExpected(TokenKind.CloseParen);
     return params;
+  },
+
+  parseBindingName(this: Parser): import("../ast/declarations.js").BindingName {
+    if (this.at(TokenKind.OpenBracket)) {
+      const open = this.nextToken();
+      const elements: (import("../ast/declarations.js").BindingElement | undefined)[] = [];
+      while (!this.at(TokenKind.CloseBracket) && !this.at(TokenKind.EndOfFile)) {
+        if (this.at(TokenKind.Comma)) {
+          elements.push(undefined);
+          this.nextToken();
+          continue;
+        }
+        elements.push(this.parseBindingElement(false));
+        if (this.at(TokenKind.Comma)) this.nextToken();
+        else break;
+      }
+      const close = this.parseExpected(TokenKind.CloseBracket);
+      return { kind: SyntaxKind.ArrayBindingPattern, elements, start: open.start, end: close.end };
+    }
+    if (this.at(TokenKind.OpenBrace)) {
+      const open = this.nextToken();
+      const elements: import("../ast/declarations.js").BindingElement[] = [];
+      while (!this.at(TokenKind.CloseBrace) && !this.at(TokenKind.EndOfFile)) {
+        elements.push(this.parseBindingElement(true));
+        if (this.at(TokenKind.Comma)) this.nextToken();
+        else break;
+      }
+      const close = this.parseExpected(TokenKind.CloseBrace);
+      return { kind: SyntaxKind.ObjectBindingPattern, elements, start: open.start, end: close.end };
+    }
+    return this.parseIdentifier();
+  },
+
+  parseBindingElement(this: Parser, allowPropertyName: boolean): import("../ast/declarations.js").BindingElement {
+    const start = this.token.start;
+    let dotDotDotToken = false;
+    if (this.at(TokenKind.DotDotDot)) {
+      this.nextToken();
+      dotDotDotToken = true;
+    }
+    let propertyName: PropertyName | undefined;
+    let name: import("../ast/declarations.js").BindingName;
+    if (allowPropertyName && this.at(TokenKind.OpenBracket)) {
+      // Computed property key: `{ [expr]: target }`.
+      this.nextToken();
+      const expr = this.parseAssignmentExpression();
+      this.parseExpected(TokenKind.CloseBracket);
+      propertyName = expressionToPropertyName(expr) ?? { kind: SyntaxKind.Identifier, text: "<computed>", start: expr.start, end: expr.end };
+      this.parseExpected(TokenKind.Colon);
+      name = this.parseBindingName();
+    } else if (allowPropertyName && !this.at(TokenKind.OpenBrace) && !this.at(TokenKind.OpenBracket)) {
+      const first = this.parseIdentifierName();
+      if (this.at(TokenKind.Colon)) {
+        this.nextToken();
+        propertyName = first;
+        name = this.parseBindingName();
+      } else {
+        name = first;
+      }
+    } else {
+      // Array element, or a nested pattern used as an object value.
+      name = this.parseBindingName();
+    }
+    let initializer: Expression | undefined;
+    if (this.at(TokenKind.Equals)) {
+      this.nextToken();
+      initializer = this.parseAssignmentExpression();
+    }
+    const end = initializer?.end ?? (name.kind === SyntaxKind.Identifier ? name.end : name.end);
+    return { kind: SyntaxKind.BindingElement, name, propertyName, dotDotDotToken, initializer, start, end };
   },
 
   parseReturnType(this: Parser): TypeNode {
@@ -248,6 +327,42 @@ export const declarationMethods: DeclarationMethods = {
     if (this.at(TokenKind.Semicolon)) {
       this.nextToken();
       return undefined;
+    }
+    if (
+      (this.at(TokenKind.GetKeyword) || this.at(TokenKind.SetKeyword)) &&
+      !this.atAhead(1, TokenKind.OpenParen) &&
+      !this.atAhead(1, TokenKind.Colon) &&
+      !this.atAhead(1, TokenKind.Equals) &&
+      !this.atAhead(1, TokenKind.Question) &&
+      !this.atAhead(1, TokenKind.LessThan) &&
+      !this.atAhead(1, TokenKind.Semicolon)
+    ) {
+      const accessorToken = this.nextToken();
+      const name = this.parsePropertyName();
+      const parameters = this.parseParameters();
+      let returnType: TypeNode | undefined;
+      if (this.at(TokenKind.Colon)) {
+        this.nextToken();
+        returnType = this.parseReturnType();
+      }
+      let body: Block | undefined;
+      if (this.at(TokenKind.OpenBrace)) body = this.parseBlock();
+      else this.parseSemicolon();
+      const accessor: MethodDeclaration = {
+        kind: SyntaxKind.MethodDeclaration,
+        name,
+        modifiers,
+        typeParameters: [],
+        parameters,
+        returnType,
+        body,
+        flags: NodeFlags.None,
+        optional: false,
+        accessor: accessorToken.kind === TokenKind.GetKeyword ? "get" : "set",
+        start,
+        end: body?.end ?? returnType?.end ?? name.end,
+      };
+      return accessor;
     }
     if (this.at(TokenKind.ConstructorKeyword)) {
       const name = this.nextToken();
@@ -439,34 +554,27 @@ export const declarationMethods: DeclarationMethods = {
       const name: Identifier = { kind: SyntaxKind.Identifier, text: "__call", start, end: start };
       return { kind: SyntaxKind.MethodSignature, name, questionToken: false, typeParameters, parameters, returnType, start, end: returnType?.end ?? start };
     }
-    if (this.at(TokenKind.OpenBracket) && this.atAhead(1, TokenKind.Identifier)) {
-      const saveIndex = this.index;
-      const savePos = this.scanner.position;
-      const savedTokens = this.tokens.slice();
-      this.nextToken();
-      const parameters: Parameter[] = [];
-      let ok = true;
-      try {
+    if (this.at(TokenKind.OpenBracket)) {
+      const indexSignature = this.tryParse<TypeElement>(() => {
+        const open = this.nextToken();
+        const parameters: Parameter[] = [];
         const paramName = this.parseIdentifier();
-        let type: TypeNode | undefined;
+        let paramType: TypeNode | undefined;
         if (this.at(TokenKind.Colon)) {
           this.nextToken();
-          type = this.parseType();
-        } else ok = false;
+          paramType = this.parseType();
+        } else {
+          throw new SpeculationError();
+        }
         this.parseExpected(TokenKind.CloseBracket);
-        parameters.push({ kind: SyntaxKind.Parameter, name: paramName, modifiers: [], dotDotDotToken: false, questionToken: false, type, start: paramName.start, end: type?.end ?? paramName.end });
-      } catch {
-        ok = false;
-      }
-      if (ok && this.at(TokenKind.Colon)) {
+        if (!this.at(TokenKind.Colon)) throw new SpeculationError();
         this.nextToken();
         const type = this.parseType();
         this.parseSemicolonOrComma();
-        return { kind: SyntaxKind.IndexSignature, parameters, type, start, end: type.end };
-      }
-      this.index = saveIndex;
-      this.tokens = savedTokens;
-      this.scanner.seek(savePos);
+        parameters.push({ kind: SyntaxKind.Parameter, name: paramName, modifiers: [], dotDotDotToken: false, questionToken: false, type: paramType, start: paramName.start, end: paramType?.end ?? paramName.end });
+        return { kind: SyntaxKind.IndexSignature, parameters, type, start: open.start, end: type.end };
+      });
+      if (indexSignature) return indexSignature;
     }
     const name = this.parsePropertyName();
     let questionToken = false;

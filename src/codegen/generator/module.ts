@@ -8,6 +8,7 @@ import {
   type ArrowFunction,
   type Block,
   type Expression,
+  type Identifier,
   type Parameter,
 } from "../../ast/nodes.js";
 import type { ClassInfo, FunctionInfo, SymbolInfo } from "../../binder/binder.js";
@@ -40,8 +41,11 @@ export const moduleMethods: ModuleMethods = {
     const moduleScope = this.binding.scopes.get(this.sourceFile);
     if (moduleScope) {
       for (const symbol of moduleScope.symbols.values()) {
-        const isVariable = symbol.kind === SymbolKind.Var || symbol.kind === SymbolKind.Let || symbol.kind === SymbolKind.Const;
-        if (!isVariable || !symbol.boxed || !symbol.fn.isModule) continue;
+        const isVariable =
+          symbol.kind === SymbolKind.Var || symbol.kind === SymbolKind.Let || symbol.kind === SymbolKind.Const;
+        const isEnum = symbol.kind === SymbolKind.Enum;
+        if ((!isVariable && !isEnum) || !symbol.fn?.isModule) continue;
+        if (isVariable && !symbol.boxed) continue;
         const globalName = `@g.${symbol.id}`;
         this.moduleGlobals.set(symbol.id, globalName);
         this.globals.push(`${globalName} = internal global i64 ${i64(XT_UNDEFINED)}`);
@@ -199,10 +203,19 @@ export const moduleMethods: ModuleMethods = {
     const proto = this.reg();
     this.emit(`  ${proto} = call i64 @xt_object_new()`);
     if (classInfo.parentExpression) {
-      const parent = this.emitExpression(classInfo.parentExpression);
-      const parentProto = this.reg();
-      this.emit(`  ${parentProto} = call i64 @xt_function_get_prototype(i64 ${parent})`);
-      this.emit(`  call i64 @xt_object_set_prototype(i64 ${proto}, i64 ${parentProto})`);
+      // `extends Error` (and other host builtins) have no runtime class value;
+      // the subclass still works, it simply does not inherit a prototype.
+      const parent = classInfo.parentExpression;
+      const unboundBuiltin =
+        parent.kind === SyntaxKind.Identifier &&
+        (parent as Identifier).text === "Error" &&
+        !this.binding.symbolOfIdentifier.get(parent as Identifier);
+      if (!unboundBuiltin) {
+        const parentValue = this.emitExpression(parent);
+        const parentProto = this.reg();
+        this.emit(`  ${parentProto} = call i64 @xt_function_get_prototype(i64 ${parentValue})`);
+        this.emit(`  call i64 @xt_object_set_prototype(i64 ${proto}, i64 ${parentProto})`);
+      }
     }
     for (const method of classInfo.methods) {
       const fnValue = this.emitClosureValue(method);

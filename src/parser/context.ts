@@ -10,7 +10,7 @@
 import { DiagnosticBag, DiagnosticCode } from "../diagnostics/diagnostic.js";
 import type { SourceFile } from "../diagnostics/source.js";
 import { Scanner } from "../lexer/scanner.js";
-import { Token, TokenKind } from "../lexer/token.js";
+import { isIdentifierNameToken, isKeywordKind, Token, TokenKind } from "../lexer/token.js";
 import { SyntaxKind } from "../ast/kinds.js";
 import type { Identifier, StringLiteral } from "../ast/nodes.js";
 import { SpeculationError } from "./speculation.js";
@@ -121,24 +121,13 @@ export class ParserContext {
   }
 
   isIdentifierLike(token: Token): boolean {
-    if (token.kind === TokenKind.Identifier) return true;
-    switch (token.kind) {
-      case TokenKind.AsKeyword:
-      case TokenKind.SatisfiesKeyword:
-      case TokenKind.FromKeyword:
-      case TokenKind.TypeKeyword:
-      case TokenKind.GetKeyword:
-      case TokenKind.SetKeyword:
-      case TokenKind.AsyncKeyword:
-        return true;
-      default:
-        return false;
-    }
+    return isIdentifierNameToken(token.kind);
   }
 
   parseIdentifier(allowKeywords = false): Identifier {
     const token = this.token;
-    if (token.kind === TokenKind.Identifier || (allowKeywords && this.isIdentifierLike(token))) {
+    const ok = allowKeywords ? isKeywordKind(token.kind) : isIdentifierNameToken(token.kind);
+    if (token.kind === TokenKind.Identifier || ok) {
       this.nextToken();
       return { kind: SyntaxKind.Identifier, text: token.text, start: token.start, end: token.end };
     }

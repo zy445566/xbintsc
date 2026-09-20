@@ -14,12 +14,35 @@ import type { TypeElement } from "./types.js";
 
 export interface Parameter extends Node {
   readonly kind: SyntaxKind.Parameter;
-  readonly name: Identifier;
+  readonly name: BindingName;
   readonly modifiers: Modifier[];
   readonly dotDotDotToken: boolean;
   readonly questionToken: boolean;
   readonly type?: TypeNode;
   readonly initializer?: Expression;
+}
+
+// -- binding patterns (destructuring) --------------------------------------
+
+export type BindingName = Identifier | ArrayBindingPattern | ObjectBindingPattern;
+
+export interface BindingElement extends Node {
+  readonly kind: SyntaxKind.BindingElement;
+  readonly name: BindingName;
+  /** For `{ a: b }` the `a`; absent for shorthand and array patterns. */
+  readonly propertyName?: PropertyName;
+  readonly dotDotDotToken: boolean;
+  readonly initializer?: Expression;
+}
+
+export interface ArrayBindingPattern extends Node {
+  readonly kind: SyntaxKind.ArrayBindingPattern;
+  readonly elements: (BindingElement | undefined)[];
+}
+
+export interface ObjectBindingPattern extends Node {
+  readonly kind: SyntaxKind.ObjectBindingPattern;
+  readonly elements: BindingElement[];
 }
 
 export interface TypeParameterDeclaration extends Node {
@@ -74,6 +97,8 @@ export interface MethodDeclaration extends Node {
   readonly body?: Block;
   readonly flags: NodeFlags;
   readonly optional: boolean;
+  /** Present for `get x()` / `set x(v)` accessors. */
+  readonly accessor?: "get" | "set";
 }
 
 export interface ConstructorDeclaration extends Node {

@@ -413,4 +413,29 @@ describeWithClang("end-to-end compilation", () => {
     `;
     expect(runProgram(source)).toBe("5 3.14\nhi ada");
   });
+
+  it("resolves `.js` specifiers to their TypeScript sources", () => {
+    writeFileSync(join(workdir, "esm_dep.ts"), `export const value = 42;`);
+    const source = `
+      import { value } from "./esm_dep.js";
+      console.log(value);
+    `;
+    expect(runProgram(source)).toBe("42");
+  });
+
+  it("supports destructuring bindings, enums, regexes and Error", () => {
+    const source = `
+      const [a, b = 7, ...rest] = [1, undefined, 3, 4];
+      const { x, y: z = 9 } = { x: 5 };
+      enum Color { Red, Green = 5, Blue }
+      const re = /^-[0-9]+/;
+      console.log(a, b, rest.join(","), x, z);
+      console.log(Color.Red, Color.Green, Color.Blue, Color[5]);
+      console.log(re.test("-42abc"), re.test("nope"));
+      try { throw new Error("boom"); } catch (e) { console.log(e.name + ": " + e.message); }
+    `;
+    expect(runProgram(source)).toBe(
+      "1 7 3,4 5 9\n0 5 6 Green\ntrue false\nError: boom",
+    );
+  });
 });

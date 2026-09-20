@@ -116,6 +116,7 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   Set: "xt_set_ctor",
   Date: "xt_date_ctor",
   RegExp: "xt_regexp_ctor",
+  Error: "xt_error_ctor",
   Promise: "xt_promise_ctor",
   Buffer: "xt_buffer_ctor",
   Readable: "xt_readable_ctor",

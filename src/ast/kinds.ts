@@ -59,6 +59,9 @@ export const enum SyntaxKind {
   AwaitExpression = 43,
   YieldExpression = 44,
   TaggedTemplateExpression = 45,
+  ArrayBindingPattern = 46,
+  ObjectBindingPattern = 47,
+  BindingElement = 48,
 
   // Statements
   ExpressionStatement = 60,
@@ -173,4 +176,5 @@ export const enum ModifierKind {
   Static = "static",
   Readonly = "readonly",
   Async = "async",
+  Const = "const",
 }

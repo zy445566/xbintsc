@@ -169,4 +169,74 @@ describe("parser", () => {
     expect(statement.modifiers).toHaveLength(1);
     expect(statement.modifiers[0].modifierKind).toBe(ModifierKind.Export);
   });
+
+  it("parses array and object binding patterns", () => {
+    const array = first("const [a, b = 2, ...rest] = xs;");
+    const arrayName = array.declarationList.declarations[0].name;
+    expect(arrayName.kind).toBe(SyntaxKind.ArrayBindingPattern);
+    expect(arrayName.elements).toHaveLength(3);
+    expect(arrayName.elements[0].name.text).toBe("a");
+    expect(arrayName.elements[1].initializer.kind).toBe(SyntaxKind.NumericLiteral);
+    expect(arrayName.elements[2].dotDotDotToken).toBeTruthy();
+
+    const object = first("const { x, y: z, w = 1 } = obj;");
+    const objectName = object.declarationList.declarations[0].name;
+    expect(objectName.kind).toBe(SyntaxKind.ObjectBindingPattern);
+    expect(objectName.elements[1].propertyName.text).toBe("y");
+    expect(objectName.elements[1].name.text).toBe("z");
+    expect(objectName.elements[2].initializer.kind).toBe(SyntaxKind.NumericLiteral);
+  });
+
+  it("parses nested and computed binding patterns", () => {
+    const statement = first("const { a: [b, { c }] } = obj;");
+    const outer = statement.declarationList.declarations[0].name;
+    const inner = outer.elements[0].name;
+    expect(inner.kind).toBe(SyntaxKind.ArrayBindingPattern);
+    expect(inner.elements[1].name.kind).toBe(SyntaxKind.ObjectBindingPattern);
+  });
+
+  it("parses const enum declarations", () => {
+    const statement = first("const enum E { A, B = 5, C }");
+    expect(statement.kind).toBe(SyntaxKind.EnumDeclaration);
+    expect(statement.modifiers[0].modifierKind).toBe(ModifierKind.Const);
+    expect(statement.members).toHaveLength(3);
+    expect(statement.members[1].initializer.kind).toBe(SyntaxKind.NumericLiteral);
+  });
+
+  it("parses class getters and setters", () => {
+    const klass = first("class C { get value() { return 1; } set value(v) {} }");
+    expect(klass.members[0].accessor).toBe("get");
+    expect(klass.members[1].accessor).toBe("set");
+  });
+
+  it("accepts keywords as property names", () => {
+    const statement = first("const o = { class: 1, if: 2, default: 3 };");
+    const names = statement.declarationList.declarations[0].initializer.properties.map((p: any) => p.name.text);
+    expect(names).toEqual(["class", "if", "default"]);
+  });
+
+  it("parses import.meta, regex literals, non-null and 'as const'", () => {
+    expect(first("const u = import.meta.url;").declarationList.declarations[0].initializer.kind).toBe(
+      SyntaxKind.PropertyAccessExpression,
+    );
+    expect(first("const r = /ab+c/gi;").declarationList.declarations[0].initializer.kind).toBe(
+      SyntaxKind.RegularExpressionLiteral,
+    );
+    expect(first("const n = value!;").declarationList.declarations[0].initializer.kind).toBe(
+      SyntaxKind.NonNullExpression,
+    );
+    expect(first("const c = [1, 2] as const;").declarationList.declarations[0].initializer.kind).toBe(
+      SyntaxKind.AsExpression,
+    );
+  });
+
+  it("parses export type re-exports", () => {
+    const { diagnostics } = parse('export type { A, B } from "./a.js";');
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
+  it("parses 'this' parameters", () => {
+    const fn = first("function f(this: void, x: number) { return x; }");
+    expect(fn.kind).toBe(SyntaxKind.FunctionDeclaration);
+  });
 });

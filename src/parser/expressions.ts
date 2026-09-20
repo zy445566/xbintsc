@@ -180,9 +180,11 @@ export const expressionMethods: ExpressionMethods = {
       const t = this.lookAhead(i);
       if (t.kind === TokenKind.EndOfFile) return -1;
       if (t.kind === TokenKind.OpenParen || t.kind === TokenKind.OpenBracket || t.kind === TokenKind.OpenBrace) depth++;
-      else if (t.kind === TokenKind.CloseParen || t.kind === TokenKind.CloseBracket || t.kind === TokenKind.CloseBrace) depth--;
-      else if (t.kind === TokenKind.EqualsGreaterThan && depth === 0) return i;
-      else if (t.kind === TokenKind.Semicolon && depth === 0) return -1;
+      else if (t.kind === TokenKind.CloseParen || t.kind === TokenKind.CloseBracket || t.kind === TokenKind.CloseBrace) {
+        if (depth === 0) return -1;
+        depth--;
+      } else if (t.kind === TokenKind.EqualsGreaterThan && depth === 0) return i;
+      else if (depth === 0 && (t.kind === TokenKind.Semicolon || t.kind === TokenKind.Comma)) return -1;
     }
   },
 
@@ -374,7 +376,16 @@ export const expressionMethods: ExpressionMethods = {
       case TokenKind.NoSubstitutionTemplateLiteral:
         return this.parseTemplateLiteral();
       case TokenKind.Slash:
+      case TokenKind.RegularExpressionLiteral:
         return this.parseRegularExpression();
+      case TokenKind.ImportKeyword:
+        if (this.atAhead(1, TokenKind.Dot)) {
+          const importToken = this.nextToken();
+          this.nextToken();
+          const metaName = this.parseIdentifierName();
+          return { kind: SyntaxKind.Identifier, text: "import.meta", start: importToken.start, end: metaName.end };
+        }
+        break;
       default:
         break;
     }
@@ -420,6 +431,11 @@ export const expressionMethods: ExpressionMethods = {
       if (this.at(TokenKind.Backtick) || this.at(TokenKind.TemplateHead) || this.at(TokenKind.NoSubstitutionTemplateLiteral)) {
         const template = this.parseTemplateLiteral();
         expression = { kind: SyntaxKind.TaggedTemplateExpression, tag: expression, template, start: expression.start, end: template.end };
+        continue;
+      }
+      if (token.kind === TokenKind.Exclamation && !token.precededByLineBreak) {
+        this.nextToken();
+        expression = { kind: SyntaxKind.NonNullExpression, expression, start: expression.start, end: token.end };
         continue;
       }
       return expression;

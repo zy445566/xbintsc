@@ -4,15 +4,19 @@
 
 import {
   SyntaxKind,
+  type ArrayBindingPattern,
+  type BindingName,
   type Block,
   type CaseClause,
   type DoStatement,
+  type EnumDeclaration,
   type Expression,
   type ForInStatement,
   type ForOfStatement,
   type ForStatement,
   type Identifier,
   type IfStatement,
+  type ObjectBindingPattern,
   type ReturnStatement,
   type Statement,
   type SwitchStatement,
@@ -23,12 +27,16 @@ import {
   type WhileStatement,
 } from "../../ast/nodes.js";
 import { i64, numberLiteral, XT_UNDEFINED } from "../values.js";
+import { propertyNameText } from "./tables.js";
 import type { Generator } from "./generator.js";
 
 export interface StatementMethods {
   emitStatements(this: Generator, statements: readonly Statement[]): void;
   emitStatement(this: Generator, statement: Statement): void;
   emitVariableStatement(this: Generator, statement: VariableStatement): void;
+  emitBindingPattern(this: Generator, name: BindingName, value: string): void;
+  emitBindingDefault(this: Generator, value: string, initializer: Expression): string;
+  emitEnum(this: Generator, statement: EnumDeclaration): void;
   emitIf(this: Generator, statement: IfStatement): void;
   emitWhile(this: Generator, statement: WhileStatement): void;
   emitDo(this: Generator, statement: DoStatement): void;
@@ -125,6 +133,9 @@ export const statementMethods: StatementMethods = {
         if (declaration) this.emitStatement(declaration);
         return;
       }
+      case SyntaxKind.EnumDeclaration:
+        this.emitEnum(statement as EnumDeclaration);
+        return;
       default:
         this.unsupported(statement, "statement");
     }
@@ -132,14 +143,112 @@ export const statementMethods: StatementMethods = {
 
   emitVariableStatement(statement: VariableStatement): void {
     for (const declaration of statement.declarationList.declarations) {
-      const symbol = this.binding.symbolOfDeclaration.get(declaration);
-      if (!symbol) continue;
-      if (this.current.slots.has(symbol.id)) continue; // hoisted `var`
       const initial = declaration.initializer
         ? this.emitExpression(declaration.initializer)
         : i64(XT_UNDEFINED);
-      this.declareSlot(symbol, initial);
+      if (declaration.name.kind === SyntaxKind.Identifier) {
+        const symbol = this.binding.symbolOfDeclaration.get(declaration);
+        if (!symbol) continue;
+        if (this.current.slots.has(symbol.id)) continue; // hoisted `var`
+        this.declareSlot(symbol, initial);
+      } else {
+        this.emitBindingPattern(declaration.name, initial);
+      }
     }
+  },
+
+  /** Lower a destructuring binding pattern, declaring each bound identifier. */
+  emitBindingPattern(name: BindingName, value: string): void {
+    if (name.kind === SyntaxKind.Identifier) {
+      const symbol = this.binding.symbolOfDeclaration.get(name);
+      if (!symbol) return;
+      if (this.current.slots.has(symbol.id)) this.writeSlot(symbol, value);
+      else this.declareSlot(symbol, value);
+      return;
+    }
+    if (name.kind === SyntaxKind.ArrayBindingPattern) {
+      const pattern = name as ArrayBindingPattern;
+      for (let index = 0; index < pattern.elements.length; index++) {
+        const element = pattern.elements[index];
+        if (!element) continue;
+        let elementValue: string;
+        if (element.dotDotDotToken) {
+          const startPtr = this.alloca();
+          this.emit(`  store i64 ${numberLiteral(index)}, i64* ${startPtr}`);
+          const sliceName = this.stringValue("slice");
+          elementValue = this.reg();
+          this.emit(`  ${elementValue} = call i64 @xt_call_method(i64 ${value}, i64 ${sliceName}, i32 1, i64* ${startPtr})`);
+        } else {
+          elementValue = this.reg();
+          this.emit(`  ${elementValue} = call i64 @xt_get(i64 ${value}, i64 ${numberLiteral(index)})`);
+        }
+        if (element.initializer) elementValue = this.emitBindingDefault(elementValue, element.initializer);
+        this.emitBindingPattern(element.name, elementValue);
+      }
+      return;
+    }
+    const pattern = name as ObjectBindingPattern;
+    for (const element of pattern.elements) {
+      const key = element.propertyName ?? (element.name.kind === SyntaxKind.Identifier ? element.name : undefined);
+      if (element.dotDotDotToken) {
+        this.unsupported(element, "object rest destructuring");
+        continue;
+      }
+      const keyValue = this.stringValue(key ? propertyNameText(key) : "undefined");
+      let elementValue = this.reg();
+      this.emit(`  ${elementValue} = call i64 @xt_get(i64 ${value}, i64 ${keyValue})`);
+      if (element.initializer) elementValue = this.emitBindingDefault(elementValue, element.initializer);
+      this.emitBindingPattern(element.name, elementValue);
+    }
+  },
+
+  /** `x = fallback` in a binding pattern: only apply when `x` is `undefined`. */
+  emitBindingDefault(value: string, initializer: Expression): string {
+    const fallback = this.emitExpression(initializer);
+    const isUndefined = this.reg();
+    this.emit(`  ${isUndefined} = call i64 @xt_seq(i64 ${value}, i64 ${i64(XT_UNDEFINED)})`);
+    const truthy = this.reg();
+    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${isUndefined})`);
+    const condition = this.reg();
+    this.emit(`  ${condition} = icmp ne i32 ${truthy}, 0`);
+    const result = this.reg();
+    this.emit(`  ${result} = select i1 ${condition}, i64 ${fallback}, i64 ${value}`);
+    return result;
+  },
+
+  /**
+   * `enum E { A, B }` (and `const enum`) lowers to a runtime object with both
+   * forward (`E.A`) and reverse (`E[0] === "A"`) numeric mappings.
+   */
+  emitEnum(statement: EnumDeclaration): void {
+    const symbol = this.binding.symbolOfDeclaration.get(statement);
+    const object = this.reg();
+    this.emit(`  ${object} = call i64 @xt_object_new()`);
+    let next = 0;
+    for (const member of statement.members) {
+      const name = propertyNameText(member.name);
+      const key = this.stringValue(name);
+      let value: string;
+      if (member.initializer) {
+        value = this.emitExpression(member.initializer);
+        if (member.initializer.kind === SyntaxKind.NumericLiteral) {
+          const numeric = (member.initializer as { value?: number }).value ?? 0;
+          next = numeric + 1;
+        } else {
+          next++; 
+        }
+      } else {
+        value = numberLiteral(next);
+        next++;
+      }
+      this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
+      // Reverse mapping (only meaningful for numeric members).
+      if (!member.initializer || member.initializer.kind === SyntaxKind.NumericLiteral) {
+        const reverseKey = this.stringValue(name);
+        this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${value}, i64 ${reverseKey})`);
+      }
+    }
+    if (symbol) this.declareSlot(symbol, object);
   },
 
   emitIf(statement: IfStatement): void {
@@ -300,7 +409,11 @@ export const statementMethods: StatementMethods = {
     if (initializer.kind === SyntaxKind.VariableDeclarationList) {
       const declaration = initializer.declarations[0];
       if (!declaration) return;
-      const symbol = this.binding.symbolOfDeclaration.get(declaration);
+      if (declaration.name.kind !== SyntaxKind.Identifier) {
+        this.emitBindingPattern(declaration.name, value);
+        return;
+      }
+      const symbol = this.binding.symbolOfDeclaration.get(declaration) ?? this.binding.symbolOfDeclaration.get(declaration.name);
       if (symbol) {
         if (this.current.slots.has(symbol.id)) this.writeSlot(symbol, value);
         else this.declareSlot(symbol, value);

@@ -5,6 +5,7 @@
 import { SyntaxKind } from "./kinds.js";
 import type { Expression, Modifier, Node, Statement, TypeNode } from "./common.js";
 import type { Identifier } from "./expressions.js";
+import type { BindingName } from "./declarations.js";
 
 // ---------------------------------------------------------------------------
 // Statements
@@ -30,7 +31,7 @@ export interface DebuggerStatement extends Node {
 
 export interface VariableDeclaration extends Node {
   readonly kind: SyntaxKind.VariableDeclaration;
-  readonly name: Identifier;
+  readonly name: BindingName;
   readonly exclamation: boolean;
   readonly type?: TypeNode;
   readonly initializer?: Expression;

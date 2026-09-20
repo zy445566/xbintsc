@@ -73,6 +73,35 @@ export function compileString(source: string, fileName = "input.ts", extensions?
   return { ir, diagnostics: diagnostics.diagnostics };
 }
 
+/**
+ * Compile a file to LLVM IR, bundling every reachable relative module first so
+ * that imports from other TypeScript sources resolve exactly like `build`.
+ */
+export function compileEntry(entryPath: string, extensions?: ExtensionRegistry): CompileStringResult {
+  const absoluteEntry = resolve(entryPath);
+  const sourceText = readFileSync(absoluteEntry, "utf8");
+  const file = new SourceFile(absoluteEntry, sourceText);
+  const diagnostics = new DiagnosticBag();
+  const parser = new Parser(file, diagnostics);
+  let sourceFile = parser.parseSourceFile();
+  const isModule = sourceFile.statements.some(
+    (statement) =>
+      statement.kind === SyntaxKind.ImportDeclaration ||
+      statement.kind === SyntaxKind.ExportDeclaration ||
+      statement.kind === SyntaxKind.ExportAssignment,
+  );
+  if (isModule) {
+    const bundled = bundleModules(absoluteEntry, diagnostics);
+    if (bundled) sourceFile = bundled.sourceFile;
+  }
+  const registry = extensions ?? createDefaultRegistry();
+  const { ir } = generate(sourceFile, diagnostics, {
+    builtins: registry.builtins(),
+    modules: registry.modules(),
+  });
+  return { ir, diagnostics: diagnostics.diagnostics };
+}
+
 function executableName(entry: string, outDir: string, explicit: string | undefined): string {
   if (explicit) return resolve(explicit);
   const base = basename(entry, extname(entry));

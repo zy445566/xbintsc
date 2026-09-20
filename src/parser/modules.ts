@@ -126,6 +126,11 @@ export const moduleMethods: ModuleMethods = {
       const assignment: ExportAssignment = { kind: SyntaxKind.ExportAssignment, isExportEquals: false, expression, start, end: expression.end };
       return assignment;
     }
+    let isTypeOnly = false;
+    if (this.at(TokenKind.TypeKeyword) && (this.atAhead(1, TokenKind.OpenBrace) || this.atAhead(1, TokenKind.Asterisk))) {
+      isTypeOnly = true;
+      this.nextToken();
+    }
     if (this.at(TokenKind.Asterisk)) {
       this.nextToken();
       let nsName: Identifier | undefined;
@@ -144,7 +149,7 @@ export const moduleMethods: ModuleMethods = {
         modifiers: [],
         exportClause: nsName ? { kind: SyntaxKind.NamespaceImport, name: nsName, start: nsName.start, end: nsName.end } : undefined,
         moduleSpecifier,
-        isTypeOnly: false,
+        isTypeOnly,
         start,
         end: moduleSpecifier?.end ?? nsName?.end ?? start,
       };
@@ -158,7 +163,7 @@ export const moduleMethods: ModuleMethods = {
         if (this.at(TokenKind.StringLiteral)) moduleSpecifier = this.stringLiteralFromToken(this.nextToken());
       }
       this.parseSemicolon();
-      const decl: ExportDeclaration = { kind: SyntaxKind.ExportDeclaration, modifiers: [], exportClause: namedExports, moduleSpecifier, isTypeOnly: false, start, end: moduleSpecifier?.end ?? namedExports.end };
+      const decl: ExportDeclaration = { kind: SyntaxKind.ExportDeclaration, modifiers: [], exportClause: namedExports, moduleSpecifier, isTypeOnly, start, end: moduleSpecifier?.end ?? namedExports.end };
       return decl;
     }
     const modifiers = this.tryParseModifiers();

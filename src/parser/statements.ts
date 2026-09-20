@@ -4,7 +4,7 @@
  */
 
 import { DiagnosticCode } from "../diagnostics/diagnostic.js";
-import { isOfKeyword, TokenKind } from "../lexer/token.js";
+import { isIdentifierNameToken, isKeywordKind, isOfKeyword, TokenKind } from "../lexer/token.js";
 import {
   ModifierKind,
   SyntaxKind,
@@ -58,6 +58,15 @@ export const statementMethods: StatementMethods = {
     const modifiers: Modifier[] = [];
     for (;;) {
       const kind = this.token.kind;
+      const nextKind = this.lookAhead(1).kind;
+      const nextStartsName =
+        isIdentifierNameToken(nextKind) ||
+        isKeywordKind(nextKind) ||
+        nextKind === TokenKind.OpenBracket ||
+        nextKind === TokenKind.StringLiteral ||
+        nextKind === TokenKind.NumericLiteral ||
+        nextKind === TokenKind.Asterisk ||
+        nextKind === TokenKind.OpenBrace;
       let modifierKind: ModifierKind | undefined;
       switch (kind) {
         case TokenKind.ExportKeyword:
@@ -89,6 +98,9 @@ export const statementMethods: StatementMethods = {
         case TokenKind.ReadonlyKeyword:
           modifierKind = ModifierKind.Readonly;
           break;
+        case TokenKind.ConstKeyword:
+          if (this.atAhead(1, TokenKind.EnumKeyword)) modifierKind = ModifierKind.Const;
+          break;
         case TokenKind.AsyncKeyword:
           if (!this.lookAhead(1).precededByLineBreak) modifierKind = ModifierKind.Async;
           break;
@@ -96,6 +108,10 @@ export const statementMethods: StatementMethods = {
           break;
       }
       if (!modifierKind) break;
+      // Contextual modifiers (`declare`, `readonly`, `static`, …) are only
+      // modifiers when a member/declaration name follows; otherwise they are
+      // names themselves (`private declare(...)`, `readonly()`).
+      if (modifierKind !== ModifierKind.Export && modifierKind !== ModifierKind.Default && !nextStartsName) break;
       const token = this.nextToken();
       modifiers.push({ kind: SyntaxKind.Unknown, modifierKind, start: token.start, end: token.end });
     }
@@ -120,6 +136,10 @@ export const statementMethods: StatementMethods = {
       case TokenKind.VarKeyword:
       case TokenKind.LetKeyword:
       case TokenKind.ConstKeyword:
+        if (this.at(TokenKind.ConstKeyword) && this.atAhead(1, TokenKind.EnumKeyword)) {
+          const constToken = this.nextToken();
+          return this.parseEnumDeclaration([{ kind: SyntaxKind.Unknown, modifierKind: ModifierKind.Const, start: constToken.start, end: constToken.end }]);
+        }
         return this.parseVariableStatement([]);
       case TokenKind.FunctionKeyword:
         return this.parseFunctionDeclaration([]);
@@ -186,6 +206,10 @@ export const statementMethods: StatementMethods = {
       case TokenKind.VarKeyword:
       case TokenKind.LetKeyword:
       case TokenKind.ConstKeyword:
+        if (this.at(TokenKind.ConstKeyword) && this.atAhead(1, TokenKind.EnumKeyword)) {
+          const constToken = this.nextToken();
+          return this.parseEnumDeclaration([...modifiers, { kind: SyntaxKind.Unknown, modifierKind: ModifierKind.Const, start: constToken.start, end: constToken.end }]);
+        }
         return this.parseVariableStatement(modifiers);
       case TokenKind.FunctionKeyword:
         return this.parseFunctionDeclaration(modifiers);
@@ -244,9 +268,9 @@ export const statementMethods: StatementMethods = {
   },
 
   parseVariableDeclaration(this: Parser): VariableDeclaration {
-    const name = this.parseIdentifier();
+    const name = this.parseBindingName();
     let exclamation = false;
-    if (this.at(TokenKind.Exclamation)) {
+    if (name.kind === SyntaxKind.Identifier && this.at(TokenKind.Exclamation)) {
       this.nextToken();
       exclamation = true;
     }

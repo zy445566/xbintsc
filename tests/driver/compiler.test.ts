@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { build, compileString } from "../../src/driver/compiler.js";
+import { build, compileEntry, compileString } from "../../src/driver/compiler.js";
 import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
 
 const directories: string[] = [];
@@ -28,6 +28,20 @@ describe("compileString", () => {
   it("reports parse errors without producing a broken module", () => {
     const { diagnostics } = compileString("const = ;", "bad.ts");
     expect(diagnostics.some((d) => d.category === "error")).toBe(true);
+  });
+});
+
+describe("compileEntry", () => {
+  it("bundles relative modules, resolving `.js` specifiers to `.ts` sources", () => {
+    const directory = temporaryDirectory();
+    writeFileSync(join(directory, "dep.ts"), "export const value = 40;\n");
+    const entry = join(directory, "main.ts");
+    writeFileSync(entry, 'import { value } from "./dep.js";\nconsole.log(value + 2);\n');
+
+    const { ir, diagnostics } = compileEntry(entry);
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    // Both the imported constant and the message are lowered into one module.
+    expect(ir).toContain("@xt_add");
   });
 });
 

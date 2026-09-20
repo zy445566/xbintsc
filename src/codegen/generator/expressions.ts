@@ -69,6 +69,22 @@ export const expressionMethods: ExpressionMethods = {
         return this.stringValue((node as { value: string }).value);
       case SyntaxKind.NoSubstitutionTemplateLiteral:
         return this.stringValue((node as { value: string }).value);
+      case SyntaxKind.RegularExpressionLiteral: {
+        const regex = node as { pattern: string; flags: string };
+        const pattern = this.stringValue(regex.pattern);
+        const flags = this.stringValue(regex.flags);
+        const ptr = `%regex${this.current.allocas.length}`;
+        this.current.allocas.push(`${ptr} = alloca i64, i32 2`);
+        const slot0 = this.reg();
+        this.emit(`  ${slot0} = getelementptr i64, i64* ${ptr}, i32 0`);
+        this.emit(`  store i64 ${pattern}, i64* ${slot0}`);
+        const slot1 = this.reg();
+        this.emit(`  ${slot1} = getelementptr i64, i64* ${ptr}, i32 1`);
+        this.emit(`  store i64 ${flags}, i64* ${slot1}`);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_regexp_ctor(i32 2, i64* ${ptr})`);
+        return result;
+      }
       case SyntaxKind.TemplateLiteral:
         return this.emitTemplate(node as TemplateLiteral);
       case SyntaxKind.TrueKeyword:
@@ -87,6 +103,15 @@ export const expressionMethods: ExpressionMethods = {
         return this.emitExpression((node as { expression: Expression }).expression);
       case SyntaxKind.DeleteExpression:
         return this.emitDelete(node as DeleteExpression);
+      case SyntaxKind.TypeOfExpression: {
+        const operand = this.emitExpression((node as { expression: Expression }).expression);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_typeof(i64 ${operand})`);
+        return result;
+      }
+      case SyntaxKind.VoidExpression:
+        this.emitExpression((node as { expression: Expression }).expression);
+        return i64(XT_UNDEFINED);
       case SyntaxKind.ThisKeyword:
         return this.emitThis();
       case SyntaxKind.NewExpression:

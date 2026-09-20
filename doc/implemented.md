@@ -322,7 +322,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`)
 
 - Per-module unit tests; when `clang` is present, e2e really compiles and runs binaries, otherwise it is skipped automatically.
-- e2e coverage: arithmetic and printing, recursive functions, loops / arrays / string concatenation, closures capturing by reference, JS-style printing of objects / arrays, the Node `fs` extension via `import`, `switch` fall-through, array / string methods, `Math` and global functions and all `console` levels, default / rest parameters and `arguments`, `Object` helpers and spread and `in`/`delete`, `for...in` object key enumeration, `try/catch/finally`, optional chaining, classes and `new`/`this`/`static`/`extends`/`super`/`instanceof`, `async`/`await` and `Promise`, `Map`/`Set`/`JSON` and extended standard library, multi-file `import`/`export`.
+- e2e coverage: arithmetic and printing, recursive functions, loops / arrays / string concatenation, closures capturing by reference, JS-style printing of objects / arrays, the Node `fs` extension via `import`, `switch` fall-through, array / string methods, `Math` and global functions and all `console` levels, default / rest parameters and `arguments`, `Object` helpers and spread and `in`/`delete`, `for...in` object key enumeration, `try/catch/finally`, optional chaining, classes and `new`/`this`/`static`/`extends`/`super`/`instanceof`, `async`/`await` and `Promise`, `Map`/`Set`/`JSON` and extended standard library, multi-file `import`/`export` (including `.js` specifiers), destructuring bindings, `enum`/`const enum`, regular-expression literals and `new Error(...)`.
 
 ---
 
@@ -330,14 +330,14 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 
 | Category | Contents |
 | --- | --- |
-| Declarations | `var` `let` `const`, function declarations, function expressions, arrow functions, `class` (declaration / expression), interfaces / type aliases (erased) |
+| Declarations | `var` `let` `const`, function declarations, function expressions, arrow functions, `class` (declaration / expression), `enum` / `const enum`, interfaces / type aliases (erased) |
 | Control flow | `if/else`, `while`, `do...while`, `for`, `for...of`, `for...in`, `switch`, `try/catch/finally`, `break`, `continue`, `return`, `throw` |
-| Expressions | Identifiers, literals, template strings, array / object literals (with spread), calls, member / element access, optional chaining, closures, `arguments`, `this`, `new`, `super`, `await` |
+| Expressions | Identifiers, literals, template strings, regular-expression literals, array / object literals (with spread), calls, member / element access, optional chaining, non-null `!`, closures, `arguments`, `this`, `new`, `super`, `await` |
 | Operators | Arithmetic, comparison, equality, logical, bitwise, shift, unary (including `typeof`/`void`), prefix/postfix increment-decrement, compound assignment, logical assignment, `in`, `delete`, `instanceof` |
 | Functions | Default parameters, rest parameters, capturing closures, `this` binding, lexical `this` in arrow functions |
 | Classes / OO | Constructors, instance fields, methods, `static`, inheritance `extends`/`super`, prototype chain, `instanceof` |
 | Async | `async`/`await`, `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), synchronous microtask queue |
-| Modules | `import`/`export` (named / default / re-export / `export *`), multi-file bundling over relative paths, bare specifiers resolved to extension modules |
+| Modules | `import`/`export` (named / default / re-export / `export *` / `export type`), multi-file bundling over relative paths (`.js` specifiers resolve to `.ts` sources), bare specifiers resolved to extension modules |
 | Standard library | Array / string / number / object extension methods, `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `Object/Array/Number/String` statics, `console.*` |
 | Value model | 64-bit NaN-boxing, uniform function ABI (including `this`), closure environments, object prototype chains |
 | Runtime | Strings / objects / arrays / closures / arithmetic / comparison / catchable exceptions / Promise / collections / `console` |

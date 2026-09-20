@@ -243,6 +243,11 @@ export const typeMethods: TypeMethods = {
         const literal: NumericLiteral = { kind: SyntaxKind.NumericLiteral, text: `-${num.text}`, value: -Number(num.value ?? 0), start, end: num.end };
         return { kind: SyntaxKind.LiteralType, literal, start, end: num.end };
       }
+      case TokenKind.ConstKeyword: {
+        // `as const` const assertion: erased like any other type.
+        this.nextToken();
+        return { kind: SyntaxKind.AnyKeywordType, start, end: token.end };
+      }
       case TokenKind.ImportKeyword: {
         // import("...").T - parse loosely and degrade to `any`.
         this.nextToken();

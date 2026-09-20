@@ -7,6 +7,7 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findRuntimeDir } from "../../driver/paths.js";
 import type { BuiltinFunction, ModuleExports } from "../registry.js";
 
 export interface NodeModule {
@@ -26,7 +27,18 @@ export interface NodeModule {
   exports?(): ModuleExports;
 }
 
-/** Resolve a path relative to the folder of the module that calls this. */
+/**
+ * Resolve a C runtime source that is written relative to an extension module
+ * (e.g. `../../../../runtime/ext_node/fs/read_file.c`).
+ *
+ * When running from source the page is resolved against the calling module's
+ * own URL, but inside a compiled xbintsc binary `import.meta.url` points at the
+ * executable, so the module-relative form no longer resolves. Anchor on the
+ * discovered runtime directory instead, which is correct in both worlds.
+ */
 export function resolveFrom(importMetaUrl: string, relative: string): string {
+  const marker = "runtime/";
+  const index = relative.indexOf(marker);
+  if (index >= 0) return resolve(findRuntimeDir(), relative.slice(index + marker.length));
   return resolve(dirname(fileURLToPath(importMetaUrl)), relative);
 }

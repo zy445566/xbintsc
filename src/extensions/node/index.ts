@@ -22,6 +22,9 @@ import { streamModule } from "./stream/index.js";
 import { netModule } from "./net/index.js";
 import { dgramModule } from "./dgram/index.js";
 import { httpModule } from "./http/index.js";
+import { urlModule } from "./url/index.js";
+import { cryptoModule } from "./crypto/index.js";
+import { childProcessModule } from "./child_process/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -35,6 +38,9 @@ const modules: readonly NodeModule[] = [
   netModule,
   dgramModule,
   httpModule,
+  urlModule,
+  cryptoModule,
+  childProcessModule,
 ];
 
 export const nodeExtension: Extension = {

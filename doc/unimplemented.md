@@ -15,6 +15,8 @@ Criteria (ordered by severity):
 
 > Recently completed (this batch): `class` declarations / class expressions, `new` / `this`, inheritance `extends` / `super`, `instanceof`, methods / static members / instance fields, `async` / `await` + `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), multi-file `import` / `export` bundling (including `.js` → `.ts` specifier resolution), `Map` / `Set` / `Date` / `RegExp` / `JSON`, and a large set of array / string / number / object / console extension methods.
 
+> Newest batch: **self-hosting** — `xbintsc` now compiles its own `src/cli/main.ts` to a native binary, and the emitted LLVM IR reaches a fixpoint (source ≡ generation 1 ≡ generation 2 ≡ generation 3, byte-identical). Along the way the runtime gained array `length` assignment (truncate / extend), spread of iterables (`[...set]`, `[...map]`, `"abc"`), `for...of` over `Map` / `Set`, and the binder now records computed property names (`{ [E.A]: 1 }`).
+
 > Most recent batch: array / object **destructuring bindings** (declarations, parameters, `for...of`, defaults, rest, nested and computed keys), **`enum` / `const enum`** declarations (forward + reverse mapping, usable across modules), **regular-expression literals** (`/re/flags`, lowered to `xt_regexp_ctor`), **`typeof` / `void`** expression codegen, `new Error(...)` (`xt_error_ctor`) and `extends Error`, plus parser support for `import.meta`, keyword property names, `as const`, `this` parameters, getter/setter accessors and `export type` re-exports.
 
 > Completed earlier: `switch`, `try/catch/finally`, object spread, `delete`, `in`, array / string methods, `Math`, `Object.keys/values/entries/assign`, global functions, `console.error/warn/info`, `arguments`, default / rest parameters, optional chaining short-circuit, `for...in` object key enumeration.
@@ -97,9 +99,9 @@ Criteria (ordered by severity):
 | --- | --- |
 | `Symbol` constructor and symbol primitives | ✗ not implemented |
 | `BigInt` arbitrary precision | ✗ (literals degrade to double) |
-| `Error` constructor / `message` / `stack` | ✗ not implemented (any value can be thrown) |
+| `Error` constructor / `message` / `stack` | ✓ `new Error(...)` / `extends Error` implemented; other error subclasses (`TypeError`, …) not yet |
 | Timers / I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
-| Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | ✗ not implemented |
+| Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | partial: arrays, strings, `Map` and `Set` are iterable in `for...of` / spread; a user-defined `Symbol.iterator` is not consulted |
 | Generators / async iteration | ✗ not implemented |
 
 ---
@@ -180,7 +182,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Item | Deviation |
 | --- | --- |
 | `finally` and early exit | `return` / `break` / `continue` leaving a `try` region **does not execute `finally`**; `finally` runs on normal completion, after `catch` completes, and on propagation of an uncaught exception. The runtime still pops the `try` frame correctly, so it does not crash |
-| Exception objects | Any value can be thrown / caught (string, number, object), but there is no `Error` constructor, `message` / `stack`, or error subclasses |
+| Exception objects | Any value can be thrown / caught (string, number, object), and `new Error(...)` / `extends Error` are supported; `stack` capture and the other built-in error subclasses (`TypeError`, …) are not implemented |
 | `for...in` | Enumerates keys of objects / arrays / strings (arrays and strings yield string indices), but does not include prototype chain properties; behavior after `delete` is broadly consistent with JS |
 | String `length` | Counted by UTF-8 bytes / code points at runtime, not by JS's UTF-16 code units (emoji and non-BMP characters report a smaller length) |
 | BigInt | Literals are converted to double via `Number()`, losing arbitrary precision |
@@ -188,13 +190,14 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Loose equality `==` | Only a subset is implemented (number/string/bool/null/undefined); objects compare by reference, no ToPrimitive |
 | `+` addition | The ToPrimitive path for number + object / array is incomplete |
 | Object spread `{...obj}` | Only copies the object's own enumerable properties; index copying for array / string spread is limited |
+| Spread of iterables | `[...arr]`, `[...set]`, `[...map]`, `[...str]` and array-literal spread (`["a", ...set]`) are supported; call-argument spread `f(...args)` is still unsupported |
 | Optional chaining `?.` | Nullish short-circuit is node-by-node: `a?.b`, `a?.[b]`, `a?.b()`, `a?.[b]()`, `a?.()` all short-circuit correctly; but a non-optional member chained after the optional part (e.g. `a?.b.c()`) does not short-circuit as a whole — `a?.b.c` first yields `undefined`, then `.c` is taken on it, and the final call throws |
-| Array out-of-bounds / sparse | Out-of-bounds access returns `undefined` and is generally usable, but length / sparse semantics differ from JS |
+| Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Bump arena never frees; no GC; long-lived programs grow continuously |
 | Function `arity` / argument count | No argument count validation |
 | `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously, and pending promises are driven by the runtime microtask queue at `await` and program exit; there is no real event loop, so timers / I/O cannot be awaited |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
-| Classes | No `get`/`set` accessor semantics, no access control, no automatic parameter property assignment |
+| Classes | No access control; `get`/`set` accessors and constructor parameter properties are implemented |
 | `import` / `export` | Driver-layer AST bundling, top-level symbols renamed by module prefix; extension modules importable by bare/`node:` specifier; namespace imports `import * as` of relative modules are unimplemented, circular dependencies error out, `export *` is approximate |
 
 ---
@@ -204,9 +207,9 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Item | Status |
 | --- | --- |
 | GC (garbage collection) | ✗ deliberately deferred; `xt_alloc` is isolated but not yet replaced with a precise / conservative collector |
-| Self-hosting | ✗ roadmap planned (see [DESIGN.md](./DESIGN.md) / [README](../README.md)), not yet implemented: the runtime is still C, and the compiler does not compile itself with xbintsc |
+| Self-hosting | ✓ the compiler compiles itself: `xbintsc build src/cli/main.ts` produces a working binary, and the emitted IR is stable from generation 1 onward. The runtime is still C |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
-| Full standard library (Math / JSON / Date / collections, etc.) | partial: Math / JSON / Date / Map / Set / RegExp implemented; Symbol / BigInt / Error not implemented |
+| Full standard library (Math / JSON / Date / collections, etc.) | partial: Math / JSON / Date / Map / Set / RegExp / `Error` implemented; Symbol / BigInt not implemented |
 | Multi-file module bundling | partial: relative-path `.ts` import bundling implemented, plus bare-specifier extension module imports; namespace imports of relative modules / circular dependencies / npm not implemented |
 | A real async runtime / event loop | ✗ (Promise is a synchronous microtask model) |
 | Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), but needs CI verification (`.github/workflows` is configured) |

@@ -35,6 +35,10 @@ source.ts
 
 - Front end, back end, runtime and extensions are fully decoupled.
 - The flow is orchestrated by `src/driver/compiler.ts`: `read → parse → bind → IR → object file → link`.
+- **Self-hosting**: `xbintsc` compiles its own front end. Building `src/cli/main.ts`
+  with the compiler yields a working `xbintsc` binary, and that binary rebuilds
+  itself with byte-identical LLVM IR (source ≡ generation 1 ≡ generation 2 ≡
+  generation 3). The runtime is still hand-written C.
 
 ---
 
@@ -89,8 +93,8 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 - Arrow functions `() => expr` / `() => { ... }` (including type parameters and return type annotations)
 - Function expressions `function () {}` and named function expressions `function g() {}`
 - Call expressions `f(...)`, member access `a.b`, element access `a[i]`
-- Array literals `[1, 2]`, sparse array elision, array spread `[...a]`
-- Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`
+- Array literals `[1, 2]`, sparse array elision, spread `[...a]` (also over strings, `Map` and `Set`)
+- Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`, computed keys `{ [expr]: 1 }`, object spread `{ ...obj }`
 - Template literal `${}` substitutions, tagged templates (parsed only, see the [unimplemented document](./unimplemented.md))
 - Parenthesized expressions, `as` / `satisfies` / non-null assertion `!` (type erasure)
 - Unary: `+ - ! ~ typeof void`, prefix / postfix `++ --`
@@ -204,6 +208,7 @@ Location: `src/codegen/llvm.ts`
 - Emits LLVM IR text (`.ll`); no custom register allocation (relies on `alloca` + mem2reg).
 - Statement / block boundary values live in `alloca`; conditionals and short-circuits materialize into temporary slots instead of `phi`.
 - Control flow: `if` / `while` / `do` / `for` / `for...of` / `for...in`, `switch`, `try/catch/finally`, `break` / `continue` / `return`.
+  - `for...of` and spread iterate arrays, strings, `Map` and `Set` through `xt_iter_length` / `xt_iter_value` (`Map` yields `[key, value]` pairs).
   - `switch` tests each `case` with strict equality, executes on a hit, and falls through until `break`.
   - `try/catch/finally` is implemented with a runtime `_setjmp` frame: `xt_try_enter` pushes, `_setjmp` catches, `xt_throw` long-jumps. The IR passes the caller's frame address (`@llvm.frameaddress(0)`) as the second `_setjmp` argument, matching clang's MSVC lowering: the Windows UCRT `_setjmp` stores that frame in `_JUMP_BUFFER.Frame` and `longjmp` feeds it to `RtlUnwind`, so omitting it made `longjmp` unwind to a bogus target (`STATUS_BAD_FUNCTION_TABLE`). `_setjmp` is used rather than the exported `setjmp` symbol, whose Windows ABI is an incompatible two-argument routine. Functions containing `try` force local variables to stay in memory (inline-asm escape points) so values survive a long jump.
   - `for...in` reuses `xt_object_keys` to enumerate keys (arrays / strings yield string indices).
@@ -240,7 +245,7 @@ Location: `runtime/xt_alloc.c`, `runtime/xt_values.c`, `runtime/xt_containers.c`
 - Bitwise: `and/or/xor/not/shl/shr/ushr` (including `ToInt32` semantics).
 - Comparison: `lt/le/gt/ge`, loose / strict equality, `not`, `is_nullish`.
 - Objects: linear property list, `object_new/get/set/has/keys/values/entries/assign/spread`.
-- Arrays: `array_new/get/set/push/length/spread`.
+- Arrays: `array_new/get/set/push/length/spread`; assigning `arr.length` truncates or extends (matching JS); `iter_length` / `iter_value` expose a uniform iteration view over arrays, strings, `Map` and `Set`.
 - Generic member access: `xt_get` / `xt_set` (dispatch over arrays / objects / strings).
 - Standard library: `xt_call_method` (uniform dispatch of array / string methods and function properties on objects), `xt_math_call` (`Math.*` and constants), global functions `xt_parse_int/parse_float/is_nan/is_finite/number_ctor/string_ctor/boolean_ctor`.
 - Operator helpers: `xt_in` (`in`), `xt_delete` (`delete`), `xt_rest_args` (rest parameters / `arguments`).
@@ -322,7 +327,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`)
 
 - Per-module unit tests; when `clang` is present, e2e really compiles and runs binaries, otherwise it is skipped automatically.
-- e2e coverage: arithmetic and printing, recursive functions, loops / arrays / string concatenation, closures capturing by reference, JS-style printing of objects / arrays, the Node `fs` extension via `import`, `switch` fall-through, array / string methods, `Math` and global functions and all `console` levels, default / rest parameters and `arguments`, `Object` helpers and spread and `in`/`delete`, `for...in` object key enumeration, `try/catch/finally`, optional chaining, classes and `new`/`this`/`static`/`extends`/`super`/`instanceof`, `async`/`await` and `Promise`, `Map`/`Set`/`JSON` and extended standard library, multi-file `import`/`export` (including `.js` specifiers), destructuring bindings, `enum`/`const enum`, regular-expression literals and `new Error(...)`.
+- e2e coverage: arithmetic and printing, recursive functions, loops / arrays / string concatenation, closures capturing by reference, JS-style printing of objects / arrays, the Node `fs` extension via `import`, `switch` fall-through, array / string methods, `Math` and global functions and all `console` levels, default / rest parameters and `arguments`, `Object` helpers and spread and `in`/`delete`, `for...in` object key enumeration, `try/catch/finally`, optional chaining, classes and `new`/`this`/`static`/`extends`/`super`/`instanceof`, `async`/`await` and `Promise`, `Map`/`Set`/`JSON` and extended standard library, `for...of` over `Map`/`Set`, array `length` assignment and iterable spread, multi-file `import`/`export` (including `.js` specifiers), destructuring bindings, `enum`/`const enum`, regular-expression literals and `new Error(...)`.
 
 ---
 
@@ -343,4 +348,5 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 | Runtime | Strings / objects / arrays / closures / arithmetic / comparison / catchable exceptions / Promise / collections / `console` |
 | Extensions | Extension registry, `core` (print), `node` (fs / path / os / process / buffer / stream / net / dgram / http imported by specifier) |
 | Toolchain | clang compiles IR/C, linking, incremental cache |
+| Self-hosting | `xbintsc` compiles `src/cli/main.ts` to a native binary; the emitted IR is at a fixpoint from generation 1 |
 | Platforms | macOS / Linux / Windows (adapted at the build level, CI in `.github/workflows`) |

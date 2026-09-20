@@ -240,12 +240,12 @@ export class Scanner {
     const cleaned = raw.replace(/_/g, "");
     if (isBigInt) {
       raw = raw.slice(0, -1).replace(/_/g, "");
-      try {
-        return this.makeToken(TokenKind.BigIntLiteral, start, this.pos, raw, precededByLineBreak, BigInt(raw));
-      } catch {
+      const parsed = Number(raw);
+      if (parsed !== parsed) {
         this.error(DiagnosticCode.InvalidNumber, `Invalid BigInt literal '${raw}'`, start, this.pos);
-        return this.makeToken(TokenKind.BigIntLiteral, start, this.pos, raw, precededByLineBreak, 0n);
+        return this.makeToken(TokenKind.BigIntLiteral, start, this.pos, raw, precededByLineBreak, 0);
       }
+      return this.makeToken(TokenKind.BigIntLiteral, start, this.pos, raw, precededByLineBreak, parsed);
     }
     let value: number;
     if (/^0[xX]/.test(cleaned)) value = parseInt(cleaned.slice(2), 16);

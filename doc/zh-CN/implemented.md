@@ -30,6 +30,7 @@ source.ts
 
 - 前端与后端、运行时、扩展完全解耦。
 - 流程由 `src/driver/compiler.ts` 串起：`读取 → 解析 → 绑定 → IR → 目标文件 → 链接`。
+- **自举**：`xbintsc` 可编译自身前端。用编译器构建 `src/cli/main.ts` 可得到可用的 `xbintsc` 二进制，且该二进制再自编译时产出的 LLVM IR 逐字节一致（源码 ≡ 第 1 代 ≡ 第 2 代 ≡ 第 3 代）。运行时仍为手写 C。
 
 ---
 
@@ -84,7 +85,7 @@ source.ts
 - 箭头函数 `() => expr` / `() => { ... }`（含类型参数、返回类型注解）
 - 函数表达式 `function () {}` 与命名函数表达式 `function g() {}`
 - 调用表达式 `f(...)`、成员访问 `a.b`、元素访问 `a[i]`
-- 数组字面量 `[1, 2]`、稀疏数组 elision、数组展开 `[...a]`
+- 数组字面量 `[1, 2]`、稀疏数组 elision、展开 `[...a]`（也支持字符串、`Map`、`Set`）
 - 对象字面量 `{ a: 1 }`、简写属性 `{ a }`、方法简写 `{ m() {} }`
 - 模板字面量 `${}` 替换、标记模板（仅解析，见[未实现文档](unimplemented.md)）
 - 括号表达式、`as` / `satisfies` / 非空断言 `!`（类型擦除）
@@ -199,6 +200,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 生成 LLVM IR 文本（`.ll`），无需自建寄存器分配（依赖 `alloca` + mem2reg）。
 - 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
 - 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`switch`，`try/catch/finally`，`break` / `continue` / `return`。
+  - `for...of` 与展开通过 `xt_iter_length` / `xt_iter_value` 迭代数组、字符串、`Map`、`Set`（`Map` 产出 `[key, value]` 对）。
   - `switch` 以严格相等逐 `case` 测试，命中后执行并在 `break` 前穿透。
   - `try/catch/finally` 通过运行时 `_setjmp` 帧实现：`xt_try_enter` 入栈、`_setjmp` 捕获、`xt_throw` 长跳转；IR 会把调用方的帧地址（`@llvm.frameaddress(0)`）作为 `_setjmp` 的第二个参数传入，与 clang 编译 MSVC 时的降级方式一致：Windows UCRT 的 `_setjmp` 会把这个帧存入 `_JUMP_BUFFER.Frame`，`longjmp` 再交给 `RtlUnwind` 执行栈展开；若不传该参数，`longjmp` 会展开到错误目标（`STATUS_BAD_FUNCTION_TABLE`）。使用 `_setjmp` 而非导出的 `setjmp` 符号，因为后者的 Windows ABI 是不兼容的双参数例程。含 `try` 的函数会强制局部变量驻留内存（内联汇编逃生点）以保证长跳转后值不丢失。
   - `for...in` 复用 `xt_object_keys` 枚举键（数组 / 字符串得到字符串下标）。
@@ -235,7 +237,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 位运算：`and/or/xor/not/shl/shr/ushr`（含 `ToInt32` 语义）。
 - 比较：`lt/le/gt/ge`、宽松 / 严格相等、`not`、`is_nullish`。
 - 对象：线性属性列表，`object_new/get/set/has/keys/values/entries/assign/spread`。
-- 数组：`array_new/get/set/push/length/spread`。
+- 数组：`array_new/get/set/push/length/spread`；对 `arr.length` 赋值会截断 / 扩展（与 JS 一致）；`iter_length` / `iter_value` 为数组、字符串、`Map`、`Set` 提供统一迭代视图。
 - 通用成员访问：`xt_get` / `xt_set`（对数组 / 对象 / 字符串分发）。
 - 标准库：`xt_call_method`（统一分发数组 / 字符串方法与对象上的函数属性）、`xt_math_call`（`Math.*` 与常量）、全局函数 `xt_parse_int/parse_float/is_nan/is_finite/number_ctor/string_ctor/boolean_ctor`。
 - 运算符辅助：`xt_in`（`in`）、`xt_delete`（`delete`）、`xt_rest_args`（剩余参数 / `arguments`）。
@@ -317,7 +319,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 实现位置：`tests/`（`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`）
 
 - 各模块单元测试；e2e 在存在 `clang` 时真正编译并运行二进制，否则自动跳过。
-- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、多文件 `import`/`export`。
+- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、`Map`/`Set` 的 `for...of`、数组 `length` 赋值与可迭代展开、多文件 `import`/`export`。
 
 ---
 
@@ -338,4 +340,5 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / `console` |
 | 扩展 | 扩展注册表、`core`（print）、`node`（fs / path / os / process / buffer / stream / net / dgram / http，按说明符导入） |
 | 工具链 | clang 编译 IR/C、链接、增量缓存 |
+| 自举 | `xbintsc` 可将 `src/cli/main.ts` 编译为原生二进制；产出的 IR 从第 1 代起达到不动点 |
 | 平台 | macOS / Linux / Windows（构建层面已适配，CI 见 `.github/workflows`） |

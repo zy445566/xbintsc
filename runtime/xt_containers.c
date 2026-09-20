@@ -63,16 +63,40 @@ xt_property *xt_object_find_property(xt_object *obj, xt_string *key) {
   return obj ? xt_object_find(obj, key) : NULL;
 }
 
+static int xt_key_is_prototype(xt_value key) {
+  xt_string *k = xt_as_string(xt_to_string(key));
+  return k && k->length == 9 && memcmp(k->data, "prototype", 9) == 0;
+}
+
 xt_value xt_object_get(xt_value value, xt_value key) {
+  /* A function's `.prototype` lives in a dedicated field (set by
+     `xt_function_set_prototype`), not in its property bag. Expose it as a
+     normal property so `Class.prototype` returns the object instances use. */
+  if (XT_IS_FUNCTION(value) && xt_key_is_prototype(key)) {
+    return ((xt_function *)XT_GET_PTR(value))->prototype;
+  }
   xt_object *obj = xt_as_object(value);
   if (!obj) return XT_UNDEFINED;
+  /* Only plain objects (and function property bags) use the `xt_object`
+     layout. Containers such as Map/Set/Date/RegExp/Promise/Array must not be
+     interpreted as property tables, or property lookup reads past the end of
+     their real representation. */
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT) return XT_UNDEFINED;
   xt_value keyString = xt_to_string(key);
   xt_string *k = xt_as_string(keyString);
   /* Walk the prototype chain like JavaScript property lookup. */
   xt_object *cur = obj;
   while (cur) {
     xt_property *prop = xt_object_find(cur, k);
-    if (prop) return prop->value;
+    if (prop) {
+      /* Invoke accessors with the original receiver as `this`, so getters
+         inherited from a prototype still see the instance. */
+      if (prop->getter != XT_UNDEFINED && XT_IS_FUNCTION(prop->getter)) {
+        return xt_call_with_this(prop->getter, value, 0, NULL);
+      }
+      if (prop->getter != XT_UNDEFINED) return XT_UNDEFINED;
+      return prop->value;
+    }
     if (!XT_IS_OBJECT(cur->prototype)) break;
     cur = (xt_object *)XT_GET_PTR(cur->prototype);
   }
@@ -80,20 +104,80 @@ xt_value xt_object_get(xt_value value, xt_value key) {
 }
 
 xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
+  if (XT_IS_FUNCTION(value) && xt_key_is_prototype(key)) {
+    return xt_function_set_prototype(value, newValue);
+  }
   xt_object *obj = xt_as_object(value);
   if (!obj) return newValue;
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT) return newValue;
   if (obj->frozen) return newValue;
   xt_value keyString = xt_to_string(key);
-  xt_property *prop = xt_object_find(obj, xt_as_string(keyString));
+  xt_string *k = xt_as_string(keyString);
+  xt_property *prop = xt_object_find(obj, k);
   if (prop) {
+    if (prop->setter != XT_UNDEFINED) {
+      if (XT_IS_FUNCTION(prop->setter)) {
+        xt_value argument = newValue;
+        xt_call_with_this(prop->setter, value, 1, &argument);
+      }
+      return newValue;
+    }
+    if (prop->getter != XT_UNDEFINED) return newValue; /* accessor without setter */
     prop->value = newValue;
     return newValue;
   }
+  /* No own property: an inherited accessor still intercepts the assignment
+     (JavaScript assigns through prototype setters instead of shadowing). */
+  xt_object *ancestor = XT_IS_OBJECT(obj->prototype) ? (xt_object *)XT_GET_PTR(obj->prototype) : NULL;
+  while (ancestor) {
+    xt_property *inherited = xt_object_find(ancestor, k);
+    if (inherited) {
+      if (inherited->setter != XT_UNDEFINED) {
+        if (XT_IS_FUNCTION(inherited->setter)) {
+          xt_value argument = newValue;
+          xt_call_with_this(inherited->setter, value, 1, &argument);
+        }
+        return newValue;
+      }
+      if (inherited->getter != XT_UNDEFINED) return newValue; /* getter-only accessor */
+      break; /* plain inherited data property: create an own shadowing property */
+    }
+    ancestor = XT_IS_OBJECT(ancestor->prototype) ? (xt_object *)XT_GET_PTR(ancestor->prototype) : NULL;
+  }
   xt_object_reserve(obj, obj->count + 1);
-  obj->properties[obj->count].key = xt_as_string(keyString);
+  obj->properties[obj->count].key = k;
   obj->properties[obj->count].value = newValue;
+  obj->properties[obj->count].getter = XT_UNDEFINED;
+  obj->properties[obj->count].setter = XT_UNDEFINED;
   obj->count++;
   return newValue;
+}
+
+static xt_property *xt_object_ensure_property(xt_object *obj, xt_value keyString) {
+  xt_property *prop = xt_object_find(obj, xt_as_string(keyString));
+  if (prop) return prop;
+  xt_object_reserve(obj, obj->count + 1);
+  prop = &obj->properties[obj->count];
+  prop->key = xt_as_string(keyString);
+  prop->value = XT_UNDEFINED;
+  prop->getter = XT_UNDEFINED;
+  prop->setter = XT_UNDEFINED;
+  obj->count++;
+  return prop;
+}
+
+xt_value xt_object_define_getter(xt_value value, xt_value key, xt_value getter) {
+  xt_object *obj = xt_as_object(value);
+  if (!obj) return value;
+  xt_object_ensure_property(obj, xt_to_string(key))->getter = getter;
+  return value;
+}
+
+xt_value xt_object_define_setter(xt_value value, xt_value key, xt_value setter) {
+  xt_object *obj = xt_as_object(value);
+  if (!obj) return value;
+  xt_object_ensure_property(obj, xt_to_string(key))->setter = setter;
+  return value;
 }
 
 xt_value xt_object_get_prototype(xt_value value) {
@@ -248,12 +332,30 @@ xt_value xt_array_length(xt_value value) {
 }
 
 xt_value xt_array_spread(xt_value target, xt_value source) {
-  if (!XT_IS_ARRAY(target) || !XT_IS_ARRAY(source)) return target;
-  xt_array *dst = (xt_array *)XT_GET_PTR(target);
-  xt_array *src = (xt_array *)XT_GET_PTR(source);
-  xt_array_reserve(dst, dst->length + src->length);
-  for (uint32_t i = 0; i < src->length; i++) dst->items[dst->length++] = src->items[i];
+  if (!XT_IS_ARRAY(target)) return target;
+  if (XT_IS_ARRAY(source)) {
+    xt_array *dst = (xt_array *)XT_GET_PTR(target);
+    xt_array *src = (xt_array *)XT_GET_PTR(source);
+    xt_array_reserve(dst, dst->length + src->length);
+    for (uint32_t i = 0; i < src->length; i++) dst->items[dst->length++] = src->items[i];
+    return target;
+  }
+  /* Spreading a string/Map/Set iterates exactly like `for...of`. */
+  int32_t n = xt_to_int32(xt_iter_length(source));
+  for (int32_t i = 0; i < n; i++) {
+    xt_array_push(target, xt_iter_value(source, xt_number((double)i)));
+  }
   return target;
+}
+
+int32_t xt_array_size(xt_value value) {
+  if (!XT_IS_ARRAY(value)) return 0;
+  return (int32_t)((xt_array *)XT_GET_PTR(value))->length;
+}
+
+xt_value *xt_array_items(xt_value value) {
+  if (!XT_IS_ARRAY(value)) return NULL;
+  return ((xt_array *)XT_GET_PTR(value))->items;
 }
 
 
@@ -262,7 +364,15 @@ xt_value xt_array_spread(xt_value target, xt_value source) {
 /* ------------------------------------------------------------------------- */
 
 xt_value xt_get(xt_value target, xt_value key) {
-  if (XT_IS_ARRAY(target)) return xt_array_get(target, key);
+  if (XT_IS_ARRAY(target)) {
+    /* `arr.length` must read the array's length, never an element. */
+    if (XT_IS_STRING(key)) {
+      xt_string *k = xt_as_string(key);
+      if (k->length == 6 && memcmp(k->data, "length", 6) == 0)
+        return xt_number((double)((xt_array *)XT_GET_PTR(target))->length);
+    }
+    return xt_array_get(target, key);
+  }
   if (XT_IS_FUNCTION(target)) return xt_object_get(target, key);
   if (XT_IS_OBJECT(target)) {
     /* Map/Set expose `.size`; promises, dates and regexps have their own
@@ -277,6 +387,7 @@ xt_value xt_get(xt_value target, xt_value key) {
         }
       }
     }
+    if (obj->header.kind == XT_OBJECT_KIND_REGEXP) return xt_regexp_get_property(target, key);
     return xt_object_get(target, key);
   }
   if (XT_IS_STRING(target)) {
@@ -294,7 +405,22 @@ xt_value xt_get(xt_value target, xt_value key) {
 }
 
 xt_value xt_set(xt_value target, xt_value key, xt_value value) {
-  if (XT_IS_ARRAY(target)) return xt_array_set(target, key, value);
+  if (XT_IS_ARRAY(target)) {
+    /* Assigning `arr.length` truncates or extends the array. */
+    if (XT_IS_STRING(key)) {
+      xt_string *k = xt_as_string(key);
+      if (k->length == 6 && memcmp(k->data, "length", 6) == 0) {
+        xt_array *array = (xt_array *)XT_GET_PTR(target);
+        int32_t n = xt_to_int32(value);
+        if (n < 0) n = 0;
+        xt_array_reserve(array, (uint32_t)n);
+        for (uint32_t j = array->length; j < (uint32_t)n; j++) array->items[j] = XT_UNDEFINED;
+        array->length = (uint32_t)n;
+        return value;
+      }
+    }
+    return xt_array_set(target, key, value);
+  }
   if (XT_IS_FUNCTION(target)) return xt_object_set(target, key, value);
   if (XT_IS_OBJECT(target)) return xt_object_set(target, key, value);
   return value;

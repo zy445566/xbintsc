@@ -393,6 +393,46 @@ describeWithClang("end-to-end compilation", () => {
     );
   });
 
+  it("assigns array.length and spreads iterables (Map/Set/string)", () => {
+    const source = `
+      const a = [10, 20, 30];
+      a.length = 1;
+      console.log(a.length, a[0], a[1]);
+      a.length = 3;
+      console.log(a.length, a[1], a[2]);
+      const set = new Set<string>();
+      set.add("x");
+      set.add("y");
+      set.add("x");
+      console.log([...set].length, [...set].join(","), ["a", ...set, "b"].join(","));
+      const map = new Map<string, number>();
+      map.set("k", 1);
+      map.set("v", 2);
+      console.log([...map].length, [...map].map((p) => p[0] + ":" + p[1]).join(","));
+      console.log([..."abc"].length, [..."abc"].join("-"));
+    `;
+    expect(runProgram(source)).toBe(
+      "1 10 undefined\n3 undefined undefined\n2 x,y a,x,y,b\n2 k:1,v:2\n3 a-b-c",
+    );
+  });
+
+  it("iterates Map and Set with for...of", () => {
+    const source = `
+      const map = new Map<string, number>();
+      map.set("a", 1);
+      map.set("b", 2);
+      let out = "";
+      for (const [k, v] of map) out += k + "=" + v + ";";
+      const set = new Set<number>();
+      set.add(10);
+      set.add(20);
+      let sum = 0;
+      for (const n of set) sum += n;
+      console.log(out, sum);
+    `;
+    expect(runProgram(source)).toBe("a=1;b=2; 30");
+  });
+
   it("supports import and export across modules", () => {
     writeFileSync(
       join(workdir, "math_dep.ts"),

@@ -40,7 +40,7 @@ export interface NumericLiteral extends Node {
 export interface BigIntLiteral extends Node {
   readonly kind: SyntaxKind.BigIntLiteral;
   readonly text: string;
-  readonly value: bigint;
+  readonly value: number;
 }
 
 export interface StringLiteral extends Node {
@@ -127,7 +127,12 @@ export interface ObjectLiteralExpression extends Node {
   readonly properties: ObjectLiteralElementLike[];
 }
 
-export type PropertyName = Identifier | StringLiteral | NumericLiteral | PrivateIdentifier;
+export type PropertyName = Identifier | StringLiteral | NumericLiteral | PrivateIdentifier | ComputedPropertyName;
+
+export interface ComputedPropertyName extends Node {
+  readonly kind: SyntaxKind.ComputedPropertyName;
+  readonly expression: Expression;
+}
 
 export interface FunctionExpression extends Node {
   readonly kind: SyntaxKind.FunctionExpression;

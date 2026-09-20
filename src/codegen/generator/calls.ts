@@ -14,6 +14,7 @@ import {
   type Identifier,
   type ObjectLiteralExpression,
   type PropertyAccessExpression,
+  type SpreadElement,
 } from "../../ast/nodes.js";
 import { SymbolKind, type FunctionInfo } from "../../binder/binder.js";
 import type { ModuleExport } from "../../extensions/registry.js";
@@ -35,7 +36,7 @@ export interface CallMethods {
   emitCall(this: Generator, node: CallExpression): string;
   tryEmitBuiltinCall(this: Generator, node: CallExpression, callee: PropertyAccessExpression): string | undefined;
   runtimeCall(this: Generator, name: string, args: readonly string[]): string;
-  emitArguments(this: Generator, args: readonly Expression[]): { argc: number; ptr: string };
+  emitArguments(this: Generator, args: readonly Expression[]): { argc: string; ptr: string };
   emitDelete(this: Generator, node: DeleteExpression): string;
   emitPropertyAccess(this: Generator, node: PropertyAccessExpression): string;
   emitElementAccess(this: Generator, node: ElementAccessExpression): string;
@@ -262,17 +263,38 @@ export const callMethods: CallMethods = {
     return result;
   },
 
-  emitArguments(args: readonly Expression[]): { argc: number; ptr: string } {
-    if (args.length === 0) return { argc: 0, ptr: "null" };
-    const ptr = `%args${this.current.allocas.length}`;
-    this.current.allocas.push(`${ptr} = alloca i64, i32 ${args.length}`);
-    for (let index = 0; index < args.length; index++) {
-      const value = this.emitExpression(args[index]!);
-      const slot = this.reg();
-      this.emit(`  ${slot} = getelementptr i64, i64* ${ptr}, i32 ${index}`);
-      this.emit(`  store i64 ${value}, i64* ${slot}`);
+  emitArguments(args: readonly Expression[]): { argc: string; ptr: string } {
+    if (args.length === 0) return { argc: "0", ptr: "null" };
+    const hasSpread = args.some((element) => element.kind === SyntaxKind.SpreadElement);
+    if (!hasSpread) {
+      const ptr = `%args${this.current.allocas.length}`;
+      this.current.allocas.push(`${ptr} = alloca i64, i32 ${args.length}`);
+      for (let index = 0; index < args.length; index++) {
+        const value = this.emitExpression(args[index]!);
+        const slot = this.reg();
+        this.emit(`  ${slot} = getelementptr i64, i64* ${ptr}, i32 ${index}`);
+        this.emit(`  store i64 ${value}, i64* ${slot}`);
+      }
+      return { argc: String(args.length), ptr };
     }
-    return { argc: args.length, ptr };
+    // At least one `...spread`: accumulate the argument list in a runtime
+    // array, which grows to whatever length the spread produces.
+    const array = this.reg();
+    this.emit(`  ${array} = call i64 @xt_array_new(i32 0, i64* null)`);
+    for (const element of args) {
+      if (element.kind === SyntaxKind.SpreadElement) {
+        const value = this.emitExpression((element as SpreadElement).expression);
+        this.emit(`  call i64 @xt_array_spread(i64 ${array}, i64 ${value})`);
+      } else {
+        const value = this.emitExpression(element);
+        this.emit(`  call i64 @xt_array_push(i64 ${array}, i64 ${value})`);
+      }
+    }
+    const argc = this.reg();
+    this.emit(`  ${argc} = call i32 @xt_array_size(i64 ${array})`);
+    const ptr = this.reg();
+    this.emit(`  ${ptr} = call i64* @xt_array_items(i64 ${array})`);
+    return { argc, ptr };
   },
 
   emitDelete(node: DeleteExpression): string {
@@ -398,14 +420,15 @@ export const callMethods: CallMethods = {
       this.emit(`  ${result} = call i64 @xt_array_new(i32 ${args.argc}, i64* ${args.ptr})`);
       return result;
     }
-    let array = this.runtimeCall("xt_array_new", [`0`, `null`]);
+    const array = this.reg();
+    this.emit(`  ${array} = call i64 @xt_array_new(i32 0, i64* null)`);
     for (const element of node.elements) {
       if (element.kind === SyntaxKind.SpreadElement) {
         const spread = this.emitExpression((element as { expression: Expression }).expression);
-        array = this.runtimeCall("xt_array_spread", [array, spread]);
+        this.emit(`  call i64 @xt_array_spread(i64 ${array}, i64 ${spread})`);
       } else {
         const value = this.emitExpression(element);
-        array = this.runtimeCall("xt_array_push", [array, value]);
+        this.emit(`  call i64 @xt_array_push(i64 ${array}, i64 ${value})`);
       }
     }
     return array;
@@ -416,8 +439,15 @@ export const callMethods: CallMethods = {
     this.emit(`  ${object} = call i64 @xt_object_new()`);
     for (const property of node.properties) {
       if (property.kind === SyntaxKind.PropertyAssignment) {
-        const name = propertyNameText(property.name);
-        const key = this.stringValue(name);
+        const nameNode = property.name;
+        let key: string;
+        if (nameNode.kind === SyntaxKind.ComputedPropertyName) {
+          const keyValue = this.emitExpression((nameNode as { expression: Expression }).expression);
+          key = this.reg();
+          this.emit(`  ${key} = call i64 @xt_to_string(i64 ${keyValue})`);
+        } else {
+          key = this.stringValue(propertyNameText(nameNode));
+        }
         const value = this.emitExpression(property.initializer);
         this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
       } else if (property.kind === SyntaxKind.ShorthandPropertyAssignment) {
@@ -482,6 +512,19 @@ export const callMethods: CallMethods = {
 
   emitSuperConstructor(node: CallExpression): string {
     const thisValue = this.emitThis();
+    const classInfo = this.current.fn.classInfo;
+    const parent = classInfo?.parentExpression;
+    const unboundBuiltin =
+      parent !== undefined &&
+      parent.kind === SyntaxKind.Identifier &&
+      (parent as Identifier).text === "Error" &&
+      !this.binding.symbolOfIdentifier.get(parent as Identifier);
+    if (unboundBuiltin) {
+      const args = this.emitArguments(node.arguments);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_error_init(i64 ${thisValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+      return result;
+    }
     const proto = this.reg();
     this.emit(`  ${proto} = call i64 @xt_object_get_prototype(i64 ${thisValue})`);
     const parentProto = this.reg();

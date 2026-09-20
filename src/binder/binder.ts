@@ -454,6 +454,35 @@ class Binder {
       case SyntaxKind.Identifier:
         this.reference(node as Identifier, scope);
         return;
+      case SyntaxKind.PropertyAccessExpression:
+        // `obj.name` reads a property, not a variable named `name`.
+        this.bindNode((node as unknown as { expression: Expression }).expression, scope);
+        return;
+      case SyntaxKind.ElementAccessExpression: {
+        const access = node as unknown as { expression: Expression; argumentExpression: Expression };
+        this.bindNode(access.expression, scope);
+        this.bindNode(access.argumentExpression, scope);
+        return;
+      }
+      case SyntaxKind.PropertyAssignment: {
+        // `{ key: value }` / `{ key() {} }`: only the value is an expression,
+        // except a computed key (`{ [expr]: value }`) whose expression is real.
+        const property = node as unknown as { name: PropertyName; initializer: Expression };
+        if (property.name.kind === SyntaxKind.ComputedPropertyName) {
+          this.bindNode((property.name as unknown as { expression: Expression }).expression, scope);
+        }
+        this.bindNode(property.initializer, scope);
+        return;
+      }
+      case SyntaxKind.ShorthandPropertyAssignment:
+        this.reference((node as unknown as { name: Identifier }).name, scope);
+        return;
+      case SyntaxKind.LabeledStatement:
+        this.bindNode((node as unknown as { statement: Node }).statement, scope);
+        return;
+      case SyntaxKind.BreakStatement:
+      case SyntaxKind.ContinueStatement:
+        return;
       case SyntaxKind.ThisKeyword:
         this.current.usesThis = true;
         return;

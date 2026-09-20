@@ -7,7 +7,7 @@
  * nothing relevant changed.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { DiagnosticBag, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
@@ -246,9 +246,22 @@ function ensureRuntimeObjects(
   cacheDir: string,
   registry: ExtensionRegistry,
 ): RuntimeObjects {
+  /* Runtime objects depend on the shared headers (rt.h/rt_internal.h/...),
+     so a header change must invalidate every cached object. Hash them all. */
+  const headerParts: string[] = [];
+  const collectHeaders = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) collectHeaders(full);
+      else if (entry.name.endsWith(".h")) headerParts.push(readFileSync(full, "utf8"));
+    }
+  };
+  collectHeaders(runtimeDir);
+  const headerStamp = hashParts(headerParts);
+
   const compileOne = (sourcePath: string, tag: string): string => {
     const body = readFileSync(sourcePath, "utf8");
-    const key = hashParts(["runtime", COMPILER_VERSION, tag, body, clang, process.platform]);
+    const key = hashParts(["runtime", COMPILER_VERSION, tag, headerStamp, body, clang, process.platform]);
     const objectPath = join(cacheDir, `${tag}-${key}.o`);
     if (!existsSync(objectPath)) {
       compileC(runner, clang, sourcePath, objectPath, runtimeDir);

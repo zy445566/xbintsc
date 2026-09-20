@@ -80,15 +80,20 @@ export class SourceFile {
  * and stable across platforms which is exactly what the incremental cache
  * needs. Collision resistance is not a security property here.
  */
-export function hashText(text: string, seed = 0xcbf29ce484222325n): string {
-  let hash = seed;
-  const prime = 0x100000001b3n;
-  const mask = 0xffffffffffffffffn;
+export function hashText(text: string, seed = 0): string {
+  // Two independent 32-bit FNV-1a lanes give a wide, stable fingerprint
+  // without relying on BigInt, which the compiler cannot assume at runtime.
+  let a = (0xcbf29ce4 ^ seed) >>> 0;
+  let b = (0x84222325 ^ seed) >>> 0;
+  const prime = 0x01000193;
   for (let i = 0; i < text.length; i++) {
-    hash ^= BigInt(text.charCodeAt(i));
-    hash = (hash * prime) & mask;
+    const code = text.charCodeAt(i);
+    a = Math.imul(a ^ (code & 0xff), prime) >>> 0;
+    a = Math.imul(a ^ (code >>> 8), prime) >>> 0;
+    b = Math.imul(b ^ (code >>> 8), prime) >>> 0;
+    b = Math.imul(b ^ (code & 0xff), prime) >>> 0;
   }
-  return hash.toString(16).padStart(16, "0");
+  return (a >>> 0).toString(16).padStart(8, "0") + (b >>> 0).toString(16).padStart(8, "0");
 }
 
 /** Combine several hashes/strings into one stable fingerprint. */

@@ -567,9 +567,13 @@ static int xt_re_match_alt(xt_re_alt *alt, const xt_re_input *in, size_t pos,
   return 0;
 }
 
-static int xt_re_accept(void *ctx, size_t pos) {
-  (void)ctx;
-  (void)pos;
+typedef struct {
+  size_t end;
+} xt_re_match_result;
+
+static int xt_re_record_match(void *ctx, size_t pos) {
+  xt_re_match_result *result = (xt_re_match_result *)ctx;
+  result->end = pos;
   return 1;
 }
 
@@ -597,15 +601,21 @@ static int regexec(const regex_t *preg, const char *string, size_t nmatch,
                    regmatch_t pmatch[], int eflags) {
   xt_re_input in;
   size_t start;
-  (void)nmatch;
-  (void)pmatch;
   (void)eflags;
   if (!preg || !preg->root || !string) return 1;
   in.text = string;
   in.len = strlen(string);
   in.icase = preg->icase;
   for (start = 0; start <= in.len; start++) {
-    if (xt_re_match_alt(preg->root, &in, start, xt_re_accept, NULL)) return 0;
+    xt_re_match_result result;
+    result.end = 0;
+    if (xt_re_match_alt(preg->root, &in, start, xt_re_record_match, &result)) {
+      if (nmatch > 0 && pmatch) {
+        pmatch[0].rm_so = (int)start;
+        pmatch[0].rm_eo = (int)result.end;
+      }
+      return 0;
+    }
   }
   return 1;
 }

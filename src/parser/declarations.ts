@@ -157,9 +157,11 @@ export const declarationMethods: DeclarationMethods = {
         dotDotDotToken = true;
       }
       let name: import("../ast/declarations.js").BindingName;
+      let isThisParameter = false;
       if (this.at(TokenKind.ThisKeyword)) {
         const thisToken = this.nextToken();
         name = { kind: SyntaxKind.Identifier, text: "this", start: thisToken.start, end: thisToken.end };
+        isThisParameter = true;
       } else {
         name = this.parseBindingName();
       }
@@ -178,7 +180,11 @@ export const declarationMethods: DeclarationMethods = {
         this.nextToken();
         initializer = this.parseAssignmentExpression();
       }
-      params.push({ kind: SyntaxKind.Parameter, name, modifiers, dotDotDotToken, questionToken, type, initializer, start, end: initializer?.end ?? type?.end ?? name.end });
+      // A `this` parameter is a type-level annotation only and is never a
+      // runtime argument, so it must not occupy an `argv` slot.
+      if (!isThisParameter) {
+        params.push({ kind: SyntaxKind.Parameter, name, modifiers, dotDotDotToken, questionToken, type, initializer, start, end: initializer?.end ?? type?.end ?? name.end });
+      }
       if (this.at(TokenKind.Comma)) this.nextToken();
       else break;
     }
@@ -452,13 +458,10 @@ export const declarationMethods: DeclarationMethods = {
       return { kind: SyntaxKind.NumericLiteral, text: token.text, value: Number(token.value ?? 0), start: token.start, end: token.end };
     }
     if (token.kind === TokenKind.OpenBracket) {
-      this.nextToken();
+      const start = this.nextToken().start;
       const expr = this.parseAssignmentExpression();
-      this.parseExpected(TokenKind.CloseBracket);
-      const name = expressionToPropertyName(expr);
-      if (name) return name;
-      this.error(DiagnosticCode.InvalidTypeSyntax, "Computed property names are not supported by xbintsc");
-      return { kind: SyntaxKind.Identifier, text: "<computed>", start: expr.start, end: expr.end };
+      const close = this.parseExpected(TokenKind.CloseBracket);
+      return { kind: SyntaxKind.ComputedPropertyName, expression: expr, start, end: close.end };
     }
     return this.parseIdentifierName();
   },

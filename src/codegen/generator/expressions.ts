@@ -33,7 +33,7 @@ import {
 import { SymbolKind, type SymbolInfo } from "../../binder/binder.js";
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_FALSE, XT_NULL, XT_TRUE, XT_UNDEFINED } from "../values.js";
-import { BINARY_RUNTIME, compoundToBinary, isAssignmentOperator, CTOR_FUNCTIONS } from "./tables.js";
+import { BINARY_RUNTIME, compoundToBinary, isAssignmentOperator, BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS } from "./tables.js";
 import type { Generator } from "./generator.js";
 
 export interface ExpressionMethods {
@@ -64,7 +64,7 @@ export const expressionMethods: ExpressionMethods = {
         return numberLiteral(value);
       }
       case SyntaxKind.BigIntLiteral:
-        return numberLiteral(Number((node as { value: bigint }).value));
+        return numberLiteral((node as { value: number }).value);
       case SyntaxKind.StringLiteral:
         return this.stringValue((node as { value: string }).value);
       case SyntaxKind.NoSubstitutionTemplateLiteral:
@@ -197,7 +197,17 @@ export const expressionMethods: ExpressionMethods = {
         this.emit(`  ${rest} = call i64 @xt_rest_args(i32 ${argc}, i64* ${argv}, i32 0)`);
         return rest;
       }
-      default:
+      default: {
+        const builtinValue = BUILTIN_FUNCTION_VALUES[identifier.text];
+        if (builtinValue) {
+          // A global like `Boolean` used as a value (`arr.filter(Boolean)`):
+          // wrap its runtime trampoline in a closure object.
+          const cast = this.reg();
+          this.emit(`  ${cast} = bitcast i64 (i64, i64, i32, i64*)* @${builtinValue} to i8*`);
+          const closure = this.reg();
+          this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 0, i64* null)`);
+          return closure;
+        }
         this.diagnostics.error(
           DiagnosticCode.CannotFindName,
           `Cannot find name '${identifier.text}'`,
@@ -205,6 +215,7 @@ export const expressionMethods: ExpressionMethods = {
           this.sourceFile.fileName,
         );
         return i64(XT_UNDEFINED);
+      }
     }
   },
 

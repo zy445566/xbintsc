@@ -143,15 +143,31 @@ export const statementMethods: StatementMethods = {
 
   emitVariableStatement(statement: VariableStatement): void {
     for (const declaration of statement.declarationList.declarations) {
-      const initial = declaration.initializer
-        ? this.emitExpression(declaration.initializer)
-        : i64(XT_UNDEFINED);
       if (declaration.name.kind === SyntaxKind.Identifier) {
         const symbol = this.binding.symbolOfDeclaration.get(declaration);
-        if (!symbol) continue;
-        if (this.current.slots.has(symbol.id)) continue; // hoisted `var`
+        if (!symbol) {
+          if (declaration.initializer) this.emitExpression(declaration.initializer);
+          continue;
+        }
+        if (this.current.slots.has(symbol.id)) {
+          // Hoisted `var` (or an already-declared slot): keep evaluating the
+          // initializer for its side effects, but do not redeclare the slot.
+          if (declaration.initializer) this.emitExpression(declaration.initializer);
+          continue;
+        }
+        if (symbol.boxed) {
+          // A captured binding lives in a box. Create the box *before*
+          // evaluating the initializer so a self-referencing closure
+          // (`const f = () => f()`) captures the box, not a copy of the
+          // still-uninitialised value.
+          this.declareSlot(symbol, i64(XT_UNDEFINED));
+          if (declaration.initializer) this.writeSlot(symbol, this.emitExpression(declaration.initializer));
+          continue;
+        }
+        const initial = declaration.initializer ? this.emitExpression(declaration.initializer) : i64(XT_UNDEFINED);
         this.declareSlot(symbol, initial);
       } else {
+        const initial = declaration.initializer ? this.emitExpression(declaration.initializer) : i64(XT_UNDEFINED);
         this.emitBindingPattern(declaration.name, initial);
       }
     }
@@ -287,7 +303,6 @@ export const statementMethods: StatementMethods = {
     const nonzero = this.reg();
     this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
     this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);
-
     this.startBlock(bodyLabel);
     this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel, tryDepth: this.current.tryFrames.length });
     this.emitStatement(statement.statement);
@@ -369,7 +384,7 @@ export const statementMethods: StatementMethods = {
     const indexPtr = this.alloca();
     this.emit(`  store i64 ${numberLiteral(0)}, i64* ${indexPtr}`);
     const lengthValue = this.reg();
-    this.emit(`  ${lengthValue} = call i64 @xt_array_length(i64 ${iterable})`);
+    this.emit(`  ${lengthValue} = call i64 @xt_iter_length(i64 ${iterable})`);
 
     const condLabel = this.label("forof.cond");
     const bodyLabel = this.label("forof.body");
@@ -390,7 +405,7 @@ export const statementMethods: StatementMethods = {
 
     this.startBlock(bodyLabel);
     const element = this.reg();
-    this.emit(`  ${element} = call i64 @xt_get(i64 ${iterable}, i64 ${index})`);
+    this.emit(`  ${element} = call i64 @xt_iter_value(i64 ${iterable}, i64 ${index})`);
     this.bindLoopVariable(statement.initializer, element);
     this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel, tryDepth: this.current.tryFrames.length });
     this.emitStatement(statement.statement);

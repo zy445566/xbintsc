@@ -66,6 +66,10 @@ typedef struct {
 typedef struct {
   xt_string *key;
   xt_value value;
+  /* Accessor properties (`get x()` / `set x(v)`) store the functions here;
+   * when set, `value` is ignored and property access invokes the getter. */
+  xt_value getter;
+  xt_value setter;
 } xt_property;
 
 typedef struct {
@@ -120,8 +124,15 @@ int xt_is_map(xt_value value);
 int xt_is_set(xt_value value);
 int xt_is_date(xt_value value);
 int xt_is_regexp(xt_value value);
+int xt_regexp_find(xt_value regexp, xt_value input, int32_t start, int32_t *matchStart, int32_t *matchEnd);
+xt_value xt_regexp_exec(xt_value regexp, xt_value input);
+xt_value xt_regexp_replace(xt_value value, xt_value regexp, xt_value replacement);
+xt_value xt_regexp_get_property(xt_value regexp, xt_value key);
 int32_t xt_map_size(xt_value value);
 int32_t xt_set_size(xt_value value);
+/* `for...of` iteration: dispatch over arrays, strings, Maps and Sets. */
+xt_value xt_iter_length(xt_value value);
+xt_value xt_iter_value(xt_value value, xt_value index);
 
 /* -- collection / date / regexp representations --------------------------- */
 typedef struct {

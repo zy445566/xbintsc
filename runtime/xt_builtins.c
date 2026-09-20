@@ -100,6 +100,29 @@ xt_value xt_boolean_ctor(int32_t argc, xt_value *argv) {
   return xt_bool(xt_truthy(argv[0]));
 }
 
+/*
+ * Builtin function values. Global constructors like `Boolean` are usually
+ * called directly, but JavaScript also allows passing them around
+ * (`arr.filter(Boolean)`). These trampolines adapt the uniform `(argc, argv)`
+ * builtin ABI to the closure ABI so the codegen can wrap them with
+ * `xt_closure_new`.
+ */
+#define XT_BUILTIN_TRAMPOLINE(name, target)                            \
+  xt_value name(xt_value thisValue, xt_value env, int32_t argc,        \
+                xt_value *argv) {                                      \
+    (void)thisValue;                                                   \
+    (void)env;                                                         \
+    return target(argc, argv);                                         \
+  }
+
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_boolean, xt_boolean_ctor)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_number, xt_number_ctor)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_string, xt_string_ctor)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_parseInt, xt_parse_int)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_parseFloat, xt_parse_float)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_isNaN, xt_is_nan)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_isFinite, xt_is_finite)
+
 xt_value xt_in(xt_value key, xt_value value) {
   if (XT_IS_OBJECT(value)) return xt_object_has(value, key);
   if (XT_IS_ARRAY(value)) {

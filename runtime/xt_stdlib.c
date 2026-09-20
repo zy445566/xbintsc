@@ -327,6 +327,7 @@ static xt_value xt_string_trim(xt_value value) {
 }
 
 static xt_value xt_string_replace(xt_value value, xt_value searchValue, xt_value replacementValue) {
+  if (xt_is_regexp(searchValue)) return xt_regexp_replace(value, searchValue, replacementValue);
   xt_string *s = xt_as_string(value);
   if (!s) return value;
   xt_string *search = xt_as_string(xt_to_string(searchValue));
@@ -456,13 +457,21 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
     xt_value result = xt_ext_object_method(target, method, argc, argv, &handled);
     if (handled) return result;
-    xt_throw(xt_string_from_cstr("TypeError: target does not have a callable property of that name"));
+    {
+      char message[256];
+      snprintf(message, sizeof(message), "TypeError: object has no callable method '%s'", method);
+      xt_throw(xt_string_from_cstr(message));
+    }
     return XT_UNDEFINED;
   }
   if (XT_IS_FUNCTION(target)) {
     xt_value fn = xt_object_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
-    xt_throw(xt_string_from_cstr("TypeError: target does not have a callable property of that name"));
+    {
+      char message[256];
+      snprintf(message, sizeof(message), "TypeError: function has no callable method '%s'", method);
+      xt_throw(xt_string_from_cstr(message));
+    }
     return XT_UNDEFINED;
   }
   if (XT_IS_ARRAY(target)) {

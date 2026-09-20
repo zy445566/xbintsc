@@ -117,7 +117,8 @@ int xt_truthy(xt_value v) {
   if (v == XT_UNDEFINED || v == XT_NULL) return 0;
   if (v == XT_FALSE) return 0;
   if (v == XT_TRUE) return 1;
-  return 1; /* objects, arrays, functions and non-empty strings are truthy */
+  if (XT_IS_STRING(v)) return xt_as_string(v)->length != 0;
+  return 1; /* objects, arrays and functions are truthy */
 }
 
 double xt_to_number(xt_value v) {

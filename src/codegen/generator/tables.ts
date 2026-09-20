@@ -79,6 +79,18 @@ export const GLOBAL_FUNCTIONS: Record<string, string> = {
   Boolean: "xt_boolean_ctor",
 };
 
+/** Global functions that are also usable as first-class values, each mapped to
+ * a runtime trampoline with the closure ABI. */
+export const BUILTIN_FUNCTION_VALUES: Record<string, string> = {
+  parseInt: "xt_builtin_value_parseInt",
+  parseFloat: "xt_builtin_value_parseFloat",
+  isNaN: "xt_builtin_value_isNaN",
+  isFinite: "xt_builtin_value_isFinite",
+  Number: "xt_builtin_value_number",
+  String: "xt_builtin_value_string",
+  Boolean: "xt_builtin_value_boolean",
+};
+
 /** Global namespaces whose static methods map to runtime dispatchers. */
 export const NAMESPACE_STATICS: Record<string, string> = {
   Math: "xt_math_call",
@@ -107,6 +119,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
 /** Namespace identifiers whose property access maps to a runtime getter. */
 export const NAMESPACE_PROPERTIES: Record<string, string> = {
   process: "xt_process_get",
+  "import.meta": "xt_import_meta",
 };
 
 /** Global constructors called as `new X(...)` (all have signature `(i32, i64*)`). */

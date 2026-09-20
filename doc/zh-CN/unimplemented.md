@@ -10,6 +10,8 @@
 2. **解析但代码生成报错**：AST / 绑定能建立，但 `codegen` 报 `UnsupportedFeature`。
 3. **解析且能编译，但语义未实现或有偏差**：能产出二进制，但运行结果不符合 ECMAScript / TypeScript 语义。
 
+> 最新批次：**自举（self-hosting）** —— `xbintsc` 已能用自身编译 `src/cli/main.ts` 生成可运行的原生二进制，且产出的 LLVM IR 达到不动点（源码 ≡ 第 1 代 ≡ 第 2 代 ≡ 第 3 代，逐字节一致）。同时运行期补齐了数组 `length` 赋值（截断 / 扩展）、可迭代对象展开（`[...set]`、`[...map]`、`"abc"`）、对 `Map` / `Set` 的 `for...of`，binder 也补齐了计算属性名（`{ [E.A]: 1 }`）。
+
 > 近期已补齐（本批次）：`class` 声明 / 类表达式、`new` / `this`、继承 `extends` / `super`、`instanceof`、方法 / 静态成员 / 实例字段、`async` / `await` + `Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`）、`import` / `export` 多文件打包、`Map` / `Set` / `Date` / `RegExp` / `JSON`、以及大量数组 / 字符串 / 数字 / 对象 / 控制台扩展方法。详见 [已实现文档](implemented.md)。
 
 > 更早已补齐：`switch`、`try/catch/finally`、对象展开、`delete`、`in`、数组 / 字符串方法、`Math`、`Object.keys/values/entries/assign`、全局函数、`console.error/warn/info`、`arguments`、默认 / 剩余参数、可选链短路、`for...in` 对象键枚举。
@@ -95,9 +97,9 @@
 | --- | --- |
 | `Symbol` 构造器与 symbol 原始值 | ✗ 未实现 |
 | `BigInt` 任意精度 | ✗（字面量退化为 double） |
-| `Error` 构造器 / `message` / `stack` | ✗ 未实现（可抛出任意值） |
+| `Error` 构造器 / `message` / `stack` | ✓ 已实现 `new Error(...)` / `extends Error`；其余错误子类（`TypeError` 等）尚未实现 |
 | 定时器 / I/O / 进程等宿主 API | 仅通过扩展（如 `node` fs）提供 |
-| 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | ✗ 未实现 |
+| 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | 部分：数组、字符串、`Map`、`Set` 均可在 `for...of` / 展开中使用；不读取自定义 `Symbol.iterator` |
 | 生成器 / 异步迭代 | ✗ 未实现 |
 
 ---
@@ -177,7 +179,7 @@
 | 项 | 偏差 |
 | --- | --- |
 | `finally` 与提前退出 | `return` / `break` / `continue` 离开 `try` 区域时**不会执行 `finally`**；仅正常完成、`catch` 完成后、以及未捕获异常传播时会执行 `finally`。运行时会正确弹出 `try` 帧，不会导致崩溃 |
-| 异常对象 | 抛出 / 捕获的是任意值（字符串、数字、对象均可），但没有 `Error` 构造器、`message` / `stack`、错误子类等 |
+| 异常对象 | 抛出 / 捕获的是任意值（字符串、数字、对象均可），且支持 `new Error(...)` / `extends Error`；但未捕获 `stack`，也未实现其它内置错误子类（`TypeError` 等） |
 | `for...in` | 对对象 / 数组 / 字符串枚举键（数组与字符串得到字符串下标），但不含原型链属性，`delete` 后行为与 JS 基本一致 |
 | 字符串 `length` | 运行时按 UTF-8 字节 / 码点计数，而非 JS 的 UTF-16 码元长度（emoji、非 BMP 字符长度会偏小） |
 | BigInt | 字面量被 `Number()` 转成 double，失去任意精度 |
@@ -185,13 +187,14 @@
 | 宽松相等 `==` | 仅实现子集（number/string/bool/null/undefined），对象参与时按引用比较，未做 ToPrimitive |
 | `+` 加法 | 数字 + 对象 / 数组等 ToPrimitive 路径不完整 |
 | 对象展开 `{...obj}` | 仅复制对象自身可枚举属性；对数组 / 字符串展开的索引复制有限 |
+| 可迭代对象展开 | 支持 `[...arr]`、`[...set]`、`[...map]`、`[...str]` 以及数组字面量展开（`["a", ...set]`）；调用参数展开 `f(...args)` 仍不支持 |
 | 可选链 `?.` | 采用逐节点空值短路：`a?.b`、`a?.[b]`、`a?.b()`、`a?.[b]()`、`a?.()` 均正确短路；但链末再接非可选成员再调用的形式（如 `a?.b.c()`）不会整体短路，`a?.b.c` 会先得到 `undefined` 再对其取 `.c`，最终调用会抛错 |
-| 数组越界 / 稀疏 | 越界访问返回 `undefined`，基本可用，但长度 / 稀疏语义与 JS 有差异 |
+| 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | bump arena 永不释放，无 GC；长生命周期程序内存持续增长 |
 | 函数 `arity` / 调用参数个数 | 无参数个数校验 |
 | `async` / `await` | **同步微任务模型**：`await` 在已 settle 的 promise 上同步继续，pending promise 通过运行时微任务队列在 `await` 与程序结束时驱动；无真正的事件循环，无法等待定时器 / I/O |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
-| 类 | 无 `get`/`set` 访问器语义，无访问控制，无参数属性自动赋值 |
+| 类 | 无访问控制；已实现 `get`/`set` 访问器与构造器参数属性 |
 | `import` / `export` | 驱动层 AST 打包、顶层符号按模块前缀重命名；扩展模块可按裸/`node:` 说明符导入；相对模块的命名空间导入 `import * as` 未实现，循环依赖报错，`export *` 为近似 |
 
 ---
@@ -201,9 +204,9 @@
 | 项 | 现状 |
 | --- | --- |
 | GC（垃圾回收） | ✗ 有意推迟；`xt_alloc` 已隔离，但尚未替换为精确 / 保守回收器 |
-| 自举（self-hosting） | ✗ 路线已规划（见 [DESIGN.md](DESIGN.md) / [README](../../README.zh-CN.md)），尚未实现：运行时仍为 C，编译器自身尚未用 xbintsc 编译 |
+| 自举（self-hosting） | ✓ 编译器已能自编译：`xbintsc build src/cli/main.ts` 可产出可用二进制，且从第 1 代起产出的 IR 保持稳定。运行时仍为 C |
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
-| 完整标准库（Math / JSON / Date / 集合等） | 部分：Math / JSON / Date / Map / Set / RegExp 已实现；Symbol / BigInt / Error 未实现 |
+| 完整标准库（Math / JSON / Date / 集合等） | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` 已实现；Symbol / BigInt 未实现 |
 | 多文件模块打包 | 部分：相对路径 `.ts` 导入打包已实现，另支持裸说明符的扩展模块导入；相对模块的命名空间导入 / 循环依赖 / npm 未实现 |
 | 真正的异步运行时 / 事件循环 | ✗（Promise 为同步微任务模型） |
 | Windows 二进制产物验证 | 构建层已适配（`.exe` 后缀、链接参数分支），但需 CI 验证（`.github/workflows` 已配置） |
@@ -214,22 +217,22 @@
 ## 10. 速查：未实现 / 部分实现清单
 
 ```
-未实现（语句）：enum、namespace/module、标签语句 label:
+未实现（语句）：namespace/module、标签语句 label:
 
-未实现（表达式）：正则字面量、标记模板、yield、数组/对象解构、调用参数展开 f(...args)
+未实现（表达式）：标记模板、yield、调用参数展开 f(...args)
 
 未实现（函数）：生成器、fn.name/length/call/apply/bind、new.target
 
-未实现（类/面向对象）：get/set 访问器、访问控制、参数属性、私有字段 #x、enum
+未实现（类/面向对象）：访问控制、私有字段 #x
 
-未实现（标准库）：Symbol、BigInt 任意精度、Error 构造器、迭代器协议
+未实现（标准库）：Symbol、BigInt 任意精度、迭代器协议（自定义 Symbol.iterator）
 
 未实现（模块）：相对模块的命名空间导入 import * as、循环依赖、npm 依赖
 
 未实现（类型系统）：类型检查、泛型实例化、断言语义、可选链类型窄化
 
-未实现（运行时）：GC、Error 构造器、真正的异步事件循环、finally 的提前退出执行、
+未实现（运行时）：GC、真正的异步事件循环、finally 的提前退出执行、
                  UTF-16 length、BigInt 精度、ToPrimitive 完整路径
 
-未实现（工程）：自举、GC 替换、类型检查器
+未实现（工程）：GC 替换、类型检查器
 ```

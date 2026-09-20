@@ -331,7 +331,7 @@ export const expressionMethods: ExpressionMethods = {
       }
       case TokenKind.BigIntLiteral:
         this.nextToken();
-        return { kind: SyntaxKind.BigIntLiteral, text: token.text, value: BigInt(token.value ?? 0n), start: token.start, end: token.end };
+        return { kind: SyntaxKind.BigIntLiteral, text: token.text, value: Number(token.value ?? 0), start: token.start, end: token.end };
       case TokenKind.StringLiteral:
         this.nextToken();
         return this.stringLiteralFromToken(token);

@@ -4,6 +4,7 @@
  */
 
 import {
+  ModifierKind,
   SyntaxKind,
   type ArrowFunction,
   type Block,
@@ -15,7 +16,19 @@ import type { ClassInfo, FunctionInfo, SymbolInfo } from "../../binder/binder.js
 import { SymbolKind } from "../../binder/binder.js";
 import { i64, XT_UNDEFINED } from "../values.js";
 import { RUNTIME_DECLARATIONS, type FunctionState } from "./state.js";
+import { propertyNameText } from "./tables.js";
 import type { Generator } from "./generator.js";
+
+/** Accessibility/`readonly` parameter modifiers make a constructor parameter a property. */
+function isParameterProperty(parameter: Parameter): boolean {
+  return parameter.modifiers.some(
+    (modifier) =>
+      modifier.modifierKind === ModifierKind.Public ||
+      modifier.modifierKind === ModifierKind.Private ||
+      modifier.modifierKind === ModifierKind.Protected ||
+      modifier.modifierKind === ModifierKind.Readonly,
+  );
+}
 
 export interface ModuleMethods {
   run(this: Generator): string;
@@ -120,6 +133,31 @@ export const moduleMethods: ModuleMethods = {
       this.emit(`  store i64 ${inherited}, i64* %saved.this`);
     }
 
+    // A derived class with no explicit constructor gets an implicit one that
+    // forwards every argument to the parent constructor (`super(...arguments)`).
+    if (fn.isConstructor && fn.classInfo?.parentExpression) {
+      const explicitBody = (fn.node as { body?: Block }).body;
+      const parent = fn.classInfo.parentExpression;
+      const unboundBuiltin =
+        parent.kind === SyntaxKind.Identifier &&
+        (parent as Identifier).text === "Error" &&
+        !this.binding.symbolOfIdentifier.get(parent as Identifier);
+      if (!explicitBody && !unboundBuiltin) {
+        const parentValue = this.emitExpression(parent);
+        const parentProto = this.reg();
+        this.emit(`  ${parentProto} = call i64 @xt_function_get_prototype(i64 ${parentValue})`);
+        const ctorKey = this.stringValue("__ctor");
+        const parentCtor = this.reg();
+        this.emit(`  ${parentCtor} = call i64 @xt_get(i64 ${parentProto}, i64 ${ctorKey})`);
+        const superThis = this.emitThis();
+        this.emit(`  call i64 @xt_call_with_this(i64 ${parentCtor}, i64 ${superThis}, i32 %argc, i64* %argv)`);
+      } else if (!explicitBody && unboundBuiltin) {
+        // `extends Error` with no explicit constructor: initialise message/name.
+        const superThis = this.emitThis();
+        this.emit(`  call i64 @xt_error_init(i64 ${superThis}, i32 %argc, i64* %argv)`);
+      }
+    }
+
     // Instance field initializers run before the constructor body.
     if (fn.isConstructor && fn.classInfo) {
       const thisValue = this.emitThis();
@@ -127,6 +165,20 @@ export const moduleMethods: ModuleMethods = {
         if (field.isStatic) continue;
         const key = this.stringValue(field.name);
         const value = field.initializer ? this.emitExpression(field.initializer) : i64(XT_UNDEFINED);
+        this.emit(`  call i64 @xt_set(i64 ${thisValue}, i64 ${key}, i64 ${value})`);
+      }
+    }
+
+    // Constructor parameter properties (`constructor(private readonly x: T) {}`)
+    // copy the incoming argument onto `this`.
+    if (fn.isConstructor) {
+      const thisValue = this.emitThis();
+      for (let index = 0; index < fn.params.length; index++) {
+        const parameter = parameterNodes[index];
+        if (!parameter || !isParameterProperty(parameter)) continue;
+        const symbol = fn.params[index]!;
+        const key = this.stringValue(propertyNameText(parameter.name));
+        const value = this.readSlot(symbol);
         this.emit(`  call i64 @xt_set(i64 ${thisValue}, i64 ${key}, i64 ${value})`);
       }
     }
@@ -220,7 +272,14 @@ export const moduleMethods: ModuleMethods = {
     for (const method of classInfo.methods) {
       const fnValue = this.emitClosureValue(method);
       const key = this.stringValue(method.name);
-      this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
+      const accessor = (method.node as { accessor?: "get" | "set" }).accessor;
+      if (accessor === "get") {
+        this.emit(`  call i64 @xt_object_define_getter(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
+      } else if (accessor === "set") {
+        this.emit(`  call i64 @xt_object_define_setter(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
+      } else {
+        this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
+      }
     }
     const ctor = this.emitClosureValue(classInfo.ctor!);
     this.emit(`  call i64 @xt_function_set_prototype(i64 ${ctor}, i64 ${proto})`);

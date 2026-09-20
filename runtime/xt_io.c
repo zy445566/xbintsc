@@ -69,6 +69,59 @@ void xt_set_program_args(int32_t argc, char **argv) {
   xt_program_argv = argv;
 }
 
+/*
+ * `import.meta` support. The compiler resolves module URLs at build time, but
+ * a self-hosted binary only knows where *it* lives, so `import.meta.url` is the
+ * executable's own `file://` URL (and `dirname`/`filename` its path parts).
+ * This lets the compiler locate an adjacent `runtime/` directory at run time.
+ */
+static xt_value xt_file_url(const char *path) {
+  char url[4300];
+  size_t j = 0;
+  const char *prefix = "file://";
+  for (; *prefix; prefix++) url[j++] = *prefix;
+#if defined(_WIN32)
+  url[j++] = '/';
+#endif
+  for (const char *p = path; *p && j < sizeof(url) - 1; p++) url[j++] = (*p == '\\') ? '/' : *p;
+  url[j] = 0;
+  return xt_string_from_cstr(url);
+}
+
+xt_value xt_import_meta(xt_value name) {
+  const char *prop = xt_string_data(name);
+  const char *raw = (xt_program_argv && xt_program_argv[0]) ? xt_program_argv[0] : "";
+  char resolved[4096];
+  resolved[0] = 0;
+  if (raw[0]) {
+#if defined(_WIN32)
+    if (_fullpath(resolved, raw, sizeof(resolved)) == NULL) resolved[0] = 0;
+#else
+    if (realpath(raw, resolved) == NULL) resolved[0] = 0;
+#endif
+  }
+  const char *abs = resolved[0] ? resolved : raw;
+  if (prop && strcmp(prop, "dirname") == 0) {
+    char dir[4096];
+    size_t n = strlen(abs);
+    if (n >= sizeof(dir)) n = sizeof(dir) - 1;
+    memcpy(dir, abs, n);
+    dir[n] = 0;
+    char *slash = strrchr(dir, '/');
+#if defined(_WIN32)
+    char *back = strrchr(dir, '\\');
+    if (back && (!slash || back > slash)) slash = back;
+#endif
+    if (slash) {
+      if (slash == dir) slash[1] = 0;
+      else *slash = 0;
+    }
+    return xt_string_from_cstr(dir);
+  }
+  if (prop && strcmp(prop, "filename") == 0) return xt_string_from_cstr(abs);
+  return xt_file_url(abs);
+}
+
 void *xt_try_enter(void) {
   xt_try_frame *frame = (xt_try_frame *)calloc(1, sizeof(xt_try_frame));
   if (!frame) abort();

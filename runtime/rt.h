@@ -147,6 +147,9 @@ xt_value xt_object_new_with_proto(xt_value proto);
 xt_value xt_object_get(xt_value obj, xt_value key);
 xt_value xt_object_get_prototype(xt_value obj);
 xt_value xt_object_set_prototype(xt_value obj, xt_value proto);
+/** Define `get name()` / `set name(v)` accessors on an object. */
+xt_value xt_object_define_getter(xt_value obj, xt_value key, xt_value getter);
+xt_value xt_object_define_setter(xt_value obj, xt_value key, xt_value setter);
 xt_value xt_object_freeze(xt_value obj);
 int xt_object_is_frozen(xt_value obj);
 xt_value xt_object_from_entries(xt_value entries);
@@ -181,6 +184,16 @@ xt_value xt_set_ctor(int32_t argc, xt_value *argv);
 xt_value xt_date_ctor(int32_t argc, xt_value *argv);
 xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_regexp_ctor(int32_t argc, xt_value *argv);
+
+/* -- node:url ------------------------------------------------------------- */
+xt_value xt_url_path_to_file_url(int32_t argc, xt_value *argv);
+xt_value xt_url_file_url_to_path(int32_t argc, xt_value *argv);
+
+/* -- node:crypto ---------------------------------------------------------- */
+xt_value xt_crypto_create_hash(int32_t argc, xt_value *argv);
+
+/* -- node:child_process --------------------------------------------------- */
+xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv);
 
 /* -- promises / async ----------------------------------------------------- */
 xt_value xt_promise_resolve(xt_value value);
@@ -223,6 +236,7 @@ xt_value xt_rest_args(int32_t argc, xt_value *argv, int32_t start);
 /* -- program arguments ---------------------------------------------------- */
 /* Captured from `main` so host extensions can expose `process.argv`. */
 void xt_set_program_args(int32_t argc, char **argv);
+xt_value xt_import_meta(xt_value name);
 extern int32_t xt_program_argc;
 extern char **xt_program_argv;
 
@@ -233,6 +247,12 @@ xt_value xt_array_set(xt_value arr, xt_value index, xt_value value);
 xt_value xt_array_push(xt_value arr, xt_value value);
 xt_value xt_array_length(xt_value arr);
 xt_value xt_array_spread(xt_value target, xt_value source);
+int32_t xt_array_size(xt_value value);
+xt_value *xt_array_items(xt_value value);
+
+/* `for...of` iteration: dispatch over arrays, strings, Maps and Sets. */
+xt_value xt_iter_length(xt_value value);
+xt_value xt_iter_value(xt_value value, xt_value index);
 
 /* -- generic member access ------------------------------------------------ */
 xt_value xt_get(xt_value target, xt_value key);

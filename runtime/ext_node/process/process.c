@@ -71,10 +71,14 @@ static xt_value xt_process_env(void) {
 static xt_value xt_process_argv(void) {
   int32_t count = xt_program_argc;
   if (count <= 0 || !xt_program_argv) return xt_array_new(0, NULL);
-  xt_value *items = (xt_value *)malloc(sizeof(xt_value) * (size_t)count);
+  /* Node semantics: `[execPath, scriptPath, ...args]`. A standalone binary is
+     both the executable and the script, so the executable path is repeated;
+     user arguments therefore start at index 2, matching `node script.js a b`. */
+  xt_value *items = (xt_value *)malloc(sizeof(xt_value) * (size_t)(count + 1));
   if (!items) return xt_array_new(0, NULL);
-  for (int32_t i = 0; i < count; i++) items[i] = xt_string_from_cstr(xt_program_argv[i]);
-  xt_value result = xt_array_new(count, items);
+  items[0] = xt_string_from_cstr(xt_program_argv[0]);
+  for (int32_t i = 0; i < count; i++) items[i + 1] = xt_string_from_cstr(xt_program_argv[i]);
+  xt_value result = xt_array_new(count + 1, items);
   free(items);
   return result;
 }
@@ -128,10 +132,40 @@ xt_value xt_process_call(xt_value name, int32_t argc, xt_value *argv) {
   return xt_undefined();
 }
 
+static xt_value xt_stdout_write(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)thisValue;
+  (void)env;
+  if (argc > 0) {
+    const char *text = xt_string_data(xt_to_string(argv[0]));
+    if (text) fputs(text, stdout);
+    fflush(stdout);
+  }
+  return xt_bool(1);
+}
+
+static xt_value xt_stderr_write(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)thisValue;
+  (void)env;
+  if (argc > 0) {
+    const char *text = xt_string_data(xt_to_string(argv[0]));
+    if (text) fputs(text, stderr);
+    fflush(stderr);
+  }
+  return xt_bool(1);
+}
+
+static xt_value xt_process_stream(void *write_fn) {
+  xt_value stream = xt_object_new();
+  xt_set(stream, xt_string_from_cstr("write"), xt_closure_new(write_fn, 0, NULL));
+  return stream;
+}
+
 xt_value xt_process_get(xt_value name) {
   const char *key = xt_string_data(name);
   if (!key) return xt_undefined();
 
+  if (strcmp(key, "stdout") == 0) return xt_process_stream((void *)xt_stdout_write);
+  if (strcmp(key, "stderr") == 0) return xt_process_stream((void *)xt_stderr_write);
   if (strcmp(key, "platform") == 0) return xt_string_from_cstr(xt_process_platform());
   if (strcmp(key, "arch") == 0) return xt_string_from_cstr(xt_process_arch());
   if (strcmp(key, "pid") == 0) return xt_number((double)xt_getpid());

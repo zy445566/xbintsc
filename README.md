@@ -13,7 +13,7 @@ The design goals are:
 2. **Well-factored modules** — lexer, parser, binder, codegen, driver, extensions each live in their own directory with their own tests.
 3. **Extensive tests** — per-module unit tests plus end-to-end tests that compile and run real binaries.
 4. **Pluggable extensions** — Node `fs`, Bun APIs, … are optional compile modules, not core code.
-5. **Self-hosting ready** — the compiler is written in TypeScript and emits IR text, so a TypeScript rewrite can eventually compile itself.
+5. **Self-hosting** — the compiler compiles itself: `src/cli/main.ts` builds into a native `xbintsc` binary whose emitted LLVM IR is a fixpoint across generations. CI builds these binaries for every platform and a release attaches them.
 6. **Multi-platform** — macOS, Linux and Windows on multiple CPUs, validated by GitHub Actions.
 
 ## How it works

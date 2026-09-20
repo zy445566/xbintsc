@@ -4,6 +4,11 @@ name: Release
 # matching git tag (if needed) and creates the GitHub Release.
 on:
   workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: "CI run id holding the self-hosted binaries (default: the successful CI run for this commit)"
+        required: false
+        type: string
 
 # Serialize runs so two quick dispatches cannot race on the same tag.
 concurrency:
@@ -12,6 +17,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: read # download the self-hosted binaries from the CI workflow run
 
 jobs:
   release:
@@ -54,6 +60,73 @@ jobs:
             echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Collect the self-hosted compiler binaries that the CI workflow built
+      # for this exact commit, and stage them under release-friendly names.
+      - name: Download the self-hosted compiler artifacts
+        if: steps.version.outputs.should_release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          INPUT_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+
+          # Either use an explicitly requested CI run, or wait (bounded) for the
+          # CI run covering this commit to finish, so a release dispatched right
+          # after a push still finds its binaries.
+          run_id="${INPUT_RUN_ID:-}"
+          conclusion=""
+          if [ -n "${run_id}" ]; then
+            conclusion="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.conclusion')"
+          else
+            deadline=$(( SECONDS + 1800 ))
+            while :; do
+              read -r run_id status conclusion <<<"$(gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SHA}&per_page=100" \
+                --jq '[.workflow_runs[] | select(.name == "CI")] | sort_by(.created_at) | last | "\(.id) \(.status) \(.conclusion)"')"
+
+              if [ -n "${run_id}" ] && [ "${run_id}" != "null" ] && [ "${status}" = "completed" ]; then
+                break
+              fi
+              if [ "${SECONDS}" -ge "${deadline}" ]; then
+                echo "::error::Timed out waiting for a CI run for ${SHA}." >&2
+                exit 1
+              fi
+              echo "Waiting for CI run for ${SHA} (status: ${status:-none})..."
+              sleep 20
+            done
+          fi
+
+          if [ "${conclusion}" != "success" ]; then
+            echo "::error::CI run ${run_id} concluded '${conclusion}'; cannot fetch self-hosted binaries." >&2
+            exit 1
+          fi
+          echo "Using binaries from CI run ${run_id}."
+
+          rm -rf .ci-artifacts release-assets
+          gh run download "${run_id}" --pattern 'xbintsc-*' --dir .ci-artifacts
+
+          mkdir -p release-assets
+          shopt -s nullglob
+          for dir in .ci-artifacts/xbintsc-*; do
+            [ -d "${dir}" ] || continue
+            slug="$(basename "${dir}" | tr '[:upper:]' '[:lower:]')"
+            for file in "${dir}"/*; do
+              [ -f "${file}" ] || continue
+              case "${file}" in
+                *.exe) cp "${file}" "release-assets/${slug}.exe" ;;
+                *)     cp "${file}" "release-assets/${slug}" ;;
+              esac
+            done
+          done
+
+          if [ -z "$(ls -A release-assets)" ]; then
+            echo "::error::No self-hosted binaries were found in CI run ${run_id}." >&2
+            exit 1
+          fi
+          ls -l release-assets
+
       - name: Create GitHub release
         if: steps.version.outputs.should_release == 'true'
         env:
@@ -63,10 +136,11 @@ jobs:
         run: |
           if [ "${TAG_EXISTS}" = "true" ]; then
             # Reuse the existing tag instead of trying to recreate it.
-            gh release create "${TAG}" --title "${TAG}" --generate-notes
+            gh release create "${TAG}" --title "${TAG}" --generate-notes release-assets/*
           else
             gh release create "${TAG}" \
               --target "${{ github.sha }}" \
               --title "${TAG}" \
-              --generate-notes
+              --generate-notes \
+              release-assets/*
           fi

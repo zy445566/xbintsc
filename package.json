@@ -1,6 +1,6 @@
 {
   "name": "xbintsc",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "xbintsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
   "type": "module",
   "license": "MIT",
@@ -32,8 +32,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "runtime": "node scripts/build-runtime.mjs",
-    "runtime:clean": "node -e \"require('fs').rmSync('build/runtime',{recursive:true,force:true})\"",
+    "runtime": "tsx scripts/build-runtime.ts",
+    "fetch-toolchain": "tsx scripts/fetch-toolchain.ts",
+    "runtime:clean": "node -e \"require('fs').rmSync('build/runtime-obj',{recursive:true,force:true});require('fs').rmSync('runtime/lib',{recursive:true,force:true})\"",
     "xbintsc": "tsx src/cli/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

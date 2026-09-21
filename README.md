@@ -210,8 +210,16 @@ Tests are organised by module under `tests/` (`lexer`, `parser`, `binder`,
 
 ## Requirements
 
-- Node.js 20+
-- A `clang`-compatible C compiler on `PATH` (override with `xbintsc_CLANG`)
+See [Requirements](./doc/requirements.md) for the full, per-platform list.
+
+- Node.js 20+ — only to run/build from source; released binaries are standalone
+- macOS: the Xcode Command Line Tools (`xcode-select --install`)
+- Windows: nothing extra — the MinGW-w64 toolchain is bundled
+- Linux: a system C library (glibc)
+- To build a binary yourself: a `clang`-compatible compiler on `PATH`
+  (override with `xbintsc_CLANG`)
+
+Check your environment with `xbintsc doctor`.
 
 ## Language subset
 

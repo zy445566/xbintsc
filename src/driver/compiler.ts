@@ -18,10 +18,11 @@ import { bundleModules } from "./modules.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { BuildCache, hashParts } from "./cache.js";
 import { findRuntimeDir } from "./paths.js";
+import { findRuntimeLibrary } from "./runtime-lib.js";
+import { resolveToolchain } from "./toolchain-provider.js";
 import {
   compileC,
   compileIr,
-  findClang,
   link,
   realRunner,
   type Runner,
@@ -43,6 +44,8 @@ export interface BuildOptions {
   readonly extensions?: ExtensionRegistry;
   readonly runner?: Runner;
   readonly clang?: string;
+  /** Prefer a prebuilt `runtime/lib/<os>-<arch>/*.a` archive when present (default true). */
+  readonly preferPrebuilt?: boolean;
   readonly write?: boolean;
 }
 
@@ -189,11 +192,11 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   }
 
   // -- toolchain -----------------------------------------------------------
-  const clang = options.clang ?? findClang(runner);
-  const runtimeDir = findRuntimeDir();
+  const toolchain = options.clang
+    ? { clang: options.clang, linkerArgs: [] as string[] }
+    : resolveToolchain(runner);
+  const clang = toolchain.clang;
   mkdirSync(cacheDir, { recursive: true });
-
-  const { runtimeObjects, extensionObjects } = ensureRuntimeObjects(runner, clang, runtimeDir, cacheDir, registry);
 
   const objectPath = emit === "obj" ? outputPath : resolve(outDir, baseName + ".o");
   compileIr(runner, { clang, irPath, objectPath, optimize });
@@ -204,11 +207,25 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, irPath, cached: false, diagnostics: [], ir };
   }
 
+  const runtimeDir = findRuntimeDir();
+  const { runtimeObjects, extensionObjects } = ensureRuntimeObjects(
+    runner,
+    clang,
+    runtimeDir,
+    cacheDir,
+    registry,
+    options.preferPrebuilt ?? true,
+  );
+
   link(runner, {
     clang,
     objectPaths: [objectPath, ...runtimeObjects, ...extensionObjects],
     outputPath,
-    linkerFlags: [...(process.platform === "win32" ? ["-lws2_32"] : ["-lm"]), ...registry.linkerFlags()],
+    linkerFlags: [
+      ...toolchain.linkerArgs,
+      ...(process.platform === "win32" ? ["-lws2_32"] : ["-lm"]),
+      ...registry.linkerFlags(),
+    ],
     optimize,
   });
 
@@ -223,7 +240,7 @@ interface RuntimeObjects {
 }
 
 /** Core runtime translation units (each compiled and cached independently). */
-const RUNTIME_SOURCES = [
+export const RUNTIME_SOURCES = [
   "xt_alloc.c",
   "xt_values.c",
   "xt_containers.c",
@@ -238,6 +255,10 @@ const RUNTIME_SOURCES = [
 /**
  * Compile the core runtime and every extension source, reusing cached object
  * files keyed on the C source hash. Returns the object paths to link.
+ *
+ * When `preferPrebuilt` is set, a shipped static archive
+ * (`runtime/lib/<os>-<arch>/{core,ext_<name>}.a`) is used instead of compiling
+ * that group's C sources. Missing archives fall back to compiling the sources.
  */
 function ensureRuntimeObjects(
   runner: Runner,
@@ -245,6 +266,7 @@ function ensureRuntimeObjects(
   runtimeDir: string,
   cacheDir: string,
   registry: ExtensionRegistry,
+  preferPrebuilt: boolean,
 ): RuntimeObjects {
   /* Runtime objects depend on the shared headers (rt.h/rt_internal.h/...),
      so a header change must invalidate every cached object. Hash them all. */
@@ -269,11 +291,27 @@ function ensureRuntimeObjects(
     return objectPath;
   };
 
-  const runtimeObjects = RUNTIME_SOURCES.map((source) =>
-    compileOne(join(runtimeDir, source), basename(source, ".c")),
-  );
-  const extensionObjects = registry
-    .runtimeSources()
-    .map((sourcePath, index) => compileOne(sourcePath, `ext_${index}_${basename(sourcePath, ".c")}`));
+  const coreArchive = preferPrebuilt ? findRuntimeLibrary("core") : undefined;
+  const runtimeObjects = coreArchive
+    ? [coreArchive]
+    : RUNTIME_SOURCES.map((source) => compileOne(join(runtimeDir, source), basename(source, ".c")));
+
+  const extensionObjects: string[] = [];
+  const seen = new Set<string>();
+  for (const extension of registry.all()) {
+    const sources = extension.runtimeSources ? extension.runtimeSources() : [];
+    if (sources.length === 0) continue;
+    const archive = preferPrebuilt ? findRuntimeLibrary(`ext_${extension.name}`) : undefined;
+    if (archive) {
+      extensionObjects.push(archive);
+      continue;
+    }
+    for (const sourcePath of sources) {
+      const dedupeKey = resolve(sourcePath);
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      extensionObjects.push(compileOne(sourcePath, `ext_${extensionObjects.length}_${basename(sourcePath, ".c")}`));
+    }
+  }
   return { runtimeObjects, extensionObjects };
 }

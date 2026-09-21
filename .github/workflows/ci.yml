@@ -76,8 +76,11 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Build the runtime objects
+      - name: Build the runtime (and prebuilt archives)
         run: npm run runtime
+
+      - name: Report the resolved toolchain
+        run: npx tsx src/cli/main.ts doctor
 
       - name: Unit and end-to-end tests
         run: npm test

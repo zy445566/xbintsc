@@ -200,8 +200,15 @@ npm run test:e2e    # 仅编译并运行的测试
 
 ## 运行要求
 
-- Node.js 20+
-- `PATH` 中有兼容 `clang` 的 C 编译器（可用 `xbintsc_CLANG` 覆盖）
+完整的分平台要求见 [使用前置要求](./doc/zh-CN/requirements.md)。
+
+- Node.js 20+ —— 仅从源码运行/构建时需要；发布版二进制是独立的
+- macOS：Xcode Command Line Tools（`xcode-select --install`）
+- Windows：无需额外安装 —— 自带 MinGW-w64 工具链
+- Linux：系统 C 库（glibc）
+- 若要自行编译二进制：`PATH` 中有兼容 `clang` 的 C 编译器（可用 `xbintsc_CLANG` 覆盖）
+
+用 `xbintsc doctor` 检查环境。
 
 ## 语言子集
 

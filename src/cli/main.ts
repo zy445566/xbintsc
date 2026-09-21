@@ -7,6 +7,7 @@
  *   xbintsc build <file> [-o out] [--emit ir|obj|exe] [-O0..3] [--ext node]
  *   xbintsc run   <file> [-- args...]
  *   xbintsc emit  <file>            # print LLVM IR to stdout
+ *   xbintsc doctor                  # report the resolved toolchain
  *   xbintsc version
  */
 
@@ -17,6 +18,10 @@ import { pathToFileURL } from "node:url";
 import { DiagnosticBag, formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { build, compileEntry, COMPILER_VERSION, type EmitKind } from "../driver/compiler.js";
+import { findRuntimeDir, platformSlug } from "../driver/paths.js";
+import { runtimeLibDir } from "../driver/runtime-lib.js";
+import { resolveToolchain } from "../driver/toolchain-provider.js";
+import { realRunner } from "../driver/toolchain.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { nodeExtension } from "../extensions/node/index.js";
 
@@ -119,6 +124,7 @@ Usage:
   xbintsc build <file.ts> [options]   Compile to a native binary
   xbintsc run <file.ts> [-- args]     Compile and execute
   xbintsc emit <file.ts>              Print LLVM IR
+  xbintsc doctor                      Report the resolved toolchain
   xbintsc version                     Print the version
   xbintsc help                        Show this message
 
@@ -132,6 +138,39 @@ Options:
       --verbose         Print progress information
 `;
 
+function firstLine(text: string): string {
+  const index = text.indexOf("\n");
+  return (index === -1 ? text : text.slice(0, index)).trim();
+}
+
+/** Report the resolved toolchain and runtime locations. */
+function doctor(io: CliIo): number {
+  io.stdout(`xbintsc ${COMPILER_VERSION}\n`);
+  io.stdout(`platform   : ${platformSlug()}\n`);
+
+  try {
+    const toolchain = resolveToolchain();
+    const version = realRunner.run(toolchain.clang, ["--version"]).stdout;
+    io.stdout(`toolchain  : ${toolchain.clang} (${toolchain.source})\n`);
+    io.stdout(`compiler   : ${firstLine(version) || "unknown"}\n`);
+  } catch {
+    io.stdout("toolchain  : not found (install the Xcode Command Line Tools or set xbintsc_CLANG)\n");
+  }
+
+  try {
+    io.stdout(`runtime    : ${findRuntimeDir()}\n`);
+  } catch {
+    io.stdout("runtime    : not found (cannot locate runtime/rt.h)\n");
+  }
+
+  try {
+    io.stdout(`runtime lib: ${runtimeLibDir()}\n`);
+  } catch {
+    io.stdout("runtime lib: unavailable\n");
+  }
+  return 0;
+}
+
 export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   const args = parseArgs(argv);
   const command = args.command;
@@ -139,6 +178,10 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   if (!command || command === "help" || args.flags.has("help")) {
     io.stdout(HELP);
     return 0;
+  }
+
+  if (command === "doctor") {
+    return doctor(io);
   }
 
   if (command === "version" || args.flags.has("version")) {

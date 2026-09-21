@@ -91,6 +91,9 @@ describe("build", () => {
       cacheDir: join(directory, ".cache"),
       runner,
       clang: "clang",
+      // Force runtime compilation so we exercise the clang C path rather than a
+      // prebuilt archive that may exist in `runtime/lib/`.
+      preferPrebuilt: false,
     });
 
     expect(result.diagnostics).toHaveLength(0);

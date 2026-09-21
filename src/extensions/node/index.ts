@@ -25,6 +25,9 @@ import { httpModule } from "./http/index.js";
 import { urlModule } from "./url/index.js";
 import { cryptoModule } from "./crypto/index.js";
 import { childProcessModule } from "./child_process/index.js";
+import { eventsModule } from "./events/index.js";
+import { utilModule } from "./util/index.js";
+import { querystringModule } from "./querystring/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -41,6 +44,9 @@ const modules: readonly NodeModule[] = [
   urlModule,
   cryptoModule,
   childProcessModule,
+  eventsModule,
+  utilModule,
+  querystringModule,
 ];
 
 export const nodeExtension: Extension = {

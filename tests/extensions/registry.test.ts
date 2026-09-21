@@ -43,6 +43,10 @@ describe("ExtensionRegistry", () => {
     expect(modules["fs/promises"]?.exports?.readFile?.symbol).toBe("xt_node_p_read_file");
     expect(modules.path?.namespace).toBe("path");
     expect(modules["node:path"]?.exports?.join?.namespace).toBe("path");
+    expect(modules.events?.exports?.EventEmitter?.isConstructor).toBe(true);
+    expect(modules.events?.exports?.once?.namespace).toBe("events");
+    expect(modules.util?.exports?.format?.symbol).toBe("xt_util_format");
+    expect(modules.querystring?.exports?.parse?.symbol).toBe("xt_querystring_parse");
   });
 
   it("collects runtime sources and linker flags", () => {

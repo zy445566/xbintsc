@@ -76,7 +76,9 @@ export const moduleMethods: ModuleMethods = {
       "source_filename = \"" + sourceName + "\"",
       "",
     ];
-    return [...header, ...RUNTIME_DECLARATIONS, ...this.extraDeclarations, "", ...this.globals, "", ...this.functions, ""].join("\n");
+    const runtimeDeclarations = new Set(RUNTIME_DECLARATIONS);
+    const extraDeclarations = [...this.extraDeclarations].filter((line) => !runtimeDeclarations.has(line));
+    return [...header, ...RUNTIME_DECLARATIONS, ...extraDeclarations, "", ...this.globals, "", ...this.functions, ""].join("\n");
   },
 
   // -- module level --------------------------------------------------------

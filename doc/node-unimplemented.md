@@ -42,21 +42,20 @@ still unimplemented:
 
 The following Node built-in modules have no corresponding extension / builtin
 (`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` / `net` /
-`dgram` / `http` are implemented, see [node-implemented.md](./node-implemented.md)):
+`dgram` / `http` / `events` / `util` / `querystring` are implemented, and `crypto` /
+`url` / `child_process` are partially implemented; see
+[node-implemented.md](./node-implemented.md)):
 
 | Module | Notes |
 | --- | --- |
-| `crypto` | hashing, random numbers, encryption |
 | `https` | TLS version of HTTP |
-| `child_process` | `spawn` `exec` `fork` |
-| `util` | `inspect` `format` `promisify` etc. |
-| `events` | standalone `EventEmitter` class (streams/sockets already have emitter capabilities internally, but there is no `events` module / global `EventEmitter`) |
-| `url` | URL parsing |
-| `querystring` | query string parsing |
 | `zlib` | compression / decompression |
 | `readline` | command-line reading |
 | `worker_threads` | worker threads |
 | `tls` / `cluster` / `vm` / `os` (partially) etc. | other modules not listed |
+
+> `crypto` (only `createHash`), `url` (only `pathToFileURL` / `fileURLToPath`) and
+> `child_process` (only `spawnSync`) are partially implemented.
 
 ---
 
@@ -89,13 +88,13 @@ Implemented:
 
 - Core event loop `runtime/xt_loop.c` (a `select(2)` reactor); `net` / `dgram` / `http` are all built on it.
 - `Promise`, `async` / `await` are available (see the core documents); `fs/promises` returns Promises.
-- Event emitters (`on` / `addListener` / `once` / `off` / `removeListener` / `emit`) are provided on streams and sockets.
+- A standalone `EventEmitter` is provided by the `events` module (also a global constructor); streams and sockets additionally carry internal emitter methods (`on` / `addListener` / `once` / `off` / `removeListener` / `emit`).
 
 Still unimplemented:
 
 - Timers `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask`.
 - A real asynchronous I/O scheduler: `fs/promises` is essentially an immediate-settle wrapper around synchronous operations and does not yield while waiting for I/O.
-- `once` is currently equivalent to `on` (no "remove after firing once" semantics).
+- On streams and sockets the built-in `once` is equivalent to `on` (no "remove after firing once" semantics); the `events` module's `EventEmitter` does implement real `once`.
 - `net`'s `connect` is blocking; HTTP responses require `Connection: close`, with no keep-alive / chunked transfer / pipelining.
 
 ---
@@ -125,20 +124,24 @@ Implemented (other modules): path (join/resolve/normalize/dirname/basename/extna
                              stream (Readable/Writable/Duplex/Transform/PassThrough, pipe),
                              net (createServer/connect/isIP + Server/Socket),
                              dgram (createSocket + bind/send/close/address),
-                             http (createServer/request/get + req/res)
+                             http (createServer/request/get + req/res),
+                             events (EventEmitter: on/once/off/emit/listeners/listenerCount/eventNames),
+                             util (format/inspect/isDeepStrictEqual/inherits/promisify + isX),
+                             querystring (parse/stringify/escape/unescape),
+                             crypto (createHash only), url (pathToFileURL/fileURLToPath only),
+                             child_process (spawnSync only)
 
 Unimplemented (fs): readFile, writeFile, appendFile (async callback-style), watch/watchFile,
                     open/read/write/close, mkdtempSync, link/symlink/readlink,
                     chmod/chown/utimes/truncate, createReadStream/createWriteStream, Buffer return
 
-Unimplemented (other modules): crypto, https, child_process, util, events (standalone class), url,
-                               querystring, zlib, readline, worker_threads, tls, cluster, vm
+Unimplemented (other modules): https, zlib, readline, worker_threads, tls, cluster, vm
 
 Unimplemented (global/namespace): global/globalThis, __dirname, __filename,
                                   require/module/exports, fs.readFileSync(...) namespace calls
 
 Unimplemented (async): timers setTimeout / setInterval / setImmediate / queueMicrotask,
-                       real async I/O scheduling, once "fire once" semantics, keep-alive
+                       real async I/O scheduling, keep-alive
 
 Unimplemented (platform): Bun extension (design example only)
 ```

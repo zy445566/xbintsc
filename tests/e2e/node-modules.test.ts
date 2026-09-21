@@ -190,4 +190,67 @@ describeWithClang("node compatibility modules", () => {
       "post hello /submit payload",
     ]);
   });
+
+  it("provides a standalone EventEmitter from events", () => {
+    const source = `
+      import { EventEmitter } from "events";
+      const em = new EventEmitter();
+      let count = 0;
+      let onceCount = 0;
+      em.on("tick", () => { count++; });
+      em.once("tick", () => { onceCount++; });
+      console.log("before", em.listenerCount("tick"));
+      em.emit("tick");
+      em.emit("tick");
+      console.log("after", count, onceCount, em.listenerCount("tick"));
+      em.removeAllListeners("tick");
+      console.log("names", em.eventNames().length);
+      // The constructor is also available as a global.
+      const global = new EventEmitter();
+      let seen = 0;
+      global.on("x", () => { seen++; });
+      global.emit("x");
+      console.log("global", seen);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["before 2", "after 2 1 1", "names 0", "global 1"]);
+  });
+
+  it("implements util helpers", () => {
+    const source = `
+      import { format, inspect, isDeepStrictEqual, promisify, isString } from "util";
+      function addAsync(a: number, b: number, cb: (e: any, v: number) => void): void { cb(null, a + b); }
+      const add = promisify(addAsync);
+      add(2, 3).then((v: number) => { console.log("promise", v); });
+      console.log(format("%s:%d:%j", "k", 5, { a: 1 }));
+      console.log(inspect({ a: 1, b: [2, 3] }));
+      console.log(isDeepStrictEqual({ a: [1, 2] }, { a: [1, 2] }), isString("x"), isString(1));
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual([
+      'k:5:{"a":1}',
+      "{ a: 1, b: [ 2, 3 ] }",
+      "true true false",
+      "promise 5",
+    ]);
+  });
+
+  it("implements querystring parse and stringify", () => {
+    const source = `
+      import { parse, stringify, escape, unescape } from "querystring";
+      const q: any = parse("a=1&b=2&b=3&c=hello+world");
+      console.log(q.a, JSON.stringify(q.b), q.c);
+      console.log(stringify({ x: "a b", y: ["1", "2"] }));
+      console.log(escape("a b&c"), unescape("a%20b%26c"));
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual([
+      '1 ["2","3"] hello world',
+      "x=a%20b&y=1&y=2",
+      "a%20b%26c a b&c",
+    ]);
+  });
 });

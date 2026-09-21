@@ -288,6 +288,18 @@ export const expressionMethods: ExpressionMethods = {
           return this.runtimeCall("xt_object_new", []);
         }
       }
+      // An imported constructor (`import { EventEmitter } from "events"`) keeps
+      // its import symbol, so resolve it through the module export table.
+      if (symbol && symbol.kind === SymbolKind.Import) {
+        const exported = this.importExports.get(symbol.id);
+        if (exported?.symbol && exported.isConstructor) {
+          this.extraDeclarations.add(`declare i64 @${exported.symbol}(i32, i64*)`);
+          const args = this.emitArguments(node.arguments);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @${exported.symbol}(i32 ${args.argc}, i64* ${args.ptr})`);
+          return result;
+        }
+      }
     }
     const ctorValue = this.emitExpression(callee);
     const args = this.emitArguments(node.arguments);

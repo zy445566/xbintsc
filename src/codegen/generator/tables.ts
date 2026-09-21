@@ -117,6 +117,9 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   net: "xt_net_static",
   dgram: "xt_dgram_static",
   http: "xt_http_static",
+  events: "xt_events_static",
+  util: "xt_util_static",
+  querystring: "xt_querystring_static",
 };
 
 /** Namespace identifiers whose property access maps to a runtime getter. */
@@ -142,6 +145,7 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   PassThrough: "xt_pass_through_ctor",
   Socket: "xt_net_socket_ctor",
   Server: "xt_net_server_ctor",
+  EventEmitter: "xt_event_emitter_ctor",
 };
 
 export const BUILTIN_METHODS = new Set<string>([

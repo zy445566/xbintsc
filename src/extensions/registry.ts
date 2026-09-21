@@ -28,6 +28,12 @@ export interface ModuleExport {
   readonly returnVoid?: boolean;
   readonly namespace?: string;
   readonly method?: string;
+  /**
+   * Marks a runtime symbol as a constructor callable with `new` (it has the
+   * `(i32, i64*)` signature). Lets `import { EventEmitter } from "events"` be
+   * used as `new EventEmitter()`.
+   */
+  readonly isConstructor?: boolean;
 }
 
 export type ModuleExports = Readonly<Record<string, ModuleExport>>;

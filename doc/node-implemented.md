@@ -42,7 +42,13 @@ src/extensions/node/           runtime/ext_node/
   net/index.ts                     dgram/dgram.c
   dgram/index.ts                   http/http.c
   http/index.ts                    node_common.h (event emitter / encoding helpers)
-  fs-promises/index.ts
+  fs-promises/index.ts             crypto/crypto.c
+  crypto/index.ts                  url/url.c
+  url/index.ts                     child_process/child_process.c
+  child_process/index.ts           events/events.c
+  events/index.ts                  util/util.c
+  util/index.ts                    querystring/querystring.c
+  querystring/index.ts
 ```
 
 - Core event loop: `runtime/xt_loop.c` (a `select(2)` reactor). The generated module's `main` calls `xt_run_event_loop()` after draining microtasks; it returns immediately when no fds are registered, so pure-computation programs are unaffected.
@@ -353,7 +359,92 @@ console.log(result.status, result.stdout.split("\n")[0]);
 
 ---
 
-## 13. Implemented Node capabilities quick reference
+## 13. The `events` module (implemented)
+
+Location: `src/extensions/node/events/index.ts`, `runtime/ext_node/events/events.c`
+
+Provides a standalone `EventEmitter`, available both as a **global constructor**
+(`new EventEmitter()`) and as a named export
+(`import { EventEmitter } from "events"`). Instances share the runtime emitter
+used by `stream` / `net` / `http` (listeners live in an internal `__xt_events`
+property), with the fuller `events` surface layered on top:
+
+| Method | Notes |
+| --- | --- |
+| `on(name, fn)` / `addListener(name, fn)` | append a listener |
+| `once(name, fn)` | fire at most once, then remove itself |
+| `prependListener(name, fn)` / `prependOnceListener(name, fn)` | insert at the front |
+| `off(name, fn)` / `removeListener(name, fn)` | remove a listener |
+| `removeAllListeners([name])` | clear one event (or all events) |
+| `emit(name[, ...args])` | invoke listeners |
+| `listeners(name)` / `rawListeners(name)` | listener array |
+| `listenerCount(name)` | number of listeners |
+| `eventNames()` | names that currently have listeners |
+| `setMaxListeners(n)` / `getMaxListeners()` | bookkeeping (default 10) |
+
+Statics reachable through the namespace (`import ee from "events"`):
+`listenerCount`, `getEventListeners`, `getMaxListeners`, `setMaxListeners`,
+`once`.
+
+```ts
+import { EventEmitter } from "events";
+
+const em = new EventEmitter();
+em.once("ready", () => console.log("ready"));
+em.emit("ready"); // ready
+em.emit("ready"); // nothing: the listener already ran
+```
+
+---
+
+## 14. The `util` module (implemented)
+
+Location: `src/extensions/node/util/index.ts`, `runtime/ext_node/util/util.c`
+
+Both named imports (`import { format } from "util"`) and namespace calls
+(`import util from "util"` / `import * as util from "util"`) are supported.
+
+| Function | Notes |
+| --- | --- |
+| `format(fmt, ...args)` | `%s` `%d` `%i` `%f` `%j` `%o` `%O` `%c` `%%` placeholders |
+| `formatWithOptions(opts, fmt, ...args)` | options accepted and ignored |
+| `inspect(value)` | recursive printer (depth-limited, strings quoted) |
+| `isDeepStrictEqual(a, b)` | structural comparison (`NaN` equals `NaN`) |
+| `inherits(ctor, superCtor)` | prototype wiring |
+| `deprecate(fn, msg)` | returns `fn` unchanged (there is no warning channel) |
+| `promisify(fn)` | wraps a trailing-callback function into a `Promise` |
+| `isString` `isNumber` `isBoolean` `isUndefined` `isNull` `isFunction` `isArray` `isObject` `isBuffer` `isDate` `isRegExp` `isPromise` `isError` | type predicates |
+
+```ts
+import { format, promisify } from "util";
+
+console.log(format("%s=%d", "n", 3)); // n=3
+```
+
+---
+
+## 15. The `querystring` module (implemented)
+
+Location: `src/extensions/node/querystring/index.ts`, `runtime/ext_node/querystring/querystring.c`
+
+| Function | Notes |
+| --- | --- |
+| `parse(str[, sep[, eq]])` / `decode` | parse into an object; repeated keys become arrays |
+| `stringify(obj[, sep[, eq]])` / `encode` | serialize; spaces become `+`, arrays repeat the key |
+| `escape(str)` / `unescape(str)` | percent-encode / decode (`+` decodes to a space) |
+
+Defaults: `sep = "&"`, `eq = "="`.
+
+```ts
+import { parse, stringify } from "querystring";
+
+const q = parse("a=1&b=2&b=3");      // { a: "1", b: ["2", "3"] }
+console.log(stringify({ x: "a b" })); // x=a+b
+```
+
+---
+
+## 16. Implemented Node capabilities quick reference
 
 | Category | Contents |
 | --- | --- |
@@ -371,6 +462,9 @@ console.log(result.status, result.stdout.split("\n")[0]);
 | dgram | `createSocket`; `bind/send/close/address/setBroadcast/setTTL` |
 | http | `createServer` `request` `get`; `ClientRequest`, `IncomingMessage`, `ServerResponse` |
 | child_process | `spawnSync(command, args[, {cwd, stdio}])` returning `status` / `stdout` / `stderr` |
+| events | `EventEmitter` (global + named); `on/once/off/emit/listeners/listenerCount/eventNames`; statics `listenerCount/getEventListeners/getMaxListeners/setMaxListeners/once` |
+| util | `format` `formatWithOptions` `inspect` `isDeepStrictEqual` `inherits` `deprecate` `promisify`; `isString/isNumber/isBoolean/isUndefined/isNull/isFunction/isArray/isObject/isBuffer/isDate/isRegExp/isPromise/isError` |
+| querystring | `parse`/`decode` `stringify`/`encode` `escape` `unescape` |
 | crypto | `createHash(algorithm)` |
 | url | `pathToFileURL` `fileURLToPath` |
 | fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `realpath` `stat` `lstat` `access` |

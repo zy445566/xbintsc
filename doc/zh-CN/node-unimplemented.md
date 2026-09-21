@@ -34,21 +34,18 @@
 
 ## 2. 其它 Node 模块完全未实现
 
-以下 Node 内置模块没有任何对应扩展 / 内置函数（`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` / `net` / `dgram` / `http` 已实现，见 [node-implemented.md](node-implemented.md)）：
+以下 Node 内置模块没有任何对应扩展 / 内置函数（`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` / `net` / `dgram` / `http` / `events` / `util` / `querystring` 已实现，`crypto` / `url` / `child_process` 部分实现，见 [node-implemented.md](node-implemented.md)）：
 
 | 模块 | 说明 |
 | --- | --- |
-| `crypto` | 哈希、随机数、加密 |
 | `https` | TLS 版 HTTP |
-| `child_process` | `spawn` `exec` `fork` |
-| `util` | `inspect` `format` `promisify` 等 |
-| `events` | 独立的 `EventEmitter` 类（流/套接字内部已具备发射器能力，但无 `events` 模块 / 全局 `EventEmitter`） |
-| `url` | URL 解析 |
-| `querystring` | 查询字符串解析 |
 | `zlib` | 压缩 / 解压 |
 | `readline` | 命令行读取 |
 | `worker_threads` | 工作线程 |
 | `tls` / `cluster` / `vm` / `os`（部分）等 | 其余未列出的模块 |
+
+> `crypto`（仅 `createHash`）、`url`（仅 `pathToFileURL` / `fileURLToPath`）与
+> `child_process`（仅 `spawnSync`）目前为部分实现。
 
 ---
 
@@ -74,13 +71,13 @@ Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { read
 
 - 核心事件循环 `runtime/xt_loop.c`（`select(2)` 反应堆），`net` / `dgram` / `http` 均构建于其上。
 - `Promise`、`async` / `await` 已可用（见核心文档），`fs/promises` 返回 Promise。
-- 事件发射器（`on` / `addListener` / `once` / `off` / `removeListener` / `emit`）已在流与套接字上提供。
+- 提供独立的 `EventEmitter`（`events` 模块，同时也是全局构造函数）；流与套接字额外具备内部发射器方法（`on` / `addListener` / `once` / `off` / `removeListener` / `emit`）。
 
 仍未实现：
 
 - 定时器 `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask`。
 - 真正的异步 I/O 调度：`fs/promises` 实质是同步操作的即时 settle 包装，不会在等待 I/O 时让出。
-- `once` 目前等同 `on`（不具「触发一次后移除」语义）。
+- 流与套接字的内置 `once` 等同 `on`（不具「触发一次后移除」语义）；`events` 模块的 `EventEmitter` 实现了真正的 `once`。
 - `net` 的 `connect` 为阻塞式；HTTP 响应要求 `Connection: close`，不做 keep-alive / 分块传输 / 流水线复用。
 
 ---
@@ -109,20 +106,24 @@ Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { read
                     stream（Readable/Writable/Duplex/Transform/PassThrough、pipe）、
                     net（createServer/connect/isIP + Server/Socket）、
                     dgram（createSocket + bind/send/close/address）、
-                    http（createServer/request/get + req/res）
+                    http（createServer/request/get + req/res）、
+                    events（EventEmitter：on/once/off/emit/listeners/listenerCount/eventNames）、
+                    util（format/inspect/isDeepStrictEqual/inherits/promisify + isX）、
+                    querystring（parse/stringify/escape/unescape）、
+                    crypto（仅 createHash）、url（仅 pathToFileURL/fileURLToPath）、
+                    child_process（仅 spawnSync）
 
 未实现（fs）：readFile、writeFile、appendFile（异步回调式）、watch/watchFile、
               open/read/write/close、mkdtempSync、link/symlink/readlink、
               chmod/chown/utimes/truncate、createReadStream/createWriteStream、Buffer 返回
 
-未实现（其它模块）：crypto、https、child_process、util、events（独立类）、url、
-                    querystring、zlib、readline、worker_threads、tls、cluster、vm
+未实现（其它模块）：https、zlib、readline、worker_threads、tls、cluster、vm
 
 未实现（全局/命名空间）：global/globalThis、__dirname、__filename、
                         require/module/exports、fs.readFileSync(...) 命名空间调用
 
 未实现（异步）：定时器 setTimeout / setInterval / setImmediate / queueMicrotask、
-                真正异步 I/O 调度、once「触发一次」语义、keep-alive
+                真正异步 I/O 调度、keep-alive
 
 未实现（平台）：Bun 扩展（仅设计示例）
 ```

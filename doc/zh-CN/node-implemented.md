@@ -39,7 +39,13 @@ src/extensions/node/           runtime/ext_node/
   net/index.ts                     dgram/dgram.c
   dgram/index.ts                   http/http.c
   http/index.ts                    node_common.h（事件发射器 / 编码助手）
-  fs-promises/index.ts
+  fs-promises/index.ts             crypto/crypto.c
+  crypto/index.ts                  url/url.c
+  url/index.ts                     child_process/child_process.c
+  child_process/index.ts           events/events.c
+  events/index.ts                  util/util.c
+  util/index.ts                    querystring/querystring.c
+  querystring/index.ts
 ```
 
 - 核心事件循环：`runtime/xt_loop.c`（`select(2)` 反应堆），生成模块的 `main` 在微任务清空后调用 `xt_run_event_loop()`；无可注册 fd 时立即返回，因此纯计算程序不受影响。
@@ -321,7 +327,90 @@ console.log(result.status, result.stdout.split("\n")[0]);
 
 ---
 
-## 13. 已实现 Node 能力速查
+## 13. `events` 模块（已实现）
+
+位置：`src/extensions/node/events/index.ts`、`runtime/ext_node/events/events.c`
+
+提供独立的 `EventEmitter`，既可以作为**全局构造函数**使用
+（`new EventEmitter()`），也可以作为命名导出（`import { EventEmitter } from
+"events"`）。实例与 `stream` / `net` / `http` 共用运行时事件发射器（监听器存放
+在内部的 `__xt_events` 属性上），并在此基础上提供更完整的 `events` 接口：
+
+| 方法 | 说明 |
+| --- | --- |
+| `on(name, fn)` / `addListener(name, fn)` | 追加监听器 |
+| `once(name, fn)` | 最多触发一次，然后自行移除 |
+| `prependListener(name, fn)` / `prependOnceListener(name, fn)` | 插入到最前 |
+| `off(name, fn)` / `removeListener(name, fn)` | 移除监听器 |
+| `removeAllListeners([name])` | 清空某个（或全部）事件 |
+| `emit(name[, ...args])` | 触发监听器 |
+| `listeners(name)` / `rawListeners(name)` | 监听器数组 |
+| `listenerCount(name)` | 监听器数量 |
+| `eventNames()` | 当前有监听器的事件名 |
+| `setMaxListeners(n)` / `getMaxListeners()` | 记录（默认 10） |
+
+通过命名空间（`import ee from "events"`）可访问的静态方法：`listenerCount`、
+`getEventListeners`、`getMaxListeners`、`setMaxListeners`、`once`。
+
+```ts
+import { EventEmitter } from "events";
+
+const em = new EventEmitter();
+em.once("ready", () => console.log("ready"));
+em.emit("ready"); // ready
+em.emit("ready"); // 无输出：监听器已执行过
+```
+
+---
+
+## 14. `util` 模块（已实现）
+
+位置：`src/extensions/node/util/index.ts`、`runtime/ext_node/util/util.c`
+
+同时支持命名导入（`import { format } from "util"`）与命名空间调用
+（`import util from "util"` / `import * as util from "util"`）。
+
+| 函数 | 说明 |
+| --- | --- |
+| `format(fmt, ...args)` | 支持 `%s` `%d` `%i` `%f` `%j` `%o` `%O` `%c` `%%` 占位符 |
+| `formatWithOptions(opts, fmt, ...args)` | 接受选项但忽略 |
+| `inspect(value)` | 递归打印（限制深度，字符串带引号） |
+| `isDeepStrictEqual(a, b)` | 结构比较（`NaN` 等于 `NaN`） |
+| `inherits(ctor, superCtor)` | 连接原型链 |
+| `deprecate(fn, msg)` | 原样返回 `fn`（没有告警通道） |
+| `promisify(fn)` | 把「回调在末尾」的函数包装为 `Promise` |
+| `isString` `isNumber` `isBoolean` `isUndefined` `isNull` `isFunction` `isArray` `isObject` `isBuffer` `isDate` `isRegExp` `isPromise` `isError` | 类型判断 |
+
+```ts
+import { format, promisify } from "util";
+
+console.log(format("%s=%d", "n", 3)); // n=3
+```
+
+---
+
+## 15. `querystring` 模块（已实现）
+
+位置：`src/extensions/node/querystring/index.ts`、`runtime/ext_node/querystring/querystring.c`
+
+| 函数 | 说明 |
+| --- | --- |
+| `parse(str[, sep[, eq]])` / `decode` | 解析为对象；重复的键会变成数组 |
+| `stringify(obj[, sep[, eq]])` / `encode` | 序列化；空格变成 `+`，数组会重复键 |
+| `escape(str)` / `unescape(str)` | 百分号编码 / 解码（`+` 解码为空格） |
+
+默认值：`sep = "&"`，`eq = "="`。
+
+```ts
+import { parse, stringify } from "querystring";
+
+const q = parse("a=1&b=2&b=3");      // { a: "1", b: ["2", "3"] }
+console.log(stringify({ x: "a b" })); // x=a+b
+```
+
+---
+
+## 16. 已实现 Node 能力速查
 
 | 类别 | 内容 |
 | --- | --- |
@@ -339,6 +428,9 @@ console.log(result.status, result.stdout.split("\n")[0]);
 | dgram | `createSocket`；`bind/send/close/address/setBroadcast/setTTL` |
 | http | `createServer` `request` `get`；`ClientRequest`、`IncomingMessage`、`ServerResponse` |
 | child_process | `spawnSync(command, args[, {cwd, stdio}])`，返回 `status` / `stdout` / `stderr` |
+| events | `EventEmitter`（全局 + 命名）；`on/once/off/emit/listeners/listenerCount/eventNames`；静态 `listenerCount/getEventListeners/getMaxListeners/setMaxListeners/once` |
+| util | `format` `formatWithOptions` `inspect` `isDeepStrictEqual` `inherits` `deprecate` `promisify`；`isString/isNumber/isBoolean/isUndefined/isNull/isFunction/isArray/isObject/isBuffer/isDate/isRegExp/isPromise/isError` |
+| querystring | `parse`/`decode` `stringify`/`encode` `escape` `unescape` |
 | crypto | `createHash(algorithm)` |
 | url | `pathToFileURL` `fileURLToPath` |
 | fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `realpath` `stat` `lstat` `access` |

@@ -91,6 +91,13 @@ xbintsc emit examples/hello.ts | head
 xbintsc run examples/read-file.ts --ext node
 ```
 
+#### 预编译独立发布包
+
+每个 GitHub Release 也会附上各平台的自包含归档
+（`xbintsc-<os>-<arch>.tar.zst` 或 `.tar.gz`，附 `.sha256`）。解压后直接调用
+`bin/xbintsc` 即可，无需 Node.js 或系统编译器。详见
+[doc/zh-CN/requirements.md](doc/zh-CN/requirements.md#预编译发布包推荐)。
+
 ### 作为开发者（从源码）
 
 在源码检出中，通过 `tsx` 直接运行 TypeScript 源码（或使用 `npm run xbintsc`）。

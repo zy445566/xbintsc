@@ -34,6 +34,7 @@
     "prepublishOnly": "npm run build",
     "runtime": "tsx scripts/build-runtime.ts",
     "fetch-toolchain": "tsx scripts/fetch-toolchain.ts",
+    "package-release": "tsx scripts/package-release.ts",
     "runtime:clean": "node -e \"require('fs').rmSync('build/runtime-obj',{recursive:true,force:true});require('fs').rmSync('runtime/lib',{recursive:true,force:true})\"",
     "xbintsc": "tsx src/cli/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

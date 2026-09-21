@@ -1,6 +1,6 @@
 export { build, compileString, COMPILER_VERSION, type BuildOptions, type BuildResult, type EmitKind } from "./compiler.js";
 export { BuildCache, hashParts, hashString } from "./cache.js";
-export { findRuntimeDir, findPackageRoot, findVendorDir, vendorRootDir, platformSlug } from "./paths.js";
+export { findRuntimeDir, findPackageRoot, findVendorDir, vendorRootDir, platformSlug, releaseArchiveBase, releaseArchiveExtension } from "./paths.js";
 export {
   toolchainDownload,
   toolchainSupportLibraries,

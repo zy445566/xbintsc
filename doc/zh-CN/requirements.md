@@ -13,6 +13,25 @@
 | Windows | 除操作系统外无需额外安装 | xbintsc 自带 MinGW-w64 ABI 工具链 |
 | 任意 | `xbintsc emit` | 无需任何东西 |
 
+## 预编译发布包（推荐）
+
+每个 GitHub Release 都会附上各平台的自包含归档
+`xbintsc-<os>-<arch>.tar.zst`（或 `.tar.gz`），旁边带 `.sha256`：
+
+```text
+xbintsc-<os>-<arch>/
+  bin/xbintsc[.exe]      编译器
+  runtime/               C 运行期 + 预编译 runtime/lib/<os>-<arch>/
+  vendor/<os>-<arch>/    随包工具链（Linux/Windows）
+```
+
+解压后把 `bin/` 加入 `PATH`（或直接调用 `bin/xbintsc`）即可，无需安装步骤。
+建议先校验下载内容：
+
+```sh
+sha256sum -c xbintsc-linux-x64.tar.zst.sha256   # macOS 用：shasum -a 256 -c
+```
+
 ## macOS —— 安装 Xcode Command Line Tools
 
 xbintsc 使用 Command Line Tools 自带的链接器与系统 SDK（`libSystem` 等）来产出
@@ -50,6 +69,8 @@ CRT + 导入库），因此在干净的 Windows 上也能直接 `xbintsc build`�
   `vendor/<os>-<arch>/`；之后 `resolveToolchain()` 会优先于 `PATH` 使用它
   （Linux 用 LLVM，Windows 用 llvm-mingw）。macOS 上此命令为空操作——直接使用
   Command Line Tools。可用 `xbintsc_LINKER_ARGS` / `xbintsc_CLANG` 覆盖解析结果。
+- `npm run package-release` 会在 `dist/release/` 下组装出各平台发布归档
+  （`xbintsc-<os>-<arch>.tar.{gz,zst}` + `.sha256`）。
 
 ## 检查环境
 

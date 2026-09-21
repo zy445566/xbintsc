@@ -12,13 +12,17 @@
 > - **Windows**：xbintsc 自带 **MinGW-w64 ABI** 工具链（clang + lld + CRT + 导入库），
 >   无需用户安装编译器。
 
-> **状态 — P0 ✅ 已落地，P1 🔄 进行中。** `src/driver/toolchain-provider.ts`
+> **状态 — P0 ✅ 已落地，P1 ✅ 已落地，P2 🔄 进行中**（release 归档已落地；
+> npm per-platform 包待办）。`src/driver/toolchain-provider.ts`
 > 按 `env → vendor → PATH` 解析工具链；`npm run runtime` 产出预编译库到
 > `runtime/lib/<os>-<arch>/{core,ext_<name>}.a`，`build` 优先使用它们；
 > `xbintsc doctor` 报告解析结果。`npm run fetch-toolchain` 把固定版本工具链
 > （Linux 用 LLVM `18.1.8`，Windows 用 llvm-mingw `20260908`）下载到
 > `vendor/<os>-<arch>/`，`resolveToolchain()` 优先使用它并以 `-fuse-ld=lld`
 > 链接；CI `self-contained` 作业负责验证。macOS 走 Command Line Tools。
+> `npm run package-release` 用自举产物、`runtime/` 与 `vendor/` 组装出
+> `xbintsc-<os>-<arch>.tar.{gz,zst}`（附 sha256）；CI `package` 作业负责产出，
+> `release.yml` 把它们附加到 GitHub Release。
 
 ## 1. 目标与非目标
 
@@ -101,7 +105,7 @@ xbintsc（自包含）
 > 预编译运行期是所有方案的前提：它让运行期不再需要 C 头文件 / SDK，
 > 并能显著缩短首次构建。
 
-### P1 随包工具链 bundle — 🔄 进行中
+### P1 随包工具链 bundle — ✅ 完成
 
 - `src/driver/toolchain-download.ts` 固定每个 host 的 bundle；`npm run
   fetch-toolchain`（`scripts/fetch-toolchain.ts`）下载并解压到 `vendor/<os>-<arch>/`：
@@ -119,12 +123,31 @@ xbintsc（自包含）
 - 验收：纯净 Linux 容器（无 clang/ld）、**装有** Command Line Tools 的 macOS、
   未装 Visual Studio 的 Windows 上，`build` + `run` 全部通过。
 
-### P2 分发
+### P2 分发 — 🔄 进行中
 
-- `release.yml`：发布包结构为
-  `xbintsc-<os>-<arch>.tar.zst`，内含 `bin/xbintsc` + `vendor/` + `runtime/lib/`。
-- npm：用 `optionalDependencies` 提供 per-platform 包（`@xbintsc/<platform>`），
-  或 postinstall 下载（校验 sha256）。launcher（`bin/xbintsc.js`）负责定位 `vendor/`。
+**已落地 — 自包含 release 归档**
+
+- `scripts/package-release.ts`（`npm run package-release`）组装
+  `dist/release/xbintsc-<os>-<arch>.tar.zst`（无 `zstd` 时回落 `.tar.gz`），
+  并生成 `.sha256`；内含：
+  - `bin/xbintsc[.exe]` —— 自举编译器；
+  - `runtime/` —— C 源码与预编译 `runtime/lib/<slug>/` 归档；
+  - `vendor/<slug>/` —— 随包工具链（Linux/Windows）；
+  - `README.md` / `LICENSE`。
+- 编译器相对自身可执行文件定位 `runtime/` 与 `vendor/`（`findRuntimeDir`
+  新增 `<root>/bin` 发布布局），因此解压后的目录无需系统工具链即可编译运行。
+- CI `package` 作业（三平台矩阵，`needs: self-host`）下载自举产物、拉取工具链、
+  构建运行期归档并上传 `release-<os>-<arch>`；`release.yml` 下载它们并附加到
+  GitHub Release。
+- `bin/xbintsc.js` 优先使用原生编译器（`xbintsc_BINARY`、已安装的
+  `@xbintsc/<os>-<arch>` 包，或同目录的 `bin/xbintsc`），再回落到编译产物
+  `dist/` CLI，最后才用 `tsx`。
+
+**待办**
+
+- 发布 per-platform npm 包（`@xbintsc/<os>-<arch>`），让 `npm i xbintsc` 即装好
+  原生二进制；`bin/xbintsc.js` 已支持解析它们。
+
 - ✅ `xbintsc doctor`：打印解析到的工具链来源、版本、路径与运行期库位置。
 
 ### P3 平台专项打磨
@@ -174,7 +197,7 @@ xbintsc（自包含）
 | --- | --- | --- |
 | M1 | P0 完成 | 预编译运行期库 + 工具链抽象 |
 | M2 | P1 完成 | 三平台 bundle 工具链，纯净环境通过 |
-| M3 | P2 完成 | release 归档 + npm 分发 + `doctor` |
+| M3 | P2（归档 ✅，npm 待办） | 三平台自包含 release 归档；per-platform npm 包 + `doctor` |
 | M4 | P3 完成 | macOS/Windows 打磨，全平台自包含 |
 | M5 | P4/P5（可选） | libLLVM 化 / 完全静态 |
 

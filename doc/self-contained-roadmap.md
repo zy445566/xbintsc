@@ -12,14 +12,18 @@ without installing `clang` / `gcc` / `ld` / `llc` themselves.
 > - **Windows**: xbintsc ships a **MinGW-w64 ABI** toolchain (clang + lld + CRT +
 >   import libraries), so no user-installed compiler is required.
 
-> **Status — P0 ✅ landed, P1 🔄 in progress.** `src/driver/toolchain-provider.ts`
+> **Status — P0 ✅ landed, P1 ✅ landed, P2 🔄 in progress** (release archives
+> landed; npm per-platform packages pending). `src/driver/toolchain-provider.ts`
 > resolves the toolchain `env → vendor → PATH`; `npm run runtime` writes prebuilt
 > archives to `runtime/lib/<os>-<arch>/{core,ext_<name>}.a` and `build` prefers
 > them; `xbintsc doctor` reports the result. `npm run fetch-toolchain` downloads
 > the pinned toolchain (LLVM `18.1.8` on Linux, llvm-mingw `20260908` on Windows)
 > into `vendor/<os>-<arch>/`, which `resolveToolchain()` prefers and links with
 > `-fuse-ld=lld`; a CI `self-contained` job verifies it. macOS uses the Command
-> Line Tools.
+> Line Tools. `npm run package-release` assembles
+> `xbintsc-<os>-<arch>.tar.{gz,zst}` (+ sha256) from the self-hosted binary,
+> `runtime/` and `vendor/`; a CI `package` job builds them and `release.yml`
+> attaches them to a GitHub Release.
 
 ## 1. Goals and non-goals
 
@@ -106,7 +110,7 @@ Fail with a clear message and point at `xbintsc doctor` when nothing resolves.
 > A prebuilt runtime is the precondition for every option: it removes the need for
 > C headers / SDKs at runtime and dramatically shortens the first build.
 
-### P1 Bundled toolchain — 🔄 in progress
+### P1 Bundled toolchain — ✅ done
 
 - `src/driver/toolchain-download.ts` pins the per-host bundle; `npm run
   fetch-toolchain` (`scripts/fetch-toolchain.ts`) downloads and extracts it into
@@ -125,12 +129,33 @@ Fail with a clear message and point at `xbintsc doctor` when nothing resolves.
 - Acceptance: pure Linux container (no clang/ld), macOS **with** Command Line
   Tools, Windows without Visual Studio — `build` + `run` all pass.
 
-### P2 Distribution
+### P2 Distribution — 🔄 in progress
 
-- `release.yml`: publish `xbintsc-<os>-<arch>.tar.zst` containing
-  `bin/xbintsc` + `vendor/` + `runtime/lib/`.
-- npm: per-platform `optionalDependencies` (`@xbintsc/<platform>`) or a postinstall
-  downloader (sha256-verified). The launcher (`bin/xbintsc.js`) locates `vendor/`.
+**Landed — self-contained release archives**
+
+- `scripts/package-release.ts` (`npm run package-release`) assembles
+  `dist/release/xbintsc-<os>-<arch>.tar.zst` (falling back to `.tar.gz` when no
+  `zstd` binary is present) plus a `.sha256`, containing:
+  - `bin/xbintsc[.exe]` — the self-hosted compiler,
+  - `runtime/` — the C sources plus prebuilt `runtime/lib/<slug>/` archives,
+  - `vendor/<slug>/` — the bundled toolchain (Linux/Windows),
+  - `README.md` / `LICENSE`.
+- The compiler locates `runtime/` and `vendor/` relative to its own executable
+  (`findRuntimeDir` learned the `<root>/bin` release layout), so the unpacked
+  tree builds and runs with no system toolchain installed.
+- CI `package` job (3-OS matrix, `needs: self-host`) downloads the self-hosted
+  binary, fetches the toolchain, builds the runtime archives and uploads
+  `release-<os>-<arch>`; `release.yml` downloads those and attaches them to the
+  GitHub Release.
+- `bin/xbintsc.js` prefers a native compiler (`xbintsc_BINARY`, an installed
+  `@xbintsc/<os>-<arch>` package, or a co-located `bin/xbintsc`) before falling
+  back to the compiled `dist/` CLI and then `tsx`.
+
+**Pending**
+
+- Publishing per-platform npm packages (`@xbintsc/<os>-<arch>`) so `npm i
+  xbintsc` installs a native binary; `bin/xbintsc.js` already resolves them.
+
 - ✅ `xbintsc doctor`: prints toolchain source, version, path, runtime-lib location.
 
 ### P3 Platform hardening
@@ -183,7 +208,7 @@ Fail with a clear message and point at `xbintsc doctor` when nothing resolves.
 | --- | --- | --- |
 | M1 | P0 done | Prebuilt runtime archive + toolchain abstraction |
 | M2 | P1 done | Bundled toolchain on all 3 OSes; clean-environment builds pass |
-| M3 | P2 done | Release archives + npm distribution + `doctor` |
+| M3 | P2 (archives ✅, npm pending) | Self-contained release archives on all 3 OSes; per-platform npm packages + `doctor` |
 | M4 | P3 done | macOS/Windows hardened; fully self-contained |
 | M5 | P4/P5 (optional) | libLLVM-ized / fully static |
 

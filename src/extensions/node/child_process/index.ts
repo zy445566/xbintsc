@@ -1,7 +1,9 @@
 /**
  * Node's `child_process` module: `spawnSync(command, args, options)`, backed by
- * `runtime/ext_node/child_process`. Captures stdout/stderr as UTF-8 strings and
- * honours `options.cwd`, which is all the compiler's toolchain wrapper needs.
+ * `runtime/ext_node/child_process`. Captures stdout/stderr as UTF-8 strings,
+ * honours `options.cwd`, and supports `options.stdio: "inherit"` (hand the
+ * child the parent's stdout/stderr) — which is all the compiler's toolchain
+ * wrapper and `xbintsc run` need.
  */
 
 import type { NodeModule } from "../module.js";

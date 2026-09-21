@@ -51,6 +51,14 @@ static const char *option_cwd(xt_value options) {
   return xt_string_data(cwd);
 }
 
+/* `stdio: "inherit"` hands the child the parent's stdout/stderr instead of
+ * capturing them. Used by `xbintsc run` so a program's output streams live. */
+static int option_stdio_inherit(xt_value options) {
+  if (!XT_IS_OBJECT(options)) return 0;
+  xt_value stdio = xt_object_get(options, xt_string_from_cstr("stdio"));
+  return stdio && XT_IS_STRING(stdio) && strcmp(xt_string_data(stdio), "inherit") == 0;
+}
+
 static xt_value make_result(double status, const char *out, const char *err) {
   xt_value result = xt_object_new();
   xt_set(result, xt_string_from_cstr("status"), xt_number(status));
@@ -84,6 +92,17 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   char **child_argv = (char **)build_argv(command, args, &count);
   if (!child_argv) return make_result(-1, "", "out of memory");
 
+  char previous[4096];
+  int had_cwd = cwd && _getcwd(previous, sizeof(previous)) != NULL;
+
+  if (option_stdio_inherit(argc > 2 ? argv[2] : XT_UNDEFINED)) {
+    if (cwd) _chdir(cwd);
+    intptr_t inherit_rc = _spawnvp(_P_WAIT, command, (const char *const *)child_argv);
+    if (had_cwd) _chdir(previous);
+    free(child_argv);
+    return make_result(inherit_rc < 0 ? -1 : (double)inherit_rc, "", "");
+  }
+
   FILE *out_file = tmpfile();
   FILE *err_file = tmpfile();
   if (!out_file || !err_file) {
@@ -98,12 +117,9 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   _dup2(_fileno(out_file), _fileno(stdout));
   _dup2(_fileno(err_file), _fileno(stderr));
 
-  char previous[4096];
-  int had_cwd = cwd && _getcwd(previous, sizeof(previous)) != NULL;
   if (cwd) _chdir(cwd);
   intptr_t rc = _spawnvp(_P_WAIT, command, (const char *const *)child_argv);
   if (had_cwd) _chdir(previous);
-
   fflush(stdout);
   fflush(stderr);
   _dup2(saved_out, _fileno(stdout));
@@ -148,6 +164,24 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   int count = 0;
   char **child_argv = (char **)build_argv(command, args, &count);
   if (!child_argv) return make_result(-1, "", "out of memory");
+
+  if (option_stdio_inherit(argc > 2 ? argv[2] : XT_UNDEFINED)) {
+    pid_t inherit_pid = fork();
+    if (inherit_pid < 0) {
+      free(child_argv);
+      return make_result(-1, "", "failed to fork");
+    }
+    if (inherit_pid == 0) {
+      if (cwd) chdir(cwd);
+      execvp(command, child_argv);
+      _exit(127);
+    }
+    int inherit_status = 0;
+    waitpid(inherit_pid, &inherit_status, 0);
+    free(child_argv);
+    return make_result(
+      WIFEXITED(inherit_status) ? (double)WEXITSTATUS(inherit_status) : -1.0, "", "");
+  }
 
   int out_pipe[2];
   int err_pipe[2];

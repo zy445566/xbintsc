@@ -13,6 +13,25 @@ link native binaries**. Only the toolchain is platform-sensitive; `xbintsc emit`
 | Windows | none beyond the OS | xbintsc ships a MinGW-w64 ABI toolchain |
 | any | `xbintsc emit` | nothing |
 
+## Prebuilt releases (recommended)
+
+Every GitHub Release attaches a self-contained archive per platform,
+`xbintsc-<os>-<arch>.tar.zst` (or `.tar.gz`), with a `.sha256` beside it:
+
+```text
+xbintsc-<os>-<arch>/
+  bin/xbintsc[.exe]      the compiler
+  runtime/               C runtime + prebuilt runtime/lib/<os>-<arch>/
+  vendor/<os>-<arch>/    bundled toolchain (Linux/Windows)
+```
+
+Unpack it and put `bin/` on `PATH` (or call `bin/xbintsc` directly) — there is no
+install step. Verify the download against the checksum first:
+
+```sh
+sha256sum -c xbintsc-linux-x64.tar.zst.sha256   # macOS: shasum -a 256 -c
+```
+
 ## macOS — install Xcode Command Line Tools
 
 xbintsc uses the linker and system SDK (`libSystem`, …) that ship with the
@@ -55,6 +74,8 @@ Windows install.
   into `vendor/<os>-<arch>/`; `resolveToolchain()` then prefers it over `PATH`
   (Linux: LLVM, Windows: llvm-mingw). On macOS this is a no-op — the Command Line
   Tools are used. `xbintsc_LINKER_ARGS` / `xbintsc_CLANG` override the result.
+- `npm run package-release` assembles the per-platform release archive
+  (`xbintsc-<os>-<arch>.tar.{gz,zst}` + `.sha256`) into `dist/release/`.
 
 ## Checking your environment
 

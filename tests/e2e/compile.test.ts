@@ -212,6 +212,28 @@ describeWithClang("end-to-end compilation", () => {
     expect(runProgram(source, { extensions: true })).toBe("true true true true\ntrue true true true\ntrue true");
   });
 
+  it("streams child output for spawnSync with stdio inherit", () => {
+    // The child inherits the program's stdout (the pipe the test reads), so its
+    // output must reach `stdout` directly rather than being captured and dropped.
+    const source = `
+      import { spawnSync } from "node:child_process";
+      let isChild = false;
+      for (const arg of process.argv) {
+        if (arg === "xb-child") isChild = true;
+      }
+      if (isChild) {
+        console.log("hello-from-child");
+      } else {
+        const result = spawnSync(process.argv[0], ["xb-child"], { stdio: "inherit" });
+        console.log("status", result.status);
+      }
+    `;
+    const { stdout, status } = runProgramFull(source, { extensions: true });
+    expect(status).toBe(0);
+    expect(stdout).toContain("hello-from-child");
+    expect(stdout).toContain("status 0");
+  });
+
   it("supports switch statements with fall-through", () => {
     const source = `
       function size(n: number): string {

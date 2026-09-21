@@ -1,12 +1,22 @@
 name: Release
 
-# Manually triggered release. Reads the version from package.json, pushes the
-# matching git tag (if needed) and creates the GitHub Release.
+# Manually triggered release. Bumps the package version, pushes the commit and
+# the matching git tag, publishes to npm, and creates the GitHub Release with
+# the self-hosted binaries built by CI for that commit.
 on:
   workflow_dispatch:
     inputs:
+      bump:
+        description: "Semver bump to apply before releasing"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
       ci_run_id:
-        description: "CI run id holding the self-hosted binaries (default: the successful CI run for this commit)"
+        description: "CI run id holding the self-hosted binaries (default: the successful CI run for the released commit)"
         required: false
         type: string
 
@@ -16,65 +26,80 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: write # push the version commit + tag, create the GitHub release
   actions: read # download the self-hosted binaries from the CI workflow run
+  id-token: write # required by npm OIDC publishing / provenance
 
 jobs:
   release:
-    name: Create GitHub release
+    name: Bump, publish and release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # fetch tags so the existing-tag check is accurate
+          fetch-depth: 0 # fetch tags so the version/tag checks are accurate
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve version
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The local git hook was removed, so the version bump happens here: commit
+      # the new package.json/package-lock.json, tag it, and push both.
+      - name: Bump version and push the tag
         id: version
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
+          npm version "${{ inputs.bump }}" -m "chore(release): v%s"
+
           current="$(node -p "require('./package.json').version")"
           tag="v${current}"
+          sha="$(git rev-parse HEAD)"
 
-          echo "current version : ${current}"
+          echo "release version : ${current}"
+          echo "release tag     : ${tag}"
+          echo "release commit  : ${sha}"
 
-          already="$(gh release view "${tag}" --json tagName \
-            --jq .tagName 2>/dev/null || true)"
-
-          should_release=true
-          if [ -n "${already}" ]; then
-            echo "Release ${tag} already exists; nothing to do."
-            should_release=false
-          else
-            echo "Creating release ${tag}."
-          fi
+          git push origin "HEAD:${{ github.ref_name }}"
+          git push origin "${tag}"
 
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "should_release=${should_release}" >> "$GITHUB_OUTPUT"
-          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
 
-      # Collect the self-hosted compiler binaries that the CI workflow built
-      # for this exact commit, and stage them under release-friendly names.
+      # `prepublishOnly` also runs `npm run build`, but building here first
+      # keeps the publish step's work visible and lets us inspect the tarball.
+      - name: Build
+        run: npm run build
+
+      - name: Preview package contents
+        run: npm pack --dry-run
+
+      # No NODE_AUTH_TOKEN needed: npm authenticates via GitHub OIDC
+      # (id-token: write) against the npm trusted publisher config.
+      - name: Publish to npm
+        run: npm publish --provenance
+
+      # Collect the self-hosted compiler binaries that CI built for the release
+      # commit, and stage them under release-friendly names.
       - name: Download the self-hosted compiler artifacts
-        if: steps.version.outputs.should_release == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ steps.version.outputs.sha }}
           INPUT_RUN_ID: ${{ inputs.ci_run_id }}
         run: |
           set -euo pipefail
 
           # Either use an explicitly requested CI run, or wait (bounded) for the
-          # CI run covering this commit to finish, so a release dispatched right
-          # after a push still finds its binaries.
+          # CI run covering the release commit to finish, so a release dispatched
+          # right after the version push still finds its binaries.
           run_id="${INPUT_RUN_ID:-}"
           conclusion=""
           if [ -n "${run_id}" ]; then
@@ -128,19 +153,7 @@ jobs:
           ls -l release-assets
 
       - name: Create GitHub release
-        if: steps.version.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
-          TAG_EXISTS: ${{ steps.version.outputs.tag_exists }}
-        run: |
-          if [ "${TAG_EXISTS}" = "true" ]; then
-            # Reuse the existing tag instead of trying to recreate it.
-            gh release create "${TAG}" --title "${TAG}" --generate-notes release-assets/*
-          else
-            gh release create "${TAG}" \
-              --target "${{ github.sha }}" \
-              --title "${TAG}" \
-              --generate-notes \
-              release-assets/*
-          fi
+        run: gh release create "${TAG}" --title "${TAG}" --generate-notes release-assets/*

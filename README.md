@@ -97,6 +97,13 @@ xbintsc emit examples/hello.ts | head
 xbintsc run examples/read-file.ts --ext node
 ```
 
+#### Prebuilt standalone archives
+
+Every GitHub Release also attaches a self-contained archive per platform
+(`xbintsc-<os>-<arch>.tar.zst` or `.tar.gz`, plus a `.sha256`). Unpack it and
+call `bin/xbintsc` directly — no Node.js or system compiler required. See
+[doc/requirements.md](doc/requirements.md#prebuilt-releases-recommended).
+
 ### As a developer (from source)
 
 In a source checkout, run the TypeScript sources directly through `tsx` (or use

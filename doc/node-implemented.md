@@ -328,7 +328,32 @@ main();
 
 ---
 
-## 12. Implemented Node capabilities quick reference
+## 12. The `child_process` module (implemented)
+
+Location: `src/extensions/node/child_process/index.ts`, `runtime/ext_node/child_process/child_process.c`
+
+`spawnSync(command, args[, options])` runs a program to completion and returns
+`{ status, stdout, stderr }`. `options.cwd` sets the working directory and
+`options.stdio: "inherit"` hands the child the parent's stdout/stderr (used by
+`xbintsc run`, so a compiled program's output streams live); otherwise
+stdout/stderr are captured as UTF-8 strings.
+
+| Option | Notes |
+| --- | --- |
+| `cwd` | working directory for the child |
+| `stdio: "inherit"` | share the parent's stdout/stderr instead of capturing |
+| `encoding` | accepted and ignored (output is always decoded as UTF-8) |
+
+```ts
+import { spawnSync } from "child_process";
+
+const result = spawnSync("clang", ["--version"], { encoding: "utf8" });
+console.log(result.status, result.stdout.split("\n")[0]);
+```
+
+---
+
+## 13. Implemented Node capabilities quick reference
 
 | Category | Contents |
 | --- | --- |
@@ -345,6 +370,9 @@ main();
 | net | `createServer` `connect` `createConnection` `isIP/isIPv4/isIPv6`; `Server` `Socket` |
 | dgram | `createSocket`; `bind/send/close/address/setBroadcast/setTTL` |
 | http | `createServer` `request` `get`; `ClientRequest`, `IncomingMessage`, `ServerResponse` |
+| child_process | `spawnSync(command, args[, {cwd, stdio}])` returning `status` / `stdout` / `stderr` |
+| crypto | `createHash(algorithm)` |
+| url | `pathToFileURL` `fileURLToPath` |
 | fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `realpath` `stat` `lstat` `access` |
 | Event loop | `xt_loop` (`select` reactor), `xt_run_event_loop()`, `xt_loop_add/update/remove` |
 | Calling convention | uniform `(argc, argv)` ABI, returns `xt_value` |

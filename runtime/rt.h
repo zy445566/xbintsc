@@ -31,7 +31,7 @@ typedef uint64_t xt_value;
 #define XT_TAG_UNDEFINED 0xFFF8000000000000ULL
 #define XT_TAG_NULL 0xFFF9000000000000ULL
 #define XT_TAG_FALSE 0xFFFA000000000000ULL
-#define XT_TAG_TRUE 0xFFFB000000000000ULL
+#define XT_TAG_BIGINT 0xFFFB000000000000ULL
 #define XT_TAG_STRING 0xFFFC000000000000ULL
 #define XT_TAG_OBJECT 0xFFFD000000000000ULL
 #define XT_TAG_ARRAY 0xFFFE000000000000ULL
@@ -44,6 +44,7 @@ typedef uint64_t xt_value;
 #define XT_IS_UNDEFINED(v) ((v) == XT_TAG_UNDEFINED)
 #define XT_IS_NULL(v) ((v) == XT_TAG_NULL)
 #define XT_IS_BOOL(v) (((v) & ~0x1ULL) == XT_TAG_FALSE)
+#define XT_IS_BIGINT(v) XT_IS_TAGGED(v, XT_TAG_BIGINT)
 #define XT_IS_STRING(v) XT_IS_TAGGED(v, XT_TAG_STRING)
 #define XT_IS_OBJECT(v) XT_IS_TAGGED(v, XT_TAG_OBJECT)
 #define XT_IS_ARRAY(v) XT_IS_TAGGED(v, XT_TAG_ARRAY)
@@ -56,7 +57,7 @@ typedef uint64_t xt_value;
 #define XT_UNDEFINED XT_TAG_UNDEFINED
 #define XT_NULL XT_TAG_NULL
 #define XT_FALSE XT_TAG_FALSE
-#define XT_TRUE XT_TAG_TRUE
+#define XT_TRUE (XT_TAG_FALSE | 0x1ULL)
 
 /* Double <-> value helpers. */
 static inline xt_value xt_from_double(double d) {
@@ -86,6 +87,11 @@ xt_value xt_string_from_cstr(const char *data);
 /** Raw UTF-8 bytes of a string value (NULL for non-strings); not NUL-safe. */
 const char *xt_string_data(xt_value value);
 int32_t xt_string_length_value(xt_value value);
+
+/* -- bigint -------------------------------------------------------------- */
+xt_value xt_bigint_from_string(const char *data, size_t len);
+xt_value xt_bigint_ctor(int32_t argc, xt_value *argv);
+xt_value xt_bigint_static(xt_value name, int32_t argc, xt_value *argv);
 
 /* -- function calling convention ----------------------------------------- */
 /* Every compiled function has the signature:

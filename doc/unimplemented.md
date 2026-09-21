@@ -100,7 +100,7 @@ Criteria (ordered by severity):
 | Category | Status |
 | --- | --- |
 | `Symbol` constructor and symbol primitives | ✗ not implemented |
-| `BigInt` arbitrary precision | ✗ (literals degrade to double) |
+| `BigInt` arbitrary precision | ✓ implemented (sign-magnitude bignum: `+ - * / % **`, bitwise, shifts, comparisons, `toString(radix)`, `BigInt()` / `BigInt.asIntN` / `BigInt.asUintN`, literals with `0x` / `0o` / `0b`) |
 | `Error` constructor / `message` / `stack` | ✓ `new Error(...)` / `extends Error` implemented; other error subclasses (`TypeError`, …) not yet |
 | Timers / I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
 | Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | partial: arrays, strings, `Map` and `Set` are iterable in `for...of` / spread; a user-defined `Symbol.iterator` is not consulted |
@@ -187,7 +187,6 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Exception objects | Any value can be thrown / caught (string, number, object), and `new Error(...)` / `extends Error` are supported; `stack` capture and the other built-in error subclasses (`TypeError`, …) are not implemented |
 | `for...in` | Enumerates keys of objects / arrays / strings (arrays and strings yield string indices), but does not include prototype chain properties; behavior after `delete` is broadly consistent with JS |
 | String `length` | Counted by UTF-8 bytes / code points at runtime, not by JS's UTF-16 code units (emoji and non-BMP characters report a smaller length) |
-| BigInt | Literals are converted to double via `Number()`, losing arbitrary precision |
 | Number-to-string | Only common cases are covered (integers, shortest round-trip); boundary formatting (scientific notation details, etc.) differs from JS |
 | Loose equality `==` | Only a subset is implemented (number/string/bool/null/undefined); objects compare by reference, no ToPrimitive |
 | `+` addition | The ToPrimitive path for number + object / array is incomplete |
@@ -211,7 +210,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | GC (garbage collection) | ✗ deliberately deferred; `xt_alloc` is isolated but not yet replaced with a precise / conservative collector |
 | Self-hosting | ✓ the compiler compiles itself: `xbintsc build src/cli/main.ts` produces a working binary, and the emitted IR is stable from generation 1 onward. The runtime is still C |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
-| Full standard library (Math / JSON / Date / collections, etc.) | partial: Math / JSON / Date / Map / Set / RegExp / `Error` implemented; Symbol / BigInt not implemented |
+| Full standard library (Math / JSON / Date / collections, etc.) | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` implemented; Symbol not implemented |
 | Multi-file module bundling | partial: relative-path `.ts` import bundling implemented, plus bare-specifier extension module imports; namespace imports of relative modules / circular dependencies / npm not implemented |
 | A real async runtime / event loop | ✗ (Promise is a synchronous microtask model) |
 | Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), but needs CI verification (`.github/workflows` is configured) |
@@ -231,14 +230,14 @@ Unimplemented (functions): generators, fn.name/length/call/apply/bind, new.targe
 
 Unimplemented (classes/OO): get/set accessors, access control, parameter properties, private fields #x, enum
 
-Unimplemented (standard library): Symbol, BigInt arbitrary precision, Error constructor, iterator protocol
+Unimplemented (standard library): Symbol, Error constructor, iterator protocol
 
 Unimplemented (modules): namespace imports import * as of relative modules, circular dependencies, npm dependencies
 
 Unimplemented (type system): type checking, generic instantiation, assertion semantics, optional-chaining narrowing
 
 Unimplemented (runtime): GC, Error constructor, a real async event loop, finally on early exit,
-                        UTF-16 length, BigInt precision, full ToPrimitive path
+                        UTF-16 length, full ToPrimitive path
 
 Unimplemented (engineering): self-hosting, GC replacement, type checker
 ```

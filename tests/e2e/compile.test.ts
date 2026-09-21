@@ -57,6 +57,28 @@ describeWithClang("end-to-end compilation", () => {
     expect(runProgram('console.log("sum", 2 + 3 * 4);')).toBe("sum 14");
   });
 
+  it("supports arbitrary-precision BigInt values", () => {
+    const source = `
+      const a = 123456789012345678901234567890n;
+      console.log(a * a);
+      console.log((2n ** 100n).toString(16));
+      console.log(-7n / 3n, -7n % 3n);
+      console.log(~5n, 1n << 130n);
+      console.log(typeof 1n, BigInt.asIntN(8, 0xFFn), BigInt.asUintN(8, 0xFFn));
+      console.log("x" + 5n, 2n < 3n, 2n === 2);
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        "15241578753238836750495351562536198787501905199875019052100n",
+        "10000000000000000000000000",
+        "-2n -1n",
+        "-6n 1361129467683753853853498429727072845824n",
+        "bigint -1n 255n",
+        "x5 true false",
+      ].join("\n"),
+    );
+  });
+
   it("interpolates template literals", () => {
     const source = `
       const name = "world";

@@ -174,6 +174,13 @@ void xt_println(xt_value v) {
  * top level, arrays as `[ a, b ]` and objects as `{ key: value }`.
  */
 static void xt_inspect(xt_value v, FILE *out) {
+  if (XT_IS_BIGINT(v)) {
+    xt_value text = xt_bigint_to_decimal(v);
+    xt_string *s = xt_as_string(text);
+    fwrite(s->data, 1, s->length, out);
+    fputc('n', out);
+    return;
+  }
   if (XT_IS_ARRAY(v)) {
     xt_array *array = (xt_array *)XT_GET_PTR(v);
     fputc('[', out);

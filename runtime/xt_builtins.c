@@ -151,6 +151,7 @@ xt_value xt_boolean_ctor(int32_t argc, xt_value *argv) {
 
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_boolean, xt_boolean_ctor)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_number, xt_number_ctor)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_bigint, xt_bigint_ctor)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_string, xt_string_ctor)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_parseInt, xt_parse_int)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_parseFloat, xt_parse_float)

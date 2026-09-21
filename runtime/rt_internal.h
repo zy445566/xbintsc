@@ -46,6 +46,7 @@
 #define XT_OBJECT_KIND_DATE 8
 #define XT_OBJECT_KIND_REGEXP 9
 #define XT_OBJECT_KIND_SYMBOL 10
+#define XT_OBJECT_KIND_BIGINT 11
 
 /* Common header for every heap object. */
 typedef struct xt_header {
@@ -62,6 +63,15 @@ typedef struct {
   uint32_t capacity;
   char *data;
 } xt_string;
+
+/* Sign-magnitude arbitrary-precision integer; see xt_bigint.c. */
+typedef struct {
+  xt_header header;
+  int32_t sign; /* -1, 0 or 1 */
+  uint32_t length;
+  uint32_t capacity;
+  uint32_t *limbs;
+} xt_bigint;
 
 typedef struct {
   xt_string *key;
@@ -110,6 +120,30 @@ xt_string *xt_as_string(xt_value value);
 int32_t xt_string_length(xt_string *s);
 int xt_string_equals(xt_string *a, xt_string *b);
 int32_t xt_to_int32(xt_value v);
+
+/* BigInt runtime (xt_bigint.c). */
+int xt_is_bigint(xt_value value);
+double xt_bigint_to_double_value(xt_value value);
+xt_value xt_bigint_to_string_radix(xt_value value, int radix);
+xt_value xt_bigint_to_decimal(xt_value value);
+xt_value xt_bigint_from_i64(int64_t value);
+xt_value xt_bigint_from_double(double value);
+xt_value xt_bigint_neg(xt_value value);
+xt_value xt_bigint_add(xt_value a, xt_value b);
+xt_value xt_bigint_sub(xt_value a, xt_value b);
+xt_value xt_bigint_mul(xt_value a, xt_value b);
+xt_value xt_bigint_div(xt_value a, xt_value b);
+xt_value xt_bigint_mod(xt_value a, xt_value b);
+xt_value xt_bigint_pow(xt_value a, xt_value b);
+xt_value xt_bigint_bit_and(xt_value a, xt_value b);
+xt_value xt_bigint_bit_or(xt_value a, xt_value b);
+xt_value xt_bigint_bit_xor(xt_value a, xt_value b);
+xt_value xt_bigint_bit_not(xt_value a);
+xt_value xt_bigint_shl(xt_value a, xt_value b);
+xt_value xt_bigint_shr(xt_value a, xt_value b);
+int xt_bigint_compare(xt_value a, xt_value b);
+int xt_bigint_compare_double(xt_value a, double b);
+xt_value xt_bigint_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 
 /* Container helper (xt_containers.c). */
 void xt_array_reserve(xt_array *array, uint32_t needed);

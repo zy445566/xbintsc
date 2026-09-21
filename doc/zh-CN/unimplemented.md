@@ -98,7 +98,7 @@
 | 类别 | 现状 |
 | --- | --- |
 | `Symbol` 构造器与 symbol 原始值 | ✗ 未实现 |
-| `BigInt` 任意精度 | ✗（字面量退化为 double） |
+| `BigInt` 任意精度 | ✓ 已实现（符号-数值大整数：`+ - * / % **`、位运算、移位、比较、`toString(radix)`、`BigInt()` / `BigInt.asIntN` / `BigInt.asUintN`，支持 `0x` / `0o` / `0b` 字面量） |
 | `Error` 构造器 / `message` / `stack` | ✓ 已实现 `new Error(...)` / `extends Error`；其余错误子类（`TypeError` 等）尚未实现 |
 | 定时器 / I/O / 进程等宿主 API | 仅通过扩展（如 `node` fs）提供 |
 | 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | 部分：数组、字符串、`Map`、`Set` 均可在 `for...of` / 展开中使用；不读取自定义 `Symbol.iterator` |
@@ -184,7 +184,6 @@
 | 异常对象 | 抛出 / 捕获的是任意值（字符串、数字、对象均可），且支持 `new Error(...)` / `extends Error`；但未捕获 `stack`，也未实现其它内置错误子类（`TypeError` 等） |
 | `for...in` | 对对象 / 数组 / 字符串枚举键（数组与字符串得到字符串下标），但不含原型链属性，`delete` 后行为与 JS 基本一致 |
 | 字符串 `length` | 运行时按 UTF-8 字节 / 码点计数，而非 JS 的 UTF-16 码元长度（emoji、非 BMP 字符长度会偏小） |
-| BigInt | 字面量被 `Number()` 转成 double，失去任意精度 |
 | 数字转字符串 | 仅覆盖常见情况（整数、最短往返），边界格式（科学计数法细节等）与 JS 不一致 |
 | 宽松相等 `==` | 仅实现子集（number/string/bool/null/undefined），对象参与时按引用比较，未做 ToPrimitive |
 | `+` 加法 | 数字 + 对象 / 数组等 ToPrimitive 路径不完整 |
@@ -208,7 +207,7 @@
 | GC（垃圾回收） | ✗ 有意推迟；`xt_alloc` 已隔离，但尚未替换为精确 / 保守回收器 |
 | 自举（self-hosting） | ✓ 编译器已能自编译：`xbintsc build src/cli/main.ts` 可产出可用二进制，且从第 1 代起产出的 IR 保持稳定。运行时仍为 C |
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
-| 完整标准库（Math / JSON / Date / 集合等） | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` 已实现；Symbol / BigInt 未实现 |
+| 完整标准库（Math / JSON / Date / 集合等） | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` 已实现；Symbol 未实现 |
 | 多文件模块打包 | 部分：相对路径 `.ts` 导入打包已实现，另支持裸说明符的扩展模块导入；相对模块的命名空间导入 / 循环依赖 / npm 未实现 |
 | 真正的异步运行时 / 事件循环 | ✗（Promise 为同步微任务模型） |
 | Windows 二进制产物验证 | 构建层已适配（`.exe` 后缀、链接参数分支），但需 CI 验证（`.github/workflows` 已配置） |
@@ -227,14 +226,14 @@
 
 未实现（类/面向对象）：访问控制、私有字段 #x
 
-未实现（标准库）：Symbol、BigInt 任意精度、迭代器协议（自定义 Symbol.iterator）
+未实现（标准库）：Symbol、迭代器协议（自定义 Symbol.iterator）
 
 未实现（模块）：相对模块的命名空间导入 import * as、循环依赖、npm 依赖
 
 未实现（类型系统）：类型检查、泛型实例化、断言语义、可选链类型窄化
 
 未实现（运行时）：GC、真正的异步事件循环、finally 的提前退出执行、
-                 UTF-16 length、BigInt 精度、ToPrimitive 完整路径
+                 UTF-16 length、ToPrimitive 完整路径
 
 未实现（工程）：GC 替换、类型检查器
 ```

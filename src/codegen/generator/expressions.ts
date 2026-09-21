@@ -63,8 +63,12 @@ export const expressionMethods: ExpressionMethods = {
         const value = (node as { value: number }).value;
         return numberLiteral(value);
       }
-      case SyntaxKind.BigIntLiteral:
-        return numberLiteral((node as { value: number }).value);
+      case SyntaxKind.BigIntLiteral: {
+        const entry = this.internString((node as { text: string }).text);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_bigint_from_string(i8* ${entry.label}, i64 ${entry.length})`);
+        return result;
+      }
       case SyntaxKind.StringLiteral:
         return this.stringValue((node as { value: string }).value);
       case SyntaxKind.NoSubstitutionTemplateLiteral:

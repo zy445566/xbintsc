@@ -25,6 +25,7 @@ export {
   XT_NULL,
   XT_TRUE,
   XT_FALSE,
+  XT_BIGINT,
   numberLiteral,
   booleanLiteral,
 } from "./codegen/values.js";

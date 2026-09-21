@@ -245,6 +245,7 @@ interface RuntimeObjects {
 export const RUNTIME_SOURCES = [
   "xt_alloc.c",
   "xt_values.c",
+  "xt_bigint.c",
   "xt_containers.c",
   "xt_stdlib.c",
   "xt_stdlib2.c",

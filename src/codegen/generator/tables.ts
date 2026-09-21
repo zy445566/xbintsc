@@ -77,6 +77,7 @@ export const GLOBAL_FUNCTIONS: Record<string, string> = {
   Number: "xt_number_ctor",
   String: "xt_string_ctor",
   Boolean: "xt_boolean_ctor",
+  BigInt: "xt_bigint_ctor",
 };
 
 /** Global functions that are also usable as first-class values, each mapped to
@@ -89,6 +90,7 @@ export const BUILTIN_FUNCTION_VALUES: Record<string, string> = {
   Number: "xt_builtin_value_number",
   String: "xt_builtin_value_string",
   Boolean: "xt_builtin_value_boolean",
+  BigInt: "xt_builtin_value_bigint",
 };
 
 /** Global namespaces whose static methods map to runtime dispatchers. */
@@ -99,6 +101,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   Object: "xt_object_static",
   Number: "xt_number_static",
   String: "xt_string_static",
+  BigInt: "xt_bigint_static",
   Date: "xt_date_static",
   Promise: "xt_promise_static",
   path: "xt_path_static",

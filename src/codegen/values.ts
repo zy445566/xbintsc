@@ -6,34 +6,34 @@
  * emits these constants directly into LLVM IR, so this module (together with
  * runtime/rt.h) is the single source of truth for the representation.
  *
- * The constants are written as pre-computed signed 64-bit decimal literals
- * rather than BigInt expressions, and `numberLiteral` derives the raw bits of a
- * double with plain arithmetic. That keeps this module free of BigInt and
- * typed-array APIs so the compiler can be compiled by itself on every platform.
+ * BigInts are available both to the host (Node) running the compiler and to
+ * the compiler once self-hosted, so the constants below are written as BigInt
+ * literals and `numberLiteral` derives a double's raw bits with BigInt
+ * arithmetic. `i64` normalises any 64-bit pattern to the signed decimal form
+ * LLVM expects.
  */
 
-/** `0xffff000000000000` as a signed i64. */
-export const XT_TAG_MASK = "-281474976710656";
-/** `0xfff8000000000000` as a signed i64. */
-export const XT_NUMBER_MASK = "-2251799813685248";
+export const XT_TAG_MASK = 0xffff000000000000n;
+export const XT_NUMBER_MASK = 0xfff8000000000000n;
 
-export const XT_UNDEFINED = "-2251799813685248"; // 0xfff8000000000000
-export const XT_NULL = "-1970324836974592"; // 0xfff9000000000000
-export const XT_FALSE = "-1688849860263936"; // 0xfffa000000000000
-export const XT_TRUE = "-1407374883553280"; // 0xfffb000000000000
-export const XT_STRING = "-1125899906842624"; // 0xfffc000000000000
-export const XT_OBJECT = "-844424930131968"; // 0xfffd000000000000
-export const XT_ARRAY = "-562949953421312"; // 0xfffe000000000000
-export const XT_FUNCTION = "-281474976710656"; // 0xffff000000000000
+export const XT_UNDEFINED = 0xfff8000000000000n;
+export const XT_NULL = 0xfff9000000000000n;
+export const XT_FALSE = 0xfffa000000000000n;
+export const XT_TRUE = 0xfffa000000000001n;
+export const XT_BIGINT = 0xfffb000000000000n;
+export const XT_STRING = 0xfffc000000000000n;
+export const XT_OBJECT = 0xfffd000000000000n;
+export const XT_ARRAY = 0xfffe000000000000n;
+export const XT_FUNCTION = 0xffff000000000000n;
 
 /** Render a 64-bit constant the way LLVM expects signed i64 literals. */
-export function i64(value: string): string {
-  return value;
+export function i64(value: bigint): string {
+  return BigInt.asIntN(64, value).toString();
 }
 
 /** The raw 64 bits of an IEEE-754 double, as a signed i64 literal. */
 export function numberLiteral(value: number): string {
-  if (value !== value) return "9221120237041090560"; // 0x7ff8000000000000 (NaN)
+  if (value !== value) return i64(0x7ff8000000000000n);
   const negative = value < 0 || (value === 0 && 1 / value < 0);
   const abs = negative ? -value : value;
   let high: number;
@@ -61,45 +61,10 @@ export function numberLiteral(value: number): string {
     low = mantissa % 0x100000000;
   }
   if (negative) high += 0x80000000;
-  return signedDecimal(high >>> 0, low >>> 0);
+  const bits = (BigInt(high >>> 0) << 32n) | BigInt(low >>> 0);
+  return i64(bits);
 }
 
 export function booleanLiteral(value: boolean): string {
-  return value ? XT_TRUE : XT_FALSE;
-}
-
-/** Two's-complement (high, low) 32-bit halves as a signed decimal string. */
-function signedDecimal(high: number, low: number): string {
-  if (high >= 0x80000000) {
-    let h = (~high) >>> 0;
-    let l = (~low) >>> 0;
-    l = (l + 1) >>> 0;
-    if (l === 0) h = (h + 1) >>> 0;
-    return "-" + unsignedDecimal(h, l);
-  }
-  return unsignedDecimal(high, low);
-}
-
-/** Unsigned 64-bit `high * 2^32 + low` as a decimal string. */
-function unsignedDecimal(high: number, low: number): string {
-  const digits: number[] = [];
-  let h = high;
-  if (h === 0) digits.push(0);
-  while (h > 0) {
-    digits.push(h % 10);
-    h = Math.floor(h / 10);
-  }
-  let carry = low;
-  for (let i = 0; i < digits.length; i++) {
-    const current = digits[i]! * 4294967296 + carry;
-    digits[i] = current % 10;
-    carry = Math.floor(current / 10);
-  }
-  while (carry > 0) {
-    digits.push(carry % 10);
-    carry = Math.floor(carry / 10);
-  }
-  let out = "";
-  for (let i = digits.length - 1; i >= 0; i--) out += digits[i]!;
-  return out;
+  return i64(value ? XT_TRUE : XT_FALSE);
 }

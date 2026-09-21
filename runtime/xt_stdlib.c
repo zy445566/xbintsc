@@ -484,6 +484,10 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     if (handled) return result;
     return xt_string_method(target, method, argc, argv, &handled);
   }
+  if (XT_IS_BIGINT(target)) {
+    xt_value result = xt_bigint_method(target, method, argc, argv, &handled);
+    if (handled) return result;
+  }
   if (XT_IS_NUMBER(target)) {
     xt_value result = xt_ext_number_method(target, method, argc, argv, &handled);
     if (handled) return result;

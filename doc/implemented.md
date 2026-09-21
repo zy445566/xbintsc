@@ -52,7 +52,7 @@ Location: `src/lexer/scanner.ts`, `src/lexer/token.ts`
   - Decimal, `0x` hex, `0o` octal, `0b` binary
   - Underscore separators `1_000_000`
   - Fractions, exponents `1.5e3`
-  - BigInt literals (`10n`, `0xFFn`)
+  - BigInt literals (`10n`, `0xFFn`) evaluate to arbitrary-precision integers (arithmetic, bitwise, shifts, comparisons, `toString(radix)`, `BigInt()` / `BigInt.asIntN` / `BigInt.asUintN`)
 - String literals:
   - Single / double quotes
   - Escapes: `\n \t \r \b \f \0 \\ \' \"`, `\xHH`, `\uHHHH`, `\u{...}`
@@ -213,7 +213,7 @@ Location: `src/codegen/llvm.ts`
   - `try/catch/finally` is implemented with a runtime `_setjmp` frame: `xt_try_enter` pushes, `_setjmp` catches, `xt_throw` long-jumps. The IR passes the caller's frame address (`@llvm.frameaddress(0)`) as the second `_setjmp` argument, matching clang's MSVC lowering: the Windows UCRT `_setjmp` stores that frame in `_JUMP_BUFFER.Frame` and `longjmp` feeds it to `RtlUnwind`, so omitting it made `longjmp` unwind to a bogus target (`STATUS_BAD_FUNCTION_TABLE`). `_setjmp` is used rather than the exported `setjmp` symbol, whose Windows ABI is an incompatible two-argument routine. Functions containing `try` force local variables to stay in memory (inline-asm escape points) so values survive a long jump.
   - `for...in` reuses `xt_object_keys` to enumerate keys (arrays / strings yield string indices).
 - Expressions:
-  - Identifiers, numbers, BigInt (treated as numbers), strings, templates, booleans, `null`, `undefined`, `arguments`
+  - Identifiers, numbers, BigInt (arbitrary precision), strings, templates, booleans, `null`, `undefined`, `arguments`
   - Arithmetic / comparison / logical / short-circuit / conditional / bitwise / unary (including `typeof` `void`) / prefix-postfix increment-decrement / compound assignment / logical assignment
   - Array literals (including spread `[...]`), object literals (including shorthand / methods / object spread `{...obj}`)
   - Property access (with a `length` special case, `Math` constants), element access, calls

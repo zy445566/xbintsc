@@ -117,8 +117,8 @@ export class GeneratorContext {
     return ptr;
   }
 
-  const(hex: string): string {
-    return i64(hex);
+  const(value: bigint): string {
+    return i64(value);
   }
 
   // -- variables -----------------------------------------------------------

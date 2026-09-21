@@ -33,8 +33,9 @@ xcrun --show-sdk-path      # 打印 SDK 路径
 
 ## Linux
 
-常规的 glibc 发行版即可，无需安装任何东西。将来可选的静态二进制会使用自带的
-musl CRT。
+常规的 glibc 发行版即可，无需安装任何东西。发布包自带 clang + lld 以及它们所需的
+共享库（尤其是旧 soname `libtinfo.so.5`），因此在没有编译器的系统上也能直接使用。
+将来可选的静态二进制会使用自带的 musl CRT。
 
 ## Windows
 
@@ -45,6 +46,10 @@ CRT + 导入库），因此在干净的 Windows 上也能直接 `xbintsc build`�
 
 - Node.js ≥ 22 仅在运行/构建编译器本身时需要；发布的独立二进制**不需要** Node。
 - C 编译器仅在重建运行期（`npm run runtime`）时需要，**使用**发布版 xbintsc 时不需要。
+- `npm run fetch-toolchain` 会下载 xbintsc 随包分发的工具链并解压到
+  `vendor/<os>-<arch>/`；之后 `resolveToolchain()` 会优先于 `PATH` 使用它
+  （Linux 用 LLVM，Windows 用 llvm-mingw）。macOS 上此命令为空操作——直接使用
+  Command Line Tools。可用 `xbintsc_LINKER_ARGS` / `xbintsc_CLANG` 覆盖解析结果。
 
 ## 检查环境
 

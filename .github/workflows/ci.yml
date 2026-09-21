@@ -237,3 +237,48 @@ jobs:
           path: dist/xbintsc*
           if-no-files-found: error
           retention-days: 90
+
+  # Proves an end user needs no compiler installed: on Linux/Windows the toolchain
+  # is fetched into vendor/ and used; on macOS the system Command Line Tools are
+  # used (the recorded prerequisite).
+  self-contained:
+    name: Self-contained (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    # Do not let the workflow-level xbintsc_CLANG shadow the bundled toolchain.
+    env:
+      xbintsc_CLANG: ""
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cache the bundled toolchain
+        uses: actions/cache@v7
+        with:
+          path: vendor
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
+
+      - name: Fetch the bundled toolchain
+        run: npx tsx scripts/fetch-toolchain.ts
+
+      - name: Report the resolved toolchain
+        run: npx tsx src/cli/main.ts doctor
+
+      - name: Assert the bundled toolchain is used (Linux/Windows)
+        if: runner.os != 'macOS'
+        shell: bash
+        run: npx tsx src/cli/main.ts doctor | grep -q "(vendor)"
+
+      - name: Build and run a program
+        run: |
+          npx tsx src/cli/main.ts build examples/hello.ts --out build/self-contained
+          npx tsx src/cli/main.ts run examples/hello.ts --out build/self-contained

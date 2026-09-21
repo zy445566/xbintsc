@@ -12,6 +12,14 @@
 > - **Windows**：xbintsc 自带 **MinGW-w64 ABI** 工具链（clang + lld + CRT + 导入库），
 >   无需用户安装编译器。
 
+> **状态 — P0 ✅ 已落地，P1 🔄 进行中。** `src/driver/toolchain-provider.ts`
+> 按 `env → vendor → PATH` 解析工具链；`npm run runtime` 产出预编译库到
+> `runtime/lib/<os>-<arch>/{core,ext_<name>}.a`，`build` 优先使用它们；
+> `xbintsc doctor` 报告解析结果。`npm run fetch-toolchain` 把固定版本工具链
+> （Linux 用 LLVM `18.1.8`，Windows 用 llvm-mingw `20260908`）下载到
+> `vendor/<os>-<arch>/`，`resolveToolchain()` 优先使用它并以 `-fuse-ld=lld`
+> 链接；CI `self-contained` 作业负责验证。macOS 走 Command Line Tools。
+
 ## 1. 目标与非目标
 
 **目标**
@@ -75,34 +83,39 @@ xbintsc（自包含）
 
 ## 5. 分阶段计划
 
-### P0 工具链抽象 + 预编译运行期（地基，收益最大）
+### P0 工具链抽象 + 预编译运行期（地基，收益最大）— ✅ 已落地
 
-- 新增 `src/driver/toolchain-provider.ts`：定义 `Lowerer` / `CCompiler` /
-  `Linker` / `Toolchain` 接口与 `resolveToolchain()`；把 `toolchain.ts` 里
-  的底层命令并入具体实现。
-- 改 `scripts/build-runtime.mjs`：产出**静态库**
-  `runtime/lib/<os>-<arch>/libxbintsc_runtime.a`（Windows 为 `.lib`），
-  可把各扩展也编成独立库按需链接。
-- 改 `src/driver/compiler.ts` `ensureRuntimeObjects()`：**优先使用预编译库**，
-  缺失时才回退到现编 `.c`。
-- 改 `src/driver/paths.ts`：新增 `findRuntimeLibDir()` / `findVendorDir()`。
-- 验收：`npm run runtime` 生成库；删掉 `build/runtime/*.o` 后 `build` 仍能链接；
-  无 clang 时 `emit` 正常；首次 `build` 不再现编 22 个 C 文件（构建提速）。
+- `src/driver/toolchain-provider.ts`：`resolveToolchain()` 按
+  `env(xbintsc_CLANG / xbintsc_TOOLCHAIN) → vendor/ → PATH` 解析，返回驱动路径
+  与额外链接参数。
+- `scripts/build-runtime.ts`（`npm run runtime`）把 C 运行期编成静态库
+  `runtime/lib/<os>-<arch>/core.a` 与 `ext_<name>.a`（Windows 在 MinGW 工具链落地前
+  暂不生成）。
+- `src/driver/compiler.ts` `ensureRuntimeObjects()` **优先使用已存在的库**
+  （`BuildOptions.preferPrebuilt`，默认 true），缺失时回退现编 `.c`。
+- `src/driver/paths.ts`：`platformSlug()` / `findVendorDir()` / `vendorRootDir()`；
+  `src/driver/runtime-lib.ts`：`runtimeLibDir()` / `findRuntimeLibrary()`。
+- `xbintsc doctor` 报告解析到的工具链与运行期库位置。
+- 验收：已满足——`emit` 无需 clang；链接时优先用库，库缺失时自动回退到源码。
 
 > 预编译运行期是所有方案的前提：它让运行期不再需要 C 头文件 / SDK，
 > 并能显著缩短首次构建。
 
-### P1 随包工具链 bundle
+### P1 随包工具链 bundle — 🔄 进行中
 
-- CI 从 LLVM 官方 release 取 `clang`/`lld`（或 `llvm-tools`），裁剪出
-  `clang`（或 `llc`）+ `lld`，放入 `vendor/<os>-<arch>/`。
-- `resolveToolchain()` 命中后一律用**绝对路径**调用，不依赖 `PATH`。
-- 平台处理：
-  - Linux：随包 clang + lld；使用系统 glibc。
-  - macOS：直接使用 **Xcode Command Line Tools** 自带的系统 clang / 链接器 / SDK
-    （已记录的前置要求）——不分发工具链。
-  - Windows：随包 **MinGW-w64** ABI 工具链（clang + lld + CRT + 导入库），
-    类似 Rust 的 `*-windows-gnu`。
+- `src/driver/toolchain-download.ts` 固定每个 host 的 bundle；`npm run
+  fetch-toolchain`（`scripts/fetch-toolchain.ts`）下载并解压到 `vendor/<os>-<arch>/`：
+  - Linux：LLVM 官方 `18.1.8` release → `bin/clang`、`bin/ld.lld`、`bin/llvm-ar`。
+  - Windows：llvm-mingw `20260908`（`ucrt-x86_64`）→ clang + lld + MinGW-w64
+    的 sysroot / CRT / 导入库。
+  - macOS：无（走 Command Line Tools）。
+- `resolveToolchain()` 选中 `vendor/<os>-<arch>/bin/clang`，并默认加
+  `-fuse-ld=lld` 使用自带链接器；可用 `xbintsc_LINKER_ARGS` 覆盖。
+- Linux 官方构建仍链接已被移除的 `libtinfo.so.5` soname；fetch 脚本把它一并放入
+  `vendor/<os>-<arch>/lib/`，`resolveToolchain()` 为工具链子进程设置
+  `LD_LIBRARY_PATH` 指向该目录。
+- CI `self-contained` 作业拉取 bundle、断言 `doctor` 在 Linux/Windows 报告
+  `(vendor)`，再 `build` + `run` 一个程序。
 - 验收：纯净 Linux 容器（无 clang/ld）、**装有** Command Line Tools 的 macOS、
   未装 Visual Studio 的 Windows 上，`build` + `run` 全部通过。
 
@@ -112,7 +125,7 @@ xbintsc（自包含）
   `xbintsc-<os>-<arch>.tar.zst`，内含 `bin/xbintsc` + `vendor/` + `runtime/lib/`。
 - npm：用 `optionalDependencies` 提供 per-platform 包（`@xbintsc/<platform>`），
   或 postinstall 下载（校验 sha256）。launcher（`bin/xbintsc.js`）负责定位 `vendor/`。
-- 新增 `xbintsc doctor`：打印解析到的工具链来源、版本、路径与运行期库位置。
+- ✅ `xbintsc doctor`：打印解析到的工具链来源、版本、路径与运行期库位置。
 
 ### P3 平台专项打磨
 
@@ -140,6 +153,7 @@ xbintsc（自包含）
 | --- | --- | --- |
 | macOS | 下载的 bundle 带 quarantine，被 Gatekeeper 拦截；Apple Silicon 需签名 | 依赖 Command Line Tools，不再分发二进制，因此不涉及 quarantine |
 | macOS | `ld64.lld` 需要 SDK 的 `libSystem.tbd`，SDK 来自 Command Line Tools | 把 Command Line Tools 作为已记录的前置要求（[`requirements.md`](./requirements.md)）；不再评估随包 `.tbd` |
+| Linux | 官方 LLVM 构建链接已被移除的 `libtinfo.so.5` soname | 在 `vendor/lib` 自带 `libtinfo.so.5`，并为工具链子进程设置 `LD_LIBRARY_PATH` |
 | Windows | MSVC 路线依赖 Windows SDK 导入库/CRT，用户未必安装 | 选 MinGW-w64 ABI，自带 CRT 与导入库（不依赖 MSVC SDK） |
 | 通用 | 体积膨胀、npm 包大小限制 | 用 per-platform 包 / release 归档；压缩 `tar.zst` |
 | 通用 | emit 的 IR 与 vendored LLVM 版本不匹配 | 固定 LLVM 版本，纳入版本常量与缓存键 |

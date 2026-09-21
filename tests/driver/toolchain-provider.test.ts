@@ -31,6 +31,7 @@ describe("resolveToolchain", () => {
     const toolchain = resolveToolchain(runnerThatWorks("clang"));
     expect(toolchain.clang).toBe("clang");
     expect(toolchain.source).toBe("system");
+    expect(toolchain.env).toEqual({});
   });
 
   it("reads extra linker args from xbintsc_LINKER_ARGS", () => {

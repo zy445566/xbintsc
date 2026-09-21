@@ -34,8 +34,10 @@ If they are missing, `xbintsc build` fails with a clear message pointing here.
 
 ## Linux
 
-A normal glibc-based distribution is enough — nothing to install. Static
-binaries (optional, later) will use a bundled musl CRT.
+A normal glibc-based distribution is enough — nothing to install. The bundle
+ships clang + lld together with the shared libraries they need (notably the
+legacy `libtinfo.so.5`), so a system without a compiler works out of the box.
+Static binaries (optional, later) will use a bundled musl CRT.
 
 ## Windows
 
@@ -49,6 +51,10 @@ Windows install.
   standalone binaries do **not** need Node.
 - A C compiler is required only to rebuild the runtime
   (`npm run runtime`) — not to **use** a released xbintsc.
+- `npm run fetch-toolchain` downloads the toolchain xbintsc bundles and unpacks it
+  into `vendor/<os>-<arch>/`; `resolveToolchain()` then prefers it over `PATH`
+  (Linux: LLVM, Windows: llvm-mingw). On macOS this is a no-op — the Command Line
+  Tools are used. `xbintsc_LINKER_ARGS` / `xbintsc_CLANG` override the result.
 
 ## Checking your environment
 

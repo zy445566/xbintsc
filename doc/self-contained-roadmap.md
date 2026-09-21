@@ -12,6 +12,15 @@ without installing `clang` / `gcc` / `ld` / `llc` themselves.
 > - **Windows**: xbintsc ships a **MinGW-w64 ABI** toolchain (clang + lld + CRT +
 >   import libraries), so no user-installed compiler is required.
 
+> **Status — P0 ✅ landed, P1 🔄 in progress.** `src/driver/toolchain-provider.ts`
+> resolves the toolchain `env → vendor → PATH`; `npm run runtime` writes prebuilt
+> archives to `runtime/lib/<os>-<arch>/{core,ext_<name>}.a` and `build` prefers
+> them; `xbintsc doctor` reports the result. `npm run fetch-toolchain` downloads
+> the pinned toolchain (LLVM `18.1.8` on Linux, llvm-mingw `20260908` on Windows)
+> into `vendor/<os>-<arch>/`, which `resolveToolchain()` prefers and links with
+> `-fuse-ld=lld`; a CI `self-contained` job verifies it. macOS uses the Command
+> Line Tools.
+
 ## 1. Goals and non-goals
 
 **Goals**
@@ -78,35 +87,41 @@ Fail with a clear message and point at `xbintsc doctor` when nothing resolves.
 
 ## 5. Phased plan
 
-### P0 Toolchain abstraction + prebuilt runtime (foundation, biggest win)
+### P0 Toolchain abstraction + prebuilt runtime (foundation, biggest win) — ✅ landed
 
-- New `src/driver/toolchain-provider.ts`: `Lowerer` / `CCompiler` / `Linker` /
-  `Toolchain` interfaces plus `resolveToolchain()`; fold the low-level commands
-  in `toolchain.ts` into concrete implementations.
-- Rework `scripts/build-runtime.mjs` to emit a **static archive**
-  `runtime/lib/<os>-<arch>/libxbintsc_runtime.a` (`.lib` on Windows); extensions
-  may become separate archives linked on demand.
-- Change `src/driver/compiler.ts` `ensureRuntimeObjects()` to **prefer the
-  prebuilt archive**, falling back to compiling `.c` only if missing.
-- Change `src/driver/paths.ts`: add `findRuntimeLibDir()` / `findVendorDir()`.
-- Acceptance: `npm run runtime` produces the archive; `build` still links after
-  deleting `build/runtime/*.o`; `emit` works with no clang; first `build` no longer
-  compiles 22 C files (faster).
+- `src/driver/toolchain-provider.ts`: `resolveToolchain()` selecting
+  `env(xbintsc_CLANG / xbintsc_TOOLCHAIN) → vendor/ → PATH`, returning the driver
+  path plus extra linker args.
+- `scripts/build-runtime.ts` (`npm run runtime`) compiles the C runtime into
+  static archives `runtime/lib/<os>-<arch>/core.a` and `ext_<name>.a` (skipped on
+  Windows until the MinGW toolchain lands).
+- `src/driver/compiler.ts` `ensureRuntimeObjects()` prefers a present archive
+  (`BuildOptions.preferPrebuilt`, default true) and falls back to compiling `.c`.
+- `src/driver/paths.ts`: `platformSlug()` / `findVendorDir()` / `vendorRootDir()`;
+  `src/driver/runtime-lib.ts`: `runtimeLibDir()` / `findRuntimeLibrary()`.
+- `xbintsc doctor` reports the resolved toolchain and runtime locations.
+- Acceptance: met — `emit` needs no clang; a build links against the archives and
+  falls back to sources when they are absent.
 
 > A prebuilt runtime is the precondition for every option: it removes the need for
 > C headers / SDKs at runtime and dramatically shortens the first build.
 
-### P1 Bundled toolchain
+### P1 Bundled toolchain — 🔄 in progress
 
-- CI fetches `clang`/`lld` from the official LLVM release (or `llvm-tools`), trims
-  to `clang` (or `llc`) + `lld`, and places them in `vendor/<os>-<arch>/`.
-- `resolveToolchain()` invokes the shipped tools by **absolute path**, never `PATH`.
-- Platform handling:
-  - Linux: bundle clang + lld; use the system glibc.
-  - macOS: rely on the system clang / linker / SDK from the **Xcode Command Line
-    Tools** (documented prerequisite) — no bundle.
-  - Windows: bundle a **MinGW-w64** ABI toolchain (clang + lld + CRT + import
-    libs), like Rust's `*-windows-gnu`.
+- `src/driver/toolchain-download.ts` pins the per-host bundle; `npm run
+  fetch-toolchain` (`scripts/fetch-toolchain.ts`) downloads and extracts it into
+  `vendor/<os>-<arch>/`:
+  - Linux: official LLVM `18.1.8` release → `bin/clang`, `bin/ld.lld`, `bin/llvm-ar`.
+  - Windows: llvm-mingw `20260908` (`ucrt-x86_64`) → clang + lld + the MinGW-w64
+    sysroot / CRT / import libraries.
+  - macOS: none (Command Line Tools).
+- `resolveToolchain()` selects `vendor/<os>-<arch>/bin/clang` and defaults to
+  `-fuse-ld=lld` (the bundled linker); `xbintsc_LINKER_ARGS` overrides.
+- The official Linux build still links the removed `libtinfo.so.5` soname; the
+  fetch script bundles it under `vendor/<os>-<arch>/lib/` and `resolveToolchain()`
+  points `LD_LIBRARY_PATH` at that directory for the toolchain subprocesses.
+- CI `self-contained` job fetches the bundle, asserts `doctor` reports `(vendor)`
+  on Linux/Windows, then `build` + `run` a program.
 - Acceptance: pure Linux container (no clang/ld), macOS **with** Command Line
   Tools, Windows without Visual Studio — `build` + `run` all pass.
 
@@ -116,7 +131,7 @@ Fail with a clear message and point at `xbintsc doctor` when nothing resolves.
   `bin/xbintsc` + `vendor/` + `runtime/lib/`.
 - npm: per-platform `optionalDependencies` (`@xbintsc/<platform>`) or a postinstall
   downloader (sha256-verified). The launcher (`bin/xbintsc.js`) locates `vendor/`.
-- New `xbintsc doctor`: prints toolchain source, version, path, runtime-lib location.
+- ✅ `xbintsc doctor`: prints toolchain source, version, path, runtime-lib location.
 
 ### P3 Platform hardening
 
@@ -147,6 +162,7 @@ Fail with a clear message and point at `xbintsc doctor` when nothing resolves.
 | --- | --- | --- |
 | macOS | Downloaded bundle is quarantined / blocked by Gatekeeper; Apple Silicon needs signing | Rely on the Command Line Tools (no bundle on macOS), so no quarantine on our binaries |
 | macOS | `ld64.lld` needs the SDK's `libSystem.tbd`, which comes from Command Line Tools | Rely on Command Line Tools as a documented prerequisite ([`requirements.md`](./requirements.md)); no `.tbd` redistribution |
+| Linux | Official LLVM build links the removed `libtinfo.so.5` soname | Bundle `libtinfo.so.5` in `vendor/lib` and set `LD_LIBRARY_PATH` for the toolchain subprocesses |
 | Windows | MSVC path depends on Windows SDK import libs/CRT the user may lack | Ship the MinGW-w64 ABI with bundled CRT and import libs (no MSVC SDK) |
 | General | Bundle size / npm package limits | Per-platform packages / release archives; `tar.zst` |
 | General | Emitted IR vs vendored LLVM version skew | Pin the LLVM version; fold it into the version constant and cache key |

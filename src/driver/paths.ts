@@ -23,6 +23,11 @@ export function findPackageRoot(): string {
   return resolve(findRuntimeDir(), "..");
 }
 
+/** `<package>/vendor` — where a bundled toolchain is assembled (may not exist). */
+export function vendorRootDir(): string {
+  return resolve(findPackageRoot(), "vendor");
+}
+
 /** Platform-architecture slug, e.g. `darwin-arm64`, `linux-x64`, `win32-x64`. */
 export function platformSlug(): string {
   return `${process.platform}-${process.arch}`;

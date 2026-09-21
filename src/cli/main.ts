@@ -150,7 +150,7 @@ function doctor(io: CliIo): number {
 
   try {
     const toolchain = resolveToolchain();
-    const version = realRunner.run(toolchain.clang, ["--version"]).stdout;
+    const version = realRunner.run(toolchain.clang, ["--version"], { env: toolchain.env }).stdout;
     io.stdout(`toolchain  : ${toolchain.clang} (${toolchain.source})\n`);
     io.stdout(`compiler   : ${firstLine(version) || "unknown"}\n`);
   } catch {

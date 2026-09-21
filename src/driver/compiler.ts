@@ -193,13 +193,13 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   // -- toolchain -----------------------------------------------------------
   const toolchain = options.clang
-    ? { clang: options.clang, linkerArgs: [] as string[] }
+    ? { clang: options.clang, linkerArgs: [] as string[], env: {} as Record<string, string> }
     : resolveToolchain(runner);
   const clang = toolchain.clang;
   mkdirSync(cacheDir, { recursive: true });
 
   const objectPath = emit === "obj" ? outputPath : resolve(outDir, baseName + ".o");
-  compileIr(runner, { clang, irPath, objectPath, optimize });
+  compileIr(runner, { clang, irPath, objectPath, optimize, env: toolchain.env });
 
   if (emit === "obj") {
     cache.record(cacheKey, outputs);
@@ -215,6 +215,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     cacheDir,
     registry,
     options.preferPrebuilt ?? true,
+    toolchain.env,
   );
 
   link(runner, {
@@ -227,6 +228,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
       ...registry.linkerFlags(),
     ],
     optimize,
+    env: toolchain.env,
   });
 
   cache.record(cacheKey, outputs);
@@ -267,6 +269,7 @@ function ensureRuntimeObjects(
   cacheDir: string,
   registry: ExtensionRegistry,
   preferPrebuilt: boolean,
+  env: Record<string, string>,
 ): RuntimeObjects {
   /* Runtime objects depend on the shared headers (rt.h/rt_internal.h/...),
      so a header change must invalidate every cached object. Hash them all. */
@@ -286,7 +289,7 @@ function ensureRuntimeObjects(
     const key = hashParts(["runtime", COMPILER_VERSION, tag, headerStamp, body, clang, process.platform]);
     const objectPath = join(cacheDir, `${tag}-${key}.o`);
     if (!existsSync(objectPath)) {
-      compileC(runner, clang, sourcePath, objectPath, runtimeDir);
+      compileC(runner, clang, sourcePath, objectPath, runtimeDir, env);
     }
     return objectPath;
   };

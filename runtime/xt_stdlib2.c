@@ -20,11 +20,12 @@
 #include <time.h>
 
 /*
- * `timegm` and `gmtime_r` are POSIX extensions that MSVC's CRT does not
- * provide. Wrap the platform-specific equivalents so the Date implementation
- * below compiles everywhere.
+ * `timegm` and `gmtime_r` are POSIX extensions that Windows' CRT does not
+ * provide. MinGW-w64 (the bundled Windows toolchain) is affected too: its
+ * <time.h> only exposes `gmtime_r` when `_POSIX_C_SOURCE` is set and has no
+ * `timegm` at all, so wrap the MSVC-style equivalents for every `_WIN32` build.
  */
-#if defined(_WIN32) && !defined(__MINGW32__) && !defined(__MINGW64__)
+#if defined(_WIN32)
 static time_t xt_timegm(struct tm *tm) { return (time_t)_mkgmtime64(tm); }
 static struct tm *xt_gmtime_r(const time_t *timer, struct tm *buf) {
   return gmtime_s(buf, timer) == 0 ? buf : NULL;

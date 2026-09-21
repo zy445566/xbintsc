@@ -113,6 +113,8 @@ export interface PropertyAssignment extends Node {
 export interface ShorthandPropertyAssignment extends Node {
   readonly kind: SyntaxKind.ShorthandPropertyAssignment;
   readonly name: Identifier;
+  /** Present for `{ a = default }` when used as a destructuring target. */
+  readonly initializer?: Expression;
 }
 
 export interface SpreadElement extends Node {

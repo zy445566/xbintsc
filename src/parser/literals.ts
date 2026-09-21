@@ -85,7 +85,16 @@ export const literalMethods: LiteralMethods = {
           const fn: FunctionExpression = { kind: SyntaxKind.FunctionExpression, typeParameters, parameters, returnType, body, flags: NodeFlags.None, start, end: body.end };
           properties.push({ kind: SyntaxKind.PropertyAssignment, name, initializer: fn, start, end: body.end });
         } else if (name.kind === SyntaxKind.Identifier) {
-          const shorthand: ShorthandPropertyAssignment = { kind: SyntaxKind.ShorthandPropertyAssignment, name, start, end: name.end };
+          // `{ a }` shorthand, optionally with a default (`{ a = 1 }`) that is
+          // only meaningful when the object is a destructuring assignment target.
+          let initializer: Expression | undefined;
+          let end = name.end;
+          if (this.at(TokenKind.Equals)) {
+            this.nextToken();
+            initializer = this.parseAssignmentExpression();
+            end = initializer.end;
+          }
+          const shorthand: ShorthandPropertyAssignment = { kind: SyntaxKind.ShorthandPropertyAssignment, name, initializer, start, end };
           properties.push(shorthand);
         } else {
           this.error(DiagnosticCode.UnexpectedToken, "Invalid object literal member");

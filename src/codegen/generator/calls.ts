@@ -451,6 +451,11 @@ export const callMethods: CallMethods = {
         const value = this.emitExpression(property.initializer);
         this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
       } else if (property.kind === SyntaxKind.ShorthandPropertyAssignment) {
+        if (property.initializer) {
+          // `{ a = 1 }` is only legal as a destructuring target, not a value.
+          this.unsupported(property, "default value in object literal");
+          continue;
+        }
         const identifier = property.name;
         const key = this.stringValue(identifier.text);
         const value = this.emitIdentifier(identifier);

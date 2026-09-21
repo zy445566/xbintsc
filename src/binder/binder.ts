@@ -474,9 +474,12 @@ class Binder {
         this.bindNode(property.initializer, scope);
         return;
       }
-      case SyntaxKind.ShorthandPropertyAssignment:
-        this.reference((node as unknown as { name: Identifier }).name, scope);
+      case SyntaxKind.ShorthandPropertyAssignment: {
+        const shorthand = node as unknown as { name: Identifier; initializer?: Expression };
+        this.reference(shorthand.name, scope);
+        if (shorthand.initializer) this.bindNode(shorthand.initializer, scope);
         return;
+      }
       case SyntaxKind.LabeledStatement:
         this.bindNode((node as unknown as { statement: Node }).statement, scope);
         return;

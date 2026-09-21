@@ -35,10 +35,17 @@ export function propertyNameText(name: PropertyName): string {
 }
 
 export function isAssignmentTarget(expr: Expression): boolean {
-  return (
-    expr.kind === SyntaxKind.Identifier ||
-    expr.kind === SyntaxKind.PropertyAccessExpression ||
-    expr.kind === SyntaxKind.ElementAccessExpression ||
-    expr.kind === SyntaxKind.ParenthesizedExpression
-  );
+  switch (expr.kind) {
+    case SyntaxKind.Identifier:
+    case SyntaxKind.PropertyAccessExpression:
+    case SyntaxKind.ElementAccessExpression:
+    case SyntaxKind.ParenthesizedExpression:
+    // Array/object literals are valid on the left of `=` as destructuring
+    // patterns (`[a, b] = xs`, `({ a } = obj)`).
+    case SyntaxKind.ArrayLiteralExpression:
+    case SyntaxKind.ObjectLiteralExpression:
+      return true;
+    default:
+      return false;
+  }
 }

@@ -22,6 +22,9 @@ import {
   type PostfixUnaryExpression,
   type PrefixUnaryExpression,
   type PropertyAccessExpression,
+  type PropertyAssignment,
+  type ShorthandPropertyAssignment,
+  type SpreadElement,
   type TemplateLiteral,
 } from "../../ast/nodes.js";
 import {
@@ -33,7 +36,7 @@ import {
 import { SymbolKind, type SymbolInfo } from "../../binder/binder.js";
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_FALSE, XT_NULL, XT_TRUE, XT_UNDEFINED } from "../values.js";
-import { BINARY_RUNTIME, compoundToBinary, isAssignmentOperator, BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS } from "./tables.js";
+import { BINARY_RUNTIME, compoundToBinary, isAssignmentOperator, BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS, propertyNameText } from "./tables.js";
 import type { Generator } from "./generator.js";
 
 export interface ExpressionMethods {
@@ -49,9 +52,17 @@ export interface ExpressionMethods {
   emitAssignment(this: Generator, node: BinaryExpression): string;
   emitLogicalAssignment(this: Generator, node: BinaryExpression): string;
   emitAssignmentTarget(this: Generator, target: Expression, value: string): void;
+  emitArrayAssignmentTarget(this: Generator, pattern: ArrayLiteralExpression, value: string): void;
+  emitObjectAssignmentTarget(this: Generator, pattern: ObjectLiteralExpression, value: string): void;
   emitThis(this: Generator): string;
   emitNew(this: Generator, node: NewExpression): string;
   emitAwait(this: Generator, node: AwaitExpression): string;
+}
+
+/** True for `target = default` (only the plain assignment operator). */
+function isPlainAssignment(node: Expression): boolean {
+  if (node.kind !== SyntaxKind.BinaryExpression) return false;
+  return ((node as BinaryExpression).operator as unknown as AssignmentOperator) === AssignmentOperator.Assign;
 }
 
 export const expressionMethods: ExpressionMethods = {
@@ -553,8 +564,83 @@ export const expressionMethods: ExpressionMethods = {
       case SyntaxKind.ParenthesizedExpression:
         this.emitAssignmentTarget((target as { expression: Expression }).expression, value);
         return;
+      case SyntaxKind.ArrayLiteralExpression:
+        this.emitArrayAssignmentTarget(target as ArrayLiteralExpression, value);
+        return;
+      case SyntaxKind.ObjectLiteralExpression:
+        this.emitObjectAssignmentTarget(target as ObjectLiteralExpression, value);
+        return;
       default:
         this.unsupported(target, "assignment target");
+    }
+  },
+
+  /** `[a, b] = value` / `for ([a, b] of xs)`: assign each element of `value`. */
+  emitArrayAssignmentTarget(pattern: ArrayLiteralExpression, value: string): void {
+    for (let index = 0; index < pattern.elements.length; index++) {
+      const element = pattern.elements[index];
+      if (!element) continue;
+      if (element.kind === SyntaxKind.UndefinedKeyword) continue; // elision hole
+      if (element.kind === SyntaxKind.SpreadElement) {
+        const spread = element as SpreadElement;
+        const startPtr = this.alloca();
+        this.emit(`  store i64 ${numberLiteral(index)}, i64* ${startPtr}`);
+        const sliceName = this.stringValue("slice");
+        const rest = this.reg();
+        this.emit(`  ${rest} = call i64 @xt_call_method(i64 ${value}, i64 ${sliceName}, i32 1, i64* ${startPtr})`);
+        this.emitAssignmentTarget(spread.expression, rest);
+        continue;
+      }
+      let target: Expression = element;
+      let fallback: Expression | undefined;
+      if (isPlainAssignment(element)) {
+        const binary = element as BinaryExpression;
+        target = binary.left;
+        fallback = binary.right;
+      }
+      let elementValue = this.reg();
+      this.emit(`  ${elementValue} = call i64 @xt_get(i64 ${value}, i64 ${numberLiteral(index)})`);
+      if (fallback) elementValue = this.emitBindingDefault(elementValue, fallback);
+      this.emitAssignmentTarget(target, elementValue);
+    }
+  },
+
+  /** `{ a, b } = value` / `for ({ a } of xs)`: assign each property of `value`. */
+  emitObjectAssignmentTarget(pattern: ObjectLiteralExpression, value: string): void {
+    for (const property of pattern.properties) {
+      if (property.kind === SyntaxKind.SpreadElement) {
+        this.unsupported(property, "object rest destructuring");
+        continue;
+      }
+      if (property.kind === SyntaxKind.PropertyAssignment) {
+        const assignment = property as PropertyAssignment;
+        let key: string;
+        if (assignment.name.kind === SyntaxKind.ComputedPropertyName) {
+          const keyValue = this.emitExpression((assignment.name as { expression: Expression }).expression);
+          key = this.reg();
+          this.emit(`  ${key} = call i64 @xt_to_string(i64 ${keyValue})`);
+        } else {
+          key = this.stringValue(propertyNameText(assignment.name));
+        }
+        let target: Expression = assignment.initializer;
+        let fallback: Expression | undefined;
+        if (isPlainAssignment(target)) {
+          const binary = target as BinaryExpression;
+          target = binary.left;
+          fallback = binary.right;
+        }
+        let elementValue = this.reg();
+        this.emit(`  ${elementValue} = call i64 @xt_get(i64 ${value}, i64 ${key})`);
+        if (fallback) elementValue = this.emitBindingDefault(elementValue, fallback);
+        this.emitAssignmentTarget(target, elementValue);
+        continue;
+      }
+      const shorthand = property as ShorthandPropertyAssignment;
+      const key = this.stringValue(shorthand.name.text);
+      let elementValue = this.reg();
+      this.emit(`  ${elementValue} = call i64 @xt_get(i64 ${value}, i64 ${key})`);
+      if (shorthand.initializer) elementValue = this.emitBindingDefault(elementValue, shorthand.initializer);
+      this.emitAssignmentTarget(shorthand.name, elementValue);
     }
   },
 };

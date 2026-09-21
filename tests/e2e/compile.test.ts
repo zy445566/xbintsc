@@ -554,4 +554,35 @@ describeWithClang("end-to-end compilation", () => {
       "1 7 3,4 5 9\n0 5 6 Green\ntrue false\nError: boom",
     );
   });
+
+  it("supports destructuring assignments", () => {
+    const source = `
+      let a = 1, b = 2;
+      [a, b] = [b, a];
+      console.log(a, b);
+
+      let c = 0, d = 0, rest: number[] = [];
+      [c, d = 5, ...rest] = [10, undefined, 30, 40];
+      console.log(c, d, rest.join(","));
+
+      let x = 0, y = 0;
+      [[x], [y]] = [[100], [200]];
+      let p = 0, q = 0, r = 0;
+      ({ p, q = 9, p: r } = { q: 7, p: 8 });
+      console.log(x, y, p, q, r);
+
+      const target = { v: 0 } as any;
+      const list = [0, 0];
+      [target.v, list[0]] = [5, 6];
+      console.log(target.v, list[0]);
+
+      const pairs = [[1, 2], [3, 4]];
+      let u = 0, v = 0;
+      for ([u, v] of pairs) console.log(u, v);
+      for (const [f, s] of pairs) console.log(f + s);
+    `;
+    expect(runProgram(source)).toBe(
+      "2 1\n10 5 30,40\n100 200 8 7 8\n5 6\n1 2\n3 4\n3\n7",
+    );
+  });
 });

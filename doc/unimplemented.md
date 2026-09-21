@@ -223,7 +223,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 ```
 Unimplemented (statements): enum, namespace/module, labeled statements label:
 
-Unimplemented (expressions): regex literals, tagged templates, yield, array/object destructuring,
+Unimplemented (expressions): tagged templates, yield,
                              spread in call arguments f(...args)
 
 Unimplemented (functions): generators, fn.name/length/call/apply/bind, new.target

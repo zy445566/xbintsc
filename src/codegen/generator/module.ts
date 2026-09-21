@@ -116,16 +116,24 @@ export const moduleMethods: ModuleMethods = {
     for (let index = 0; index < fn.params.length; index++) {
       const symbol = fn.params[index]!;
       const parameter = parameterNodes[index];
-      if (parameter?.dotDotDotToken) {
+      if (!parameter) continue;
+      if (parameter.dotDotDotToken) {
         const rest = this.reg();
         this.emit(`  ${rest} = call i64 @xt_rest_args(i32 %argc, i64* %argv, i32 ${index})`);
         this.declareSlot(symbol, rest);
         continue;
       }
-      const value = this.reg();
+      let value = this.reg();
       this.emit(`  ${value} = call i64 @xt_arg(i32 %argc, i64* %argv, i32 ${index})`);
+      if (parameter.name.kind !== SyntaxKind.Identifier) {
+        // A destructuring parameter (`([a, b]) => ...` / `({ a }) => ...`) binds
+        // every name introduced by its pattern, not just the first one.
+        if (parameter.initializer) value = this.emitBindingDefault(value, parameter.initializer);
+        this.emitBindingPattern(parameter.name, value);
+        continue;
+      }
       this.declareSlot(symbol, value);
-      if (parameter?.initializer) this.emitDefaultParameter(symbol, value, parameter.initializer);
+      if (parameter.initializer) this.emitDefaultParameter(symbol, value, parameter.initializer);
     }
 
     // Captures threaded through the environment.

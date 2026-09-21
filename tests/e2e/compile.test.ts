@@ -424,4 +424,27 @@ describeE2E("end-to-end compilation", (harness) => {
       "2 1\n10 5 30,40\n100 200 8 7 8\n5 6\n1 2\n3 4\n3\n7",
     );
   });
+
+  it("supports destructuring parameters", () => {
+    const source = `
+      const pairs = [["a", 1], ["b", 2]];
+      const mapped = pairs.map(([name, value]) => [name, { value }]);
+      console.log(mapped[0][0], mapped[1][0]);
+      console.log(mapped[0][1].value, mapped[1][1].value);
+
+      function sum([a, b]: [number, number]) { return a + b; }
+      console.log(sum([3, 4]));
+
+      function greet({ name, greeting = "Hello" }: { name: string; greeting?: string }) {
+        return greeting + ", " + name;
+      }
+      console.log(greet({ name: "Ada" }), greet({ name: "Bob", greeting: "Hi" }));
+
+      const withDefault = ([a, b] = [10, 20]) => a + b;
+      console.log(withDefault(), withDefault([1, 2]));
+    `;
+    expect(runProgram(source)).toBe(
+      "a b\n1 2\n7\nHello, Ada Hi, Bob\n30 3",
+    );
+  });
 });

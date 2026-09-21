@@ -5,6 +5,10 @@
  *   dist/release/xbintsc-<os>-<arch>.tar.gz        (or .tar.zst)
  *   dist/release/xbintsc-<os>-<arch>.tar.gz.sha256
  *
+ * The unpacked staging tree is built under `build/release-stage/`, never under
+ * `dist/release/`, so an upload glob over `dist/release/*` cannot accidentally
+ * ship the (multi-GB) tree alongside the archive.
+ *
  * Layout inside the archive:
  *
  *   xbintsc-<os>-<arch>/
@@ -30,7 +34,9 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -63,6 +69,55 @@ function firstExisting(candidates: readonly string[]): string | undefined {
   return undefined;
 }
 
+/**
+ * Copy only the parts of the fetched toolchain that xbintsc actually runs.
+ *
+ * The official LLVM release unpacks to ~7 GB: every MLIR/Flang/lldb tool, the
+ * static archives and the full C++ headers. The compiler only shells out to the
+ * clang driver, the lld linker and llvm-ar, and clang additionally needs its own
+ * resource directory (`lib/clang/<version>`, the builtin headers and
+ * compiler-rt). Copying just those keeps the archive ~100x smaller.
+ */
+function stageToolchain(vendor: string, dest: string): void {
+  const exe = process.platform === "win32" ? ".exe" : "";
+  mkdirSync(join(dest, "bin"), { recursive: true });
+
+  const real = (...candidates: readonly string[]): string | undefined => {
+    const found = firstExisting(candidates.map((candidate) => join(vendor, candidate)));
+    return found ? realpathSync(found) : undefined;
+  };
+  const copyAs = (source: string | undefined, name: string): void => {
+    if (!source) return;
+    const target = join(dest, "bin", name);
+    copyFileSync(source, target);
+    if (process.platform !== "win32") chmodSync(target, 0o755);
+  };
+
+  // In the official release `clang`/`ld.lld` are symlinks into the bin/ dir;
+  // copy the resolved targets under the names the toolchain provider (and
+  // clang's `-fuse-ld=lld`) expect next to `bin/clang`.
+  copyAs(real(`bin/clang${exe}`, `bin/clang-18${exe}`), `clang${exe}`);
+  copyAs(real(`bin/ld.lld${exe}`, `bin/lld${exe}`), `ld.lld${exe}`);
+  copyAs(real(`bin/llvm-ar${exe}`, "bin/llvm-ar"), `llvm-ar${exe}`);
+
+  // clang's resource directory: builtin headers + compiler-rt archives.
+  const resourceDir = join(vendor, "lib", "clang");
+  if (existsSync(resourceDir)) {
+    cpSync(resourceDir, join(dest, "lib", "clang"), { recursive: true });
+  }
+
+  // Shared libraries the fetch placed next to the toolchain (on Linux that is
+  // the legacy `libtinfo.so.5` the official build still links).
+  const libDir = join(vendor, "lib");
+  if (existsSync(libDir)) {
+    for (const entry of readdirSync(libDir, { withFileTypes: true })) {
+      if (/^(.*\.so(\.\d+)*|.*\.dylib|.*\.dll)$/.test(entry.name)) {
+        cpSync(join(libDir, entry.name), join(dest, "lib", entry.name), { recursive: true });
+      }
+    }
+  }
+}
+
 const distDir = join(root, "dist");
 const binary = firstExisting([
   join(distDir, `xbintsc${exeSuffix}`),
@@ -73,10 +128,15 @@ if (!binary) {
   fail(`no self-hosted binary found under ${distDir} (expected dist/xbintsc${exeSuffix})`);
 }
 
+// Archives go to `dist/release/`; the unpacked staging tree goes to
+// `build/release-stage/` so the upload glob over `dist/release/*` cannot pick up
+// the raw tree (which would ship the toolchain twice, and uncompressed).
 const releaseRoot = join(distDir, "release");
-const stage = join(releaseRoot, base);
+const stageRoot = join(root, "build", "release-stage");
+const stage = join(stageRoot, base);
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(join(stage, "bin"), { recursive: true });
+mkdirSync(releaseRoot, { recursive: true });
 
 // 1. The compiler binary.
 const stagedBinary = join(stage, "bin", `xbintsc${exeSuffix}`);
@@ -91,7 +151,13 @@ console.log("xbintsc: packaged runtime/");
 // 3. The bundled toolchain, when one was fetched for this platform.
 const vendor = join(root, "vendor", slug);
 if (existsSync(join(vendor, "bin"))) {
-  cpSync(vendor, join(stage, "vendor", slug), { recursive: true });
+  if (process.platform === "win32") {
+    // llvm-mingw spreads its MinGW-w64 CRT/import libraries across the tree, so
+    // bundling it whole is the safe default there for now.
+    cpSync(vendor, join(stage, "vendor", slug), { recursive: true });
+  } else {
+    stageToolchain(vendor, join(stage, "vendor", slug));
+  }
   console.log(`xbintsc: packaged vendor/${slug}/`);
 } else if (process.platform === "linux" || process.platform === "win32") {
   console.warn(
@@ -113,7 +179,7 @@ const hasZstd = !spawnSync("zstd", ["--version"], { stdio: "ignore" }).error;
 const extension = releaseArchiveExtension(hasZstd);
 const archive = join(releaseRoot, `${base}${extension}`);
 rmSync(archive, { force: true });
-const tarArgs = ["-c", hasZstd ? "--zstd" : "-z", "-f", archive, "-C", releaseRoot, base];
+const tarArgs = ["-c", hasZstd ? "--zstd" : "-z", "-f", archive, "-C", stageRoot, base];
 const tar = spawnSync("tar", tarArgs, { stdio: "inherit" });
 if (tar.error) fail(`failed to run tar: ${tar.error.message}`);
 if (tar.status !== 0) fail(`tar exited with ${tar.status}`);

@@ -332,6 +332,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-${{ runner.os }}-${{ runner.arch }}
-          path: dist/release/xbintsc-*
+          # Only the archives (and their .sha256), never the unpacked tree.
+          path: dist/release/xbintsc-*.tar.*
           if-no-files-found: error
           retention-days: 90

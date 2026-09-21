@@ -138,7 +138,9 @@ Fail with a clear message and point at `xbintsc doctor` when nothing resolves.
   `zstd` binary is present) plus a `.sha256`, containing:
   - `bin/xbintsc[.exe]` — the self-hosted compiler,
   - `runtime/` — the C sources plus prebuilt `runtime/lib/<slug>/` archives,
-  - `vendor/<slug>/` — the bundled toolchain (Linux/Windows),
+  - `vendor/<slug>/` — the bundled toolchain (Linux/Windows), pruned to what the
+    compiler runs (`bin/clang`, `bin/ld.lld`, `bin/llvm-ar`, `lib/clang/<version>/`
+    and the support `.so` files) rather than the whole ~7 GB LLVM release,
   - `README.md` / `LICENSE`.
 - The compiler locates `runtime/` and `vendor/` relative to its own executable
   (`findRuntimeDir` learned the `<root>/bin` release layout), so the unpacked

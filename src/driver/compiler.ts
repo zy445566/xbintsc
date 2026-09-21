@@ -272,14 +272,15 @@ function ensureRuntimeObjects(
   preferPrebuilt: boolean,
   env: Record<string, string>,
 ): RuntimeObjects {
-  /* Runtime objects depend on the shared headers (rt.h/rt_internal.h/...),
-     so a header change must invalidate every cached object. Hash them all. */
+  /* Runtime objects depend on the shared headers (rt.h/rt_internal.h/...) and
+     the `#include`d implementation fragments (`.inc`), so any change to them
+     must invalidate every cached object. Hash them all. */
   const headerParts: string[] = [];
   const collectHeaders = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) collectHeaders(full);
-      else if (entry.name.endsWith(".h")) headerParts.push(readFileSync(full, "utf8"));
+      else if (entry.name.endsWith(".h") || entry.name.endsWith(".inc")) headerParts.push(readFileSync(full, "utf8"));
     }
   };
   collectHeaders(runtimeDir);

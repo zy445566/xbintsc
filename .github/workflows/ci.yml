@@ -262,7 +262,7 @@ jobs:
       - run: npm ci
 
       - name: Cache the bundled toolchain
-        uses: actions/cache@v7
+        uses: actions/cache@v6
         with:
           path: vendor
           key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
@@ -308,13 +308,13 @@ jobs:
       - run: npm ci
 
       - name: Download the self-hosted compiler
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: xbintsc-${{ runner.os }}-${{ runner.arch }}
           path: dist
 
       - name: Cache the bundled toolchain
-        uses: actions/cache@v7
+        uses: actions/cache@v6
         with:
           path: vendor
           key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}

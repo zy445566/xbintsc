@@ -543,8 +543,21 @@ export const expressionMethods: ExpressionMethods = {
   emitAssignmentTarget(target: Expression, value: string): void {
     switch (target.kind) {
       case SyntaxKind.Identifier: {
-        const symbol = this.binding.symbolOfIdentifier.get(target as Identifier);
-        if (symbol) this.writeSlot(symbol, value);
+        const identifier = target as Identifier;
+        const symbol = this.binding.symbolOfIdentifier.get(identifier);
+        if (!symbol) return;
+        if (symbol.kind === SymbolKind.Const || symbol.kind === SymbolKind.Import) {
+          this.diagnostics.error(
+            DiagnosticCode.CannotAssignToConst,
+            symbol.kind === SymbolKind.Import
+              ? `Cannot assign to '${symbol.name}' because it is an import.`
+              : `Cannot assign to '${symbol.name}' because it is a constant.`,
+            identifier,
+            this.sourceFile.fileName,
+          );
+          return;
+        }
+        this.writeSlot(symbol, value);
         return;
       }
       case SyntaxKind.PropertyAccessExpression: {

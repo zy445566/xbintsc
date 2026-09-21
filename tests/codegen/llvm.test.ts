@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compileToIr } from "../helpers.js";
 import { numberLiteral } from "../../src/codegen/values.js";
+import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
 
@@ -129,5 +130,31 @@ describe("codegen", () => {
   it("reports unsupported syntax instead of crashing", () => {
     const { diagnostics } = compileToIr("tag`x`;");
     expect(diagnostics.some((d) => d.category === "error")).toBe(true);
+  });
+
+  it("rejects assignment to const bindings", () => {
+    const { diagnostics } = compileToIr("const x = 1;\nx = 2;");
+    expect(diagnostics.some((d) => d.code === DiagnosticCode.CannotAssignToConst)).toBe(true);
+  });
+
+  it("rejects compound, update and destructuring assignment to const bindings", () => {
+    const sources = [
+      "const x = 1;\nx += 2;",
+      "const x = 1;\nx++;",
+      "const [a] = [1];\na = 2;",
+      "const x = 1;\nfunction f() { x = 2; }",
+    ];
+    for (const source of sources) {
+      const { diagnostics } = compileToIr(source);
+      expect(diagnostics.some((d) => d.code === DiagnosticCode.CannotAssignToConst)).toBe(true);
+    }
+  });
+
+  it("allows assigning to let bindings, object properties and for-of constants", () => {
+    const sources = ["let x = 1;\nx = 2;", "const o = {};\no.a = 1;", "for (const v of [1, 2]) { v; }"];
+    for (const source of sources) {
+      const { diagnostics } = compileToIr(source);
+      expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    }
   });
 });

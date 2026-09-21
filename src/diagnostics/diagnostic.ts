@@ -25,6 +25,7 @@ export enum DiagnosticCode {
   DuplicateIdentifier = 3001,
   CannotFindName = 3002,
   IllegalRedeclaration = 3003,
+  CannotAssignToConst = 3004,
 
   // Checker 4xxx
   TypeMismatch = 4001,

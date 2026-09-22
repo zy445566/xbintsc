@@ -224,7 +224,16 @@ typedef struct xt_try_frame {
   struct xt_try_frame *prev;
   xt_value exception;
 } xt_try_frame;
+/* On Windows the UCRT/MinGW `_setjmp` takes the caller's frame address as a
+ * second argument (`_JUMP_BUFFER.Frame`); the generated IR does the same with
+ * `@llvm.frameaddress(0)`. POSIX `_setjmp` takes only the buffer, so the extra
+ * argument is passed under `_WIN32` only. `_setjmp` (rather than the `setjmp`
+ * macro) is used so it pairs with the plain `longjmp` in `xt_throw`. */
+#if defined(_WIN32)
+#define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf, __builtin_frame_address(0))
+#else
 #define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
+#endif
 void *xt_try_mark(void);
 void xt_try_restore(void *mark);
 

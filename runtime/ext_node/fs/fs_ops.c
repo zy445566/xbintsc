@@ -131,10 +131,45 @@ xt_value xt_node_exists(int32_t argc, xt_value *argv) {
 /* readdirSync                                                               */
 /* ------------------------------------------------------------------------- */
 
+/* Defined alongside `statSync` further down; the `Dirent` objects built for
+   `readdirSync(path, { withFileTypes: true })` reuse the same closures. */
+static void xt_fs_define_stat_method(xt_value object, const char *name, unsigned int mode);
+
+/* Build the Node `Dirent`-shaped object (`name` plus stat predicates) for a
+   single directory entry. Types come from `lstat`, matching Node's `d_type`
+   based `Dirent` (a symlink reports `isSymbolicLink()` true). */
+static xt_value xt_node_dirent_result(const char *dir, const char *name) {
+  size_t size = strlen(dir) + strlen(name) + 2;
+  char *full = (char *)malloc(size);
+  unsigned int mode = 0;
+  if (full) {
+    snprintf(full, size, "%s/%s", dir, name);
+    xt_fs_stat_t info;
+    if (xt_fs_lstat_fn(full, &info) == 0) mode = (unsigned int)info.st_mode;
+    free(full);
+  }
+
+  xt_value object = xt_object_new();
+  xt_object_set(object, xt_string_from_cstr("name"), xt_string_from_cstr(name));
+  xt_fs_define_stat_method(object, "isFile", mode);
+  xt_fs_define_stat_method(object, "isDirectory", mode);
+  xt_fs_define_stat_method(object, "isSymbolicLink", mode);
+  xt_fs_define_stat_method(object, "isFIFO", mode);
+  xt_fs_define_stat_method(object, "isSocket", mode);
+  xt_fs_define_stat_method(object, "isBlockDevice", mode);
+  xt_fs_define_stat_method(object, "isCharacterDevice", mode);
+  return object;
+}
+
 xt_value xt_node_read_dir(int32_t argc, xt_value *argv) {
   if (argc < 1) return xt_undefined();
   const char *path = xt_string_data(xt_to_string(argv[0]));
   if (!path) return xt_undefined();
+
+  /* `readdirSync(path, { withFileTypes: true })` yields `Dirent` objects;
+     without the option the result is a plain array of entry names. */
+  int withFileTypes =
+      argc > 1 && XT_IS_OBJECT(argv[1]) && xt_truthy(xt_object_get_cstr(argv[1], "withFileTypes"));
 
   xt_fs_dir dir;
   if (!xt_fs_dir_open(&dir, path)) {
@@ -159,7 +194,7 @@ xt_value xt_node_read_dir(int32_t argc, xt_value *argv) {
       if (!grown) break;
       items = grown;
     }
-    items[count++] = xt_string_from_cstr(name);
+    items[count++] = withFileTypes ? xt_node_dirent_result(path, name) : xt_string_from_cstr(name);
   }
   xt_fs_dir_close(&dir);
 

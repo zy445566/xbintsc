@@ -34,13 +34,15 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       copyFileSync(base + "/a/b/file.txt", base + "/a/copy.txt");
       renameSync(base + "/a/copy.txt", base + "/a/moved.txt");
       console.log(readdirSync(base + "/a").sort().join(","));
+      const entries = readdirSync(base + "/a", { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+      console.log(entries.map((entry) => entry.name + ":" + entry.isDirectory()).join(","));
       const info = statSync(base + "/a/b/file.txt");
       console.log(info.size, info.isFile(), info.isDirectory());
       rmSync(base + "/a", { recursive: true });
       console.log(existsSync(base + "/a"));
     `;
     expect(runProgram(source, { extensions: true })).toBe(
-      "hello world\n68656c6c6f20776f726c64\ntrue false\nb,moved.txt\n11 true false\nfalse",
+      "hello world\n68656c6c6f20776f726c64\ntrue false\nb,moved.txt\nb:true,moved.txt:false\n11 true false\nfalse",
     );
   });
 

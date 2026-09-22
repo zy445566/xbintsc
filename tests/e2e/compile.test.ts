@@ -838,4 +838,60 @@ describeE2E("end-to-end compilation", (harness) => {
         "AggregateError all failed [1,2] true\nAggregateError [\"x\",\"y\"]",
     );
   });
+
+  it("supports generator functions", () => {
+    const source = `
+      function* nums() { yield 1; yield 2; yield 3; }
+      const g = nums();
+      console.log(typeof nums, g.next().value, g.next().value, g.next().value);
+      console.log(JSON.stringify(g.next()));
+
+      function* counter(start: number) {
+        let x = start;
+        while (true) {
+          const step = yield x;
+          x = step === undefined ? x + 1 : step;
+        }
+      }
+      const c = counter(10);
+      console.log(c.next().value, c.next().value, c.next(100).value, c.next().value);
+
+      class Box {
+        private n = 0;
+        *gen(): Generator<number> { yield this.n++; yield this.n++; }
+      }
+      const box = new Box();
+      console.log([...box.gen()].join(","), [...box.gen()].join(","));
+
+      function* inner() { yield 1; yield 2; }
+      function* outer() { yield* inner(); yield 9; }
+      console.log([...outer()].join("-"), [...outer()].join("-"));
+
+      function* echo() { const a = yield "first"; const b = yield a; return b; }
+      const e = echo();
+      console.log(e.next().value, e.next("A").value, JSON.stringify(e.next("B")));
+
+      function* guarded() {
+        try { yield "x"; } catch (err) { yield "caught:" + (err as Error).message; }
+        yield "end";
+      }
+      const t = guarded();
+      console.log(t.next().value, t.throw(new Error("E")).value, t.next().value);
+
+      function* once() { yield 1; }
+      const o = once();
+      o.next();
+      console.log(JSON.stringify(o.next()), typeof o);
+
+      function* naturals() { let i = 0; while (true) yield i++; }
+      const seen: number[] = [];
+      for (const v of naturals()) { if (v >= 3) break; seen.push(v); }
+      console.log(seen.join(","));
+    `;
+    expect(runProgram(source)).toBe(
+      "function 1 2 3\n{\"done\":true}\n10 11 100 101\n0,1 2,3\n" +
+        "1-2-9 1-2-9\nfirst A {\"value\":\"B\",\"done\":true}\n" +
+        "x caught:E end\n{\"done\":true} object\n0,1,2",
+    );
+  });
 });

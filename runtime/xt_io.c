@@ -43,12 +43,6 @@
  * with `xt_try_leave`. `xt_throw` longjmps into the innermost frame when one
  * is active, and only prints + exits when the exception is uncaught.
  */
-typedef struct xt_try_frame {
-  jmp_buf buf;
-  struct xt_try_frame *prev;
-  xt_value exception;
-} xt_try_frame;
-
 static xt_try_frame *g_try_top = NULL;
 
 /* Program arguments, captured once by `xt_set_program_args` from `main`. */
@@ -143,6 +137,12 @@ void xt_try_leave(void *framePtr) {
     free(frame);
   }
 }
+
+/* Save/restore the innermost try frame. Generators use this to swap their own
+ * exception stack in while they run on their private coroutine stack. */
+void *xt_try_mark(void) { return (void *)g_try_top; }
+
+void xt_try_restore(void *mark) { g_try_top = (xt_try_frame *)mark; }
 
 void xt_throw(xt_value v) {
   if (g_try_top) {

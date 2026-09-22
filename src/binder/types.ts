@@ -61,6 +61,8 @@ export interface FunctionInfo {
   readonly isArrow: boolean;
   /** True when the function was declared `async`. */
   readonly isAsync: boolean;
+  /** True for `function*` / generator methods; calling one creates a generator. */
+  readonly isGenerator: boolean;
   /** True when this function's body mentions `this` directly. */
   usesThis: boolean;
   /** True when an arrow function must receive `this` from its enclosing scope. */

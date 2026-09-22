@@ -63,12 +63,13 @@ by code generation (see above).
 
 ### 2.1 Parsed but codegen reports `UnsupportedFeature`
 
-| Syntax | Status | Notes |
-| --- | --- | --- |
-| `yield` expressions (generators) | parse ✓, codegen ✗ | → "does not yet support this expression (yield expression)" |
+None — generators are implemented.
 
 > Tagged templates are implemented, including raw strings and `String.raw`.
-> `import.meta` is parsed but has no runtime value.
+> Generators (`function*`, `yield`, `yield*`) are implemented with stackful
+> coroutines, including `next`/`throw`/`return`, `for...of`, spread and
+> delegation. `import.meta` is parsed but has no runtime value; `async`
+> generators are not yet supported.
 
 ### 2.2 Not supported by the parser
 
@@ -110,8 +111,8 @@ None known at the expression level.
 | `structuredClone` | ✗ not implemented |
 | Built-in error subclasses (`TypeError`, `RangeError`, …) | ✓ first-class constructors and prototypes; `instanceof Error` holds for the whole family |
 | `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
-| Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | partial: arrays, strings, `Map` and `Set` are iterable in `for...of` / spread; a user-defined `Symbol.iterator` is not consulted |
-| Generators / async iteration | ✗ not implemented |
+| Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | partial: arrays, strings, `Map`, `Set` and generators are iterable in `for...of` / spread; a user-defined `Symbol.iterator` is not consulted |
+| Generators (`function*`, `yield`, `yield*`, `next`/`throw`/`return`) | ✓ implemented with stackful coroutines; `for...of`, spread and delegation supported. `return()` completes without running `finally` |
 | Timers / I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
 
 ---
@@ -148,7 +149,7 @@ None known at the expression level.
 | `this` binding / method call semantics | ✓ | ✓ implemented (`this` is threaded as the first ABI parameter; arrow functions inherit lexically) |
 | `async` / `await` / Promise | ✓ | ✓ implemented (synchronous microtask model) |
 | `new.target` | ✗ | not implemented |
-| Generators / iterators / `yield` | ✗ (`yield` codegen errors) | not implemented |
+| Generators / iterators / `yield` | ✓ implemented | `function*`, `yield`, `yield*`, `.next/.throw/.return`; `async` generators not supported |
 | Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ implemented (the bound closure does not track partial-argument `length`) |
 | `fn.name` / `fn.length` | ✓ | ✓ implemented (inferred from the declaration / assignment / property key; bound functions use `"bound ..."` and adjusted arity) |
@@ -241,9 +242,9 @@ These features **compile and run**, but the result does not fully match ECMAScri
 ```
 Unimplemented (statements): namespace/module declarations
 
-Unimplemented (expressions): yield (generators), new.target, import.meta value
+Unimplemented (expressions): new.target, import.meta value
 
-Unimplemented (functions): generators, `fn.toString()` source text
+Unimplemented (functions): `fn.toString()` source text, async generators
 
 Unimplemented (classes/OO): abstract/implements, access control,
                             parent/child #x collision

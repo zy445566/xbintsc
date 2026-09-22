@@ -523,6 +523,57 @@ Promise.any([Promise.reject("x"), Promise.reject("y")]).catch((reason) => {
 `,
   );
 
+  diff(
+    "generators",
+    `
+function* nums() { yield 1; yield 2; yield 3; }
+const g = nums();
+console.log(JSON.stringify([typeof nums, g.next(), g.next(), g.next(), g.next()]));
+
+function* counter(start: number) {
+  let x = start;
+  while (true) {
+    const step = yield x;
+    x = step === undefined ? x + 1 : step;
+  }
+}
+const c = counter(10);
+console.log(JSON.stringify([c.next().value, c.next().value, c.next(100).value, c.next().value]));
+
+function* inner() { yield "a"; return "done"; }
+function* outer() { const r = yield* inner(); yield r; yield* [1, 2]; }
+console.log(JSON.stringify([...outer()]));
+
+function* echo() { const a = yield "first"; const b = yield a; return b; }
+const e = echo();
+console.log(JSON.stringify([e.next(), e.next("A"), e.next("B")]));
+
+function* guarded() {
+  try { yield "x"; } catch (err) { yield "caught:" + (err as Error).message; }
+  yield "end";
+}
+const t = guarded();
+console.log(JSON.stringify([t.next(), t.throw(new Error("E")), t.next(), t.next()]));
+
+function* naturals() { let i = 0; while (true) yield i++; }
+const seen: number[] = [];
+for (const v of naturals()) { if (v >= 3) break; seen.push(v); }
+console.log(JSON.stringify(seen));
+
+class Box {
+  private n = 0;
+  *gen(): Generator<number> { yield this.n++; yield this.n++; }
+}
+console.log(JSON.stringify([...new Box().gen()]));
+
+const obj = {
+  base: 5,
+  *gen() { yield this.base; yield this.base * 2; },
+};
+console.log(JSON.stringify([...obj.gen(), Math.max(...obj.gen())]));
+`,
+  );
+
   it("binds namespace imports to every export", () => {
     harness.expectSameOutputAsNode(
       `import * as util from "./util.ts";

@@ -36,11 +36,11 @@
 
 ### 2.1 解析但代码生成报 `UnsupportedFeature`
 
-| 语法 | 现状 | 说明 |
-| --- | --- | --- |
-| `yield` 表达式（生成器） | 解析 ✓，代码生成 ✗ | → "does not yet support this expression (yield expression)" |
+无——生成器已实现。
 
-> 标记模板已实现，含 raw 字符串与 `String.raw`。`import.meta` 可解析，但无运行时取值。
+> 标记模板已实现，含 raw 字符串与 `String.raw`。生成器（`function*`、`yield`、`yield*`）
+> 基于有栈协程实现，支持 `next`/`throw`/`return`、`for...of`、展开与委托；
+> `import.meta` 可解析，但无运行时取值；异步生成器尚未支持。
 
 ### 2.2 解析器不支持
 
@@ -82,8 +82,8 @@
 | `structuredClone` | ✗ 未实现 |
 | 内置错误子类（`TypeError`、`RangeError` 等） | ✓ 一等公民构造器与原型；整个家族 `instanceof Error` 成立 |
 | `AggregateError` 构造器 | ✓ `new AggregateError(errors, message)`；`Promise.any` 现以其作为 rejection |
-| 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | 部分：数组、字符串、`Map`、`Set` 均可在 `for...of` / 展开中使用；不读取自定义 `Symbol.iterator` |
-| 生成器 / 异步迭代 | ✗ 未实现 |
+| 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | 部分：数组、字符串、`Map`、`Set`、生成器均可在 `for...of` / 展开中使用；不读取自定义 `Symbol.iterator` |
+| 生成器（`function*`、`yield`、`yield*`、`next`/`throw`/`return`） | ✓ 基于有栈协程实现；支持 `for...of`、展开与委托。`return()` 直接结束，不执行 `finally` |
 | 定时器 / I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
 
 ---
@@ -117,7 +117,7 @@
 | `this` 绑定 / 方法调用语义 | ✓ | ✓ 已实现（`this` 作为函数首个 ABI 参数线程化；箭头函数词法继承） |
 | `async` / `await` / Promise | ✓ | ✓ 已实现（同步微任务模型） |
 | `new.target` | ✗ | 未实现 |
-| 生成器 / 迭代器 / `yield` | ✗（`yield` 代码生成报错） | 未实现 |
+| 生成器 / 迭代器 / `yield` | ✓ 已实现 | `function*`、`yield`、`yield*`、`.next/.throw/.return`；不支持异步生成器 |
 | 闭包 `arity` | — | `xt_closure_arity` 恒为 -1，未填充 |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ 已实现（绑定闭包不跟踪部分参数的 `length`） |
 | `fn.name` / `fn.length` | ✓ | ✓ 已实现（从声明 / 赋值 / 属性键推断；绑定函数为 `"bound ..."` 并调整 arity） |
@@ -206,9 +206,9 @@
 ```
 未实现（语句）：namespace/module 声明
 
-未实现（表达式）：yield（生成器）、new.target、import.meta 取值
+未实现（表达式）：new.target、import.meta 取值
 
-未实现（函数）：生成器、`fn.toString()` 源码文本
+未实现（函数）：`fn.toString()` 源码文本、异步生成器
 
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 

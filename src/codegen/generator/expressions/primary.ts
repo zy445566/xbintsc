@@ -22,6 +22,7 @@ import {
   type PropertyAccessExpression,
   type TaggedTemplateExpression,
   type TemplateLiteral,
+  type YieldExpression,
   type ArrayLiteralExpression,
 } from "../../../ast/nodes.js";
 import { SymbolKind, type SymbolInfo } from "../../../binder/binder.js";
@@ -39,6 +40,7 @@ export interface PrimaryExpressionMethods {
   emitThis(this: Generator): string;
   emitNew(this: Generator, node: NewExpression): string;
   emitAwait(this: Generator, node: AwaitExpression): string;
+  emitYield(this: Generator, node: YieldExpression): string;
 }
 
 export const primaryExpressionMethods: PrimaryExpressionMethods = {
@@ -114,6 +116,8 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return this.emitNew(node as NewExpression);
       case SyntaxKind.AwaitExpression:
         return this.emitAwait(node as AwaitExpression);
+      case SyntaxKind.YieldExpression:
+        return this.emitYield(node as YieldExpression);
       case SyntaxKind.ClassExpression: {
         const info = this.binding.classOfNode.get(node);
         if (!info) {
@@ -245,6 +249,19 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
     const value = this.emitExpression(node.expression);
     const result = this.reg();
     this.emit(`  ${result} = call i64 @xt_await(i64 ${value})`);
+    return result;
+  },
+
+  emitYield(node: YieldExpression): string {
+    if (node.delegate) {
+      const delegate = this.emitExpression(node.expression as Expression);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_yield_star(i64 ${delegate})`);
+      return result;
+    }
+    const value = node.expression ? this.emitExpression(node.expression) : i64(XT_UNDEFINED);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_yield(i64 ${value})`);
     return result;
   },
 

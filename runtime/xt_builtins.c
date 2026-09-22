@@ -376,6 +376,9 @@ xt_value xt_call_with_this(xt_value value, xt_value thisValue, int32_t argc, xt_
     return XT_UNDEFINED;
   }
   xt_function *function = (xt_function *)XT_GET_PTR(value);
+  /* Calling a generator function returns a suspended generator instead of
+   * running the body. */
+  if (function->is_generator) return xt_generator_new(value, thisValue, argc, argv);
   /* The closure value itself is threaded through as `env` so the callee can
    * read its captures with xt_closure_env(env, i). */
   return function->code(thisValue, value, argc, argv);
@@ -385,6 +388,11 @@ xt_value xt_this(void) { return XT_UNDEFINED; }
 
 xt_value xt_function_set_prototype(xt_value value, xt_value proto) {
   if (XT_IS_FUNCTION(value)) ((xt_function *)XT_GET_PTR(value))->prototype = proto;
+  return value;
+}
+
+xt_value xt_function_set_generator(xt_value value) {
+  if (XT_IS_FUNCTION(value)) ((xt_function *)XT_GET_PTR(value))->is_generator = 1;
   return value;
 }
 

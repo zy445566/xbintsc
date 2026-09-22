@@ -32,6 +32,7 @@
 
 #include "rt.h"
 
+#include <setjmp.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -48,6 +49,7 @@
 #define XT_OBJECT_KIND_SYMBOL 10
 #define XT_OBJECT_KIND_BIGINT 11
 #define XT_OBJECT_KIND_ERROR 12
+#define XT_OBJECT_KIND_GENERATOR 13
 
 /* Common header for every heap object. */
 typedef struct xt_header {
@@ -113,6 +115,9 @@ typedef struct {
   xt_string *name;
   xt_object *properties;
   xt_value prototype;
+  /* Set on generator function objects: calling the closure does not run the
+   * body, it creates a suspended generator (see xt_generator.c). */
+  uint8_t is_generator;
 } xt_function;
 
 /* Allocation (xt_alloc.c). */
@@ -179,6 +184,32 @@ int32_t xt_set_size(xt_value value);
 /* `for...of` iteration: dispatch over arrays, strings, Maps and Sets. */
 xt_value xt_iter_length(xt_value value);
 xt_value xt_iter_value(xt_value value, xt_value index);
+/* Per-step iteration check. Generators pull the next value here; the index is
+ * ignored because the value is cached until `xt_iter_value` reads it. */
+xt_value xt_iter_has(xt_value value, xt_value index);
+
+/* Stackful generators (xt_generator.c). */
+int xt_is_generator(xt_value value);
+xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, xt_value *argv);
+xt_value xt_generator_next(xt_value generator, xt_value sent);
+xt_value xt_generator_return(xt_value generator, xt_value value);
+xt_value xt_generator_throw(xt_value generator, xt_value error);
+xt_value xt_yield(xt_value value);
+xt_value xt_yield_star(xt_value delegate);
+int xt_generator_has_next(xt_value generator);
+xt_value xt_generator_iter_value(xt_value generator);
+
+/* Exception-frame plumbing shared with the generator runtime. The struct is
+ * public so a coroutine can `_setjmp` its own boundary directly (a `setjmp`
+ * must run in the frame it returns to, never in a helper). */
+typedef struct xt_try_frame {
+  jmp_buf buf;
+  struct xt_try_frame *prev;
+  xt_value exception;
+} xt_try_frame;
+#define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
+void *xt_try_mark(void);
+void xt_try_restore(void *mark);
 
 /* -- collection / date / regexp representations --------------------------- */
 typedef struct {

@@ -133,8 +133,6 @@ export const loopStatementMethods: LoopStatementMethods = {
     const iterable = isForIn ? this.runtimeCall("xt_object_keys", [source]) : source;
     const indexPtr = this.alloca();
     this.emit(`  store i64 ${numberLiteral(0)}, i64* ${indexPtr}`);
-    const lengthValue = this.reg();
-    this.emit(`  ${lengthValue} = call i64 @xt_iter_length(i64 ${iterable})`);
 
     const condLabel = this.label("forof.cond");
     const bodyLabel = this.label("forof.body");
@@ -145,10 +143,11 @@ export const loopStatementMethods: LoopStatementMethods = {
     this.startBlock(condLabel);
     const index = this.reg();
     this.emit(`  ${index} = load i64, i64* ${indexPtr}`);
-    const inRange = this.reg();
-    this.emit(`  ${inRange} = call i64 @xt_lt(i64 ${index}, i64 ${lengthValue})`);
+    /* `xt_iter_has` covers generators too, which cannot be sized up front. */
+    const hasValue = this.reg();
+    this.emit(`  ${hasValue} = call i64 @xt_iter_has(i64 ${iterable}, i64 ${index})`);
     const truthy = this.reg();
-    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${inRange})`);
+    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${hasValue})`);
     const nonzero = this.reg();
     this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
     this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);

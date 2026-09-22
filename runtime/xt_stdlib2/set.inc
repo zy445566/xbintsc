@@ -11,15 +11,24 @@ int32_t xt_set_size(xt_value value) {
 
 /* -- for...of iteration --------------------------------------------------- */
 
-/* `for...of` lowers to a length check plus an index lookup. Arrays and strings
-   index directly; Maps yield `[key, value]` pairs and Sets yield their values. */
+/* `for...of` lowers to a per-step check plus an index lookup. Arrays and
+   strings index directly; Maps yield `[key, value]` pairs and Sets yield their
+   values. Generators pull their next value during the check. */
 xt_value xt_iter_length(xt_value value) {
   if (xt_is_map(value)) return xt_number((double)xt_map_size(value));
   if (xt_is_set(value)) return xt_number((double)xt_set_size(value));
   return xt_array_length(value);
 }
 
+xt_value xt_iter_has(xt_value value, xt_value index) {
+  if (xt_is_generator(value)) return xt_bool(xt_generator_has_next(value));
+  if (xt_is_map(value)) return xt_bool(xt_to_int32(index) < xt_map_size(value));
+  if (xt_is_set(value)) return xt_bool(xt_to_int32(index) < xt_set_size(value));
+  return xt_bool(xt_to_int32(index) < xt_to_int32(xt_array_length(value)));
+}
+
 xt_value xt_iter_value(xt_value value, xt_value index) {
+  if (xt_is_generator(value)) return xt_generator_iter_value(value);
   if (xt_is_map(value)) {
     xt_map *map = (xt_map *)XT_GET_PTR(value);
     int64_t i = (int64_t)xt_to_int32(index);

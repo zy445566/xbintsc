@@ -72,7 +72,7 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 ### 3.1 Statements
 
 - Variable declarations: `var` / `let` / `const`, with multiple declarators `const a = 1, b = 2;`
-- Function declarations (including parsing the `async` modifier and the generator `*` marker)
+- Function declarations, function expressions and methods, including the `async` modifier and generators (`function*`, `yield`, `yield*`, `.next`/`.throw`/`.return`)
 - `class` declarations / class expressions (constructor, fields, methods, `static`, `extends`)
 - `if` / `else`
 - `while`, `do...while`
@@ -208,7 +208,7 @@ Location: `src/codegen/llvm.ts`
 - Emits LLVM IR text (`.ll`); no custom register allocation (relies on `alloca` + mem2reg).
 - Statement / block boundary values live in `alloca`; conditionals and short-circuits materialize into temporary slots instead of `phi`.
 - Control flow: `if` / `while` / `do` / `for` / `for...of` / `for...in`, `switch`, `try/catch/finally`, `break` / `continue` / `return`.
-  - `for...of` and spread iterate arrays, strings, `Map` and `Set` through `xt_iter_length` / `xt_iter_value` (`Map` yields `[key, value]` pairs).
+  - `for...of` and spread iterate arrays, strings, `Map`, `Set` and generators through `xt_iter_has` / `xt_iter_value` (`Map` yields `[key, value]` pairs).
   - `switch` tests each `case` with strict equality, executes on a hit, and falls through until `break`.
   - `try/catch/finally` is implemented with a runtime `_setjmp` frame: `xt_try_enter` pushes, `_setjmp` catches, `xt_throw` long-jumps. The IR passes the caller's frame address (`@llvm.frameaddress(0)`) as the second `_setjmp` argument, matching clang's MSVC lowering: the Windows UCRT `_setjmp` stores that frame in `_JUMP_BUFFER.Frame` and `longjmp` feeds it to `RtlUnwind`, so omitting it made `longjmp` unwind to a bogus target (`STATUS_BAD_FUNCTION_TABLE`). `_setjmp` is used rather than the exported `setjmp` symbol, whose Windows ABI is an incompatible two-argument routine. Functions containing `try` force local variables to stay in memory (inline-asm escape points) so values survive a long jump.
   - `for...in` reuses `xt_object_keys` to enumerate keys (arrays / strings yield string indices).

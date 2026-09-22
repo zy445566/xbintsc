@@ -102,6 +102,20 @@ export const literalMethods: LiteralMethods = {
           start,
           end: body.end,
         });
+      } else if (this.at(TokenKind.Asterisk)) {
+        // `{ *gen() {} }` object-literal generator method.
+        const start = this.nextToken().start;
+        const name = this.parsePropertyName();
+        const typeParameters = this.at(TokenKind.LessThan) ? this.parseTypeParameters() : [];
+        const parameters = this.parseParameters();
+        let returnType: TypeNode | undefined;
+        if (this.at(TokenKind.Colon)) {
+          this.nextToken();
+          returnType = this.parseReturnType();
+        }
+        const body = this.parseBlock();
+        const fn: FunctionExpression = { kind: SyntaxKind.FunctionExpression, typeParameters, parameters, returnType, body, flags: NodeFlags.Generator, start, end: body.end };
+        properties.push({ kind: SyntaxKind.PropertyAssignment, name, initializer: fn, start, end: body.end });
       } else {
         const start = this.token.start;
         const name = this.parsePropertyName();

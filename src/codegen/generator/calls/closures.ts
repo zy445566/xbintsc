@@ -79,5 +79,6 @@ export const closureCallMethods: ClosureCallMethods = {
     if (fn.isConstructor && fn.classInfo) name = fn.classInfo.name;
     const nameValue = this.stringValue(name);
     this.emit(`  call i64 @xt_function_set_metadata(i64 ${closure}, i64 ${nameValue}, i32 ${arity})`);
+    if (fn.isGenerator) this.emit(`  call i64 @xt_function_set_generator(i64 ${closure})`);
   },
 };

@@ -402,9 +402,8 @@ xt_value xt_array_spread(xt_value target, xt_value source) {
     for (uint32_t i = 0; i < src->length; i++) dst->items[dst->length++] = src->items[i];
     return target;
   }
-  /* Spreading a string/Map/Set iterates exactly like `for...of`. */
-  int32_t n = xt_to_int32(xt_iter_length(source));
-  for (int32_t i = 0; i < n; i++) {
+  /* Spreading a string/Map/Set/iterable iterates exactly like `for...of`. */
+  for (int32_t i = 0; xt_truthy(xt_iter_has(source, xt_number((double)i))); i++) {
     xt_array_push(target, xt_iter_value(source, xt_number((double)i)));
   }
   return target;

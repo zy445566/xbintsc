@@ -64,7 +64,7 @@ source.ts
 ### 3.1 语句
 
 - 变量声明：`var` / `let` / `const`，支持多声明符 `const a = 1, b = 2;`
-- 函数声明（含 `async` 修饰解析、生成器 `*` 标记解析）
+- 函数声明、函数表达式和方法，含 `async` 修饰与生成器（`function*`、`yield`、`yield*`、`.next`/`.throw`/`.return`）
 - `class` 声明 / 类表达式（构造函数、字段、方法、`static`、`extends`）
 - `if` / `else`
 - `while`、`do...while`
@@ -200,7 +200,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 生成 LLVM IR 文本（`.ll`），无需自建寄存器分配（依赖 `alloca` + mem2reg）。
 - 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
 - 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`switch`，`try/catch/finally`，`break` / `continue` / `return`。
-  - `for...of` 与展开通过 `xt_iter_length` / `xt_iter_value` 迭代数组、字符串、`Map`、`Set`（`Map` 产出 `[key, value]` 对）。
+  - `for...of` 与展开通过 `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、`Map`、`Set` 与生成器（`Map` 产出 `[key, value]` 对）。
   - `switch` 以严格相等逐 `case` 测试，命中后执行并在 `break` 前穿透。
   - `try/catch/finally` 通过运行时 `_setjmp` 帧实现：`xt_try_enter` 入栈、`_setjmp` 捕获、`xt_throw` 长跳转；IR 会把调用方的帧地址（`@llvm.frameaddress(0)`）作为 `_setjmp` 的第二个参数传入，与 clang 编译 MSVC 时的降级方式一致：Windows UCRT 的 `_setjmp` 会把这个帧存入 `_JUMP_BUFFER.Frame`，`longjmp` 再交给 `RtlUnwind` 执行栈展开；若不传该参数，`longjmp` 会展开到错误目标（`STATUS_BAD_FUNCTION_TABLE`）。使用 `_setjmp` 而非导出的 `setjmp` 符号，因为后者的 Windows ABI 是不兼容的双参数例程。含 `try` 的函数会强制局部变量驻留内存（内联汇编逃生点）以保证长跳转后值不丢失。
   - `for...in` 复用 `xt_object_keys` 枚举键（数组 / 字符串得到字符串下标）。

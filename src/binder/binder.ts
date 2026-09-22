@@ -108,6 +108,7 @@ export class Binder {
       isModule,
       isArrow,
       isAsync: (((node as { flags?: number }).flags ?? 0) & NodeFlags.Async) !== 0,
+      isGenerator: (((node as { flags?: number }).flags ?? 0) & NodeFlags.Generator) !== 0,
       usesThis: false,
       capturesThis: false,
     };

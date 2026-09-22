@@ -92,7 +92,7 @@ describeE2E("end-to-end compilation", (harness) => {
       const user = { name: "ada", tags: ["math", "code"], age: 36 };
       console.log(user);
     `;
-    expect(runProgram(source)).toBe("{ name: ada, tags: [ math, code ], age: 36 }");
+    expect(runProgram(source)).toBe("{ name: 'ada', tags: [ 'math', 'code' ], age: 36 }");
   });
 
   it("orders object keys like JavaScript", () => {
@@ -398,6 +398,56 @@ describeE2E("end-to-end compilation", (harness) => {
     );
   });
 
+  it("exposes RegExp capture groups in exec, match, replace and split", () => {
+    const source = `
+      const m = "12-34".match(/(\\d+)-(\\d+)/)!;
+      console.log(JSON.stringify([m[0], m[1], m[2], m.index]), Array.isArray(m), m.length);
+      console.log(JSON.stringify("a1b2c3".split(/(\\d)/)));
+      console.log(JSON.stringify("a1b2c3".split(/\\d/)));
+      console.log("2020-01-02".replace(/(\\d+)-(\\d+)-(\\d+)/, "$3/$2/$1"));
+      console.log("a1b2".replace(/(\\d)/g, "[$1]"));
+      console.log("a1b2".replace(/\\d/g, (x: string) => "<" + x + ">"));
+      console.log("a.b.c".search(/\\./));
+      console.log(JSON.stringify("abc".split(/(?:)/)));
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        '["12-34","12","34",0] true 3',
+        '["a","1","b","2","c","3",""]',
+        '["a","b","c",""]',
+        "02/01/2020",
+        "a[1]b[2]",
+        "a<1>b<2>",
+        "1",
+        '["a","b","c"]',
+      ].join("\n"),
+    );
+  });
+
+  it("supports the immutable array methods and Object statics", () => {
+    const source = `
+      const a = [3, 1, 2];
+      console.log(JSON.stringify(a.toSorted((x, y) => x - y)), JSON.stringify(a));
+      console.log(JSON.stringify(a.toReversed()), JSON.stringify(a));
+      console.log(JSON.stringify(a.toSpliced(1, 1, 9, 9)), JSON.stringify(a));
+      console.log(JSON.stringify(a.with(1, 9)), JSON.stringify(a.with(-1, 9)));
+      console.log(JSON.stringify(Object.getOwnPropertyNames({ b: 1, a: 2 })));
+      console.log(JSON.stringify(Object.getOwnPropertyNames([1, 2])));
+      console.log(JSON.stringify(Object.groupBy([1, 2, 3, 4], (n: number) => (n % 2 === 0 ? "even" : "odd"))));
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        "[1,2,3] [3,1,2]",
+        "[2,1,3] [3,1,2]",
+        "[3,9,9,2] [3,1,2]",
+        "[3,9,2] [3,1,9]",
+        '["b","a"]',
+        '["0","1","length"]',
+        '{"odd":[1,3],"even":[2,4]}',
+      ].join("\n"),
+    );
+  });
+
   it("supports optional chaining", () => {
     const source = `
       const obj = { a: { b: 5 }, m: (x: number) => x + 1 };
@@ -454,7 +504,7 @@ describeE2E("end-to-end compilation", (harness) => {
         "apple,banana,cherry",
         "[1,2,3,null,null]",
         "1,3,5,8",
-        "{ name: x, self: [Circular *1], child: { parent: [Circular *1] } }",
+        "{ name: 'x', self: [Circular *1], child: { parent: [Circular *1] } }",
         "[ 1, 2, [Circular *1] ]",
       ].join("\n"),
     );

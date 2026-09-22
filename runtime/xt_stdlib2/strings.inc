@@ -76,6 +76,28 @@ xt_value xt_ext_string_method(xt_value target, const char *method, int32_t argc,
   if (strcmp(method, "trimEnd") == 0) return xt_string_trim_side(target, 0);
   if (strcmp(method, "replaceAll") == 0) return xt_string_replace_all(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   if (strcmp(method, "match") == 0) return xt_regexp_match(target, xt_arg_at(argc, argv, 0));
+  if (strcmp(method, "split") == 0) {
+    xt_value separator = xt_arg_at(argc, argv, 0);
+    if (xt_is_regexp(separator)) return xt_regexp_split(target, separator, xt_arg_at(argc, argv, 1));
+    *handled = 0;
+    return XT_UNDEFINED;
+  }
+  if (strcmp(method, "search") == 0) {
+    xt_value regexp = xt_arg_at(argc, argv, 0);
+    if (xt_is_regexp(regexp)) {
+      int32_t start = 0;
+      if (xt_regexp_find(regexp, target, 0, &start, NULL)) return xt_number((double)start);
+      return xt_number(-1);
+    }
+    *handled = 0;
+    return XT_UNDEFINED;
+  }
+  if (strcmp(method, "replaceAll") == 0) {
+    xt_value searchValue = xt_arg_at(argc, argv, 0);
+    if (xt_is_regexp(searchValue)) return xt_regexp_replace(target, searchValue, xt_arg_at(argc, argv, 1));
+    *handled = 0;
+    return XT_UNDEFINED;
+  }
   if (strcmp(method, "lastIndexOf") == 0) {
     xt_string *s = xt_as_string(target);
     xt_string *needle = xt_as_string(xt_to_string(xt_arg_at(argc, argv, 0)));

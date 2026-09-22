@@ -76,10 +76,12 @@ static xt_value xt_string_substr(xt_value value, xt_value startValue, xt_value l
   return xt_string_new(s->data + start, (size_t)length);
 }
 
-static xt_value xt_string_split(xt_value value, xt_value separatorValue) {
+static xt_value xt_string_split(xt_value value, xt_value separatorValue, xt_value limitValue) {
   xt_value result = xt_array_new(0, NULL);
   xt_string *s = xt_as_string(value);
   if (!s) return result;
+  int64_t limit = limitValue == XT_UNDEFINED ? 0x7fffffff : (int64_t)xt_to_int32(limitValue);
+  if (limit <= 0) return result;
   if (separatorValue == XT_UNDEFINED) {
     xt_array_push(result, value);
     return result;
@@ -87,20 +89,22 @@ static xt_value xt_string_split(xt_value value, xt_value separatorValue) {
   xt_string *sep = xt_as_string(xt_to_string(separatorValue));
   if (sep->length == 0) {
     for (uint32_t i = 0; i < s->length; i++) xt_array_push(result, xt_string_new(s->data + i, 1));
-    return result;
-  }
-  uint32_t start = 0;
-  uint32_t i = 0;
-  while (i + sep->length <= s->length) {
-    if (memcmp(s->data + i, sep->data, sep->length) == 0) {
-      xt_array_push(result, xt_string_new(s->data + start, i - start));
-      i += sep->length;
-      start = i;
-    } else {
-      i++;
+  } else {
+    uint32_t start = 0;
+    uint32_t i = 0;
+    while (i + sep->length <= s->length) {
+      if (memcmp(s->data + i, sep->data, sep->length) == 0) {
+        xt_array_push(result, xt_string_new(s->data + start, i - start));
+        i += sep->length;
+        start = i;
+      } else {
+        i++;
+      }
     }
+    xt_array_push(result, xt_string_new(s->data + start, s->length - start));
   }
-  xt_array_push(result, xt_string_new(s->data + start, s->length - start));
+  xt_array *array = xt_as_array(result);
+  if ((int64_t)array->length > limit) array->length = (uint32_t)limit;
   return result;
 }
 

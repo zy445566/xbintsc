@@ -189,6 +189,49 @@ static xt_value xt_array_splice(xt_value value, int32_t argc, xt_value *argv) {
   return removed;
 }
 
+/* Copy the own elements of `value` into a fresh array. */
+static xt_value xt_array_copy(xt_value value) {
+  xt_value out = xt_array_new(0, NULL);
+  xt_array *array = xt_as_array(value);
+  if (!array) return out;
+  for (uint32_t i = 0; i < array->length; i++) xt_array_push(out, array->items[i]);
+  return out;
+}
+
+static xt_value xt_array_to_reversed(xt_value value) {
+  xt_value copy = xt_array_copy(value);
+  xt_array *array = xt_as_array(copy);
+  for (uint32_t i = 0; i + 1 < array->length - i; i++) {
+    xt_value tmp = array->items[i];
+    array->items[i] = array->items[array->length - 1 - i];
+    array->items[array->length - 1 - i] = tmp;
+  }
+  return copy;
+}
+
+static xt_value xt_array_to_sorted(xt_value value, xt_value fn) {
+  return xt_array_sort(xt_array_copy(value), fn);
+}
+
+static xt_value xt_array_to_spliced(xt_value value, int32_t argc, xt_value *argv) {
+  xt_value copy = xt_array_copy(value);
+  xt_array_splice(copy, argc, argv);
+  return copy;
+}
+
+static xt_value xt_array_with(xt_value value, xt_value indexValue, xt_value newValue) {
+  xt_value copy = xt_array_copy(value);
+  xt_array *array = xt_as_array(copy);
+  int32_t index = xt_to_int32(indexValue);
+  if (index < 0) index += (int32_t)array->length;
+  if (index < 0 || index >= (int32_t)array->length) {
+    xt_throw(xt_add(xt_string_from_cstr("RangeError: Invalid index : "), xt_to_string(indexValue)));
+    return copy;
+  }
+  array->items[index] = newValue;
+  return copy;
+}
+
 xt_value xt_ext_array_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled) {
   *handled = 1;
   if (strcmp(method, "at") == 0) return xt_array_at(target, xt_arg_at(argc, argv, 0));
@@ -211,6 +254,10 @@ xt_value xt_ext_array_method(xt_value target, const char *method, int32_t argc, 
   if (strcmp(method, "fill") == 0) return xt_array_fill(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1), xt_arg_at(argc, argv, 2));
   if (strcmp(method, "copyWithin") == 0) return xt_array_copy_within(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1), xt_arg_at(argc, argv, 2));
   if (strcmp(method, "splice") == 0) return xt_array_splice(target, argc, argv);
+  if (strcmp(method, "toReversed") == 0) return xt_array_to_reversed(target);
+  if (strcmp(method, "toSorted") == 0) return xt_array_to_sorted(target, xt_arg_at(argc, argv, 0));
+  if (strcmp(method, "toSpliced") == 0) return xt_array_to_spliced(target, argc, argv);
+  if (strcmp(method, "with") == 0) return xt_array_with(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   if (strcmp(method, "reduceRight") == 0) {
     xt_array *array = xt_as_array(target);
     if (!array) return XT_UNDEFINED;

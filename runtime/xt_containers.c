@@ -283,6 +283,12 @@ xt_value xt_object_keys(xt_value value) {
       snprintf(buffer, sizeof(buffer), "%u", i);
       xt_array_push(result, xt_string_from_cstr(buffer));
     }
+    if (XT_IS_OBJECT(array->extra)) {
+      xt_object *extra = (xt_object *)XT_GET_PTR(array->extra);
+      for (uint32_t i = 0; i < extra->count; i++) {
+        xt_array_push(result, XT_FROM_PTR(XT_TAG_STRING, extra->properties[i].key));
+      }
+    }
     return result;
   }
   if (XT_IS_STRING(value)) {
@@ -325,12 +331,23 @@ xt_value xt_array_new(int32_t count, xt_value *items) {
   array->length = 0;
   array->capacity = 0;
   array->items = NULL;
+  array->extra = XT_UNDEFINED;
   if (count > 0) {
     xt_array_reserve(array, (uint32_t)count);
     for (int32_t i = 0; i < count; i++) array->items[i] = items[i];
     array->length = (uint32_t)count;
   }
   return XT_FROM_PTR(XT_TAG_ARRAY, array);
+}
+
+/* Named properties of an array live in a lazily-created side object. Returns
+ * XT_UNDEFINED when `create` is false and no such object exists yet. */
+static xt_value xt_array_extra(xt_array *array, int create) {
+  if (!XT_IS_OBJECT(array->extra)) {
+    if (!create) return XT_UNDEFINED;
+    array->extra = xt_object_new();
+  }
+  return array->extra;
 }
 
 xt_value xt_array_get(xt_value value, xt_value index) {
@@ -428,6 +445,13 @@ xt_value xt_get(xt_value target, xt_value key) {
       xt_string *k = xt_as_string(key);
       if (k->length == 6 && memcmp(k->data, "length", 6) == 0)
         return xt_number((double)((xt_array *)XT_GET_PTR(target))->length);
+      /* Named (non-index) properties such as `raw`/`index`/`input`. */
+      uint32_t ignored = 0;
+      if (!xt_key_is_array_index(k, &ignored)) {
+        xt_value extra = xt_array_extra((xt_array *)XT_GET_PTR(target), 0);
+        if (extra == XT_UNDEFINED) return XT_UNDEFINED;
+        return xt_object_get(extra, key);
+      }
     }
     return xt_array_get(target, key);
   }
@@ -475,6 +499,10 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
         for (uint32_t j = array->length; j < (uint32_t)n; j++) array->items[j] = XT_UNDEFINED;
         array->length = (uint32_t)n;
         return value;
+      }
+      uint32_t ignored = 0;
+      if (!xt_key_is_array_index(k, &ignored)) {
+        return xt_object_set(xt_array_extra((xt_array *)XT_GET_PTR(target), 1), key, value);
       }
     }
     return xt_array_set(target, key, value);

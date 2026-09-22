@@ -311,4 +311,35 @@ for (const v of results) console.log(JSON.stringify(v));`,
       "[...new Map([[\"a\", 1], [\"b\", 2]]).keys()]",
     ]),
   );
+
+  diff(
+    "regexp capture groups and string splitting",
+    printAll([
+      '"12-34".match(/(\\d+)-(\\d+)/)',
+      '"a1b2c3".split(/(\\d)/)',
+      '"a1b2c3".split(/\\d/)',
+      '"2020-01-02".replace(/(\\d+)-(\\d+)-(\\d+)/, "$3/$2/$1")',
+      '"a1b2".replace(/(\\d)/g, "[$1]")',
+      '"a.b.c".search(/\\./)',
+      '"abc".split(/(?:)/)',
+      '"hello world".match(/(\\w+) (\\w+)/)',
+      '"aaa".split("a", 2)',
+      '"a,b;c".split(/[,;]/)',
+    ]),
+  );
+
+  diff(
+    "immutable array methods and Object statics",
+    printAll([
+      "[3, 1, 2].toSorted((x, y) => x - y)",
+      "[3, 1, 2].toReversed()",
+      "[3, 1, 2].toSpliced(1, 1, 9, 9)",
+      "[3, 1, 2].with(1, 9)",
+      "[3, 1, 2].with(-1, 9)",
+      "Object.getOwnPropertyNames({ b: 1, a: 2 })",
+      "Object.getOwnPropertyNames([1, 2])",
+      "Object.groupBy([1, 2, 3, 4], (n) => (n % 2 === 0 ? \"even\" : \"odd\"))",
+      "Array.from({ length: 3 }, (_v, i) => i * 2)",
+    ]),
+  );
 });

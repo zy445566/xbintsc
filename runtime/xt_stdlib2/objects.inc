@@ -9,10 +9,38 @@ xt_value xt_ext_object_method(xt_value target, const char *method, int32_t argc,
 
 /* -- Object statics ------------------------------------------------------- */
 
+/* `Object.getOwnPropertyNames` differs from `Object.keys` only in that it also
+ * reports the non-enumerable `length` of arrays and strings. */
+static xt_value xt_object_own_property_names(xt_value value) {
+  xt_value names = xt_object_keys(value);
+  if (XT_IS_ARRAY(value) || XT_IS_STRING(value)) xt_array_push(names, xt_string_from_cstr("length"));
+  return names;
+}
+
+/* `Object.groupBy(items, fn)`: bucket each element by the key `fn` returns. */
+static xt_value xt_object_group_by(xt_value value, xt_value fn) {
+  xt_value result = xt_object_new();
+  xt_array *array = xt_as_array(value);
+  if (!array) return result;
+  for (uint32_t i = 0; i < array->length; i++) {
+    xt_value args[2] = {array->items[i], xt_number((double)i)};
+    xt_value keyString = xt_to_string(xt_closure_call(fn, 2, args));
+    xt_value group = xt_object_get(result, keyString);
+    if (!XT_IS_ARRAY(group)) {
+      group = xt_array_new(0, NULL);
+      xt_object_set(result, keyString, group);
+    }
+    xt_array_push(group, array->items[i]);
+  }
+  return result;
+}
+
 xt_value xt_object_static(xt_value name, int32_t argc, xt_value *argv) {
   const char *fn = xt_string_data(name);
   if (!fn) return XT_UNDEFINED;
   if (strcmp(fn, "keys") == 0) return xt_object_keys(xt_arg_at(argc, argv, 0));
+  if (strcmp(fn, "getOwnPropertyNames") == 0) return xt_object_own_property_names(xt_arg_at(argc, argv, 0));
+  if (strcmp(fn, "groupBy") == 0) return xt_object_group_by(xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   if (strcmp(fn, "values") == 0) return xt_object_values(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "entries") == 0) return xt_object_entries(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "assign") == 0) return xt_object_assign(argc, argv);

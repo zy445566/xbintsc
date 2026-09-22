@@ -98,6 +98,9 @@ typedef struct {
   uint32_t length;
   uint32_t capacity;
   xt_value *items;
+  /* Named (non-index) properties such as `raw` on template strings or
+   * `index`/`input` on RegExp match results, stored in an `xt_object`. */
+  xt_value extra;
 } xt_array;
 
 typedef struct {
@@ -168,6 +171,7 @@ int xt_regexp_find(xt_value regexp, xt_value input, int32_t start, int32_t *matc
 xt_value xt_regexp_exec(xt_value regexp, xt_value input);
 xt_value xt_regexp_match(xt_value input, xt_value regexp);
 xt_value xt_regexp_replace(xt_value value, xt_value regexp, xt_value replacement);
+xt_value xt_regexp_split(xt_value value, xt_value regexp, xt_value limit);
 xt_value xt_regexp_get_property(xt_value regexp, xt_value key);
 int32_t xt_map_size(xt_value value);
 int32_t xt_set_size(xt_value value);

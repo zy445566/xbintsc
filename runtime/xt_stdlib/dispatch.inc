@@ -45,7 +45,7 @@ static xt_value xt_string_method(xt_value target, const char *method, int32_t ar
   if (strcmp(method, "slice") == 0) return xt_string_slice(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   if (strcmp(method, "substring") == 0) return xt_string_substring(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   if (strcmp(method, "substr") == 0) return xt_string_substr(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
-  if (strcmp(method, "split") == 0) return xt_string_split(target, xt_arg_at(argc, argv, 0));
+  if (strcmp(method, "split") == 0) return xt_string_split(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   if (strcmp(method, "toUpperCase") == 0) return xt_string_case(target, 1);
   if (strcmp(method, "toLowerCase") == 0) return xt_string_case(target, 0);
   if (strcmp(method, "trim") == 0) return xt_string_trim(target);

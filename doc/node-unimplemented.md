@@ -67,16 +67,18 @@ The following Node built-in modules have no corresponding extension / builtin
 | `__dirname` / `__filename` | none |
 | `require` / `module` / `exports` | none (xbintsc has no CommonJS module runtime) |
 | `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask` | no timers |
-| `fs.readFileSync(...)` namespace-style calls | ✗ unsupported. `fs` exposes no default/namespace object; import named bindings instead, e.g. `import { readFileSync } from "fs"` |
+| `fs.readFileSync(...)` without an `import` | ✗ unsupported. `fs` is not a global; import it first (`import fs from "fs"` or `import * as fs from "node:fs"`) and `fs.readFileSync(...)` lowers to the module's runtime symbol. |
 
 Node modules are reached through `import` with a bare or `node:`-prefixed
 specifier (`import { readFileSync } from "fs"`, `import path from "path"`,
 `import { platform } from "node:os"`). Named and namespace imports both resolve
 to the extension module's runtime entries.
 
-Supported namespace calls: `path.*`, `os.*`, `process.*` (methods) once imported
-(a namespace/default import or the global name), `Buffer.*`, `stream.*`,
-`net.*`, `dgram.*`, `http.*`, plus properties such as `process.platform` /
+Supported namespace calls: `path.*`, `os.*`, `process.*`, `fs.*`,
+`fs/promises.*` (methods), `child_process.*`, `crypto.*`, `url.*` once imported
+(a namespace/default import or, for `path`/`os`/`process`, the global name),
+plus the dispatcher-backed namespaces `Buffer.*`, `stream.*`, `net.*`,
+`dgram.*`, `http.*` and properties such as `process.platform` /
 `process.argv`. `Readable` / `Writable` / `Duplex` / `Transform` / `PassThrough`
 / `Buffer` can also be used as global constructors.
 

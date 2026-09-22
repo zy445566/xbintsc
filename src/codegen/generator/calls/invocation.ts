@@ -206,6 +206,14 @@ export const invocationCallMethods: InvocationCallMethods = {
           return result;
         }
       }
+      // Modules with no namespace dispatcher (`fs`, `child_process`, ...): lower
+      // `import fs from "node:fs"; fs.readFileSync(...)` through the module's
+      // named exports, exactly like a named import of `readFileSync`.
+      const moduleExports = this.moduleExportsOfSymbol(targetSymbol);
+      if (moduleExports) {
+        const exported = moduleExports[method];
+        if (exported) return this.emitModuleExport(node, exported);
+      }
     }
 
     void BUILTIN_METHODS;

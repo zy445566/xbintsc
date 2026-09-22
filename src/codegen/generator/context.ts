@@ -15,6 +15,7 @@ import type {
   BuiltinFunction,
   ExtensionModule,
   ModuleExport,
+  ModuleExports,
 } from "../../extensions/registry.js";
 import type { CodegenOptions, FunctionState } from "./state.js";
 import { escapeBytes, isErrorFamily, kindName, utf8Bytes } from "./tables.js";
@@ -29,6 +30,13 @@ export class GeneratorContext {
   readonly importExports = new Map<number, ModuleExport>();
   /** Imported symbol id -> the namespace it aliases (e.g. `path`). */
   readonly importNamespaces = new Map<number, string>();
+  /**
+   * Imported symbol id -> the named exports of the module it aliases, for
+   * modules that do not expose a runtime namespace dispatcher (`fs`,
+   * `child_process`, `crypto`, ...). Lets `import fs from "node:fs"` lower
+   * `fs.readFileSync(...)` straight to the module's runtime symbol.
+   */
+  readonly importModuleExports = new Map<number, ModuleExports>();
   readonly globals: string[] = [];
   readonly functions: string[] = [];
   readonly strings = new Map<string, { label: string; length: number }>();
@@ -61,9 +69,9 @@ export class GeneratorContext {
       if (!module) continue;
       const clause = declaration.importClause;
       if (!clause) continue;
-      if (clause.name && module.namespace) {
+      if (clause.name) {
         const symbol = this.binding.symbolOfDeclaration.get(clause.name);
-        if (symbol) this.importNamespaces.set(symbol.id, module.namespace);
+        if (symbol) this.bindModuleAlias(symbol, module);
       }
       const bindings = clause.namedBindings;
       if (bindings && bindings.kind === SyntaxKind.NamedImports) {
@@ -73,10 +81,22 @@ export class GeneratorContext {
           const symbol = this.binding.symbolOfDeclaration.get(specifier.name);
           if (symbol && exported) this.importExports.set(symbol.id, exported);
         }
-      } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport && module.namespace) {
+      } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport) {
         const symbol = this.binding.symbolOfDeclaration.get(bindings.name);
-        if (symbol) this.importNamespaces.set(symbol.id, module.namespace);
+        if (symbol) this.bindModuleAlias(symbol, module);
       }
+    }
+  }
+
+  /**
+   * Bind a default/namespace import to either the module's runtime namespace
+   * dispatcher (when it has one) or its named exports (when it does not).
+   */
+  private bindModuleAlias(symbol: SymbolInfo, module: ExtensionModule): void {
+    if (module.namespace) {
+      this.importNamespaces.set(symbol.id, module.namespace);
+    } else if (module.exports) {
+      this.importModuleExports.set(symbol.id, module.exports);
     }
   }
 
@@ -84,6 +104,12 @@ export class GeneratorContext {
   namespaceOfSymbol(symbol: SymbolInfo | undefined): string | undefined {
     if (!symbol || symbol.kind !== SymbolKind.Import) return undefined;
     return this.importNamespaces.get(symbol.id);
+  }
+
+  /** Named exports a default/namespace import aliases, if any. */
+  moduleExportsOfSymbol(symbol: SymbolInfo | undefined): ModuleExports | undefined {
+    if (!symbol || symbol.kind !== SymbolKind.Import) return undefined;
+    return this.importModuleExports.get(symbol.id);
   }
 
   // -- emission primitives -------------------------------------------------

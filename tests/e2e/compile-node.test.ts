@@ -106,6 +106,18 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     expect(runProgram(source, { extensions: true })).toBe("a/b\na/c y.txt");
   });
 
+  it("supports default and namespace imports of node: modules", () => {
+    const dataPath = join(harness.workdir, `default-import-${Math.random().toString(36).slice(2)}.txt`);
+    writeFileSync(dataPath, "via default import");
+    const source = `
+      import fs from "node:fs";
+      import * as fs2 from "node:fs";
+      console.log(fs.existsSync(${JSON.stringify(dataPath)}), fs2.existsSync(${JSON.stringify(dataPath)}));
+      console.log(fs.readFileSync(${JSON.stringify(dataPath)}));
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("true true\nvia default import");
+  });
+
   it("provides the os and process modules", () => {
     const source = `
       console.log(os.platform().length > 0, os.arch().length > 0, os.homedir().length > 0, os.tmpdir().length > 0);

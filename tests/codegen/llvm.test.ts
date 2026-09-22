@@ -127,6 +127,21 @@ describe("codegen", () => {
     expect(ir).toMatch(/call i64 @xt_path_static\(i64 %\w+, i32 2, i64\* %\w+\)/);
   });
 
+  it("resolves default and namespace imports of dispatcher-less node modules", () => {
+    const registry = createDefaultRegistry().register(nodeExtension);
+    const sources = [
+      'import fs from "node:fs";\nfs.readFileSync("f.txt");',
+      'import * as fs from "node:fs";\nfs.readFileSync("f.txt");',
+      'import cp from "node:child_process";\ncp.spawnSync("ls");',
+    ];
+    for (const source of sources) {
+      const { diagnostics } = compileToIr(source, registry);
+      expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    }
+    const { ir } = compileToIr('import fs from "node:fs";\nfs.readFileSync("f.txt");', registry);
+    expect(ir).toMatch(/call i64 @xt_node_read_text_file\(i32 \d+, i64\* %\w+\)/);
+  });
+
   it("reports unsupported syntax instead of crashing", () => {
     const { diagnostics } = compileToIr("tag`x`;");
     expect(diagnostics.some((d) => d.category === "error")).toBe(true);

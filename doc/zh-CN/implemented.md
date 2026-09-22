@@ -70,7 +70,7 @@ source.ts
 - `while`、`do...while`
 - `for`（初始化、条件、增量均可省略）
 - `for...of`、`for...in`（见 3.5 语义限制）
-- `return`、`break`、`continue`、`throw`
+- `return`、`break`、`continue`、`throw`（含带标签的 `break label` / `continue label`）
 - `switch` / `case` / `default`（含穿透 fall-through）
 - `try` / `catch` / `finally`（基于运行时 setjmp 帧的可捕获异常）
 - `export var` / `export let` / `export const`（修饰符解析后擦除）
@@ -87,7 +87,7 @@ source.ts
 - 调用表达式 `f(...)`、成员访问 `a.b`、元素访问 `a[i]`
 - 数组字面量 `[1, 2]`、稀疏数组 elision、展开 `[...a]`（也支持字符串、`Map`、`Set`）
 - 对象字面量 `{ a: 1 }`、简写属性 `{ a }`、方法简写 `{ m() {} }`
-- 模板字面量 `${}` 替换、标记模板（仅解析，见[未实现文档](unimplemented.md)）
+- 模板字面量 `${}` 替换、标记模板（含 raw 字符串与 `String.raw`）
 - 括号表达式、`as` / `satisfies` / 非空断言 `!`（类型擦除）
 - 一元：`+ - ! ~ typeof void`、前缀 / 后缀 `++ --`
 - 可选链 `?.` / `?.[]` / `?.()`（含空值短路语义）
@@ -110,7 +110,7 @@ source.ts
 
 ### 3.4 模块语法（结构解析 + 驱动打包）
 
-- `import default, { named } from "..."`、`import * as ns from "..."`（相对模块的命名空间导入仅解析，扩展模块如 `path` 已支持）、`import type`
+- `import default, { named } from "..."`、`import * as ns from "..."`（相对模块的命名空间导入会降级为合成对象字面量；扩展模块如 `path` 亦已支持）、`import type`
 - `export default`、`export { a as b }`、`export *`、`export =`
 - import attributes（`with` / `assert`）
 - `import` / `export` 的**运行时语义**由 `src/driver/modules.ts` 在驱动层完成：递归解析相对依赖、按模块前缀重命名顶层符号、改写引用，合并为单文件后重新绑定。循环依赖报错。

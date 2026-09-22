@@ -78,7 +78,7 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 - `while`, `do...while`
 - `for` (init, condition and increment may all be omitted)
 - `for...of`, `for...in` (see the semantic limits in 3.5)
-- `return`, `break`, `continue`, `throw`
+- `return`, `break`, `continue`, `throw` (including labeled `break label` / `continue label`)
 - `switch` / `case` / `default` (including fall-through)
 - `try` / `catch` / `finally` (catchable exceptions based on a runtime setjmp frame)
 - `export var` / `export let` / `export const` (modifier parsed then erased)
@@ -95,7 +95,7 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 - Call expressions `f(...)`, member access `a.b`, element access `a[i]`
 - Array literals `[1, 2]`, sparse array elision, spread `[...a]` (also over strings, `Map` and `Set`)
 - Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`, computed keys `{ [expr]: 1 }`, object spread `{ ...obj }`
-- Template literal `${}` substitutions, tagged templates (parsed only, see the [unimplemented document](./unimplemented.md))
+- Template literal `${}` substitutions, tagged templates (with raw strings and `String.raw`)
 - Parenthesized expressions, `as` / `satisfies` / non-null assertion `!` (type erasure)
 - Unary: `+ - ! ~ typeof void`, prefix / postfix `++ --`
 - Optional chaining `?.` / `?.[]` / `?.()` (with nullish short-circuit semantics)
@@ -118,7 +118,7 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 
 ### 3.4 Module syntax (structural parsing + driver bundling)
 
-- `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules parsed only; extension modules such as `path` are supported), `import type`
+- `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules are lowered to a synthetic object literal; extension modules such as `path` are also supported), `import type`
 - `export default`, `export { a as b }`, `export *`, `export =`
 - Import attributes (`with` / `assert`)
 - The **runtime semantics** of `import` / `export` are handled at the driver layer by `src/driver/modules.ts`: it recursively resolves relative dependencies, renames top-level symbols with a per-module prefix, rewrites references, merges into a single file and rebinds. Circular dependencies error out.

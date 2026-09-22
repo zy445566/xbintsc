@@ -27,7 +27,7 @@ concurrency:
 
 permissions:
   contents: write # push the version commit + tag, create the GitHub release
-  actions: read # download the self-hosted binaries from the CI workflow run
+  actions: write # dispatch the CI workflow and download its artifacts
   id-token: write # required by npm OIDC publishing / provenance
 
 jobs:
@@ -79,6 +79,18 @@ jobs:
 
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+
+      # The version commit is pushed with GITHUB_TOKEN, and GitHub deliberately
+      # does NOT create a workflow run for push events triggered by that token.
+      # workflow_dispatch is exempt from that rule, so trigger CI for the release
+      # commit explicitly; the download step below waits for this run.
+      - name: Dispatch CI for the release commit
+        if: ${{ inputs.ci_run_id == '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh workflow run ci.yml --ref "${TAG}"
 
       # `prepublishOnly` also runs `npm run build`, but building here first
       # keeps the publish step's work visible and lets us inspect the tarball.

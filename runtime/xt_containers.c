@@ -52,9 +52,9 @@ xt_object *xt_as_object(xt_value value) {
   return NULL;
 }
 
-static xt_property *xt_object_find(xt_object *obj, xt_string *key) {
+static xt_property *xt_object_find(xt_object *obj, xt_value key) {
   for (uint32_t i = 0; i < obj->count; i++) {
-    if (xt_string_equals(obj->properties[i].key, key)) return &obj->properties[i];
+    if (xt_property_key_equals(obj->properties[i].key, key)) return &obj->properties[i];
   }
   return NULL;
 }
@@ -80,14 +80,17 @@ static int xt_key_is_array_index(xt_string *key, uint32_t *out) {
   return 1;
 }
 
-/* Insert a new property for `key`, preserving JavaScript key order. */
-static xt_property *xt_object_insert_property(xt_object *obj, xt_string *key) {
+/* Insert a new property for `key`, preserving JavaScript key order. Symbols
+ * are not array indices and simply append in insertion order. */
+static xt_property *xt_object_insert_property(xt_object *obj, xt_value key) {
   uint32_t index = 0;
   uint32_t position = obj->count;
-  if (xt_key_is_array_index(key, &index)) {
+  if (XT_IS_STRING(key) && xt_key_is_array_index(xt_as_string(key), &index)) {
     for (uint32_t i = 0; i < obj->count; i++) {
       uint32_t existing = 0;
-      if (!xt_key_is_array_index(obj->properties[i].key, &existing)) {
+      xt_value existingKey = obj->properties[i].key;
+      if (!XT_IS_STRING(existingKey) ||
+          !xt_key_is_array_index(xt_as_string(existingKey), &existing)) {
         position = i; /* first non-index key: the integer prefix ends here */
         break;
       }
@@ -108,12 +111,26 @@ static xt_property *xt_object_insert_property(xt_object *obj, xt_string *key) {
   return prop;
 }
 
-xt_property *xt_object_find_property(xt_object *obj, xt_string *key) {
+xt_property *xt_object_find_property(xt_object *obj, xt_value key) {
   return obj ? xt_object_find(obj, key) : NULL;
 }
 
+/* Normalise a property key to a string value or a symbol value. */
+xt_value xt_to_property_key(xt_value key) {
+  if (xt_is_symbol(key)) return key;
+  return xt_to_string(key);
+}
+
+/* Two property keys are equal when they are the same symbol, or equal
+ * strings. */
+int xt_property_key_equals(xt_value a, xt_value b) {
+  if (XT_IS_STRING(a) && XT_IS_STRING(b)) return xt_string_equals(xt_as_string(a), xt_as_string(b));
+  return a == b;
+}
+
 static int xt_key_is_prototype(xt_value key) {
-  xt_string *k = xt_as_string(xt_to_string(key));
+  if (!XT_IS_STRING(key)) return 0;
+  xt_string *k = xt_as_string(key);
   return k && k->length == 9 && memcmp(k->data, "prototype", 9) == 0;
 }
 
@@ -132,8 +149,7 @@ xt_value xt_object_get(xt_value value, xt_value key) {
      their real representation. */
   if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
     return XT_UNDEFINED;
-  xt_value keyString = xt_to_string(key);
-  xt_string *k = xt_as_string(keyString);
+  xt_value k = xt_to_property_key(key);
   /* Walk the prototype chain like JavaScript property lookup. */
   xt_object *cur = obj;
   while (cur) {
@@ -162,8 +178,7 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
   if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
     return newValue;
   if (obj->frozen) return newValue;
-  xt_value keyString = xt_to_string(key);
-  xt_string *k = xt_as_string(keyString);
+  xt_value k = xt_to_property_key(key);
   xt_property *prop = xt_object_find(obj, k);
   if (prop) {
     if (prop->setter != XT_UNDEFINED) {
@@ -200,23 +215,24 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
   return newValue;
 }
 
-static xt_property *xt_object_ensure_property(xt_object *obj, xt_value keyString) {
-  xt_property *prop = xt_object_find(obj, xt_as_string(keyString));
+static xt_property *xt_object_ensure_property(xt_object *obj, xt_value key) {
+  xt_value propertyKey = xt_to_property_key(key);
+  xt_property *prop = xt_object_find(obj, propertyKey);
   if (prop) return prop;
-  return xt_object_insert_property(obj, xt_as_string(keyString));
+  return xt_object_insert_property(obj, propertyKey);
 }
 
 xt_value xt_object_define_getter(xt_value value, xt_value key, xt_value getter) {
   xt_object *obj = xt_as_object(value);
   if (!obj) return value;
-  xt_object_ensure_property(obj, xt_to_string(key))->getter = getter;
+  xt_object_ensure_property(obj, key)->getter = getter;
   return value;
 }
 
 xt_value xt_object_define_setter(xt_value value, xt_value key, xt_value setter) {
   xt_object *obj = xt_as_object(value);
   if (!obj) return value;
-  xt_object_ensure_property(obj, xt_to_string(key))->setter = setter;
+  xt_object_ensure_property(obj, key)->setter = setter;
   return value;
 }
 
@@ -246,8 +262,7 @@ int xt_object_is_frozen(xt_value value) {
 xt_value xt_object_has_own(xt_value value, xt_value key) {
   xt_object *obj = xt_as_object(value);
   if (!obj) return XT_FALSE;
-  xt_value keyString = xt_to_string(key);
-  return xt_bool(xt_object_find(obj, xt_as_string(keyString)) != NULL);
+  return xt_bool(xt_object_find(obj, xt_to_property_key(key)) != NULL);
 }
 
 xt_value xt_object_from_entries(xt_value entries) {
@@ -265,8 +280,21 @@ xt_value xt_object_from_entries(xt_value entries) {
 xt_value xt_object_has(xt_value value, xt_value key) {
   if (!XT_IS_OBJECT(value)) return XT_FALSE;
   xt_object *obj = (xt_object *)XT_GET_PTR(value);
-  xt_value keyString = xt_to_string(key);
-  return xt_bool(xt_object_find(obj, xt_as_string(keyString)) != NULL);
+  return xt_bool(xt_object_find(obj, xt_to_property_key(key)) != NULL);
+}
+
+/* `Object.getOwnPropertySymbols`: the symbol-keyed own properties, in
+ * insertion order. String keys are skipped. */
+xt_value xt_object_own_property_symbols(xt_value value) {
+  xt_value result = xt_array_new(0, NULL);
+  if (!XT_IS_OBJECT(value)) return result;
+  xt_object *obj = (xt_object *)XT_GET_PTR(value);
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+    return result;
+  for (uint32_t i = 0; i < obj->count; i++) {
+    if (xt_is_symbol(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
+  }
+  return result;
 }
 
 xt_value xt_object_keys(xt_value value) {
@@ -274,7 +302,7 @@ xt_value xt_object_keys(xt_value value) {
   if (XT_IS_OBJECT(value)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(value);
     for (uint32_t i = 0; i < obj->count; i++) {
-      xt_array_push(result, XT_FROM_PTR(XT_TAG_STRING, obj->properties[i].key));
+      if (XT_IS_STRING(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
     }
     return result;
   }
@@ -288,7 +316,7 @@ xt_value xt_object_keys(xt_value value) {
     if (XT_IS_OBJECT(array->extra)) {
       xt_object *extra = (xt_object *)XT_GET_PTR(array->extra);
       for (uint32_t i = 0; i < extra->count; i++) {
-        xt_array_push(result, XT_FROM_PTR(XT_TAG_STRING, extra->properties[i].key));
+        if (XT_IS_STRING(extra->properties[i].key)) xt_array_push(result, extra->properties[i].key);
       }
     }
     return result;
@@ -403,6 +431,7 @@ xt_value xt_array_spread(xt_value target, xt_value source) {
     return target;
   }
   /* Spreading a string/Map/Set/iterable iterates exactly like `for...of`. */
+  source = xt_iter_open(source);
   for (int32_t i = 0; xt_truthy(xt_iter_has(source, xt_number((double)i))); i++) {
     xt_array_push(target, xt_iter_value(source, xt_number((double)i)));
   }
@@ -462,6 +491,16 @@ xt_value xt_get(xt_value target, xt_value key) {
         /* Fall back to first-class built-in methods (`arr.map`). */
         return xt_method_value(target, key);
       }
+      return xt_array_get(target, key);
+    }
+    /* Symbol-keyed properties live in the side object too. */
+    if (xt_is_symbol(key)) {
+      xt_value extra = xt_array_extra((xt_array *)XT_GET_PTR(target), 0);
+      if (extra != XT_UNDEFINED) {
+        xt_value value = xt_object_get(extra, key);
+        if (value != XT_UNDEFINED) return value;
+      }
+      return xt_method_value(target, key);
     }
     return xt_array_get(target, key);
   }
@@ -488,6 +527,15 @@ xt_value xt_get(xt_value target, xt_value key) {
     /* Map/Set expose `.size`; promises, dates and regexps have their own
      * getters implemented in the standard library. */
     xt_object *obj = (xt_object *)XT_GET_PTR(target);
+    if (obj->header.kind == XT_OBJECT_KIND_SYMBOL) {
+      if (XT_IS_STRING(key)) {
+        xt_string *k = xt_as_string(key);
+        if (k->length == 11 && memcmp(k->data, "description", 11) == 0) {
+          return xt_symbol_description(target);
+        }
+      }
+      return xt_method_value(target, key);
+    }
     if (obj->header.kind == XT_OBJECT_KIND_MAP || obj->header.kind == XT_OBJECT_KIND_SET) {
       if (XT_IS_STRING(key)) {
         xt_string *k = xt_as_string(key);
@@ -558,6 +606,10 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
       if (!xt_key_is_array_index(k, &ignored)) {
         return xt_object_set(xt_array_extra((xt_array *)XT_GET_PTR(target), 1), key, value);
       }
+      return xt_array_set(target, key, value);
+    }
+    if (xt_is_symbol(key)) {
+      return xt_object_set(xt_array_extra((xt_array *)XT_GET_PTR(target), 1), key, value);
     }
     return xt_array_set(target, key, value);
   }

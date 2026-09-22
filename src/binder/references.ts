@@ -345,6 +345,13 @@ export const referenceMethods: ReferenceMethods = {
         const method = member as MethodDeclaration;
         const isStatic = method.modifiers.some((modifier) => modifier.modifierKind === ModifierKind.Static);
         const fn = this.createClassFunction(method, classMemberName(method.name), method.parameters, method.body, classScope, info, isStatic, false);
+        if (method.name.kind === SyntaxKind.ComputedPropertyName) {
+          // Computed member names are evaluated in the enclosing scope when
+          // the class is defined, so bind them there.
+          const keyExpression = (method.name as unknown as { expression: Expression }).expression;
+          this.bindNode(keyExpression, scope);
+          (fn as MutableFunction & { computedKey: Expression }).computedKey = keyExpression;
+        }
         if (isStatic) (info.statics as FunctionInfo[]).push(fn);
         else (info.methods as FunctionInfo[]).push(fn);
       }

@@ -353,6 +353,9 @@ xt_value xt_to_string(xt_value v) {
     return result;
   }
   if (XT_IS_FUNCTION(v)) return xt_string_from_cstr("function () { [native code] }");
+  if (xt_is_symbol(v)) {
+    xt_throw(xt_string_from_cstr("TypeError: Cannot convert a Symbol value to a string"));
+  }
   if (XT_IS_OBJECT(v) &&
       ((xt_object *)XT_GET_PTR(v))->header.kind == XT_OBJECT_KIND_ERROR) {
     return xt_error_to_string(v);
@@ -368,6 +371,7 @@ xt_value xt_typeof(xt_value v) {
   if (v == XT_UNDEFINED) return xt_string_from_cstr("undefined");
   if (XT_IS_FUNCTION(v)) return xt_string_from_cstr("function");
   if (v == XT_NULL) return xt_string_from_cstr("object");
+  if (xt_is_symbol(v)) return xt_string_from_cstr("symbol");
   return xt_string_from_cstr("object");
 }
 
@@ -587,6 +591,7 @@ xt_value xt_gt(xt_value a, xt_value b) { return xt_lt(b, a); }
 xt_value xt_ge(xt_value a, xt_value b) { return xt_le(b, a); }
 
 static int xt_loose_equals(xt_value a, xt_value b) {
+  if (xt_is_symbol(a) || xt_is_symbol(b)) return a == b;
   if (XT_IS_NUMBER(a) && XT_IS_NUMBER(b)) return xt_to_double(a) == xt_to_double(b);
   if (XT_IS_STRING(a) && XT_IS_STRING(b)) return xt_string_equals(xt_as_string(a), xt_as_string(b));
   if (a == b) return 1;

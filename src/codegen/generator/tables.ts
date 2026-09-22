@@ -112,6 +112,7 @@ export const GLOBAL_FUNCTIONS: Record<string, string> = {
   String: "xt_string_ctor",
   Boolean: "xt_boolean_ctor",
   BigInt: "xt_bigint_ctor",
+  Symbol: "xt_symbol",
   ...ERROR_CONSTRUCTORS,
 };
 
@@ -130,6 +131,7 @@ export const BUILTIN_FUNCTION_VALUES: Record<string, string> = {
   String: "xt_builtin_value_string",
   Boolean: "xt_builtin_value_boolean",
   BigInt: "xt_builtin_value_bigint",
+  Symbol: "xt_builtin_value_symbol",
 };
 
 /** Global namespaces whose static methods map to runtime dispatchers. */
@@ -141,6 +143,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   Number: "xt_number_static",
   String: "xt_string_static",
   BigInt: "xt_bigint_static",
+  Symbol: "xt_symbol_static",
   Date: "xt_date_static",
   Promise: "xt_promise_static",
   path: "xt_path_static",
@@ -165,6 +168,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
 export const NAMESPACE_PROPERTIES: Record<string, string> = {
   process: "xt_process_get",
   "import.meta": "xt_import_meta",
+  Symbol: "xt_symbol_get",
 };
 
 /** Global constructors called as `new X(...)` (all have signature `(i32, i64*)`). */

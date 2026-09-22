@@ -264,6 +264,9 @@ xt_value xt_yield(xt_value value) {
 xt_value xt_yield_star(xt_value delegate) {
   xt_value nextName = xt_string_from_cstr("next");
   int usesNext = XT_IS_FUNCTION(xt_get(delegate, nextName));
+  /* A plain iterable (`[Symbol.iterator]` but no `next`) resolves through the
+   * iteration protocol; arrays/strings/Map/Set keep their index protocol. */
+  if (!usesNext) delegate = xt_iter_open(delegate);
   xt_value sent = XT_UNDEFINED;
   int32_t index = 0;
   for (;;) {

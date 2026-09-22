@@ -40,6 +40,7 @@ xt_value xt_object_static(xt_value name, int32_t argc, xt_value *argv) {
   if (!fn) return XT_UNDEFINED;
   if (strcmp(fn, "keys") == 0) return xt_object_keys(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "getOwnPropertyNames") == 0) return xt_object_own_property_names(xt_arg_at(argc, argv, 0));
+  if (strcmp(fn, "getOwnPropertySymbols") == 0) return xt_object_own_property_symbols(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "groupBy") == 0) return xt_object_group_by(xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   if (strcmp(fn, "values") == 0) return xt_object_values(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "entries") == 0) return xt_object_entries(xt_arg_at(argc, argv, 0));

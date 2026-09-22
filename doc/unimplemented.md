@@ -106,12 +106,12 @@ None known at the expression level.
 
 | Category | Status |
 | --- | --- |
-| `Symbol` constructor and symbol primitives | ✗ not implemented |
+| `Symbol` constructor and symbol primitives | ✓ `Symbol(description)`, well-known symbols, `Symbol.for` / `Symbol.keyFor`, symbol property keys and `Object.getOwnPropertySymbols` |
 | `String.prototype.normalize` | ✗ not implemented |
 | `structuredClone` | ✗ not implemented |
 | Built-in error subclasses (`TypeError`, `RangeError`, …) | ✓ first-class constructors and prototypes; `instanceof Error` holds for the whole family |
 | `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
-| Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | partial: arrays, strings, `Map`, `Set` and generators are iterable in `for...of` / spread; a user-defined `Symbol.iterator` is not consulted |
+| Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | ✓ arrays, strings, `Map`, `Set`, generators and any object exposing `[Symbol.iterator]()` are iterable in `for...of` / spread |
 | Generators (`function*`, `yield`, `yield*`, `next`/`throw`/`return`) | ✓ implemented with stackful coroutines; `for...of`, spread and delegation supported. `return()` completes without running `finally` |
 | Timers / I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
 
@@ -203,7 +203,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | String `length` | Counted in UTF-8 bytes, not UTF-16 code units (`"\u00e9".length` reports 1 instead of 2; `"\u{1F600}".length` reports 4 instead of 2; `codePointAt` likewise differs) |
 | `Object.getPrototypeOf({})` | Returns `undefined` instead of the `Object.prototype` object |
 | Global RegExp `lastIndex` | `test` / `exec` do not advance or honour a caller-set `lastIndex` for `/g` / `/y` regexes |
-| String `normalize` / `structuredClone` / `Symbol` | Not implemented (see section 3) |
+| String `normalize` / `structuredClone` | Not implemented |
 | First-class built-in methods | Implemented as unbound method values (see section 5); `fn.toString()` returns a placeholder rather than source text |
 | `for...in` | Enumerates own keys of objects / arrays / strings; does not include prototype-chain properties |
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
@@ -229,7 +229,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | GC (garbage collection) | ✗ deliberately deferred; `xt_alloc` is isolated but not yet replaced with a precise / conservative collector |
 | Self-hosting | ✓ the compiler compiles itself: `xbintsc build src/cli/main.ts` produces a working binary, and the emitted IR is stable from generation 1 onward. The runtime is still C |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
-| Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` implemented; Symbol not implemented |
+| Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` implemented; String.normalize / structuredClone missing |
 | Multi-file module bundling | partial: relative-path `.ts` bundling, namespace imports and bare-specifier extension module imports implemented; circular dependencies / npm / live bindings not implemented |
 | A real async runtime / event loop | ✗ (Promise is a synchronous microtask model) |
 | Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), verified in CI |
@@ -249,8 +249,7 @@ Unimplemented (functions): `fn.toString()` source text, async generators
 Unimplemented (classes/OO): abstract/implements, access control,
                             parent/child #x collision
 
-Unimplemented (standard library): Symbol, String.normalize, structuredClone,
-                                  iterator protocol (Symbol.iterator)
+Unimplemented (standard library): String.normalize, structuredClone
 
 Unimplemented (modules): circular dependencies, npm dependencies, live bindings
 

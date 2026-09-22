@@ -129,8 +129,10 @@ export const loopStatementMethods: LoopStatementMethods = {
     const source = this.emitExpression(statement.expression);
     const isForIn = statement.kind === SyntaxKind.ForInStatement;
     // `for...in` iterates the enumerable keys (indices become strings);
-    // `for...of` iterates the values at each index.
-    const iterable = isForIn ? this.runtimeCall("xt_object_keys", [source]) : source;
+    // `for...of` resolves the iteration protocol once, then walks it.
+    const iterable = isForIn
+      ? this.runtimeCall("xt_object_keys", [source])
+      : this.runtimeCall("xt_iter_open", [source]);
     const indexPtr = this.alloca();
     this.emit(`  store i64 ${numberLiteral(0)}, i64* ${indexPtr}`);
 

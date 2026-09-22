@@ -50,6 +50,7 @@
 #define XT_OBJECT_KIND_BIGINT 11
 #define XT_OBJECT_KIND_ERROR 12
 #define XT_OBJECT_KIND_GENERATOR 13
+#define XT_OBJECT_KIND_ITERATOR 14
 
 /* Common header for every heap object. */
 typedef struct xt_header {
@@ -77,7 +78,8 @@ typedef struct {
 } xt_bigint;
 
 typedef struct {
-  xt_string *key;
+  /* String or Symbol value (see `xt_to_property_key`). */
+  xt_value key;
   xt_value value;
   /* Accessor properties (`get x()` / `set x(v)`) store the functions here;
    * when set, `value` is ignored and property access invokes the getter. */
@@ -165,7 +167,19 @@ void xt_array_reserve(xt_array *array, uint32_t needed);
 
 /* Object helpers used by the standard library. */
 xt_object *xt_as_object(xt_value value);
-xt_property *xt_object_find_property(xt_object *obj, xt_string *key);
+xt_property *xt_object_find_property(xt_object *obj, xt_value key);
+
+/* Property keys are either strings or symbols. */
+xt_value xt_to_property_key(xt_value key);
+int xt_property_key_equals(xt_value a, xt_value b);
+
+/* Symbols (xt_symbol.c). */
+int xt_is_symbol(xt_value value);
+xt_value xt_symbol_new(xt_value description);
+xt_value xt_symbol_description(xt_value value);
+xt_value xt_symbol_to_string(xt_value value);
+xt_value xt_symbol_well_known(const char *name);
+xt_value xt_object_own_property_symbols(xt_value value);
 
 /* Map / Set / Promise / Date / RegExp live in xt_stdlib.c and xt_promise.c. */
 int xt_is_promise(xt_value value);
@@ -187,6 +201,9 @@ xt_value xt_iter_value(xt_value value, xt_value index);
 /* Per-step iteration check. Generators pull the next value here; the index is
  * ignored because the value is cached until `xt_iter_value` reads it. */
 xt_value xt_iter_has(xt_value value, xt_value index);
+/* Resolve the iteration protocol once: returns `value` for the built-in index
+ * protocols, or a wrapper around `value[Symbol.iterator]()` otherwise. */
+xt_value xt_iter_open(xt_value value);
 
 /* Stackful generators (xt_generator.c). */
 int xt_is_generator(xt_value value);

@@ -69,6 +69,8 @@ export interface FunctionInfo {
   capturesThis: boolean;
   /** Set for class methods/constructors; carries the owning class. */
   classInfo?: ClassInfo;
+  /** Computed member name (`[expr]() {}`), evaluated at class definition. */
+  computedKey?: Expression;
   /** True for `static` class members. */
   isStatic?: boolean;
   /** True for an explicit `constructor`. */

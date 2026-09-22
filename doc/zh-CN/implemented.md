@@ -200,7 +200,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 生成 LLVM IR 文本（`.ll`），无需自建寄存器分配（依赖 `alloca` + mem2reg）。
 - 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
 - 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`switch`，`try/catch/finally`，`break` / `continue` / `return`。
-  - `for...of` 与展开通过 `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、`Map`、`Set` 与生成器（`Map` 产出 `[key, value]` 对）。
+  - `for...of` 与展开通过 `xt_iter_open` → `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象（`Map` 产出 `[key, value]` 对）；非可迭代值抛出 `TypeError`。
   - `switch` 以严格相等逐 `case` 测试，命中后执行并在 `break` 前穿透。
   - `try/catch/finally` 通过运行时 `_setjmp` 帧实现：`xt_try_enter` 入栈、`_setjmp` 捕获、`xt_throw` 长跳转；IR 会把调用方的帧地址（`@llvm.frameaddress(0)`）作为 `_setjmp` 的第二个参数传入，与 clang 编译 MSVC 时的降级方式一致：Windows UCRT 的 `_setjmp` 会把这个帧存入 `_JUMP_BUFFER.Frame`，`longjmp` 再交给 `RtlUnwind` 执行栈展开；若不传该参数，`longjmp` 会展开到错误目标（`STATUS_BAD_FUNCTION_TABLE`）。使用 `_setjmp` 而非导出的 `setjmp` 符号，因为后者的 Windows ABI 是不兼容的双参数例程。含 `try` 的函数会强制局部变量驻留内存（内联汇编逃生点）以保证长跳转后值不丢失。
   - `for...in` 复用 `xt_object_keys` 枚举键（数组 / 字符串得到字符串下标）。
@@ -238,6 +238,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 比较：`lt/le/gt/ge`、宽松 / 严格相等、`not`、`is_nullish`。
 - 对象：线性属性列表，`object_new/get/set/has/keys/values/entries/assign/spread`。
 - 数组：`array_new/get/set/push/length/spread`；对 `arr.length` 赋值会截断 / 扩展（与 JS 一致）；`iter_length` / `iter_value` 为数组、字符串、`Map`、`Set` 提供统一迭代视图。
+- Symbol（`xt_symbol.c`）：`Symbol(description)` 原始值（`XT_OBJECT_KIND_SYMBOL`）、13 个著名符号（`Symbol.iterator`、`Symbol.asyncIterator`、`Symbol.match` 等）、`Symbol.for` / `Symbol.keyFor` 全局注册表、`symbol.description` / `toString()` / `valueOf()`；symbol 可作为属性键（`Object.getOwnPropertySymbols`，symbol 键的 `get`/`set`/`in`/`delete`），会被 `Object.keys` / `values` / `entries` / `for...in` / `JSON.stringify` 跳过，打印为 `Symbol(desc)`。
 - 通用成员访问：`xt_get` / `xt_set`（对数组 / 对象 / 字符串分发）。
 - 标准库：`xt_call_method`（统一分发数组 / 字符串方法与对象上的函数属性）、`xt_math_call`（`Math.*` 与常量）、全局函数 `xt_parse_int/parse_float/is_nan/is_finite/number_ctor/string_ctor/boolean_ctor`。
 - 运算符辅助：`xt_in`（`in`）、`xt_delete`（`delete`）、`xt_rest_args`（剩余参数 / `arguments`）。
@@ -335,9 +336,9 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 类 / OO | 构造函数、实例字段、方法、`static`、继承 `extends`/`super`、原型链、`instanceof` |
 | 异步 | `async`/`await`、`Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`）、同步微任务队列 |
 | 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包，裸说明符解析到扩展模块 |
-| 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`Object/Array/Number/String` 静态、`console.*` |
+| 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`Symbol`、`Error` 家族、`Object/Array/Number/String/Symbol` 静态、`console.*` |
 | 值模型 | 64 位 NaN-boxing、统一函数 ABI（含 `this`）、闭包环境、对象原型链 |
-| 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / `console` |
+| 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / symbol / 生成器 / `console` |
 | 扩展 | 扩展注册表、`core`（print）、`node`（fs / path / os / process / buffer / stream / net / dgram / http，按说明符导入） |
 | 工具链 | clang 编译 IR/C、链接、增量缓存 |
 | 自举 | `xbintsc` 可将 `src/cli/main.ts` 编译为原生二进制；产出的 IR 从第 1 代起达到不动点 |

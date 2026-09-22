@@ -20,7 +20,53 @@ xt_value xt_iter_length(xt_value value) {
   return xt_array_length(value);
 }
 
+/* Resolved `[Symbol.iterator]()` result: primes one `next()` per step and
+ * caches its `value` until `xt_iter_value` consumes it. */
+typedef struct {
+  xt_header header;
+  xt_value iterator;
+  xt_value cached;
+  int32_t done;
+} xt_iterator_state;
+
+static int xt_is_iterator_state(xt_value value) {
+  if (!XT_IS_OBJECT(value)) return 0;
+  return ((xt_object *)XT_GET_PTR(value))->header.kind == XT_OBJECT_KIND_ITERATOR;
+}
+
+/* Resolve the iteration protocol once, before the loop starts. Arrays,
+ * strings, Maps, Sets and generators keep their built-in index protocol;
+ * any other object with a `Symbol.iterator` method is wrapped. */
+xt_value xt_iter_open(xt_value value) {
+  if (XT_IS_ARRAY(value) || XT_IS_STRING(value) || xt_is_map(value) || xt_is_set(value) ||
+      xt_is_generator(value))
+    return value;
+  if (XT_IS_OBJECT(value)) {
+    xt_value method = xt_object_get(value, xt_symbol_well_known("iterator"));
+    if (XT_IS_FUNCTION(method)) {
+      xt_value iterator = xt_call_with_this(method, value, 0, NULL);
+      xt_iterator_state *state =
+          (xt_iterator_state *)xt_alloc(sizeof(xt_iterator_state), XT_OBJECT_KIND_ITERATOR);
+      state->iterator = iterator;
+      state->cached = XT_UNDEFINED;
+      state->done = 0;
+      return XT_FROM_PTR(XT_TAG_OBJECT, state);
+    }
+  }
+  xt_throw(xt_string_from_cstr("TypeError: value is not iterable"));
+  return XT_UNDEFINED;
+}
+
 xt_value xt_iter_has(xt_value value, xt_value index) {
+  if (xt_is_iterator_state(value)) {
+    xt_iterator_state *state = (xt_iterator_state *)XT_GET_PTR(value);
+    if (state->done) return XT_FALSE;
+    xt_value next = xt_get(state->iterator, xt_string_from_cstr("next"));
+    xt_value result = xt_call_with_this(next, state->iterator, 0, NULL);
+    state->cached = xt_get(result, xt_string_from_cstr("value"));
+    state->done = xt_truthy(xt_get(result, xt_string_from_cstr("done")));
+    return xt_bool(!state->done);
+  }
   if (xt_is_generator(value)) return xt_bool(xt_generator_has_next(value));
   if (xt_is_map(value)) return xt_bool(xt_to_int32(index) < xt_map_size(value));
   if (xt_is_set(value)) return xt_bool(xt_to_int32(index) < xt_set_size(value));
@@ -28,6 +74,7 @@ xt_value xt_iter_has(xt_value value, xt_value index) {
 }
 
 xt_value xt_iter_value(xt_value value, xt_value index) {
+  if (xt_is_iterator_state(value)) return ((xt_iterator_state *)XT_GET_PTR(value))->cached;
   if (xt_is_generator(value)) return xt_generator_iter_value(value);
   if (xt_is_map(value)) {
     xt_map *map = (xt_map *)XT_GET_PTR(value);

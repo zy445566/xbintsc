@@ -241,6 +241,11 @@ static void xt_inspect_string(xt_string *s, FILE *out) {
 }
 
 static void xt_inspect(xt_value v, FILE *out, int nested) {
+  if (xt_is_symbol(v)) {
+    xt_string *text = xt_as_string(xt_symbol_to_string(v));
+    fwrite(text->data, 1, text->length, out);
+    return;
+  }
   if (XT_IS_BIGINT(v)) {
     xt_value text = xt_bigint_to_decimal(v);
     xt_string *s = xt_as_string(text);
@@ -275,7 +280,14 @@ static void xt_inspect(xt_value v, FILE *out, int nested) {
       for (uint32_t i = 0; i < extra->count; i++) {
         if (array->length > 0 || i > 0) fputs(", ", out);
         else fputc(' ', out);
-        fwrite(extra->properties[i].key->data, 1, extra->properties[i].key->length, out);
+        xt_value key = extra->properties[i].key;
+        if (xt_is_symbol(key)) {
+          xt_string *text = xt_as_string(xt_symbol_to_string(key));
+          fwrite(text->data, 1, text->length, out);
+        } else {
+          xt_string *keyString = xt_as_string(key);
+          fwrite(keyString->data, 1, keyString->length, out);
+        }
         fputs(": ", out);
         xt_inspect(extra->properties[i].value, out, 1);
       }
@@ -298,16 +310,30 @@ static void xt_inspect(xt_value v, FILE *out, int nested) {
     }
     xt_inspect_push(obj);
     fputc('{', out);
-    for (uint32_t i = 0; i < obj->count; i++) {
-      if (i > 0) fputs(", ", out);
-      else fputc(' ', out);
-      xt_string *key = obj->properties[i].key;
-      if (xt_inspect_identifier_key(key)) fwrite(key->data, 1, key->length, out);
-      else xt_inspect_string(key, out);
-      fputs(": ", out);
-      xt_inspect(obj->properties[i].value, out, 1);
+    /* `util.inspect` lists string keys first, then symbol keys, in insertion
+     * order; symbol keys are printed without brackets. */
+    int written = 0;
+    for (int pass = 0; pass < 2; pass++) {
+      for (uint32_t i = 0; i < obj->count; i++) {
+        xt_value key = obj->properties[i].key;
+        int isSymbol = xt_is_symbol(key);
+        if ((pass == 0) == isSymbol) continue;
+        if (written > 0) fputs(", ", out);
+        else fputc(' ', out);
+        written++;
+        if (isSymbol) {
+          xt_string *text = xt_as_string(xt_symbol_to_string(key));
+          fwrite(text->data, 1, text->length, out);
+        } else {
+          xt_string *keyString = xt_as_string(key);
+          if (xt_inspect_identifier_key(keyString)) fwrite(keyString->data, 1, keyString->length, out);
+          else xt_inspect_string(keyString, out);
+        }
+        fputs(": ", out);
+        xt_inspect(obj->properties[i].value, out, 1);
+      }
     }
-    if (obj->count > 0) fputc(' ', out);
+    if (written > 0) fputc(' ', out);
     fputc('}', out);
     xt_inspect_pop();
     return;

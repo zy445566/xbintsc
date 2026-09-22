@@ -894,4 +894,62 @@ describeE2E("end-to-end compilation", (harness) => {
         "x caught:E end\n{\"done\":true} object\n0,1,2",
     );
   });
+
+  it("supports symbols and the well-known symbol protocol", () => {
+    const source = `
+      const a = Symbol("desc");
+      const b = Symbol("desc");
+      console.log(typeof Symbol, typeof a, a === a, a === b);
+      console.log(a.toString(), String(a), a.description, String(Symbol()));
+      console.log(String(Symbol.iterator), typeof Symbol.iterator);
+
+      const holder: Record<string, unknown> = {};
+      (holder as any)[a] = 1;
+      (holder as any)[b] = 2;
+      holder.x = 3;
+      console.log(Object.keys(holder).join(","));
+      console.log(Object.getOwnPropertySymbols(holder).length);
+      console.log((holder as any)[a], (holder as any)[b], (holder as any)[Symbol("desc")]);
+      console.log(JSON.stringify(holder), JSON.stringify(a), JSON.stringify([a, 1]));
+      console.log(holder);
+
+      const reg = Symbol.for("shared");
+      console.log(reg === Symbol.for("shared"), Symbol.keyFor(reg), Symbol.keyFor(a));
+
+      class Range {
+        start: number;
+        end: number;
+        constructor(start: number, end: number) {
+          this.start = start;
+          this.end = end;
+        }
+        [Symbol.iterator]() {
+          let i = this.start;
+          const end = this.end;
+          return {
+            next() {
+              return i < end ? { value: i++, done: false } : { value: undefined, done: true };
+            },
+          };
+        }
+      }
+      console.log([...new Range(1, 4)].join(","));
+      const walked: number[] = [];
+      for (const x of new Range(10, 13)) walked.push(x);
+      console.log(walked.join(","));
+
+      function* delegates() { yield* new Range(5, 7); }
+      console.log([...delegates()].join(","));
+    `;
+    expect(runProgram(source)).toBe(
+      "function symbol true false\n" +
+        "Symbol(desc) Symbol(desc) desc Symbol()\n" +
+        "Symbol(Symbol.iterator) symbol\n" +
+        "x\n2\n1 2 undefined\n" +
+        '{"x":3} undefined [null,1]\n' +
+        "{ x: 3, Symbol(desc): 1, Symbol(desc): 2 }\n" +
+        "true shared undefined\n" +
+        "1,2,3\n10,11,12\n5,6",
+    );
+  });
 });

@@ -86,7 +86,7 @@ xt_value xt_error_constructor(xt_value nameValue) {
   /* Own-property lookup only: a prototype walk would find `Error`'s
    * constructor (stored on the root prototype) for every child. */
   xt_property *existing =
-      xt_object_find_property((xt_object *)XT_GET_PTR(proto), xt_as_string(key));
+      xt_object_find_property((xt_object *)XT_GET_PTR(proto), key);
   if (existing && XT_IS_FUNCTION(existing->value)) return existing->value;
   xt_value env[1];
   env[0] = xt_string_from_cstr(name);

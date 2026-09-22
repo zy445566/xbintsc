@@ -47,9 +47,9 @@ export const literalCallMethods: LiteralCallMethods = {
         const nameNode = property.name;
         let key: string;
         if (nameNode.kind === SyntaxKind.ComputedPropertyName) {
-          const keyValue = this.emitExpression((nameNode as { expression: Expression }).expression);
-          key = this.reg();
-          this.emit(`  ${key} = call i64 @xt_to_string(i64 ${keyValue})`);
+          // Property keys may be symbols; `xt_set` normalises with
+          // `xt_to_property_key`.
+          key = this.emitExpression((nameNode as { expression: Expression }).expression);
         } else {
           key = this.stringValue(propertyNameText(nameNode));
         }

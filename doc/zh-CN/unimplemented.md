@@ -77,12 +77,12 @@
 
 | 类别 | 现状 |
 | --- | --- |
-| `Symbol` 构造器与 symbol 原始值 | ✗ 未实现 |
+| `Symbol` 构造器与 symbol 原始值 | ✓ `Symbol(description)`、著名符号、`Symbol.for` / `Symbol.keyFor`、symbol 属性键与 `Object.getOwnPropertySymbols` |
 | `String.prototype.normalize` | ✗ 未实现 |
 | `structuredClone` | ✗ 未实现 |
 | 内置错误子类（`TypeError`、`RangeError` 等） | ✓ 一等公民构造器与原型；整个家族 `instanceof Error` 成立 |
 | `AggregateError` 构造器 | ✓ `new AggregateError(errors, message)`；`Promise.any` 现以其作为 rejection |
-| 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | 部分：数组、字符串、`Map`、`Set`、生成器均可在 `for...of` / 展开中使用；不读取自定义 `Symbol.iterator` |
+| 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | ✓ 数组、字符串、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象均可在 `for...of` / 展开中使用 |
 | 生成器（`function*`、`yield`、`yield*`、`next`/`throw`/`return`） | ✓ 基于有栈协程实现；支持 `for...of`、展开与委托。`return()` 直接结束，不执行 `finally` |
 | 定时器 / I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
 
@@ -170,7 +170,7 @@
 | 字符串 `length` | 按 UTF-8 字节计数，而非 UTF-16 码元（`"\u00e9".length` 报 1 而非 2；`"\u{1F600}".length` 报 4 而非 2；`codePointAt` 同样有偏差） |
 | `Object.getPrototypeOf({})` | 返回 `undefined`，而非 `Object.prototype` 对象 |
 | 全局正则 `lastIndex` | `/g`、`/y` 正则的 `test` / `exec` 不推进也不读取调用方设置的 `lastIndex` |
-| `String.normalize` / `structuredClone` / `Symbol` | 未实现（见第 3 节） |
+| `String.normalize` / `structuredClone` | 未实现 |
 | 内置方法一等公民 | 以未绑定方法值实现（见第 5 节）；`fn.toString()` 返回占位字符串而非源码文本 |
 | `for...in` | 枚举对象 / 数组 / 字符串的自身键；不含原型链属性 |
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
@@ -193,7 +193,7 @@
 | GC（垃圾回收） | ✗ 有意推迟；`xt_alloc` 已隔离，但尚未替换为精确 / 保守回收器 |
 | 自举（self-hosting） | ✓ 编译器已能自编译：`xbintsc build src/cli/main.ts` 可产出可用二进制，且从第 1 代起产出的 IR 保持稳定。运行时仍为 C |
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
-| 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` 已实现；Symbol 未实现 |
+| 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` 已实现；String.normalize / structuredClone 缺失 |
 | 多文件模块打包 | 部分：相对路径 `.ts` 打包、命名空间导入、裸说明符扩展模块导入已实现；循环依赖 / npm / 实时绑定未实现 |
 | 真正的异步运行时 / 事件循环 | ✗（Promise 为同步微任务模型） |
 | Windows 二进制产物验证 | 构建层已适配（`.exe` 后缀、链接参数分支），并在 CI 中验证 |
@@ -212,8 +212,7 @@
 
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 
-未实现（标准库）：Symbol、String.normalize、structuredClone、
-                  迭代器协议（Symbol.iterator）
+未实现（标准库）：String.normalize、structuredClone
 
 未实现（模块）：循环依赖、npm 依赖、实时绑定
 

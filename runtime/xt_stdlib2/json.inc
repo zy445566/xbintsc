@@ -152,7 +152,7 @@ static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_v
   int any = 0;
   for (uint32_t i = 0; i < array->length; i++) {
     xt_value item = xt_object_get(value, array->items[i]);
-    if (item != XT_UNDEFINED && !XT_IS_FUNCTION(item)) { any = 1; break; }
+    if (item != XT_UNDEFINED && !XT_IS_FUNCTION(item) && !xt_is_symbol(item)) { any = 1; break; }
   }
   if (!any) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
   *out = xt_add(*out, xt_string_from_cstr("{"));
@@ -160,8 +160,8 @@ static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_v
   for (uint32_t i = 0; i < array->length; i++) {
     xt_value key = array->items[i];
     xt_value item = xt_object_get(value, key);
-    /* `undefined` and functions are omitted from objects. */
-    if (item == XT_UNDEFINED || XT_IS_FUNCTION(item)) continue;
+    /* `undefined`, functions and symbols are omitted from objects. */
+    if (item == XT_UNDEFINED || XT_IS_FUNCTION(item) || xt_is_symbol(item)) continue;
     if (written > 0) *out = xt_add(*out, xt_string_from_cstr(","));
     written++;
     xt_json_indent(out, indent, depth + 1);
@@ -176,7 +176,7 @@ static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_v
 }
 
 static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_value *out) {
-  if (value == XT_UNDEFINED || value == XT_NULL || XT_IS_FUNCTION(value)) {
+  if (value == XT_UNDEFINED || value == XT_NULL || XT_IS_FUNCTION(value) || xt_is_symbol(value)) {
     *out = xt_add(*out, xt_string_from_cstr("null"));
     return;
   }
@@ -219,7 +219,7 @@ xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
   if (indent < 0) indent = 0;
   if (indent > 10) indent = 10;
   xt_value value = xt_arg_at(argc, argv, 0);
-  if (value == XT_UNDEFINED || XT_IS_FUNCTION(value)) return XT_UNDEFINED;
+  if (value == XT_UNDEFINED || XT_IS_FUNCTION(value) || xt_is_symbol(value)) return XT_UNDEFINED;
   xt_value out = xt_string_from_cstr("");
   xt_json_stringify_value(value, indent, 0, &out);
   return out;

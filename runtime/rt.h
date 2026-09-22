@@ -170,6 +170,14 @@ xt_value xt_object_entries(xt_value obj);
 xt_value xt_object_assign(int32_t argc, xt_value *argv);
 xt_value xt_object_spread(xt_value target, xt_value source);
 
+/* -- symbols -------------------------------------------------------------- */
+/** Implements `Symbol(description)`. */
+xt_value xt_symbol(int32_t argc, xt_value *argv);
+/** Implements `Symbol.<name>(...)` statics (`for`, `keyFor`). */
+xt_value xt_symbol_static(xt_value name, int32_t argc, xt_value *argv);
+/** Reads a well-known symbol (`Symbol.iterator`, ...). */
+xt_value xt_symbol_get(xt_value name);
+
 /* -- standard library dispatch -------------------------------------------- */
 /** Call `target[name](...)`, falling back to built-in Array/String methods. */
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv);

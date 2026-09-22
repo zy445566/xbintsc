@@ -20,7 +20,9 @@ xt_value xt_object_values(xt_value value) {
   xt_value result = xt_array_new(0, NULL);
   if (!XT_IS_OBJECT(value)) return result;
   xt_object *obj = (xt_object *)XT_GET_PTR(value);
-  for (uint32_t i = 0; i < obj->count; i++) xt_array_push(result, obj->properties[i].value);
+  for (uint32_t i = 0; i < obj->count; i++) {
+    if (XT_IS_STRING(obj->properties[i].key)) xt_array_push(result, obj->properties[i].value);
+  }
   return result;
 }
 
@@ -29,8 +31,9 @@ xt_value xt_object_entries(xt_value value) {
   if (!XT_IS_OBJECT(value)) return result;
   xt_object *obj = (xt_object *)XT_GET_PTR(value);
   for (uint32_t i = 0; i < obj->count; i++) {
+    if (!XT_IS_STRING(obj->properties[i].key)) continue;
     xt_value pair = xt_array_new(0, NULL);
-    xt_array_push(pair, XT_FROM_PTR(XT_TAG_STRING, obj->properties[i].key));
+    xt_array_push(pair, obj->properties[i].key);
     xt_array_push(pair, obj->properties[i].value);
     xt_array_push(result, pair);
   }
@@ -45,7 +48,7 @@ xt_value xt_object_assign(int32_t argc, xt_value *argv) {
     if (!XT_IS_OBJECT(argv[i])) continue;
     xt_object *source = (xt_object *)XT_GET_PTR(argv[i]);
     for (uint32_t j = 0; j < source->count; j++) {
-      xt_object_set(target, XT_FROM_PTR(XT_TAG_STRING, source->properties[j].key), source->properties[j].value);
+      xt_object_set(target, source->properties[j].key, source->properties[j].value);
     }
   }
   return target;
@@ -261,6 +264,7 @@ xt_value xt_number_ctor(int32_t argc, xt_value *argv) {
 
 xt_value xt_string_ctor(int32_t argc, xt_value *argv) {
   if (argc == 0) return xt_string_from_cstr("");
+  if (xt_is_symbol(argv[0])) return xt_symbol_to_string(argv[0]);
   return xt_to_string(argv[0]);
 }
 
@@ -288,6 +292,7 @@ XT_BUILTIN_TRAMPOLINE(xt_builtin_value_boolean, xt_boolean_ctor)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_number, xt_number_ctor)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_bigint, xt_bigint_ctor)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_string, xt_string_ctor)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_symbol, xt_symbol)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_parseInt, xt_parse_int)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_parseFloat, xt_parse_float)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_isNaN, xt_is_nan)
@@ -300,10 +305,16 @@ XT_BUILTIN_TRAMPOLINE(xt_builtin_value_decodeURI, xt_decode_uri)
 xt_value xt_in(xt_value key, xt_value value) {
   if (XT_IS_OBJECT(value)) return xt_object_has(value, key);
   if (XT_IS_ARRAY(value)) {
+    if (xt_is_symbol(key)) {
+      xt_array *array = (xt_array *)XT_GET_PTR(value);
+      if (!XT_IS_OBJECT(array->extra)) return XT_FALSE;
+      return xt_object_has_own(array->extra, key);
+    }
     int32_t index = xt_to_int32(key);
     return xt_bool(index >= 0 && (uint32_t)index < xt_as_array(value)->length);
   }
   if (XT_IS_STRING(value)) {
+    if (xt_is_symbol(key)) return XT_FALSE;
     xt_string *s = xt_as_string(value);
     xt_string *k = xt_as_string(xt_to_string(key));
     if (k->length == 6 && memcmp(k->data, "length", 6) == 0) return XT_TRUE;
@@ -316,9 +327,9 @@ xt_value xt_in(xt_value key, xt_value value) {
 xt_value xt_delete(xt_value value, xt_value key) {
   if (XT_IS_OBJECT(value)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(value);
-    xt_string *k = xt_as_string(xt_to_string(key));
+    xt_value k = xt_to_property_key(key);
     for (uint32_t i = 0; i < obj->count; i++) {
-      if (xt_string_equals(obj->properties[i].key, k)) {
+      if (xt_property_key_equals(obj->properties[i].key, k)) {
         for (uint32_t j = i + 1; j < obj->count; j++) obj->properties[j - 1] = obj->properties[j];
         obj->count--;
         break;
@@ -327,7 +338,7 @@ xt_value xt_delete(xt_value value, xt_value key) {
     return XT_TRUE;
   }
   if (XT_IS_ARRAY(value)) {
-    xt_array_set(value, key, XT_UNDEFINED);
+    if (!xt_is_symbol(key)) xt_array_set(value, key, XT_UNDEFINED);
     return XT_TRUE;
   }
   return XT_TRUE;

@@ -292,7 +292,9 @@ export const moduleMethods: ModuleMethods = {
     }
     for (const method of classInfo.methods) {
       const fnValue = this.emitClosureValue(method);
-      const key = this.stringValue(method.name);
+      const key = method.computedKey
+        ? this.emitExpression(method.computedKey)
+        : this.stringValue(method.name);
       const accessor = (method.node as { accessor?: "get" | "set" }).accessor;
       if (accessor === "get") {
         this.emit(`  call i64 @xt_object_define_getter(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
@@ -308,7 +310,9 @@ export const moduleMethods: ModuleMethods = {
     this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${ctorKey}, i64 ${ctor})`);
     for (const method of classInfo.statics) {
       const fnValue = this.emitClosureValue(method);
-      const key = this.stringValue(method.name);
+      const key = method.computedKey
+        ? this.emitExpression(method.computedKey)
+        : this.stringValue(method.name);
       this.emit(`  call i64 @xt_set(i64 ${ctor}, i64 ${key}, i64 ${fnValue})`);
     }
     for (const field of classInfo.fields) {

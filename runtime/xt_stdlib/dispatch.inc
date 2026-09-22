@@ -174,6 +174,10 @@ static const xt_method_spec XT_GENERATOR_METHODS[] = {
   {"next", 1}, {"return", 1}, {"throw", 1},
 };
 
+static const xt_method_spec XT_SYMBOL_METHODS[] = {
+  {"toString", 0}, {"valueOf", 0},
+};
+
 static int xt_method_lookup(const xt_method_spec *specs, size_t count, const char *method, int32_t *arity) {
   for (size_t i = 0; i < count; i++) {
     if (strcmp(method, specs[i].name) == 0) {
@@ -218,6 +222,8 @@ xt_value xt_method_value(xt_value target, xt_value name) {
       known = xt_method_lookup(XT_ERROR_METHODS, XT_NAME_COUNT(XT_ERROR_METHODS), method, &arity);
     } else if (kind == XT_OBJECT_KIND_GENERATOR) {
       known = xt_method_lookup(XT_GENERATOR_METHODS, XT_NAME_COUNT(XT_GENERATOR_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_SYMBOL) {
+      known = xt_method_lookup(XT_SYMBOL_METHODS, XT_NAME_COUNT(XT_SYMBOL_METHODS), method, &arity);
     }
   }
   if (!known) return XT_UNDEFINED;
@@ -229,6 +235,16 @@ xt_value xt_method_value(xt_value target, xt_value name) {
 }
 
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv) {
+  /* A symbol-named method (`obj[Symbol.iterator]()`) is never a built-in, so
+   * resolve it as an ordinary property and call it with `target` as `this`. */
+  if (xt_is_symbol(name)) {
+    if (target == XT_UNDEFINED || target == XT_NULL) {
+      xt_throw(xt_string_from_cstr("TypeError: Cannot read properties of null (reading a Symbol)"));
+    }
+    xt_value fn = xt_get(target, name);
+    if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
+    return XT_UNDEFINED;
+  }
   const char *method = xt_string_data(name);
   if (!method) return XT_UNDEFINED;
   if (target == XT_UNDEFINED || target == XT_NULL) {
@@ -239,6 +255,11 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     xt_throw(xt_string_from_cstr(message));
   }
   int handled = 0;
+  if (xt_is_symbol(target)) {
+    if (strcmp(method, "toString") == 0) return xt_symbol_to_string(target);
+    if (strcmp(method, "valueOf") == 0) return target;
+    return XT_UNDEFINED;
+  }
   if (XT_IS_OBJECT(target)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(target);
     int kind = obj->header.kind;

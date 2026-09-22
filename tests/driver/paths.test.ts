@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 import {
+  findPackageRoot,
+  findRuntimeDir,
   platformSlug,
   releaseArchiveBase,
   releaseArchiveExtension,
+  vendorRootDir,
 } from "../../src/driver/paths.js";
 
 describe("platformSlug", () => {
@@ -32,3 +37,20 @@ describe("releaseArchiveExtension", () => {
     expect(releaseArchiveExtension(false)).toBe(".tar.gz");
   });
 });
+
+describe("package layout", () => {
+  it("finds the runtime directory containing rt.h", () => {
+    const runtime = findRuntimeDir();
+    expect(existsSync(join(runtime, "rt.h"))).toBe(true);
+  });
+
+  it("anchors the package root at the runtime parent and vendor beside it", () => {
+    const root = findPackageRoot();
+    expect(runtimeRootAnchor(root)).toBe(true);
+    expect(vendorRootDir()).toBe(join(root, "vendor"));
+  });
+});
+
+function runtimeRootAnchor(root: string): boolean {
+  return existsSync(join(root, "runtime", "rt.h"));
+}

@@ -127,6 +127,26 @@ xt_value xt_regexp_exec(xt_value target, xt_value input) {
   return out;
 }
 
+/* `String.prototype.match`: a non-global regexp yields the exec result, a
+ * global one yields the array of matched substrings (or null). */
+xt_value xt_regexp_match(xt_value input, xt_value regexp) {
+  if (!xt_regexp_is_global(regexp)) return xt_regexp_exec(regexp, input);
+  xt_value textValue = xt_to_string(input);
+  xt_string *text = xt_as_string(textValue);
+  xt_value results = xt_array_new(0, NULL);
+  int32_t cursor = 0;
+  int found = 0;
+  while (cursor <= (int32_t)text->length) {
+    int32_t start = 0;
+    int32_t end = 0;
+    if (!xt_regexp_find(regexp, input, cursor, &start, &end)) break;
+    found = 1;
+    xt_array_push(results, xt_string_new(text->data + start, (int64_t)(end - start)));
+    cursor = end > start ? end : end + 1;
+  }
+  return found ? results : XT_NULL;
+}
+
 /* `String.prototype.replace`/`replaceAll` with a RegExp search value. */
 xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replacementValue) {
   xt_string *text = xt_as_string(xt_to_string(value));

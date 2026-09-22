@@ -69,6 +69,18 @@ export const MATH_CONSTANTS: Record<string, number> = {
   SQRT1_2: Math.SQRT1_2,
 };
 
+/** Read-only numeric constants exposed on the global `Number` namespace. */
+export const NUMBER_CONSTANTS = new Set<string>([
+  "MAX_SAFE_INTEGER",
+  "MIN_SAFE_INTEGER",
+  "MAX_VALUE",
+  "MIN_VALUE",
+  "EPSILON",
+  "POSITIVE_INFINITY",
+  "NEGATIVE_INFINITY",
+  "NaN",
+]);
+
 export const GLOBAL_FUNCTIONS: Record<string, string> = {
   parseInt: "xt_parse_int",
   parseFloat: "xt_parse_float",

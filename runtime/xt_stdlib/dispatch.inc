@@ -25,10 +25,10 @@ static xt_value xt_array_method(xt_value target, const char *method, int32_t arg
   }
   if (strcmp(method, "reverse") == 0) {
     xt_array *array = xt_as_array(target);
-    for (uint32_t i = 0; i + 1 < array->length; i++, array->length--) {
+    for (uint32_t i = 0; i + 1 < array->length - i; i++) {
       xt_value tmp = array->items[i];
-      array->items[i] = array->items[array->length - 1];
-      array->items[array->length - 1] = tmp;
+      array->items[i] = array->items[array->length - 1 - i];
+      array->items[array->length - 1 - i] = tmp;
     }
     return target;
   }
@@ -118,6 +118,11 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
   if (XT_IS_NUMBER(target)) {
     xt_value result = xt_ext_number_method(target, method, argc, argv, &handled);
     if (handled) return result;
+  }
+  if (target == XT_TRUE || target == XT_FALSE) {
+    if (strcmp(method, "toString") == 0) return target == XT_TRUE ? xt_string_from_cstr("true") : xt_string_from_cstr("false");
+    if (strcmp(method, "valueOf") == 0) return target;
+    return XT_UNDEFINED;
   }
   return XT_UNDEFINED;
 }

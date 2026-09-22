@@ -160,6 +160,35 @@ static xt_value xt_array_copy_within(xt_value value, xt_value targetValue, xt_va
   return value;
 }
 
+static xt_value xt_array_splice(xt_value value, int32_t argc, xt_value *argv) {
+  xt_array *array = xt_as_array(value);
+  if (!array) return XT_UNDEFINED;
+  int32_t len = (int32_t)array->length;
+  int32_t start = argc >= 1 ? xt_to_int32(argv[0]) : 0;
+  if (start < 0) start += len;
+  if (start < 0) start = 0;
+  if (start > len) start = len;
+  int32_t deleteCount;
+  if (argc < 2) {
+    deleteCount = len - start;
+  } else {
+    deleteCount = xt_to_int32(argv[1]);
+    if (deleteCount < 0) deleteCount = 0;
+    if (deleteCount > len - start) deleteCount = len - start;
+  }
+  int32_t insertCount = argc > 2 ? argc - 2 : 0;
+  xt_value removed = xt_array_new(deleteCount, deleteCount > 0 ? array->items + start : NULL);
+  int32_t newLength = len - deleteCount + insertCount;
+  xt_array_reserve(array, (uint32_t)(newLength > 0 ? newLength : 0));
+  if (insertCount != deleteCount) {
+    memmove(array->items + start + insertCount, array->items + start + deleteCount,
+            sizeof(xt_value) * (size_t)(len - start - deleteCount));
+  }
+  for (int32_t i = 0; i < insertCount; i++) array->items[start + i] = argv[2 + i];
+  array->length = (uint32_t)newLength;
+  return removed;
+}
+
 xt_value xt_ext_array_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled) {
   *handled = 1;
   if (strcmp(method, "at") == 0) return xt_array_at(target, xt_arg_at(argc, argv, 0));
@@ -181,6 +210,7 @@ xt_value xt_ext_array_method(xt_value target, const char *method, int32_t argc, 
   if (strcmp(method, "lastIndexOf") == 0) return xt_array_last_index_of(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   if (strcmp(method, "fill") == 0) return xt_array_fill(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1), xt_arg_at(argc, argv, 2));
   if (strcmp(method, "copyWithin") == 0) return xt_array_copy_within(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1), xt_arg_at(argc, argv, 2));
+  if (strcmp(method, "splice") == 0) return xt_array_splice(target, argc, argv);
   if (strcmp(method, "reduceRight") == 0) {
     xt_array *array = xt_as_array(target);
     if (!array) return XT_UNDEFINED;

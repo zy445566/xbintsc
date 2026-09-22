@@ -13,7 +13,7 @@ import {
   type PropertyAccessExpression,
 } from "../../../ast/nodes.js";
 import { i64, numberLiteral, XT_TRUE, XT_UNDEFINED } from "../../values.js";
-import { MATH_CONSTANTS, NAMESPACE_PROPERTIES } from "../tables.js";
+import { MATH_CONSTANTS, NAMESPACE_PROPERTIES, NUMBER_CONSTANTS } from "../tables.js";
 import type { Generator } from "../generator.js";
 
 export interface AccessCallMethods {
@@ -68,6 +68,17 @@ export const accessCallMethods: AccessCallMethods = {
       !this.binding.symbolOfIdentifier.get(node.expression as Identifier)
     ) {
       return numberLiteral(MATH_CONSTANTS[node.name.text]!);
+    }
+    if (
+      node.expression.kind === SyntaxKind.Identifier &&
+      (node.expression as Identifier).text === "Number" &&
+      NUMBER_CONSTANTS.has(node.name.text) &&
+      !this.binding.symbolOfIdentifier.get(node.expression as Identifier)
+    ) {
+      const key = this.stringValue(node.name.text);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_number_static(i64 ${key}, i32 0, i64* null)`);
+      return result;
     }
     if (
       node.expression.kind === SyntaxKind.Identifier &&

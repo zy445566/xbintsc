@@ -130,7 +130,18 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
       env[0] = target;
       env[1] = xt_arg_at(argc, argv, 0);
       env[2] = argc > 1 ? xt_array_new(argc - 1, argv + 1) : xt_array_new(0, NULL);
-      return xt_closure_new((void *)xt_bound_invoke, 3, env);
+      xt_value bound = xt_closure_new((void *)xt_bound_invoke, 3, env);
+      /* Bound functions report `name` as "bound <target>" and reduce `length`
+       * by the number of pre-bound arguments, like the specification. */
+      xt_function *targetFn = (xt_function *)XT_GET_PTR(target);
+      const char *base = targetFn->name ? targetFn->name->data : "";
+      char boundName[256];
+      snprintf(boundName, sizeof(boundName), "bound %s", base);
+      int32_t prebound = argc > 1 ? argc - 1 : 0;
+      int32_t arity = targetFn->arity >= 0 ? targetFn->arity - prebound : 0;
+      if (arity < 0) arity = 0;
+      xt_function_set_metadata(bound, xt_string_from_cstr(boundName), arity);
+      return bound;
     }
     xt_value fn = xt_object_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);

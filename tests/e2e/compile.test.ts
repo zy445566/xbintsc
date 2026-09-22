@@ -751,4 +751,30 @@ describeE2E("end-to-end compilation", (harness) => {
       "3 11\n13 17\n13\n15\nhi ada hi cy",
     );
   });
+
+  it("supports object-literal getters and setters", () => {
+    const source = `
+      const obj = {
+        _x: 0,
+        get x(): number { return this._x; },
+        set x(v: number) { this._x = v * 2; },
+        get double(): number { return this._x * 2; },
+        method(a: number, b: number) { return a + b; },
+      };
+      obj.x = 5;
+      console.log(obj.x, obj.double);
+      console.log(obj.method(2, 3));
+      console.log(Object.keys(obj).join(","));
+
+      const base = 7;
+      const o2 = { base, get next() { return base + 1; } };
+      console.log(o2.base, o2.next);
+
+      const o3 = { get ["dyn" + "amic"]() { return 42; } };
+      console.log(o3.dynamic);
+    `;
+    expect(runProgram(source)).toBe(
+      "10 20\n5\n_x,x,double,method\n7 8\n42",
+    );
+  });
 });

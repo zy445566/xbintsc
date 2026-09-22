@@ -86,7 +86,7 @@ source.ts
 - 函数表达式 `function () {}` 与命名函数表达式 `function g() {}`
 - 调用表达式 `f(...)`、成员访问 `a.b`、元素访问 `a[i]`
 - 数组字面量 `[1, 2]`、稀疏数组 elision、展开 `[...a]`（也支持字符串、`Map`、`Set`）
-- 对象字面量 `{ a: 1 }`、简写属性 `{ a }`、方法简写 `{ m() {} }`
+- 对象字面量 `{ a: 1 }`、简写属性 `{ a }`、方法简写 `{ m() {} }`、getter/setter 简写 `{ get x() {} }` / `{ set x(v) {} }`、计算属性名 `{ [expr]: 1 }`、对象展开 `{ ...obj }`
 - 模板字面量 `${}` 替换、标记模板（含 raw 字符串与 `String.raw`）
 - 括号表达式、`as` / `satisfies` / 非空断言 `!`（类型擦除）
 - 一元：`+ - ! ~ typeof void`、前缀 / 后缀 `++ --`
@@ -331,7 +331,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 控制流 | `if/else`、`while`、`do...while`、`for`、`for...of`、`for...in`、`switch`、`try/catch/finally`、`break`、`continue`、`return`、`throw` |
 | 表达式 | 标识符、字面量、模板字符串、数组 / 对象字面量（含展开）、调用、成员 / 元素访问、可选链、闭包、`arguments`、`this`、`new`、`super`、`await` |
 | 运算符 | 算术、比较、相等、逻辑、位运算、移位、一元（含 `typeof`/`void`）、前后缀增减、复合赋值、逻辑赋值、`in`、`delete`、`instanceof` |
-| 函数 | 默认参数、剩余参数、捕获闭包、`this` 绑定、箭头函数词法 `this`、`call`/`apply`/`bind` |
+| 函数 | 默认参数、剩余参数、捕获闭包、`this` 绑定、箭头函数词法 `this`、`call`/`apply`/`bind`、`name`/`length` |
 | 类 / OO | 构造函数、实例字段、方法、`static`、继承 `extends`/`super`、原型链、`instanceof` |
 | 异步 | `async`/`await`、`Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`）、同步微任务队列 |
 | 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包，裸说明符解析到扩展模块 |

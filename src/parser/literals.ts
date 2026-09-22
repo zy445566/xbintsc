@@ -72,6 +72,36 @@ export const literalMethods: LiteralMethods = {
         const start = this.nextToken().start;
         const expression = this.parseAssignmentExpression();
         properties.push({ kind: SyntaxKind.SpreadElement, expression, start, end: expression.end });
+      } else if (
+        (this.at(TokenKind.GetKeyword) || this.at(TokenKind.SetKeyword)) &&
+        !this.atAhead(1, TokenKind.OpenParen) &&
+        !this.atAhead(1, TokenKind.Colon) &&
+        !this.atAhead(1, TokenKind.Comma) &&
+        !this.atAhead(1, TokenKind.CloseBrace) &&
+        !this.atAhead(1, TokenKind.Equals) &&
+        !this.atAhead(1, TokenKind.Question) &&
+        !this.atAhead(1, TokenKind.LessThan)
+      ) {
+        // `{ get x() {} }` / `{ set x(v) {} }` object-literal accessors.
+        const start = this.token.start;
+        const accessorToken = this.nextToken();
+        const name = this.parsePropertyName();
+        const parameters = this.parseParameters();
+        let returnType: TypeNode | undefined;
+        if (this.at(TokenKind.Colon)) {
+          this.nextToken();
+          returnType = this.parseReturnType();
+        }
+        const body = this.parseBlock();
+        const fn: FunctionExpression = { kind: SyntaxKind.FunctionExpression, typeParameters: [], parameters, returnType, body, flags: NodeFlags.None, start, end: body.end };
+        properties.push({
+          kind: SyntaxKind.PropertyAssignment,
+          name,
+          initializer: fn,
+          accessor: accessorToken.kind === TokenKind.GetKeyword ? "get" : "set",
+          start,
+          end: body.end,
+        });
       } else {
         const start = this.token.start;
         const name = this.parsePropertyName();

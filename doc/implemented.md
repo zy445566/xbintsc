@@ -94,7 +94,7 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 - Function expressions `function () {}` and named function expressions `function g() {}`
 - Call expressions `f(...)`, member access `a.b`, element access `a[i]`
 - Array literals `[1, 2]`, sparse array elision, spread `[...a]` (also over strings, `Map` and `Set`)
-- Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`, computed keys `{ [expr]: 1 }`, object spread `{ ...obj }`
+- Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`, getter / setter shorthand `{ get x() {} }` / `{ set x(v) {} }`, computed keys `{ [expr]: 1 }`, object spread `{ ...obj }`
 - Template literal `${}` substitutions, tagged templates (with raw strings and `String.raw`)
 - Parenthesized expressions, `as` / `satisfies` / non-null assertion `!` (type erasure)
 - Unary: `+ - ! ~ typeof void`, prefix / postfix `++ --`
@@ -339,7 +339,7 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 | Control flow | `if/else`, `while`, `do...while`, `for`, `for...of`, `for...in`, `switch`, `try/catch/finally`, `break`, `continue`, `return`, `throw` |
 | Expressions | Identifiers, literals, template strings, regular-expression literals, array / object literals (with spread), destructuring bindings and assignments, calls, member / element access, optional chaining, non-null `!`, closures, `arguments`, `this`, `new`, `super`, `await` |
 | Operators | Arithmetic, comparison, equality, logical, bitwise, shift, unary (including `typeof`/`void`), prefix/postfix increment-decrement, compound assignment, logical assignment, `in`, `delete`, `instanceof` |
-| Functions | Default parameters, rest parameters, capturing closures, `this` binding, lexical `this` in arrow functions, `call`/`apply`/`bind` |
+| Functions | Default parameters, rest parameters, capturing closures, `this` binding, lexical `this` in arrow functions, `call`/`apply`/`bind`, `name`/`length` |
 | Classes / OO | Constructors, instance fields, methods, `static`, inheritance `extends`/`super`, prototype chain, `instanceof` |
 | Async | `async`/`await`, `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), synchronous microtask queue |
 | Modules | `import`/`export` (named / default / re-export / `export *` / `export type`), multi-file bundling over relative paths (`.js` specifiers resolve to `.ts` sources), bare specifiers resolved to extension modules |

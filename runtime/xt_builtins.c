@@ -434,3 +434,12 @@ int32_t xt_closure_arity(xt_value value) {
   return ((xt_function *)XT_GET_PTR(value))->arity;
 }
 
+xt_value xt_function_set_metadata(xt_value value, xt_value name, int32_t arity) {
+  if (XT_IS_FUNCTION(value)) {
+    xt_function *function = (xt_function *)XT_GET_PTR(value);
+    function->arity = arity;
+    function->name = XT_IS_STRING(name) ? xt_as_string(name) : NULL;
+  }
+  return value;
+}
+

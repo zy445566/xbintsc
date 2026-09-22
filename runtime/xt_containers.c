@@ -381,6 +381,11 @@ xt_value xt_array_push(xt_value value, xt_value newValue) {
 xt_value xt_array_length(xt_value value) {
   if (XT_IS_ARRAY(value)) return xt_number((double)((xt_array *)XT_GET_PTR(value))->length);
   if (XT_IS_STRING(value)) return xt_number((double)xt_string_length(xt_as_string(value)));
+  /* Functions expose their arity as `.length`. */
+  if (XT_IS_FUNCTION(value)) {
+    int32_t arity = ((xt_function *)XT_GET_PTR(value))->arity;
+    return xt_number(arity >= 0 ? (double)arity : 0.0);
+  }
   /* Objects such as Buffers expose a `length` property of their own. */
   if (XT_IS_OBJECT(value)) return xt_object_get_cstr(value, "length");
   return XT_UNDEFINED;
@@ -455,7 +460,21 @@ xt_value xt_get(xt_value target, xt_value key) {
     }
     return xt_array_get(target, key);
   }
-  if (XT_IS_FUNCTION(target)) return xt_object_get(target, key);
+  if (XT_IS_FUNCTION(target)) {
+    /* Functions expose own `name` / `length` (arity) properties. */
+    if (XT_IS_STRING(key)) {
+      xt_string *k = xt_as_string(key);
+      if (k->length == 6 && memcmp(k->data, "length", 6) == 0) {
+        int32_t arity = ((xt_function *)XT_GET_PTR(target))->arity;
+        return xt_number(arity >= 0 ? (double)arity : 0.0);
+      }
+      if (k->length == 4 && memcmp(k->data, "name", 4) == 0) {
+        xt_string *name = ((xt_function *)XT_GET_PTR(target))->name;
+        return name ? XT_FROM_PTR(XT_TAG_STRING, name) : xt_string_from_cstr("");
+      }
+    }
+    return xt_object_get(target, key);
+  }
   if (XT_IS_OBJECT(target)) {
     /* Map/Set expose `.size`; promises, dates and regexps have their own
      * getters implemented in the standard library. */

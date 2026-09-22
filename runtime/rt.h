@@ -107,6 +107,7 @@ xt_value xt_closure_call(xt_value fn, int32_t argc, xt_value *argv);
 xt_value xt_call_with_this(xt_value fn, xt_value thisValue, int32_t argc, xt_value *argv);
 xt_value xt_closure_env(xt_value fn, int32_t index);
 int32_t xt_closure_arity(xt_value fn);
+xt_value xt_function_set_metadata(xt_value fn, xt_value name, int32_t arity);
 xt_value xt_this(void);
 xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv);
 xt_value xt_instance_of(xt_value value, xt_value ctor);

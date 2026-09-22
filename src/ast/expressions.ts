@@ -114,6 +114,8 @@ export interface PropertyAssignment extends Node {
   readonly kind: SyntaxKind.PropertyAssignment;
   readonly name: PropertyName;
   readonly initializer: Expression;
+  /** `get x() {}` / `set x(v) {}` in an object literal. */
+  readonly accessor?: "get" | "set";
 }
 
 export interface ShorthandPropertyAssignment extends Node {

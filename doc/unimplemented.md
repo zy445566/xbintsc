@@ -151,7 +151,7 @@ None known at the expression level.
 | Generators / iterators / `yield` | ✗ (`yield` codegen errors) | not implemented |
 | Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ implemented (the bound closure does not track partial-argument `length`) |
-| `fn.name` / `fn.length` | ✗ | not implemented |
+| `fn.name` / `fn.length` | ✓ | ✓ implemented (inferred from the declaration / assignment / property key; bound functions use `"bound ..."` and adjusted arity) |
 | First-class built-in methods (`typeof arr.map`, `const f = arr.push`, `obj.method?.()`) | ✗ | built-in methods are only reachable through a direct call (`arr.map(...)`); reading them as values yields `undefined` |
 
 ---
@@ -206,7 +206,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | `for...in` | Enumerates own keys of objects / arrays / strings; does not include prototype-chain properties |
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Bump arena never frees; no GC; long-lived programs grow continuously |
-| Function `arity` / argument count | No argument count validation; `fn.length` is unavailable |
+| Function `arity` / argument count | No argument count validation; `fn.length` reports the declared arity but calls are never checked against it |
 | `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously; no real event loop, so timers / I/O cannot be awaited |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
 | `Error.stack` | Not captured |
@@ -242,7 +242,7 @@ Unimplemented (statements): namespace/module declarations
 
 Unimplemented (expressions): yield (generators), new.target, import.meta value
 
-Unimplemented (functions): generators, fn.name/length,
+Unimplemented (functions): generators, first-class built-in methods
                            first-class built-in methods
 
 Unimplemented (classes/OO): abstract/implements, access control,

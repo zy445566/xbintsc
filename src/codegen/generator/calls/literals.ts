@@ -54,7 +54,13 @@ export const literalCallMethods: LiteralCallMethods = {
           key = this.stringValue(propertyNameText(nameNode));
         }
         const value = this.emitExpression(property.initializer);
-        this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
+        if (property.accessor === "get") {
+          this.emit(`  call i64 @xt_object_define_getter(i64 ${object}, i64 ${key}, i64 ${value})`);
+        } else if (property.accessor === "set") {
+          this.emit(`  call i64 @xt_object_define_setter(i64 ${object}, i64 ${key}, i64 ${value})`);
+        } else {
+          this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
+        }
       } else if (property.kind === SyntaxKind.ShorthandPropertyAssignment) {
         if (property.initializer) {
           // `{ a = 1 }` is only legal as a destructuring target, not a value.

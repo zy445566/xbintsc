@@ -397,6 +397,30 @@ ${printAll([
 ])}`,
   );
 
+  diff(
+    "object-literal getters and setters",
+    `const obj = {
+  _x: 0,
+  get x(): number { return this._x; },
+  set x(v: number) { this._x = v * 2; },
+  get double(): number { return this._x * 2; },
+  method(a: number, b: number): number { return a + b; },
+};
+obj.x = 5;
+const base = 7;
+const o2 = { base, get next() { return base + 1; } };
+const o3 = { get ["dyn" + "amic"]() { return 42; } };
+${printAll([
+  "obj.x",
+  "obj.double",
+  "obj.method(2, 3)",
+  "Object.keys(obj)",
+  "o2.base",
+  "o2.next",
+  "o3.dynamic",
+])}`,
+  );
+
   it("binds namespace imports to every export", () => {
     harness.expectSameOutputAsNode(
       `import * as util from "./util.ts";

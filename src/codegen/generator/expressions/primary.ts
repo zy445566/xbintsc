@@ -223,6 +223,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
     this.emit(`  ${cast} = bitcast i64 (i64, i64, i32, i64*)* @${this.functionName(fn)} to i8*`);
     const closure = this.reg();
     this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 0, i64* null)`);
+    this.emitFunctionMetadata(closure, fn);
     return closure;
   },
 

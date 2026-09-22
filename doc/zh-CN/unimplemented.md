@@ -120,7 +120,7 @@
 | 生成器 / 迭代器 / `yield` | ✗（`yield` 代码生成报错） | 未实现 |
 | 闭包 `arity` | — | `xt_closure_arity` 恒为 -1，未填充 |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ 已实现（绑定闭包不跟踪部分参数的 `length`） |
-| `fn.name` / `fn.length` | ✗ | 未实现 |
+| `fn.name` / `fn.length` | ✓ | ✓ 已实现（从声明 / 赋值 / 属性键推断；绑定函数为 `"bound ..."` 并调整 arity） |
 | 内置方法一等公民（`typeof arr.map`、`const f = arr.push`、`obj.method?.()`） | ✗ | 内置方法只能通过直接调用（`arr.map(...)`）访问；作为值读取会得到 `undefined` |
 
 ---
@@ -174,7 +174,7 @@
 | `for...in` | 枚举对象 / 数组 / 字符串的自身键；不含原型链属性 |
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | bump arena 永不释放，无 GC；长生命周期程序内存持续增长 |
-| 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 不可用 |
+| 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 报告声明的 arity，但调用不做校验 |
 | `async` / `await` | **同步微任务模型**：`await` 在已 settle 的 promise 上同步继续；无真正的事件循环，无法等待定时器 / I/O |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
 | `Error.stack` | 未捕获 |
@@ -207,7 +207,7 @@
 
 未实现（表达式）：yield（生成器）、new.target、import.meta 取值
 
-未实现（函数）：生成器、fn.name/length、内置方法一等公民
+未实现（函数）：生成器、内置方法一等公民
 
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 

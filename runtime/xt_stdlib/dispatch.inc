@@ -77,6 +77,145 @@ static xt_value xt_bound_invoke(xt_value thisValue, xt_value env, int32_t argc, 
   return result;
 }
 
+/* Backing trampoline for first-class built-in method values (`arr.map`,
+ * `"".slice`, `(1).toFixed`). The value is *unbound*, exactly like JavaScript:
+ * the receiver arrives through `this`, so a detached call
+ * (`const f = arr.map; f(cb)`) throws, while `arr.map(cb)` and
+ * `arr.map?.(cb)` (which pass the receiver) work. The method name lives in
+ * environment slot 0. */
+static xt_value xt_method_value_invoke(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  xt_value name = xt_closure_env(env, 0);
+  if (thisValue == XT_UNDEFINED || thisValue == XT_NULL) {
+    const char *method = xt_string_data(name);
+    char message[256];
+    snprintf(message, sizeof(message),
+             "TypeError: Cannot read properties of undefined (reading '%s')",
+             method ? method : "method");
+    xt_throw(xt_string_from_cstr(message));
+  }
+  return xt_call_method(thisValue, name, argc, argv);
+}
+
+#define XT_NAME_COUNT(table) (sizeof(table) / sizeof((table)[0]))
+
+typedef struct {
+  const char *name;
+  int32_t arity;
+} xt_method_spec;
+
+static const xt_method_spec XT_ARRAY_METHODS[] = {
+  {"push", 1}, {"pop", 0}, {"shift", 0}, {"unshift", 1}, {"join", 1}, {"slice", 2},
+  {"indexOf", 1}, {"lastIndexOf", 1}, {"includes", 1}, {"concat", 1}, {"forEach", 1},
+  {"map", 1}, {"filter", 1}, {"reduce", 1}, {"reduceRight", 1}, {"reverse", 0},
+  {"at", 1}, {"find", 1}, {"findIndex", 1}, {"findLast", 1}, {"findLastIndex", 1},
+  {"some", 1}, {"every", 1}, {"sort", 1}, {"flat", 0}, {"flatMap", 1}, {"fill", 1},
+  {"copyWithin", 2}, {"splice", 2}, {"toReversed", 0}, {"toSorted", 1}, {"toSpliced", 2},
+  {"with", 2}, {"keys", 0}, {"values", 0}, {"entries", 0}, {"toString", 0},
+  {"toLocaleString", 0},
+};
+
+static const xt_method_spec XT_STRING_METHODS[] = {
+  {"charAt", 1}, {"charCodeAt", 1}, {"codePointAt", 1}, {"indexOf", 1}, {"lastIndexOf", 1},
+  {"includes", 1}, {"slice", 2}, {"substring", 2}, {"substr", 2}, {"split", 2},
+  {"toUpperCase", 0}, {"toLowerCase", 0}, {"trim", 0}, {"trimStart", 0}, {"trimEnd", 0},
+  {"replace", 2}, {"replaceAll", 2}, {"repeat", 1}, {"startsWith", 1}, {"endsWith", 1},
+  {"concat", 1}, {"at", 1}, {"padStart", 1}, {"padEnd", 1}, {"match", 1}, {"search", 1},
+  {"localeCompare", 1}, {"toString", 0}, {"valueOf", 0},
+};
+
+static const xt_method_spec XT_NUMBER_METHODS[] = {
+  {"toFixed", 1}, {"toPrecision", 1}, {"toExponential", 1}, {"toString", 1},
+  {"valueOf", 0}, {"toLocaleString", 0},
+};
+
+static const xt_method_spec XT_FUNCTION_METHODS[] = {
+  {"call", 1}, {"apply", 2}, {"bind", 1}, {"toString", 0},
+};
+
+static const xt_method_spec XT_BIGINT_METHODS[] = {
+  {"toString", 0}, {"toLocaleString", 0}, {"valueOf", 0},
+};
+
+static const xt_method_spec XT_BOOLEAN_METHODS[] = {
+  {"toString", 0}, {"valueOf", 0},
+};
+
+static const xt_method_spec XT_DATE_METHODS[] = {
+  {"getTime", 0}, {"getFullYear", 0}, {"getMonth", 0}, {"getDate", 0}, {"getDay", 0},
+  {"getHours", 0}, {"getMinutes", 0}, {"getSeconds", 0}, {"getMilliseconds", 0},
+  {"getUTCFullYear", 0}, {"getUTCMonth", 0}, {"getUTCDate", 0}, {"getUTCDay", 0},
+  {"getUTCHours", 0}, {"getUTCMinutes", 0}, {"getUTCSeconds", 0}, {"getUTCMilliseconds", 0},
+  {"toISOString", 0}, {"toJSON", 1}, {"toString", 0}, {"valueOf", 0},
+};
+
+static const xt_method_spec XT_MAP_METHODS[] = {
+  {"get", 1}, {"set", 2}, {"has", 1}, {"delete", 1}, {"clear", 0}, {"keys", 0},
+  {"values", 0}, {"entries", 0}, {"forEach", 1},
+};
+
+static const xt_method_spec XT_SET_METHODS[] = {
+  {"add", 1}, {"has", 1}, {"delete", 1}, {"clear", 0}, {"keys", 0}, {"values", 0},
+  {"entries", 0}, {"forEach", 1},
+};
+
+static const xt_method_spec XT_REGEXP_METHODS[] = {
+  {"test", 1}, {"exec", 1}, {"toString", 0},
+};
+
+static const xt_method_spec XT_PROMISE_METHODS[] = {
+  {"then", 2}, {"catch", 1}, {"finally", 1},
+};
+
+static int xt_method_lookup(const xt_method_spec *specs, size_t count, const char *method, int32_t *arity) {
+  for (size_t i = 0; i < count; i++) {
+    if (strcmp(method, specs[i].name) == 0) {
+      if (arity) *arity = specs[i].arity;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+xt_value xt_method_value(xt_value target, xt_value name) {
+  if (!XT_IS_STRING(name)) return XT_UNDEFINED;
+  const char *method = xt_string_data(name);
+  if (!method) return XT_UNDEFINED;
+  int32_t arity = 0;
+  int known = 0;
+  if (XT_IS_ARRAY(target)) {
+    known = xt_method_lookup(XT_ARRAY_METHODS, XT_NAME_COUNT(XT_ARRAY_METHODS), method, &arity);
+  } else if (XT_IS_STRING(target)) {
+    known = xt_method_lookup(XT_STRING_METHODS, XT_NAME_COUNT(XT_STRING_METHODS), method, &arity);
+  } else if (XT_IS_FUNCTION(target)) {
+    known = xt_method_lookup(XT_FUNCTION_METHODS, XT_NAME_COUNT(XT_FUNCTION_METHODS), method, &arity);
+  } else if (XT_IS_BIGINT(target)) {
+    known = xt_method_lookup(XT_BIGINT_METHODS, XT_NAME_COUNT(XT_BIGINT_METHODS), method, &arity);
+  } else if (XT_IS_NUMBER(target)) {
+    known = xt_method_lookup(XT_NUMBER_METHODS, XT_NAME_COUNT(XT_NUMBER_METHODS), method, &arity);
+  } else if (target == XT_TRUE || target == XT_FALSE) {
+    known = xt_method_lookup(XT_BOOLEAN_METHODS, XT_NAME_COUNT(XT_BOOLEAN_METHODS), method, &arity);
+  } else if (XT_IS_OBJECT(target)) {
+    int kind = ((xt_object *)XT_GET_PTR(target))->header.kind;
+    if (kind == XT_OBJECT_KIND_DATE) {
+      known = xt_method_lookup(XT_DATE_METHODS, XT_NAME_COUNT(XT_DATE_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_MAP) {
+      known = xt_method_lookup(XT_MAP_METHODS, XT_NAME_COUNT(XT_MAP_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_SET) {
+      known = xt_method_lookup(XT_SET_METHODS, XT_NAME_COUNT(XT_SET_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_REGEXP) {
+      known = xt_method_lookup(XT_REGEXP_METHODS, XT_NAME_COUNT(XT_REGEXP_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_PROMISE) {
+      known = xt_method_lookup(XT_PROMISE_METHODS, XT_NAME_COUNT(XT_PROMISE_METHODS), method, &arity);
+    }
+  }
+  if (!known) return XT_UNDEFINED;
+  xt_value env[1];
+  env[0] = name;
+  xt_value closure = xt_closure_new((void *)xt_method_value_invoke, 1, env);
+  xt_function_set_metadata(closure, name, arity);
+  return closure;
+}
+
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv) {
   const char *method = xt_string_data(name);
   if (!method) return XT_UNDEFINED;
@@ -145,6 +284,14 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     }
     xt_value fn = xt_object_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
+    if (strcmp(method, "toString") == 0) {
+      /* Source text is not retained; report a native-style representation. */
+      xt_function *self = (xt_function *)XT_GET_PTR(target);
+      const char *selfName = self->name ? self->name->data : "";
+      char buffer[256];
+      snprintf(buffer, sizeof(buffer), "function %s() { [native code] }", selfName);
+      return xt_string_from_cstr(buffer);
+    }
     {
       char message[256];
       snprintf(message, sizeof(message), "TypeError: function has no callable method '%s'", method);

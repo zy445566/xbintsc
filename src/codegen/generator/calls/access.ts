@@ -191,8 +191,24 @@ export const accessCallMethods: AccessCallMethods = {
     if (node.kind === SyntaxKind.CallExpression) {
       const call = node as CallExpression;
       const callee = call.expression;
-      /* `a.b?.()`: the callee value itself is guarded, then invoked. */
+      /* `a.b?.()` / `a[k]?.()`: evaluate the callee, then invoke it with the
+       * receiver as `this` so user methods and first-class built-in method
+       * values both bind correctly. */
       if (call.optional) {
+        if (callee.kind === SyntaxKind.PropertyAccessExpression || callee.kind === SyntaxKind.ElementAccessExpression) {
+          const access = callee as PropertyAccessExpression | ElementAccessExpression;
+          const object = this.emitChainReceiver(access.expression, endLabel);
+          if (access.optional) this.guardOptional(object, endLabel);
+          const calleeValue =
+            access.kind === SyntaxKind.PropertyAccessExpression
+              ? this.emitPropertyGet(object, (access as PropertyAccessExpression).name.text)
+              : this.runtimeCall("xt_get", [object, this.emitExpression((access as ElementAccessExpression).argumentExpression)]);
+          this.guardOptional(calleeValue, endLabel);
+          const args = this.emitArguments(call.arguments);
+          const out = this.reg();
+          this.emit(`  ${out} = call i64 @xt_call_with_this(i64 ${calleeValue}, i64 ${object}, i32 ${args.argc}, i64* ${args.ptr})`);
+          return out;
+        }
         const calleeValue = this.emitChainReceiver(callee, endLabel);
         this.guardOptional(calleeValue, endLabel);
         const args = this.emitArguments(call.arguments);

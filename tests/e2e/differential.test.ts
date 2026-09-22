@@ -398,6 +398,50 @@ ${printAll([
   );
 
   diff(
+    "first-class built-in method values",
+    `const array = [1, 2, 3];
+const text = "abc";
+const fn = function (x: number): number { return x; };
+const date = new Date(0);
+const map = new Map<string, number>();
+map.set("a", 1);
+const set = new Set<number>([1, 2]);
+const regexp = /a(b)c/;
+const object = { base: 10, add(n: number): number { return this.base + n; } };
+type Holder = { base: number; go?: (n: number) => number };
+const holder: Holder = { base: 10, go(n: number): number { return this.base + n; } };
+const empty: { go?: (n: number) => number } = {};
+const results: unknown[] = [
+  typeof array.map,
+  typeof array.push,
+  typeof text.slice,
+  typeof fn.call,
+  typeof date.getTime,
+  typeof map.get,
+  typeof set.add,
+  typeof regexp.test,
+  array.map.name,
+  array.map.length,
+  text.slice.length,
+  array.map(function (x: number): number { return x * 2; }),
+  array.map?.((x: number): number => x + 1),
+  text.split?.(""),
+  object.add(5),
+  holder.go?.(3),
+  empty.go?.(3),
+];
+for (const value of results) console.log(JSON.stringify(value));
+try {
+  const detached = array.map;
+  (detached as unknown as (cb: (x: number) => number) => number[])((x: number): number => x);
+  console.log(JSON.stringify("no throw"));
+} catch (caught) {
+  console.log(JSON.stringify("threw"));
+}
+`,
+  );
+
+  diff(
     "object-literal getters and setters",
     `const obj = {
   _x: 0,

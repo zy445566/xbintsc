@@ -454,8 +454,12 @@ xt_value xt_get(xt_value target, xt_value key) {
       uint32_t ignored = 0;
       if (!xt_key_is_array_index(k, &ignored)) {
         xt_value extra = xt_array_extra((xt_array *)XT_GET_PTR(target), 0);
-        if (extra == XT_UNDEFINED) return XT_UNDEFINED;
-        return xt_object_get(extra, key);
+        if (extra != XT_UNDEFINED) {
+          xt_value value = xt_object_get(extra, key);
+          if (value != XT_UNDEFINED) return value;
+        }
+        /* Fall back to first-class built-in methods (`arr.map`). */
+        return xt_method_value(target, key);
       }
     }
     return xt_array_get(target, key);
@@ -473,7 +477,11 @@ xt_value xt_get(xt_value target, xt_value key) {
         return name ? XT_FROM_PTR(XT_TAG_STRING, name) : xt_string_from_cstr("");
       }
     }
-    return xt_object_get(target, key);
+    {
+      xt_value value = xt_object_get(target, key);
+      if (value != XT_UNDEFINED) return value;
+      return xt_method_value(target, key);
+    }
   }
   if (XT_IS_OBJECT(target)) {
     /* Map/Set expose `.size`; promises, dates and regexps have their own
@@ -488,19 +496,38 @@ xt_value xt_get(xt_value target, xt_value key) {
         }
       }
     }
-    if (obj->header.kind == XT_OBJECT_KIND_REGEXP) return xt_regexp_get_property(target, key);
-    return xt_object_get(target, key);
+    if (obj->header.kind == XT_OBJECT_KIND_REGEXP) {
+      xt_value regexpValue = xt_regexp_get_property(target, key);
+      if (regexpValue != XT_UNDEFINED) return regexpValue;
+    }
+    {
+      xt_value value = xt_object_get(target, key);
+      if (value != XT_UNDEFINED) return value;
+      return xt_method_value(target, key);
+    }
   }
   if (XT_IS_STRING(target)) {
-    /* Property access on a string: `.length` and numeric indexing. */
+    /* Property access on a string: `.length`, numeric indexing and built-in
+     * methods. */
     xt_string *s = xt_as_string(target);
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
       if (k->length == 6 && memcmp(k->data, "length", 6) == 0) return xt_number((double)s->length);
+      uint32_t index = 0;
+      if (xt_key_is_array_index(k, &index) && index < s->length) {
+        return xt_string_new(s->data + index, 1);
+      }
+      return xt_method_value(target, key);
     }
-    int32_t index = xt_to_int32(key);
-    if (index >= 0 && (uint32_t)index < s->length) return xt_string_new(s->data + index, 1);
+    if (XT_IS_NUMBER(key)) {
+      int32_t index = xt_to_int32(key);
+      if (index >= 0 && (uint32_t)index < s->length) return xt_string_new(s->data + index, 1);
+    }
     return XT_UNDEFINED;
+  }
+  if (XT_IS_STRING(key) &&
+      (XT_IS_NUMBER(target) || XT_IS_BIGINT(target) || target == XT_TRUE || target == XT_FALSE)) {
+    return xt_method_value(target, key);
   }
   return XT_UNDEFINED;
 }

@@ -152,7 +152,8 @@ None known at the expression level.
 | Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ implemented (the bound closure does not track partial-argument `length`) |
 | `fn.name` / `fn.length` | ✓ | ✓ implemented (inferred from the declaration / assignment / property key; bound functions use `"bound ..."` and adjusted arity) |
-| First-class built-in methods (`typeof arr.map`, `const f = arr.push`, `obj.method?.()`) | ✗ | built-in methods are only reachable through a direct call (`arr.map(...)`); reading them as values yields `undefined` |
+| First-class built-in methods (`typeof arr.map`, `const f = arr.push`, `obj.method?.()`) | ✓ | ✓ implemented as *unbound* method values: reading `arr.map` yields a function, `arr.map?.(cb)` and `obj.method?.()` bind the receiver as `this`, and a detached call (`const f = arr.map; f(cb)`) throws exactly like JavaScript. Method `name`/`length` are exposed |
+| `fn.toString()` | ~ | returns a native-style placeholder (`function name() { [native code] }`) instead of the original source text |
 
 ---
 
@@ -202,7 +203,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | `Object.getPrototypeOf({})` | Returns `undefined` instead of the `Object.prototype` object |
 | Global RegExp `lastIndex` | `test` / `exec` do not advance or honour a caller-set `lastIndex` for `/g` / `/y` regexes |
 | String `normalize` / `structuredClone` / `Symbol` | Not implemented (see section 3) |
-| First-class built-in methods | `typeof arr.map` is `"undefined"`; a detached built-in method cannot be called and `obj.method?.()` is not bound to `obj` |
+| First-class built-in methods | Implemented as unbound method values (see section 5); `fn.toString()` returns a placeholder rather than source text |
 | `for...in` | Enumerates own keys of objects / arrays / strings; does not include prototype-chain properties |
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Bump arena never frees; no GC; long-lived programs grow continuously |
@@ -242,8 +243,7 @@ Unimplemented (statements): namespace/module declarations
 
 Unimplemented (expressions): yield (generators), new.target, import.meta value
 
-Unimplemented (functions): generators, first-class built-in methods
-                           first-class built-in methods
+Unimplemented (functions): generators, `fn.toString()` source text
 
 Unimplemented (classes/OO): abstract/implements, access control,
                             parent/child #x collision

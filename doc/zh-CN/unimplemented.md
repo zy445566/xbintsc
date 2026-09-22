@@ -121,7 +121,8 @@
 | 闭包 `arity` | — | `xt_closure_arity` 恒为 -1，未填充 |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ 已实现（绑定闭包不跟踪部分参数的 `length`） |
 | `fn.name` / `fn.length` | ✓ | ✓ 已实现（从声明 / 赋值 / 属性键推断；绑定函数为 `"bound ..."` 并调整 arity） |
-| 内置方法一等公民（`typeof arr.map`、`const f = arr.push`、`obj.method?.()`） | ✗ | 内置方法只能通过直接调用（`arr.map(...)`）访问；作为值读取会得到 `undefined` |
+| 内置方法一等公民（`typeof arr.map`、`const f = arr.push`、`obj.method?.()`） | ✓ | ✓ 作为**未绑定**方法值实现：读取 `arr.map` 得到函数，`arr.map?.(cb)` 与 `obj.method?.()` 会把接收者作为 `this` 绑定，脱离接收者调用（`const f = arr.map; f(cb)`）会像 JavaScript 一样抛错。方法的 `name`/`length` 也一并暴露 |
+| `fn.toString()` | ~ | 返回原生占位字符串（`function name() { [native code] }`），而非原始源码文本 |
 
 ---
 
@@ -170,7 +171,7 @@
 | `Object.getPrototypeOf({})` | 返回 `undefined`，而非 `Object.prototype` 对象 |
 | 全局正则 `lastIndex` | `/g`、`/y` 正则的 `test` / `exec` 不推进也不读取调用方设置的 `lastIndex` |
 | `String.normalize` / `structuredClone` / `Symbol` | 未实现（见第 3 节） |
-| 内置方法一等公民 | `typeof arr.map` 为 `"undefined"`；脱离接收者的内置方法无法调用，`obj.method?.()` 也未绑定 `this` |
+| 内置方法一等公民 | 以未绑定方法值实现（见第 5 节）；`fn.toString()` 返回占位字符串而非源码文本 |
 | `for...in` | 枚举对象 / 数组 / 字符串的自身键；不含原型链属性 |
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | bump arena 永不释放，无 GC；长生命周期程序内存持续增长 |
@@ -207,7 +208,7 @@
 
 未实现（表达式）：yield（生成器）、new.target、import.meta 取值
 
-未实现（函数）：生成器、内置方法一等公民
+未实现（函数）：生成器、`fn.toString()` 源码文本
 
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 

@@ -777,4 +777,29 @@ describeE2E("end-to-end compilation", (harness) => {
       "10 20\n5\n_x,x,double,method\n7 8\n42",
     );
   });
+
+  it("supports first-class built-in method values", () => {
+    const source = `
+      const arr = [1, 2, 3];
+      console.log(typeof arr.map, arr.map.name, arr.map.length);
+      console.log(arr.map?.((x: number) => x * 2).join(","));
+
+      const text = "abc";
+      console.log(typeof text.slice, text.slice(1), text.split?.("").join("-"));
+
+      const obj = { base: 10, add(n: number) { return this.base + n; } };
+      console.log(obj.add?.(5));
+
+      const detached = arr.map;
+      try {
+        (detached as any)((x: number) => x);
+        console.log("no throw");
+      } catch (e) {
+        console.log("threw");
+      }
+    `;
+    expect(runProgram(source)).toBe(
+      "function map 1\n2,4,6\nfunction bc a-b-c\n15\nthrew",
+    );
+  });
 });

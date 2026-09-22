@@ -268,6 +268,10 @@ xt_value xt_iter_value(xt_value value, xt_value index);
 /* -- generic member access ------------------------------------------------ */
 xt_value xt_get(xt_value target, xt_value key);
 xt_value xt_set(xt_value target, xt_value key, xt_value value);
+/* Materialise a first-class runtime method value (`arr.map`) as an unbound
+ * closure that expects the receiver through `this`. Returns `XT_UNDEFINED` when
+ * `name` is not a method of `target`, so it can be used as a property fallback. */
+xt_value xt_method_value(xt_value target, xt_value name);
 
 /* -- boxes (used for captured variables) ---------------------------------- */
 xt_value xt_box_new(xt_value value);

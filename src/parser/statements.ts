@@ -43,6 +43,7 @@ export interface StatementMethods {
   parseDoStatement(this: Parser): Statement;
   parseForStatement(this: Parser): ForStatement | ForOfStatement | ForInStatement;
   parseReturnStatement(this: Parser): Statement;
+  parseLabeledStatement(this: Parser): Statement;
   parseBreakStatement(this: Parser): Statement;
   parseContinueStatement(this: Parser): Statement;
   parseThrowStatement(this: Parser): Statement;
@@ -126,6 +127,9 @@ export const statementMethods: StatementMethods = {
 
   parseStatement(this: Parser): Statement | undefined {
     const token = this.token;
+    if (this.isIdentifierLike(token) && this.atAhead(1, TokenKind.Colon)) {
+      return this.parseLabeledStatement();
+    }
     switch (token.kind) {
       case TokenKind.OpenBrace:
         return this.parseBlock();
@@ -379,6 +383,14 @@ export const statementMethods: StatementMethods = {
     if (!this.at(TokenKind.Semicolon) && !this.canInsertSemicolon()) expression = this.parseExpression();
     this.parseSemicolon();
     return { kind: SyntaxKind.ReturnStatement, expression, start, end: expression?.end ?? start + 6 } as Statement;
+  },
+
+  parseLabeledStatement(this: Parser): Statement {
+    const label = this.parseIdentifier();
+    this.parseExpected(TokenKind.Colon);
+    const statement = this.parseStatement();
+    const node = statement ?? ({ kind: SyntaxKind.EmptyStatement, start: label.end, end: label.end } as Statement);
+    return { kind: SyntaxKind.LabeledStatement, label, statement: node, start: label.start, end: node.end } as Statement;
   },
 
   parseBreakStatement(this: Parser): Statement {

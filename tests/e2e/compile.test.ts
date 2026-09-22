@@ -315,6 +315,40 @@ describeE2E("end-to-end compilation", (harness) => {
     );
   });
 
+  it("supports labeled break and continue across nested loops", () => {
+    const source = `
+      const out: string[] = [];
+      outer: for (let i = 0; i < 3; i++) {
+        inner: for (let j = 0; j < 3; j++) {
+          if (j === 1) continue outer;
+          if (i === 2) break outer;
+          out.push(i + "," + j);
+        }
+      }
+      block: {
+        out.push("before");
+        if (out.length > 0) break block;
+        out.push("unreachable");
+      }
+      out.push("after");
+      function f(): number {
+        let total = 0;
+        loop: for (let i = 0; i < 5; i++) {
+          try {
+            if (i === 2) continue loop;
+            if (i === 4) break loop;
+            total += i;
+          } finally {
+            total += 100;
+          }
+        }
+        return total;
+      }
+      console.log(out.join("|"), f());
+    `;
+    expect(runProgram(source)).toBe("0,0|1,0|before|after 504");
+  });
+
   it("supports optional chaining", () => {
     const source = `
       const obj = { a: { b: 5 }, m: (x: number) => x + 1 };

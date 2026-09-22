@@ -28,6 +28,8 @@ export interface LoopLabels {
   readonly continueLabel: string;
   /** Number of enclosing `try` frames when the loop was entered. */
   readonly tryDepth?: number;
+  /** Labels attached to this loop (outermost first), for `break`/`continue`. */
+  readonly labels?: readonly string[];
 }
 
 export interface FunctionState {
@@ -39,6 +41,8 @@ export interface FunctionState {
   label: number;
   terminated: boolean;
   readonly loops: LoopLabels[];
+  /** Labels on enclosing `LabeledStatement`s, consumed by the next loop. */
+  readonly pendingLabels: string[];
   readonly tryFrames: string[];
   readonly finallyStack: FinallyContext[];
   readonly escapePointers: string[];

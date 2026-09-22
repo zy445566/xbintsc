@@ -7,7 +7,9 @@ import {
   type CaseClause,
   type Identifier,
   type IfStatement,
+  type LabeledStatement,
   type ReturnStatement,
+  type Statement,
   type SwitchStatement,
   type TryStatement,
 } from "../../../ast/nodes.js";
@@ -16,6 +18,7 @@ import type { Generator } from "../generator.js";
 
 export interface ControlFlowStatementMethods {
   emitIf(this: Generator, statement: IfStatement): void;
+  emitLabeled(this: Generator, statement: LabeledStatement): void;
   emitSwitch(this: Generator, statement: SwitchStatement): void;
   emitTry(this: Generator, statement: TryStatement): void;
   bindCatchVariable(this: Generator, variable: Identifier | undefined, value: string): void;
@@ -25,6 +28,44 @@ export interface ControlFlowStatementMethods {
 }
 
 export const controlFlowStatementMethods: ControlFlowStatementMethods = {
+  /**
+   * `label: statement`. A label on a loop is attached to that loop's break and
+   * continue targets; a label on any other statement becomes a breakable
+   * region so `break label` can jump to its end.
+   */
+  emitLabeled(statement: LabeledStatement): void {
+    const labels: string[] = [];
+    let current: Statement = statement;
+    while (current.kind === SyntaxKind.LabeledStatement) {
+      labels.push((current as LabeledStatement).label.text);
+      current = (current as LabeledStatement).statement;
+    }
+    const isLoop =
+      current.kind === SyntaxKind.WhileStatement ||
+      current.kind === SyntaxKind.DoStatement ||
+      current.kind === SyntaxKind.ForStatement ||
+      current.kind === SyntaxKind.ForOfStatement ||
+      current.kind === SyntaxKind.ForInStatement;
+    if (isLoop) {
+      this.current.pendingLabels.push(...labels);
+      this.emitStatement(current);
+      /* The loop consumed them; guard against a loop kind that did not. */
+      this.current.pendingLabels.length = 0;
+      return;
+    }
+    const endLabel = this.label("label.end");
+    this.current.loops.push({
+      breakLabel: endLabel,
+      continueLabel: endLabel,
+      labels,
+      tryDepth: this.current.tryFrames.length,
+    });
+    this.emitStatement(current);
+    this.current.loops.pop();
+    if (!this.current.terminated) this.terminate(`br label %${endLabel}`);
+    this.startBlock(endLabel);
+  },
+
   emitIf(statement: IfStatement): void {
     const thenLabel = this.label("if.then");
     const elseLabel = statement.elseStatement ? this.label("if.else") : undefined;

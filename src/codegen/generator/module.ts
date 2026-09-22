@@ -94,6 +94,7 @@ export const moduleMethods: ModuleMethods = {
       label: 0,
       terminated: false,
       loops: [],
+      pendingLabels: [],
       tryFrames: [],
       finallyStack: [],
       escapePointers: [],

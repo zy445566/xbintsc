@@ -15,8 +15,18 @@
 
 ## 预编译发布包（推荐）
 
-每个 GitHub Release 都会附上各平台的自包含归档
-`xbintsc-<os>-<arch>.tar.zst`（或 `.tar.gz`），旁边带 `.sha256`：
+从 [GitHub Releases](https://github.com/zy445566/xbintsc/releases/latest) 下载对应
+平台的自包含归档（每个都附带 `.sha256`）：
+
+| 平台 | 归档 |
+| --- | --- |
+| Windows x64 / arm64 | `xbintsc-win32-x64.tar.zst` / `xbintsc-win32-arm64.tar.zst` |
+| Linux x64 / arm64 | `xbintsc-linux-x64.tar.zst` / `xbintsc-linux-arm64.tar.zst` |
+| macOS x64 / arm64（Apple Silicon） | `xbintsc-darwin-x64.tar.zst` / `xbintsc-darwin-arm64.tar.zst` |
+
+（仅当构建机没有 `zstd` 时才会回退为 `.tar.gz`。）
+
+每个归档解压出的结构一致：
 
 ```text
 xbintsc-<os>-<arch>/

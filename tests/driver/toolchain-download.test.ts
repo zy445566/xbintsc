@@ -29,6 +29,14 @@ describe("toolchainDownload", () => {
     expect(target?.stripComponents).toBe(1);
   });
 
+  it("maps Windows arm64 to the pinned llvm-mingw release", () => {
+    const target = toolchainDownload("win32", "arm64");
+    expect(target?.url).toContain(`llvm-mingw-${LLVM_MINGW_VERSION}`);
+    expect(target?.url).toContain("ucrt-aarch64");
+    expect(target?.kind).toBe("zip");
+    expect(target?.stripComponents).toBe(1);
+  });
+
   it("does not bundle a toolchain on macOS", () => {
     expect(toolchainDownload("darwin", "arm64")).toBeUndefined();
     expect(toolchainDownload("darwin", "x64")).toBeUndefined();
@@ -41,8 +49,17 @@ describe("toolchainDownload", () => {
     expect(libraries[0]?.urls.length).toBeGreaterThan(0);
   });
 
+  it("bundles libtinfo.so.5 for Linux arm64", () => {
+    const libraries = toolchainSupportLibraries("linux", "arm64");
+    expect(libraries).toHaveLength(1);
+    expect(libraries[0]?.dest).toBe("libtinfo.so.5");
+    expect(libraries[0]?.member).toContain("aarch64-linux-gnu");
+    expect(libraries[0]?.urls.length).toBeGreaterThan(0);
+  });
+
   it("requests no support libraries on other hosts", () => {
     expect(toolchainSupportLibraries("darwin", "arm64")).toEqual([]);
     expect(toolchainSupportLibraries("win32", "x64")).toEqual([]);
+    expect(toolchainSupportLibraries("win32", "arm64")).toEqual([]);
   });
 });

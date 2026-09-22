@@ -150,10 +150,11 @@ jobs:
           echo "Using binaries from CI run ${run_id}."
 
           rm -rf .ci-artifacts release-assets
-          gh run download "${run_id}" --pattern 'xbintsc-*' --dir .ci-artifacts
+          gh run download "${run_id}" --pattern 'xbintsc-*' --pattern 'release-*' --dir .ci-artifacts
 
           mkdir -p release-assets
           shopt -s nullglob
+          # Raw self-hosted compiler binaries, one per platform.
           for dir in .ci-artifacts/xbintsc-*; do
             [ -d "${dir}" ] || continue
             slug="$(basename "${dir}" | tr '[:upper:]' '[:lower:]')"
@@ -166,8 +167,19 @@ jobs:
             done
           done
 
+          # Self-contained archives assembled by the `package` job. They are
+          # already named xbintsc-<os>-<arch>.tar.{gz,zst} (+ .sha256), so copy
+          # them through verbatim.
+          for dir in .ci-artifacts/release-*; do
+            [ -d "${dir}" ] || continue
+            for file in "${dir}"/*; do
+              [ -f "${file}" ] || continue
+              cp "${file}" "release-assets/$(basename "${file}")"
+            done
+          done
+
           if [ -z "$(ls -A release-assets)" ]; then
-            echo "::error::No self-hosted binaries were found in CI run ${run_id}." >&2
+            echo "::error::No release artifacts were found in CI run ${run_id}." >&2
             exit 1
           fi
           ls -l release-assets

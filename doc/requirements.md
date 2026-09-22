@@ -15,8 +15,19 @@ link native binaries**. Only the toolchain is platform-sensitive; `xbintsc emit`
 
 ## Prebuilt releases (recommended)
 
-Every GitHub Release attaches a self-contained archive per platform,
-`xbintsc-<os>-<arch>.tar.zst` (or `.tar.gz`), with a `.sha256` beside it:
+Download the self-contained archive for your platform from
+[GitHub Releases](https://github.com/zy445566/xbintsc/releases/latest) (each one
+has a `.sha256` beside it):
+
+| Platform | Archive |
+| --- | --- |
+| Windows x64 / arm64 | `xbintsc-win32-x64.tar.zst` / `xbintsc-win32-arm64.tar.zst` |
+| Linux x64 / arm64 | `xbintsc-linux-x64.tar.zst` / `xbintsc-linux-arm64.tar.zst` |
+| macOS x64 / arm64 (Apple Silicon) | `xbintsc-darwin-x64.tar.zst` / `xbintsc-darwin-arm64.tar.zst` |
+
+(`.tar.gz` is used only when `zstd` is unavailable on the build machine.)
+
+Every archive unpacks to the same layout:
 
 ```text
 xbintsc-<os>-<arch>/

@@ -14,7 +14,7 @@ The design goals are:
 3. **Extensive tests** — per-module unit tests plus end-to-end tests that compile and run real binaries.
 4. **Pluggable extensions** — Node `fs`, Bun APIs, … are optional compile modules, not core code.
 5. **Self-hosting** — the compiler compiles itself: `src/cli/main.ts` builds into a native `xbintsc` binary whose emitted LLVM IR is a fixpoint across generations. CI builds these binaries for every platform and a release attaches them.
-6. **Multi-platform** — macOS, Linux and Windows on multiple CPUs, validated by GitHub Actions.
+6. **Multi-platform** — macOS, Linux and Windows on x64 and arm64 (Apple Silicon / AArch64), validated by GitHub Actions on native runners.
 
 ## How it works
 
@@ -97,12 +97,52 @@ xbintsc emit examples/hello.ts | head
 xbintsc run examples/read-file.ts --ext node
 ```
 
-#### Prebuilt standalone archives
+#### Prebuilt standalone archives (recommended, no Node.js needed)
 
-Every GitHub Release also attaches a self-contained archive per platform
-(`xbintsc-<os>-<arch>.tar.zst` or `.tar.gz`, plus a `.sha256`). Unpack it and
-call `bin/xbintsc` directly — no Node.js or system compiler required. See
-[doc/requirements.md](doc/requirements.md#prebuilt-releases-recommended).
+Every [GitHub Release](https://github.com/zy445566/xbintsc/releases/latest) attaches a
+self-contained archive per platform, plus a `.sha256` checksum next to it:
+
+| Platform | Archive |
+| --- | --- |
+| Windows x64 / arm64 | `xbintsc-win32-x64.tar.zst` / `xbintsc-win32-arm64.tar.zst` |
+| Linux x64 / arm64 | `xbintsc-linux-x64.tar.zst` / `xbintsc-linux-arm64.tar.zst` |
+| macOS x64 / arm64 (Apple Silicon) | `xbintsc-darwin-x64.tar.zst` / `xbintsc-darwin-arm64.tar.zst` |
+
+(`.tar.gz` is used only when `zstd` is unavailable on the build machine.)
+
+Each archive unpacks to a `xbintsc-<os>-<arch>/` folder that already contains the
+compiler (`bin/xbintsc[.exe]`), the C runtime and the bundled toolchain, so it needs
+**no Node.js and no system compiler**. See
+[Requirements → Prebuilt releases](doc/requirements.md#prebuilt-releases-recommended)
+for the (minimal) per-platform requirements.
+
+**Windows example** — download an archive from the
+[Releases page](https://github.com/zy445566/xbintsc/releases/latest) (here
+`xbintsc-win32-x64.tar.zst`; use `-arm64` on Windows on ARM), then in PowerShell
+(Windows 10+ ships `tar`):
+
+```powershell
+# 1. Verify the checksum (optional but recommended)
+(Get-FileHash .\xbintsc-win32-x64.tar.zst -Algorithm SHA256).Hash
+Get-Content .\xbintsc-win32-x64.tar.zst.sha256
+
+# 2. Unpack
+tar -xf .\xbintsc-win32-x64.tar.zst
+
+# 3. Compile and run hello.ts (below)
+.\xbintsc-win32-x64\bin\xbintsc.exe run .\hello.ts
+
+# 4. ...or emit a standalone hello.exe
+.\xbintsc-win32-x64\bin\xbintsc.exe build .\hello.ts --out .\build
+.\build\hello.exe
+```
+
+```ts
+// hello.ts
+console.log("Hello from xbintsc!");
+```
+
+Tip: add `xbintsc-win32-x64\bin` to `PATH` to call `xbintsc` instead of the full path.
 
 ### As a developer (from source)
 
@@ -217,9 +257,12 @@ Tests are organised by module under `tests/` (`lexer`, `parser`, `binder`,
 
 ## Requirements
 
-See [Requirements](./doc/requirements.md) for the full, per-platform list.
+See [Requirements](./doc/requirements.md) for the full, per-platform list. If you
+only use the prebuilt standalone binaries, the relevant part is
+[Requirements → Prebuilt releases](./doc/requirements.md#prebuilt-releases-recommended)
+(Windows/Linux bundle their toolchain; macOS needs the Xcode Command Line Tools).
 
-- Node.js 20+ — only to run/build from source; released binaries are standalone
+- Node.js 22+ — only to run/build from source; released binaries are standalone
 - macOS: the Xcode Command Line Tools (`xcode-select --install`)
 - Windows: nothing extra — the MinGW-w64 toolchain is bundled
 - Linux: a system C library (glibc)

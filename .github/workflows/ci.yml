@@ -10,9 +10,20 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Keep the runtime builds deterministic across the matrix.
-  xbintsc_CLANG: clang
+# The compiler resolves its C toolchain as: bundled `vendor/<os>-<arch>/` first,
+# then the system `PATH` (see `src/driver/toolchain-provider.ts`). We deliberately
+# do not pin `xbintsc_CLANG` here so each job can pick the right one — on Windows
+# arm64 the image's clang targets the MSVC ABI while we ship MinGW-w64, so that
+# job fetches and uses the bundled toolchain instead.
+
+# Every host architecture is covered, but these are native builds, not
+# cross-compilation: each runner builds and tests its own architecture.
+#   Linux x64      -> ubuntu-latest
+#   Linux arm64    -> ubuntu-24.04-arm
+#   macOS x64      -> macos-15-intel
+#   macOS arm64    -> macos-15
+#   Windows x64    -> windows-latest
+#   Windows arm64  -> windows-11-arm
 
 jobs:
   lint:
@@ -38,7 +49,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-latest        # Linux x64
+          - ubuntu-24.04-arm     # Linux arm64
+          - macos-15-intel       # macOS x64
+          - macos-15             # macOS arm64
+          - windows-latest       # Windows x64
+          - windows-11-arm       # Windows arm64
         node: ["22","26"]
     steps:
       - uses: actions/checkout@v7
@@ -52,8 +69,10 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang
 
-      - name: Install clang (Windows)
-        if: runner.os == 'Windows'
+      # Windows arm64 has no MinGW-w64 clang in the image and the MSVC one emits
+      # MSVC-ABI objects, so it uses the bundled llvm-mingw toolchain instead.
+      - name: Install clang (Windows x64)
+        if: runner.os == 'Windows' && runner.arch != 'ARM64'
         shell: pwsh
         run: |
           choco install llvm --no-progress -y
@@ -64,8 +83,8 @@ jobs:
       # ilammy/msvc-dev-cmd still runs on Node 20 (which GitHub now forces onto
       # Node 24), so import the Visual Studio build environment directly instead
       # of depending on a deprecated action.
-      - name: Set up the MSVC environment (Windows)
-        if: runner.os == 'Windows'
+      - name: Set up the MSVC environment (Windows x64)
+        if: runner.os == 'Windows' && runner.arch != 'ARM64'
         shell: pwsh
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -84,11 +103,23 @@ jobs:
           }
 
       - name: Verify the toolchain
+        if: "!(runner.os == 'Windows' && runner.arch == 'ARM64')"
         shell: bash
         run: clang --version
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Cache the bundled toolchain (Windows arm64)
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        uses: actions/cache@v6
+        with:
+          path: vendor
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
+
+      - name: Fetch the bundled toolchain (Windows arm64)
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        run: npx tsx scripts/fetch-toolchain.ts
 
       - name: Type check
         run: npm run typecheck
@@ -108,7 +139,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-latest        # Linux x64
+          - ubuntu-24.04-arm     # Linux arm64
+          - macos-15-intel       # macOS x64
+          - macos-15             # macOS arm64
+          - windows-latest       # Windows x64
+          - windows-11-arm       # Windows arm64
     steps:
       - uses: actions/checkout@v7
 
@@ -121,15 +158,15 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang
 
-      - name: Install clang (Windows)
-        if: runner.os == 'Windows'
+      - name: Install clang (Windows x64)
+        if: runner.os == 'Windows' && runner.arch != 'ARM64'
         shell: pwsh
         run: |
           choco install llvm --no-progress -y
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Set up the MSVC environment (Windows)
-        if: runner.os == 'Windows'
+      - name: Set up the MSVC environment (Windows x64)
+        if: runner.os == 'Windows' && runner.arch != 'ARM64'
         shell: pwsh
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -149,6 +186,17 @@ jobs:
 
       - run: npm ci
 
+      - name: Cache the bundled toolchain (Windows arm64)
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        uses: actions/cache@v6
+        with:
+          path: vendor
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
+
+      - name: Fetch the bundled toolchain (Windows arm64)
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        run: npx tsx scripts/fetch-toolchain.ts
+
       - name: Build the hello example
         run: npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
 
@@ -164,7 +212,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-latest        # Linux x64
+          - ubuntu-24.04-arm     # Linux arm64
+          - macos-15-intel       # macOS x64
+          - macos-15             # macOS arm64
+          - windows-latest       # Windows x64
+          - windows-11-arm       # Windows arm64
     steps:
       - uses: actions/checkout@v7
 
@@ -177,15 +231,15 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang
 
-      - name: Install clang (Windows)
-        if: runner.os == 'Windows'
+      - name: Install clang (Windows x64)
+        if: runner.os == 'Windows' && runner.arch != 'ARM64'
         shell: pwsh
         run: |
           choco install llvm --no-progress -y
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Set up the MSVC environment (Windows)
-        if: runner.os == 'Windows'
+      - name: Set up the MSVC environment (Windows x64)
+        if: runner.os == 'Windows' && runner.arch != 'ARM64'
         shell: pwsh
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -205,6 +259,17 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Cache the bundled toolchain (Windows arm64)
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        uses: actions/cache@v6
+        with:
+          path: vendor
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
+
+      - name: Fetch the bundled toolchain (Windows arm64)
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        run: npx tsx scripts/fetch-toolchain.ts
 
       # Bootstrap the compiler with itself and prove the emitted LLVM IR is a
       # fixpoint: source -> gen1 binary -> gen2 IR == gen1 IR.
@@ -264,10 +329,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    # Do not let the workflow-level xbintsc_CLANG shadow the bundled toolchain.
-    env:
-      xbintsc_CLANG: ""
+        os:
+          - ubuntu-latest        # Linux x64
+          - ubuntu-24.04-arm     # Linux arm64
+          - macos-15-intel       # macOS x64
+          - macos-15             # macOS arm64
+          - windows-latest       # Windows x64
+          - windows-11-arm       # Windows arm64
     steps:
       - uses: actions/checkout@v7
 
@@ -310,10 +378,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    # Prefer the bundled toolchain over the workflow-level xbintsc_CLANG.
-    env:
-      xbintsc_CLANG: ""
+        os:
+          - ubuntu-latest        # Linux x64
+          - ubuntu-24.04-arm     # Linux arm64
+          - macos-15-intel       # macOS x64
+          - macos-15             # macOS arm64
+          - windows-latest       # Windows x64
+          - windows-11-arm       # Windows arm64
     steps:
       - uses: actions/checkout@v7
 

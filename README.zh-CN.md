@@ -13,7 +13,7 @@
 3. **测试充分** —— 每个模块单元测试，外加真正编译并运行二进制的端到端测试。
 4. **可插拔扩展** —— Node `fs`、Bun API 等是可选的编译模块，而非核心代码。
 5. **自举（self-hosting）** —— 编译器可编译自身：`src/cli/main.ts` 能构建为原生 `xbintsc` 二进制，其产出的 LLVM IR 跨代达到不动点。CI 会为各平台构建这些二进制，Release 则附上这些产物。
-6. **多平台** —— 在多种 CPU 上支持 macOS、Linux 与 Windows，并由 GitHub Actions 验证。
+6. **多平台** —— 在 x64 与 arm64（Apple Silicon / AArch64）上支持 macOS、Linux 与 Windows，并由 GitHub Actions 在各自架构的原生 runner 上验证。
 
 ## 工作原理
 
@@ -91,12 +91,51 @@ xbintsc emit examples/hello.ts | head
 xbintsc run examples/read-file.ts --ext node
 ```
 
-#### 预编译独立发布包
+#### 预编译独立发布包（推荐，无需 Node.js）
 
-每个 GitHub Release 也会附上各平台的自包含归档
-（`xbintsc-<os>-<arch>.tar.zst` 或 `.tar.gz`，附 `.sha256`）。解压后直接调用
-`bin/xbintsc` 即可，无需 Node.js 或系统编译器。详见
-[doc/zh-CN/requirements.md](doc/zh-CN/requirements.md#预编译发布包推荐)。
+每个 [GitHub Release](https://github.com/zy445566/xbintsc/releases/latest) 都会附上
+各平台的自包含归档，并在旁边附 `.sha256` 校验文件：
+
+| 平台 | 归档 |
+| --- | --- |
+| Windows x64 / arm64 | `xbintsc-win32-x64.tar.zst` / `xbintsc-win32-arm64.tar.zst` |
+| Linux x64 / arm64 | `xbintsc-linux-x64.tar.zst` / `xbintsc-linux-arm64.tar.zst` |
+| macOS x64 / arm64（Apple Silicon） | `xbintsc-darwin-x64.tar.zst` / `xbintsc-darwin-arm64.tar.zst` |
+
+（仅当构建机没有 `zstd` 时才会回退为 `.tar.gz`。）
+
+每个归档解压后都是一个 `xbintsc-<os>-<arch>/` 目录，其中已包含编译器
+（`bin/xbintsc[.exe]`）、C 运行时与自带工具链，因此**无需 Node.js，也无需系统编译器**。
+各平台（极简）的运行前置条件见
+[使用前置要求 → 预编译发布包](doc/zh-CN/requirements.md#预编译发布包推荐)。
+
+**Windows 示例** —— 从
+[Releases 页面](https://github.com/zy445566/xbintsc/releases/latest) 下载对应归档
+（此处为 `xbintsc-win32-x64.tar.zst`；Windows on ARM 请用 `-arm64`），
+然后在 PowerShell 中执行（Windows 10+ 自带 `tar`）：
+
+```powershell
+# 1. 校验哈希（可选，但推荐）
+(Get-FileHash .\xbintsc-win32-x64.tar.zst -Algorithm SHA256).Hash
+Get-Content .\xbintsc-win32-x64.tar.zst.sha256
+
+# 2. 解压
+tar -xf .\xbintsc-win32-x64.tar.zst
+
+# 3. 编译并运行 hello.ts（见下）
+.\xbintsc-win32-x64\bin\xbintsc.exe run .\hello.ts
+
+# 4. ...或产出独立的 hello.exe
+.\xbintsc-win32-x64\bin\xbintsc.exe build .\hello.ts --out .\build
+.\build\hello.exe
+```
+
+```ts
+// hello.ts
+console.log("Hello from xbintsc!");
+```
+
+提示：把 `xbintsc-win32-x64\bin` 加入 `PATH`，即可直接用 `xbintsc` 命令。
 
 ### 作为开发者（从源码）
 
@@ -207,9 +246,12 @@ npm run test:e2e    # 仅编译并运行的测试
 
 ## 运行要求
 
-完整的分平台要求见 [使用前置要求](./doc/zh-CN/requirements.md)。
+完整的分平台要求见 [使用前置要求](./doc/zh-CN/requirements.md)。若只使用预编译的
+独立二进制，相关部分为
+[使用前置要求 → 预编译发布包](./doc/zh-CN/requirements.md#预编译发布包推荐)
+（Windows/Linux 自带工具链；macOS 需要 Xcode Command Line Tools）。
 
-- Node.js 20+ —— 仅从源码运行/构建时需要；发布版二进制是独立的
+- Node.js 22+ —— 仅从源码运行/构建时需要；发布版二进制是独立的
 - macOS：Xcode Command Line Tools（`xcode-select --install`）
 - Windows：无需额外安装 —— 自带 MinGW-w64 工具链
 - Linux：系统 C 库（glibc）

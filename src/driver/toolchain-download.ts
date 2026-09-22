@@ -65,6 +65,18 @@ export function toolchainDownload(
     };
   }
 
+  if (platform === "win32" && arch === "arm64") {
+    // The llvm-mingw `aarch64` package is the Windows-on-ARM host build; its
+    // clang targets aarch64 by default, so a native Windows ARM64 runner gets
+    // native MinGW-w64 binaries with no MSVC dependency.
+    return {
+      url: `https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-aarch64.zip`,
+      archive: `llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-aarch64.zip`,
+      kind: "zip",
+      stripComponents: 1,
+    };
+  }
+
   // macOS (and any other host) uses the system SDK; nothing to bundle.
   return undefined;
 }
@@ -100,6 +112,21 @@ export function toolchainSupportLibraries(
         ],
         archive: "libtinfo5.deb",
         member: "lib/x86_64-linux-gnu/libtinfo.so.5.9",
+        dest: "libtinfo.so.5",
+      },
+    ];
+  }
+  if (platform === "linux" && arch === "arm64") {
+    // The aarch64 release build links the same removed `libtinfo.so.5` soname as
+    // the x86_64 one; arm64 packages live in the Ubuntu ports archive.
+    return [
+      {
+        urls: [
+          "https://ports.ubuntu.com/ubuntu-ports/pool/main/n/ncurses/libtinfo5_6.1-1ubuntu1.18.04.1_arm64.deb",
+          "http://ports.ubuntu.com/ubuntu-ports/pool/main/n/ncurses/libtinfo5_6.1-1ubuntu1.18.04.1_arm64.deb",
+        ],
+        archive: "libtinfo5.deb",
+        member: "lib/aarch64-linux-gnu/libtinfo.so.5.9",
         dest: "libtinfo.so.5",
       },
     ];

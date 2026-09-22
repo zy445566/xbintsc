@@ -723,4 +723,32 @@ describeE2E("end-to-end compilation", (harness) => {
       "a b\n1 2\n7\nHello, Ada Hi, Bob\n30 3",
     );
   });
+
+  it("supports Function.prototype.call, apply and bind", () => {
+    const source = `
+      function add(a: number, b: number): number { return a + b; }
+      console.log(add.call(null, 1, 2), add.apply(null, [5, 6]));
+
+      const obj = {
+        base: 10,
+        sum(a: number, b: number): number { return this.base + a + b; },
+      };
+      console.log(obj.sum.call(obj, 1, 2), obj.sum.apply(obj, [3, 4]));
+
+      const bound = obj.sum.bind(obj, 1);
+      console.log(bound(2));
+      const bound2 = add.bind(null, 10);
+      console.log(bound2(5));
+
+      class Greeter {
+        prefix = "hi";
+        greet(name: string): string { return this.prefix + " " + name; }
+      }
+      const g = new Greeter();
+      console.log(g.greet.call(g, "ada"), g.greet.bind(g)("cy"));
+    `;
+    expect(runProgram(source)).toBe(
+      "3 11\n13 17\n13\n15\nhi ada hi cy",
+    );
+  });
 });

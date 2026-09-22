@@ -355,6 +355,7 @@ xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env) {
   function->code = (xt_code_fn)fn;
   function->environment_count = env_count;
   function->arity = -1;
+  function->name = NULL;
   function->properties = NULL;
   function->environment = NULL;
   function->prototype = XT_UNDEFINED;

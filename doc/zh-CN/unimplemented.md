@@ -119,7 +119,8 @@
 | `new.target` | ✗ | 未实现 |
 | 生成器 / 迭代器 / `yield` | ✗（`yield` 代码生成报错） | 未实现 |
 | 闭包 `arity` | — | `xt_closure_arity` 恒为 -1，未填充 |
-| 函数对象属性（`fn.name` / `fn.length` / `fn.call` / `fn.apply` / `bind`） | ✗ | 未实现 |
+| `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ 已实现（绑定闭包不跟踪部分参数的 `length`） |
+| `fn.name` / `fn.length` | ✗ | 未实现 |
 | 内置方法一等公民（`typeof arr.map`、`const f = arr.push`、`obj.method?.()`） | ✗ | 内置方法只能通过直接调用（`arr.map(...)`）访问；作为值读取会得到 `undefined` |
 
 ---
@@ -206,7 +207,7 @@
 
 未实现（表达式）：yield（生成器）、new.target、import.meta 取值
 
-未实现（函数）：生成器、fn.name/length/call/apply/bind、内置方法一等公民
+未实现（函数）：生成器、fn.name/length、内置方法一等公民
 
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 

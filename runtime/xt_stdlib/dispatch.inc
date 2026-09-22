@@ -58,6 +58,25 @@ static xt_value xt_string_method(xt_value target, const char *method, int32_t ar
   return XT_UNDEFINED;
 }
 
+/* Backing trampoline for `fn.bind(thisArg, ...partial)`: the bound target,
+ * `this` value and partial argument array travel in the closure environment. */
+static xt_value xt_bound_invoke(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)thisValue;
+  xt_value target = xt_closure_env(env, 0);
+  xt_value boundThis = xt_closure_env(env, 1);
+  xt_value boundArgs = xt_closure_env(env, 2);
+  int32_t boundCount = XT_IS_ARRAY(boundArgs) ? (int32_t)xt_as_array(boundArgs)->length : 0;
+  int32_t total = boundCount + argc;
+  xt_value *combined = total > 0 ? (xt_value *)malloc(sizeof(xt_value) * (size_t)total) : NULL;
+  if (combined) {
+    for (int32_t i = 0; i < boundCount; i++) combined[i] = xt_as_array(boundArgs)->items[i];
+    for (int32_t i = 0; i < argc; i++) combined[boundCount + i] = argv[i];
+  }
+  xt_value result = xt_call_with_this(target, boundThis, total, combined);
+  free(combined);
+  return result;
+}
+
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv) {
   const char *method = xt_string_data(name);
   if (!method) return XT_UNDEFINED;
@@ -92,6 +111,27 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     return XT_UNDEFINED;
   }
   if (XT_IS_FUNCTION(target)) {
+    /* Function prototype methods, resolved before the property bag. */
+    if (strcmp(method, "call") == 0) {
+      return xt_call_with_this(target, xt_arg_at(argc, argv, 0),
+                               argc > 0 ? argc - 1 : 0, argc > 0 ? argv + 1 : NULL);
+    }
+    if (strcmp(method, "apply") == 0) {
+      xt_value thisArg = xt_arg_at(argc, argv, 0);
+      xt_value args = xt_arg_at(argc, argv, 1);
+      if (XT_IS_ARRAY(args)) {
+        xt_array *array = xt_as_array(args);
+        return xt_call_with_this(target, thisArg, (int32_t)array->length, array->items);
+      }
+      return xt_call_with_this(target, thisArg, 0, NULL);
+    }
+    if (strcmp(method, "bind") == 0) {
+      xt_value env[3];
+      env[0] = target;
+      env[1] = xt_arg_at(argc, argv, 0);
+      env[2] = argc > 1 ? xt_array_new(argc - 1, argv + 1) : xt_array_new(0, NULL);
+      return xt_closure_new((void *)xt_bound_invoke, 3, env);
+    }
     xt_value fn = xt_object_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
     {

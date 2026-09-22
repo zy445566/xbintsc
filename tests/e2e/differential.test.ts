@@ -367,6 +367,36 @@ ${printAll([
 ])}`,
   );
 
+  diff(
+    "Function.prototype.call, apply and bind",
+    `function add(a: number, b: number): number { return a + b; }
+const obj = {
+  base: 10,
+  sum(a: number, b: number): number { return this.base + a + b; },
+};
+class Greeter {
+  prefix = "hi";
+  greet(name: string): string { return this.prefix + " " + name; }
+}
+const g = new Greeter();
+const bound = obj.sum.bind(obj, 1);
+const bound2 = add.bind(null, 10);
+const mk = (x: number) => x * 2;
+${printAll([
+  "add.call(null, 1, 2)",
+  "obj.sum.call(obj, 1, 2)",
+  "obj.sum.apply(obj, [3, 4])",
+  "add.apply(null, [5, 6])",
+  "bound(2)",
+  "bound2(5)",
+  'g.greet.call(g, "ada")',
+  'g.greet.apply(g, ["bob"])',
+  'g.greet.bind(g)("cy")',
+  "mk.call(null, 21)",
+  "mk.apply(null, [3])",
+])}`,
+  );
+
   it("binds namespace imports to every export", () => {
     harness.expectSameOutputAsNode(
       `import * as util from "./util.ts";

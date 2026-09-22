@@ -150,7 +150,8 @@ None known at the expression level.
 | `new.target` | ✗ | not implemented |
 | Generators / iterators / `yield` | ✗ (`yield` codegen errors) | not implemented |
 | Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
-| Function object properties (`fn.name` / `fn.length` / `fn.call` / `fn.apply` / `fn.bind`) | ✗ | not implemented |
+| `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ implemented (the bound closure does not track partial-argument `length`) |
+| `fn.name` / `fn.length` | ✗ | not implemented |
 | First-class built-in methods (`typeof arr.map`, `const f = arr.push`, `obj.method?.()`) | ✗ | built-in methods are only reachable through a direct call (`arr.map(...)`); reading them as values yields `undefined` |
 
 ---
@@ -241,7 +242,7 @@ Unimplemented (statements): namespace/module declarations
 
 Unimplemented (expressions): yield (generators), new.target, import.meta value
 
-Unimplemented (functions): generators, fn.name/length/call/apply/bind,
+Unimplemented (functions): generators, fn.name/length,
                            first-class built-in methods
 
 Unimplemented (classes/OO): abstract/implements, access control,

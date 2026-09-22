@@ -377,6 +377,27 @@ describeE2E("end-to-end compilation", (harness) => {
     expect(runProgram(source)).toBe("10 0 2\nsub:5");
   });
 
+  it("encodes and decodes URIs like the specification", () => {
+    const source = `
+      console.log(encodeURI("a/b?c=d&e#f"), encodeURIComponent("a/b?c=d&e#f"));
+      console.log(encodeURI("café"), encodeURIComponent("😀 中文"));
+      console.log(decodeURI("%2f%2F"), decodeURIComponent("a%23b"));
+      console.log(decodeURIComponent("%C3%A9"), decodeURIComponent("%F0%9F%98%80"));
+      console.log(typeof encodeURIComponent, typeof decodeURI);
+      try { decodeURIComponent("%E0%80%80"); } catch (e) { console.log(String(e)); }
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        "a/b?c=d&e#f a%2Fb%3Fc%3Dd%26e%23f",
+        "caf%C3%A9 %F0%9F%98%80%20%E4%B8%AD%E6%96%87",
+        "%2f%2F a#b",
+        "é 😀",
+        "function function",
+        "URIError: URI malformed",
+      ].join("\n"),
+    );
+  });
+
   it("supports optional chaining", () => {
     const source = `
       const obj = { a: { b: 5 }, m: (x: number) => x + 1 };

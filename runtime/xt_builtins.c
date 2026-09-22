@@ -8,6 +8,7 @@
 #include "rt_internal.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -119,6 +120,140 @@ xt_value xt_is_finite(int32_t argc, xt_value *argv) {
   return xt_bool(!isnan(value) && !isinf(value));
 }
 
+/* ------------------------------------------------------------------------- */
+/* URI encoding / decoding (ECMAScript 19.2.6)                               */
+/* ------------------------------------------------------------------------- */
+
+static _Noreturn void xt_throw_uri_error(const char *message) {
+  char buffer[96];
+  snprintf(buffer, sizeof(buffer), "URIError: %s", message);
+  xt_throw(xt_string_from_cstr(buffer));
+  abort();
+}
+
+static int xt_uri_is_kept(const char *allowed, unsigned char c) {
+  return c < 0x80 && c != 0 && strchr(allowed, (int)c) != NULL;
+}
+
+static xt_value xt_uri_encode(xt_value input, const char *allowed) {
+  xt_string *s = xt_as_string(xt_to_string(input));
+  static const char hex[] = "0123456789ABCDEF";
+  char *out = (char *)malloc((size_t)s->length * 3 + 1);
+  if (!out) {
+    fprintf(stderr, "xbintsc: out of memory\n");
+    abort();
+  }
+  size_t written = 0;
+  for (uint32_t i = 0; i < s->length; i++) {
+    unsigned char c = (unsigned char)s->data[i];
+    if (xt_uri_is_kept(allowed, c)) {
+      out[written++] = (char)c;
+    } else {
+      out[written++] = '%';
+      out[written++] = hex[(c >> 4) & 0xF];
+      out[written++] = hex[c & 0xF];
+    }
+  }
+  xt_value result = xt_string_new(out, written);
+  free(out);
+  return result;
+}
+
+static int xt_hex_value(int c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  return -1;
+}
+
+/* Decode percent-escapes as UTF-8. When `component` is false (`decodeURI`),
+ * escapes for reserved characters are copied through unchanged. */
+static xt_value xt_uri_decode(xt_value input, int component) {
+  xt_string *s = xt_as_string(xt_to_string(input));
+  char *out = (char *)malloc((size_t)s->length + 1);
+  if (!out) {
+    fprintf(stderr, "xbintsc: out of memory\n");
+    abort();
+  }
+  size_t written = 0;
+  uint32_t i = 0;
+  while (i < s->length) {
+    unsigned char c = (unsigned char)s->data[i];
+    if (c != '%') {
+      out[written++] = (char)c;
+      i++;
+      continue;
+    }
+    if (i + 2 >= s->length) xt_throw_uri_error("URI malformed");
+    int h1 = xt_hex_value((unsigned char)s->data[i + 1]);
+    int h2 = xt_hex_value((unsigned char)s->data[i + 2]);
+    if (h1 < 0 || h2 < 0) xt_throw_uri_error("URI malformed");
+    unsigned char b = (unsigned char)((h1 << 4) | h2);
+    if (b < 0x80) {
+      if (!component && xt_uri_is_kept(";/?:@&=+$,#", b)) {
+        out[written++] = s->data[i];
+        out[written++] = s->data[i + 1];
+        out[written++] = s->data[i + 2];
+      } else {
+        out[written++] = (char)b;
+      }
+      i += 3;
+      continue;
+    }
+    int extra;
+    if (b >= 0xC2 && b <= 0xDF) extra = 1;
+    else if (b >= 0xE0 && b <= 0xEF) extra = 2;
+    else if (b >= 0xF0 && b <= 0xF4) extra = 3;
+    else xt_throw_uri_error("URI malformed");
+    char seq[4];
+    seq[0] = (char)b;
+    for (int k = 1; k <= extra; k++) {
+      uint32_t pos = i + (uint32_t)k * 3;
+      if (pos + 2 >= s->length) xt_throw_uri_error("URI malformed");
+      if (s->data[pos] != '%') xt_throw_uri_error("URI malformed");
+      int c1 = xt_hex_value((unsigned char)s->data[pos + 1]);
+      int c2 = xt_hex_value((unsigned char)s->data[pos + 2]);
+      if (c1 < 0 || c2 < 0) xt_throw_uri_error("URI malformed");
+      unsigned char cb = (unsigned char)((c1 << 4) | c2);
+      if ((cb & 0xC0) != 0x80) xt_throw_uri_error("URI malformed");
+      seq[k] = (char)cb;
+    }
+    uint32_t codePoint;
+    if (extra == 1) codePoint = ((uint32_t)(b & 0x1F) << 6) | ((uint32_t)seq[1] & 0x3F);
+    else if (extra == 2)
+      codePoint = ((uint32_t)(b & 0x0F) << 12) | (((uint32_t)seq[1] & 0x3F) << 6) | ((uint32_t)seq[2] & 0x3F);
+    else
+      codePoint = ((uint32_t)(b & 0x07) << 18) | (((uint32_t)seq[1] & 0x3F) << 12) |
+                  (((uint32_t)seq[2] & 0x3F) << 6) | ((uint32_t)seq[3] & 0x3F);
+    uint32_t minimum = extra == 1 ? 0x80u : (extra == 2 ? 0x800u : 0x10000u);
+    if (codePoint < minimum || codePoint > 0x10FFFF || (codePoint >= 0xD800 && codePoint <= 0xDFFF))
+      xt_throw_uri_error("URI malformed");
+    for (int k = 0; k <= extra; k++) out[written++] = seq[k];
+    i += (uint32_t)(extra + 1) * 3;
+  }
+  xt_value result = xt_string_new(out, written);
+  free(out);
+  return result;
+}
+
+xt_value xt_encode_uri_component(int32_t argc, xt_value *argv) {
+  return xt_uri_encode(xt_arg_at(argc, argv, 0),
+                       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()");
+}
+
+xt_value xt_encode_uri(int32_t argc, xt_value *argv) {
+  return xt_uri_encode(xt_arg_at(argc, argv, 0),
+                       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'();,/?:@&=+$#");
+}
+
+xt_value xt_decode_uri_component(int32_t argc, xt_value *argv) {
+  return xt_uri_decode(xt_arg_at(argc, argv, 0), /* component */ 1);
+}
+
+xt_value xt_decode_uri(int32_t argc, xt_value *argv) {
+  return xt_uri_decode(xt_arg_at(argc, argv, 0), /* component */ 0);
+}
+
 xt_value xt_number_ctor(int32_t argc, xt_value *argv) {
   if (argc == 0) return xt_number(0);
   return xt_number(xt_to_number(argv[0]));
@@ -157,6 +292,10 @@ XT_BUILTIN_TRAMPOLINE(xt_builtin_value_parseInt, xt_parse_int)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_parseFloat, xt_parse_float)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_isNaN, xt_is_nan)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_isFinite, xt_is_finite)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_encodeURIComponent, xt_encode_uri_component)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_encodeURI, xt_encode_uri)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_decodeURIComponent, xt_decode_uri_component)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_decodeURI, xt_decode_uri)
 
 xt_value xt_in(xt_value key, xt_value value) {
   if (XT_IS_OBJECT(value)) return xt_object_has(value, key);

@@ -33,6 +33,13 @@ export interface RunResult {
   status: number | null;
 }
 
+export interface NodeRunOptions {
+  /** Entry file base name; defaults to a random name. */
+  name?: string;
+  /** Child-process timeout in milliseconds. */
+  timeout?: number;
+}
+
 export interface E2EHarness {
   /** Scratch directory shared by the tests in the calling suite. */
   readonly workdir: string;
@@ -40,6 +47,17 @@ export interface E2EHarness {
   runProgram(source: string, options?: RunOptions): string;
   /** Compile and run `source` without asserting the exit status. */
   runProgramFull(source: string, options?: RunOptions): RunResult;
+  /**
+   * Run `source` under Node (through the `tsx` loader) and return its trimmed
+   * stdout. Differential cases should print canonical `JSON.stringify` output
+   * so console formatting never masks a real difference.
+   */
+  runNodeProgram(source: string, options?: NodeRunOptions): string;
+  /**
+   * Compile `source` with xbintsc and run it under Node, asserting both produce
+   * byte-identical stdout. This is the core differential-testing primitive.
+   */
+  expectSameOutputAsNode(source: string, options?: RunOptions): void;
 }
 
 /**
@@ -84,6 +102,17 @@ export function describeE2E(
       return { stdout: executed.stdout ?? "", stderr: executed.stderr ?? "", status: executed.status };
     };
 
+    const runNodeProgram = (source: string, runOptions: NodeRunOptions = {}): string => {
+      const entry = join(workdir, `${runOptions.name ?? `node_${Math.random().toString(36).slice(2)}`}.ts`);
+      writeFileSync(entry, source);
+      const executed = spawnSync(process.execPath, ["--import", "tsx", entry], {
+        encoding: "utf8",
+        ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
+      });
+      expect(executed.status).toBe(0);
+      return (executed.stdout ?? "").trim();
+    };
+
     const harness: E2EHarness = {
       get workdir() {
         return workdir;
@@ -94,6 +123,15 @@ export function describeE2E(
         return result.stdout.trim();
       },
       runProgramFull,
+      runNodeProgram,
+      expectSameOutputAsNode(source: string, runOptions: RunOptions = {}): void {
+        const ours = harness.runProgram(source, runOptions);
+        const theirs = runNodeProgram(source, {
+          ...(runOptions.name ? { name: runOptions.name } : {}),
+          ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
+        });
+        expect(ours).toBe(theirs);
+      },
     };
 
     define(harness);

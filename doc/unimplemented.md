@@ -99,7 +99,7 @@ None known at the expression level.
 - `JSON.parse` / `JSON.stringify`
 - `Date`, `RegExp` (POSIX ERE subset with capture groups), `Map`, `Set`, `Promise`, `BigInt`
 - `Array` statics (`isArray/of/from`), `Object` statics, `Number` statics, `String` statics (`fromCharCode` / `fromCodePoint` / `raw`)
-- `Error` (`new Error(...)`, `extends Error`)
+- `Error` family (`Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, `AggregateError`): `new`, `instanceof`, `extends`, `String(err)` / `err.toString()` and `.stack`
 
 ### 3.3 Still unimplemented
 
@@ -108,8 +108,8 @@ None known at the expression level.
 | `Symbol` constructor and symbol primitives | ✗ not implemented |
 | `String.prototype.normalize` | ✗ not implemented |
 | `structuredClone` | ✗ not implemented |
-| Built-in error subclasses (`TypeError`, `RangeError`, …) | ✗ only `Error` exists; runtime throws use it internally |
-| `AggregateError` constructor | ✗ `Promise.any` exists but rejects with a string instead of an `AggregateError` object |
+| Built-in error subclasses (`TypeError`, `RangeError`, …) | ✓ first-class constructors and prototypes; `instanceof Error` holds for the whole family |
+| `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
 | Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | partial: arrays, strings, `Map` and `Set` are iterable in `for...of` / spread; a user-defined `Symbol.iterator` is not consulted |
 | Generators / async iteration | ✗ not implemented |
 | Timers / I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
@@ -249,7 +249,6 @@ Unimplemented (classes/OO): abstract/implements, access control,
                             parent/child #x collision
 
 Unimplemented (standard library): Symbol, String.normalize, structuredClone,
-                                  TypeError/RangeError subclasses, AggregateError,
                                   iterator protocol (Symbol.iterator)
 
 Unimplemented (modules): circular dependencies, npm dependencies, live bindings

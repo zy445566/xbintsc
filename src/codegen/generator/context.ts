@@ -9,7 +9,7 @@
 import { bind, SymbolKind, type BindResult, type SymbolInfo } from "../../binder/binder.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
-import { SyntaxKind, type ImportDeclaration, type SourceFileNode, type Node } from "../../ast/nodes.js";
+import { SyntaxKind, type Identifier, type ImportDeclaration, type Node, type SourceFileNode } from "../../ast/nodes.js";
 import { i64, XT_UNDEFINED } from "../values.js";
 import type {
   BuiltinFunction,
@@ -17,7 +17,7 @@ import type {
   ModuleExport,
 } from "../../extensions/registry.js";
 import type { CodegenOptions, FunctionState } from "./state.js";
-import { escapeBytes, kindName, utf8Bytes } from "./tables.js";
+import { escapeBytes, isErrorFamily, kindName, utf8Bytes } from "./tables.js";
 
 export class GeneratorContext {
   readonly binding: BindResult;
@@ -209,6 +209,17 @@ export class GeneratorContext {
   }
 
   // -- string pool ---------------------------------------------------------
+
+  /**
+   * The name of the builtin Error-family constructor an expression refers to
+   * (`extends TypeError`), or `undefined` for a user class / shadowed name.
+   */
+  errorFamilyName(expression: Node): string | undefined {
+    if (expression.kind !== SyntaxKind.Identifier) return undefined;
+    const identifier = expression as Identifier;
+    if (this.binding.symbolOfIdentifier.get(identifier)) return undefined;
+    return isErrorFamily(identifier.text) ? identifier.text : undefined;
+  }
 
   stringValue(text: string): string {
     const entry = this.internString(text);

@@ -130,7 +130,8 @@ xt_value xt_object_get(xt_value value, xt_value key) {
      layout. Containers such as Map/Set/Date/RegExp/Promise/Array must not be
      interpreted as property tables, or property lookup reads past the end of
      their real representation. */
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT) return XT_UNDEFINED;
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+    return XT_UNDEFINED;
   xt_value keyString = xt_to_string(key);
   xt_string *k = xt_as_string(keyString);
   /* Walk the prototype chain like JavaScript property lookup. */
@@ -158,7 +159,8 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
   }
   xt_object *obj = xt_as_object(value);
   if (!obj) return newValue;
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT) return newValue;
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+    return newValue;
   if (obj->frozen) return newValue;
   xt_value keyString = xt_to_string(key);
   xt_string *k = xt_as_string(keyString);
@@ -499,6 +501,13 @@ xt_value xt_get(xt_value target, xt_value key) {
     if (obj->header.kind == XT_OBJECT_KIND_REGEXP) {
       xt_value regexpValue = xt_regexp_get_property(target, key);
       if (regexpValue != XT_UNDEFINED) return regexpValue;
+    }
+    if (obj->header.kind == XT_OBJECT_KIND_ERROR && XT_IS_STRING(key)) {
+      xt_string *k = xt_as_string(key);
+      if (k->length == 5 && memcmp(k->data, "stack", 5) == 0) {
+        xt_value own = xt_object_get(target, key);
+        return own != XT_UNDEFINED ? own : xt_error_to_string(target);
+      }
     }
     {
       xt_value value = xt_object_get(target, key);

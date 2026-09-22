@@ -353,6 +353,10 @@ xt_value xt_to_string(xt_value v) {
     return result;
   }
   if (XT_IS_FUNCTION(v)) return xt_string_from_cstr("function () { [native code] }");
+  if (XT_IS_OBJECT(v) &&
+      ((xt_object *)XT_GET_PTR(v))->header.kind == XT_OBJECT_KIND_ERROR) {
+    return xt_error_to_string(v);
+  }
   return xt_string_from_cstr("[object Object]");
 }
 

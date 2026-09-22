@@ -27,7 +27,7 @@ import {
 import { SymbolKind, type SymbolInfo } from "../../../binder/binder.js";
 import { DiagnosticCode } from "../../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_FALSE, XT_NULL, XT_TRUE, XT_UNDEFINED } from "../../values.js";
-import { BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS } from "../tables.js";
+import { BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS, ERROR_CONSTRUCTORS } from "../tables.js";
 import type { Generator } from "../generator.js";
 
 export interface PrimaryExpressionMethods {
@@ -203,6 +203,13 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           const closure = this.reg();
           this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 0, i64* null)`);
           return closure;
+        }
+        const errorCtor = ERROR_CONSTRUCTORS[identifier.text];
+        if (errorCtor) {
+          // A first-class Error-family constructor (`instanceof TypeError`,
+          // `typeof RangeError`, `class X extends Error`, ...).
+          const nameValue = this.stringValue(identifier.text);
+          return this.runtimeCall("xt_error_constructor", [nameValue]);
         }
         this.diagnostics.error(
           DiagnosticCode.CannotFindName,

@@ -81,6 +81,24 @@ export const NUMBER_CONSTANTS = new Set<string>([
   "NaN",
 ]);
 
+/** The Error family. Each name is a first-class constructor: usable with `new`,
+ * as a value (`instanceof`, `typeof`) and as a superclass (`extends TypeError`).
+ * All map to runtime constructors with signature `(i32, i64*)`. */
+export const ERROR_CONSTRUCTORS: Record<string, string> = {
+  Error: "xt_error_ctor",
+  TypeError: "xt_type_error_ctor",
+  RangeError: "xt_range_error_ctor",
+  SyntaxError: "xt_syntax_error_ctor",
+  ReferenceError: "xt_reference_error_ctor",
+  EvalError: "xt_eval_error_ctor",
+  URIError: "xt_uri_error_ctor",
+  AggregateError: "xt_aggregate_error_ctor",
+};
+
+export function isErrorFamily(name: string): boolean {
+  return ERROR_CONSTRUCTORS[name] !== undefined;
+}
+
 export const GLOBAL_FUNCTIONS: Record<string, string> = {
   parseInt: "xt_parse_int",
   parseFloat: "xt_parse_float",
@@ -94,6 +112,7 @@ export const GLOBAL_FUNCTIONS: Record<string, string> = {
   String: "xt_string_ctor",
   Boolean: "xt_boolean_ctor",
   BigInt: "xt_bigint_ctor",
+  ...ERROR_CONSTRUCTORS,
 };
 
 /** Global functions that are also usable as first-class values, each mapped to
@@ -155,7 +174,6 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   Set: "xt_set_ctor",
   Date: "xt_date_ctor",
   RegExp: "xt_regexp_ctor",
-  Error: "xt_error_ctor",
   Promise: "xt_promise_ctor",
   Buffer: "xt_buffer_ctor",
   Readable: "xt_readable_ctor",
@@ -166,6 +184,7 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   Socket: "xt_net_socket_ctor",
   Server: "xt_net_server_ctor",
   EventEmitter: "xt_event_emitter_ctor",
+  ...ERROR_CONSTRUCTORS,
 };
 
 export const BUILTIN_METHODS = new Set<string>([

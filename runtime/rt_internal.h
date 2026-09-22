@@ -47,6 +47,7 @@
 #define XT_OBJECT_KIND_REGEXP 9
 #define XT_OBJECT_KIND_SYMBOL 10
 #define XT_OBJECT_KIND_BIGINT 11
+#define XT_OBJECT_KIND_ERROR 12
 
 /* Common header for every heap object. */
 typedef struct xt_header {
@@ -212,6 +213,10 @@ xt_value xt_ext_array_method(xt_value target, const char *method, int32_t argc, 
 xt_value xt_ext_string_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 xt_value xt_ext_number_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 xt_value xt_ext_object_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+
+/* Error family helpers (xt_stdlib2.c). */
+xt_value xt_error_to_string(xt_value error);
+xt_value xt_aggregate_error_ctor(int32_t argc, xt_value *argv);
 xt_value xt_ext_container_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 

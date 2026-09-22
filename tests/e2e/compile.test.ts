@@ -802,4 +802,40 @@ describeE2E("end-to-end compilation", (harness) => {
       "function map 1\n2,4,6\nfunction bc a-b-c\n15\nthrew",
     );
   });
+
+  it("supports the Error family as first-class constructors", () => {
+    const source = `
+      console.log(typeof Error, typeof TypeError, typeof AggregateError);
+      console.log(new Error("a") instanceof Error);
+      console.log(new TypeError("b") instanceof TypeError);
+      console.log(new TypeError("b") instanceof Error);
+      console.log(new RangeError("c") instanceof TypeError);
+      const e = new Error("boom");
+      console.log(String(e), e.toString(), e.name, e.message);
+
+      class MyErr extends Error {
+        constructor(m: string) { super(m); this.name = "MyErr"; }
+      }
+      const m = new MyErr("m");
+      console.log(m.name, m.message, m instanceof MyErr, m instanceof Error);
+
+      class CustomRange extends RangeError {}
+      const r = new CustomRange("too big");
+      console.log(r.name, r.message, r instanceof RangeError, r instanceof Error);
+
+      const agg = new AggregateError([1, 2], "all failed");
+      console.log(agg.name, agg.message, JSON.stringify(agg.errors), agg instanceof Error);
+
+      Promise.any([Promise.reject("x"), Promise.reject("y")]).catch((reason) => {
+        const err = reason as { name: string; errors: unknown[] };
+        console.log(err.name, JSON.stringify(err.errors));
+      });
+    `;
+    expect(runProgram(source)).toBe(
+      "function function function\ntrue\ntrue\ntrue\nfalse\n" +
+        "Error: boom Error: boom Error boom\n" +
+        "MyErr m true true\nRangeError too big true true\n" +
+        "AggregateError all failed [1,2] true\nAggregateError [\"x\",\"y\"]",
+    );
+  });
 });

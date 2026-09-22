@@ -166,6 +166,10 @@ static const xt_method_spec XT_PROMISE_METHODS[] = {
   {"then", 2}, {"catch", 1}, {"finally", 1},
 };
 
+static const xt_method_spec XT_ERROR_METHODS[] = {
+  {"toString", 0},
+};
+
 static int xt_method_lookup(const xt_method_spec *specs, size_t count, const char *method, int32_t *arity) {
   for (size_t i = 0; i < count; i++) {
     if (strcmp(method, specs[i].name) == 0) {
@@ -206,6 +210,8 @@ xt_value xt_method_value(xt_value target, xt_value name) {
       known = xt_method_lookup(XT_REGEXP_METHODS, XT_NAME_COUNT(XT_REGEXP_METHODS), method, &arity);
     } else if (kind == XT_OBJECT_KIND_PROMISE) {
       known = xt_method_lookup(XT_PROMISE_METHODS, XT_NAME_COUNT(XT_PROMISE_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_ERROR) {
+      known = xt_method_lookup(XT_ERROR_METHODS, XT_NAME_COUNT(XT_ERROR_METHODS), method, &arity);
     }
   }
   if (!known) return XT_UNDEFINED;
@@ -233,6 +239,9 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     if (kind == XT_OBJECT_KIND_PROMISE) {
       xt_value result = xt_promise_method(target, method, argc, argv, &handled);
       if (handled) return result;
+    }
+    if (kind == XT_OBJECT_KIND_ERROR && strcmp(method, "toString") == 0) {
+      return xt_error_to_string(target);
     }
     if (kind != XT_OBJECT_KIND_OBJECT && kind != XT_OBJECT_KIND_FUNCTION) {
       xt_value result = xt_ext_container_method(target, method, argc, argv, &handled);

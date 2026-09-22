@@ -465,6 +465,64 @@ ${printAll([
 ])}`,
   );
 
+  diff(
+    "Error family and AggregateError",
+    `
+const e = new Error("boom");
+class MyErr extends Error {
+  constructor(m: string) { super(m); this.name = "MyErr"; }
+}
+class CustomRange extends RangeError {}
+const m = new MyErr("m");
+const r = new CustomRange("too big");
+const agg = new AggregateError([1, 2], "all failed");
+${printAll([
+  "typeof Error",
+  "typeof TypeError",
+  "typeof AggregateError",
+  "e instanceof Error",
+  "new TypeError('b') instanceof TypeError",
+  "new TypeError('b') instanceof Error",
+  "new RangeError('c') instanceof TypeError",
+  "String(e)",
+  "e.toString()",
+  "e.name",
+  "e.message",
+  "m.name",
+  "m.message",
+  "m instanceof MyErr",
+  "m instanceof Error",
+  "m instanceof TypeError",
+  "r.name",
+  "r.message",
+  "r instanceof RangeError",
+  "r instanceof Error",
+  "agg.name",
+  "agg.message",
+  "agg.errors",
+  "agg instanceof AggregateError",
+  "agg instanceof Error",
+  "String(agg)",
+  "typeof e.stack",
+])}`,
+  );
+
+  diff(
+    "Promise.any rejects with an AggregateError",
+    `
+Promise.any([Promise.reject("a"), Promise.reject("b"), Promise.resolve(42)])
+  .then((value) => console.log(JSON.stringify(["fulfilled", value])))
+  .catch((reason) => {
+    const err = reason as { name: string; message: string; errors: unknown[] };
+    console.log(JSON.stringify([err.name, err.message, err.errors]));
+  });
+Promise.any([Promise.reject("x"), Promise.reject("y")]).catch((reason) => {
+  const err = reason as { name: string; errors: unknown[] };
+  console.log(JSON.stringify([err.name, err.errors, reason instanceof AggregateError]));
+});
+`,
+  );
+
   it("binds namespace imports to every export", () => {
     harness.expectSameOutputAsNode(
       `import * as util from "./util.ts";

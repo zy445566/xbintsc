@@ -18,7 +18,7 @@ import type {
   ModuleExports,
 } from "../../extensions/registry.js";
 import type { CodegenOptions, FunctionState } from "./state.js";
-import { escapeBytes, isErrorFamily, kindName, utf8Bytes } from "./tables.js";
+import { escapeBytes, isErrorFamily, kindName, requiresSetjmpex, utf8Bytes } from "./tables.js";
 
 export class GeneratorContext {
   readonly binding: BindResult;
@@ -26,6 +26,8 @@ export class GeneratorContext {
   readonly diagnostics: DiagnosticBag;
   readonly builtins: Readonly<Record<string, BuiltinFunction>>;
   readonly modules: Readonly<Record<string, ExtensionModule>>;
+  /** Host the emitted IR targets (the process by default; see `CodegenOptions`). */
+  readonly target: { readonly platform: string; readonly arch: string };
   /** Imported symbol id -> the module binding it refers to. */
   readonly importExports = new Map<number, ModuleExport>();
   /** Imported symbol id -> the namespace it aliases (e.g. `path`). */
@@ -52,6 +54,7 @@ export class GeneratorContext {
     this.binding = bind(sourceFile);
     this.builtins = options.builtins ?? {};
     this.modules = options.modules ?? {};
+    this.target = options.target ?? { platform: process.platform, arch: process.arch };
     this.resolveImports();
   }
 
@@ -125,6 +128,31 @@ export class GeneratorContext {
 
   reg(): string {
     return `%r${this.current.reg++}`;
+  }
+
+  /**
+   * Emit the `setjmp` that opens a `try` frame and return the register holding
+   * its result. The frame address is always passed explicitly because Windows
+   * `_setjmp` stores it in `_JUMP_BUFFER.Frame` for `longjmp` to unwind to; the
+   * extra argument is ignored by the one-argument `_setjmp` on Linux/macOS.
+   */
+  emitSetjmp(frame: string): string {
+    if (requiresSetjmpex(this.target.platform, this.target.arch)) {
+      // Windows ARM64 has no `_setjmp`; use `_setjmpex`, which expects the
+      // caller's stack pointer on entry (`llvm.sponentry`).
+      this.extraDeclarations.add("declare i8* @llvm.sponentry()");
+      this.extraDeclarations.add("declare i32 @_setjmpex(i8*, i8*) returns_twice");
+      const entry = this.reg();
+      this.emit(`  ${entry} = call i8* @llvm.sponentry()`);
+      const jump = this.reg();
+      this.emit(`  ${jump} = call i32 @_setjmpex(i8* ${frame}, i8* ${entry})`);
+      return jump;
+    }
+    const frameAddress = this.reg();
+    this.emit(`  ${frameAddress} = call i8* @llvm.frameaddress(i32 0)`);
+    const jump = this.reg();
+    this.emit(`  ${jump} = call i32 @_setjmp(i8* ${frame}, i8* ${frameAddress})`);
+    return jump;
   }
 
   label(prefix: string): string {

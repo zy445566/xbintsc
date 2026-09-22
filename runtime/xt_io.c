@@ -5,20 +5,21 @@
  * innermost frame when one is active and otherwise prints + exits. Also holds
  * `print`/`console` output and the Node-like value inspector.
  *
- * The generated IR calls `_setjmp` with two arguments — the jmp_buf and the
- * caller's frame address (`@llvm.frameaddress(0)`) — paired with `longjmp`
- * here. This is exactly what clang lowers a C `_setjmp(buf)` call to on MSVC:
- * on Windows the UCRT `_setjmp` stores that frame in `_JUMP_BUFFER.Frame` and
- * `longjmp` passes it to `RtlUnwind` to run the unwind, so omitting it makes
- * `longjmp` unwind to a bogus target (`STATUS_BAD_FUNCTION_TABLE`,
- * 0xC00000FF). Because the generated call is IR it must pass the frame
- * explicitly; the C runtime (see `xt_try_setjmp`) instead follows whatever
- * the active `<setjmp.h>` declares -- one argument on MSVC (clang injects the
- * frame) and two on MinGW-w64. `_setjmp` is used
- * rather than the exported `setjmp` symbol, whose Windows ABI is an
- * incompatible two-argument routine; on Linux/macOS `_setjmp` takes only the
- * buffer and pairs with `longjmp` (the XSI `_longjmp` does not exist on
- * Windows).
+ * The generated IR saves each frame with a `setjmp`-family call that passes
+ * the frame explicitly — the jmp_buf plus a frame pointer — because the call
+ * is already IR and clang will not rewrite it. On Linux/macOS that is
+ * `_setjmp(buf, frame)`; the extra argument is ignored. On Windows the UCRT
+ * `_setjmp` stores the frame in `_JUMP_BUFFER.Frame` and `longjmp` passes it
+ * to `RtlUnwind` to run the unwind, so omitting it makes `longjmp` unwind to a
+ * bogus target (`STATUS_BAD_FUNCTION_TABLE`, 0xC00000FF). Windows ARM64 has
+ * no `_setjmp` at all: the generated IR uses `_setjmpex(buf, entry-sp)` with
+ * the stack pointer on entry (`@llvm.sponentry`), exactly as clang lowers a C
+ * `setjmp` there. The C runtime (see `xt_try_setjmp`) calls whatever the
+ * active `<setjmp.h>` declares — one argument on MSVC (clang injects the
+ * frame) and two on MinGW-w64. `_setjmp`/`_setjmpex` are used rather than the
+ * exported `setjmp` symbol, whose Windows ABI is an incompatible two-argument
+ * routine; on Linux/macOS `_setjmp` takes only the buffer and pairs with
+ * `longjmp` (the XSI `_longjmp` does not exist on Windows).
  */
 
 #include "rt_internal.h"

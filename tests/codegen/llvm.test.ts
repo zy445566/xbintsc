@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compileToIr } from "../helpers.js";
 import { numberLiteral } from "../../src/codegen/values.js";
+import { requiresSetjmpex } from "../../src/codegen/generator/tables.js";
 import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
@@ -66,6 +67,36 @@ describe("codegen", () => {
     expect(ir).toMatch(/while\.cond/);
     expect(ir).toMatch(/while\.body/);
     expect(ir).toMatch(/while\.end/);
+  });
+
+  it("only asks for `_setjmpex` on 64-bit Windows on ARM", () => {
+    expect(requiresSetjmpex("win32", "arm64")).toBe(true);
+    expect(requiresSetjmpex("win32", "x64")).toBe(false);
+    expect(requiresSetjmpex("linux", "arm64")).toBe(false);
+    expect(requiresSetjmpex("darwin", "x64")).toBe(false);
+  });
+
+  it("saves try frames with `_setjmp` on 32/64-bit non-ARM hosts", () => {
+    const { ir } = compileToIr("function a() {}\nfunction b() {}\ntry { a(); } catch (e) { b(); }", undefined, {
+      platform: "win32",
+      arch: "x64",
+    });
+    expect(ir).toContain("call i32 @_setjmp(i8*");
+    expect(ir).toContain("@llvm.frameaddress");
+    expect(ir).not.toContain("@_setjmpex");
+  });
+
+  it("saves try frames with `_setjmpex`/`sponentry` on Windows ARM64 (which has no `_setjmp`)", () => {
+    const { ir, diagnostics } = compileToIr(
+      "function a() {}\nfunction b() {}\ntry { a(); } catch (e) { b(); }",
+      undefined,
+      { platform: "win32", arch: "arm64" },
+    );
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    expect(ir).toContain("declare i8* @llvm.sponentry()");
+    expect(ir).toContain("declare i32 @_setjmpex(i8*, i8*) returns_twice");
+    expect(ir).toMatch(/call i8\* @llvm\.sponentry\(\)/);
+    expect(ir).toMatch(/call i32 @_setjmpex\(i8\* %\w+, i8\* %\w+\)/);
   });
 
   it("allocates locals with alloca and promotes reads/writes through slots", () => {

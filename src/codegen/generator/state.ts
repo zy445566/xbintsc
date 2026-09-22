@@ -62,6 +62,11 @@ export interface CodegenOptions {
   readonly builtins?: Readonly<Record<string, BuiltinFunction>>;
   /** Importable modules supplied by registered extensions. */
   readonly modules?: Readonly<Record<string, ExtensionModule>>;
+  /**
+   * Host the IR is generated for. xbintsc builds for its own host, so this
+   * defaults to the running process; it is overridable for tests.
+   */
+  readonly target?: { readonly platform: string; readonly arch: string };
 }
 
 export const RUNTIME_DECLARATIONS: readonly string[] = [

@@ -235,9 +235,11 @@ typedef struct xt_try_frame {
  *    `_setjmp(jmp_buf, void *frame)` itself, so the frame must be passed
  *    explicitly -- exactly what its own `setjmp` macro does.
  *
- * The generated IR always emits the two-argument form, because it is already
- * IR and clang will not rewrite it. `_setjmp` (rather than the `setjmp` macro)
- * is used so it pairs with the plain `longjmp` in `xt_throw`. */
+ * The generated IR emits the two-argument form, because it is already IR and
+ * clang will not rewrite it. On Windows ARM64 it names `_setjmpex` (and the
+ * entry stack pointer from `llvm.sponentry`) instead, matching clang's own
+ * lowering there. `_setjmp`/`_setjmpex` (rather than the `setjmp` macro) is
+ * used so it pairs with the plain `longjmp` in `xt_throw`. */
 #if defined(_WIN32) && !defined(__MINGW32__)
 #define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
 #elif defined(_WIN32) && defined(__aarch64__)

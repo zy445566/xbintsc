@@ -33,7 +33,11 @@ export function bindSource(text: string): { result: BindResult; diagnostics: rea
   return { result, diagnostics: bag.diagnostics };
 }
 
-export function compileToIr(text: string, extensions?: ExtensionRegistry) {
+export function compileToIr(
+  text: string,
+  extensions?: ExtensionRegistry,
+  target?: { platform: string; arch: string },
+) {
   const { file, diagnostics: parseDiagnostics } = parse(text);
   const diagnostics = new DiagnosticBag();
   diagnostics.addAll(parseDiagnostics);
@@ -41,6 +45,7 @@ export function compileToIr(text: string, extensions?: ExtensionRegistry) {
   const { ir, binding } = generate(file, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
+    ...(target ? { target } : {}),
   });
   return { ir, binding, diagnostics: diagnostics.diagnostics };
 }

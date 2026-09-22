@@ -61,6 +61,13 @@ static xt_value xt_string_method(xt_value target, const char *method, int32_t ar
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv) {
   const char *method = xt_string_data(name);
   if (!method) return XT_UNDEFINED;
+  if (target == XT_UNDEFINED || target == XT_NULL) {
+    const char *base = target == XT_NULL ? "null" : "undefined";
+    char message[256];
+    snprintf(message, sizeof(message),
+             "TypeError: Cannot read properties of %s (reading '%s')", base, method);
+    xt_throw(xt_string_from_cstr(message));
+  }
   int handled = 0;
   if (XT_IS_OBJECT(target)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(target);

@@ -172,7 +172,30 @@ void xt_println(xt_value v) {
 /*
  * console.log applies a Node-like inspection format: strings unquoted at the
  * top level, arrays as `[ a, b ]` and objects as `{ key: value }`.
+ *
+ * Recursion tracks the ancestor chain so self-referential containers print
+ * Node's `[Circular *N]` marker instead of recursing forever. `N` is the
+ * 1-based position of the repeated container in the current path.
  */
+#define XT_INSPECT_MAX_DEPTH 512
+static const void *xt_inspect_stack[XT_INSPECT_MAX_DEPTH];
+static int xt_inspect_depth = 0;
+
+static int xt_inspect_seen(const void *ptr) {
+  for (int i = 0; i < xt_inspect_depth; i++) {
+    if (xt_inspect_stack[i] == ptr) return i + 1;
+  }
+  return 0;
+}
+
+static void xt_inspect_push(const void *ptr) {
+  if (xt_inspect_depth < XT_INSPECT_MAX_DEPTH) xt_inspect_stack[xt_inspect_depth++] = ptr;
+}
+
+static void xt_inspect_pop(void) {
+  if (xt_inspect_depth > 0) xt_inspect_depth--;
+}
+
 static void xt_inspect(xt_value v, FILE *out) {
   if (XT_IS_BIGINT(v)) {
     xt_value text = xt_bigint_to_decimal(v);
@@ -183,6 +206,16 @@ static void xt_inspect(xt_value v, FILE *out) {
   }
   if (XT_IS_ARRAY(v)) {
     xt_array *array = (xt_array *)XT_GET_PTR(v);
+    int seen = xt_inspect_seen(array);
+    if (seen > 0) {
+      fprintf(out, "[Circular *%d]", seen);
+      return;
+    }
+    if (xt_inspect_depth >= XT_INSPECT_MAX_DEPTH) {
+      fputs("[Array]", out);
+      return;
+    }
+    xt_inspect_push(array);
     fputc('[', out);
     for (uint32_t i = 0; i < array->length; i++) {
       if (i > 0) fputs(", ", out);
@@ -191,10 +224,21 @@ static void xt_inspect(xt_value v, FILE *out) {
     }
     if (array->length > 0) fputc(' ', out);
     fputc(']', out);
+    xt_inspect_pop();
     return;
   }
   if (XT_IS_OBJECT(v)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(v);
+    int seen = xt_inspect_seen(obj);
+    if (seen > 0) {
+      fprintf(out, "[Circular *%d]", seen);
+      return;
+    }
+    if (xt_inspect_depth >= XT_INSPECT_MAX_DEPTH) {
+      fputs("[Object]", out);
+      return;
+    }
+    xt_inspect_push(obj);
     fputc('{', out);
     for (uint32_t i = 0; i < obj->count; i++) {
       if (i > 0) fputs(", ", out);
@@ -205,15 +249,23 @@ static void xt_inspect(xt_value v, FILE *out) {
     }
     if (obj->count > 0) fputc(' ', out);
     fputc('}', out);
+    xt_inspect_pop();
     return;
   }
   xt_print_value(v, out);
 }
 
+/* Inspect one top-level value; reset the ancestor chain so nested console
+ * calls (or a `longjmp` out of a throw) never leave stale state behind. */
+static void xt_inspect_top(xt_value v, FILE *out) {
+  xt_inspect_depth = 0;
+  xt_inspect(v, out);
+}
+
 void xt_console_log(int32_t argc, xt_value *argv) {
   for (int32_t i = 0; i < argc; i++) {
     if (i > 0) fputc(' ', stdout);
-    xt_inspect(argv[i], stdout);
+    xt_inspect_top(argv[i], stdout);
   }
   fputc('\n', stdout);
 }
@@ -221,7 +273,7 @@ void xt_console_log(int32_t argc, xt_value *argv) {
 static void xt_console_write(int32_t argc, xt_value *argv, FILE *out) {
   for (int32_t i = 0; i < argc; i++) {
     if (i > 0) fputc(' ', out);
-    xt_inspect(argv[i], out);
+    xt_inspect_top(argv[i], out);
   }
   fputc('\n', out);
 }
@@ -239,7 +291,7 @@ xt_value xt_console_trace(int32_t argc, xt_value *argv) {
   fputs("Trace", stderr);
   for (int32_t i = 0; i < argc; i++) {
     fputc(' ', stderr);
-    xt_inspect(argv[i], stderr);
+    xt_inspect_top(argv[i], stderr);
   }
   fputc('\n', stderr);
   return XT_UNDEFINED;
@@ -251,7 +303,7 @@ xt_value xt_console_assert(int32_t argc, xt_value *argv) {
     if (argc > 1) fputs(":", stderr);
     for (int32_t i = 1; i < argc; i++) {
       fputc(' ', stderr);
-      xt_inspect(argv[i], stderr);
+      xt_inspect_top(argv[i], stderr);
     }
     fputc('\n', stderr);
   }

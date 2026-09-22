@@ -33,33 +33,63 @@ static xt_value xt_array_quantifier(xt_value value, xt_value fn, int every) {
   return xt_bool(every ? 1 : 0);
 }
 
-static int xt_array_compare_values(xt_value a, xt_value b) {
-  if (xt_truthy(xt_gt(a, b))) return 1;
-  if (xt_truthy(xt_lt(a, b))) return -1;
+/*
+ * Default `Array.prototype.sort` comparator. Per spec the elements are
+ * converted to strings and compared by UTF-16 code unit; `undefined` always
+ * sorts last and holes are handled by the caller. Because our strings are
+ * UTF-8, a byte-wise compare matches UTF-16 ordering for the BMP (and differs
+ * only for supplementary vs. U+E000..U+FFFF code points).
+ */
+static int xt_array_default_compare(xt_value a, xt_value b) {
+  if (a == XT_UNDEFINED) return b == XT_UNDEFINED ? 0 : 1;
+  if (b == XT_UNDEFINED) return -1;
+  xt_string *sa = xt_as_string(xt_to_string(a));
+  xt_string *sb = xt_as_string(xt_to_string(b));
+  uint32_t n = sa->length < sb->length ? sa->length : sb->length;
+  int cmp = n ? memcmp(sa->data, sb->data, n) : 0;
+  if (cmp != 0) return cmp < 0 ? -1 : 1;
+  if (sa->length == sb->length) return 0;
+  return sa->length < sb->length ? -1 : 1;
+}
+
+static int xt_array_sort_compare(xt_value fn, int hasFn, xt_value a, xt_value b) {
+  if (!hasFn) return xt_array_default_compare(a, b);
+  xt_value args[2] = {a, b};
+  double result = xt_to_number(xt_closure_call(fn, 2, args));
+  if (result < 0) return -1;
+  if (result > 0) return 1;
   return 0;
+}
+
+/* Stable bottom-up merge sort: O(n log n) and never reorders equal keys. */
+static void xt_array_merge_sort(xt_value *items, xt_value *scratch, uint32_t length, xt_value fn, int hasFn) {
+  for (uint32_t width = 1; width < length; width *= 2) {
+    for (uint32_t lo = 0; lo < length; lo += 2 * width) {
+      uint32_t mid = lo + width < length ? lo + width : length;
+      uint32_t hi = lo + 2 * width < length ? lo + 2 * width : length;
+      uint32_t i = lo, j = mid, k = lo;
+      while (i < mid && j < hi) {
+        if (xt_array_sort_compare(fn, hasFn, items[j], items[i]) < 0) scratch[k++] = items[j++];
+        else scratch[k++] = items[i++];
+      }
+      while (i < mid) scratch[k++] = items[i++];
+      while (j < hi) scratch[k++] = items[j++];
+      for (k = lo; k < hi; k++) items[k] = scratch[k];
+    }
+  }
 }
 
 static xt_value xt_array_sort(xt_value value, xt_value fn) {
   xt_array *array = xt_as_array(value);
   if (!array || array->length < 2) return value;
   int hasFn = XT_IS_FUNCTION(fn);
-  for (uint32_t i = 1; i < array->length; i++) {
-    xt_value key = array->items[i];
-    int32_t j = (int32_t)i - 1;
-    while (j >= 0) {
-      int cmp;
-      if (hasFn) {
-        xt_value args[2] = {array->items[j], key};
-        cmp = (int)xt_to_number(xt_closure_call(fn, 2, args));
-      } else {
-        cmp = xt_array_compare_values(array->items[j], key);
-      }
-      if (cmp <= 0) break;
-      array->items[j + 1] = array->items[j];
-      j--;
-    }
-    array->items[j + 1] = key;
+  xt_value *scratch = (xt_value *)malloc(sizeof(xt_value) * array->length);
+  if (!scratch) {
+    xt_throw(xt_string_from_cstr("RangeError: out of memory in Array.prototype.sort"));
+    return value;
   }
+  xt_array_merge_sort(array->items, scratch, array->length, fn, hasFn);
+  free(scratch);
   return value;
 }
 

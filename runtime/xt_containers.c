@@ -363,7 +363,27 @@ xt_value *xt_array_items(xt_value value) {
 /* Generic member access                                                     */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * Reading a property of `null` / `undefined` is a TypeError in JavaScript.
+ * Short-circuiting `?.` guards forbid reaching this point for a nullish
+ * receiver, so a non-optional access on a nullish base is a genuine bug in
+ * the compiled program (e.g. `o?.a.b` where `o.a` is null).
+ */
+static void xt_throw_read_of_nullish(xt_value target, xt_value key) {
+  const char *base = target == XT_NULL ? "null" : "undefined";
+  char keybuf[128];
+  xt_string *k = XT_IS_STRING(key) ? xt_as_string(key) : xt_as_string(xt_to_string(key));
+  uint32_t n = k->length < sizeof(keybuf) - 1 ? k->length : (uint32_t)(sizeof(keybuf) - 1);
+  memcpy(keybuf, k->data, n);
+  keybuf[n] = 0;
+  char message[256];
+  snprintf(message, sizeof(message),
+           "TypeError: Cannot read properties of %s (reading '%s')", base, keybuf);
+  xt_throw(xt_string_from_cstr(message));
+}
+
 xt_value xt_get(xt_value target, xt_value key) {
+  if (target == XT_UNDEFINED || target == XT_NULL) xt_throw_read_of_nullish(target, key);
   if (XT_IS_ARRAY(target)) {
     /* `arr.length` must read the array's length, never an element. */
     if (XT_IS_STRING(key)) {

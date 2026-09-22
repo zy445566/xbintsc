@@ -5,8 +5,10 @@
 
 import {
   SyntaxKind,
+  type CallExpression,
   type DeleteExpression,
   type ElementAccessExpression,
+  type Expression,
   type Identifier,
   type PropertyAccessExpression,
 } from "../../../ast/nodes.js";
@@ -19,6 +21,14 @@ export interface AccessCallMethods {
   emitPropertyAccess(this: Generator, node: PropertyAccessExpression): string;
   emitElementAccess(this: Generator, node: ElementAccessExpression): string;
   emitOptional(this: Generator, objectValue: string, compute: () => string): string;
+  /** True when `node` is (part of) an optional chain: a `?.` appears anywhere
+   *  along its member/call spine. Parentheses end the chain. */
+  isOptionalChain(this: Generator, node: Expression): boolean;
+  emitOptionalChain(this: Generator, node: Expression): string;
+  emitChainValue(this: Generator, node: Expression, endLabel: string): string;
+  emitChainReceiver(this: Generator, node: Expression, endLabel: string): string;
+  guardOptional(this: Generator, value: string, endLabel: string): void;
+  emitPropertyGet(this: Generator, object: string, name: string): string;
 }
 
 export const accessCallMethods: AccessCallMethods = {
@@ -86,18 +96,7 @@ export const accessCallMethods: AccessCallMethods = {
       }
     }
     const object = this.emitExpression(node.expression);
-    const access = (): string => {
-      if (node.name.text === "length") {
-        const result = this.reg();
-        this.emit(`  ${result} = call i64 @xt_array_length(i64 ${object})`);
-        return result;
-      }
-      const key = this.stringValue(node.name.text);
-      const result = this.reg();
-      this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
-      return result;
-    };
-    return node.optional ? this.emitOptional(object, access) : access();
+    return this.emitPropertyGet(object, node.name.text);
   },
 
   emitElementAccess(node: ElementAccessExpression): string {
@@ -109,6 +108,125 @@ export const accessCallMethods: AccessCallMethods = {
       return result;
     };
     return node.optional ? this.emitOptional(object, access) : access();
+  },
+
+  /** Property read that works on any receiver value (`length` is special-cased
+   *  because it is meaningful for arrays and strings). */
+  emitPropertyGet(object: string, name: string): string {
+    if (name === "length") {
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_array_length(i64 ${object})`);
+      return result;
+    }
+    const key = this.stringValue(name);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
+    return result;
+  },
+
+  /*
+   * Optional chaining is a *whole-chain* short circuit in JavaScript:
+   * `a?.b.c()` evaluates to `undefined` when `a` is nullish, without reading
+   * `.b`/`.c` or calling anything. The parser records `optional` on the
+   * individual access node, so we detect the chain here, evaluate it once and
+   * branch to a shared end label whenever any `?.` guard fails. The result slot
+   * defaults to `undefined` and is overwritten only on the non-short-circuited
+   * path.
+   */
+  isOptionalChain(node: Expression): boolean {
+    let current: Expression = node;
+    for (;;) {
+      if (current.kind === SyntaxKind.PropertyAccessExpression || current.kind === SyntaxKind.ElementAccessExpression) {
+        const access = current as PropertyAccessExpression | ElementAccessExpression;
+        if (access.optional) return true;
+        current = access.expression;
+      } else if (current.kind === SyntaxKind.CallExpression) {
+        const call = current as CallExpression;
+        if (call.optional) return true;
+        current = call.expression;
+      } else {
+        return false;
+      }
+    }
+  },
+
+  emitOptionalChain(node: Expression): string {
+    const result = this.alloca();
+    this.emit(`  store i64 ${i64(XT_UNDEFINED)}, i64* ${result}`);
+    const endLabel = this.label("optchain.end");
+    const value = this.emitChainValue(node, endLabel);
+    this.emit(`  store i64 ${value}, i64* ${result}`);
+    this.terminate(`br label %${endLabel}`);
+    this.startBlock(endLabel);
+    const merged = this.reg();
+    this.emit(`  ${merged} = load i64, i64* ${result}`);
+    return merged;
+  },
+
+  emitChainValue(node: Expression, endLabel: string): string {
+    if (node.kind === SyntaxKind.PropertyAccessExpression) {
+      const access = node as PropertyAccessExpression;
+      const object = this.emitChainReceiver(access.expression, endLabel);
+      if (access.optional) this.guardOptional(object, endLabel);
+      return this.emitPropertyGet(object, access.name.text);
+    }
+    if (node.kind === SyntaxKind.ElementAccessExpression) {
+      const access = node as ElementAccessExpression;
+      const object = this.emitChainReceiver(access.expression, endLabel);
+      if (access.optional) this.guardOptional(object, endLabel);
+      const key = this.emitExpression(access.argumentExpression);
+      return this.runtimeCall("xt_get", [object, key]);
+    }
+    if (node.kind === SyntaxKind.CallExpression) {
+      const call = node as CallExpression;
+      const callee = call.expression;
+      /* `a.b?.()`: the callee value itself is guarded, then invoked. */
+      if (call.optional) {
+        const calleeValue = this.emitChainReceiver(callee, endLabel);
+        this.guardOptional(calleeValue, endLabel);
+        const args = this.emitArguments(call.arguments);
+        const out = this.reg();
+        this.emit(`  ${out} = call i64 @xt_closure_call(i64 ${calleeValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+        return out;
+      }
+      /* `a?.b(...)` / `a?.[k](...)`: guard the receiver, then dispatch. */
+      if (callee.kind === SyntaxKind.PropertyAccessExpression || callee.kind === SyntaxKind.ElementAccessExpression) {
+        const access = callee as PropertyAccessExpression | ElementAccessExpression;
+        const object = this.emitChainReceiver(access.expression, endLabel);
+        if (access.optional) this.guardOptional(object, endLabel);
+        const name =
+          access.kind === SyntaxKind.PropertyAccessExpression
+            ? this.stringValue((access as PropertyAccessExpression).name.text)
+            : this.emitExpression((access as ElementAccessExpression).argumentExpression);
+        const args = this.emitArguments(call.arguments);
+        const out = this.reg();
+        this.emit(`  ${out} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`);
+        return out;
+      }
+      const calleeValue = this.emitChainReceiver(callee, endLabel);
+      const args = this.emitArguments(call.arguments);
+      const out = this.reg();
+      this.emit(`  ${out} = call i64 @xt_closure_call(i64 ${calleeValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+      return out;
+    }
+    return this.emitExpression(node);
+  },
+
+  emitChainReceiver(node: Expression, endLabel: string): string {
+    return this.isOptionalChain(node) ? this.emitChainValue(node, endLabel) : this.emitExpression(node);
+  },
+
+  /** Branch to `endLabel` (result stays `undefined`) when `value` is nullish. */
+  guardOptional(value: string, endLabel: string): void {
+    const nullish = this.reg();
+    this.emit(`  ${nullish} = call i64 @xt_is_nullish(i64 ${value})`);
+    const truthy = this.reg();
+    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${nullish})`);
+    const condition = this.reg();
+    this.emit(`  ${condition} = icmp ne i32 ${truthy}, 0`);
+    const cont = this.label("optchain.cont");
+    this.terminate(`br i1 ${condition}, label %${endLabel}, label %${cont}`);
+    this.startBlock(cont);
   },
 
   /**

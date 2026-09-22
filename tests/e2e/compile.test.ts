@@ -226,12 +226,63 @@ describeE2E("end-to-end compilation", (harness) => {
   it("supports optional chaining", () => {
     const source = `
       const obj = { a: { b: 5 }, m: (x: number) => x + 1 };
-      const empty = null;
+      const empty: any = null;
       console.log(obj?.a?.b, empty?.a?.b, obj?.m?.(10), empty?.m?.(10));
       const arr = [1, 2, 3];
       console.log(arr?.length, arr?.map((x) => x * 2).join(","), empty?.length);
     `;
     expect(runProgram(source)).toBe("5 undefined 11 undefined\n3 2,4,6 undefined");
+  });
+
+  it("short-circuits a whole optional chain but throws past the guard", () => {
+    const source = `
+      const empty: any = null;
+      const nested: any = { a: { b: null } };
+      // A \`?.\` short-circuits every later member, so nothing past it is evaluated.
+      console.log("A", empty?.a.b.c);
+      console.log("B", (nested?.a)?.b);
+      console.log("C", nested.a?.b?.c);
+      // Once the chain has started, a non-optional member on null throws.
+      try {
+        console.log(nested?.b.c);
+        console.log("D-ok");
+      } catch (e) {
+        console.log("D-threw");
+      }
+      try {
+        console.log(nested.a?.b.c);
+        console.log("E-ok");
+      } catch (e) {
+        console.log("E-threw");
+      }
+    `;
+    expect(runProgram(source)).toBe("A undefined\nB null\nC undefined\nD-threw\nE-threw");
+  });
+
+  it("defaults Array.sort to string order and reveals circular references", () => {
+    const source = `
+      console.log([10, 1, 2, 20].sort().join(","));
+      console.log(["banana", "apple", "cherry"].sort().join(","));
+      console.log(JSON.stringify([3, undefined, 1, 2, undefined].sort()));
+      console.log([5, 3, 8, 1].sort((a, b) => a - b).join(","));
+      const o: any = { name: "x" };
+      o.self = o;
+      o.child = { parent: o };
+      console.log(o);
+      const arr: any = [1, 2];
+      arr.push(arr);
+      console.log(arr);
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        "1,10,2,20",
+        "apple,banana,cherry",
+        "[1,2,3,null,null]",
+        "1,3,5,8",
+        "{ name: x, self: [Circular *1], child: { parent: [Circular *1] } }",
+        "[ 1, 2, [Circular *1] ]",
+      ].join("\n"),
+    );
   });
 
   it("supports classes with new, this, statics, inheritance and instanceof", () => {

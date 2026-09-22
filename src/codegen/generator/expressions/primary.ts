@@ -42,6 +42,9 @@ export interface PrimaryExpressionMethods {
 
 export const primaryExpressionMethods: PrimaryExpressionMethods = {
   emitExpression(node: Expression): string {
+    /* An optional chain must be lowered as a unit so `?.` short-circuits the
+       entire chain (`a?.b.c()`), not just the guarded member. */
+    if (this.isOptionalChain(node)) return this.emitOptionalChain(node);
     switch (node.kind) {
       case SyntaxKind.Identifier:
         return this.emitIdentifier(node as Identifier);

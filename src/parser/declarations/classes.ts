@@ -196,6 +196,10 @@ export const declarationClassMethods: DeclarationClassMethods = {
 
   parsePropertyName(this: Parser): PropertyName {
     const token = this.token;
+    if (token.kind === TokenKind.PrivateIdentifier) {
+      this.nextToken();
+      return { kind: SyntaxKind.PrivateIdentifier, text: token.text, start: token.start, end: token.end };
+    }
     if (token.kind === TokenKind.StringLiteral) {
       this.nextToken();
       return { kind: SyntaxKind.StringLiteral, text: token.text, raw: token.text, value: String(token.value ?? ""), start: token.start, end: token.end };

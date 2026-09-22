@@ -40,18 +40,25 @@ xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv) {
 }
 
 static xt_value xt_date_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled) {
+  (void)argc;
+  (void)argv;
   *handled = 1;
   xt_date *date = (xt_date *)XT_GET_PTR(target);
+  if (strcmp(method, "getTime") == 0 || strcmp(method, "valueOf") == 0) return xt_number(date->time);
   time_t seconds = (time_t)(date->time / 1000.0);
   struct tm tm;
-  xt_gmtime_r(&seconds, &tm);
-  if (strcmp(method, "getTime") == 0 || strcmp(method, "valueOf") == 0) return xt_number(date->time);
   const char *name = method;
   char utc[32];
+  int isUtc = 0;
   if (strncmp(method, "getUTC", 6) == 0) {
     snprintf(utc, sizeof(utc), "get%s", method + 6);
     name = utc;
+    isUtc = 1;
   }
+  /* Bare getters and `toString` report local time; `getUTC*` and
+   * `toISOString` report UTC. */
+  if (isUtc || strcmp(method, "toISOString") == 0) xt_gmtime_r(&seconds, &tm);
+  else xt_localtime_r(&seconds, &tm);
   if (strcmp(name, "getFullYear") == 0) return xt_number(tm.tm_year + 1900);
   if (strcmp(name, "getMonth") == 0) return xt_number(tm.tm_mon);
   if (strcmp(name, "getDate") == 0) return xt_number(tm.tm_mday);

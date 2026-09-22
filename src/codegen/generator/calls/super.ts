@@ -3,9 +3,7 @@
  */
 
 import {
-  SyntaxKind,
   type CallExpression,
-  type Identifier,
   type PropertyAccessExpression,
 } from "../../../ast/nodes.js";
 import type { Generator } from "../generator.js";
@@ -20,15 +18,14 @@ export const superCallMethods: SuperCallMethods = {
     const thisValue = this.emitThis();
     const classInfo = this.current.fn.classInfo;
     const parent = classInfo?.parentExpression;
-    const unboundBuiltin =
-      parent !== undefined &&
-      parent.kind === SyntaxKind.Identifier &&
-      (parent as Identifier).text === "Error" &&
-      !this.binding.symbolOfIdentifier.get(parent as Identifier);
-    if (unboundBuiltin) {
+    const errorName = parent ? this.errorFamilyName(parent) : undefined;
+    if (errorName) {
       const args = this.emitArguments(node.arguments);
+      const nameValue = this.stringValue(errorName);
       const result = this.reg();
-      this.emit(`  ${result} = call i64 @xt_error_init(i64 ${thisValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+      this.emit(
+        `  ${result} = call i64 @xt_error_init(i64 ${thisValue}, i64 ${nameValue}, i32 ${args.argc}, i64* ${args.ptr})`,
+      );
       return result;
     }
     const proto = this.reg();

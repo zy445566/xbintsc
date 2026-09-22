@@ -36,12 +36,12 @@ export function propertyNameText(name: PropertyName): string {
 
 export function isAssignmentTarget(expr: Expression): boolean {
   switch (expr.kind) {
+    // Array/object literals are valid on the left of `=` as destructuring
+    // patterns (`[a, b] = xs`, `({ a } = obj)`).
     case SyntaxKind.Identifier:
     case SyntaxKind.PropertyAccessExpression:
     case SyntaxKind.ElementAccessExpression:
     case SyntaxKind.ParenthesizedExpression:
-    // Array/object literals are valid on the left of `=` as destructuring
-    // patterns (`[a, b] = xs`, `({ a } = obj)`).
     case SyntaxKind.ArrayLiteralExpression:
     case SyntaxKind.ObjectLiteralExpression:
       return true;

@@ -24,7 +24,6 @@ export class Parser extends ParserContext {
     const statements: Statement[] = [];
     while (!this.at(TokenKind.EndOfFile)) {
       const before = this.consumed;
-      const beforePos = this.scanner.position;
       const statement = this.parseStatement();
       if (statement) statements.push(statement);
       if (this.consumed === before) {

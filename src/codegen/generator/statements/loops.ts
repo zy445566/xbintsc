@@ -14,6 +14,7 @@ import {
 } from "../../../ast/nodes.js";
 import { numberLiteral } from "../../values.js";
 import type { Generator } from "../generator.js";
+import type { LoopLabels } from "../state.js";
 
 export interface LoopStatementMethods {
   emitWhile(this: Generator, statement: WhileStatement): void;
@@ -21,9 +22,25 @@ export interface LoopStatementMethods {
   emitFor(this: Generator, statement: ForStatement): void;
   emitForOf(this: Generator, statement: ForOfStatement | ForInStatement): void;
   bindLoopVariable(this: Generator, initializer: VariableDeclarationList | Expression, value: string): void;
+  takePendingLabels(this: Generator): string[];
+  findLoop(this: Generator, label: string | undefined): LoopLabels | undefined;
 }
 
 export const loopStatementMethods: LoopStatementMethods = {
+  /** Consume labels accumulated by enclosing `LabeledStatement`s. */
+  takePendingLabels(): string[] {
+    return this.current.pendingLabels.splice(0, this.current.pendingLabels.length);
+  },
+
+  /** Innermost loop, or the innermost loop carrying `label`. */
+  findLoop(label: string | undefined) {
+    for (let i = this.current.loops.length - 1; i >= 0; i--) {
+      const loop = this.current.loops[i]!;
+      if (!label || loop.labels?.includes(label)) return loop;
+    }
+    return undefined;
+  },
+
   emitWhile(statement: WhileStatement): void {
     const condLabel = this.label("while.cond");
     const bodyLabel = this.label("while.body");
@@ -37,7 +54,7 @@ export const loopStatementMethods: LoopStatementMethods = {
     this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
     this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);
     this.startBlock(bodyLabel);
-    this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel, tryDepth: this.current.tryFrames.length });
+    this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel, tryDepth: this.current.tryFrames.length, labels: this.takePendingLabels() });
     this.emitStatement(statement.statement);
     this.current.loops.pop();
     if (!this.current.terminated) this.terminate(`br label %${condLabel}`);
@@ -50,7 +67,7 @@ export const loopStatementMethods: LoopStatementMethods = {
     const endLabel = this.label("do.end");
     this.terminate(`br label %${bodyLabel}`);
     this.startBlock(bodyLabel);
-    this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel, tryDepth: this.current.tryFrames.length });
+    this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel, tryDepth: this.current.tryFrames.length, labels: this.takePendingLabels() });
     this.emitStatement(statement.statement);
     this.current.loops.pop();
     if (!this.current.terminated) this.terminate(`br label %${condLabel}`);
@@ -96,7 +113,7 @@ export const loopStatementMethods: LoopStatementMethods = {
     }
 
     this.startBlock(bodyLabel);
-    this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel, tryDepth: this.current.tryFrames.length });
+    this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel, tryDepth: this.current.tryFrames.length, labels: this.takePendingLabels() });
     this.emitStatement(statement.statement);
     this.current.loops.pop();
     if (!this.current.terminated) this.terminate(`br label %${updateLabel}`);
@@ -112,12 +129,12 @@ export const loopStatementMethods: LoopStatementMethods = {
     const source = this.emitExpression(statement.expression);
     const isForIn = statement.kind === SyntaxKind.ForInStatement;
     // `for...in` iterates the enumerable keys (indices become strings);
-    // `for...of` iterates the values at each index.
-    const iterable = isForIn ? this.runtimeCall("xt_object_keys", [source]) : source;
+    // `for...of` resolves the iteration protocol once, then walks it.
+    const iterable = isForIn
+      ? this.runtimeCall("xt_object_keys", [source])
+      : this.runtimeCall("xt_iter_open", [source]);
     const indexPtr = this.alloca();
     this.emit(`  store i64 ${numberLiteral(0)}, i64* ${indexPtr}`);
-    const lengthValue = this.reg();
-    this.emit(`  ${lengthValue} = call i64 @xt_iter_length(i64 ${iterable})`);
 
     const condLabel = this.label("forof.cond");
     const bodyLabel = this.label("forof.body");
@@ -128,10 +145,11 @@ export const loopStatementMethods: LoopStatementMethods = {
     this.startBlock(condLabel);
     const index = this.reg();
     this.emit(`  ${index} = load i64, i64* ${indexPtr}`);
-    const inRange = this.reg();
-    this.emit(`  ${inRange} = call i64 @xt_lt(i64 ${index}, i64 ${lengthValue})`);
+    /* `xt_iter_has` covers generators too, which cannot be sized up front. */
+    const hasValue = this.reg();
+    this.emit(`  ${hasValue} = call i64 @xt_iter_has(i64 ${iterable}, i64 ${index})`);
     const truthy = this.reg();
-    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${inRange})`);
+    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${hasValue})`);
     const nonzero = this.reg();
     this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
     this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);
@@ -140,7 +158,7 @@ export const loopStatementMethods: LoopStatementMethods = {
     const element = this.reg();
     this.emit(`  ${element} = call i64 @xt_iter_value(i64 ${iterable}, i64 ${index})`);
     this.bindLoopVariable(statement.initializer, element);
-    this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel, tryDepth: this.current.tryFrames.length });
+    this.current.loops.push({ breakLabel: endLabel, continueLabel: updateLabel, tryDepth: this.current.tryFrames.length, labels: this.takePendingLabels() });
     this.emitStatement(statement.statement);
     this.current.loops.pop();
     if (!this.current.terminated) this.terminate(`br label %${updateLabel}`);

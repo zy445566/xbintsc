@@ -196,9 +196,7 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
         const assignment = property as PropertyAssignment;
         let key: string;
         if (assignment.name.kind === SyntaxKind.ComputedPropertyName) {
-          const keyValue = this.emitExpression((assignment.name as { expression: Expression }).expression);
-          key = this.reg();
-          this.emit(`  ${key} = call i64 @xt_to_string(i64 ${keyValue})`);
+          key = this.emitExpression((assignment.name as { expression: Expression }).expression);
         } else {
           key = this.stringValue(propertyNameText(assignment.name));
         }

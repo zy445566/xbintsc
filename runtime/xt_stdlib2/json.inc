@@ -148,24 +148,35 @@ static void xt_json_stringify_array(xt_value value, int indent, int depth, xt_va
 static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_value *out) {
   xt_value keys = xt_object_keys(value);
   xt_array *array = xt_as_array(keys);
-  if (!array || array->length == 0) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
-  *out = xt_add(*out, xt_string_from_cstr("{"));
+  if (!array) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
+  int any = 0;
   for (uint32_t i = 0; i < array->length; i++) {
-    if (i > 0) *out = xt_add(*out, xt_string_from_cstr(","));
-    xt_json_indent(out, indent, depth + 1);
+    xt_value item = xt_object_get(value, array->items[i]);
+    if (item != XT_UNDEFINED && !XT_IS_FUNCTION(item) && !xt_is_symbol(item)) { any = 1; break; }
+  }
+  if (!any) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
+  *out = xt_add(*out, xt_string_from_cstr("{"));
+  int written = 0;
+  for (uint32_t i = 0; i < array->length; i++) {
     xt_value key = array->items[i];
+    xt_value item = xt_object_get(value, key);
+    /* `undefined`, functions and symbols are omitted from objects. */
+    if (item == XT_UNDEFINED || XT_IS_FUNCTION(item) || xt_is_symbol(item)) continue;
+    if (written > 0) *out = xt_add(*out, xt_string_from_cstr(","));
+    written++;
+    xt_json_indent(out, indent, depth + 1);
     *out = xt_add(*out, xt_string_from_cstr("\""));
     *out = xt_add(*out, key);
     *out = xt_add(*out, xt_string_from_cstr("\":"));
     if (indent > 0) *out = xt_add(*out, xt_string_from_cstr(" "));
-    xt_json_stringify_value(xt_object_get(value, key), indent, depth + 1, out);
+    xt_json_stringify_value(item, indent, depth + 1, out);
   }
   xt_json_indent(out, indent, depth);
   *out = xt_add(*out, xt_string_from_cstr("}"));
 }
 
 static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_value *out) {
-  if (value == XT_UNDEFINED || value == XT_NULL || XT_IS_FUNCTION(value)) {
+  if (value == XT_UNDEFINED || value == XT_NULL || XT_IS_FUNCTION(value) || xt_is_symbol(value)) {
     *out = xt_add(*out, xt_string_from_cstr("null"));
     return;
   }
@@ -207,7 +218,9 @@ xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
   else if (XT_IS_STRING(space)) indent = (int)((xt_string *)XT_GET_PTR(space))->length;
   if (indent < 0) indent = 0;
   if (indent > 10) indent = 10;
+  xt_value value = xt_arg_at(argc, argv, 0);
+  if (value == XT_UNDEFINED || XT_IS_FUNCTION(value) || xt_is_symbol(value)) return XT_UNDEFINED;
   xt_value out = xt_string_from_cstr("");
-  xt_json_stringify_value(xt_arg_at(argc, argv, 0), indent, 0, &out);
+  xt_json_stringify_value(value, indent, 0, &out);
   return out;
 }

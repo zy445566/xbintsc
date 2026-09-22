@@ -32,6 +32,7 @@
 
 #include "rt.h"
 
+#include <setjmp.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -47,6 +48,9 @@
 #define XT_OBJECT_KIND_REGEXP 9
 #define XT_OBJECT_KIND_SYMBOL 10
 #define XT_OBJECT_KIND_BIGINT 11
+#define XT_OBJECT_KIND_ERROR 12
+#define XT_OBJECT_KIND_GENERATOR 13
+#define XT_OBJECT_KIND_ITERATOR 14
 
 /* Common header for every heap object. */
 typedef struct xt_header {
@@ -74,7 +78,8 @@ typedef struct {
 } xt_bigint;
 
 typedef struct {
-  xt_string *key;
+  /* String or Symbol value (see `xt_to_property_key`). */
+  xt_value key;
   xt_value value;
   /* Accessor properties (`get x()` / `set x(v)`) store the functions here;
    * when set, `value` is ignored and property access invokes the getter. */
@@ -98,6 +103,9 @@ typedef struct {
   uint32_t length;
   uint32_t capacity;
   xt_value *items;
+  /* Named (non-index) properties such as `raw` on template strings or
+   * `index`/`input` on RegExp match results, stored in an `xt_object`. */
+  xt_value extra;
 } xt_array;
 
 typedef struct {
@@ -109,6 +117,9 @@ typedef struct {
   xt_string *name;
   xt_object *properties;
   xt_value prototype;
+  /* Set on generator function objects: calling the closure does not run the
+   * body, it creates a suspended generator (see xt_generator.c). */
+  uint8_t is_generator;
 } xt_function;
 
 /* Allocation (xt_alloc.c). */
@@ -120,6 +131,12 @@ xt_string *xt_as_string(xt_value value);
 int32_t xt_string_length(xt_string *s);
 int xt_string_equals(xt_string *a, xt_string *b);
 int32_t xt_to_int32(xt_value v);
+
+/* ECMAScript number formatting (xt_values.c). */
+void xt_number_to_js_string(double d, char *buffer, size_t size);
+void xt_number_to_exponential(double d, int precision, char *buffer, size_t size);
+void xt_number_to_precision(double d, int precision, char *buffer, size_t size);
+void xt_number_to_fixed(double d, int precision, char *buffer, size_t size);
 
 /* BigInt runtime (xt_bigint.c). */
 int xt_is_bigint(xt_value value);
@@ -150,7 +167,19 @@ void xt_array_reserve(xt_array *array, uint32_t needed);
 
 /* Object helpers used by the standard library. */
 xt_object *xt_as_object(xt_value value);
-xt_property *xt_object_find_property(xt_object *obj, xt_string *key);
+xt_property *xt_object_find_property(xt_object *obj, xt_value key);
+
+/* Property keys are either strings or symbols. */
+xt_value xt_to_property_key(xt_value key);
+int xt_property_key_equals(xt_value a, xt_value b);
+
+/* Symbols (xt_symbol.c). */
+int xt_is_symbol(xt_value value);
+xt_value xt_symbol_new(xt_value description);
+xt_value xt_symbol_description(xt_value value);
+xt_value xt_symbol_to_string(xt_value value);
+xt_value xt_symbol_well_known(const char *name);
+xt_value xt_object_own_property_symbols(xt_value value);
 
 /* Map / Set / Promise / Date / RegExp live in xt_stdlib.c and xt_promise.c. */
 int xt_is_promise(xt_value value);
@@ -160,13 +189,44 @@ int xt_is_date(xt_value value);
 int xt_is_regexp(xt_value value);
 int xt_regexp_find(xt_value regexp, xt_value input, int32_t start, int32_t *matchStart, int32_t *matchEnd);
 xt_value xt_regexp_exec(xt_value regexp, xt_value input);
+xt_value xt_regexp_match(xt_value input, xt_value regexp);
 xt_value xt_regexp_replace(xt_value value, xt_value regexp, xt_value replacement);
+xt_value xt_regexp_split(xt_value value, xt_value regexp, xt_value limit);
 xt_value xt_regexp_get_property(xt_value regexp, xt_value key);
 int32_t xt_map_size(xt_value value);
 int32_t xt_set_size(xt_value value);
 /* `for...of` iteration: dispatch over arrays, strings, Maps and Sets. */
 xt_value xt_iter_length(xt_value value);
 xt_value xt_iter_value(xt_value value, xt_value index);
+/* Per-step iteration check. Generators pull the next value here; the index is
+ * ignored because the value is cached until `xt_iter_value` reads it. */
+xt_value xt_iter_has(xt_value value, xt_value index);
+/* Resolve the iteration protocol once: returns `value` for the built-in index
+ * protocols, or a wrapper around `value[Symbol.iterator]()` otherwise. */
+xt_value xt_iter_open(xt_value value);
+
+/* Stackful generators (xt_generator.c). */
+int xt_is_generator(xt_value value);
+xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, xt_value *argv);
+xt_value xt_generator_next(xt_value generator, xt_value sent);
+xt_value xt_generator_return(xt_value generator, xt_value value);
+xt_value xt_generator_throw(xt_value generator, xt_value error);
+xt_value xt_yield(xt_value value);
+xt_value xt_yield_star(xt_value delegate);
+int xt_generator_has_next(xt_value generator);
+xt_value xt_generator_iter_value(xt_value generator);
+
+/* Exception-frame plumbing shared with the generator runtime. The struct is
+ * public so a coroutine can `_setjmp` its own boundary directly (a `setjmp`
+ * must run in the frame it returns to, never in a helper). */
+typedef struct xt_try_frame {
+  jmp_buf buf;
+  struct xt_try_frame *prev;
+  xt_value exception;
+} xt_try_frame;
+#define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
+void *xt_try_mark(void);
+void xt_try_restore(void *mark);
 
 /* -- collection / date / regexp representations --------------------------- */
 typedef struct {
@@ -201,6 +261,10 @@ xt_value xt_ext_array_method(xt_value target, const char *method, int32_t argc, 
 xt_value xt_ext_string_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 xt_value xt_ext_number_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 xt_value xt_ext_object_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+
+/* Error family helpers (xt_stdlib2.c). */
+xt_value xt_error_to_string(xt_value error);
+xt_value xt_aggregate_error_ctor(int32_t argc, xt_value *argv);
 xt_value xt_ext_container_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 

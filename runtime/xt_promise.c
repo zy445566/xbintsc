@@ -210,6 +210,7 @@ xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv) {
     if (XT_IS_ARRAY(iterable)) {
       xt_array *array = xt_as_array(iterable);
       int anyRejected = 0;
+      xt_value reasons = xt_array_new(0, NULL);
       for (uint32_t i = 0; i < array->length; i++) {
         xt_value item = array->items[i];
         xt_promise *inner = xt_is_promise(item) ? xt_as_promise(item) : NULL;
@@ -224,6 +225,7 @@ xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv) {
         if (rejected) {
           if (strcmp(fn, "any") == 0) {
             anyRejected++;
+            xt_array_push(reasons, inner->value);
             continue;
           }
           xt_promise_settle(result, XT_PROMISE_REJECTED, inner->value);
@@ -237,7 +239,10 @@ xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv) {
         xt_array_push(values, settled);
       }
       if (strcmp(fn, "any") == 0 && anyRejected > 0) {
-        xt_promise_settle(result, XT_PROMISE_REJECTED, xt_string_from_cstr("AggregateError: all promises rejected"));
+        xt_value ctorArgv[2];
+        ctorArgv[0] = reasons;
+        ctorArgv[1] = xt_string_from_cstr("All promises were rejected");
+        xt_promise_settle(result, XT_PROMISE_REJECTED, xt_aggregate_error_ctor(2, ctorArgv));
         return xt_promise_value(result);
       }
     }

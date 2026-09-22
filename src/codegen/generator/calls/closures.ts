@@ -10,6 +10,7 @@ import type { Generator } from "../generator.js";
 export interface ClosureCallMethods {
   emitClosure(this: Generator, node: ArrowFunction | FunctionExpression): string;
   emitClosureValue(this: Generator, fn: FunctionInfo): string;
+  emitFunctionMetadata(this: Generator, closure: string, fn: FunctionInfo): void;
 }
 
 export const closureCallMethods: ClosureCallMethods = {
@@ -55,6 +56,29 @@ export const closureCallMethods: ClosureCallMethods = {
     this.emit(`  ${cast} = bitcast i64 (i64, i64, i32, i64*)* @${this.functionName(fn)} to i8*`);
     const closure = this.reg();
     this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 ${count}, i64* ${envPtr})`);
+    this.emitFunctionMetadata(closure, fn);
     return closure;
+  },
+
+  /**
+   * Attach the JavaScript `name` and `length` (arity) of a closure. Arity
+   * counts parameters before the first default / rest parameter, matching the
+   * specification.
+   */
+  emitFunctionMetadata(closure: string, fn: FunctionInfo): void {
+    const parameters =
+      (fn.node as { parameters?: readonly { initializer?: unknown; dotDotDotToken?: boolean }[] })
+        .parameters ?? [];
+    let arity = 0;
+    for (const parameter of parameters) {
+      if (parameter.initializer || parameter.dotDotDotToken) break;
+      arity++;
+    }
+    let name = fn.name;
+    if (name === "(anonymous)" || name === "(arrow)") name = "";
+    if (fn.isConstructor && fn.classInfo) name = fn.classInfo.name;
+    const nameValue = this.stringValue(name);
+    this.emit(`  call i64 @xt_function_set_metadata(i64 ${closure}, i64 ${nameValue}, i32 ${arity})`);
+    if (fn.isGenerator) this.emit(`  call i64 @xt_function_set_generator(i64 ${closure})`);
   },
 };

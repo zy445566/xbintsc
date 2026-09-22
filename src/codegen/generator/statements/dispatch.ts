@@ -7,6 +7,8 @@
 import {
   SyntaxKind,
   type Block,
+  type BreakStatement,
+  type ContinueStatement,
   type DoStatement,
   type EnumDeclaration,
   type Expression,
@@ -14,6 +16,7 @@ import {
   type ForOfStatement,
   type ForStatement,
   type IfStatement,
+  type LabeledStatement,
   type ReturnStatement,
   type Statement,
   type SwitchStatement,
@@ -63,6 +66,9 @@ export const statementDispatchMethods: StatementDispatchMethods = {
       case SyntaxKind.IfStatement:
         this.emitIf(statement as IfStatement);
         return;
+      case SyntaxKind.LabeledStatement:
+        this.emitLabeled(statement as LabeledStatement);
+        return;
       case SyntaxKind.WhileStatement:
         this.emitWhile(statement as WhileStatement);
         return;
@@ -86,18 +92,24 @@ export const statementDispatchMethods: StatementDispatchMethods = {
         this.emitReturn(statement as ReturnStatement);
         return;
       case SyntaxKind.BreakStatement: {
-        const loop = this.current.loops[this.current.loops.length - 1];
+        const loop = this.findLoop((statement as BreakStatement).label?.text);
         if (loop) {
-          this.popTryFramesTo(loop.tryDepth ?? 0);
-          this.terminate(`br label %${loop.breakLabel}`);
+          this.runFinallysBeforeExit(loop.tryDepth ?? 0);
+          if (!this.current.terminated) {
+            this.popTryFramesTo(loop.tryDepth ?? 0);
+            this.terminate(`br label %${loop.breakLabel}`);
+          }
         }
         return;
       }
       case SyntaxKind.ContinueStatement: {
-        const loop = this.current.loops[this.current.loops.length - 1];
+        const loop = this.findLoop((statement as ContinueStatement).label?.text);
         if (loop) {
-          this.popTryFramesTo(loop.tryDepth ?? 0);
-          this.terminate(`br label %${loop.continueLabel}`);
+          this.runFinallysBeforeExit(loop.tryDepth ?? 0);
+          if (!this.current.terminated) {
+            this.popTryFramesTo(loop.tryDepth ?? 0);
+            this.terminate(`br label %${loop.continueLabel}`);
+          }
         }
         return;
       }

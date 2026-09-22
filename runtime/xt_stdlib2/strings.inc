@@ -75,6 +75,44 @@ xt_value xt_ext_string_method(xt_value target, const char *method, int32_t argc,
   if (strcmp(method, "trimStart") == 0) return xt_string_trim_side(target, 1);
   if (strcmp(method, "trimEnd") == 0) return xt_string_trim_side(target, 0);
   if (strcmp(method, "replaceAll") == 0) return xt_string_replace_all(target, xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
+  if (strcmp(method, "match") == 0) return xt_regexp_match(target, xt_arg_at(argc, argv, 0));
+  if (strcmp(method, "split") == 0) {
+    xt_value separator = xt_arg_at(argc, argv, 0);
+    if (xt_is_regexp(separator)) return xt_regexp_split(target, separator, xt_arg_at(argc, argv, 1));
+    *handled = 0;
+    return XT_UNDEFINED;
+  }
+  if (strcmp(method, "search") == 0) {
+    xt_value regexp = xt_arg_at(argc, argv, 0);
+    if (xt_is_regexp(regexp)) {
+      int32_t start = 0;
+      if (xt_regexp_find(regexp, target, 0, &start, NULL)) return xt_number((double)start);
+      return xt_number(-1);
+    }
+    *handled = 0;
+    return XT_UNDEFINED;
+  }
+  if (strcmp(method, "replaceAll") == 0) {
+    xt_value searchValue = xt_arg_at(argc, argv, 0);
+    if (xt_is_regexp(searchValue)) return xt_regexp_replace(target, searchValue, xt_arg_at(argc, argv, 1));
+    *handled = 0;
+    return XT_UNDEFINED;
+  }
+  if (strcmp(method, "lastIndexOf") == 0) {
+    xt_string *s = xt_as_string(target);
+    xt_string *needle = xt_as_string(xt_to_string(xt_arg_at(argc, argv, 0)));
+    if (!s || !needle) return xt_number(-1);
+    int32_t limit = (argc >= 2 && argv[1] != XT_UNDEFINED) ? xt_to_int32(argv[1]) : (int32_t)s->length;
+    if (limit > (int32_t)s->length) limit = (int32_t)s->length;
+    int32_t nlen = (int32_t)needle->length;
+    if (nlen == 0) return xt_number((double)(limit < 0 ? 0 : limit));
+    int32_t i = limit;
+    if (i > (int32_t)s->length - nlen) i = (int32_t)s->length - nlen;
+    for (; i >= 0; i--) {
+      if (memcmp(s->data + i, needle->data, (size_t)nlen) == 0) return xt_number((double)i);
+    }
+    return xt_number(-1);
+  }
   if (strcmp(method, "localeCompare") == 0) {
     xt_string *a = xt_as_string(target);
     xt_string *b = xt_as_string(xt_to_string(xt_arg_at(argc, argv, 0)));

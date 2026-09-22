@@ -52,19 +52,85 @@ xt_object *xt_as_object(xt_value value) {
   return NULL;
 }
 
-static xt_property *xt_object_find(xt_object *obj, xt_string *key) {
+static xt_property *xt_object_find(xt_object *obj, xt_value key) {
   for (uint32_t i = 0; i < obj->count; i++) {
-    if (xt_string_equals(obj->properties[i].key, key)) return &obj->properties[i];
+    if (xt_property_key_equals(obj->properties[i].key, key)) return &obj->properties[i];
   }
   return NULL;
 }
 
-xt_property *xt_object_find_property(xt_object *obj, xt_string *key) {
+/*
+ * JavaScript enumerates own string keys in a canonical order: array-index
+ * keys (the canonical decimal form of an integer in [0, 2^32 - 2]) first, in
+ * ascending numeric order, then the remaining keys in insertion order. We keep
+ * the physical property array in exactly that order so every consumer
+ * (`Object.keys`, `for...in`, `JSON.stringify`, ...) is correct for free.
+ */
+static int xt_key_is_array_index(xt_string *key, uint32_t *out) {
+  if (key->length == 0 || key->length > 10) return 0;
+  if (key->data[0] == '0' && key->length != 1) return 0; /* "0" is canonical, "01" is not */
+  uint64_t value = 0;
+  for (uint32_t i = 0; i < key->length; i++) {
+    char ch = key->data[i];
+    if (ch < '0' || ch > '9') return 0;
+    value = value * 10 + (uint64_t)(ch - '0');
+  }
+  if (value > 4294967294ULL) return 0; /* 2^32 - 2 is the largest array index */
+  *out = (uint32_t)value;
+  return 1;
+}
+
+/* Insert a new property for `key`, preserving JavaScript key order. Symbols
+ * are not array indices and simply append in insertion order. */
+static xt_property *xt_object_insert_property(xt_object *obj, xt_value key) {
+  uint32_t index = 0;
+  uint32_t position = obj->count;
+  if (XT_IS_STRING(key) && xt_key_is_array_index(xt_as_string(key), &index)) {
+    for (uint32_t i = 0; i < obj->count; i++) {
+      uint32_t existing = 0;
+      xt_value existingKey = obj->properties[i].key;
+      if (!XT_IS_STRING(existingKey) ||
+          !xt_key_is_array_index(xt_as_string(existingKey), &existing)) {
+        position = i; /* first non-index key: the integer prefix ends here */
+        break;
+      }
+      if (existing > index) {
+        position = i;
+        break;
+      }
+    }
+  }
+  xt_object_reserve(obj, obj->count + 1);
+  for (uint32_t i = obj->count; i > position; i--) obj->properties[i] = obj->properties[i - 1];
+  xt_property *prop = &obj->properties[position];
+  prop->key = key;
+  prop->value = XT_UNDEFINED;
+  prop->getter = XT_UNDEFINED;
+  prop->setter = XT_UNDEFINED;
+  obj->count++;
+  return prop;
+}
+
+xt_property *xt_object_find_property(xt_object *obj, xt_value key) {
   return obj ? xt_object_find(obj, key) : NULL;
 }
 
+/* Normalise a property key to a string value or a symbol value. */
+xt_value xt_to_property_key(xt_value key) {
+  if (xt_is_symbol(key)) return key;
+  return xt_to_string(key);
+}
+
+/* Two property keys are equal when they are the same symbol, or equal
+ * strings. */
+int xt_property_key_equals(xt_value a, xt_value b) {
+  if (XT_IS_STRING(a) && XT_IS_STRING(b)) return xt_string_equals(xt_as_string(a), xt_as_string(b));
+  return a == b;
+}
+
 static int xt_key_is_prototype(xt_value key) {
-  xt_string *k = xt_as_string(xt_to_string(key));
+  if (!XT_IS_STRING(key)) return 0;
+  xt_string *k = xt_as_string(key);
   return k && k->length == 9 && memcmp(k->data, "prototype", 9) == 0;
 }
 
@@ -81,9 +147,9 @@ xt_value xt_object_get(xt_value value, xt_value key) {
      layout. Containers such as Map/Set/Date/RegExp/Promise/Array must not be
      interpreted as property tables, or property lookup reads past the end of
      their real representation. */
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT) return XT_UNDEFINED;
-  xt_value keyString = xt_to_string(key);
-  xt_string *k = xt_as_string(keyString);
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+    return XT_UNDEFINED;
+  xt_value k = xt_to_property_key(key);
   /* Walk the prototype chain like JavaScript property lookup. */
   xt_object *cur = obj;
   while (cur) {
@@ -109,10 +175,10 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
   }
   xt_object *obj = xt_as_object(value);
   if (!obj) return newValue;
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT) return newValue;
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+    return newValue;
   if (obj->frozen) return newValue;
-  xt_value keyString = xt_to_string(key);
-  xt_string *k = xt_as_string(keyString);
+  xt_value k = xt_to_property_key(key);
   xt_property *prop = xt_object_find(obj, k);
   if (prop) {
     if (prop->setter != XT_UNDEFINED) {
@@ -144,39 +210,29 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
     }
     ancestor = XT_IS_OBJECT(ancestor->prototype) ? (xt_object *)XT_GET_PTR(ancestor->prototype) : NULL;
   }
-  xt_object_reserve(obj, obj->count + 1);
-  obj->properties[obj->count].key = k;
-  obj->properties[obj->count].value = newValue;
-  obj->properties[obj->count].getter = XT_UNDEFINED;
-  obj->properties[obj->count].setter = XT_UNDEFINED;
-  obj->count++;
+  xt_property *inserted = xt_object_insert_property(obj, k);
+  inserted->value = newValue;
   return newValue;
 }
 
-static xt_property *xt_object_ensure_property(xt_object *obj, xt_value keyString) {
-  xt_property *prop = xt_object_find(obj, xt_as_string(keyString));
+static xt_property *xt_object_ensure_property(xt_object *obj, xt_value key) {
+  xt_value propertyKey = xt_to_property_key(key);
+  xt_property *prop = xt_object_find(obj, propertyKey);
   if (prop) return prop;
-  xt_object_reserve(obj, obj->count + 1);
-  prop = &obj->properties[obj->count];
-  prop->key = xt_as_string(keyString);
-  prop->value = XT_UNDEFINED;
-  prop->getter = XT_UNDEFINED;
-  prop->setter = XT_UNDEFINED;
-  obj->count++;
-  return prop;
+  return xt_object_insert_property(obj, propertyKey);
 }
 
 xt_value xt_object_define_getter(xt_value value, xt_value key, xt_value getter) {
   xt_object *obj = xt_as_object(value);
   if (!obj) return value;
-  xt_object_ensure_property(obj, xt_to_string(key))->getter = getter;
+  xt_object_ensure_property(obj, key)->getter = getter;
   return value;
 }
 
 xt_value xt_object_define_setter(xt_value value, xt_value key, xt_value setter) {
   xt_object *obj = xt_as_object(value);
   if (!obj) return value;
-  xt_object_ensure_property(obj, xt_to_string(key))->setter = setter;
+  xt_object_ensure_property(obj, key)->setter = setter;
   return value;
 }
 
@@ -206,8 +262,7 @@ int xt_object_is_frozen(xt_value value) {
 xt_value xt_object_has_own(xt_value value, xt_value key) {
   xt_object *obj = xt_as_object(value);
   if (!obj) return XT_FALSE;
-  xt_value keyString = xt_to_string(key);
-  return xt_bool(xt_object_find(obj, xt_as_string(keyString)) != NULL);
+  return xt_bool(xt_object_find(obj, xt_to_property_key(key)) != NULL);
 }
 
 xt_value xt_object_from_entries(xt_value entries) {
@@ -225,8 +280,21 @@ xt_value xt_object_from_entries(xt_value entries) {
 xt_value xt_object_has(xt_value value, xt_value key) {
   if (!XT_IS_OBJECT(value)) return XT_FALSE;
   xt_object *obj = (xt_object *)XT_GET_PTR(value);
-  xt_value keyString = xt_to_string(key);
-  return xt_bool(xt_object_find(obj, xt_as_string(keyString)) != NULL);
+  return xt_bool(xt_object_find(obj, xt_to_property_key(key)) != NULL);
+}
+
+/* `Object.getOwnPropertySymbols`: the symbol-keyed own properties, in
+ * insertion order. String keys are skipped. */
+xt_value xt_object_own_property_symbols(xt_value value) {
+  xt_value result = xt_array_new(0, NULL);
+  if (!XT_IS_OBJECT(value)) return result;
+  xt_object *obj = (xt_object *)XT_GET_PTR(value);
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+    return result;
+  for (uint32_t i = 0; i < obj->count; i++) {
+    if (xt_is_symbol(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
+  }
+  return result;
 }
 
 xt_value xt_object_keys(xt_value value) {
@@ -234,7 +302,7 @@ xt_value xt_object_keys(xt_value value) {
   if (XT_IS_OBJECT(value)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(value);
     for (uint32_t i = 0; i < obj->count; i++) {
-      xt_array_push(result, XT_FROM_PTR(XT_TAG_STRING, obj->properties[i].key));
+      if (XT_IS_STRING(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
     }
     return result;
   }
@@ -244,6 +312,12 @@ xt_value xt_object_keys(xt_value value) {
       char buffer[32];
       snprintf(buffer, sizeof(buffer), "%u", i);
       xt_array_push(result, xt_string_from_cstr(buffer));
+    }
+    if (XT_IS_OBJECT(array->extra)) {
+      xt_object *extra = (xt_object *)XT_GET_PTR(array->extra);
+      for (uint32_t i = 0; i < extra->count; i++) {
+        if (XT_IS_STRING(extra->properties[i].key)) xt_array_push(result, extra->properties[i].key);
+      }
     }
     return result;
   }
@@ -287,12 +361,23 @@ xt_value xt_array_new(int32_t count, xt_value *items) {
   array->length = 0;
   array->capacity = 0;
   array->items = NULL;
+  array->extra = XT_UNDEFINED;
   if (count > 0) {
     xt_array_reserve(array, (uint32_t)count);
     for (int32_t i = 0; i < count; i++) array->items[i] = items[i];
     array->length = (uint32_t)count;
   }
   return XT_FROM_PTR(XT_TAG_ARRAY, array);
+}
+
+/* Named properties of an array live in a lazily-created side object. Returns
+ * XT_UNDEFINED when `create` is false and no such object exists yet. */
+static xt_value xt_array_extra(xt_array *array, int create) {
+  if (!XT_IS_OBJECT(array->extra)) {
+    if (!create) return XT_UNDEFINED;
+    array->extra = xt_object_new();
+  }
+  return array->extra;
 }
 
 xt_value xt_array_get(xt_value value, xt_value index) {
@@ -326,6 +411,11 @@ xt_value xt_array_push(xt_value value, xt_value newValue) {
 xt_value xt_array_length(xt_value value) {
   if (XT_IS_ARRAY(value)) return xt_number((double)((xt_array *)XT_GET_PTR(value))->length);
   if (XT_IS_STRING(value)) return xt_number((double)xt_string_length(xt_as_string(value)));
+  /* Functions expose their arity as `.length`. */
+  if (XT_IS_FUNCTION(value)) {
+    int32_t arity = ((xt_function *)XT_GET_PTR(value))->arity;
+    return xt_number(arity >= 0 ? (double)arity : 0.0);
+  }
   /* Objects such as Buffers expose a `length` property of their own. */
   if (XT_IS_OBJECT(value)) return xt_object_get_cstr(value, "length");
   return XT_UNDEFINED;
@@ -340,9 +430,9 @@ xt_value xt_array_spread(xt_value target, xt_value source) {
     for (uint32_t i = 0; i < src->length; i++) dst->items[dst->length++] = src->items[i];
     return target;
   }
-  /* Spreading a string/Map/Set iterates exactly like `for...of`. */
-  int32_t n = xt_to_int32(xt_iter_length(source));
-  for (int32_t i = 0; i < n; i++) {
+  /* Spreading a string/Map/Set/iterable iterates exactly like `for...of`. */
+  source = xt_iter_open(source);
+  for (int32_t i = 0; xt_truthy(xt_iter_has(source, xt_number((double)i))); i++) {
     xt_array_push(target, xt_iter_value(source, xt_number((double)i)));
   }
   return target;
@@ -363,21 +453,89 @@ xt_value *xt_array_items(xt_value value) {
 /* Generic member access                                                     */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * Reading a property of `null` / `undefined` is a TypeError in JavaScript.
+ * Short-circuiting `?.` guards forbid reaching this point for a nullish
+ * receiver, so a non-optional access on a nullish base is a genuine bug in
+ * the compiled program (e.g. `o?.a.b` where `o.a` is null).
+ */
+static void xt_throw_read_of_nullish(xt_value target, xt_value key) {
+  const char *base = target == XT_NULL ? "null" : "undefined";
+  char keybuf[128];
+  xt_string *k = XT_IS_STRING(key) ? xt_as_string(key) : xt_as_string(xt_to_string(key));
+  uint32_t n = k->length < sizeof(keybuf) - 1 ? k->length : (uint32_t)(sizeof(keybuf) - 1);
+  memcpy(keybuf, k->data, n);
+  keybuf[n] = 0;
+  char message[256];
+  snprintf(message, sizeof(message),
+           "TypeError: Cannot read properties of %s (reading '%s')", base, keybuf);
+  xt_throw(xt_string_from_cstr(message));
+}
+
 xt_value xt_get(xt_value target, xt_value key) {
+  if (target == XT_UNDEFINED || target == XT_NULL) xt_throw_read_of_nullish(target, key);
   if (XT_IS_ARRAY(target)) {
     /* `arr.length` must read the array's length, never an element. */
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
       if (k->length == 6 && memcmp(k->data, "length", 6) == 0)
         return xt_number((double)((xt_array *)XT_GET_PTR(target))->length);
+      /* Named (non-index) properties such as `raw`/`index`/`input`. */
+      uint32_t ignored = 0;
+      if (!xt_key_is_array_index(k, &ignored)) {
+        xt_value extra = xt_array_extra((xt_array *)XT_GET_PTR(target), 0);
+        if (extra != XT_UNDEFINED) {
+          xt_value value = xt_object_get(extra, key);
+          if (value != XT_UNDEFINED) return value;
+        }
+        /* Fall back to first-class built-in methods (`arr.map`). */
+        return xt_method_value(target, key);
+      }
+      return xt_array_get(target, key);
+    }
+    /* Symbol-keyed properties live in the side object too. */
+    if (xt_is_symbol(key)) {
+      xt_value extra = xt_array_extra((xt_array *)XT_GET_PTR(target), 0);
+      if (extra != XT_UNDEFINED) {
+        xt_value value = xt_object_get(extra, key);
+        if (value != XT_UNDEFINED) return value;
+      }
+      return xt_method_value(target, key);
     }
     return xt_array_get(target, key);
   }
-  if (XT_IS_FUNCTION(target)) return xt_object_get(target, key);
+  if (XT_IS_FUNCTION(target)) {
+    /* Functions expose own `name` / `length` (arity) properties. */
+    if (XT_IS_STRING(key)) {
+      xt_string *k = xt_as_string(key);
+      if (k->length == 6 && memcmp(k->data, "length", 6) == 0) {
+        int32_t arity = ((xt_function *)XT_GET_PTR(target))->arity;
+        return xt_number(arity >= 0 ? (double)arity : 0.0);
+      }
+      if (k->length == 4 && memcmp(k->data, "name", 4) == 0) {
+        xt_string *name = ((xt_function *)XT_GET_PTR(target))->name;
+        return name ? XT_FROM_PTR(XT_TAG_STRING, name) : xt_string_from_cstr("");
+      }
+    }
+    {
+      xt_value value = xt_object_get(target, key);
+      if (value != XT_UNDEFINED) return value;
+      return xt_method_value(target, key);
+    }
+  }
   if (XT_IS_OBJECT(target)) {
     /* Map/Set expose `.size`; promises, dates and regexps have their own
      * getters implemented in the standard library. */
     xt_object *obj = (xt_object *)XT_GET_PTR(target);
+    if (obj->header.kind == XT_OBJECT_KIND_SYMBOL) {
+      if (XT_IS_STRING(key)) {
+        xt_string *k = xt_as_string(key);
+        if (k->length == 11 && memcmp(k->data, "description", 11) == 0) {
+          return xt_symbol_description(target);
+        }
+      }
+      return xt_method_value(target, key);
+    }
     if (obj->header.kind == XT_OBJECT_KIND_MAP || obj->header.kind == XT_OBJECT_KIND_SET) {
       if (XT_IS_STRING(key)) {
         xt_string *k = xt_as_string(key);
@@ -387,19 +545,45 @@ xt_value xt_get(xt_value target, xt_value key) {
         }
       }
     }
-    if (obj->header.kind == XT_OBJECT_KIND_REGEXP) return xt_regexp_get_property(target, key);
-    return xt_object_get(target, key);
+    if (obj->header.kind == XT_OBJECT_KIND_REGEXP) {
+      xt_value regexpValue = xt_regexp_get_property(target, key);
+      if (regexpValue != XT_UNDEFINED) return regexpValue;
+    }
+    if (obj->header.kind == XT_OBJECT_KIND_ERROR && XT_IS_STRING(key)) {
+      xt_string *k = xt_as_string(key);
+      if (k->length == 5 && memcmp(k->data, "stack", 5) == 0) {
+        xt_value own = xt_object_get(target, key);
+        return own != XT_UNDEFINED ? own : xt_error_to_string(target);
+      }
+    }
+    {
+      xt_value value = xt_object_get(target, key);
+      if (value != XT_UNDEFINED) return value;
+      return xt_method_value(target, key);
+    }
   }
   if (XT_IS_STRING(target)) {
-    /* Property access on a string: `.length` and numeric indexing. */
+    /* Property access on a string: `.length`, numeric indexing and built-in
+     * methods. */
     xt_string *s = xt_as_string(target);
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
       if (k->length == 6 && memcmp(k->data, "length", 6) == 0) return xt_number((double)s->length);
+      uint32_t index = 0;
+      if (xt_key_is_array_index(k, &index) && index < s->length) {
+        return xt_string_new(s->data + index, 1);
+      }
+      return xt_method_value(target, key);
     }
-    int32_t index = xt_to_int32(key);
-    if (index >= 0 && (uint32_t)index < s->length) return xt_string_new(s->data + index, 1);
+    if (XT_IS_NUMBER(key)) {
+      int32_t index = xt_to_int32(key);
+      if (index >= 0 && (uint32_t)index < s->length) return xt_string_new(s->data + index, 1);
+    }
     return XT_UNDEFINED;
+  }
+  if (XT_IS_STRING(key) &&
+      (XT_IS_NUMBER(target) || XT_IS_BIGINT(target) || target == XT_TRUE || target == XT_FALSE)) {
+    return xt_method_value(target, key);
   }
   return XT_UNDEFINED;
 }
@@ -418,6 +602,14 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
         array->length = (uint32_t)n;
         return value;
       }
+      uint32_t ignored = 0;
+      if (!xt_key_is_array_index(k, &ignored)) {
+        return xt_object_set(xt_array_extra((xt_array *)XT_GET_PTR(target), 1), key, value);
+      }
+      return xt_array_set(target, key, value);
+    }
+    if (xt_is_symbol(key)) {
+      return xt_object_set(xt_array_extra((xt_array *)XT_GET_PTR(target), 1), key, value);
     }
     return xt_array_set(target, key, value);
   }

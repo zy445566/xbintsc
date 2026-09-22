@@ -9,7 +9,6 @@ import {
   type AwaitExpression,
   type BinaryExpression,
   type CallExpression,
-  type ClassExpression,
   type ConditionalExpression,
   type DeleteExpression,
   type ElementAccessExpression,
@@ -21,13 +20,15 @@ import {
   type PostfixUnaryExpression,
   type PrefixUnaryExpression,
   type PropertyAccessExpression,
+  type TaggedTemplateExpression,
   type TemplateLiteral,
+  type YieldExpression,
   type ArrayLiteralExpression,
 } from "../../../ast/nodes.js";
 import { SymbolKind, type SymbolInfo } from "../../../binder/binder.js";
 import { DiagnosticCode } from "../../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_FALSE, XT_NULL, XT_TRUE, XT_UNDEFINED } from "../../values.js";
-import { BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS } from "../tables.js";
+import { BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS, ERROR_CONSTRUCTORS } from "../tables.js";
 import type { Generator } from "../generator.js";
 
 export interface PrimaryExpressionMethods {
@@ -35,13 +36,18 @@ export interface PrimaryExpressionMethods {
   emitIdentifier(this: Generator, identifier: Identifier): string;
   emitFunctionValue(this: Generator, symbol: SymbolInfo): string;
   emitTemplate(this: Generator, node: TemplateLiteral): string;
+  emitTaggedTemplate(this: Generator, node: TaggedTemplateExpression): string;
   emitThis(this: Generator): string;
   emitNew(this: Generator, node: NewExpression): string;
   emitAwait(this: Generator, node: AwaitExpression): string;
+  emitYield(this: Generator, node: YieldExpression): string;
 }
 
 export const primaryExpressionMethods: PrimaryExpressionMethods = {
   emitExpression(node: Expression): string {
+    /* An optional chain must be lowered as a unit so `?.` short-circuits the
+       entire chain (`a?.b.c()`), not just the guarded member. */
+    if (this.isOptionalChain(node)) return this.emitOptionalChain(node);
     switch (node.kind) {
       case SyntaxKind.Identifier:
         return this.emitIdentifier(node as Identifier);
@@ -77,6 +83,8 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
       }
       case SyntaxKind.TemplateLiteral:
         return this.emitTemplate(node as TemplateLiteral);
+      case SyntaxKind.TaggedTemplateExpression:
+        return this.emitTaggedTemplate(node as TaggedTemplateExpression);
       case SyntaxKind.TrueKeyword:
         return i64(XT_TRUE);
       case SyntaxKind.FalseKeyword:
@@ -108,6 +116,8 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return this.emitNew(node as NewExpression);
       case SyntaxKind.AwaitExpression:
         return this.emitAwait(node as AwaitExpression);
+      case SyntaxKind.YieldExpression:
+        return this.emitYield(node as YieldExpression);
       case SyntaxKind.ClassExpression: {
         const info = this.binding.classOfNode.get(node);
         if (!info) {
@@ -198,6 +208,13 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 0, i64* null)`);
           return closure;
         }
+        const errorCtor = ERROR_CONSTRUCTORS[identifier.text];
+        if (errorCtor) {
+          // A first-class Error-family constructor (`instanceof TypeError`,
+          // `typeof RangeError`, `class X extends Error`, ...).
+          const nameValue = this.stringValue(identifier.text);
+          return this.runtimeCall("xt_error_constructor", [nameValue]);
+        }
         this.diagnostics.error(
           DiagnosticCode.CannotFindName,
           `Cannot find name '${identifier.text}'`,
@@ -217,6 +234,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
     this.emit(`  ${cast} = bitcast i64 (i64, i64, i32, i64*)* @${this.functionName(fn)} to i8*`);
     const closure = this.reg();
     this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 0, i64* null)`);
+    this.emitFunctionMetadata(closure, fn);
     return closure;
   },
 
@@ -231,6 +249,19 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
     const value = this.emitExpression(node.expression);
     const result = this.reg();
     this.emit(`  ${result} = call i64 @xt_await(i64 ${value})`);
+    return result;
+  },
+
+  emitYield(node: YieldExpression): string {
+    if (node.delegate) {
+      const delegate = this.emitExpression(node.expression as Expression);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_yield_star(i64 ${delegate})`);
+      return result;
+    }
+    const value = node.expression ? this.emitExpression(node.expression) : i64(XT_UNDEFINED);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_yield(i64 ${value})`);
     return result;
   },
 
@@ -300,5 +331,80 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
       }
     }
     return accumulator;
+  },
+
+  /**
+   * Lower a tagged template: build the (cooked) strings array with a `.raw`
+   * sibling and call the tag with it followed by the interpolation values.
+   * `String.raw` is the one namespace tag special-cased by the runtime.
+   */
+  emitTaggedTemplate(node: TaggedTemplateExpression): string {
+    const template = node.template;
+    let cooked: string[];
+    let raw: string[];
+    let expressions: readonly Expression[];
+    if (template.kind === SyntaxKind.NoSubstitutionTemplateLiteral) {
+      cooked = [template.value];
+      raw = [template.raw ?? template.value];
+      expressions = [];
+    } else {
+      const literal = template as TemplateLiteral;
+      cooked = [literal.head, ...literal.spans.map((span) => span.literal)];
+      raw = [literal.raw ?? literal.head, ...literal.spans.map((span) => span.raw ?? span.literal)];
+      expressions = literal.spans.map((span) => span.expression);
+    }
+
+    const makeArray = (items: string[]): string => {
+      const array = this.reg();
+      this.emit(`  ${array} = call i64 @xt_array_new(i32 0, i64* null)`);
+      for (const item of items) {
+        const value = this.stringValue(item);
+        this.emit(`  call i64 @xt_array_push(i64 ${array}, i64 ${value})`);
+      }
+      return array;
+    };
+    const strings = makeArray(cooked);
+    const rawArray = makeArray(raw);
+    const rawKey = this.stringValue("raw");
+    this.emit(`  call i64 @xt_set(i64 ${strings}, i64 ${rawKey}, i64 ${rawArray})`);
+
+    const argc = String(expressions.length + 1);
+    const ptr = `%args${this.current.allocas.length}`;
+    this.current.allocas.push(`${ptr} = alloca i64, i32 ${expressions.length + 1}`);
+    const first = this.reg();
+    this.emit(`  ${first} = getelementptr i64, i64* ${ptr}, i32 0`);
+    this.emit(`  store i64 ${strings}, i64* ${first}`);
+    for (let index = 0; index < expressions.length; index++) {
+      const value = this.emitExpression(expressions[index]!);
+      const slot = this.reg();
+      this.emit(`  ${slot} = getelementptr i64, i64* ${ptr}, i32 ${index + 1}`);
+      this.emit(`  store i64 ${value}, i64* ${slot}`);
+    }
+
+    const tag = node.tag;
+    if (tag.kind === SyntaxKind.PropertyAccessExpression) {
+      const access = tag as PropertyAccessExpression;
+      const owner = access.expression;
+      if (
+        owner.kind === SyntaxKind.Identifier &&
+        (owner as Identifier).text === "String" &&
+        access.name.text === "raw" &&
+        !this.binding.symbolOfIdentifier.get(owner as Identifier)
+      ) {
+        const key = this.stringValue("raw");
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_string_static(i64 ${key}, i32 ${argc}, i64* ${ptr})`);
+        return result;
+      }
+      const object = this.emitExpression(owner);
+      const name = this.stringValue(access.name.text);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${argc}, i64* ${ptr})`);
+      return result;
+    }
+    const tagValue = this.emitExpression(tag);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_closure_call(i64 ${tagValue}, i32 ${argc}, i64* ${ptr})`);
+    return result;
   },
 };

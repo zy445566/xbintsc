@@ -18,7 +18,6 @@ import type { CodegenOptions, CodegenResult } from "./state.js";
 
 export class Generator extends GeneratorContext {}
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface Generator extends ModuleMethods, StatementMethods, ExpressionMethods, CallMethods {}
 
 Object.assign(Generator.prototype, moduleMethods, statementMethods, expressionMethods, callMethods);

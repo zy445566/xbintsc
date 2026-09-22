@@ -33,6 +33,12 @@ export interface LiteralMethods {
   parseRegularExpression(this: Parser): RegularExpressionLiteral;
 }
 
+/** Strip the delimiters from a scanned template chunk and normalize newlines. */
+function rawTemplateChunk(text: string, leading: number, trailing: number): string {
+  const end = Math.max(leading, text.length - trailing);
+  return text.slice(leading, end).replace(/\r\n?/g, "\n");
+}
+
 export const literalMethods: LiteralMethods = {
   parseArrayLiteral(this: Parser): ArrayLiteralExpression {
     const open = this.parseExpected(TokenKind.OpenBracket);
@@ -66,6 +72,50 @@ export const literalMethods: LiteralMethods = {
         const start = this.nextToken().start;
         const expression = this.parseAssignmentExpression();
         properties.push({ kind: SyntaxKind.SpreadElement, expression, start, end: expression.end });
+      } else if (
+        (this.at(TokenKind.GetKeyword) || this.at(TokenKind.SetKeyword)) &&
+        !this.atAhead(1, TokenKind.OpenParen) &&
+        !this.atAhead(1, TokenKind.Colon) &&
+        !this.atAhead(1, TokenKind.Comma) &&
+        !this.atAhead(1, TokenKind.CloseBrace) &&
+        !this.atAhead(1, TokenKind.Equals) &&
+        !this.atAhead(1, TokenKind.Question) &&
+        !this.atAhead(1, TokenKind.LessThan)
+      ) {
+        // `{ get x() {} }` / `{ set x(v) {} }` object-literal accessors.
+        const start = this.token.start;
+        const accessorToken = this.nextToken();
+        const name = this.parsePropertyName();
+        const parameters = this.parseParameters();
+        let returnType: TypeNode | undefined;
+        if (this.at(TokenKind.Colon)) {
+          this.nextToken();
+          returnType = this.parseReturnType();
+        }
+        const body = this.parseBlock();
+        const fn: FunctionExpression = { kind: SyntaxKind.FunctionExpression, typeParameters: [], parameters, returnType, body, flags: NodeFlags.None, start, end: body.end };
+        properties.push({
+          kind: SyntaxKind.PropertyAssignment,
+          name,
+          initializer: fn,
+          accessor: accessorToken.kind === TokenKind.GetKeyword ? "get" : "set",
+          start,
+          end: body.end,
+        });
+      } else if (this.at(TokenKind.Asterisk)) {
+        // `{ *gen() {} }` object-literal generator method.
+        const start = this.nextToken().start;
+        const name = this.parsePropertyName();
+        const typeParameters = this.at(TokenKind.LessThan) ? this.parseTypeParameters() : [];
+        const parameters = this.parseParameters();
+        let returnType: TypeNode | undefined;
+        if (this.at(TokenKind.Colon)) {
+          this.nextToken();
+          returnType = this.parseReturnType();
+        }
+        const body = this.parseBlock();
+        const fn: FunctionExpression = { kind: SyntaxKind.FunctionExpression, typeParameters, parameters, returnType, body, flags: NodeFlags.Generator, start, end: body.end };
+        properties.push({ kind: SyntaxKind.PropertyAssignment, name, initializer: fn, start, end: body.end });
       } else {
         const start = this.token.start;
         const name = this.parsePropertyName();
@@ -142,7 +192,14 @@ export const literalMethods: LiteralMethods = {
     const startToken = this.token;
     if (startToken.kind === TokenKind.NoSubstitutionTemplateLiteral) {
       this.nextToken();
-      return { kind: SyntaxKind.NoSubstitutionTemplateLiteral, text: startToken.text, value: String(startToken.value ?? ""), start: startToken.start, end: startToken.end } as unknown as TemplateLiteral;
+      return {
+        kind: SyntaxKind.NoSubstitutionTemplateLiteral,
+        text: startToken.text,
+        value: String(startToken.value ?? ""),
+        raw: rawTemplateChunk(startToken.text, 1, 1),
+        start: startToken.start,
+        end: startToken.end,
+      } as unknown as TemplateLiteral;
     }
     if (startToken.kind === TokenKind.Backtick) {
       // Re-scan from the backtick so the scanner produces a TemplateHead.
@@ -150,14 +207,16 @@ export const literalMethods: LiteralMethods = {
       this.tokens = [this.scanner.nextToken()];
       this.index = 0;
       return this.parseTemplateLiteral();
-    }    const head = String(startToken.value ?? "");
+    }
+    const head = String(startToken.value ?? "");
+    const headRaw = rawTemplateChunk(startToken.text, 1, 2);
     this.nextToken();
     const spans: TemplateSpan[] = [];
     for (;;) {
       const expression = this.parseExpression();
       if (!this.at(TokenKind.CloseBrace)) {
         this.error(DiagnosticCode.UnterminatedTemplate, "Expected '}' to close template substitution");
-        return { kind: SyntaxKind.TemplateLiteral, head, spans, start: startToken.start, end: this.token.end };
+        return { kind: SyntaxKind.TemplateLiteral, head, raw: headRaw, spans, start: startToken.start, end: this.token.end };
       }
       // The `}` terminates a substitution; re-read it as template text without
       // first scanning the following (template) characters as normal tokens.
@@ -167,16 +226,32 @@ export const literalMethods: LiteralMethods = {
       const literalToken = this.token;
       if (literalToken.kind === TokenKind.NoSubstitutionTemplateLiteral) {
         this.nextToken();
-        spans.push({ kind: SyntaxKind.TemplateSpan, expression, literal: String(literalToken.value ?? ""), isTail: true, start: expression.start, end: literalToken.end });
-        return { kind: SyntaxKind.TemplateLiteral, head, spans, start: startToken.start, end: literalToken.end };
+        spans.push({
+          kind: SyntaxKind.TemplateSpan,
+          expression,
+          literal: String(literalToken.value ?? ""),
+          raw: rawTemplateChunk(literalToken.text, 0, 1),
+          isTail: true,
+          start: expression.start,
+          end: literalToken.end,
+        });
+        return { kind: SyntaxKind.TemplateLiteral, head, raw: headRaw, spans, start: startToken.start, end: literalToken.end };
       }
       if (literalToken.kind === TokenKind.TemplateHead) {
         this.nextToken();
-        spans.push({ kind: SyntaxKind.TemplateSpan, expression, literal: String(literalToken.value ?? ""), isTail: false, start: expression.start, end: literalToken.end });
+        spans.push({
+          kind: SyntaxKind.TemplateSpan,
+          expression,
+          literal: String(literalToken.value ?? ""),
+          raw: rawTemplateChunk(literalToken.text, 0, 2),
+          isTail: false,
+          start: expression.start,
+          end: literalToken.end,
+        });
         continue;
       }
       this.error(DiagnosticCode.UnterminatedTemplate, "Unterminated template literal", literalToken);
-      return { kind: SyntaxKind.TemplateLiteral, head, spans, start: startToken.start, end: literalToken.end };
+      return { kind: SyntaxKind.TemplateLiteral, head, raw: headRaw, spans, start: startToken.start, end: literalToken.end };
     }
   },
 

@@ -72,13 +72,13 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 ### 3.1 Statements
 
 - Variable declarations: `var` / `let` / `const`, with multiple declarators `const a = 1, b = 2;`
-- Function declarations (including parsing the `async` modifier and the generator `*` marker)
+- Function declarations, function expressions and methods, including the `async` modifier and generators (`function*`, `yield`, `yield*`, `.next`/`.throw`/`.return`)
 - `class` declarations / class expressions (constructor, fields, methods, `static`, `extends`)
 - `if` / `else`
 - `while`, `do...while`
 - `for` (init, condition and increment may all be omitted)
 - `for...of`, `for...in` (see the semantic limits in 3.5)
-- `return`, `break`, `continue`, `throw`
+- `return`, `break`, `continue`, `throw` (including labeled `break label` / `continue label`)
 - `switch` / `case` / `default` (including fall-through)
 - `try` / `catch` / `finally` (catchable exceptions based on a runtime setjmp frame)
 - `export var` / `export let` / `export const` (modifier parsed then erased)
@@ -94,8 +94,8 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 - Function expressions `function () {}` and named function expressions `function g() {}`
 - Call expressions `f(...)`, member access `a.b`, element access `a[i]`
 - Array literals `[1, 2]`, sparse array elision, spread `[...a]` (also over strings, `Map` and `Set`)
-- Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`, computed keys `{ [expr]: 1 }`, object spread `{ ...obj }`
-- Template literal `${}` substitutions, tagged templates (parsed only, see the [unimplemented document](./unimplemented.md))
+- Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`, getter / setter shorthand `{ get x() {} }` / `{ set x(v) {} }`, computed keys `{ [expr]: 1 }`, object spread `{ ...obj }`
+- Template literal `${}` substitutions, tagged templates (with raw strings and `String.raw`)
 - Parenthesized expressions, `as` / `satisfies` / non-null assertion `!` (type erasure)
 - Unary: `+ - ! ~ typeof void`, prefix / postfix `++ --`
 - Optional chaining `?.` / `?.[]` / `?.()` (with nullish short-circuit semantics)
@@ -118,7 +118,7 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 
 ### 3.4 Module syntax (structural parsing + driver bundling)
 
-- `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules parsed only; extension modules such as `path` are supported), `import type`
+- `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules are lowered to a synthetic object literal; extension modules such as `path` are also supported), `import type`
 - `export default`, `export { a as b }`, `export *`, `export =`
 - Import attributes (`with` / `assert`)
 - The **runtime semantics** of `import` / `export` are handled at the driver layer by `src/driver/modules.ts`: it recursively resolves relative dependencies, renames top-level symbols with a per-module prefix, rewrites references, merges into a single file and rebinds. Circular dependencies error out.
@@ -208,7 +208,7 @@ Location: `src/codegen/llvm.ts`
 - Emits LLVM IR text (`.ll`); no custom register allocation (relies on `alloca` + mem2reg).
 - Statement / block boundary values live in `alloca`; conditionals and short-circuits materialize into temporary slots instead of `phi`.
 - Control flow: `if` / `while` / `do` / `for` / `for...of` / `for...in`, `switch`, `try/catch/finally`, `break` / `continue` / `return`.
-  - `for...of` and spread iterate arrays, strings, `Map` and `Set` through `xt_iter_length` / `xt_iter_value` (`Map` yields `[key, value]` pairs).
+  - `for...of` and spread iterate arrays, strings, `Map`, `Set`, generators and any object exposing `[Symbol.iterator]()` through `xt_iter_open` → `xt_iter_has` / `xt_iter_value` (`Map` yields `[key, value]` pairs); a non-iterable throws `TypeError`.
   - `switch` tests each `case` with strict equality, executes on a hit, and falls through until `break`.
   - `try/catch/finally` is implemented with a runtime `_setjmp` frame: `xt_try_enter` pushes, `_setjmp` catches, `xt_throw` long-jumps. The IR passes the caller's frame address (`@llvm.frameaddress(0)`) as the second `_setjmp` argument, matching clang's MSVC lowering: the Windows UCRT `_setjmp` stores that frame in `_JUMP_BUFFER.Frame` and `longjmp` feeds it to `RtlUnwind`, so omitting it made `longjmp` unwind to a bogus target (`STATUS_BAD_FUNCTION_TABLE`). `_setjmp` is used rather than the exported `setjmp` symbol, whose Windows ABI is an incompatible two-argument routine. Functions containing `try` force local variables to stay in memory (inline-asm escape points) so values survive a long jump.
   - `for...in` reuses `xt_object_keys` to enumerate keys (arrays / strings yield string indices).
@@ -246,6 +246,7 @@ Location: `runtime/xt_alloc.c`, `runtime/xt_values.c`, `runtime/xt_containers.c`
 - Comparison: `lt/le/gt/ge`, loose / strict equality, `not`, `is_nullish`.
 - Objects: linear property list, `object_new/get/set/has/keys/values/entries/assign/spread`.
 - Arrays: `array_new/get/set/push/length/spread`; assigning `arr.length` truncates or extends (matching JS); `iter_length` / `iter_value` expose a uniform iteration view over arrays, strings, `Map` and `Set`.
+- Symbols (`xt_symbol.c`): `Symbol(description)` primitives (`XT_OBJECT_KIND_SYMBOL`), the 13 well-known symbols (`Symbol.iterator`, `Symbol.asyncIterator`, `Symbol.match`, …), `Symbol.for` / `Symbol.keyFor` global registry, `symbol.description` / `toString()` / `valueOf()`; symbols are valid property keys (`Object.getOwnPropertySymbols`, symbol keyed `get`/`set`/`in`/`delete`), are skipped by `Object.keys` / `values` / `entries` / `for...in` / `JSON.stringify`, and print as `Symbol(desc)`.
 - Generic member access: `xt_get` / `xt_set` (dispatch over arrays / objects / strings).
 - Standard library: `xt_call_method` (uniform dispatch of array / string methods and function properties on objects), `xt_math_call` (`Math.*` and constants), global functions `xt_parse_int/parse_float/is_nan/is_finite/number_ctor/string_ctor/boolean_ctor`.
 - Operator helpers: `xt_in` (`in`), `xt_delete` (`delete`), `xt_rest_args` (rest parameters / `arguments`).
@@ -327,7 +328,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`)
 
 - Per-module unit tests; when `clang` is present, e2e really compiles and runs binaries, otherwise it is skipped automatically.
-- e2e coverage: arithmetic and printing, recursive functions, loops / arrays / string concatenation, closures capturing by reference, JS-style printing of objects / arrays, the Node `fs` extension via `import`, `switch` fall-through, array / string methods, `Math` and global functions and all `console` levels, default / rest parameters and `arguments`, `Object` helpers and spread and `in`/`delete`, `for...in` object key enumeration, `try/catch/finally`, optional chaining, classes and `new`/`this`/`static`/`extends`/`super`/`instanceof`, `async`/`await` and `Promise`, `Map`/`Set`/`JSON` and extended standard library, `for...of` over `Map`/`Set`, array `length` assignment and iterable spread, multi-file `import`/`export` (including `.js` specifiers), destructuring bindings and assignments, `enum`/`const enum`, regular-expression literals and `new Error(...)`.
+- e2e coverage: arithmetic and printing, recursive functions, loops / arrays / string concatenation, closures capturing by reference, JS-style printing of objects / arrays, the Node `fs` extension via `import`, `switch` fall-through, array / string methods, `Math` and global functions and all `console` levels, default / rest parameters and `arguments`, `Object` helpers and spread and `in`/`delete`, `for...in` object key enumeration, `try/catch/finally`, optional chaining, classes and `new`/`this`/`static`/`extends`/`super`/`instanceof`, `async`/`await` and `Promise`, `Map`/`Set`/`JSON` and extended standard library, `for...of` over `Map`/`Set`, array `length` assignment and iterable spread, multi-file `import`/`export` (including `.js` specifiers), destructuring bindings and assignments, `enum`/`const enum`, regular-expression literals and `new Error(...)`, the `Error` family and `AggregateError`, generators and `Symbol` with custom `Symbol.iterator` iterables.
 
 ---
 
@@ -339,13 +340,13 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 | Control flow | `if/else`, `while`, `do...while`, `for`, `for...of`, `for...in`, `switch`, `try/catch/finally`, `break`, `continue`, `return`, `throw` |
 | Expressions | Identifiers, literals, template strings, regular-expression literals, array / object literals (with spread), destructuring bindings and assignments, calls, member / element access, optional chaining, non-null `!`, closures, `arguments`, `this`, `new`, `super`, `await` |
 | Operators | Arithmetic, comparison, equality, logical, bitwise, shift, unary (including `typeof`/`void`), prefix/postfix increment-decrement, compound assignment, logical assignment, `in`, `delete`, `instanceof` |
-| Functions | Default parameters, rest parameters, capturing closures, `this` binding, lexical `this` in arrow functions |
+| Functions | Default parameters, rest parameters, capturing closures, `this` binding, lexical `this` in arrow functions, `call`/`apply`/`bind`, `name`/`length` |
 | Classes / OO | Constructors, instance fields, methods, `static`, inheritance `extends`/`super`, prototype chain, `instanceof` |
 | Async | `async`/`await`, `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), synchronous microtask queue |
 | Modules | `import`/`export` (named / default / re-export / `export *` / `export type`), multi-file bundling over relative paths (`.js` specifiers resolve to `.ts` sources), bare specifiers resolved to extension modules |
-| Standard library | Array / string / number / object extension methods, `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `Object/Array/Number/String` statics, `console.*` |
+| Standard library | Array / string / number / object extension methods, `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `Symbol`, `Error` family, `Object/Array/Number/String/Symbol` statics, `console.*` |
 | Value model | 64-bit NaN-boxing, uniform function ABI (including `this`), closure environments, object prototype chains |
-| Runtime | Strings / objects / arrays / closures / arithmetic / comparison / catchable exceptions / Promise / collections / `console` |
+| Runtime | Strings / objects / arrays / closures / arithmetic / comparison / catchable exceptions / Promise / collections / symbols / generators / `console` |
 | Extensions | Extension registry, `core` (print), `node` (fs / path / os / process / buffer / stream / net / dgram / http imported by specifier) |
 | Toolchain | clang compiles IR/C, linking, incremental cache |
 | Self-hosting | `xbintsc` compiles `src/cli/main.ts` to a native binary; the emitted IR is at a fixpoint from generation 1 |

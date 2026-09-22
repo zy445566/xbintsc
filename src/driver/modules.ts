@@ -6,9 +6,10 @@
  * Each module's top-level bindings are renamed to a globally unique name and
  * imported names are rewritten to the (renamed) exported binding.
  *
- * This is intentionally simple: it supports named imports/exports, `export
- * default` for declarations, and `export ... from`. Namespace imports and
- * `export *` are approximated, and circular graphs are reported as an error.
+ * This is intentionally simple: it supports named imports/exports, namespace
+ * imports, `export default` for declarations, `export ... from` and `export *`.
+ * Namespace names are live bindings only at the granularity of the module's
+ * final names, and circular graphs are reported as an error.
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -21,6 +22,8 @@ import {
   type Identifier,
   type ImportDeclaration,
   type Node,
+  type ObjectLiteralExpression,
+  type PropertyAssignment,
   type SourceFileNode,
   type Statement,
   type VariableDeclaration,
@@ -284,7 +287,10 @@ export function bundleModules(entryPath: string, diagnostics: DiagnosticBag): Bu
     }
   }
 
-  // Phase 3: rewrite imported names and record re-exports.
+  // Phase 3: rewrite imported names and record re-exports. Namespace imports
+  // are lowered to a synthetic object literal holding every export, built
+  // from the dependency's (already renamed) final names.
+  const namespaceStatements = new Map<Statement, Statement>();
   for (const record of records) {
     const scope = moduleScope(record);
     if (!scope) continue;
@@ -307,6 +313,11 @@ export function bundleModules(entryPath: string, diagnostics: DiagnosticBag): Bu
           const local = scope.symbols.get(specifier.name.text);
           if (target && local) renameReferences(local, target);
         }
+      } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport) {
+        const local = scope.symbols.get(bindings.name.text);
+        const finalName = `${record.prefix}${bindings.name.text}`;
+        if (local) renameReferences(local, finalName);
+        namespaceStatements.set(statement, namespaceImportToStatement(statement, finalName, dependency));
       }
     }
   }
@@ -320,6 +331,9 @@ export function bundleModules(entryPath: string, diagnostics: DiagnosticBag): Bu
         // External (extension) imports stay in place for code generation.
         if (isExternalSpecifier((statement as ImportDeclaration).moduleSpecifier.value)) {
           merged.push(statement);
+        } else {
+          const synthetic = namespaceStatements.get(statement);
+          if (synthetic) merged.push(synthetic);
         }
         continue;
       }
@@ -381,6 +395,52 @@ function collectBindingIdentifiers(name: import("../ast/declarations.js").Bindin
   for (const element of elements) {
     if (element) collectBindingIdentifiers(element.name, out);
   }
+}
+
+/** Lower `import * as ns from "./mod"` to `const m0_ns = { ...exports }`. */
+function namespaceImportToStatement(
+  statement: Statement,
+  finalName: string,
+  dependency: ModuleRecord,
+): Statement {
+  const properties: PropertyAssignment[] = [];
+  for (const [exportedName, target] of dependency.exports) {
+    properties.push({
+      kind: SyntaxKind.PropertyAssignment,
+      name: { kind: SyntaxKind.Identifier, text: exportedName, start: statement.start, end: statement.start },
+      initializer: { kind: SyntaxKind.Identifier, text: target, start: statement.start, end: statement.start },
+      start: statement.start,
+      end: statement.start,
+    });
+  }
+  const initializer: ObjectLiteralExpression = {
+    kind: SyntaxKind.ObjectLiteralExpression,
+    properties,
+    start: statement.start,
+    end: statement.end,
+  };
+  const declaration: VariableDeclaration = {
+    kind: SyntaxKind.VariableDeclaration,
+    name: { kind: SyntaxKind.Identifier, text: finalName, start: statement.start, end: statement.start },
+    exclamation: false,
+    initializer,
+    start: statement.start,
+    end: statement.end,
+  };
+  const list: VariableDeclarationList = {
+    kind: SyntaxKind.VariableDeclarationList,
+    declarationKind: "const" as const,
+    declarations: [declaration],
+    start: statement.start,
+    end: statement.end,
+  };
+  return {
+    kind: SyntaxKind.VariableStatement,
+    declarationList: list,
+    modifiers: [],
+    start: statement.start,
+    end: statement.end,
+  };
 }
 
 /** Turn `export default expr` into a synthetic `const` declaration. */

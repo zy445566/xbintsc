@@ -13,15 +13,30 @@ Criteria (ordered by severity):
 
 > Language: **English** | [简体中文](./zh-CN/unimplemented.md)
 
-> Recently completed (this batch): `class` declarations / class expressions, `new` / `this`, inheritance `extends` / `super`, `instanceof`, methods / static members / instance fields, `async` / `await` + `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), multi-file `import` / `export` bundling (including `.js` → `.ts` specifier resolution), `Map` / `Set` / `Date` / `RegExp` / `JSON`, and a large set of array / string / number / object / console extension methods.
+> Recently completed: **ECMAScript semantics + differential testing** — number
+> formatting / coercion (`toFixed` / `toPrecision` / `toExponential`, hex / octal
+> / binary parsing, full `+` and relational `ToPrimitive`), `JSON.stringify`
+> omission rules, default `Array.prototype.sort` (stable, string order),
+> insertion-ordered integer keys, whole-chain optional chaining, `finally` on
+> early `return` / `break` / `continue`, object-key insertion order, UTF-8-aware
+> `console` inspection with circular references, `Array.prototype.splice`,
+> `String.prototype.match` / `lastIndexOf` / `split` with limit, RegExp capture
+> groups (`exec` / `match` / `replace` / `split` / `search`), immutable array
+> methods (`toReversed` / `toSorted` / `toSpliced` / `with`),
+> `Object.getOwnPropertyNames` / `groupBy`, global URI functions, labeled
+> statements, `#private` fields / methods / statics, tagged templates (with raw
+> strings and `String.raw`), and `import * as ns` for relative modules. The test
+> suite now includes a **differential harness** that runs every case through both
+> xbintsc and Node and compares output byte-for-byte.
 
-> Newest batch: **self-hosting** — `xbintsc` now compiles its own `src/cli/main.ts` to a native binary, and the emitted LLVM IR reaches a fixpoint (source ≡ generation 1 ≡ generation 2 ≡ generation 3, byte-identical). Along the way the runtime gained array `length` assignment (truncate / extend), spread of iterables (`[...set]`, `[...map]`, `"abc"`), `for...of` over `Map` / `Set`, and the binder now records computed property names (`{ [E.A]: 1 }`).
-
-> Windows self-hosting: the C `path` module now recognises native Windows separators (`/` and `\`) and drive prefixes (`C:`) while still emitting `/`; `parseInt` accumulates into a `double` instead of `strtol`, so large integer literals (e.g. `0xcbf29ce4`, `0x100000000`) are no longer clamped to `INT32_MAX` by Windows' 32-bit `long`; and the emitted `source_filename` is normalised to `/` so the self-host IR fixpoint is byte-identical across platforms.
-
-> Most recent batch: array / object **destructuring bindings** (declarations, parameters, `for...of`, defaults, rest, nested and computed keys), **`enum` / `const enum`** declarations (forward + reverse mapping, usable across modules), **regular-expression literals** (`/re/flags`, lowered to `xt_regexp_ctor`), **`typeof` / `void`** expression codegen, `new Error(...)` (`xt_error_ctor`) and `extends Error`, plus parser support for `import.meta`, keyword property names, `as const`, `this` parameters, getter/setter accessors and `export type` re-exports.
-
-> Completed earlier: `switch`, `try/catch/finally`, object spread, `delete`, `in`, array / string methods, `Math`, `Object.keys/values/entries/assign`, global functions, `console.error/warn/info`, `arguments`, default / rest parameters, optional chaining short-circuit, `for...in` object key enumeration.
+> Also completed: `class` declarations / class expressions, `new` / `this`,
+> inheritance `extends` / `super`, `instanceof`, methods / static members /
+> instance fields / getters and setters / constructor parameter properties,
+> `async` / `await` + `Promise`, multi-file `import` / `export` bundling
+> (including `.js` → `.ts` specifier resolution and namespace imports), `Map` /
+> `Set` / `Date` / `RegExp` / `JSON` / `BigInt`, destructuring bindings and
+> parameters, `enum` / `const enum`, and **self-hosting** (the emitted LLVM IR
+> reaches a byte-identical fixpoint).
 
 ---
 
@@ -32,15 +47,15 @@ Criteria (ordered by severity):
 | Syntax | Status | Notes |
 | --- | --- | --- |
 | `namespace` / `module` declarations | parse ✓, codegen ✗ | → "does not yet support this statement (module declaration)" |
-| `label: statement` | parse ✓, codegen ✗ | no labeled jump semantics |
+
+> Labeled statements (`label: statement`, `break label`, `continue label`) are
+> implemented, including labels on non-loop statements.
 
 ### 1.2 Not supported by the parser (immediate syntax error)
 
-| Syntax | Status | Notes |
-| --- | --- | --- |
-| Labeled statements `label: statement` (some paths) | partially parsed | `parseStatement` may still report "Unexpected token ':'" for some `label:` forms |
-
-> `class` / `new` / `this` / `import` / `export` are now implemented; see below.
+None known at the statement level. The parser is intentionally permissive and
+accepts most TypeScript statement syntax; unsupported forms are rejected later
+by code generation (see above).
 
 ---
 
@@ -48,26 +63,24 @@ Criteria (ordered by severity):
 
 ### 2.1 Parsed but codegen reports `UnsupportedFeature`
 
-| Syntax | Status | Notes |
-| --- | --- | --- |
-| Tagged templates `` f`...` `` | parse ✓, codegen ✗ | → "does not yet support this expression (tagged template)" |
-| `yield` expressions (generators) | parse ✓, codegen ✗ | → "does not yet support this expression (yield expression)" |
+None — generators are implemented.
+
+> Tagged templates are implemented, including raw strings and `String.raw`.
+> Generators (`function*`, `yield`, `yield*`) are implemented with stackful
+> coroutines, including `next`/`throw`/`return`, `for...of`, spread and
+> delegation. `import.meta` is parsed but has no runtime value; `async`
+> generators are not yet supported.
 
 ### 2.2 Not supported by the parser
 
-| Syntax | Status | Notes |
-| --- | --- | --- |
-| `Promise.any` / type keywords as property names (e.g. `.any`, `.get` in some cases) | partially unparsed | contextual keywords as member names occasionally report "Expected identifier" |
-| Spread in call arguments `f(...args)` / `Math.max(...xs)` | parsed but codegen unsupported | `SpreadElement` in argument position reports unsupported |
+None known at the expression level.
 
-### 2.3 Unimplemented operators (codegen errors)
+### 2.3 Unimplemented operators
 
 | Operator | Status | Notes |
 | --- | --- | --- |
-| `typeof` / `void` | implemented | — |
-| `instanceof` | implemented | mapped to `xt_instance_of` |
-
-> Value-level `typeof` / `void` are implemented (see the implemented document). `in` and `delete` are implemented.
+| `new.target` | ✗ | not implemented |
+| `typeof` / `void` / `in` / `delete` / `instanceof` | ✓ | mapped to runtime helpers (`xt_typeof`, `xt_in`, `xt_delete`, `xt_instance_of`) |
 
 ---
 
@@ -75,52 +88,52 @@ Criteria (ordered by severity):
 
 ### 3.1 Implemented (summary)
 
-- Arrays: `push` `pop` `shift` `unshift` `join` `slice` `indexOf` `includes` `concat` `reverse` `forEach` `map` `filter` `reduce`
-- Strings: `charAt` `charCodeAt` `indexOf` `includes` `slice` `substring` `substr` `split` `toUpperCase` `toLowerCase` `trim` `replace` `repeat` `startsWith` `endsWith` `concat`
-- `Math`: `abs` `floor` `ceil` `round` `trunc` `sqrt` `cbrt` `pow` `exp` `log` `log2` `log10` `sin` `cos` `tan` `asin` `acos` `atan` `atan2` `hypot` `sign` `random` `min` `max`, constants `PI` `E` `LN2` `LN10` `LOG2E` `LOG10E` `SQRT2` `SQRT1_2`
-- `Object.keys` / `values` / `entries` / `assign`, object spread `{...obj}`
-- Global functions: `parseInt` `parseFloat` `isNaN` `isFinite` `Number` `String` `Boolean`
-- `console.log` / `info` / `warn` / `error`
+- Arrays: `push` `pop` `shift` `unshift` `join` `slice` `splice` `indexOf` `lastIndexOf` `includes` `concat` `reverse` `forEach` `map` `filter` `reduce` `reduceRight` `find` `findIndex` `findLast` `findLastIndex` `some` `every` `sort` `flat` `flatMap` `fill` `copyWithin` `at` `keys` `values` `entries` and the immutable `toReversed` / `toSorted` / `toSpliced` / `with`
+- Strings: `charAt` `charCodeAt` `codePointAt` `indexOf` `lastIndexOf` `includes` `startsWith` `endsWith` `slice` `substring` `substr` `split` `match` `replace` `replaceAll` `search` `toUpperCase` `toLowerCase` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `repeat` `concat` `at` `localeCompare` `valueOf`
+- `Math`: full set of functions and constants
+- `Object.keys` / `values` / `entries` / `assign` / `getOwnPropertyNames` / `groupBy`, object spread `{...obj}`
+- Global functions: `parseInt` `parseFloat` `isNaN` `isFinite` `Number` `String` `Boolean` `encodeURI` `decodeURI` `encodeURIComponent` `decodeURIComponent`
+- `console.log` / `info` / `warn` / `error` / `dir` / `trace` / `assert` / `count` / `group` / `table` / `time`
 
-### 3.2 Completed (this batch)
+### 3.2 Completed
 
 - `JSON.parse` / `JSON.stringify`
-- `Date` (construction, `getTime`, `getFullYear`/`getUTCFullYear` etc., `toISOString`/`toJSON`), `RegExp` (`new RegExp`, `test`, `exec`, a POSIX ERE subset)
-- `Map` (`set/get/has/delete/clear/size`), `Set` (`add/has/delete/clear/size`)
-- `Promise` (`resolve/reject/all/allSettled/race`, instance `then/catch/finally`)
-- `Array` statics (`isArray/of/from`), `Object` statics (`keys/values/entries/assign/freeze/isFrozen/fromEntries/getPrototypeOf/setPrototypeOf/hasOwn/is/create`), `Number` statics (`isInteger/isSafeInteger/isFinite/isNaN/parseInt/parseFloat` and constants), `String` statics (`fromCharCode/fromCodePoint/raw`)
-- Array instance extensions: `at/find/findIndex/findLast/findLastIndex/some/every/sort/flat/flatMap/lastIndexOf/fill/copyWithin/reduceRight/toString/keys/values/entries`
-- String instance extensions: `at/padStart/padEnd/trimStart/trimEnd/replaceAll/localeCompare/codePointAt/valueOf`
-- Number instances: `toFixed/toPrecision/toExponential/toString(radix)/valueOf`
-- `Math` extensions: `log1p/expm1/sinh/cosh/tanh/asinh/acosh/atanh/fround/imul/clz32`
-- `console` extensions: `dir/trace/assert/count/countReset/group/groupEnd/table/time/timeEnd/timeLog`
+- `Date`, `RegExp` (POSIX ERE subset with capture groups), `Map`, `Set`, `Promise`, `BigInt`
+- `Array` statics (`isArray/of/from`), `Object` statics, `Number` statics, `String` statics (`fromCharCode` / `fromCodePoint` / `raw`)
+- `Error` family (`Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, `AggregateError`): `new`, `instanceof`, `extends`, `String(err)` / `err.toString()` and `.stack`
 
 ### 3.3 Still unimplemented
 
 | Category | Status |
 | --- | --- |
-| `Symbol` constructor and symbol primitives | ✗ not implemented |
-| `BigInt` arbitrary precision | ✓ implemented (sign-magnitude bignum: `+ - * / % **`, bitwise, shifts, comparisons, `toString(radix)`, `BigInt()` / `BigInt.asIntN` / `BigInt.asUintN`, literals with `0x` / `0o` / `0b`) |
-| `Error` constructor / `message` / `stack` | ✓ `new Error(...)` / `extends Error` implemented; other error subclasses (`TypeError`, …) not yet |
+| `Symbol` constructor and symbol primitives | ✓ `Symbol(description)`, well-known symbols, `Symbol.for` / `Symbol.keyFor`, symbol property keys and `Object.getOwnPropertySymbols` |
+| `String.prototype.normalize` | ✗ not implemented |
+| `structuredClone` | ✗ not implemented |
+| Built-in error subclasses (`TypeError`, `RangeError`, …) | ✓ first-class constructors and prototypes; `instanceof Error` holds for the whole family |
+| `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
+| Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | ✓ arrays, strings, `Map`, `Set`, generators and any object exposing `[Symbol.iterator]()` are iterable in `for...of` / spread |
+| Generators (`function*`, `yield`, `yield*`, `next`/`throw`/`return`) | ✓ implemented with stackful coroutines; `for...of`, spread and delegation supported. `return()` completes without running `finally` |
 | Timers / I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
-| Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | partial: arrays, strings, `Map` and `Set` are iterable in `for...of` / spread; a user-defined `Symbol.iterator` is not consulted |
-| Generators / async iteration | ✗ not implemented |
 
 ---
 
-## 4. Module system (partially implemented)
+## 4. Module system
 
 | Feature | Status |
 | --- | --- |
 | Multi-file / module resolution and linking | ✓ driver-layer AST bundling (`src/driver/modules.ts`): parse each module, rename top-level symbols by module prefix, rewrite references, merge into one file and rebind |
 | Named import/export | ✓ `import { a, b as c }` / `export { a as b }` / `export const/let/var/function/class` |
 | Default import/export | ✓ `export default` / `import d from` |
-| Re-export `export { x } from` / `export * from` | ✓ (`export *` is an approximate copy) |
-| Namespace import `import * as ns` | ✗ not implemented for relative modules (extension modules such as `path` support it: `import * as path from "path"`) |
+| Re-export `export { x } from` / `export * from` | ✓ (`export *` copies the dependency's exports) |
+| Namespace import `import * as ns` | ✓ lowered to a synthetic object literal holding every export |
 | Circular dependencies | ✗ errors out (no circular initialization semantics) |
+| Live bindings | ✗ namespace objects and imported bindings are snapshots at module-evaluation time |
 | Third-party / npm dependencies | ✗ not implemented (relative `.ts` files only) |
 
-> Extension modules (such as `fs`) are importable by bare or `node:`-prefixed specifier — `import { readFileSync } from "fs"` / `import path from "path"` — and resolve to their runtime entries (named, default and namespace forms). Relative modules are still bundled at the driver layer.
+> Extension modules (such as `fs`) are importable by bare or `node:`-prefixed
+> specifier — `import { readFileSync } from "fs"` / `import path from "path"` —
+> and resolve to their runtime entries (named, default and namespace forms).
+> Relative modules are bundled at the driver layer.
 
 ---
 
@@ -130,37 +143,41 @@ Criteria (ordered by severity):
 | --- | --- | --- |
 | Default parameters `function f(a = 5)` | ✓ | ✓ implemented |
 | Rest parameters `function f(...args)` | ✓ | ✓ implemented |
+| Spread in call arguments `f(...args)` | ✓ | ✓ implemented |
+| Destructuring parameters / bindings | ✓ | ✓ implemented |
 | `arguments` object | ✓ (implicit) | ✓ implemented (arrow functions get their own parameters, not the outer function's `arguments`, unlike JS) |
 | `this` binding / method call semantics | ✓ | ✓ implemented (`this` is threaded as the first ABI parameter; arrow functions inherit lexically) |
 | `async` / `await` / Promise | ✓ | ✓ implemented (synchronous microtask model) |
 | `new.target` | ✗ | not implemented |
-| Generators / iterators / `yield` | ✗ (`yield` codegen errors) | not implemented |
-| Closure `arity` / function properties | — | `xt_closure_arity` is always -1, never filled in |
-| Function object properties (`fn.name` / `fn.length` / `fn.call` / `fn.apply` / `bind`) | ✗ | not implemented |
-| Spread in call arguments `f(...args)` | ✗ | not implemented |
-| Destructuring parameters / bindings | ✗ | not implemented |
+| Generators / iterators / `yield` | ✓ implemented | `function*`, `yield`, `yield*`, `.next/.throw/.return`; `async` generators not supported |
+| Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
+| `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ implemented (the bound closure does not track partial-argument `length`) |
+| `fn.name` / `fn.length` | ✓ | ✓ implemented (inferred from the declaration / assignment / property key; bound functions use `"bound ..."` and adjusted arity) |
+| First-class built-in methods (`typeof arr.map`, `const f = arr.push`, `obj.method?.()`) | ✓ | ✓ implemented as *unbound* method values: reading `arr.map` yields a function, `arr.map?.(cb)` and `obj.method?.()` bind the receiver as `this`, and a detached call (`const f = arr.map; f(cb)`) throws exactly like JavaScript. Method `name`/`length` are exposed |
+| `fn.toString()` | ~ | returns a native-style placeholder (`function name() { [native code] }`) instead of the original source text |
 
 ---
 
-## 6. Classes and object orientation (partially implemented)
+## 6. Classes and object orientation
 
 | Feature | Status |
 | --- | --- |
-| `class` declarations / class expressions | ✓ implemented (prototype object + constructor closure, stored in an LLVM global) |
+| `class` declarations / class expressions | ✓ implemented |
 | `constructor` | ✓ |
-| Instance fields / property declarations | ✓ (including `this` initializers, executed before the constructor body) |
+| Instance fields / property declarations | ✓ |
 | Methods | ✓ |
-| `static` fields / methods | ✓ (stored in the constructor function's property bag) |
-| Inheritance `extends` / `super` | ✓ (single level correct; `super` takes the prototype of `this`'s prototype — see the theoretical flaw in section 8) |
+| `static` fields / methods | ✓ |
+| Inheritance `extends` / `super` | ✓ (single level correct; `super` takes the prototype of `this`'s prototype — see section 8) |
 | Prototype chain / method lookup | ✓ |
 | `instanceof` | ✓ |
 | `new` / instantiation | ✓ |
-| `get` / `set` accessors | ✗ parsed only, no accessor semantics |
-| Parameter properties `constructor(public x: T)` | ✗ does not auto-assign `this.x` |
-| `private` / `protected` / `public` / `readonly` modifiers | ✗ parsed only, no access control |
-| `abstract` / `implements` | ✗ |
-| Private fields `#x` | ✗ |
-| `enum` | ✗ |
+| `get` / `set` accessors | ✓ implemented |
+| Parameter properties `constructor(public x: T)` | ✓ implemented |
+| Private fields `#x` | ✓ implemented (stored under a literal `#x` key; no accessibility enforcement) |
+| `enum` / `const enum` | ✓ implemented (forward + reverse mapping) |
+| `private` / `protected` / `public` / `readonly` modifiers | ✗ no access control (erased) |
+| `abstract` / `implements` | ✗ (erased) |
+| Parent/child `#x` name collisions | ✗ may alias (same literal key) |
 
 ---
 
@@ -183,23 +200,25 @@ These features **compile and run**, but the result does not fully match ECMAScri
 
 | Item | Deviation |
 | --- | --- |
-| `finally` and early exit | `return` / `break` / `continue` leaving a `try` region **does not execute `finally`**; `finally` runs on normal completion, after `catch` completes, and on propagation of an uncaught exception. The runtime still pops the `try` frame correctly, so it does not crash |
-| Exception objects | Any value can be thrown / caught (string, number, object), and `new Error(...)` / `extends Error` are supported; `stack` capture and the other built-in error subclasses (`TypeError`, …) are not implemented |
-| `for...in` | Enumerates keys of objects / arrays / strings (arrays and strings yield string indices), but does not include prototype chain properties; behavior after `delete` is broadly consistent with JS |
-| String `length` | Counted by UTF-8 bytes / code points at runtime, not by JS's UTF-16 code units (emoji and non-BMP characters report a smaller length) |
-| Number-to-string | Only common cases are covered (integers, shortest round-trip); boundary formatting (scientific notation details, etc.) differs from JS |
-| Loose equality `==` | Only a subset is implemented (number/string/bool/null/undefined); objects compare by reference, no ToPrimitive |
-| `+` addition | The ToPrimitive path for number + object / array is incomplete |
-| Object spread `{...obj}` | Only copies the object's own enumerable properties; index copying for array / string spread is limited |
-| Spread of iterables | `[...arr]`, `[...set]`, `[...map]`, `[...str]` and array-literal spread (`["a", ...set]`) are supported; call-argument spread `f(...args)` is still unsupported |
-| Optional chaining `?.` | Nullish short-circuit is node-by-node: `a?.b`, `a?.[b]`, `a?.b()`, `a?.[b]()`, `a?.()` all short-circuit correctly; but a non-optional member chained after the optional part (e.g. `a?.b.c()`) does not short-circuit as a whole — `a?.b.c` first yields `undefined`, then `.c` is taken on it, and the final call throws |
+| String `length` | Counted in UTF-8 bytes, not UTF-16 code units (`"\u00e9".length` reports 1 instead of 2; `"\u{1F600}".length` reports 4 instead of 2; `codePointAt` likewise differs) |
+| `Object.getPrototypeOf({})` | Returns `undefined` instead of the `Object.prototype` object |
+| Global RegExp `lastIndex` | `test` / `exec` do not advance or honour a caller-set `lastIndex` for `/g` / `/y` regexes |
+| String `normalize` / `structuredClone` | Not implemented |
+| First-class built-in methods | Implemented as unbound method values (see section 5); `fn.toString()` returns a placeholder rather than source text |
+| `for...in` | Enumerates own keys of objects / arrays / strings; does not include prototype-chain properties |
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Bump arena never frees; no GC; long-lived programs grow continuously |
-| Function `arity` / argument count | No argument count validation |
-| `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously, and pending promises are driven by the runtime microtask queue at `await` and program exit; there is no real event loop, so timers / I/O cannot be awaited |
+| Function `arity` / argument count | No argument count validation; `fn.length` reports the declared arity but calls are never checked against it |
+| `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously; no real event loop, so timers / I/O cannot be awaited |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
-| Classes | No access control; `get`/`set` accessors and constructor parameter properties are implemented |
-| `import` / `export` | Driver-layer AST bundling, top-level symbols renamed by module prefix; extension modules importable by bare/`node:` specifier; namespace imports `import * as` of relative modules are unimplemented, circular dependencies error out, `export *` is approximate |
+| `Error.stack` | Not captured |
+| Module live bindings | Namespace imports and imported bindings are snapshots (see section 4) |
+| `import.meta` | Parsed but has no value |
+
+> Number formatting, loose equality, `+` / relational `ToPrimitive`, whole-chain
+> optional chaining, `finally` on early exit and object-key ordering have all
+> been brought in line with Node and are covered by the differential tests, so
+> they are no longer listed as deviations.
 
 ---
 
@@ -210,34 +229,35 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | GC (garbage collection) | ✗ deliberately deferred; `xt_alloc` is isolated but not yet replaced with a precise / conservative collector |
 | Self-hosting | ✓ the compiler compiles itself: `xbintsc build src/cli/main.ts` produces a working binary, and the emitted IR is stable from generation 1 onward. The runtime is still C |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
-| Full standard library (Math / JSON / Date / collections, etc.) | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` implemented; Symbol not implemented |
-| Multi-file module bundling | partial: relative-path `.ts` import bundling implemented, plus bare-specifier extension module imports; namespace imports of relative modules / circular dependencies / npm not implemented |
+| Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` implemented; String.normalize / structuredClone missing |
+| Multi-file module bundling | partial: relative-path `.ts` bundling, namespace imports and bare-specifier extension module imports implemented; circular dependencies / npm / live bindings not implemented |
 | A real async runtime / event loop | ✗ (Promise is a synchronous microtask model) |
-| Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), but needs CI verification (`.github/workflows` is configured) |
-| Precise ECMAScript number / string / comparison semantics | ✗ see section 8 |
+| Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), verified in CI |
+| Precise ECMAScript number / string / comparison semantics | partial, see section 8 |
 
 ---
 
 ## 10. Quick reference: unimplemented / partially implemented list
 
 ```
-Unimplemented (statements): enum, namespace/module, labeled statements label:
+Unimplemented (statements): namespace/module declarations
 
-Unimplemented (expressions): tagged templates, yield,
-                             spread in call arguments f(...args)
+Unimplemented (expressions): new.target, import.meta value
 
-Unimplemented (functions): generators, fn.name/length/call/apply/bind, new.target
+Unimplemented (functions): `fn.toString()` source text, async generators
 
-Unimplemented (classes/OO): get/set accessors, access control, parameter properties, private fields #x, enum
+Unimplemented (classes/OO): abstract/implements, access control,
+                            parent/child #x collision
 
-Unimplemented (standard library): Symbol, Error constructor, iterator protocol
+Unimplemented (standard library): String.normalize, structuredClone
 
-Unimplemented (modules): namespace imports import * as of relative modules, circular dependencies, npm dependencies
+Unimplemented (modules): circular dependencies, npm dependencies, live bindings
 
-Unimplemented (type system): type checking, generic instantiation, assertion semantics, optional-chaining narrowing
+Unimplemented (type system): type checking, generic instantiation, assertion
+                             semantics, optional-chaining narrowing
 
-Unimplemented (runtime): GC, Error constructor, a real async event loop, finally on early exit,
-                        UTF-16 length, full ToPrimitive path
+Unimplemented (runtime): GC, a real async event loop, UTF-16 string length,
+                         Object.prototype identity, global-regex lastIndex
 
-Unimplemented (engineering): self-hosting, GC replacement, type checker
+Unimplemented (engineering): GC replacement, type checker
 ```

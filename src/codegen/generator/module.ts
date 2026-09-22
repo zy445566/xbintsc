@@ -9,7 +9,6 @@ import {
   type ArrowFunction,
   type Block,
   type Expression,
-  type Identifier,
   type Parameter,
 } from "../../ast/nodes.js";
 import type { ClassInfo, FunctionInfo, SymbolInfo } from "../../binder/binder.js";
@@ -94,7 +93,9 @@ export const moduleMethods: ModuleMethods = {
       label: 0,
       terminated: false,
       loops: [],
+      pendingLabels: [],
       tryFrames: [],
+      finallyStack: [],
       escapePointers: [],
       usesTry: false,
     };
@@ -157,11 +158,8 @@ export const moduleMethods: ModuleMethods = {
     if (fn.isConstructor && fn.classInfo?.parentExpression) {
       const explicitBody = (fn.node as { body?: Block }).body;
       const parent = fn.classInfo.parentExpression;
-      const unboundBuiltin =
-        parent.kind === SyntaxKind.Identifier &&
-        (parent as Identifier).text === "Error" &&
-        !this.binding.symbolOfIdentifier.get(parent as Identifier);
-      if (!explicitBody && !unboundBuiltin) {
+      const errorName = this.errorFamilyName(parent);
+      if (!explicitBody && !errorName) {
         const parentValue = this.emitExpression(parent);
         const parentProto = this.reg();
         this.emit(`  ${parentProto} = call i64 @xt_function_get_prototype(i64 ${parentValue})`);
@@ -170,10 +168,12 @@ export const moduleMethods: ModuleMethods = {
         this.emit(`  ${parentCtor} = call i64 @xt_get(i64 ${parentProto}, i64 ${ctorKey})`);
         const superThis = this.emitThis();
         this.emit(`  call i64 @xt_call_with_this(i64 ${parentCtor}, i64 ${superThis}, i32 %argc, i64* %argv)`);
-      } else if (!explicitBody && unboundBuiltin) {
-        // `extends Error` with no explicit constructor: initialise message/name.
+      } else if (!explicitBody && errorName) {
+        // `extends Error` / `extends TypeError` with no explicit constructor:
+        // initialise the instance's name and message from the arguments.
         const superThis = this.emitThis();
-        this.emit(`  call i64 @xt_error_init(i64 ${superThis}, i32 %argc, i64* %argv)`);
+        const nameValue = this.stringValue(errorName);
+        this.emit(`  call i64 @xt_error_init(i64 ${superThis}, i64 ${nameValue}, i32 %argc, i64* %argv)`);
       }
     }
 
@@ -274,14 +274,16 @@ export const moduleMethods: ModuleMethods = {
     const proto = this.reg();
     this.emit(`  ${proto} = call i64 @xt_object_new()`);
     if (classInfo.parentExpression) {
-      // `extends Error` (and other host builtins) have no runtime class value;
-      // the subclass still works, it simply does not inherit a prototype.
+      // `extends Error` / `extends TypeError` / other host builtins: chain the
+      // subclass prototype onto the builtin's prototype so `instanceof` works.
       const parent = classInfo.parentExpression;
-      const unboundBuiltin =
-        parent.kind === SyntaxKind.Identifier &&
-        (parent as Identifier).text === "Error" &&
-        !this.binding.symbolOfIdentifier.get(parent as Identifier);
-      if (!unboundBuiltin) {
+      const errorName = this.errorFamilyName(parent);
+      if (errorName) {
+        const nameValue = this.stringValue(errorName);
+        const parentProto = this.reg();
+        this.emit(`  ${parentProto} = call i64 @xt_error_prototype(i64 ${nameValue})`);
+        this.emit(`  call i64 @xt_object_set_prototype(i64 ${proto}, i64 ${parentProto})`);
+      } else {
         const parentValue = this.emitExpression(parent);
         const parentProto = this.reg();
         this.emit(`  ${parentProto} = call i64 @xt_function_get_prototype(i64 ${parentValue})`);
@@ -290,7 +292,9 @@ export const moduleMethods: ModuleMethods = {
     }
     for (const method of classInfo.methods) {
       const fnValue = this.emitClosureValue(method);
-      const key = this.stringValue(method.name);
+      const key = method.computedKey
+        ? this.emitExpression(method.computedKey)
+        : this.stringValue(method.name);
       const accessor = (method.node as { accessor?: "get" | "set" }).accessor;
       if (accessor === "get") {
         this.emit(`  call i64 @xt_object_define_getter(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
@@ -306,7 +310,9 @@ export const moduleMethods: ModuleMethods = {
     this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${ctorKey}, i64 ${ctor})`);
     for (const method of classInfo.statics) {
       const fnValue = this.emitClosureValue(method);
-      const key = this.stringValue(method.name);
+      const key = method.computedKey
+        ? this.emitExpression(method.computedKey)
+        : this.stringValue(method.name);
       this.emit(`  call i64 @xt_set(i64 ${ctor}, i64 ${key}, i64 ${fnValue})`);
     }
     for (const field of classInfo.fields) {

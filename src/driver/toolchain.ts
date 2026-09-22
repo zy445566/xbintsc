@@ -114,7 +114,7 @@ export function compileC(
 ): void {
   const result = runner.run(
     clang,
-    ["-O2", "-D_CRT_SECURE_NO_WARNINGS", "-c", sourcePath, "-o", objectPath, `-I${includeDir}`],
+    ["-O2", "-Wall", "-Wextra", "-D_CRT_SECURE_NO_WARNINGS", "-c", sourcePath, "-o", objectPath, `-I${includeDir}`],
     { env },
   );
   if (result.status !== 0) throw new ToolchainError(`${clang} ${sourcePath}`, result.status, result.stderr);

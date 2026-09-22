@@ -9,9 +9,13 @@ static time_t xt_timegm(struct tm *tm) { return (time_t)_mkgmtime64(tm); }
 static struct tm *xt_gmtime_r(const time_t *timer, struct tm *buf) {
   return gmtime_s(buf, timer) == 0 ? buf : NULL;
 }
+static struct tm *xt_localtime_r(const time_t *timer, struct tm *buf) {
+  return localtime_s(buf, timer) == 0 ? buf : NULL;
+}
 #else
 static time_t xt_timegm(struct tm *tm) { return timegm(tm); }
 static struct tm *xt_gmtime_r(const time_t *timer, struct tm *buf) { return gmtime_r(timer, buf); }
+static struct tm *xt_localtime_r(const time_t *timer, struct tm *buf) { return localtime_r(timer, buf); }
 #endif
 
 int xt_value_equals(xt_value a, xt_value b) {

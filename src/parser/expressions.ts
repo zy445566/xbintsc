@@ -19,6 +19,7 @@ import {
   type CallExpression,
   type ConditionalExpression,
   type Expression,
+  type Identifier,
   type NewExpression,
   type NumericLiteral,
   type Parameter,
@@ -54,6 +55,7 @@ export interface ExpressionMethods {
   parseCallAndMemberTail(this: Parser, base: Expression): Expression;
   previousEnd(this: Parser, args: readonly Expression[], fallback: number): number;
   parsePropertyAccess(this: Parser, expression: Expression): Expression;
+  parseMemberName(this: Parser): Identifier;
   parseArguments(this: Parser): Expression[];
 }
 
@@ -459,8 +461,18 @@ export const expressionMethods: ExpressionMethods = {
       const close = this.parseExpected(TokenKind.CloseBracket);
       return { kind: SyntaxKind.ElementAccessExpression, expression, argumentExpression: argument, optional: true, start: expression.start, end: close.end };
     }
-    const name = this.parseIdentifierName();
+    const name = this.parseMemberName();
     return { kind: SyntaxKind.PropertyAccessExpression, expression, name, optional, start: expression.start, end: name.end };
+  },
+
+  /** Member name after `.`: a normal identifier or a `#private` name. */
+  parseMemberName(this: Parser): Identifier {
+    const token = this.token;
+    if (token.kind === TokenKind.PrivateIdentifier) {
+      this.nextToken();
+      return { kind: SyntaxKind.Identifier, text: token.text, escaped: true, start: token.start, end: token.end };
+    }
+    return this.parseIdentifierName();
   },
 
   parseArguments(this: Parser): Expression[] {

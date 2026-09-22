@@ -60,7 +60,7 @@ xt_value xt_string_static(xt_value name, int32_t argc, xt_value *argv) {
   }
   if (strcmp(fn, "raw") == 0) {
     xt_value strings = xt_arg_at(argc, argv, 0);
-    xt_value raw = xt_object_get(strings, xt_string_from_cstr("raw"));
+    xt_value raw = xt_get(strings, xt_string_from_cstr("raw"));
     xt_value out = xt_string_from_cstr("");
     double length = xt_to_number(xt_get(raw, xt_string_from_cstr("length")));
     for (int32_t i = 0; i < (int32_t)length; i++) {

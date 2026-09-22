@@ -55,11 +55,15 @@ export interface NoSubstitutionTemplateLiteral extends Node {
   readonly kind: SyntaxKind.NoSubstitutionTemplateLiteral;
   readonly text: string;
   readonly value: string;
+  /** Raw text between the backticks (escapes preserved), for tagged templates. */
+  readonly raw?: string;
 }
 
 export interface TemplateLiteral extends Node {
   readonly kind: SyntaxKind.TemplateLiteral;
   readonly head: string;
+  /** Raw text of the head chunk, for tagged templates. */
+  readonly raw?: string;
   readonly spans: TemplateSpan[];
 }
 
@@ -67,6 +71,8 @@ export interface TemplateSpan extends Node {
   readonly kind: SyntaxKind.TemplateSpan;
   readonly expression: Expression;
   readonly literal: string;
+  /** Raw text of the chunk that follows this substitution. */
+  readonly raw?: string;
   /** True when this span terminates the template (tail) rather than continues it. */
   readonly isTail: boolean;
 }
@@ -108,6 +114,8 @@ export interface PropertyAssignment extends Node {
   readonly kind: SyntaxKind.PropertyAssignment;
   readonly name: PropertyName;
   readonly initializer: Expression;
+  /** `get x() {}` / `set x(v) {}` in an object literal. */
+  readonly accessor?: "get" | "set";
 }
 
 export interface ShorthandPropertyAssignment extends Node {

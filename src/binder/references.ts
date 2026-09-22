@@ -49,7 +49,7 @@ export interface ReferenceMethods {
   bindNode(this: Binder, node: Node | undefined, scope: Scope): void;
   bindVariableList(this: Binder, list: VariableDeclarationList, scope: Scope): void;
   bindBindingPattern(this: Binder, name: BindingName, scope: Scope): void;
-  bindFunction(this: Binder, node: FunctionDeclaration | FunctionExpression | ArrowFunction, parentScope: Scope, symbol: SymbolInfo | undefined): void;
+  bindFunction(this: Binder, node: FunctionDeclaration | FunctionExpression | ArrowFunction, parentScope: Scope, symbol: SymbolInfo | undefined, inferredName?: string): void;
   bindClass(this: Binder, node: ClassDeclaration | ClassExpression, scope: Scope): void;
   createClassFunction(this: Binder, member: Node, name: string, parameters: readonly Parameter[], body: Block | undefined, parentScope: Scope, info: ClassInfo, isStatic: boolean, isConstructor: boolean): FunctionInfo;
   reference(this: Binder, identifier: Identifier, scope: Scope): void;
@@ -80,7 +80,6 @@ export const referenceMethods: ReferenceMethods = {
       case SyntaxKind.FunctionDeclaration: {
         const fn = node as FunctionDeclaration;
         const symbol = this.symbolOfDeclaration.get(fn);
-        if (symbol) (symbol.declarations as Node[]).length; // keep declaration mapping warm
         this.bindFunction(fn, scope, symbol);
         return;
       }
@@ -108,7 +107,24 @@ export const referenceMethods: ReferenceMethods = {
         if (property.name.kind === SyntaxKind.ComputedPropertyName) {
           this.bindNode((property.name as unknown as { expression: Expression }).expression, scope);
         }
-        this.bindNode(property.initializer, scope);
+        const initializer = property.initializer;
+        if (
+          initializer.kind === SyntaxKind.FunctionExpression ||
+          initializer.kind === SyntaxKind.ArrowFunction
+        ) {
+          // Infer the function name from the property key (`{ sum() {} }`).
+          const accessor = (property as unknown as { accessor?: "get" | "set" }).accessor;
+          const key = classMemberName(property.name);
+          const inferred = accessor ? `${accessor} ${key}` : key;
+          this.bindFunction(
+            initializer as FunctionExpression | ArrowFunction,
+            scope,
+            undefined,
+            inferred,
+          );
+        } else {
+          this.bindNode(initializer, scope);
+        }
         return;
       }
       case SyntaxKind.ShorthandPropertyAssignment: {
@@ -202,7 +218,23 @@ export const referenceMethods: ReferenceMethods = {
       } else {
         this.bindBindingPattern(declaration.name, scope);
       }
-      this.bindNode(declaration.initializer, scope);
+      const initializer = declaration.initializer;
+      if (
+        declaration.name.kind === SyntaxKind.Identifier &&
+        initializer &&
+        (initializer.kind === SyntaxKind.FunctionExpression ||
+          initializer.kind === SyntaxKind.ArrowFunction)
+      ) {
+        // Infer the function name from the variable it is assigned to.
+        this.bindFunction(
+          initializer as FunctionExpression | ArrowFunction,
+          scope,
+          undefined,
+          (declaration.name as Identifier).text,
+        );
+      } else {
+        this.bindNode(initializer, scope);
+      }
     }
   },
 
@@ -221,6 +253,7 @@ export const referenceMethods: ReferenceMethods = {
     node: FunctionDeclaration | FunctionExpression | ArrowFunction,
     parentScope: Scope,
     symbol: SymbolInfo | undefined,
+    inferredName?: string,
   ): void {
     const name =
       node.kind === SyntaxKind.FunctionDeclaration
@@ -230,6 +263,9 @@ export const referenceMethods: ReferenceMethods = {
           : "(arrow)";
     const parentFn = this.current;
     const fn = this.createFunction(name, node, parentFn, false, node.kind === SyntaxKind.ArrowFunction);
+    if (inferredName && (name === "(anonymous)" || name === "(arrow)")) {
+      (fn as { name: string }).name = inferredName;
+    }
     this.current = fn;
 
     const scope = this.createScope(ScopeKind.Function, node, parentScope);
@@ -309,6 +345,13 @@ export const referenceMethods: ReferenceMethods = {
         const method = member as MethodDeclaration;
         const isStatic = method.modifiers.some((modifier) => modifier.modifierKind === ModifierKind.Static);
         const fn = this.createClassFunction(method, classMemberName(method.name), method.parameters, method.body, classScope, info, isStatic, false);
+        if (method.name.kind === SyntaxKind.ComputedPropertyName) {
+          // Computed member names are evaluated in the enclosing scope when
+          // the class is defined, so bind them there.
+          const keyExpression = (method.name as unknown as { expression: Expression }).expression;
+          this.bindNode(keyExpression, scope);
+          (fn as MutableFunction & { computedKey: Expression }).computedKey = keyExpression;
+        }
         if (isStatic) (info.statics as FunctionInfo[]).push(fn);
         else (info.methods as FunctionInfo[]).push(fn);
       }

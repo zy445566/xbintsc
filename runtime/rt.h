@@ -107,6 +107,7 @@ xt_value xt_closure_call(xt_value fn, int32_t argc, xt_value *argv);
 xt_value xt_call_with_this(xt_value fn, xt_value thisValue, int32_t argc, xt_value *argv);
 xt_value xt_closure_env(xt_value fn, int32_t index);
 int32_t xt_closure_arity(xt_value fn);
+xt_value xt_function_set_metadata(xt_value fn, xt_value name, int32_t arity);
 xt_value xt_this(void);
 xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv);
 xt_value xt_instance_of(xt_value value, xt_value ctor);
@@ -169,6 +170,14 @@ xt_value xt_object_entries(xt_value obj);
 xt_value xt_object_assign(int32_t argc, xt_value *argv);
 xt_value xt_object_spread(xt_value target, xt_value source);
 
+/* -- symbols -------------------------------------------------------------- */
+/** Implements `Symbol(description)`. */
+xt_value xt_symbol(int32_t argc, xt_value *argv);
+/** Implements `Symbol.<name>(...)` statics (`for`, `keyFor`). */
+xt_value xt_symbol_static(xt_value name, int32_t argc, xt_value *argv);
+/** Reads a well-known symbol (`Symbol.iterator`, ...). */
+xt_value xt_symbol_get(xt_value name);
+
 /* -- standard library dispatch -------------------------------------------- */
 /** Call `target[name](...)`, falling back to built-in Array/String methods. */
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv);
@@ -229,6 +238,10 @@ xt_value xt_parse_int(int32_t argc, xt_value *argv);
 xt_value xt_parse_float(int32_t argc, xt_value *argv);
 xt_value xt_is_nan(int32_t argc, xt_value *argv);
 xt_value xt_is_finite(int32_t argc, xt_value *argv);
+xt_value xt_encode_uri_component(int32_t argc, xt_value *argv);
+xt_value xt_encode_uri(int32_t argc, xt_value *argv);
+xt_value xt_decode_uri_component(int32_t argc, xt_value *argv);
+xt_value xt_decode_uri(int32_t argc, xt_value *argv);
 xt_value xt_number_ctor(int32_t argc, xt_value *argv);
 xt_value xt_string_ctor(int32_t argc, xt_value *argv);
 xt_value xt_boolean_ctor(int32_t argc, xt_value *argv);
@@ -263,6 +276,10 @@ xt_value xt_iter_value(xt_value value, xt_value index);
 /* -- generic member access ------------------------------------------------ */
 xt_value xt_get(xt_value target, xt_value key);
 xt_value xt_set(xt_value target, xt_value key, xt_value value);
+/* Materialise a first-class runtime method value (`arr.map`) as an unbound
+ * closure that expects the receiver through `this`. Returns `XT_UNDEFINED` when
+ * `name` is not a method of `target`, so it can be used as a property fallback. */
+xt_value xt_method_value(xt_value target, xt_value name);
 
 /* -- boxes (used for captured variables) ---------------------------------- */
 xt_value xt_box_new(xt_value value);

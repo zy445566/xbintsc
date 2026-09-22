@@ -13,9 +13,8 @@
 
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { DiagnosticBag, formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js";
+import { formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { build, compileEntry, COMPILER_VERSION, type EmitKind } from "../driver/compiler.js";
 import { findRuntimeDir, platformSlug } from "../driver/paths.js";

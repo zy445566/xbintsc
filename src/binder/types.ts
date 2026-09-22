@@ -61,12 +61,16 @@ export interface FunctionInfo {
   readonly isArrow: boolean;
   /** True when the function was declared `async`. */
   readonly isAsync: boolean;
+  /** True for `function*` / generator methods; calling one creates a generator. */
+  readonly isGenerator: boolean;
   /** True when this function's body mentions `this` directly. */
   usesThis: boolean;
   /** True when an arrow function must receive `this` from its enclosing scope. */
   capturesThis: boolean;
   /** Set for class methods/constructors; carries the owning class. */
   classInfo?: ClassInfo;
+  /** Computed member name (`[expr]() {}`), evaluated at class definition. */
+  computedKey?: Expression;
   /** True for `static` class members. */
   isStatic?: boolean;
   /** True for an explicit `constructor`. */

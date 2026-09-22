@@ -224,16 +224,15 @@ typedef struct xt_try_frame {
   struct xt_try_frame *prev;
   xt_value exception;
 } xt_try_frame;
-/* On Windows the UCRT/MinGW `_setjmp` takes the caller's frame address as a
- * second argument (`_JUMP_BUFFER.Frame`); the generated IR does the same with
- * `@llvm.frameaddress(0)`. POSIX `_setjmp` takes only the buffer, so the extra
- * argument is passed under `_WIN32` only. `_setjmp` (rather than the `setjmp`
- * macro) is used so it pairs with the plain `longjmp` in `xt_throw`. */
-#if defined(_WIN32)
-#define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf, __builtin_frame_address(0))
-#else
+/* Call `_setjmp` with a single argument on every platform. On the MSVC target
+ * clang recognises `_setjmp` as a built-in and injects the caller's frame
+ * address (`@llvm.frameaddress(0)`) as the hidden second argument itself; the
+ * UCRT prototype only declares the one-visible-argument form, so writing the
+ * frame argument by hand is a compile error (`too many arguments to function
+ * call`). The generated IR cannot rely on that rewrite (it is already IR), so
+ * it emits the two-argument form explicitly. `_setjmp` (rather than the
+ * `setjmp` macro) is used so it pairs with the plain `longjmp` in `xt_throw`. */
 #define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
-#endif
 void *xt_try_mark(void);
 void xt_try_restore(void *mark);
 

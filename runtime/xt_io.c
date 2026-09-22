@@ -7,15 +7,16 @@
  *
  * The generated IR calls `_setjmp` with two arguments — the jmp_buf and the
  * caller's frame address (`@llvm.frameaddress(0)`) — paired with `longjmp`
- * here. This is exactly what clang lowers a C `_setjmp(buf)` call to on MSVC.
- * On Windows the UCRT `_setjmp` takes the frame as a second argument and
- * stores it in `_JUMP_BUFFER.Frame`; `longjmp` passes that frame to
- * `RtlUnwind` to run the unwind. Calling `_setjmp` with only one argument left
- * `Frame` as garbage, so `longjmp` unwound to a bogus target
- * (`STATUS_BAD_FUNCTION_TABLE`, 0xC00000FF). `_setjmp` is used rather than the
- * exported `setjmp` symbol, which is a legacy two-argument routine with an
- * incompatible ABI; on Linux/macOS `_setjmp` simply ignores the extra
- * argument and pairs with `longjmp` (the XSI `_longjmp` does not exist on
+ * here. This is exactly what clang lowers a C `_setjmp(buf)` call to on MSVC:
+ * on Windows the UCRT `_setjmp` stores that frame in `_JUMP_BUFFER.Frame` and
+ * `longjmp` passes it to `RtlUnwind` to run the unwind, so omitting it makes
+ * `longjmp` unwind to a bogus target (`STATUS_BAD_FUNCTION_TABLE`,
+ * 0xC00000FF). Because the generated call is IR it must pass the frame
+ * explicitly; the C runtime (see `xt_try_setjmp`) instead calls the
+ * one-argument `_setjmp` and lets clang inject the frame. `_setjmp` is used
+ * rather than the exported `setjmp` symbol, whose Windows ABI is an
+ * incompatible two-argument routine; on Linux/macOS `_setjmp` takes only the
+ * buffer and pairs with `longjmp` (the XSI `_longjmp` does not exist on
  * Windows).
  */
 

@@ -20,6 +20,7 @@ import {
   type PostfixUnaryExpression,
   type PrefixUnaryExpression,
   type PropertyAccessExpression,
+  type TaggedTemplateExpression,
   type TemplateLiteral,
   type ArrayLiteralExpression,
 } from "../../../ast/nodes.js";
@@ -34,6 +35,7 @@ export interface PrimaryExpressionMethods {
   emitIdentifier(this: Generator, identifier: Identifier): string;
   emitFunctionValue(this: Generator, symbol: SymbolInfo): string;
   emitTemplate(this: Generator, node: TemplateLiteral): string;
+  emitTaggedTemplate(this: Generator, node: TaggedTemplateExpression): string;
   emitThis(this: Generator): string;
   emitNew(this: Generator, node: NewExpression): string;
   emitAwait(this: Generator, node: AwaitExpression): string;
@@ -79,6 +81,8 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
       }
       case SyntaxKind.TemplateLiteral:
         return this.emitTemplate(node as TemplateLiteral);
+      case SyntaxKind.TaggedTemplateExpression:
+        return this.emitTaggedTemplate(node as TaggedTemplateExpression);
       case SyntaxKind.TrueKeyword:
         return i64(XT_TRUE);
       case SyntaxKind.FalseKeyword:
@@ -302,5 +306,80 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
       }
     }
     return accumulator;
+  },
+
+  /**
+   * Lower a tagged template: build the (cooked) strings array with a `.raw`
+   * sibling and call the tag with it followed by the interpolation values.
+   * `String.raw` is the one namespace tag special-cased by the runtime.
+   */
+  emitTaggedTemplate(node: TaggedTemplateExpression): string {
+    const template = node.template;
+    let cooked: string[];
+    let raw: string[];
+    let expressions: readonly Expression[];
+    if (template.kind === SyntaxKind.NoSubstitutionTemplateLiteral) {
+      cooked = [template.value];
+      raw = [template.raw ?? template.value];
+      expressions = [];
+    } else {
+      const literal = template as TemplateLiteral;
+      cooked = [literal.head, ...literal.spans.map((span) => span.literal)];
+      raw = [literal.raw ?? literal.head, ...literal.spans.map((span) => span.raw ?? span.literal)];
+      expressions = literal.spans.map((span) => span.expression);
+    }
+
+    const makeArray = (items: string[]): string => {
+      const array = this.reg();
+      this.emit(`  ${array} = call i64 @xt_array_new(i32 0, i64* null)`);
+      for (const item of items) {
+        const value = this.stringValue(item);
+        this.emit(`  call i64 @xt_array_push(i64 ${array}, i64 ${value})`);
+      }
+      return array;
+    };
+    const strings = makeArray(cooked);
+    const rawArray = makeArray(raw);
+    const rawKey = this.stringValue("raw");
+    this.emit(`  call i64 @xt_set(i64 ${strings}, i64 ${rawKey}, i64 ${rawArray})`);
+
+    const argc = String(expressions.length + 1);
+    const ptr = `%args${this.current.allocas.length}`;
+    this.current.allocas.push(`${ptr} = alloca i64, i32 ${expressions.length + 1}`);
+    const first = this.reg();
+    this.emit(`  ${first} = getelementptr i64, i64* ${ptr}, i32 0`);
+    this.emit(`  store i64 ${strings}, i64* ${first}`);
+    for (let index = 0; index < expressions.length; index++) {
+      const value = this.emitExpression(expressions[index]!);
+      const slot = this.reg();
+      this.emit(`  ${slot} = getelementptr i64, i64* ${ptr}, i32 ${index + 1}`);
+      this.emit(`  store i64 ${value}, i64* ${slot}`);
+    }
+
+    const tag = node.tag;
+    if (tag.kind === SyntaxKind.PropertyAccessExpression) {
+      const access = tag as PropertyAccessExpression;
+      const owner = access.expression;
+      if (
+        owner.kind === SyntaxKind.Identifier &&
+        (owner as Identifier).text === "String" &&
+        access.name.text === "raw" &&
+        !this.binding.symbolOfIdentifier.get(owner as Identifier)
+      ) {
+        const key = this.stringValue("raw");
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_string_static(i64 ${key}, i32 ${argc}, i64* ${ptr})`);
+        return result;
+      }
+      const object = this.emitExpression(owner);
+      const name = this.stringValue(access.name.text);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${argc}, i64* ${ptr})`);
+      return result;
+    }
+    const tagValue = this.emitExpression(tag);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_closure_call(i64 ${tagValue}, i32 ${argc}, i64* ${ptr})`);
+    return result;
   },
 };

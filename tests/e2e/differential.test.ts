@@ -343,6 +343,30 @@ for (const v of results) console.log(JSON.stringify(v));`,
     ]),
   );
 
+  diff(
+    "tagged templates and String.raw",
+    `function tag(strings: TemplateStringsArray, ...values: unknown[]): string {
+  let out = strings[0];
+  for (let i = 0; i < values.length; i++) out += "[" + String(values[i]) + "]" + strings[i + 1];
+  return out;
+}
+const obj = {
+  prefix: "<",
+  tag(strings: TemplateStringsArray, ...values: unknown[]): string {
+    return this.prefix + strings.join("|") + "/" + JSON.stringify(strings.raw) + "/" + values.join(",");
+  },
+};
+const name = "world";
+${printAll([
+  'tag`hello ${name} and ${1 + 1}!`',
+  'tag`no substitutions`',
+  'obj.tag`a\\n${name}b${2}`',
+  'String.raw`a\\nb\\t${name}c`',
+  'String.raw`plain`',
+  'tag`${name}`',
+])}`,
+  );
+
   it("binds namespace imports to every export", () => {
     harness.expectSameOutputAsNode(
       `import * as util from "./util.ts";

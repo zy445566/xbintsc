@@ -33,6 +33,12 @@ export interface LiteralMethods {
   parseRegularExpression(this: Parser): RegularExpressionLiteral;
 }
 
+/** Strip the delimiters from a scanned template chunk and normalize newlines. */
+function rawTemplateChunk(text: string, leading: number, trailing: number): string {
+  const end = Math.max(leading, text.length - trailing);
+  return text.slice(leading, end).replace(/\r\n?/g, "\n");
+}
+
 export const literalMethods: LiteralMethods = {
   parseArrayLiteral(this: Parser): ArrayLiteralExpression {
     const open = this.parseExpected(TokenKind.OpenBracket);
@@ -142,7 +148,14 @@ export const literalMethods: LiteralMethods = {
     const startToken = this.token;
     if (startToken.kind === TokenKind.NoSubstitutionTemplateLiteral) {
       this.nextToken();
-      return { kind: SyntaxKind.NoSubstitutionTemplateLiteral, text: startToken.text, value: String(startToken.value ?? ""), start: startToken.start, end: startToken.end } as unknown as TemplateLiteral;
+      return {
+        kind: SyntaxKind.NoSubstitutionTemplateLiteral,
+        text: startToken.text,
+        value: String(startToken.value ?? ""),
+        raw: rawTemplateChunk(startToken.text, 1, 1),
+        start: startToken.start,
+        end: startToken.end,
+      } as unknown as TemplateLiteral;
     }
     if (startToken.kind === TokenKind.Backtick) {
       // Re-scan from the backtick so the scanner produces a TemplateHead.
@@ -150,14 +163,16 @@ export const literalMethods: LiteralMethods = {
       this.tokens = [this.scanner.nextToken()];
       this.index = 0;
       return this.parseTemplateLiteral();
-    }    const head = String(startToken.value ?? "");
+    }
+    const head = String(startToken.value ?? "");
+    const headRaw = rawTemplateChunk(startToken.text, 1, 2);
     this.nextToken();
     const spans: TemplateSpan[] = [];
     for (;;) {
       const expression = this.parseExpression();
       if (!this.at(TokenKind.CloseBrace)) {
         this.error(DiagnosticCode.UnterminatedTemplate, "Expected '}' to close template substitution");
-        return { kind: SyntaxKind.TemplateLiteral, head, spans, start: startToken.start, end: this.token.end };
+        return { kind: SyntaxKind.TemplateLiteral, head, raw: headRaw, spans, start: startToken.start, end: this.token.end };
       }
       // The `}` terminates a substitution; re-read it as template text without
       // first scanning the following (template) characters as normal tokens.
@@ -167,16 +182,32 @@ export const literalMethods: LiteralMethods = {
       const literalToken = this.token;
       if (literalToken.kind === TokenKind.NoSubstitutionTemplateLiteral) {
         this.nextToken();
-        spans.push({ kind: SyntaxKind.TemplateSpan, expression, literal: String(literalToken.value ?? ""), isTail: true, start: expression.start, end: literalToken.end });
-        return { kind: SyntaxKind.TemplateLiteral, head, spans, start: startToken.start, end: literalToken.end };
+        spans.push({
+          kind: SyntaxKind.TemplateSpan,
+          expression,
+          literal: String(literalToken.value ?? ""),
+          raw: rawTemplateChunk(literalToken.text, 0, 1),
+          isTail: true,
+          start: expression.start,
+          end: literalToken.end,
+        });
+        return { kind: SyntaxKind.TemplateLiteral, head, raw: headRaw, spans, start: startToken.start, end: literalToken.end };
       }
       if (literalToken.kind === TokenKind.TemplateHead) {
         this.nextToken();
-        spans.push({ kind: SyntaxKind.TemplateSpan, expression, literal: String(literalToken.value ?? ""), isTail: false, start: expression.start, end: literalToken.end });
+        spans.push({
+          kind: SyntaxKind.TemplateSpan,
+          expression,
+          literal: String(literalToken.value ?? ""),
+          raw: rawTemplateChunk(literalToken.text, 0, 2),
+          isTail: false,
+          start: expression.start,
+          end: literalToken.end,
+        });
         continue;
       }
       this.error(DiagnosticCode.UnterminatedTemplate, "Unterminated template literal", literalToken);
-      return { kind: SyntaxKind.TemplateLiteral, head, spans, start: startToken.start, end: literalToken.end };
+      return { kind: SyntaxKind.TemplateLiteral, head, raw: headRaw, spans, start: startToken.start, end: literalToken.end };
     }
   },
 

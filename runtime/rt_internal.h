@@ -224,15 +224,29 @@ typedef struct xt_try_frame {
   struct xt_try_frame *prev;
   xt_value exception;
 } xt_try_frame;
-/* Call `_setjmp` with a single argument on every platform. On the MSVC target
- * clang recognises `_setjmp` as a built-in and injects the caller's frame
- * address (`@llvm.frameaddress(0)`) as the hidden second argument itself; the
- * UCRT prototype only declares the one-visible-argument form, so writing the
- * frame argument by hand is a compile error (`too many arguments to function
- * call`). The generated IR cannot rely on that rewrite (it is already IR), so
- * it emits the two-argument form explicitly. `_setjmp` (rather than the
- * `setjmp` macro) is used so it pairs with the plain `longjmp` in `xt_throw`. */
+/* Call `_setjmp` the way the active `<setjmp.h>` declares it. The two Windows
+ * C runtimes differ:
+ *
+ *  - MSVC/UCRT declares `_setjmp(jmp_buf)` with one visible argument and lets
+ *    clang treat it as a built-in that injects the caller's frame address
+ *    (`@llvm.frameaddress(0)`) as a hidden second argument. Writing the frame
+ *    by hand is a compile error ("too many arguments to function call").
+ *  - MinGW-w64 (the vendored llvm-mingw toolchain) declares
+ *    `_setjmp(jmp_buf, void *frame)` itself, so the frame must be passed
+ *    explicitly -- exactly what its own `setjmp` macro does.
+ *
+ * The generated IR always emits the two-argument form, because it is already
+ * IR and clang will not rewrite it. `_setjmp` (rather than the `setjmp` macro)
+ * is used so it pairs with the plain `longjmp` in `xt_throw`. */
+#if defined(_WIN32) && !defined(__MINGW32__)
 #define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
+#elif defined(_WIN32) && defined(__aarch64__)
+#define xt_try_setjmp(framePtr) _setjmpex(((xt_try_frame *)(framePtr))->buf, __builtin_sponentry())
+#elif defined(_WIN32)
+#define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf, __builtin_frame_address(0))
+#else
+#define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
+#endif
 void *xt_try_mark(void);
 void xt_try_restore(void *mark);
 

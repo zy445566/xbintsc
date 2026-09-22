@@ -12,8 +12,9 @@
  * `longjmp` passes it to `RtlUnwind` to run the unwind, so omitting it makes
  * `longjmp` unwind to a bogus target (`STATUS_BAD_FUNCTION_TABLE`,
  * 0xC00000FF). Because the generated call is IR it must pass the frame
- * explicitly; the C runtime (see `xt_try_setjmp`) instead calls the
- * one-argument `_setjmp` and lets clang inject the frame. `_setjmp` is used
+ * explicitly; the C runtime (see `xt_try_setjmp`) instead follows whatever
+ * the active `<setjmp.h>` declares -- one argument on MSVC (clang injects the
+ * frame) and two on MinGW-w64. `_setjmp` is used
  * rather than the exported `setjmp` symbol, whose Windows ABI is an
  * incompatible two-argument routine; on Linux/macOS `_setjmp` takes only the
  * buffer and pairs with `longjmp` (the XSI `_longjmp` does not exist on

@@ -1,10 +1,30 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveToolchain } from "../../src/driver/toolchain-provider.js";
 import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
 import { ToolchainError } from "../../src/driver/toolchain.js";
+
+// The real `findVendorDir` also looks next to the package, so a toolchain
+// already fetched on the machine (e.g. the CI `vendor/` for Windows ARM64)
+// would shadow the temporary one each test creates. Restrict discovery to the
+// working directory so the tests are hermetic.
+vi.mock("../../src/driver/paths.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/driver/paths.js")>();
+  const { existsSync } = await import("node:fs");
+  const { join: joinPath } = await import("node:path");
+  return {
+    ...actual,
+    findVendorDir: (): string | undefined => {
+      const root = process.cwd();
+      const specific = joinPath(root, "vendor", `${process.platform}-${process.arch}`);
+      if (existsSync(specific)) return specific;
+      const generic = joinPath(root, "vendor");
+      return existsSync(generic) ? generic : undefined;
+    },
+  };
+});
 
 const saved = { ...process.env };
 

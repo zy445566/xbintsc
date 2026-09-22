@@ -109,7 +109,7 @@ None known at the expression level.
 | `String.prototype.normalize` | ✗ not implemented |
 | `structuredClone` | ✗ not implemented |
 | Built-in error subclasses (`TypeError`, `RangeError`, …) | ✗ only `Error` exists; runtime throws use it internally |
-| `Promise.any` / `AggregateError` | ✗ not implemented |
+| `AggregateError` constructor | ✗ `Promise.any` exists but rejects with a string instead of an `AggregateError` object |
 | Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | partial: arrays, strings, `Map` and `Set` are iterable in `for...of` / spread; a user-defined `Symbol.iterator` is not consulted |
 | Generators / async iteration | ✗ not implemented |
 | Timers / I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
@@ -248,7 +248,7 @@ Unimplemented (classes/OO): abstract/implements, access control,
                             parent/child #x collision
 
 Unimplemented (standard library): Symbol, String.normalize, structuredClone,
-                                  TypeError/RangeError subclasses, Promise.any,
+                                  TypeError/RangeError subclasses, AggregateError,
                                   iterator protocol (Symbol.iterator)
 
 Unimplemented (modules): circular dependencies, npm dependencies, live bindings

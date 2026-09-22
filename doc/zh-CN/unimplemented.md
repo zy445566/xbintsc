@@ -81,7 +81,7 @@
 | `String.prototype.normalize` | ✗ 未实现 |
 | `structuredClone` | ✗ 未实现 |
 | 内置错误子类（`TypeError`、`RangeError` 等） | ✗ 仅 `Error`；运行时内部抛出使用它 |
-| `Promise.any` / `AggregateError` | ✗ 未实现 |
+| `AggregateError` 构造器 | ✗ `Promise.any` 已实现，但 rejection 为字符串而非 `AggregateError` 对象 |
 | 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | 部分：数组、字符串、`Map`、`Set` 均可在 `for...of` / 展开中使用；不读取自定义 `Symbol.iterator` |
 | 生成器 / 异步迭代 | ✗ 未实现 |
 | 定时器 / I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
@@ -211,7 +211,7 @@
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 
 未实现（标准库）：Symbol、String.normalize、structuredClone、
-                  TypeError/RangeError 子类、Promise.any、
+                  TypeError/RangeError 子类、AggregateError、
                   迭代器协议（Symbol.iterator）
 
 未实现（模块）：循环依赖、npm 依赖、实时绑定

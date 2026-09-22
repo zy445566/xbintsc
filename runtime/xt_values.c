@@ -400,6 +400,16 @@ static int xt_loose_equals(xt_value a, xt_value b) {
   if (XT_IS_STRING(a) && XT_IS_STRING(b)) return xt_string_equals(xt_as_string(a), xt_as_string(b));
   if (a == b) return 1;
   if ((a == XT_NULL && b == XT_UNDEFINED) || (a == XT_UNDEFINED && b == XT_NULL)) return 1;
+  /* Abstract equality converts an object operand to a primitive (via
+     ToPrimitive) before comparing, so `[] == 0`, `[1] == 1` and
+     `{} == "[object Object]"` are all true. */
+  if (XT_IS_OBJECT(a) || XT_IS_ARRAY(a) || XT_IS_FUNCTION(a)) {
+    if (XT_IS_OBJECT(b) || XT_IS_ARRAY(b) || XT_IS_FUNCTION(b)) return 0;
+    return xt_loose_equals(xt_to_string(a), b);
+  }
+  if (XT_IS_OBJECT(b) || XT_IS_ARRAY(b) || XT_IS_FUNCTION(b)) {
+    return xt_loose_equals(a, xt_to_string(b));
+  }
   if (XT_IS_BIGINT(a) || XT_IS_BIGINT(b)) {
     xt_value big = XT_IS_BIGINT(a) ? a : b;
     xt_value other = XT_IS_BIGINT(a) ? b : a;

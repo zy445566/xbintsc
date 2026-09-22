@@ -296,6 +296,25 @@ describeE2E("end-to-end compilation", (harness) => {
     );
   });
 
+  it("implements abstract equality with ToPrimitive", () => {
+    const source = `
+      console.log(([] as any) == 0, ([] as any) == "", ([1] as any) == 1, ([1, 2] as any) == "1,2");
+      console.log(({} as any) == "[object Object]");
+      console.log(([1] as any) == [1], ([] as any) == false, ([] as any) == null);
+      console.log(0 == "0", 0 == false, "" == false, null == undefined, null == 0, undefined == 0);
+      console.log(NaN == NaN, (1 as any) == "1");
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        "true true true true",
+        "true",
+        "false true false",
+        "true true true true false false",
+        "false true",
+      ].join("\n"),
+    );
+  });
+
   it("supports optional chaining", () => {
     const source = `
       const obj = { a: { b: 5 }, m: (x: number) => x + 1 };

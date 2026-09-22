@@ -138,7 +138,10 @@ xt_value xt_try_exception(void *framePtr) {
 
 void xt_try_leave(void *framePtr) {
   xt_try_frame *frame = (xt_try_frame *)framePtr;
-  if (frame && g_try_top == frame) g_try_top = frame->prev;
+  if (frame && g_try_top == frame) {
+    g_try_top = frame->prev;
+    free(frame);
+  }
 }
 
 void xt_throw(xt_value v) {

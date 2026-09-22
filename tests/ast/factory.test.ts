@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { isIdentifier, node, range, span } from "../../src/ast/factory.js";
 import { SyntaxKind, type Node } from "../../src/ast/nodes.js";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 const asNode = (value: Record<string, unknown>): Node => value as unknown as Node;
 
 describe("ast factory", () => {

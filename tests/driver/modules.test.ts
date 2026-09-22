@@ -30,7 +30,7 @@ function bundle(entry: string): { result: ReturnType<typeof bundleModules>; bag:
 function identifierTexts(node: Node): string[] {
   const texts: string[] = [];
   walk(node, (current) => {
-    if (current.kind === SyntaxKind.Identifier) texts.push((current as { text: string }).text);
+    if (current.kind === SyntaxKind.Identifier) texts.push((current as unknown as { text: string }).text);
   });
   return texts;
 }

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { describe, expect, it } from "vitest";
 import { booleanLiteral, i64, numberLiteral, XT_FALSE, XT_TRUE } from "../../src/codegen/values.js";
 

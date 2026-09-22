@@ -2,7 +2,6 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "../helpers.js";
 import { SyntaxKind } from "../../src/ast/nodes.js";
-import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
 
 function firstDeclaration(source: string): { decl: any; diagnostics: readonly any[] } {
   const { file, diagnostics } = parse(source);

@@ -6,7 +6,7 @@ import {
 } from "../../src/parser/helpers.js";
 import { SyntaxKind, type Expression, type PropertyName } from "../../src/ast/nodes.js";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 const expr = (kind: SyntaxKind, extra: Record<string, unknown> = {}): Expression =>
   ({ kind, ...extra }) as unknown as Expression;
 const name = (kind: SyntaxKind, extra: Record<string, unknown> = {}): PropertyName =>

@@ -342,4 +342,32 @@ for (const v of results) console.log(JSON.stringify(v));`,
       "Array.from({ length: 3 }, (_v, i) => i * 2)",
     ]),
   );
+
+  it("binds namespace imports to every export", () => {
+    harness.expectSameOutputAsNode(
+      `import * as util from "./util.ts";
+import { add } from "./util.ts";
+const values: unknown[] = [
+  util.greeting,
+  util.add(2, 3),
+  add(20, 22),
+  new util.default().value,
+  Object.keys(util).sort(),
+  typeof util.add,
+];
+for (const v of values) console.log(JSON.stringify(v));
+`,
+      {
+        name: "diff_namespace_import",
+        files: {
+          "util.ts": [
+            'export const greeting = "hello";',
+            "export function add(a: number, b: number): number { return a + b; }",
+            "export default class Thing { value = 42; }",
+            "export const ignored = 1;\n",
+          ].join("\n"),
+        },
+      },
+    );
+  });
 });

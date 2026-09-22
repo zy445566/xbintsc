@@ -25,6 +25,8 @@ export interface RunOptions {
   force?: boolean;
   /** Child-process timeout in milliseconds. */
   timeout?: number;
+  /** Extra modules written next to the entry file, keyed by relative path. */
+  files?: Record<string, string>;
 }
 
 export interface RunResult {
@@ -38,6 +40,8 @@ export interface NodeRunOptions {
   name?: string;
   /** Child-process timeout in milliseconds. */
   timeout?: number;
+  /** Extra modules written next to the entry file, keyed by relative path. */
+  files?: Record<string, string>;
 }
 
 export interface E2EHarness {
@@ -85,6 +89,9 @@ export function describeE2E(
 
     const runProgramFull = (source: string, runOptions: RunOptions = {}): RunResult => {
       const entry = join(workdir, `${runOptions.name ?? `program_${Math.random().toString(36).slice(2)}`}.ts`);
+      for (const [relative, contents] of Object.entries(runOptions.files ?? {})) {
+        writeFileSync(join(workdir, relative), contents);
+      }
       writeFileSync(entry, source);
       const extensions = runOptions.extensions ? createDefaultRegistry().register(nodeExtension) : undefined;
       const result = build(entry, {
@@ -104,6 +111,9 @@ export function describeE2E(
 
     const runNodeProgram = (source: string, runOptions: NodeRunOptions = {}): string => {
       const entry = join(workdir, `${runOptions.name ?? `node_${Math.random().toString(36).slice(2)}`}.ts`);
+      for (const [relative, contents] of Object.entries(runOptions.files ?? {})) {
+        writeFileSync(join(workdir, relative), contents);
+      }
       writeFileSync(entry, source);
       const executed = spawnSync(process.execPath, ["--import", "tsx", entry], {
         encoding: "utf8",
@@ -129,6 +139,7 @@ export function describeE2E(
         const theirs = runNodeProgram(source, {
           ...(runOptions.name ? { name: runOptions.name } : {}),
           ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
+          ...(runOptions.files ? { files: runOptions.files } : {}),
         });
         expect(ours).toBe(theirs);
       },

@@ -121,6 +121,12 @@ int32_t xt_string_length(xt_string *s);
 int xt_string_equals(xt_string *a, xt_string *b);
 int32_t xt_to_int32(xt_value v);
 
+/* ECMAScript number formatting (xt_values.c). */
+void xt_number_to_js_string(double d, char *buffer, size_t size);
+void xt_number_to_exponential(double d, int precision, char *buffer, size_t size);
+void xt_number_to_precision(double d, int precision, char *buffer, size_t size);
+void xt_number_to_fixed(double d, int precision, char *buffer, size_t size);
+
 /* BigInt runtime (xt_bigint.c). */
 int xt_is_bigint(xt_value value);
 double xt_bigint_to_double_value(xt_value value);
@@ -160,6 +166,7 @@ int xt_is_date(xt_value value);
 int xt_is_regexp(xt_value value);
 int xt_regexp_find(xt_value regexp, xt_value input, int32_t start, int32_t *matchStart, int32_t *matchEnd);
 xt_value xt_regexp_exec(xt_value regexp, xt_value input);
+xt_value xt_regexp_match(xt_value input, xt_value regexp);
 xt_value xt_regexp_replace(xt_value value, xt_value regexp, xt_value replacement);
 xt_value xt_regexp_get_property(xt_value regexp, xt_value key);
 int32_t xt_map_size(xt_value value);

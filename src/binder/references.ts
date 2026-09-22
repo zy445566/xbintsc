@@ -80,7 +80,6 @@ export const referenceMethods: ReferenceMethods = {
       case SyntaxKind.FunctionDeclaration: {
         const fn = node as FunctionDeclaration;
         const symbol = this.symbolOfDeclaration.get(fn);
-        if (symbol) (symbol.declarations as Node[]).length; // keep declaration mapping warm
         this.bindFunction(fn, scope, symbol);
         return;
       }

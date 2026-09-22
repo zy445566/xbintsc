@@ -6,7 +6,7 @@
  * helpers every group relies on.
  */
 
-import { bind, SymbolKind, type BindResult, type ClassInfo, type SymbolInfo } from "../../binder/binder.js";
+import { bind, SymbolKind, type BindResult, type SymbolInfo } from "../../binder/binder.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { SyntaxKind, type ImportDeclaration, type SourceFileNode, type Node } from "../../ast/nodes.js";

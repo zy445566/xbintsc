@@ -330,13 +330,13 @@ export const typeMethods: TypeMethods = {
     if (this.atAhead(1, TokenKind.OpenBracket)) {
       cursor = 1;
       if (this.atAhead(2, TokenKind.Identifier)) {
-        let i = 3;
+        const i = 3;
         if (this.lookAhead(i).kind === TokenKind.InKeyword) {
           const open = this.parseExpected(TokenKind.OpenBrace);
           this.parseExpected(TokenKind.OpenBracket);
           const name = this.parseIdentifier();
           this.parseExpected(TokenKind.InKeyword);
-          let constraint = this.parseType();
+          const constraint = this.parseType();
           this.parseExpected(TokenKind.CloseBracket);
           let questionToken: boolean | "+" | "-" = false;
           if (this.at(TokenKind.Question)) {

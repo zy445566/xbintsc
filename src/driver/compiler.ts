@@ -8,7 +8,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, extname, join, resolve } from "node:path";
 import { DiagnosticBag, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { Parser } from "../parser/parser.js";
@@ -153,6 +153,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     }
   }
 
+  const runtimeDir = findRuntimeDir();
   const cacheKey = hashParts([
     COMPILER_VERSION,
     cacheText,
@@ -160,6 +161,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     optimize,
     process.platform,
     registry.all().map((e) => e.name).join(","),
+    runtimeFingerprint(runtimeDir),
   ]);
 
   const cache = new BuildCache(cacheDir);
@@ -207,7 +209,6 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, irPath, cached: false, diagnostics: [], ir };
   }
 
-  const runtimeDir = findRuntimeDir();
   const { runtimeObjects, extensionObjects } = ensureRuntimeObjects(
     runner,
     clang,
@@ -254,6 +255,33 @@ export const RUNTIME_SOURCES = [
   "xt_builtins.c",
   "xt_io.c",
 ] as const;
+
+/**
+ * Fingerprint every runtime artifact that can change a linked executable: the
+ * C sources, shared headers and `#include`d `.inc` fragments plus the shipped
+ * prebuilt archives. It feeds the executable cache key, so a runtime change
+ * invalidates a cached binary even when the entry source is untouched — the
+ * per-object cache cannot express that, because the freshness check runs before
+ * any compilation.
+ */
+function runtimeFingerprint(runtimeDir: string): string {
+  if (!existsSync(runtimeDir)) return "";
+  const parts: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (/\.(c|h|inc)$/.test(entry.name)) {
+        parts.push(entry.name, readFileSync(full, "utf8"));
+      } else {
+        parts.push(entry.name, readFileSync(full).toString("base64"));
+      }
+    }
+  };
+  walk(runtimeDir);
+  return hashParts(parts);
+}
 
 /**
  * Compile the core runtime and every extension source, reusing cached object

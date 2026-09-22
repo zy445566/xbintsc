@@ -120,7 +120,6 @@ export class Binder {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface Binder extends DeclarationMethods, ReferenceMethods {}
 
 Object.assign(Binder.prototype, declarationMethods, referenceMethods);

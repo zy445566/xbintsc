@@ -40,6 +40,8 @@ xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv) {
 }
 
 static xt_value xt_date_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled) {
+  (void)argc;
+  (void)argv;
   *handled = 1;
   xt_date *date = (xt_date *)XT_GET_PTR(target);
   time_t seconds = (time_t)(date->time / 1000.0);

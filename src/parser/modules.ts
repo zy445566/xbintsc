@@ -13,7 +13,6 @@ import {
   type ImportClause,
   type ImportDeclaration,
   type ImportSpecifier,
-  type Modifier,
   type NamedExports,
   type NamedImports,
   type NamespaceImport,

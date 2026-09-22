@@ -73,7 +73,7 @@ function compile(sources: readonly string[], extension: string): string[] {
     const object = join(objDir, `${extension}_${index}_${basename(source, ".c")}.o`);
     const result = spawnSync(
       clang,
-      ["-O2", "-D_CRT_SECURE_NO_WARNINGS", "-c", source, "-o", object, `-I${runtimeDir}`],
+      ["-O2", "-Wall", "-Wextra", "-D_CRT_SECURE_NO_WARNINGS", "-c", source, "-o", object, `-I${runtimeDir}`],
       { stdio: "inherit", env: childEnv },
     );
     if (result.status !== 0) {

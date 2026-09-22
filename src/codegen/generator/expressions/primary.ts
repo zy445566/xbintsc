@@ -9,7 +9,6 @@ import {
   type AwaitExpression,
   type BinaryExpression,
   type CallExpression,
-  type ClassExpression,
   type ConditionalExpression,
   type DeleteExpression,
   type ElementAccessExpression,

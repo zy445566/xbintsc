@@ -95,6 +95,27 @@ describeE2E("end-to-end compilation", (harness) => {
     expect(runProgram(source)).toBe("{ name: ada, tags: [ math, code ], age: 36 }");
   });
 
+  it("orders object keys like JavaScript", () => {
+    const source = `
+      console.log(JSON.stringify({ b: 1, a: 2, 10: 3, 2: 4 }));
+      const o: any = {};
+      o.z = 1; o[5] = 2; o.a = 3; o[1] = 4; o["01"] = 5; o[100] = 6;
+      console.log(Object.keys(o).join(" "));
+      let seen = "";
+      for (const k in o) seen += k + ",";
+      console.log(seen);
+      console.log(JSON.stringify(Object.fromEntries([["b", 1], ["2", 2], ["a", 3]])));
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        '{"2":4,"10":3,"b":1,"a":2}',
+        "1 5 100 z a 01",
+        "1,5,100,z,a,01,",
+        '{"2":2,"b":1,"a":3}',
+      ].join("\n"),
+    );
+  });
+
   it("supports switch statements with fall-through", () => {
     const source = `
       function size(n: number): string {
@@ -221,6 +242,58 @@ describeE2E("end-to-end compilation", (harness) => {
       console.log(safe(5), safe(-2), cleanup());
     `;
     expect(runProgram(source)).toBe("10 -1 try;catch:boom;finally");
+  });
+
+  it("runs finally blocks on early return, break and continue", () => {
+    const source = `
+      const events: string[] = [];
+      function f(n: number): string {
+        try {
+          events.push("try" + n);
+          if (n === 1) return "ret1";
+          if (n === 2) throw "boom" + n;
+        } catch (e) {
+          events.push("catch" + e);
+          if (n === 3) return "ret3";
+        } finally {
+          events.push("finally" + n);
+        }
+        return "done" + n;
+      }
+      console.log(f(0), f(1), f(2), f(3));
+      console.log(events.join("|"));
+      const loop: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        try {
+          if (i === 2) break;
+          if (i === 4) continue;
+          loop.push("i" + i);
+        } finally {
+          loop.push("F" + i);
+        }
+      }
+      console.log(loop.join("|"));
+      function nested(): string {
+        try {
+          try {
+            return "inner";
+          } finally {
+            events.push("innerFinally");
+          }
+        } finally {
+          events.push("outerFinally");
+        }
+      }
+      console.log(nested(), events[events.length - 2], events[events.length - 1]);
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        "done0 ret1 done2 done3",
+        "try0|finally0|try1|finally1|try2|catchboom2|finally2|try3|finally3",
+        "i0|F0|i1|F1|F2",
+        "inner innerFinally outerFinally",
+      ].join("\n"),
+    );
   });
 
   it("supports optional chaining", () => {

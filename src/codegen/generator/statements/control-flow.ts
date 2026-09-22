@@ -21,6 +21,7 @@ export interface ControlFlowStatementMethods {
   bindCatchVariable(this: Generator, variable: Identifier | undefined, value: string): void;
   emitReturn(this: Generator, statement: ReturnStatement): void;
   popTryFramesTo(this: Generator, depth: number): void;
+  runFinallysBeforeExit(this: Generator, targetTryDepth: number): void;
 }
 
 export const controlFlowStatementMethods: ControlFlowStatementMethods = {
@@ -115,6 +116,10 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
     const finallyLabel = statement.finallyBlock ? this.label("try.finally") : undefined;
     const endLabel = this.label("try.end");
     const hasCatch = !!statement.catchClause;
+    const finallyContext =
+      statement.finallyBlock && finallyLabel
+        ? { frameDepth: this.current.tryFrames.length, block: statement.finallyBlock }
+        : undefined;
 
     const frame = this.reg();
     this.emit(`  ${frame} = call i8* @xt_try_enter()`);
@@ -136,7 +141,9 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
     // Normal completion of the try block.
     this.startBlock(tryLabel);
     this.current.tryFrames.push(frameSlot);
+    if (finallyContext) this.current.finallyStack.push(finallyContext);
     this.emitStatements(statement.tryBlock.statements);
+    if (finallyContext) this.current.finallyStack.pop();
     this.current.tryFrames.pop();
     if (!this.current.terminated) {
       const currentFrame = this.reg();
@@ -153,7 +160,9 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
       this.emit(`  ${exception} = call i64 @xt_try_exception(i8* ${currentFrame})`);
       this.emit(`  call void @xt_try_leave(i8* ${currentFrame})`);
       this.bindCatchVariable(statement.catchClause!.variable, exception);
+      if (finallyContext) this.current.finallyStack.push(finallyContext);
       this.emitStatements(statement.catchClause!.block.statements);
+      if (finallyContext) this.current.finallyStack.pop();
       if (!this.current.terminated) this.terminate(`br label %${finallyLabel ?? endLabel}`);
     } else {
       // Without a catch clause the exception is remembered, then rethrown
@@ -209,6 +218,8 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
   emitReturn(statement: ReturnStatement): void {
     let value = statement.expression ? this.emitExpression(statement.expression) : i64(XT_UNDEFINED);
     if (this.current.fn.isAsync) value = this.wrapAsync(value);
+    this.runFinallysBeforeExit(0);
+    if (this.current.terminated) return;
     this.popTryFramesTo(0);
     this.terminate(`ret i64 ${value}`);
   },
@@ -221,5 +232,39 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
       this.emit(`  ${frame} = load i8*, i8** ${slot}`);
       this.emit(`  call void @xt_try_leave(i8* ${frame})`);
     }
+  },
+
+  /**
+   * Run the `finally` blocks of every region whose frame is above
+   * `targetTryDepth`, innermost first, so an abrupt completion
+   * (`return`/`break`/`continue`) observes JavaScript's guarantee that each
+   * `finally` runs before control leaves its `try`.
+   *
+   * The blocks are emitted inline on the exiting path (the shared `finally`
+   * block still serves normal and exceptional completion). While a block runs,
+   * only the *outer* regions stay on {@link FunctionState.finallyStack}, so a
+   * `return` written inside `finally` overrides the pending completion without
+   * re-entering the same block. The stack is restored afterwards because the
+   * emission is path-local: sibling branches must still see every region.
+   */
+  runFinallysBeforeExit(targetTryDepth: number): void {
+    const saved = this.current.finallyStack.slice();
+    const restore = (): void => {
+      this.current.finallyStack.length = 0;
+      this.current.finallyStack.push(...saved);
+    };
+    for (let index = saved.length - 1; index >= 0; index--) {
+      const context = saved[index]!;
+      if (context.frameDepth < targetTryDepth) break;
+      this.current.finallyStack.length = 0;
+      this.current.finallyStack.push(...saved.slice(0, index));
+      this.popTryFramesTo(context.frameDepth);
+      this.emitStatements(context.block.statements);
+      if (this.current.terminated) {
+        restore();
+        return;
+      }
+    }
+    restore();
   },
 };

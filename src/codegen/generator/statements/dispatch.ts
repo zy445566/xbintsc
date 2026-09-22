@@ -88,16 +88,22 @@ export const statementDispatchMethods: StatementDispatchMethods = {
       case SyntaxKind.BreakStatement: {
         const loop = this.current.loops[this.current.loops.length - 1];
         if (loop) {
-          this.popTryFramesTo(loop.tryDepth ?? 0);
-          this.terminate(`br label %${loop.breakLabel}`);
+          this.runFinallysBeforeExit(loop.tryDepth ?? 0);
+          if (!this.current.terminated) {
+            this.popTryFramesTo(loop.tryDepth ?? 0);
+            this.terminate(`br label %${loop.breakLabel}`);
+          }
         }
         return;
       }
       case SyntaxKind.ContinueStatement: {
         const loop = this.current.loops[this.current.loops.length - 1];
         if (loop) {
-          this.popTryFramesTo(loop.tryDepth ?? 0);
-          this.terminate(`br label %${loop.continueLabel}`);
+          this.runFinallysBeforeExit(loop.tryDepth ?? 0);
+          if (!this.current.terminated) {
+            this.popTryFramesTo(loop.tryDepth ?? 0);
+            this.terminate(`br label %${loop.continueLabel}`);
+          }
         }
         return;
       }

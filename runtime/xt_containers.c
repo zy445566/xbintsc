@@ -59,6 +59,55 @@ static xt_property *xt_object_find(xt_object *obj, xt_string *key) {
   return NULL;
 }
 
+/*
+ * JavaScript enumerates own string keys in a canonical order: array-index
+ * keys (the canonical decimal form of an integer in [0, 2^32 - 2]) first, in
+ * ascending numeric order, then the remaining keys in insertion order. We keep
+ * the physical property array in exactly that order so every consumer
+ * (`Object.keys`, `for...in`, `JSON.stringify`, ...) is correct for free.
+ */
+static int xt_key_is_array_index(xt_string *key, uint32_t *out) {
+  if (key->length == 0 || key->length > 10) return 0;
+  if (key->data[0] == '0' && key->length != 1) return 0; /* "0" is canonical, "01" is not */
+  uint64_t value = 0;
+  for (uint32_t i = 0; i < key->length; i++) {
+    char ch = key->data[i];
+    if (ch < '0' || ch > '9') return 0;
+    value = value * 10 + (uint64_t)(ch - '0');
+  }
+  if (value > 4294967294ULL) return 0; /* 2^32 - 2 is the largest array index */
+  *out = (uint32_t)value;
+  return 1;
+}
+
+/* Insert a new property for `key`, preserving JavaScript key order. */
+static xt_property *xt_object_insert_property(xt_object *obj, xt_string *key) {
+  uint32_t index = 0;
+  uint32_t position = obj->count;
+  if (xt_key_is_array_index(key, &index)) {
+    for (uint32_t i = 0; i < obj->count; i++) {
+      uint32_t existing = 0;
+      if (!xt_key_is_array_index(obj->properties[i].key, &existing)) {
+        position = i; /* first non-index key: the integer prefix ends here */
+        break;
+      }
+      if (existing > index) {
+        position = i;
+        break;
+      }
+    }
+  }
+  xt_object_reserve(obj, obj->count + 1);
+  for (uint32_t i = obj->count; i > position; i--) obj->properties[i] = obj->properties[i - 1];
+  xt_property *prop = &obj->properties[position];
+  prop->key = key;
+  prop->value = XT_UNDEFINED;
+  prop->getter = XT_UNDEFINED;
+  prop->setter = XT_UNDEFINED;
+  obj->count++;
+  return prop;
+}
+
 xt_property *xt_object_find_property(xt_object *obj, xt_string *key) {
   return obj ? xt_object_find(obj, key) : NULL;
 }
@@ -144,26 +193,15 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
     }
     ancestor = XT_IS_OBJECT(ancestor->prototype) ? (xt_object *)XT_GET_PTR(ancestor->prototype) : NULL;
   }
-  xt_object_reserve(obj, obj->count + 1);
-  obj->properties[obj->count].key = k;
-  obj->properties[obj->count].value = newValue;
-  obj->properties[obj->count].getter = XT_UNDEFINED;
-  obj->properties[obj->count].setter = XT_UNDEFINED;
-  obj->count++;
+  xt_property *inserted = xt_object_insert_property(obj, k);
+  inserted->value = newValue;
   return newValue;
 }
 
 static xt_property *xt_object_ensure_property(xt_object *obj, xt_value keyString) {
   xt_property *prop = xt_object_find(obj, xt_as_string(keyString));
   if (prop) return prop;
-  xt_object_reserve(obj, obj->count + 1);
-  prop = &obj->properties[obj->count];
-  prop->key = xt_as_string(keyString);
-  prop->value = XT_UNDEFINED;
-  prop->getter = XT_UNDEFINED;
-  prop->setter = XT_UNDEFINED;
-  obj->count++;
-  return prop;
+  return xt_object_insert_property(obj, xt_as_string(keyString));
 }
 
 xt_value xt_object_define_getter(xt_value value, xt_value key, xt_value getter) {

@@ -95,6 +95,7 @@ export const moduleMethods: ModuleMethods = {
       terminated: false,
       loops: [],
       tryFrames: [],
+      finallyStack: [],
       escapePointers: [],
       usesTry: false,
     };

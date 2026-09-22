@@ -5,11 +5,22 @@
 import type { FunctionInfo } from "../../binder/binder.js";
 import type { BindResult } from "../../binder/binder.js";
 import type { BuiltinFunction, ExtensionModule } from "../../extensions/registry.js";
+import type { Block } from "../../ast/nodes.js";
 
 export interface Slot {
   /** Register holding the `i64*` to the storage. */
   readonly ptr: string;
   readonly boxed: boolean;
+}
+
+/**
+ * One enclosing `try`/`finally` region, used to run the `finally` block when an
+ * abrupt completion (`return`/`break`/`continue`) exits it.
+ */
+export interface FinallyContext {
+  /** Number of active `try` frames just before this region's frame. */
+  readonly frameDepth: number;
+  readonly block: Block;
 }
 
 export interface LoopLabels {
@@ -29,6 +40,7 @@ export interface FunctionState {
   terminated: boolean;
   readonly loops: LoopLabels[];
   readonly tryFrames: string[];
+  readonly finallyStack: FinallyContext[];
   readonly escapePointers: string[];
   /** Alloca holding the `this` binding for the current function. */
   thisPtr?: string;

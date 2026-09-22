@@ -349,6 +349,34 @@ describeE2E("end-to-end compilation", (harness) => {
     expect(runProgram(source)).toBe("0,0|1,0|before|after 504");
   });
 
+  it("supports #private fields, methods and static members", () => {
+    const source = `
+      class Counter {
+        #count = 0;
+        static #instances = 0;
+        constructor() { Counter.#bumpStatic(); }
+        #bump(by: number): void { this.#count += by; }
+        static #bumpStatic(): void { Counter.#instances++; }
+        inc(by: number): number { this.#bump(by); return this.#count; }
+        get count(): number { return this.#count; }
+        set count(v: number) { this.#count = v; }
+        static instances(): number { return Counter.#instances; }
+      }
+      class Sub extends Counter {
+        #label = "sub";
+        constructor() { super(); this.inc(5); }
+        describe(): string { return this.#label + ":" + this.count; }
+      }
+      const a = new Counter();
+      const b = new Counter();
+      a.inc(3);
+      a.count = 10;
+      console.log(a.count, b.count, Counter.instances());
+      console.log(new Sub().describe());
+    `;
+    expect(runProgram(source)).toBe("10 0 2\nsub:5");
+  });
+
   it("supports optional chaining", () => {
     const source = `
       const obj = { a: { b: 5 }, m: (x: number) => x + 1 };

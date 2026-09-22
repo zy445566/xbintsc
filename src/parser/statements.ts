@@ -61,6 +61,8 @@ export const statementMethods: StatementMethods = {
       const kind = this.token.kind;
       const nextKind = this.lookAhead(1).kind;
       const nextStartsName =
+        nextKind === TokenKind.Identifier ||
+        nextKind === TokenKind.PrivateIdentifier ||
         isIdentifierNameToken(nextKind) ||
         isKeywordKind(nextKind) ||
         nextKind === TokenKind.OpenBracket ||

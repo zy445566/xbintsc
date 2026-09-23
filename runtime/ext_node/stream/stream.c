@@ -56,6 +56,24 @@ static xt_value xt_stream_deliver(xt_value stream, xt_value chunk) {
   return xt_bool(1);
 }
 
+/* Attaching a `data` listener drains anything `push`/`Readable.from` buffered
+ * before the listener existed, so no chunk is silently lost. */
+static xt_value xt_stream_method_on(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  xt_value result = xt_node_on_impl(thisValue, env, argc, argv);
+  const char *event = xt_node_cstr(xt_arg(argc, argv, 0));
+  if (event && strcmp(event, "data") == 0 && xt_stream_has_data_listener(thisValue)) {
+    xt_value buffer = xt_stream_buffer(thisValue);
+    int32_t count = (int32_t)xt_to_number(xt_array_length(buffer));
+    if (count > 0) {
+      xt_node_set(thisValue, "__readable", xt_array_new(0, NULL));
+      for (int32_t i = 0; i < count; i++) {
+        xt_node_emit1(thisValue, "data", xt_array_get(buffer, xt_number((double)i)));
+      }
+    }
+  }
+  return result;
+}
+
 static xt_value xt_stream_method_push(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   xt_value chunk = xt_arg(argc, argv, 0);
@@ -331,6 +349,8 @@ static xt_value xt_stream_proto(void) {
   if (proto) return proto;
   proto = xt_object_new();
   xt_node_install_emitter(proto);
+  xt_node_define_method(proto, "on", (void *)xt_stream_method_on);
+  xt_node_define_method(proto, "addListener", (void *)xt_stream_method_on);
   xt_node_define_method(proto, "push", (void *)xt_stream_method_push);
   xt_node_define_method(proto, "unshift", (void *)xt_stream_method_unshift);
   xt_node_define_method(proto, "read", (void *)xt_stream_method_read);

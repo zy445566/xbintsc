@@ -803,6 +803,19 @@ describeE2E("end-to-end compilation", (harness) => {
     );
   });
 
+  it("calls functions through computed and indexed element access", () => {
+    const source = `
+      const fns = [(n: number) => n + 1, (n: number) => n * 2];
+      console.log(fns[0](10), fns[1](10));
+      let total = 0;
+      for (let i = 0; i < fns.length; i++) total += fns[i](3);
+      const table: any = { a: () => "A", b: () => "B" };
+      const key = "b";
+      console.log(total, table[key]());
+    `;
+    expect(runProgram(source)).toBe("11 20\n10 B");
+  });
+
   it("supports the Error family as first-class constructors", () => {
     const source = `
       console.log(typeof Error, typeof TypeError, typeof AggregateError);

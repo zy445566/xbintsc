@@ -246,7 +246,15 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     return XT_UNDEFINED;
   }
   const char *method = xt_string_data(name);
-  if (!method) return XT_UNDEFINED;
+  if (!method) {
+    /* A computed non-string key (`arr[0]()`, `table[someKey]()` where the key
+     * is not a string) resolves like a property read followed by a call with
+     * `target` as `this`, instead of silently returning undefined. */
+    xt_value fn = xt_get(target, name);
+    if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
+    xt_throw(xt_string_from_cstr("TypeError: value at computed index is not a function"));
+    return XT_UNDEFINED;
+  }
   if (target == XT_UNDEFINED || target == XT_NULL) {
     const char *base = target == XT_NULL ? "null" : "undefined";
     char message[256];

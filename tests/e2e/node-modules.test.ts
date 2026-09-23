@@ -142,6 +142,21 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim().split("\n")).toEqual(["data hello", "upper ABC", "pass through", "finish"]);
   });
 
+  it("flushes chunks buffered before a data listener attaches", () => {
+    const source = `
+      const readable = new Readable();
+      readable.push("early");
+      readable.on("data", (chunk: string) => console.log("data", chunk));
+      readable.push(null);
+
+      const from = Readable.from(["a", "b"]);
+      from.on("data", (chunk: string) => console.log("from", chunk));
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["data early", "from a", "from b"]);
+  });
+
   it("exchanges data over a TCP server and client", () => {
     const source = `
       const server = net.createServer((socket: any) => {

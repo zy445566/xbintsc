@@ -82,7 +82,15 @@ export class GeneratorContext {
           const importedName = specifier.propertyName?.text ?? specifier.name.text;
           const exported = module.exports?.[importedName];
           const symbol = this.binding.symbolOfDeclaration.get(specifier.name);
-          if (symbol && exported) this.importExports.set(symbol.id, exported);
+          if (symbol && exported) {
+            this.importExports.set(symbol.id, exported);
+            // A named constructor (`import { Buffer } from "buffer"`) also
+            // inherits its module's static dispatcher, so `Buffer.from(...)`
+            // lowers like `buffer.from(...)`.
+            if (exported.isConstructor && module.namespace) {
+              this.importNamespaces.set(symbol.id, module.namespace);
+            }
+          }
         }
       } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport) {
         const symbol = this.binding.symbolOfDeclaration.get(bindings.name);

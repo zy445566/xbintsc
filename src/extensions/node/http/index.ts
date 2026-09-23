@@ -9,6 +9,13 @@
 
 import type { NodeModule } from "../module.js";
 import { resolveFrom } from "../module.js";
+import type { ModuleExports } from "../../registry.js";
+
+const methods = ["createServer", "request", "get"] as const;
+
+const exports: ModuleExports = Object.fromEntries(
+  methods.map((method) => [method, { namespace: "http", method }]),
+);
 
 export const httpModule: NodeModule = {
   name: "http",
@@ -18,4 +25,5 @@ export const httpModule: NodeModule = {
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/http/http.c"),
   ],
   builtins: () => ({}),
+  exports: () => exports,
 };

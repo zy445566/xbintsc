@@ -11,7 +11,7 @@ import type { NodeModule } from "../module.js";
 import { resolveFrom } from "../module.js";
 import type { ModuleExports } from "../../registry.js";
 
-const methods = ["listenerCount", "getEventListeners", "getMaxListeners", "setMaxListeners", "once"] as const;
+const methods = ["listenerCount", "getEventListeners", "getMaxListeners", "setMaxListeners", "once", "addAbortListener"] as const;
 
 const exports: ModuleExports = {
   EventEmitter: { symbol: "xt_event_emitter_ctor", isConstructor: true },

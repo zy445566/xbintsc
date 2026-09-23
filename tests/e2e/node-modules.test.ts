@@ -62,6 +62,18 @@ describeWithClang("node compatibility modules", () => {
     );
   });
 
+  it("supports named imports from buffer", () => {
+    const source = `
+      import { Buffer, alloc, concat, from, isBuffer } from "buffer";
+      console.log(from("hello").toString(), alloc(4, 65).toString());
+      console.log(isBuffer(from("x")), concat([from("foo"), from("bar")]).toString());
+      console.log(new Buffer("hey").toString(), Buffer.from("yo").toString(), Buffer.isBuffer(Buffer.from("z")));
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["hello AAAA", "true foobar", "hey yo true"]);
+  });
+
   it("wraps fs operations in promises", () => {
     const target = join(workdir, `promise_${Math.random().toString(36).slice(2)}.txt`);
     const source = `
@@ -106,6 +118,30 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim().split("\n")).toEqual(["data hello", "end", "upper ABC", "piped"]);
   });
 
+  it("supports named imports from stream", () => {
+    const source = `
+      import { PassThrough, Readable, Transform, Writable } from "stream";
+      const readable = new Readable();
+      readable.on("data", (chunk: string) => console.log("data", chunk));
+      readable.push("hello");
+      readable.push(null);
+      const transform = new Transform({ transform(chunk: string, enc: string, cb: (err: unknown, out: string) => void) {
+        cb(null, chunk.toUpperCase());
+      } });
+      transform.on("data", (chunk: string) => console.log("upper", chunk));
+      transform.write("abc");
+      const pass = new PassThrough();
+      pass.on("data", (chunk: string) => console.log("pass", chunk));
+      pass.write("through");
+      const sink = new Writable();
+      sink.on("finish", () => console.log("finish"));
+      sink.end();
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["data hello", "upper ABC", "pass through", "finish"]);
+  });
+
   it("exchanges data over a TCP server and client", () => {
     const source = `
       const server = net.createServer((socket: any) => {
@@ -116,6 +152,30 @@ describeWithClang("node compatibility modules", () => {
       });
       server.listen(0, () => {
         const client = net.connect(server.address().port, "127.0.0.1");
+        client.on("data", (data: string) => console.log("client", data));
+        client.on("end", () => {
+          console.log("end");
+          server.close();
+        });
+        client.write("ping");
+      });
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["client echo:ping", "end"]);
+  });
+
+  it("supports named imports from node:net", () => {
+    const source = `
+      import { createServer, connect } from "node:net";
+      const server = createServer((socket: any) => {
+        socket.on("data", (data: string) => {
+          socket.write("echo:" + data);
+          socket.end();
+        });
+      });
+      server.listen(0, () => {
+        const client = connect(server.address().port, "127.0.0.1");
         client.on("data", (data: string) => console.log("client", data));
         client.on("end", () => {
           console.log("end");
@@ -191,9 +251,56 @@ describeWithClang("node compatibility modules", () => {
     ]);
   });
 
+  it("supports named imports from node:http", () => {
+    const source = `
+      import { createServer, get } from "node:http";
+      const server = createServer((req: any, res: any) => {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("hello " + req.url);
+      });
+      server.listen(0, () => {
+        const port = server.address().port;
+        get("http://127.0.0.1:" + port + "/world", (res: any) => {
+          let body = "";
+          console.log("status", res.statusCode);
+          res.on("data", (chunk: string) => { body += chunk; });
+          res.on("end", () => {
+            console.log("get", body);
+            server.close();
+          });
+        });
+      });
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["status 200", "get hello /world"]);
+  });
+
+  it("supports named imports from dgram", () => {
+    const source = `
+      import { createSocket } from "node:dgram";
+      const server = createSocket("udp4");
+      server.on("message", (msg: string, rinfo: any) => {
+        server.send("pong:" + msg, rinfo.port, rinfo.address);
+      });
+      server.bind(0, () => {
+        const client = createSocket("udp4");
+        client.on("message", (msg: string) => {
+          console.log(msg);
+          client.close();
+          server.close();
+        });
+        client.send("ping", server.address().port, "127.0.0.1");
+      });
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim()).toBe("pong:ping");
+  });
+
   it("provides a standalone EventEmitter from events", () => {
     const source = `
-      import { EventEmitter } from "events";
+      import { EventEmitter, addAbortListener, getEventListeners } from "events";
       const em = new EventEmitter();
       let count = 0;
       let onceCount = 0;
@@ -210,11 +317,19 @@ describeWithClang("node compatibility modules", () => {
       let seen = 0;
       global.on("x", () => { seen++; });
       global.emit("x");
-      console.log("global", seen);
+      console.log("global", seen, EventEmitter.listenerCount(global, "x"));
+      // addAbortListener registers on the signal's abort listeners.
+      const signal: any = {};
+      let aborted = 0;
+      addAbortListener(signal, () => { aborted++; });
+      const abortListeners = getEventListeners(signal, "abort");
+      const first: any = abortListeners[0];
+      first();
+      console.log("abort", aborted);
     `;
     const { status, stdout } = run(source);
     expect(status).toBe(0);
-    expect(stdout.trim().split("\n")).toEqual(["before 2", "after 2 1 1", "names 0", "global 1"]);
+    expect(stdout.trim().split("\n")).toEqual(["before 2", "after 2 1 1", "names 0", "global 1 1", "abort 1"]);
   });
 
   it("implements util helpers", () => {

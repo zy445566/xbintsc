@@ -350,7 +350,8 @@ console.log(result.status, result.stdout.split("\n")[0]);
 | `setMaxListeners(n)` / `getMaxListeners()` | 记录（默认 10） |
 
 通过命名空间（`import ee from "events"`）可访问的静态方法：`listenerCount`、
-`getEventListeners`、`getMaxListeners`、`setMaxListeners`、`once`。
+`getEventListeners`、`getMaxListeners`、`setMaxListeners`、`once`、
+`addAbortListener`。
 
 ```ts
 import { EventEmitter } from "events";
@@ -428,7 +429,7 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | dgram | `createSocket`；`bind/send/close/address/setBroadcast/setTTL` |
 | http | `createServer` `request` `get`；`ClientRequest`、`IncomingMessage`、`ServerResponse` |
 | child_process | `spawnSync(command, args[, {cwd, stdio}])`，返回 `status` / `stdout` / `stderr` |
-| events | `EventEmitter`（全局 + 命名）；`on/once/off/emit/listeners/listenerCount/eventNames`；静态 `listenerCount/getEventListeners/getMaxListeners/setMaxListeners/once` |
+| events | `EventEmitter`（全局 + 命名）；`on/once/off/emit/listeners/listenerCount/eventNames`；静态 `listenerCount/getEventListeners/getMaxListeners/setMaxListeners/once/addAbortListener` |
 | util | `format` `formatWithOptions` `inspect` `isDeepStrictEqual` `inherits` `deprecate` `promisify`；`isString/isNumber/isBoolean/isUndefined/isNull/isFunction/isArray/isObject/isBuffer/isDate/isRegExp/isPromise/isError` |
 | querystring | `parse`/`decode` `stringify`/`encode` `escape` `unescape` |
 | crypto | `createHash(algorithm)` |

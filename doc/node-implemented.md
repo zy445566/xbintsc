@@ -384,7 +384,7 @@ property), with the fuller `events` surface layered on top:
 
 Statics reachable through the namespace (`import ee from "events"`):
 `listenerCount`, `getEventListeners`, `getMaxListeners`, `setMaxListeners`,
-`once`.
+`once`, `addAbortListener`.
 
 ```ts
 import { EventEmitter } from "events";
@@ -462,7 +462,7 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | dgram | `createSocket`; `bind/send/close/address/setBroadcast/setTTL` |
 | http | `createServer` `request` `get`; `ClientRequest`, `IncomingMessage`, `ServerResponse` |
 | child_process | `spawnSync(command, args[, {cwd, stdio}])` returning `status` / `stdout` / `stderr` |
-| events | `EventEmitter` (global + named); `on/once/off/emit/listeners/listenerCount/eventNames`; statics `listenerCount/getEventListeners/getMaxListeners/setMaxListeners/once` |
+| events | `EventEmitter` (global + named); `on/once/off/emit/listeners/listenerCount/eventNames`; statics `listenerCount/getEventListeners/getMaxListeners/setMaxListeners/once/addAbortListener` |
 | util | `format` `formatWithOptions` `inspect` `isDeepStrictEqual` `inherits` `deprecate` `promisify`; `isString/isNumber/isBoolean/isUndefined/isNull/isFunction/isArray/isObject/isBuffer/isDate/isRegExp/isPromise/isError` |
 | querystring | `parse`/`decode` `stringify`/`encode` `escape` `unescape` |
 | crypto | `createHash(algorithm)` |

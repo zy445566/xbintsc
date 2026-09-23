@@ -4,23 +4,6 @@ Build a binary compiler for TypeScript.
 
 > Language: **English** | [简体中文](./zh-CN/DESIGN.md)
 
-## Original requirements
-
-1. Implement the fundamental JavaScript categories (primitive types, functions, …) so that IR binding is possible later.
-2. Parse TypeScript into an AST.
-3. Bind IR through LLVM.
-4. Compile a TypeScript binary compiler with `llc`.
-5. Use that binary compiler to compile the test cases.
-
-Requirements:
-
-1. Incremental compilation.
-2. Well-factored modules (parsing and implementation live in separate directories).
-3. Extensive tests, organised by module.
-4. Optional compile modules as pluggable extensions (e.g. Node's `fs`, Bun's modules).
-5. Eventually self-hosting (compile a compiler rewritten in TS with the compiler itself).
-6. Multi-platform (Windows, macOS, Ubuntu and multiple CPU architectures), with build artifacts produced by GitHub Actions.
-
 ## Architecture
 
 ```
@@ -108,6 +91,15 @@ exported bindings to runtime symbols with the uniform `(argc, argv)` ABI. Node's
 `import { readFileSync } from "fs"` is wired in through
 `src/extensions/node/fs` + `runtime/ext_node/fs`, and the core compiler never
 needs to know any platform details.
+
+`nativeObjects` extends the same shape to code built outside the pipeline: a
+C++ or Rust project compiled to an `extern "C"` object or static archive can be
+linked in and exposed through a JSON manifest (`src/extensions/native.ts`,
+`--ext-native`). The driver links the artifacts verbatim and the generator binds
+their symbols exactly like the C runtime, so the extension language is invisible
+to the core compiler. Windows is covered too: xbintsc links with its bundled
+MinGW-w64 toolchain there, so the examples build against that GNU ABI. See
+`examples/extensions/` and `runtime/xt_ext.h` / `runtime/xt_ext.rs`.
 
 ## Self-hosting roadmap
 

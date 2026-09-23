@@ -1,0 +1,24 @@
+{
+  "name": "mathx-cpp",
+  "description": "C++ math helpers compiled to extern \"C\" and linked by xbintsc",
+  "objects": ["build/libmathx.a"],
+  "linkerFlags": ["-lm"],
+  "linkerFlagsByPlatform": {
+    "linux": ["-lstdc++"],
+    "darwin": ["-lc++"],
+    "win32": ["-lc++", "-static"]
+  },
+  "builtins": {
+    "cppClamp": { "symbol": "mathx_clamp" }
+  },
+  "modules": {
+    "mathx": {
+      "exports": {
+        "add": { "symbol": "mathx_add" },
+        "fib": { "symbol": "mathx_fib" },
+        "fibSequence": { "symbol": "mathx_fib_sequence" },
+        "reverse": { "symbol": "mathx_reverse" }
+      }
+    }
+  }
+}

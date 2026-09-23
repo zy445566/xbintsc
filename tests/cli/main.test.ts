@@ -138,6 +138,28 @@ describe("cli", () => {
     expect(run(["emit", entry, "--ext", "node"], io)).toBe(0);
   });
 
+  it("registers a native extension from a manifest", () => {
+    const entry = writeProgram("console.log(1);");
+    const directory = temporaryDirectory();
+    writeFileSync(join(directory, "libfake.a"), "fake archive");
+    const manifest = join(directory, "ext.manifest.json");
+    writeFileSync(
+      manifest,
+      JSON.stringify({ name: "fake", objects: ["libfake.a"], builtins: { fake: { symbol: "fake_impl" } } }),
+    );
+    const { io } = capture();
+    expect(run(["emit", entry, "--ext-native", manifest], io)).toBe(0);
+  });
+
+  it("reports a missing native extension manifest", () => {
+    const entry = writeProgram("console.log(1);");
+    const { io } = capture();
+    const missing = join(temporaryDirectory(), "nope.json");
+    expect(() => run(["emit", entry, "--ext-native", missing], io)).toThrow(
+      /Unable to read native extension manifest/,
+    );
+  });
+
   it("reports doctor information", () => {
     const { io, out } = capture();
     expect(run(["doctor"], io)).toBe(0);

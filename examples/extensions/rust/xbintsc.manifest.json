@@ -1,0 +1,23 @@
+{
+  "name": "mathx-rust",
+  "description": "Rust math helpers compiled to extern \"C\" and linked by xbintsc",
+  "objects": ["target/release/libmathx.a"],
+  "linkerFlagsByPlatform": {
+    "linux": ["-lpthread", "-ldl", "-lm"],
+    "darwin": ["-liconv", "-framework", "Security"],
+    "win32": ["-lntdll", "-static"]
+  },
+  "builtins": {
+    "rustClamp": { "symbol": "mathx_clamp" }
+  },
+  "modules": {
+    "mathx": {
+      "exports": {
+        "add": { "symbol": "mathx_add" },
+        "fib": { "symbol": "mathx_fib" },
+        "fibSequence": { "symbol": "mathx_fib_sequence" },
+        "reverse": { "symbol": "mathx_reverse" }
+      }
+    }
+  }
+}

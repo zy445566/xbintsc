@@ -52,6 +52,17 @@ export interface Extension {
   readonly description?: string;
   /** C/asm sources compiled and linked alongside the generated module. */
   runtimeSources?(): readonly string[];
+  /**
+   * Pre-built object files or static archives linked alongside the generated
+   * module. This is the hook for native extensions written in C++ or Rust:
+   * compile them to `extern "C"` objects (or a static library) that use the
+   * `xt_value` ABI, then hand the artifacts to the driver through an
+   * `Extension` such as the one built by `src/extensions/native.ts`.
+   *
+   * The paths must already exist; the driver passes them straight to the
+   * linker and never recompiles them.
+   */
+  nativeObjects?(): readonly string[];
   /** Extra linker flags (e.g. `["-lm"]`, `["-framework", "CoreFoundation"]`). */
   linkerFlags?(): readonly string[];
   /** Global identifiers that resolve to runtime symbols when called. */
@@ -121,6 +132,16 @@ export class ExtensionRegistry {
       if (extra) sources.push(...extra);
     }
     return sources;
+  }
+
+  /** Flatten every registered extension's pre-built native objects. */
+  nativeObjects(): readonly string[] {
+    const objects: string[] = [];
+    for (const extension of this.extensions.values()) {
+      const extra = extension.nativeObjects?.();
+      if (extra) objects.push(...extra);
+    }
+    return objects;
   }
 
   linkerFlags(): readonly string[] {

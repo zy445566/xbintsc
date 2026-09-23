@@ -160,7 +160,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     emit,
     optimize,
     process.platform,
-    registry.all().map((e) => e.name).join(","),
+    registryFingerprint(registry),
     runtimeFingerprint(runtimeDir),
   ]);
 
@@ -209,7 +209,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, irPath, cached: false, diagnostics: [], ir };
   }
 
-  const { runtimeObjects, extensionObjects } = ensureRuntimeObjects(
+  const { runtimeObjects, extensionObjects, nativeObjects } = ensureRuntimeObjects(
     runner,
     clang,
     runtimeDir,
@@ -221,7 +221,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   link(runner, {
     clang,
-    objectPaths: [objectPath, ...runtimeObjects, ...extensionObjects],
+    objectPaths: [objectPath, ...runtimeObjects, ...extensionObjects, ...nativeObjects],
     outputPath,
     linkerFlags: [
       ...toolchain.linkerArgs,
@@ -240,6 +240,8 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 interface RuntimeObjects {
   readonly runtimeObjects: readonly string[];
   readonly extensionObjects: readonly string[];
+  /** Pre-built C++/Rust objects and archives contributed by native extensions. */
+  readonly nativeObjects: readonly string[];
 }
 
 /** Core runtime translation units (each compiled and cached independently). */
@@ -282,6 +284,24 @@ function runtimeFingerprint(runtimeDir: string): string {
     }
   };
   walk(runtimeDir);
+  return hashParts(parts);
+}
+
+/**
+ * Fingerprint everything an extension contributes that can change the linked
+ * executable but does not live under `runtime/`: its name, linker flags and the
+ * contents of any pre-built C++/Rust objects. Keeps a cached binary fresh when
+ * a native extension is rebuilt, or when `--ext-native` flags change.
+ */
+function registryFingerprint(registry: ExtensionRegistry): string {
+  const parts: string[] = [];
+  for (const extension of registry.all()) {
+    parts.push(extension.name);
+    parts.push(...(extension.linkerFlags?.() ?? []));
+    for (const object of extension.nativeObjects?.() ?? []) {
+      parts.push(object, existsSync(object) ? readFileSync(object).toString("base64") : "");
+    }
+  }
   return hashParts(parts);
 }
 
@@ -348,5 +368,6 @@ function ensureRuntimeObjects(
       extensionObjects.push(compileOne(sourcePath, `ext_${extensionObjects.length}_${basename(sourcePath, ".c")}`));
     }
   }
-  return { runtimeObjects, extensionObjects };
+  // A native archive may be shared by several manifests; link each once.
+  return { runtimeObjects, extensionObjects, nativeObjects: [...new Set(registry.nativeObjects())] };
 }

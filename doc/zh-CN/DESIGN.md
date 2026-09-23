@@ -4,23 +4,6 @@
 
 实现一个 TypeScript 的二进制编译器。
 
-## 原始需求
-
-1. 实现 JS 的各个基础类别（基础类型、function 等）的实现（以便后续 IR 的绑定）
-2. 需要实现对 TypeScript 解析成 AST 树
-3. 通过 LLVM 实现 IR 的绑定
-4. 使用 llc 编译出 TypeScript 的二进制编译器
-5. 再使用 TypeScript 的二进制编译器实现测试用例的 case
-
-要求：
-
-1. 需要实现增量编译
-2. 合理的规划每个模块（解析与实现按不同目录存储）
-3. 大量测试用例验证，测试用例也按模块划分
-4. 支持扩展模块作为可选编译模块（如 nodejs 的 fs 模块、bun.js 的模块）
-5. 后续能够实现自举（用编译器编译用 TS 重写的编译器）
-6. 多系统支持（windows、mac、Ubuntu，以及不同芯片），用 GitHub Action 编译产物
-
 ## 实现架构
 
 ```
@@ -101,6 +84,13 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 `(argc, argv)` ABI）。Node 的 `import { readFileSync } from "fs"` 就是通过
 `src/extensions/node/fs` + `runtime/ext_node/fs` 接入的，核心编译器无需了解任何
 平台细节。
+
+`nativeObjects` 把同一形状扩展到流程之外构建的代码：用 C++ 或 Rust 编译出的
+`extern "C"` 对象文件或静态库，可以经 JSON manifest 链接并暴露
+（`src/extensions/native.ts`、`--ext-native`）。驱动会原样链接这些产物，生成器
+像绑定 C 运行时那样绑定它们的符号，因此扩展使用何种语言对核心编译器透明。Windows
+同样覆盖：xbintsc 在那里使用自带的 MinGW-w64 工具链链接，示例即针对该 GNU ABI 构建。
+参见 `examples/extensions/` 与 `runtime/xt_ext.h` / `runtime/xt_ext.rs`。
 
 ## 自举路线
 

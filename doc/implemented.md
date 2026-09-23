@@ -271,6 +271,11 @@ Location: `src/extensions/registry.ts`, `src/extensions/node/`
   - Modular organisation: `src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
   - Exposes importable modules (`fs`, `fs/promises`, `path`, `os`, `process`, …) under both bare and `node:`-prefixed specifiers; `import { readFileSync } from "fs"` resolves to `xt_node_read_text_file`, and `path`/`os`/`process` map exports onto the namespace dispatchers.
 - Adding a new module only requires a new directory plus a C implementation; the core compiler never changes.
+- Native C++/Rust extensions (`src/extensions/native.ts`, `--ext-native`):
+  - `nativeObjects()` links pre-built objects/static archives that expose `extern "C"` symbols with the `(argc, argv)` ABI; a JSON manifest maps them onto builtins/modules (`linkerFlags` / `linkerFlagsByPlatform` cover C++/Rust runtimes).
+  - Authoring helpers live in `runtime/xt_ext.h` (C/C++) and `runtime/xt_ext.rs` (Rust); runnable projects are under `examples/extensions/`.
+  - The driver links the artifacts verbatim and the incremental cache fingerprints their contents, so a rebuilt library invalidates the cached binary.
+  - CI builds both language examples on Linux, macOS and Windows; on Windows the bundled MinGW-w64 toolchain is used (C++ `-lc++ -static`, Rust `*-pc-windows-gnullvm` with `-lntdll -static`).
 
 ---
 
@@ -279,7 +284,7 @@ Location: `src/extensions/registry.ts`, `src/extensions/node/`
 Location: `src/driver/compiler.ts`, `src/driver/cache.ts`, `src/driver/toolchain.ts`, `src/driver/paths.ts`
 
 - Compilation pipeline: read source → module bundling (`src/driver/modules.ts`, when the entry contains `import`/`export`) → parse → bind/check → IR → object file → link.
-- Incremental cache: keyed on "compiler version + source hash + emit kind + optimization level + platform + extension set"; if the artifacts exist and are fresh, the build is skipped.
+- Incremental cache: keyed on "compiler version + source hash + emit kind + optimization level + platform + extension fingerprint (names, linker flags, native object contents)"; if the artifacts exist and are fresh, the build is skipped.
 - C runtime and extension sources are cached as object files by content hash and compiled only once.
 - Toolchain wrapper: locates `clang` (overridable with `xbintsc_CLANG`), compiles IR, compiles C, links.
 - Link flags: `-lm` is added automatically on non-Windows; extensions may append extra link flags.
@@ -308,6 +313,7 @@ xbintsc help                        help
     --emit <kind>     exe | obj | ir (default: exe)
 -O0..-O3              Optimization level (default: -O2)
     --ext <names>     Comma separated extensions (e.g. node)
+    --ext-native <m>  Register a C++/Rust extension from a JSON manifest
     --force           Ignore the incremental cache
     --verbose         Print progress information
 ```

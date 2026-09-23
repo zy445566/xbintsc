@@ -170,6 +170,7 @@ CLI 选项：
     --emit <kind>     exe | obj | ir（默认 exe）
 -O0..-O3              优化级别（默认 -O2）
     --ext <names>     逗号分隔扩展（如 node）
+    --ext-native <m>  从 JSON manifest 注册 C++/Rust 扩展
     --force           忽略增量缓存
     --verbose         打印进度信息
 ```
@@ -232,6 +233,33 @@ Node 模块覆盖情况：
 
 - [Node 扩展：已实现](./doc/zh-CN/node-implemented.md)
 - [Node 扩展：未实现](./doc/zh-CN/node-unimplemented.md)
+
+### 原生扩展（C++ / Rust）
+
+扩展并非只能用 C 或 TypeScript 编写。只要库以 `extern "C"` 暴露运行时 ABI 的
+入口（`xt_value fn(int32_t argc, xt_value *argv)`），就可以被链接进来。把
+C++ 或 Rust 代码编译为对象文件或静态库，用一个很小的 JSON manifest 描述它，
+再通过 `--ext-native` 传入：
+
+```bash
+./examples/extensions/cpp/build.sh
+xbintsc run examples/extensions/cpp/demo.ts \
+  --ext-native examples/extensions/cpp/xbintsc.manifest.json
+```
+
+```jsonc
+{
+  "name": "mathx-cpp",
+  "objects": ["build/libmathx.a"],
+  "linkerFlagsByPlatform": { "linux": ["-lstdc++"], "darwin": ["-lc++"], "win32": ["-lc++", "-static"] },
+  "builtins": { "cppClamp": { "symbol": "mathx_clamp" } },
+  "modules": { "mathx": { "exports": { "add": { "symbol": "mathx_add" } } } }
+}
+```
+
+之后 `import { add } from "mathx"` 会像 C 运行时绑定一样下降为 C++/Rust 符号。
+可运行的 C++ 与 Rust 工程见 [`examples/extensions/`](./examples/extensions)，编写
+辅助见 `runtime/xt_ext.h` / `runtime/xt_ext.rs`。
 
 ## 测试
 

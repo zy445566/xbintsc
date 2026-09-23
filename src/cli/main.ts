@@ -5,6 +5,7 @@
  * available programmatically through the driver API:
  *
  *   xbintsc build <file> [-o out] [--emit ir|obj|exe] [-O0..3] [--ext node]
+ *                        [--ext-native manifest.json]
  *   xbintsc run   <file> [-- args...]
  *   xbintsc emit  <file>            # print LLVM IR to stdout
  *   xbintsc doctor                  # report the resolved toolchain
@@ -23,6 +24,7 @@ import { resolveToolchain } from "../driver/toolchain-provider.js";
 import { realRunner } from "../driver/toolchain.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { nodeExtension } from "../extensions/node/index.js";
+import { nativeExtensionFromManifest } from "../extensions/native.js";
 
 export interface CliIo {
   readonly stdout: (text: string) => void;
@@ -41,7 +43,7 @@ interface ParsedArgs {
   readonly passthrough: string[];
 }
 
-const VALUE_FLAGS = new Set(["output", "out", "emit", "optimize", "ext"]);
+const VALUE_FLAGS = new Set(["output", "out", "emit", "optimize", "ext", "ext-native"]);
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = [];
@@ -102,6 +104,14 @@ function buildRegistry(flags: Map<string, string | boolean>): ExtensionRegistry 
       else throw new Error(`Unknown extension '${name}'`);
     }
   }
+  // Each `--ext-native` value is a manifest path describing a pre-built C++ or
+  // Rust library; several manifests may be comma separated.
+  const native = flags.get("ext-native");
+  if (typeof native === "string") {
+    for (const manifest of native.split(",").map((n) => n.trim()).filter(Boolean)) {
+      registry.register(nativeExtensionFromManifest(manifest));
+    }
+  }
   return registry;
 }
 
@@ -133,6 +143,8 @@ Options:
       --emit <kind>     exe | obj | ir (default: exe)
   -O0..-O3              Optimization level (default: -O2)
       --ext <names>     Comma separated extensions (e.g. node)
+      --ext-native <m>  Register a C++/Rust extension from a JSON manifest
+                        (comma separated for several)
       --force           Ignore the incremental cache
       --verbose         Print progress information
 `;

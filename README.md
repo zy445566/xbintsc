@@ -178,6 +178,7 @@ CLI options:
     --emit <kind>     exe | obj | ir (default: exe)
 -O0..-O3              Optimization level (default: -O2)
     --ext <names>     Comma separated extensions (e.g. node)
+    --ext-native <m>  Register a C++/Rust extension from a JSON manifest
     --force           Ignore the incremental cache
     --verbose         Print progress information
 ```
@@ -243,6 +244,35 @@ Node module coverage:
 
 - [Node extension: implemented](./doc/node-implemented.md)
 - [Node extension: unimplemented](./doc/node-unimplemented.md)
+
+### Native extensions (C++ / Rust)
+
+Extensions do not have to be written in C or TypeScript. Any library that
+exposes `extern "C"` entry points with the runtime ABI
+(`xt_value fn(int32_t argc, xt_value *argv)`) can be linked in. Build the C++ or
+Rust code into an object file or static archive, describe it with a small JSON
+manifest, and pass the manifest to `--ext-native`:
+
+```bash
+./examples/extensions/cpp/build.sh
+xbintsc run examples/extensions/cpp/demo.ts \
+  --ext-native examples/extensions/cpp/xbintsc.manifest.json
+```
+
+```jsonc
+{
+  "name": "mathx-cpp",
+  "objects": ["build/libmathx.a"],
+  "linkerFlagsByPlatform": { "linux": ["-lstdc++"], "darwin": ["-lc++"], "win32": ["-lc++", "-static"] },
+  "builtins": { "cppClamp": { "symbol": "mathx_clamp" } },
+  "modules": { "mathx": { "exports": { "add": { "symbol": "mathx_add" } } } }
+}
+```
+
+`import { add } from "mathx"` then lowers to the C++/Rust symbol exactly like a
+C runtime binding. See [`examples/extensions/`](./examples/extensions) for
+working C++ and Rust projects, and `runtime/xt_ext.h` / `runtime/xt_ext.rs` for
+the authoring helpers.
 
 ## Tests
 

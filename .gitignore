@@ -5,9 +5,13 @@ build/
 .xbintsc/
 *.o
 *.obj
+*.a
+*.lib
 *.ll
 *.exe
 *.out
+target/
+examples/extensions/rust/Cargo.lock
 coverage/
 .DS_Store
 scratch/

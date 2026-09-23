@@ -32,4 +32,14 @@ export {
 export { ExtensionRegistry, createDefaultRegistry, coreExtension, type Extension, type ExtensionModule, type ModuleExport, type ModuleExports } from "./extensions/registry.js";
 export { nodeExtension } from "./extensions/node/index.js";
 export type { NodeModule } from "./extensions/node/module.js";
+export {
+  NativeExtensionError,
+  loadNativeManifest,
+  nativeExtensionFromManifest,
+  parseNativeManifest,
+  type NativeManifest,
+  type NativeBuiltin,
+  type NativeModule,
+  type NativeModuleExport,
+} from "./extensions/native.js";
 export * from "./driver/index.js";

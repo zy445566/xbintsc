@@ -263,6 +263,11 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - 模块化组织：`src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
   - 暴露可导入模块（`fs`、`fs/promises`、`path`、`os`、`process` 等），同时支持裸名称与 `node:` 前缀；`import { readFileSync } from "fs"` 解析到 `xt_node_read_text_file`，`path`/`os`/`process` 的导出映射到命名空间分发器。
 - 添加新模块只需新增目录 + C 实现，核心编译器无需改动。
+- 原生 C++/Rust 扩展（`src/extensions/native.ts`、`--ext-native`）：
+  - `nativeObjects()` 链接以 `(argc, argv)` ABI 暴露 `extern "C"` 符号的预编译对象/静态库；JSON manifest 把它们映射为 builtins/modules（`linkerFlags` / `linkerFlagsByPlatform` 用于 C++/Rust 运行时）。
+  - 编写辅助位于 `runtime/xt_ext.h`（C/C++）与 `runtime/xt_ext.rs`（Rust）；可运行工程在 `examples/extensions/`。
+  - 驱动原样链接这些产物，增量缓存会对其内容取指纹，因此重建库会使缓存二进制失效。
+  - CI 在 Linux、macOS、Windows 上都会构建两种语言的示例；Windows 使用自带的 MinGW-w64 工具链（C++ `-lc++ -static`，Rust `*-pc-windows-gnullvm` + `-lntdll -static`）。
 
 ---
 
@@ -271,7 +276,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 实现位置：`src/driver/compiler.ts`、`src/driver/cache.ts`、`src/driver/toolchain.ts`、`src/driver/paths.ts`
 
 - 编译流水线：读源 → 模块打包（`src/driver/modules.ts`，当入口含 `import`/`export` 时）→ 解析 → 绑定/检查 → IR → 目标文件 → 链接。
-- 增量缓存：以「编译器版本 + 源码哈希 + emit 类型 + 优化级别 + 平台 + 扩展集合」为键，产物存在且新鲜则跳过构建。
+- 增量缓存：以「编译器版本 + 源码哈希 + emit 类型 + 优化级别 + 平台 + 扩展指纹（名称、链接参数、原生对象内容）」为键，产物存在且新鲜则跳过构建。
 - C 运行时与扩展源按内容哈希缓存目标文件，只编译一次。
 - 工具链封装：查找 `clang`（可用 `xbintsc_CLANG` 覆盖）、编译 IR、编译 C、链接。
 - 链接参数：非 Windows 自动加 `-lm`；扩展可追加链接参数。
@@ -300,6 +305,7 @@ xbintsc help                        帮助
     --emit <kind>     exe | obj | ir（默认 exe）
 -O0..-O3              优化级别（默认 -O2）
     --ext <names>     逗号分隔扩展（如 node）
+    --ext-native <m>  从 JSON manifest 注册 C++/Rust 扩展
     --force           忽略增量缓存
     --verbose         打印进度信息
 ```

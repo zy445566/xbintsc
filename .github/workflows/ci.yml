@@ -206,6 +206,59 @@ jobs:
       - name: Build and run the file-reading example with the node extension
         run: npx tsx src/cli/main.ts run examples/read-file.ts --ext node --out build/examples
 
+      # Native (C++/Rust) extensions are compiled to `extern "C"` objects/static
+      # libraries and linked by xbintsc. Windows x64 fetches the bundled
+      # MinGW-w64 toolchain here (after the MSVC-built `hello` examples, which
+      # stay on the system clang); Windows arm64 fetched it above because its
+      # `hello` example already needs it. Every platform therefore links the
+      # extensions with a GNU-ABI compiler, and the platform-specific linker
+      # flags live in each manifest's `linkerFlagsByPlatform` block.
+      - name: Cache the bundled toolchain (Windows x64)
+        if: runner.os == 'Windows' && runner.arch != 'ARM64'
+        uses: actions/cache@v6
+        with:
+          path: vendor
+          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
+
+      - name: Fetch the bundled toolchain (Windows x64)
+        if: runner.os == 'Windows' && runner.arch != 'ARM64'
+        run: npx tsx scripts/fetch-toolchain.ts
+
+      - name: Build the C++ native extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            case "${{ runner.arch }}" in
+              ARM64) slug=win32-arm64 ;;
+              *)     slug=win32-x64 ;;
+            esac
+            ws="$(cygpath -m "$GITHUB_WORKSPACE")"
+            export CXX="$ws/vendor/$slug/bin/clang++.exe"
+            export AR="$ws/vendor/$slug/bin/llvm-ar.exe"
+          fi
+          bash examples/extensions/cpp/build.sh
+
+      - name: Run the C++ native extension example
+        run: npx tsx src/cli/main.ts run examples/extensions/cpp/demo.ts --ext-native examples/extensions/cpp/xbintsc.manifest.json --out build/examples
+
+      - name: Build the Rust native extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            case "${{ runner.arch }}" in
+              ARM64) rust_target=aarch64-pc-windows-gnullvm ;;
+              *)     rust_target=x86_64-pc-windows-gnullvm ;;
+            esac
+            rustup target add "$rust_target"
+            export RUST_TARGET="$rust_target"
+          fi
+          bash examples/extensions/rust/build.sh
+
+      - name: Run the Rust native extension example
+        run: npx tsx src/cli/main.ts run examples/extensions/rust/demo.ts --ext-native examples/extensions/rust/xbintsc.manifest.json --out build/examples
+
   self-host:
     name: Self-host (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

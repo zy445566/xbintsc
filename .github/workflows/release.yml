@@ -70,6 +70,7 @@ jobs:
           git push origin "${tag}"
 
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${current}" >> "$GITHUB_OUTPUT"
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v7
@@ -114,6 +115,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ steps.version.outputs.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
           INPUT_RUN_ID: ${{ inputs.ci_run_id }}
         run: |
           set -euo pipefail
@@ -148,6 +150,16 @@ jobs:
             echo "::error::CI run ${run_id} concluded '${conclusion}'; cannot fetch self-hosted binaries." >&2
             exit 1
           fi
+
+          # The binaries must come from the release commit. A hand-supplied
+          # `ci_run_id` (or a missing SHA in the query above) can otherwise point
+          # at a run from an earlier commit, whose archives still carry the
+          # previous version number (e.g. xbintsc-0.3.9-* on a v0.3.10 release).
+          run_sha="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" --jq '.head_sha')"
+          if [ "${run_sha}" != "${SHA}" ]; then
+            echo "::error::CI run ${run_id} is for commit ${run_sha}, not the release commit ${SHA}." >&2
+            exit 1
+          fi
           echo "Using binaries from CI run ${run_id}."
 
           rm -rf .ci-artifacts release-assets
@@ -171,6 +183,19 @@ jobs:
             echo "::error::No release artifacts were found in CI run ${run_id}." >&2
             exit 1
           fi
+
+          # Belt-and-braces: every archive must embed the version being
+          # released, so a version/tag mismatch can never reach the release.
+          for file in release-assets/*; do
+            base="$(basename "${file}")"
+            case "${base}" in
+              "xbintsc-${VERSION}-"*) ;;
+              *)
+                echo "::error::Release asset ${base} does not match version ${VERSION}." >&2
+                exit 1
+                ;;
+            esac
+          done
           ls -l release-assets
 
       - name: Create GitHub release

@@ -138,6 +138,25 @@ describe("cli", () => {
     expect(run(["emit", entry, "--ext", "node"], io)).toBe(0);
   });
 
+  it("points a missing node import at --ext node", () => {
+    const entry = writeProgram('import { readFileSync } from "node:fs";\nreadFileSync("x");');
+    const { io, err } = capture();
+    expect(run(["emit", entry], io)).toBe(1);
+    const output = err.join("");
+    expect(output).toContain(
+      "module 'node:fs' is provided by the 'node' extension; pass --ext node",
+    );
+    // The actionable hint replaces the confusing secondary error.
+    expect(output).not.toContain("cannot be used as a value");
+  });
+
+  it("accepts the import once --ext node is passed", () => {
+    const entry = writeProgram('import { readFileSync } from "node:fs";\nreadFileSync("x");');
+    const { io, err } = capture();
+    expect(run(["emit", entry, "--ext", "node"], io)).toBe(0);
+    expect(err.join("")).toBe("");
+  });
+
   it("registers a native extension from a manifest", () => {
     const entry = writeProgram("console.log(1);");
     const directory = temporaryDirectory();

@@ -166,6 +166,9 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return this.emitFunctionValue(symbol);
       }
       if (symbol.kind === SymbolKind.Import) {
+        // The providing module was reported as missing (with a `pass --ext`
+        // hint) while resolving imports; don't pile on a second error.
+        if (this.missingModuleSymbols.has(symbol.id)) return i64(XT_UNDEFINED);
         // Some module bindings are plain values rather than functions
         // (`isMainThread`, `workerData`, ...). They resolve through a nullary
         // runtime getter instead of being called or namespaced.

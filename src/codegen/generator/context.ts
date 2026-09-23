@@ -26,6 +26,14 @@ export class GeneratorContext {
   readonly diagnostics: DiagnosticBag;
   readonly builtins: Readonly<Record<string, BuiltinFunction>>;
   readonly modules: Readonly<Record<string, ExtensionModule>>;
+  /** Module specifier -> extension name for known but unregistered extensions. */
+  readonly moduleHints: Readonly<Record<string, string>>;
+  /**
+   * Imported symbols whose providing module was already reported as missing
+   * (hint emitted). Referencing them is skipped so the actionable hint is the
+   * only diagnostic, instead of a second "cannot be used as a value" error.
+   */
+  readonly missingModuleSymbols = new Set<number>();
   /** Host the emitted IR targets (the process by default; see `CodegenOptions`). */
   readonly target: { readonly platform: string; readonly arch: string };
   /** Imported symbol id -> the module binding it refers to. */
@@ -59,6 +67,7 @@ export class GeneratorContext {
     this.binding = bind(sourceFile);
     this.builtins = options.builtins ?? {};
     this.modules = options.modules ?? {};
+    this.moduleHints = options.moduleHints ?? {};
     this.target = options.target ?? { platform: process.platform, arch: process.arch };
     this.resolveImports();
   }
@@ -69,14 +78,28 @@ export class GeneratorContext {
    * the namespace dispatch tables.
    */
   private resolveImports(): void {
-    if (Object.keys(this.modules).length === 0) return;
+    if (Object.keys(this.modules).length === 0 && Object.keys(this.moduleHints).length === 0) return;
     for (const statement of this.sourceFile.statements) {
       if (statement.kind !== SyntaxKind.ImportDeclaration) continue;
       const declaration = statement as ImportDeclaration;
-      const module = this.modules[declaration.moduleSpecifier.value];
-      if (!module) continue;
       const clause = declaration.importClause;
-      if (!clause) continue;
+      // Type-only imports are erased at runtime, so a missing host module is
+      // not an error for them.
+      if (!clause || clause.isTypeOnly) continue;
+      const module = this.modules[declaration.moduleSpecifier.value];
+      if (!module) {
+        const provider = this.moduleHints[declaration.moduleSpecifier.value];
+        if (provider) {
+          this.diagnostics.error(
+            DiagnosticCode.ModuleNotFound,
+            `module '${declaration.moduleSpecifier.value}' is provided by the '${provider}' extension; pass --ext ${provider}`,
+            declaration.moduleSpecifier,
+            this.sourceFile.fileName,
+          );
+          this.markMissingModuleSymbols(declaration);
+        }
+        continue;
+      }
       if (clause.name) {
         const symbol = this.binding.symbolOfDeclaration.get(clause.name);
         if (symbol) {
@@ -88,6 +111,7 @@ export class GeneratorContext {
       const bindings = clause.namedBindings;
       if (bindings && bindings.kind === SyntaxKind.NamedImports) {
         for (const specifier of bindings.elements) {
+          if (specifier.isTypeOnly) continue;
           const importedName = specifier.propertyName?.text ?? specifier.name.text;
           const exported = module.exports?.[importedName];
           const symbol = this.binding.symbolOfDeclaration.get(specifier.name);
@@ -117,6 +141,24 @@ export class GeneratorContext {
       this.importNamespaces.set(symbol.id, module.namespace);
     } else if (module.exports) {
       this.importModuleExports.set(symbol.id, module.exports);
+    }
+  }
+
+  /** Record every symbol introduced by an import of a missing known module. */
+  private markMissingModuleSymbols(declaration: ImportDeclaration): void {
+    const clause = declaration.importClause;
+    if (!clause) return;
+    const names: Identifier[] = [];
+    if (clause.name) names.push(clause.name);
+    const bindings = clause.namedBindings;
+    if (bindings && bindings.kind === SyntaxKind.NamedImports) {
+      for (const specifier of bindings.elements) names.push(specifier.name);
+    } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport) {
+      names.push(bindings.name);
+    }
+    for (const name of names) {
+      const symbol = this.binding.symbolOfDeclaration.get(name);
+      if (symbol) this.missingModuleSymbols.add(symbol.id);
     }
   }
 

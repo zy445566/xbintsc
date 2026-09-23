@@ -60,6 +60,19 @@ describe("ExtensionRegistry", () => {
     expect(createDefaultRegistry().has("core")).toBe(true);
   });
 
+  it("hints unregistered extensions by their module specifiers", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension);
+    const hints = registry.moduleHints();
+    expect(hints["fs"]).toBe("node");
+    expect(hints["node:http"]).toBe("node");
+  });
+
+  it("drops hints once the extension is registered", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension).register(nodeExtension);
+    expect(registry.moduleHints()["fs"]).toBeUndefined();
+    expect(registry.moduleHints()["node:http"]).toBeUndefined();
+  });
+
   it("node extension points at the ext C sources", () => {
     const sources = nodeExtension.runtimeSources?.() ?? [];
     expect(sources.length).toBeGreaterThanOrEqual(6);

@@ -30,6 +30,7 @@ export {
   booleanLiteral,
 } from "./codegen/values.js";
 export { ExtensionRegistry, createDefaultRegistry, coreExtension, type Extension, type ExtensionModule, type ModuleExport, type ModuleExports } from "./extensions/registry.js";
+export { bundledExtensions } from "./extensions/catalog.js";
 export { nodeExtension } from "./extensions/node/index.js";
 export type { NodeModule } from "./extensions/node/module.js";
 export {

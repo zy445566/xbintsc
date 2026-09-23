@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { build, compileEntry, compileString } from "../../src/driver/compiler.js";
+import { createDefaultRegistry } from "../../src/extensions/registry.js";
+import { nodeExtension } from "../../src/extensions/node/index.js";
+import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
 import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
 
 const directories: string[] = [];
@@ -28,6 +31,31 @@ describe("compileString", () => {
   it("reports parse errors without producing a broken module", () => {
     const { diagnostics } = compileString("const = ;", "bad.ts");
     expect(diagnostics.some((d) => d.category === "error")).toBe(true);
+  });
+
+  it("hints the enabling flag for a known module from an unregistered extension", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension);
+    const { diagnostics } = compileString(
+      'import { createServer } from "node:http";\ncreateServer(() => {});',
+      "server.ts",
+      registry,
+    );
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.code).toBe(DiagnosticCode.ModuleNotFound);
+    expect(errors[0]!.message).toBe(
+      "module 'node:http' is provided by the 'node' extension; pass --ext node",
+    );
+  });
+
+  it("does not hint modules whose extension is registered", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension).register(nodeExtension);
+    const { diagnostics } = compileString(
+      'import { createServer } from "node:http";\ncreateServer(() => {});',
+      "server.ts",
+      registry,
+    );
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
   });
 });
 

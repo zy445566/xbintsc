@@ -72,6 +72,7 @@ export function compileString(source: string, fileName = "input.ts", extensions?
   const { ir } = generate(sourceFile, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
+    moduleHints: registry.moduleHints(),
   });
   return { ir, diagnostics: diagnostics.diagnostics };
 }
@@ -101,6 +102,7 @@ export function compileEntry(entryPath: string, extensions?: ExtensionRegistry):
   const { ir } = generate(sourceFile, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
+    moduleHints: registry.moduleHints(),
   });
   return { ir, diagnostics: diagnostics.diagnostics };
 }
@@ -173,6 +175,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const { ir } = generate(sourceFile, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
+    moduleHints: registry.moduleHints(),
   });
 
   if (options.verbose) {

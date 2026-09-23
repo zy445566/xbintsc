@@ -23,6 +23,7 @@ import { runtimeLibDir } from "../driver/runtime-lib.js";
 import { resolveToolchain } from "../driver/toolchain-provider.js";
 import { realRunner } from "../driver/toolchain.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
+import { bundledExtensions } from "../extensions/catalog.js";
 import { nodeExtension } from "../extensions/node/index.js";
 import { nativeExtensionFromManifest } from "../extensions/native.js";
 
@@ -111,6 +112,12 @@ function buildRegistry(flags: Map<string, string | boolean>): ExtensionRegistry 
     for (const manifest of native.split(",").map((n) => n.trim()).filter(Boolean)) {
       registry.register(nativeExtensionFromManifest(manifest));
     }
+  }
+  // Hint the extensions that ship with xbintsc but were not enabled, so a
+  // missing `import` of a known module points at the flag that enables it
+  // (`pass --ext node`) instead of failing later with a confusing error.
+  for (const extension of bundledExtensions()) {
+    if (!registry.has(extension.name)) registry.hintExtension(extension);
   }
   return registry;
 }

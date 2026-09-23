@@ -63,6 +63,13 @@ export interface CodegenOptions {
   /** Importable modules supplied by registered extensions. */
   readonly modules?: Readonly<Record<string, ExtensionModule>>;
   /**
+   * Module specifier -> extension name for modules that a *known but
+   * unregistered* extension provides. Used to report an actionable
+   * `pass --ext node` diagnostic when such a module is imported without
+   * enabling the extension.
+   */
+  readonly moduleHints?: Readonly<Record<string, string>>;
+  /**
    * Host the IR is generated for. xbintsc builds for its own host, so this
    * defaults to the running process; it is overridable for tests.
    */

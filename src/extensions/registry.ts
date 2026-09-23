@@ -79,6 +79,13 @@ export interface Extension {
 
 export class ExtensionRegistry {
   private readonly extensions = new Map<string, Extension>();
+  /**
+   * Module specifier -> extension name for extensions that are known to the
+   * caller but not registered. Lets the compiler turn a missing `import`
+   * (`import { createServer } from "node:http"`) into an actionable hint
+   * (`pass --ext node`) instead of a confusing downstream error.
+   */
+  private readonly hints = new Map<string, string>();
 
   register(extension: Extension): this {
     if (this.extensions.has(extension.name)) {
@@ -86,6 +93,27 @@ export class ExtensionRegistry {
     }
     this.extensions.set(extension.name, extension);
     return this;
+  }
+
+  /**
+   * Record every module an extension would provide if it were registered. The
+   * extension itself is *not* enabled: this only feeds diagnostics, so a user
+   * who forgot `--ext node` is told which flag to pass.
+   */
+  hintExtension(extension: Extension): this {
+    for (const specifier of Object.keys(extension.modules?.() ?? {})) {
+      this.hints.set(specifier, extension.name);
+    }
+    return this;
+  }
+
+  /** Module specifier -> extension name hints for unregistered extensions. */
+  moduleHints(): Readonly<Record<string, string>> {
+    const hints: Record<string, string> = {};
+    for (const [specifier, name] of this.hints) {
+      if (!this.extensions.has(name)) hints[specifier] = name;
+    }
+    return hints;
   }
 
   unregister(name: string): boolean {

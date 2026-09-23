@@ -164,7 +164,7 @@ npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
 npx tsx src/cli/main.ts emit examples/hello.ts | head
 
 # Use an optional extension (here, Node's fs via import)
-npx tsx src/cli/main.ts run examples/read-file.ts --ext node
+npx tsx src/cli/main.ts run examples/node/read.ts --ext node
 ```
 
 CLI options:

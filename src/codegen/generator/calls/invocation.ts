@@ -96,6 +96,8 @@ export const invocationCallMethods: InvocationCallMethods = {
       if (symbol && symbol.kind === SymbolKind.Import) {
         const exported = this.importExports.get(symbol.id);
         if (exported) return this.emitModuleExport(node, exported);
+        const defaultExport = this.importDefaults.get(symbol.id);
+        if (defaultExport) return this.emitModuleExport(node, defaultExport);
       }
       if (symbol && symbol.kind === SymbolKind.Function) {
         const declaration = symbol.declarations[0];

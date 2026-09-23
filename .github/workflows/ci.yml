@@ -204,7 +204,7 @@ jobs:
         run: npx tsx src/cli/main.ts run examples/hello.ts --out build/examples
 
       - name: Build and run the file-reading example with the node extension
-        run: npx tsx src/cli/main.ts run examples/read-file.ts --ext node --out build/examples
+        run: npx tsx src/cli/main.ts run examples/node/read.ts --ext node --out build/examples
 
       # Native (C++/Rust) extensions are compiled to `extern "C"` objects/static
       # libraries and linked by xbintsc. Windows x64 fetches the bundled

@@ -5,7 +5,8 @@
  * harness, so the suite is skipped when no clang-compatible compiler is found.
  */
 
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { describeE2E } from "./harness.js";
@@ -147,5 +148,77 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     expect(status).toBe(0);
     expect(stdout).toContain("hello-from-child");
     expect(stdout).toContain("status 0");
+  });
+
+  it("hashes with SHA-1 and the streaming crypto API", () => {
+    const source = `
+      import { createHash } from "node:crypto";
+      const hasher = createHash("sha1");
+      hasher.setEncoding("hex");
+      hasher.write("abc");
+      hasher.end();
+      console.log(hasher.read());
+      console.log(createHash("sha256").update("abc").digest("hex"));
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      "a9993e364706816aba3e25717850c26c9cd0d89d\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    );
+  });
+
+  it("runs node:test assertions through node:assert", () => {
+    const source = `
+      import assert from "node:assert";
+      import test from "node:test";
+      test("strict and deep equality", () => {
+        assert.strictEqual(1, 1);
+        assert.deepStrictEqual({ a: [1, 2] }, { a: [1, 2] });
+        assert.throws(() => { throw new Error("boom"); });
+      });
+    `;
+    const result = runProgramFull(source, { extensions: true });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("ok 1 - strict and deep equality");
+  });
+
+  it("exits non-zero when a node:test assertion fails", () => {
+    const source = `
+      import assert from "node:assert";
+      import test from "node:test";
+      test("fails", () => { assert.strictEqual(1, 2); });
+    `;
+    const result = runProgramFull(source, { extensions: true });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("not ok 1 - fails");
+  });
+
+  it("pipes a file through gzip with stream/promises", () => {
+    const sourcePath = join(harness.workdir, `pipe-src-${Math.random().toString(36).slice(2)}.txt`);
+    const destPath = join(harness.workdir, `pipe-dest-${Math.random().toString(36).slice(2)}.gz`);
+    writeFileSync(sourcePath, "hello gzip");
+    const source = `
+      import { createReadStream, createWriteStream } from "node:fs";
+      import { pipeline } from "node:stream/promises";
+      import { createGzip } from "node:zlib";
+      await pipeline(
+        createReadStream(${JSON.stringify(sourcePath)}),
+        createGzip(),
+        createWriteStream(${JSON.stringify(destPath)}),
+      );
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("");
+    expect(gunzipSync(readFileSync(destPath)).toString("utf8")).toBe("hello gzip");
+  });
+
+  it("runs a worker_threads worker and relays its message", () => {
+    const source = `
+      import { Worker, isMainThread, workerData, parentPort } from "node:worker_threads";
+      if (isMainThread) {
+        const worker = new Worker(import.meta.filename, { workerData: "some data" });
+        worker.on("message", (msg) => console.log("Reply from Thread:", msg));
+      } else {
+        parentPort.postMessage(btoa(workerData.toUpperCase()));
+      }
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("Reply from Thread: U09NRSBEQVRB");
   });
 });

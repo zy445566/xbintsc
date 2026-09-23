@@ -34,18 +34,17 @@
 
 ## 2. 其它 Node 模块完全未实现
 
-以下 Node 内置模块没有任何对应扩展 / 内置函数（`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` / `net` / `dgram` / `http` / `events` / `util` / `querystring` 已实现，`crypto` / `url` / `child_process` 部分实现，见 [node-implemented.md](node-implemented.md)）：
+以下 Node 内置模块没有任何对应扩展 / 内置函数（`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` / `dgram` / `http` / `events` / `util` / `querystring` / `assert` / `test` 已实现，`crypto` / `url` / `child_process` / `zlib` / `stream/promises` / `worker_threads` 部分实现，见 [node-implemented.md](node-implemented.md)）：
 
 | 模块 | 说明 |
 | --- | --- |
 | `https` | TLS 版 HTTP |
-| `zlib` | 压缩 / 解压 |
 | `readline` | 命令行读取 |
-| `worker_threads` | 工作线程 |
 | `tls` / `cluster` / `vm` / `os`（部分）等 | 其余未列出的模块 |
 
-> `crypto`（仅 `createHash`）、`url`（仅 `pathToFileURL` / `fileURLToPath`）与
-> `child_process`（仅 `spawnSync`）目前为部分实现。
+> `crypto`（仅 `createHash`，现支持流式 API）、`url`（仅 `pathToFileURL` / `fileURLToPath`）、
+> `child_process`（仅 `spawnSync`）、`zlib`（仅 `createGzip`）与
+> `worker_threads`（仅 `Worker` / `isMainThread` / `workerData` / `parentPort`）目前为部分实现。
 
 ---
 
@@ -110,14 +109,17 @@ Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { read
                     events（EventEmitter：on/once/off/emit/listeners/listenerCount/eventNames）、
                     util（format/inspect/isDeepStrictEqual/inherits/promisify + isX）、
                     querystring（parse/stringify/escape/unescape）、
-                    crypto（仅 createHash）、url（仅 pathToFileURL/fileURLToPath）、
-                    child_process（仅 spawnSync）
+                    crypto（createHash + 流式 API，SHA-1/SHA-256）、
+                    url（仅 pathToFileURL/fileURLToPath）、
+                    child_process（仅 spawnSync）、
+                    zlib（仅 createGzip）、stream/promises（仅 pipeline）、
+                    worker_threads（仅 Worker/isMainThread/workerData/parentPort）
 
 未实现（fs）：readFile、writeFile、appendFile（异步回调式）、watch/watchFile、
               open/read/write/close、mkdtempSync、link/symlink/readlink、
-              chmod/chown/utimes/truncate、createReadStream/createWriteStream、Buffer 返回
+              chmod/chown/utimes/truncate、Buffer 返回
 
-未实现（其它模块）：https、zlib、readline、worker_threads、tls、cluster、vm
+未实现（其它模块）：https、readline、tls、cluster、vm
 
 未实现（全局/命名空间）：global/globalThis、__dirname、__filename、
                         require/module/exports、fs.readFileSync(...) 命名空间调用

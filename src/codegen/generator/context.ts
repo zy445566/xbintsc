@@ -39,6 +39,11 @@ export class GeneratorContext {
    * `fs.readFileSync(...)` straight to the module's runtime symbol.
    */
   readonly importModuleExports = new Map<number, ModuleExports>();
+  /**
+   * Imported symbol id -> the module's `default` export, for callable default
+   * imports such as `import test from "node:test"`.
+   */
+  readonly importDefaults = new Map<number, ModuleExport>();
   readonly globals: string[] = [];
   readonly functions: string[] = [];
   readonly strings = new Map<string, { label: string; length: number }>();
@@ -74,7 +79,11 @@ export class GeneratorContext {
       if (!clause) continue;
       if (clause.name) {
         const symbol = this.binding.symbolOfDeclaration.get(clause.name);
-        if (symbol) this.bindModuleAlias(symbol, module);
+        if (symbol) {
+          this.bindModuleAlias(symbol, module);
+          const defaultExport = module.exports?.["default"];
+          if (defaultExport) this.importDefaults.set(symbol.id, defaultExport);
+        }
       }
       const bindings = clause.namedBindings;
       if (bindings && bindings.kind === SyntaxKind.NamedImports) {

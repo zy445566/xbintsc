@@ -29,6 +29,12 @@ export interface ModuleExport {
   readonly namespace?: string;
   readonly method?: string;
   /**
+   * Runtime getter used when the binding is read as a *value* rather than
+   * called (e.g. `import { isMainThread } from "worker_threads"`). The symbol
+   * has the uniform `(i32, i64*)` ABI and is invoked with no arguments.
+   */
+  readonly valueSymbol?: string;
+  /**
    * Marks a runtime symbol as a constructor callable with `new` (it has the
    * `(i32, i64*)` signature). Lets `import { EventEmitter } from "events"` be
    * used as `new EventEmitter()`.

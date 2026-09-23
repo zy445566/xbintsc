@@ -19,6 +19,9 @@ import { osModule } from "./os/index.js";
 import { processModule } from "./process/index.js";
 import { bufferModule } from "./buffer/index.js";
 import { streamModule } from "./stream/index.js";
+import { streamPromisesModule } from "./stream-promises/index.js";
+import { zlibModule } from "./zlib/index.js";
+import { workerThreadsModule } from "./worker_threads/index.js";
 import { netModule } from "./net/index.js";
 import { dgramModule } from "./dgram/index.js";
 import { httpModule } from "./http/index.js";
@@ -28,6 +31,8 @@ import { childProcessModule } from "./child_process/index.js";
 import { eventsModule } from "./events/index.js";
 import { utilModule } from "./util/index.js";
 import { querystringModule } from "./querystring/index.js";
+import { assertModule } from "./assert/index.js";
+import { testModule } from "./test/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -38,6 +43,9 @@ const modules: readonly NodeModule[] = [
   processModule,
   bufferModule,
   streamModule,
+  streamPromisesModule,
+  zlibModule,
+  workerThreadsModule,
   netModule,
   dgramModule,
   httpModule,
@@ -47,6 +55,8 @@ const modules: readonly NodeModule[] = [
   eventsModule,
   utilModule,
   querystringModule,
+  assertModule,
+  testModule,
 ];
 
 export const nodeExtension: Extension = {

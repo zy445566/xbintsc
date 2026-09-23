@@ -41,21 +41,22 @@ still unimplemented:
 ## 2. Other Node modules fully unimplemented
 
 The following Node built-in modules have no corresponding extension / builtin
-(`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` / `net` /
-`dgram` / `http` / `events` / `util` / `querystring` are implemented, and `crypto` /
-`url` / `child_process` are partially implemented; see
+(`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` /
+`dgram` / `http` / `events` / `util` / `querystring` / `assert` / `test` are
+implemented, and `crypto` / `url` / `child_process` / `zlib` /
+`stream/promises` / `worker_threads` are partially implemented; see
 [node-implemented.md](./node-implemented.md)):
 
 | Module | Notes |
 | --- | --- |
 | `https` | TLS version of HTTP |
-| `zlib` | compression / decompression |
 | `readline` | command-line reading |
-| `worker_threads` | worker threads |
 | `tls` / `cluster` / `vm` / `os` (partially) etc. | other modules not listed |
 
-> `crypto` (only `createHash`), `url` (only `pathToFileURL` / `fileURLToPath`) and
-> `child_process` (only `spawnSync`) are partially implemented.
+> `crypto` (only `createHash`, now with the streaming API), `url` (only
+> `pathToFileURL` / `fileURLToPath`), `child_process` (only `spawnSync`),
+> `zlib` (only `createGzip`) and `worker_threads` (only `Worker` /
+> `isMainThread` / `workerData` / `parentPort`) are partially implemented.
 
 ---
 
@@ -130,14 +131,17 @@ Implemented (other modules): path (join/resolve/normalize/dirname/basename/extna
                              events (EventEmitter: on/once/off/emit/listeners/listenerCount/eventNames),
                              util (format/inspect/isDeepStrictEqual/inherits/promisify + isX),
                              querystring (parse/stringify/escape/unescape),
-                             crypto (createHash only), url (pathToFileURL/fileURLToPath only),
-                             child_process (spawnSync only)
+                             crypto (createHash + streaming, SHA-1/SHA-256),
+                             url (pathToFileURL/fileURLToPath only),
+                             child_process (spawnSync only),
+                             zlib (createGzip only), stream/promises (pipeline only),
+                             worker_threads (Worker/isMainThread/workerData/parentPort only)
 
 Unimplemented (fs): readFile, writeFile, appendFile (async callback-style), watch/watchFile,
                     open/read/write/close, mkdtempSync, link/symlink/readlink,
-                    chmod/chown/utimes/truncate, createReadStream/createWriteStream, Buffer return
+                    chmod/chown/utimes/truncate, Buffer return
 
-Unimplemented (other modules): https, zlib, readline, worker_threads, tls, cluster, vm
+Unimplemented (other modules): https, readline, tls, cluster, vm
 
 Unimplemented (global/namespace): global/globalThis, __dirname, __filename,
                                   require/module/exports, fs.readFileSync(...) namespace calls

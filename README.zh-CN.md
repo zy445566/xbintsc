@@ -156,7 +156,7 @@ npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
 npx tsx src/cli/main.ts emit examples/hello.ts | head
 
 # 使用可选扩展（这里为 Node 的 fs，通过 import 引入）
-npx tsx src/cli/main.ts run examples/read-file.ts --ext node
+npx tsx src/cli/main.ts run examples/node/read.ts --ext node
 ```
 
 CLI 选项：

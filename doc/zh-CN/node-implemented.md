@@ -18,7 +18,7 @@
 - 通过 CLI 开启：
 
 ```bash
-xbintsc run examples/read-file.ts --ext node
+xbintsc run examples/node/read.ts --ext node
 ```
 
 - 模块化组织：每个 Node 模块一个子目录，与 C 实现一一对应：
@@ -30,7 +30,8 @@ src/extensions/node/           runtime/ext_node/
   fs/index.ts                      fs/fs_ops.c
   fs/read-file.ts                  fs/fs_common.h
   fs/write-file.ts                 fs/promises.c
-  fs/fs-ops.ts                     path/path.c
+  fs/fs-ops.ts                     fs/streams.c
+  fs/streams.ts                     path/path.c
   path/index.ts                    os/os.c
   os/index.ts                      process/process.c
   process/index.ts                 buffer/buffer.c
@@ -45,7 +46,12 @@ src/extensions/node/           runtime/ext_node/
   child_process/index.ts           events/events.c
   events/index.ts                  util/util.c
   util/index.ts                    querystring/querystring.c
-  querystring/index.ts
+  querystring/index.ts             assert/assert.c
+  assert/index.ts                  test/test.c
+  test/index.ts                    zlib/zlib.c
+  zlib/index.ts                    stream/pipeline.c
+  stream-promises/index.ts         worker_threads/worker_threads.c
+  worker_threads/index.ts
 ```
 
 - 核心事件循环：`runtime/xt_loop.c`（`select(2)` 反应堆），生成模块的 `main` 在微任务清空后调用 `xt_run_event_loop()`；无可注册 fd 时立即返回，因此纯计算程序不受影响。
@@ -429,10 +435,16 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | dgram | `createSocket`；`bind/send/close/address/setBroadcast/setTTL` |
 | http | `createServer` `request` `get`；`ClientRequest`、`IncomingMessage`、`ServerResponse` |
 | child_process | `spawnSync(command, args[, {cwd, stdio}])`，返回 `status` / `stdout` / `stderr` |
+| assert | `ok/equal/notEqual/strictEqual/notStrictEqual/deepStrictEqual/notDeepStrictEqual/throws/doesNotThrow/ifError/match/doesNotMatch/fail`（`import assert from "node:assert"`） |
+| test | `test(name, fn)` / `it` / `describe` / `skip` / `todo`（`import test from "node:test"`），输出 TAP，失败时以非零码退出 |
+| zlib | `createGzip()`（由 `stream/promises` 的 pipeline 消费） |
+| stream/promises | `pipeline(...)`（同步执行，返回已决议的 Promise） |
+| worker_threads | `Worker`、`isMainThread`、`workerData`、`parentPort`（把当前可执行文件作为子进程重跑） |
 | events | `EventEmitter`（全局 + 命名）；`on/once/off/emit/listeners/listenerCount/eventNames`；静态 `listenerCount/getEventListeners/getMaxListeners/setMaxListeners/once/addAbortListener` |
 | util | `format` `formatWithOptions` `inspect` `isDeepStrictEqual` `inherits` `deprecate` `promisify`；`isString/isNumber/isBoolean/isUndefined/isNull/isFunction/isArray/isObject/isBuffer/isDate/isRegExp/isPromise/isError` |
 | querystring | `parse`/`decode` `stringify`/`encode` `escape` `unescape` |
-| crypto | `createHash(algorithm)` |
+| crypto | `createHash(algorithm)`，含 `update`/`digest` 与流式 API（`setEncoding`/`write`/`end`/`read`）；支持 SHA-1 与 SHA-256 |
+| 全局函数 | `btoa` / `atob` base64 辅助函数 |
 | url | `pathToFileURL` `fileURLToPath` |
 | fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `realpath` `stat` `lstat` `access` |
 | 事件循环 | `xt_loop`（`select` 反应堆）、`xt_run_event_loop()`、`xt_loop_add/update/remove` |

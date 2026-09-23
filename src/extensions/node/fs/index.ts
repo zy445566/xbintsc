@@ -10,6 +10,7 @@ import { resolveFrom } from "../module.js";
 import { readFileBuiltins } from "./read-file.js";
 import { writeFileBuiltins } from "./write-file.js";
 import { fsOpsBuiltins } from "./fs-ops.js";
+import { fsStreamBuiltins } from "./streams.js";
 
 export const fsModule: NodeModule = {
   name: "fs",
@@ -17,6 +18,7 @@ export const fsModule: NodeModule = {
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/read_file.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/write_file.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/fs_ops.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/streams.c"),
   ],
-  builtins: () => ({ ...readFileBuiltins, ...writeFileBuiltins, ...fsOpsBuiltins }),
+  builtins: () => ({ ...readFileBuiltins, ...writeFileBuiltins, ...fsOpsBuiltins, ...fsStreamBuiltins }),
 };

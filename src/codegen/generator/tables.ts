@@ -122,6 +122,8 @@ export const GLOBAL_FUNCTIONS: Record<string, string> = {
   encodeURI: "xt_encode_uri",
   decodeURIComponent: "xt_decode_uri_component",
   decodeURI: "xt_decode_uri",
+  btoa: "xt_btoa",
+  atob: "xt_atob",
   Number: "xt_number_ctor",
   String: "xt_string_ctor",
   Boolean: "xt_boolean_ctor",
@@ -176,6 +178,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   events: "xt_events_static",
   util: "xt_util_static",
   querystring: "xt_querystring_static",
+  assert: "xt_assert_static",
 };
 
 /** Namespace identifiers whose property access maps to a runtime getter. */

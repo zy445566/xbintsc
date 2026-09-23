@@ -21,7 +21,7 @@ Location: `src/extensions/node/index.ts`, `src/extensions/node/module.ts`, `src/
 - Enable it via the CLI:
 
 ```bash
-xbintsc run examples/read-file.ts --ext node
+xbintsc run examples/node/read.ts --ext node
 ```
 
 - Modular organisation: one subdirectory per Node module, in one-to-one correspondence with its C implementation:
@@ -33,7 +33,8 @@ src/extensions/node/           runtime/ext_node/
   fs/index.ts                      fs/fs_ops.c
   fs/read-file.ts                  fs/fs_common.h
   fs/write-file.ts                 fs/promises.c
-  fs/fs-ops.ts                     path/path.c
+  fs/fs-ops.ts                     fs/streams.c
+  fs/streams.ts                     path/path.c
   path/index.ts                    os/os.c
   os/index.ts                      process/process.c
   process/index.ts                 buffer/buffer.c
@@ -48,7 +49,12 @@ src/extensions/node/           runtime/ext_node/
   child_process/index.ts           events/events.c
   events/index.ts                  util/util.c
   util/index.ts                    querystring/querystring.c
-  querystring/index.ts
+  querystring/index.ts             assert/assert.c
+  assert/index.ts                  test/test.c
+  test/index.ts                    zlib/zlib.c
+  zlib/index.ts                    stream/pipeline.c
+  stream-promises/index.ts         worker_threads/worker_threads.c
+  worker_threads/index.ts
 ```
 
 - Core event loop: `runtime/xt_loop.c` (a `select(2)` reactor). The generated module's `main` calls `xt_run_event_loop()` after draining microtasks; it returns immediately when no fds are registered, so pure-computation programs are unaffected.
@@ -462,10 +468,16 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | dgram | `createSocket`; `bind/send/close/address/setBroadcast/setTTL` |
 | http | `createServer` `request` `get`; `ClientRequest`, `IncomingMessage`, `ServerResponse` |
 | child_process | `spawnSync(command, args[, {cwd, stdio}])` returning `status` / `stdout` / `stderr` |
+| assert | `ok/equal/notEqual/strictEqual/notStrictEqual/deepStrictEqual/notDeepStrictEqual/throws/doesNotThrow/ifError/match/doesNotMatch/fail` (`import assert from "node:assert"`) |
+| test | `test(name, fn)` / `it` / `describe` / `skip` / `todo` (`import test from "node:test"`), TAP output, non-zero exit on failure |
+| zlib | `createGzip()` (consumed by `stream/promises` pipeline) |
+| stream/promises | `pipeline(...)` (synchronous drain, returns a resolved Promise) |
+| worker_threads | `Worker`, `isMainThread`, `workerData`, `parentPort` (re-executes the binary as a child process) |
 | events | `EventEmitter` (global + named); `on/once/off/emit/listeners/listenerCount/eventNames`; statics `listenerCount/getEventListeners/getMaxListeners/setMaxListeners/once/addAbortListener` |
 | util | `format` `formatWithOptions` `inspect` `isDeepStrictEqual` `inherits` `deprecate` `promisify`; `isString/isNumber/isBoolean/isUndefined/isNull/isFunction/isArray/isObject/isBuffer/isDate/isRegExp/isPromise/isError` |
 | querystring | `parse`/`decode` `stringify`/`encode` `escape` `unescape` |
-| crypto | `createHash(algorithm)` |
+| crypto | `createHash(algorithm)` with `update`/`digest` and the streaming API (`setEncoding`/`write`/`end`/`read`); SHA-1 and SHA-256 |
+| globals | `btoa` / `atob` base64 helpers |
 | url | `pathToFileURL` `fileURLToPath` |
 | fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `realpath` `stat` `lstat` `access` |
 | Event loop | `xt_loop` (`select` reactor), `xt_run_event_loop()`, `xt_loop_add/update/remove` |

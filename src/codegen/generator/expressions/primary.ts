@@ -166,6 +166,23 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return this.emitFunctionValue(symbol);
       }
       if (symbol.kind === SymbolKind.Import) {
+        // Some module bindings are plain values rather than functions
+        // (`isMainThread`, `workerData`, ...). They resolve through a nullary
+        // runtime getter instead of being called or namespaced.
+        const exported = this.importExports.get(symbol.id);
+        if (exported?.valueSymbol) {
+          this.extraDeclarations.add(`declare i64 @${exported.valueSymbol}(i32, i64*)`);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @${exported.valueSymbol}(i32 0, i64* null)`);
+          return result;
+        }
+        const defaultExport = this.importDefaults.get(symbol.id);
+        if (defaultExport?.valueSymbol) {
+          this.extraDeclarations.add(`declare i64 @${defaultExport.valueSymbol}(i32, i64*)`);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @${defaultExport.valueSymbol}(i32 0, i64* null)`);
+          return result;
+        }
         // Imported runtime bindings have no first-class value: they are meant
         // to be called (`readFileSync(...)`) or used as a namespace
         // (`path.join(...)`), both handled before identifier lowering.

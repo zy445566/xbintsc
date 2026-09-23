@@ -1,20 +1,16 @@
 name: Release
 
-# Manually triggered release. Bumps the package version, pushes the commit and
-# the matching git tag, publishes to npm, and creates the GitHub Release with
-# the self-hosted binaries built by CI for that commit.
+# Manually triggered release for a version that has already been committed.
+#
+# The version bump is NOT done here: update package.json and package-lock.json,
+# commit that change and push it, then let CI build that commit before
+# dispatching this workflow. It releases the version found in package.json at
+# the dispatched ref - so a CI run id for that same commit can be supplied
+# as-is - tags that exact commit, publishes to npm, and creates the GitHub
+# Release with the self-hosted binaries CI built for it.
 on:
   workflow_dispatch:
     inputs:
-      bump:
-        description: "Semver bump to apply before releasing"
-        required: true
-        default: patch
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
       ci_run_id:
         description: "CI run id holding the self-hosted binaries (default: the successful CI run for the released commit)"
         required: false
@@ -26,13 +22,13 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # push the version commit + tag, create the GitHub release
+  contents: write # push the release tag, create the GitHub release
   actions: write # dispatch the CI workflow and download its artifacts
   id-token: write # required by npm OIDC publishing / provenance
 
 jobs:
   release:
-    name: Bump, publish and release
+    name: Tag, publish and release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -40,34 +36,36 @@ jobs:
           fetch-depth: 0 # fetch tags so the version/tag checks are accurate
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # `npm version` creates a commit, which needs an author identity on the
-      # runner (otherwise git fails with "Author identity unknown").
-      - name: Configure git identity
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      # The local git hook was removed, so the version bump happens here: commit
-      # the new package.json/package-lock.json, tag it, and push both. This runs
-      # first so every later step operates on the bumped version.
-      - name: Bump version and push the tag
+      # The version comes from the committed package.json. This step only reads
+      # it and makes sure the matching tag sits on this exact commit: the version
+      # commit is authored and pushed by hand, never here.
+      - name: Resolve the version and ensure the release tag
         id: version
         shell: bash
         run: |
           set -euo pipefail
 
-          npm version "${{ inputs.bump }}" -m "chore(release): v%s"
-
           current="$(node -p "require('./package.json').version")"
           tag="v${current}"
           sha="$(git rev-parse HEAD)"
 
+          # A tag that already exists must point at the commit being released;
+          # reusing an older tag would attach the wrong binaries to the release.
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            tagged="$(git rev-list -n 1 "${tag}")"
+            if [ "${tagged}" != "${sha}" ]; then
+              echo "::error::Tag ${tag} already exists on ${tagged}, not on the release commit ${sha}." >&2
+              exit 1
+            fi
+            echo "Tag ${tag} already points at ${sha}."
+          else
+            git tag "${tag}" "${sha}"
+            git push origin "refs/tags/${tag}"
+          fi
+
           echo "release version : ${current}"
           echo "release tag     : ${tag}"
           echo "release commit  : ${sha}"
-
-          git push origin "HEAD:${{ github.ref_name }}"
-          git push origin "${tag}"
 
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "version=${current}" >> "$GITHUB_OUTPUT"
@@ -82,10 +80,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # The version commit is pushed with GITHUB_TOKEN, and GitHub deliberately
-      # does NOT create a workflow run for push events triggered by that token.
-      # workflow_dispatch is exempt from that rule, so trigger CI for the release
-      # commit explicitly; the download step below waits for this run.
+      # A human-pushed version commit already triggers CI, but this fallback keeps
+      # the release self-sufficient when no run id is supplied: ci.yml does not
+      # run on tags, so dispatch it on the release tag and pin it to exactly this
+      # commit. The download step below waits for that run.
       - name: Dispatch CI for the release commit
         if: ${{ inputs.ci_run_id == '' }}
         shell: bash

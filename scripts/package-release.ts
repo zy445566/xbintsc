@@ -2,8 +2,11 @@
 /**
  * Assemble a self-contained release archive for the current platform:
  *
- *   dist/release/xbintsc-<os>-<arch>.tar.gz        (or .tar.zst)
- *   dist/release/xbintsc-<os>-<arch>.tar.gz.sha256
+ *   dist/release/xbintsc-<version>-<os>-<arch>.tar.gz        (or .tar.zst)
+ *   dist/release/xbintsc-<version>-<os>-<arch>.tar.gz.sha256
+ *
+ * The version comes from package.json, so release assets from different
+ * versions do not collide in a download folder.
  *
  * The unpacked staging tree is built under `build/release-stage/`, never under
  * `dist/release/`, so an upload glob over `dist/release/*` cannot accidentally
@@ -49,11 +52,16 @@ import {
   platformSlug,
   releaseArchiveBase,
   releaseArchiveExtension,
+  releaseArchiveFileName,
 } from "../src/driver/paths.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const slug = platformSlug();
 const base = releaseArchiveBase();
+const version = (
+  JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }
+).version;
+const archiveBase = releaseArchiveFileName(version);
 const exeSuffix = process.platform === "win32" ? ".exe" : "";
 
 function fail(message: string): never {
@@ -177,7 +185,7 @@ for (const name of ["README.md", "LICENSE"]) {
 // 5. Archive it. Prefer zstd when available, otherwise gzip.
 const hasZstd = !spawnSync("zstd", ["--version"], { stdio: "ignore" }).error;
 const extension = releaseArchiveExtension(hasZstd);
-const archive = join(releaseRoot, `${base}${extension}`);
+const archive = join(releaseRoot, `${archiveBase}${extension}`);
 rmSync(archive, { force: true });
 const tarArgs = ["-c", hasZstd ? "--zstd" : "-z", "-f", archive, "-C", stageRoot, base];
 const tar = spawnSync("tar", tarArgs, { stdio: "inherit" });

@@ -76,25 +76,27 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 
 | 平台 | 归档 |
 | --- | --- |
-| Windows x64 / arm64 | `xbintsc-win32-x64.tar.zst` / `xbintsc-win32-arm64.tar.zst` |
-| Linux x64 / arm64 | `xbintsc-linux-x64.tar.zst` / `xbintsc-linux-arm64.tar.zst` |
-| macOS x64 / arm64（Apple Silicon） | `xbintsc-darwin-x64.tar.zst` / `xbintsc-darwin-arm64.tar.zst` |
+| Windows x64 / arm64 | `xbintsc-<version>-win32-x64.tar.zst` / `xbintsc-<version>-win32-arm64.tar.zst` |
+| Linux x64 / arm64 | `xbintsc-<version>-linux-x64.tar.zst` / `xbintsc-<version>-linux-arm64.tar.zst` |
+| macOS x64 / arm64（Apple Silicon） | `xbintsc-<version>-darwin-x64.tar.zst` / `xbintsc-<version>-darwin-arm64.tar.zst` |
 
 （仅当构建机没有 `zstd` 时才会回退为 `.tar.gz`。）
+
+`<version>` 是发布版本号（例如 `0.3.8`），会写入归档文件名，避免不同版本的下载文件相互覆盖。
 
 每个归档解压后都是一个 `xbintsc-<os>-<arch>/` 目录，其中已包含编译器
 （`bin/xbintsc[.exe]`）、C 运行时与自带工具链，因此**无需 Node.js，也无需系统编译器**。
 解压后把 `bin/` 加入 `PATH`（或直接调用 `bin/xbintsc`）即可，无需任何安装步骤。
 
-**macOS / Linux 示例** —— 此处以 `xbintsc-darwin-arm64.tar.zst` 为例（请按你的平台
+**macOS / Linux 示例** —— 此处以 `xbintsc-<version>-darwin-arm64.tar.zst` 为例（请按你的平台
 换成 `-linux-x64` 等）：
 
 ```bash
 # 1. 校验哈希（可选，但推荐）
-shasum -a 256 -c xbintsc-darwin-arm64.tar.zst.sha256   # Linux：sha256sum -c
+shasum -a 256 -c xbintsc-<version>-darwin-arm64.tar.zst.sha256   # Linux：sha256sum -c
 
 # 2. 解压
-tar -xf xbintsc-darwin-arm64.tar.zst
+tar -xf xbintsc-<version>-darwin-arm64.tar.zst
 
 # 3. 编译并运行 hello.ts（见下）
 ./xbintsc-darwin-arm64/bin/xbintsc run ./hello.ts
@@ -106,16 +108,16 @@ tar -xf xbintsc-darwin-arm64.tar.zst
 
 **Windows 示例** —— 从
 [Releases 页面](https://github.com/zy445566/xbintsc/releases/latest) 下载对应归档
-（此处为 `xbintsc-win32-x64.tar.zst`；Windows on ARM 请用 `-arm64`），
+（此处为 `xbintsc-<version>-win32-x64.tar.zst`；Windows on ARM 请用 `-arm64`），
 然后在 PowerShell 中执行（Windows 10+ 自带 `tar`）：
 
 ```powershell
 # 1. 校验哈希（可选，但推荐）
-(Get-FileHash .\xbintsc-win32-x64.tar.zst -Algorithm SHA256).Hash
-Get-Content .\xbintsc-win32-x64.tar.zst.sha256
+(Get-FileHash .\xbintsc-<version>-win32-x64.tar.zst -Algorithm SHA256).Hash
+Get-Content .\xbintsc-<version>-win32-x64.tar.zst.sha256
 
 # 2. 解压
-tar -xf .\xbintsc-win32-x64.tar.zst
+tar -xf .\xbintsc-<version>-win32-x64.tar.zst
 
 # 3. 编译并运行 hello.ts（见下）
 .\xbintsc-win32-x64\bin\xbintsc.exe run .\hello.ts

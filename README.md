@@ -81,26 +81,29 @@ self-contained archive per platform, plus a `.sha256` checksum next to it:
 
 | Platform | Archive |
 | --- | --- |
-| Windows x64 / arm64 | `xbintsc-win32-x64.tar.zst` / `xbintsc-win32-arm64.tar.zst` |
-| Linux x64 / arm64 | `xbintsc-linux-x64.tar.zst` / `xbintsc-linux-arm64.tar.zst` |
-| macOS x64 / arm64 (Apple Silicon) | `xbintsc-darwin-x64.tar.zst` / `xbintsc-darwin-arm64.tar.zst` |
+| Windows x64 / arm64 | `xbintsc-<version>-win32-x64.tar.zst` / `xbintsc-<version>-win32-arm64.tar.zst` |
+| Linux x64 / arm64 | `xbintsc-<version>-linux-x64.tar.zst` / `xbintsc-<version>-linux-arm64.tar.zst` |
+| macOS x64 / arm64 (Apple Silicon) | `xbintsc-<version>-darwin-x64.tar.zst` / `xbintsc-<version>-darwin-arm64.tar.zst` |
 
 (`.tar.gz` is used only when `zstd` is unavailable on the build machine.)
+
+`<version>` is the release version (for example `0.3.8`), embedded in the asset
+name so downloads from different releases do not collide.
 
 Each archive unpacks to a `xbintsc-<os>-<arch>/` folder that already contains the
 compiler (`bin/xbintsc[.exe]`), the C runtime and the bundled toolchain, so it needs
 **no Node.js and no system compiler**. Unpack it and put `bin/` on `PATH` (or call
 `bin/xbintsc` directly) — there is no install step.
 
-**macOS / Linux example** — here using `xbintsc-darwin-arm64.tar.zst` (swap in
+**macOS / Linux example** — here using `xbintsc-<version>-darwin-arm64.tar.zst` (swap in
 `-linux-x64`, etc. for your platform):
 
 ```bash
 # 1. Verify the checksum (optional but recommended)
-shasum -a 256 -c xbintsc-darwin-arm64.tar.zst.sha256   # Linux: sha256sum -c
+shasum -a 256 -c xbintsc-<version>-darwin-arm64.tar.zst.sha256   # Linux: sha256sum -c
 
 # 2. Unpack
-tar -xf xbintsc-darwin-arm64.tar.zst
+tar -xf xbintsc-<version>-darwin-arm64.tar.zst
 
 # 3. Compile and run hello.ts (below)
 ./xbintsc-darwin-arm64/bin/xbintsc run ./hello.ts
@@ -112,16 +115,16 @@ tar -xf xbintsc-darwin-arm64.tar.zst
 
 **Windows example** — download an archive from the
 [Releases page](https://github.com/zy445566/xbintsc/releases/latest) (here
-`xbintsc-win32-x64.tar.zst`; use `-arm64` on Windows on ARM), then in PowerShell
+`xbintsc-<version>-win32-x64.tar.zst`; use `-arm64` on Windows on ARM), then in PowerShell
 (Windows 10+ ships `tar`):
 
 ```powershell
 # 1. Verify the checksum (optional but recommended)
-(Get-FileHash .\xbintsc-win32-x64.tar.zst -Algorithm SHA256).Hash
-Get-Content .\xbintsc-win32-x64.tar.zst.sha256
+(Get-FileHash .\xbintsc-<version>-win32-x64.tar.zst -Algorithm SHA256).Hash
+Get-Content .\xbintsc-<version>-win32-x64.tar.zst.sha256
 
 # 2. Unpack
-tar -xf .\xbintsc-win32-x64.tar.zst
+tar -xf .\xbintsc-<version>-win32-x64.tar.zst
 
 # 3. Compile and run hello.ts (below)
 .\xbintsc-win32-x64\bin\xbintsc.exe run .\hello.ts

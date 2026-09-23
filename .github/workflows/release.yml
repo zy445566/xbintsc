@@ -157,7 +157,7 @@ jobs:
 
           mkdir -p release-assets
           shopt -s nullglob
-          # Archives are already named xbintsc-<os>-<arch>.tar.{gz,zst}
+          # Archives are already named xbintsc-<version>-<os>-<arch>.tar.{gz,zst}
           # (+ .sha256), so copy them through verbatim.
           for dir in .ci-artifacts/release-*; do
             [ -d "${dir}" ] || continue

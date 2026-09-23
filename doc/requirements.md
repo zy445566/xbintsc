@@ -21,11 +21,14 @@ has a `.sha256` beside it):
 
 | Platform | Archive |
 | --- | --- |
-| Windows x64 / arm64 | `xbintsc-win32-x64.tar.zst` / `xbintsc-win32-arm64.tar.zst` |
-| Linux x64 / arm64 | `xbintsc-linux-x64.tar.zst` / `xbintsc-linux-arm64.tar.zst` |
-| macOS x64 / arm64 (Apple Silicon) | `xbintsc-darwin-x64.tar.zst` / `xbintsc-darwin-arm64.tar.zst` |
+| Windows x64 / arm64 | `xbintsc-<version>-win32-x64.tar.zst` / `xbintsc-<version>-win32-arm64.tar.zst` |
+| Linux x64 / arm64 | `xbintsc-<version>-linux-x64.tar.zst` / `xbintsc-<version>-linux-arm64.tar.zst` |
+| macOS x64 / arm64 (Apple Silicon) | `xbintsc-<version>-darwin-x64.tar.zst` / `xbintsc-<version>-darwin-arm64.tar.zst` |
 
 (`.tar.gz` is used only when `zstd` is unavailable on the build machine.)
+
+`<version>` is the release version (for example `0.3.8`), embedded in the asset
+name so downloads from different releases do not collide.
 
 Every archive unpacks to the same layout:
 
@@ -40,7 +43,7 @@ Unpack it and put `bin/` on `PATH` (or call `bin/xbintsc` directly) — there is
 install step. Verify the download against the checksum first:
 
 ```sh
-sha256sum -c xbintsc-linux-x64.tar.zst.sha256   # macOS: shasum -a 256 -c
+sha256sum -c xbintsc-<version>-linux-x64.tar.zst.sha256   # macOS: shasum -a 256 -c
 ```
 
 ## macOS — install Xcode Command Line Tools

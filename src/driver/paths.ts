@@ -48,6 +48,20 @@ export function releaseArchiveBase(
 }
 
 /**
+ * Base name (no extension) of the published release archive, e.g.
+ * `xbintsc-0.3.8-linux-x64`. The version is embedded so downloads from
+ * different releases can coexist and users can tell them apart. The top-level
+ * directory inside the archive still uses {@link releaseArchiveBase}.
+ */
+export function releaseArchiveFileName(
+  version: string,
+  platform: string = process.platform,
+  arch: string = process.arch,
+): string {
+  return `xbintsc-${version}-${platform}-${arch}`;
+}
+
+/**
  * Extension for a release archive. `.tar.zst` when a `zstd` binary is available
  * (smaller, faster), otherwise the universally supported `.tar.gz`.
  */

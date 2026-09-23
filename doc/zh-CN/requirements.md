@@ -20,11 +20,13 @@
 
 | 平台 | 归档 |
 | --- | --- |
-| Windows x64 / arm64 | `xbintsc-win32-x64.tar.zst` / `xbintsc-win32-arm64.tar.zst` |
-| Linux x64 / arm64 | `xbintsc-linux-x64.tar.zst` / `xbintsc-linux-arm64.tar.zst` |
-| macOS x64 / arm64（Apple Silicon） | `xbintsc-darwin-x64.tar.zst` / `xbintsc-darwin-arm64.tar.zst` |
+| Windows x64 / arm64 | `xbintsc-<version>-win32-x64.tar.zst` / `xbintsc-<version>-win32-arm64.tar.zst` |
+| Linux x64 / arm64 | `xbintsc-<version>-linux-x64.tar.zst` / `xbintsc-<version>-linux-arm64.tar.zst` |
+| macOS x64 / arm64（Apple Silicon） | `xbintsc-<version>-darwin-x64.tar.zst` / `xbintsc-<version>-darwin-arm64.tar.zst` |
 
 （仅当构建机没有 `zstd` 时才会回退为 `.tar.gz`。）
+
+`<version>` 是发布版本号（例如 `0.3.8`），会写入归档文件名，避免不同版本的下载文件相互覆盖。
 
 每个归档解压出的结构一致：
 
@@ -39,7 +41,7 @@ xbintsc-<os>-<arch>/
 建议先校验下载内容：
 
 ```sh
-sha256sum -c xbintsc-linux-x64.tar.zst.sha256   # macOS 用：shasum -a 256 -c
+sha256sum -c xbintsc-<version>-linux-x64.tar.zst.sha256   # macOS 用：shasum -a 256 -c
 ```
 
 ## macOS —— 安装 Xcode Command Line Tools

@@ -63,35 +63,13 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 
 ## 使用方法
 
-有两种调用 CLI 的方式：
+> **使用前请先确认：** 各平台的运行前置条件见
+> [使用前置要求](./doc/zh-CN/requirements.md)。若使用下方的预编译独立发布包，
+> 相关部分为
+> [使用前置要求 → 预编译发布包](./doc/zh-CN/requirements.md#预编译发布包推荐)
+> （Windows/Linux 自带工具链；macOS 需要 Xcode Command Line Tools）。
 
-- **作为用户** —— 安装包后即可使用 `xbintsc` 命令（通过 `bin` 条目 `./bin/xbintsc.js`）。
-- **作为开发者** —— 在源码检出中直接运行，无需先构建。
-
-### 作为用户
-
-```bash
-# 全局安装
-npm install -g xbintsc
-
-# ...或按需使用，无需安装
-npx xbintsc version
-
-# 编译并运行程序
-xbintsc run examples/hello.ts
-
-# 产出原生二进制
-xbintsc build examples/hello.ts --out build/examples
-./build/examples/hello
-
-# 查看生成的 LLVM IR
-xbintsc emit examples/hello.ts | head
-
-# 使用可选扩展（这里为 Node 的 fs，通过 import 引入）
-xbintsc run examples/read-file.ts --ext node
-```
-
-#### 预编译独立发布包（推荐，无需 Node.js）
+### 预编译独立发布包
 
 每个 [GitHub Release](https://github.com/zy445566/xbintsc/releases/latest) 都会附上
 各平台的自包含归档，并在旁边附 `.sha256` 校验文件：
@@ -106,8 +84,25 @@ xbintsc run examples/read-file.ts --ext node
 
 每个归档解压后都是一个 `xbintsc-<os>-<arch>/` 目录，其中已包含编译器
 （`bin/xbintsc[.exe]`）、C 运行时与自带工具链，因此**无需 Node.js，也无需系统编译器**。
-各平台（极简）的运行前置条件见
-[使用前置要求 → 预编译发布包](doc/zh-CN/requirements.md#预编译发布包推荐)。
+解压后把 `bin/` 加入 `PATH`（或直接调用 `bin/xbintsc`）即可，无需任何安装步骤。
+
+**macOS / Linux 示例** —— 此处以 `xbintsc-darwin-arm64.tar.zst` 为例（请按你的平台
+换成 `-linux-x64` 等）：
+
+```bash
+# 1. 校验哈希（可选，但推荐）
+shasum -a 256 -c xbintsc-darwin-arm64.tar.zst.sha256   # Linux：sha256sum -c
+
+# 2. 解压
+tar -xf xbintsc-darwin-arm64.tar.zst
+
+# 3. 编译并运行 hello.ts（见下）
+./xbintsc-darwin-arm64/bin/xbintsc run ./hello.ts
+
+# 4. ...或产出独立的二进制
+./xbintsc-darwin-arm64/bin/xbintsc build ./hello.ts --out ./build
+./build/hello
+```
 
 **Windows 示例** —— 从
 [Releases 页面](https://github.com/zy445566/xbintsc/releases/latest) 下载对应归档

@@ -68,36 +68,13 @@ be replaced without touching the compiler.
 
 ## Usage
 
-There are two ways to invoke the CLI:
+> **Before you start:** check the per-platform prerequisites in
+> [Requirements](./doc/requirements.md). If you use the prebuilt standalone
+> archives below, the relevant part is
+> [Requirements → Prebuilt releases](./doc/requirements.md#prebuilt-releases-recommended)
+> (Windows/Linux bundle their toolchain; macOS needs the Xcode Command Line Tools).
 
-- **As a user** — the package is installed and the `xbintsc` command is available
-  (via the `bin` entry `./bin/xbintsc.js`).
-- **As a developer** — running directly from a source checkout, before building.
-
-### As a user
-
-```bash
-# Install globally
-npm install -g xbintsc
-
-# ...or use it on demand without installing
-npx xbintsc version
-
-# Compile and run a program
-xbintsc run examples/hello.ts
-
-# Produce a native binary
-xbintsc build examples/hello.ts --out build/examples
-./build/examples/hello
-
-# Inspect the generated LLVM IR
-xbintsc emit examples/hello.ts | head
-
-# Use an optional extension (here, Node's fs via import)
-xbintsc run examples/read-file.ts --ext node
-```
-
-#### Prebuilt standalone archives (recommended, no Node.js needed)
+### Prebuilt standalone archives
 
 Every [GitHub Release](https://github.com/zy445566/xbintsc/releases/latest) attaches a
 self-contained archive per platform, plus a `.sha256` checksum next to it:
@@ -112,9 +89,26 @@ self-contained archive per platform, plus a `.sha256` checksum next to it:
 
 Each archive unpacks to a `xbintsc-<os>-<arch>/` folder that already contains the
 compiler (`bin/xbintsc[.exe]`), the C runtime and the bundled toolchain, so it needs
-**no Node.js and no system compiler**. See
-[Requirements → Prebuilt releases](doc/requirements.md#prebuilt-releases-recommended)
-for the (minimal) per-platform requirements.
+**no Node.js and no system compiler**. Unpack it and put `bin/` on `PATH` (or call
+`bin/xbintsc` directly) — there is no install step.
+
+**macOS / Linux example** — here using `xbintsc-darwin-arm64.tar.zst` (swap in
+`-linux-x64`, etc. for your platform):
+
+```bash
+# 1. Verify the checksum (optional but recommended)
+shasum -a 256 -c xbintsc-darwin-arm64.tar.zst.sha256   # Linux: sha256sum -c
+
+# 2. Unpack
+tar -xf xbintsc-darwin-arm64.tar.zst
+
+# 3. Compile and run hello.ts (below)
+./xbintsc-darwin-arm64/bin/xbintsc run ./hello.ts
+
+# 4. ...or emit a standalone binary
+./xbintsc-darwin-arm64/bin/xbintsc build ./hello.ts --out ./build
+./build/hello
+```
 
 **Windows example** — download an archive from the
 [Releases page](https://github.com/zy445566/xbintsc/releases/latest) (here

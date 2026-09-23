@@ -16,6 +16,7 @@
 #include <string.h>
 
 #if defined(_WIN32)
+#include <direct.h>
 #include <io.h>
 #include <process.h>
 #else

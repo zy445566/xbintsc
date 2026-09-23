@@ -63,10 +63,14 @@ export const numberMethods: NumberMethods = {
     const cleaned = raw.replace(/_/g, "");
     if (isBigInt) {
       raw = raw.slice(0, -1).replace(/_/g, "");
-      const parsed = Number(raw);
-      if (parsed !== parsed) {
+      // Parse exactly with BigInt: a Number would round values past 2^53 and
+      // overflow huge literals to Infinity, silently corrupting the AST value.
+      let parsed: bigint;
+      try {
+        parsed = BigInt(raw);
+      } catch {
         this.error(DiagnosticCode.InvalidNumber, `Invalid BigInt literal '${raw}'`, start, this.pos);
-        return this.makeToken(TokenKind.BigIntLiteral, start, this.pos, raw, precededByLineBreak, 0);
+        return this.makeToken(TokenKind.BigIntLiteral, start, this.pos, raw, precededByLineBreak, 0n);
       }
       return this.makeToken(TokenKind.BigIntLiteral, start, this.pos, raw, precededByLineBreak, parsed);
     }

@@ -17,6 +17,16 @@ describe("numeric literal edge cases", () => {
     expect(tokens[0]!.kind).toBe(TokenKind.BigIntLiteral);
   });
 
+  it("preserves arbitrary-precision BigInt values exactly", () => {
+    const { tokens, diagnostics } = lex("123456789012345678901234567890n");
+    expect(diagnostics).toHaveLength(0);
+    expect(tokens[0]).toMatchObject({
+      kind: TokenKind.BigIntLiteral,
+      text: "123456789012345678901234567890",
+      value: 123456789012345678901234567890n,
+    });
+  });
+
   it("reports an invalid numeric literal and recovers with value 0", () => {
     const { tokens, diagnostics } = lex("0b2");
     expect(diagnostics.some((d) => d.code === DiagnosticCode.InvalidNumber)).toBe(true);

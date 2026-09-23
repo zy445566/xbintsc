@@ -40,7 +40,8 @@ export interface NumericLiteral extends Node {
 export interface BigIntLiteral extends Node {
   readonly kind: SyntaxKind.BigIntLiteral;
   readonly text: string;
-  readonly value: number;
+  /** Exact value; BigInt literals are arbitrary precision. */
+  readonly value: bigint;
 }
 
 export interface StringLiteral extends Node {

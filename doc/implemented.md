@@ -53,6 +53,7 @@ Location: `src/lexer/scanner.ts`, `src/lexer/token.ts`
   - Underscore separators `1_000_000`
   - Fractions, exponents `1.5e3`
   - BigInt literals (`10n`, `0xFFn`) evaluate to arbitrary-precision integers (arithmetic, bitwise, shifts, comparisons, `toString(radix)`, `BigInt()` / `BigInt.asIntN` / `BigInt.asUintN`)
+  - BigInt literal values are parsed exactly into `bigint` (never routed through `Number`), so the token / AST value of a literal beyond 2^53 keeps full precision
 - String literals:
   - Single / double quotes
   - Escapes: `\n \t \r \b \f \0 \\ \' \"`, `\xHH`, `\uHHHH`, `\u{...}`

@@ -45,6 +45,7 @@ source.ts
   - 下划线分隔 `1_000_000`
   - 小数、指数 `1.5e3`
   - BigInt 字面量（`10n`、`0xFFn`）求值为任意精度整数（算术、位运算、移位、比较、`toString(radix)`、`BigInt()` / `BigInt.asIntN` / `BigInt.asUintN`）
+  - BigInt 字面量的值在词法 / 语法阶段即精确解析为 `bigint`（不经过 `Number`），超过 2^53 的字面量在 token / AST 中也保持完整精度
 - 字符串字面量：
   - 单引号 / 双引号
   - 转义：`\n \t \r \b \f \0 \\ \' \"`、`\xHH`、`\uHHHH`、`\u{...}`

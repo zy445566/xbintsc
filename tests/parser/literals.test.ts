@@ -49,6 +49,14 @@ describe("literal expressions", () => {
     expect(named.typeParameters).toHaveLength(1);
   });
 
+  it("keeps BigInt literal values exact as bigint", () => {
+    const { init, diagnostics } = initializerOf("const a = 123456789012345678901234567890n;");
+    expect(diagnostics).toHaveLength(0);
+    expect(init.kind).toBe(SyntaxKind.BigIntLiteral);
+    expect(typeof init.value).toBe("bigint");
+    expect(init.value).toBe(123456789012345678901234567890n);
+  });
+
   it("parses regular expression literals with flags", () => {
     const { init } = initializerOf("const r = /ab+c/gi;");
     expect(init.kind).toBe(SyntaxKind.RegularExpressionLiteral);

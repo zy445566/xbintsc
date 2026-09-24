@@ -157,6 +157,16 @@ describe("cli", () => {
     expect(err.join("")).toBe("");
   });
 
+  it("explains an unsupported third-party import precisely", () => {
+    const entry = writeProgram('import { z } from "zod";\nz.string();');
+    const { io, err } = capture();
+    expect(run(["emit", entry], io)).toBe(1);
+    const output = err.join("");
+    expect(output).toContain("module 'zod' is not supported");
+    expect(output).toContain("node_modules");
+    expect(output).not.toContain("cannot be used as a value");
+  });
+
   it("registers a native extension from a manifest", () => {
     const entry = writeProgram("console.log(1);");
     const directory = temporaryDirectory();

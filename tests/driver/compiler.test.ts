@@ -57,6 +57,39 @@ describe("compileString", () => {
     );
     expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
   });
+
+  it("explains an unsupported third-party import without a value error", () => {
+    const { diagnostics } = compileString(
+      'import { z } from "zod";\nz.string();',
+      "third-party.ts",
+    );
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.code).toBe(DiagnosticCode.ModuleNotFound);
+    expect(errors[0]!.message).toContain("module 'zod' is not supported");
+    expect(errors[0]!.message).toContain("node_modules");
+    expect(errors.map((d) => d.message).join("\n")).not.toContain("cannot be used as a value");
+  });
+
+  it("keeps a type-only third-party import compiling", () => {
+    const { diagnostics } = compileString(
+      'import { ZodString } from "zod";\nlet value: ZodString;\nconsole.log(1);',
+      "third-party-types.ts",
+    );
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
+  it("names a missing export of a registered module", () => {
+    const registry = createDefaultRegistry().register(nodeExtension);
+    const { diagnostics } = compileString(
+      'import { nope } from "node:fs";\nconsole.log(nope);',
+      "missing-export.ts",
+      registry,
+    );
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toBe(`Module '"node:fs"' has no exported member 'nope'`);
+  });
 });
 
 describe("compileEntry", () => {

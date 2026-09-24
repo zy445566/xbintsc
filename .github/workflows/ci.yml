@@ -131,8 +131,10 @@ jobs:
       - name: Report the resolved toolchain
         run: npx tsx src/cli/main.ts doctor
 
-      - name: Unit and end-to-end tests
-        run: npm test
+      # Coverage is enforced here: `vitest run --coverage` fails the job when
+      # the global thresholds in vitest.config.ts are not met.
+      - name: Unit and end-to-end tests (with coverage)
+        run: npm test -- --coverage
 
   compile-examples:
     name: Compile examples (${{ matrix.os }})

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { build, compileEntry, compileString } from "../../src/driver/compiler.js";
+import { build, compileEntry, compileString, resolvePreferPrebuilt } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
 import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
@@ -124,6 +124,48 @@ describe("build", () => {
 
     const forced = build(entry, { emit: "ir", outDir, cacheDir: join(directory, ".cache"), force: true });
     expect(forced.cached).toBe(false);
+  });
+
+  it("honours xbintsc_CACHE_DIR when no cacheDir is given", () => {
+    const directory = temporaryDirectory();
+    const entry = join(directory, "main.ts");
+    writeFileSync(entry, "console.log(1);");
+    const envCache = join(directory, "env-cache");
+    const previous = process.env.xbintsc_CACHE_DIR;
+    process.env.xbintsc_CACHE_DIR = envCache;
+    try {
+      build(entry, { emit: "ir", outDir: join(directory, "out") });
+      expect(existsSync(join(envCache, "build-cache.json"))).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.xbintsc_CACHE_DIR;
+      else process.env.xbintsc_CACHE_DIR = previous;
+    }
+  });
+
+  it("resolves the prebuilt-archive preference from the option then the environment", () => {
+    const previous = process.env.xbintsc_PREFER_PREBUILT;
+    try {
+      delete process.env.xbintsc_PREFER_PREBUILT;
+      expect(resolvePreferPrebuilt(undefined)).toBe(true);
+      expect(resolvePreferPrebuilt(false)).toBe(false);
+      expect(resolvePreferPrebuilt(true)).toBe(true);
+
+      process.env.xbintsc_PREFER_PREBUILT = "0";
+      expect(resolvePreferPrebuilt(undefined)).toBe(false);
+      process.env.xbintsc_PREFER_PREBUILT = "FALSE";
+      expect(resolvePreferPrebuilt(undefined)).toBe(false);
+      process.env.xbintsc_PREFER_PREBUILT = "1";
+      expect(resolvePreferPrebuilt(undefined)).toBe(true);
+      process.env.xbintsc_PREFER_PREBUILT = "";
+      expect(resolvePreferPrebuilt(undefined)).toBe(true);
+
+      // An explicit option still wins over the environment.
+      process.env.xbintsc_PREFER_PREBUILT = "0";
+      expect(resolvePreferPrebuilt(true)).toBe(true);
+    } finally {
+      if (previous === undefined) delete process.env.xbintsc_PREFER_PREBUILT;
+      else process.env.xbintsc_PREFER_PREBUILT = previous;
+    }
   });
 
   it("returns diagnostics for invalid programs", () => {

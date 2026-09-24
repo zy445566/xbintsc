@@ -261,13 +261,28 @@ xbintsc run examples/extensions/cpp/demo.ts \
 ## 测试
 
 ```bash
-npm run typecheck   # tsc --noEmit
-npm test            # 单元 + 端到端（存在 clang 时运行真实二进制）
-npm run test:e2e    # 仅编译并运行的测试
+npm run typecheck        # tsc --noEmit
+npm test                 # 单元 + 端到端（存在 clang 时运行真实二进制）
+npm run test:e2e         # 仅编译并运行的测试
+npm run coverage         # TypeScript 编译器（src/）的 V8 覆盖率
+npm run coverage:runtime # C runtime（runtime/）的 LLVM 覆盖率
 ```
 
 测试在 `tests/` 下按模块组织（`lexer`、`parser`、`binder`、`codegen`、`driver`、
 `extensions`、`cli`、`e2e`）。
+
+V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改用 clang 的
+源码插桩来覆盖 C runtime：脚本导出 `CCC_OVERRIDE_OPTIONS`（驱动执行的每次编译/链接
+都会带上 `-fprofile-instr-generate -fcoverage-mapping`），运行测试后用
+`llvm-cov` 把采集到的 profile 映射回 `runtime/`。加 `-- --report-only`
+可只对上一次插桩运行留下的 profile 重新出报告，加 `-- --threshold 60`
+可在低于覆盖率门槛时失败；CI 固定以 `--threshold 70` 运行，runtime 覆盖率回退会直接
+让 job 失败。插桩产物存放在 `xbintsc_CACHE_DIR` 指向的独立缓存，
+因为对象缓存的 key 不包含编译参数：与普通缓存共用会静默复用未插桩的对象。
+脚本还会设置 `xbintsc_PREFER_PREBUILT=0`，强制从源码编译 runtime，而不是链接
+未插桩的 `runtime/lib` 预编译归档。
+需要与解析到的 clang 版本匹配的 `llvm-profdata`/`llvm-cov`（自带工具链中已包含）；
+缺失时脚本会打印警告并跳过。
 
 ## 运行要求
 

@@ -68,7 +68,9 @@ jobs:
 
       - name: Install a C compiler (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang
+        # 'llvm' carries llvm-profdata/llvm-cov, which the runtime coverage
+        # report below needs alongside clang.
+        run: sudo apt-get update && sudo apt-get install -y clang llvm
 
       # Windows arm64 has no MinGW-w64 clang in the image and the MSVC one emits
       # MSVC-ABI objects, so it uses the bundled llvm-mingw toolchain instead.
@@ -132,9 +134,29 @@ jobs:
         run: npx tsx src/cli/main.ts doctor
 
       # Coverage is enforced here: `vitest run --coverage` fails the job when
-      # the global thresholds in vitest.config.ts are not met.
+      # the global thresholds in vitest.config.ts are not met. The same run also
+      # instruments the C runtime through clang: `CCC_OVERRIDE_OPTIONS` appends
+      # the LLVM coverage flags to every compile/link the driver performs, so
+      # `runtime/` can be reported next (V8 cannot see it).
       - name: Unit and end-to-end tests (with coverage)
-        run: npm test -- --coverage
+        shell: bash
+        env:
+          CCC_OVERRIDE_OPTIONS: "+-fprofile-instr-generate +-fcoverage-mapping"
+          LLVM_PROFILE_FILE: "${{ github.workspace }}/build/runtime-prof/%p-%m.profraw"
+          xbintsc_CACHE_DIR: "${{ github.workspace }}/build/runtime-cov-cache"
+          # A prebuilt runtime/lib archive is not instrumented; compile instead.
+          xbintsc_PREFER_PREBUILT: "0"
+        run: |
+          mkdir -p build/runtime-prof
+          npm test -- --coverage
+
+      # Reports the C runtime coverage gathered above, and enforces a floor.
+      # The script skips (rather than fails) on a host without a matching
+      # llvm-profdata/llvm-cov, so the gate only applies where it can measure.
+      # 55% sits well under the ~72% a full local run reaches; raise it once the
+      # per-platform numbers have been observed for a while.
+      - name: Runtime (C) coverage
+        run: npm run coverage:runtime -- --report-only --threshold 70
 
   compile-examples:
     name: Compile examples (${{ matrix.os }})

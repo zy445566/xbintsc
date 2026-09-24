@@ -107,6 +107,30 @@ export function compileEntry(entryPath: string, extensions?: ExtensionRegistry):
   return { ir, diagnostics: diagnostics.diagnostics };
 }
 
+/**
+ * Where the incremental cache lives when the caller does not name a directory:
+ * `xbintsc_CACHE_DIR` when set, otherwise `<cwd>/.xbintsc`. The override keeps
+ * an instrumented build (see `scripts/coverage-runtime.ts`) from reusing the
+ * un-instrumented objects in a normal cache, which would silently yield no
+ * profile data.
+ */
+function defaultCacheDir(): string {
+  return process.env.xbintsc_CACHE_DIR || join(process.cwd(), ".xbintsc");
+}
+
+/**
+ * Whether a build may link a prebuilt `runtime/lib` archive. The explicit option
+ * wins; otherwise `xbintsc_PREFER_PREBUILT` decides (`0`/`false` disables) and
+ * the default is to use an archive when one exists. Instrumented builds set it
+ * to `0` so the C runtime is compiled (and therefore instrumented) from source.
+ */
+export function resolvePreferPrebuilt(explicit: boolean | undefined): boolean {
+  if (explicit !== undefined) return explicit;
+  const raw = process.env.xbintsc_PREFER_PREBUILT;
+  if (raw === undefined || raw === "") return true;
+  return raw !== "0" && raw.toLowerCase() !== "false";
+}
+
 function executableName(entry: string, outDir: string, explicit: string | undefined): string {
   if (explicit) return resolve(explicit);
   const base = basename(entry, extname(entry));
@@ -118,7 +142,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const runner = options.runner ?? realRunner;
   const registry = options.extensions ?? createDefaultRegistry();
   const outDir = resolve(options.outDir ?? join(process.cwd(), "build"));
-  const cacheDir = resolve(options.cacheDir ?? join(process.cwd(), ".xbintsc"));
+  const cacheDir = resolve(options.cacheDir ?? defaultCacheDir());
   const emit: EmitKind = options.emit ?? "exe";
   const optimize = options.optimize ?? "2";
 
@@ -218,7 +242,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     runtimeDir,
     cacheDir,
     registry,
-    options.preferPrebuilt ?? true,
+    resolvePreferPrebuilt(options.preferPrebuilt),
     toolchain.env,
   );
 

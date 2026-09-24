@@ -274,13 +274,31 @@ the authoring helpers.
 ## Tests
 
 ```bash
-npm run typecheck   # tsc --noEmit
-npm test            # unit + end-to-end (runs real binaries when clang is present)
-npm run test:e2e    # only the compile-and-run tests
+npm run typecheck        # tsc --noEmit
+npm test                 # unit + end-to-end (runs real binaries when clang is present)
+npm run test:e2e         # only the compile-and-run tests
+npm run coverage         # V8 coverage of the TypeScript compiler (src/)
+npm run coverage:runtime # LLVM coverage of the C runtime (runtime/) via clang
 ```
 
 Tests are organised by module under `tests/` (`lexer`, `parser`, `binder`,
 `codegen`, `driver`, `extensions`, `cli`, `e2e`).
+
+V8 can only see the compiler's own sources, so `npm run coverage:runtime`
+covers the C runtime with clang's source instrumentation instead: it exports
+`CCC_OVERRIDE_OPTIONS` (every compile/link the driver performs gets
+`-fprofile-instr-generate -fcoverage-mapping`), runs the suite, and reports
+the collected profiles against `runtime/` with `llvm-cov`. Pass
+`-- --report-only` to only re-report profiles from an earlier instrumented run,
+or `-- --threshold 60` to fail below a coverage bar. CI runs the report with
+`--threshold 70`, so a runtime-coverage regression fails the job. The instrumented objects
+live in `xbintsc_CACHE_DIR`, a separate cache from `.xbintsc`, because the
+object cache key does not include compiler flags: sharing one cache would
+silently reuse un-instrumented objects. It also sets `xbintsc_PREFER_PREBUILT=0`
+so the runtime is compiled from source rather than linked from an
+un-instrumented `runtime/lib` archive. Requires `llvm-profdata`/`llvm-cov`
+matching the resolved clang (the bundled toolchains provide them); the script
+skips with a warning when they are missing.
 
 ## Requirements
 

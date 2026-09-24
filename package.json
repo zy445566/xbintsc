@@ -42,7 +42,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "vitest run tests/e2e",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "coverage:runtime": "tsx scripts/coverage-runtime.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

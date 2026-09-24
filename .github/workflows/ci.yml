@@ -160,6 +160,7 @@ jobs:
 
   compile-examples:
     name: Compile examples (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -286,6 +287,7 @@ jobs:
 
   self-host:
     name: Self-host (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -403,6 +405,7 @@ jobs:
   # used (the recorded prerequisite).
   self-contained:
     name: Self-contained (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -451,6 +454,7 @@ jobs:
   # downloads these and attaches them to a GitHub Release.
   package:
     name: Package (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
     needs: self-host
     runs-on: ${{ matrix.os }}
     strategy:

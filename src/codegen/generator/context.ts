@@ -78,7 +78,6 @@ export class GeneratorContext {
    * the namespace dispatch tables.
    */
   private resolveImports(): void {
-    if (Object.keys(this.modules).length === 0 && Object.keys(this.moduleHints).length === 0) return;
     for (const statement of this.sourceFile.statements) {
       if (statement.kind !== SyntaxKind.ImportDeclaration) continue;
       const declaration = statement as ImportDeclaration;
@@ -86,18 +85,10 @@ export class GeneratorContext {
       // Type-only imports are erased at runtime, so a missing host module is
       // not an error for them.
       if (!clause || clause.isTypeOnly) continue;
-      const module = this.modules[declaration.moduleSpecifier.value];
+      const specifier = declaration.moduleSpecifier.value;
+      const module = this.modules[specifier];
       if (!module) {
-        const provider = this.moduleHints[declaration.moduleSpecifier.value];
-        if (provider) {
-          this.diagnostics.error(
-            DiagnosticCode.ModuleNotFound,
-            `module '${declaration.moduleSpecifier.value}' is provided by the '${provider}' extension; pass --ext ${provider}`,
-            declaration.moduleSpecifier,
-            this.sourceFile.fileName,
-          );
-          this.markMissingModuleSymbols(declaration);
-        }
+        this.reportMissingModule(declaration, specifier);
         continue;
       }
       if (clause.name) {
@@ -110,12 +101,13 @@ export class GeneratorContext {
       }
       const bindings = clause.namedBindings;
       if (bindings && bindings.kind === SyntaxKind.NamedImports) {
-        for (const specifier of bindings.elements) {
-          if (specifier.isTypeOnly) continue;
-          const importedName = specifier.propertyName?.text ?? specifier.name.text;
+        for (const specifierNode of bindings.elements) {
+          if (specifierNode.isTypeOnly) continue;
+          const importedName = specifierNode.propertyName?.text ?? specifierNode.name.text;
           const exported = module.exports?.[importedName];
-          const symbol = this.binding.symbolOfDeclaration.get(specifier.name);
-          if (symbol && exported) {
+          const symbol = this.binding.symbolOfDeclaration.get(specifierNode.name);
+          if (!symbol) continue;
+          if (exported) {
             this.importExports.set(symbol.id, exported);
             // A named constructor (`import { Buffer } from "buffer"`) also
             // inherits its module's static dispatcher, so `Buffer.from(...)`
@@ -123,6 +115,14 @@ export class GeneratorContext {
             if (exported.isConstructor && module.namespace) {
               this.importNamespaces.set(symbol.id, module.namespace);
             }
+          } else if (this.usedAsValue(symbol)) {
+            this.diagnostics.error(
+              DiagnosticCode.ModuleNotFound,
+              `Module '"${specifier}"' has no exported member '${importedName}'`,
+              specifierNode.name,
+              this.sourceFile.fileName,
+            );
+            this.missingModuleSymbols.add(symbol.id);
           }
         }
       } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport) {
@@ -130,6 +130,52 @@ export class GeneratorContext {
         if (symbol) this.bindModuleAlias(symbol, module);
       }
     }
+  }
+
+  /**
+   * Diagnose an import of a module the registry cannot provide.
+   *
+   * A *hinted* module belongs to an extension the caller knows about but did
+   * not enable, so point at the flag that enables it. Anything else is a bare
+   * specifier xbintsc cannot link - almost always a third-party package from
+   * `node_modules` - and must be reported at the import site rather than
+   * degrading into a downstream "cannot be used as a value" error.
+   */
+  private reportMissingModule(declaration: ImportDeclaration, specifier: string): void {
+    const provider = this.moduleHints[specifier];
+    if (provider) {
+      this.diagnostics.error(
+        DiagnosticCode.ModuleNotFound,
+        `module '${specifier}' is provided by the '${provider}' extension; pass --ext ${provider}`,
+        declaration.moduleSpecifier,
+        this.sourceFile.fileName,
+      );
+      this.markMissingModuleSymbols(declaration);
+      return;
+    }
+    // A path that is not a bare specifier is a bundling concern; the driver
+    // already reports unresolved relative imports, so stay out of the way.
+    if (!isBareSpecifier(specifier)) return;
+    // Only report when a binding is actually read: a type-only use is erased
+    // by the binder and must keep compiling.
+    const symbols = this.importBindingSymbols(declaration);
+    if (!symbols.some((symbol) => this.usedAsValue(symbol))) return;
+    this.diagnostics.error(
+      DiagnosticCode.ModuleNotFound,
+      `module '${specifier}' is not supported: xbintsc can only import built-in platform modules and ` +
+        "relative '.ts' files; third-party npm packages (node_modules) are not implemented yet",
+      declaration.moduleSpecifier,
+      this.sourceFile.fileName,
+    );
+    for (const symbol of symbols) this.missingModuleSymbols.add(symbol.id);
+  }
+
+  /**
+   * True when a binding is read as a runtime value. Type positions are not
+   * bound (the binder skips them), so a symbol with no references is erased.
+   */
+  private usedAsValue(symbol: SymbolInfo): boolean {
+    return symbol.references.length > 0;
   }
 
   /**
@@ -144,10 +190,10 @@ export class GeneratorContext {
     }
   }
 
-  /** Record every symbol introduced by an import of a missing known module. */
-  private markMissingModuleSymbols(declaration: ImportDeclaration): void {
+  /** Every binding an import declaration introduces (including type-only ones). */
+  private importBindingSymbols(declaration: ImportDeclaration): SymbolInfo[] {
     const clause = declaration.importClause;
-    if (!clause) return;
+    if (!clause) return [];
     const names: Identifier[] = [];
     if (clause.name) names.push(clause.name);
     const bindings = clause.namedBindings;
@@ -156,10 +202,17 @@ export class GeneratorContext {
     } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport) {
       names.push(bindings.name);
     }
+    const symbols: SymbolInfo[] = [];
     for (const name of names) {
       const symbol = this.binding.symbolOfDeclaration.get(name);
-      if (symbol) this.missingModuleSymbols.add(symbol.id);
+      if (symbol) symbols.push(symbol);
     }
+    return symbols;
+  }
+
+  /** Record every symbol introduced by an import of a missing known module. */
+  private markMissingModuleSymbols(declaration: ImportDeclaration): void {
+    for (const symbol of this.importBindingSymbols(declaration)) this.missingModuleSymbols.add(symbol.id);
   }
 
   /** Namespace name an imported alias refers to, if any. */
@@ -361,4 +414,14 @@ export class GeneratorContext {
       this.sourceFile.fileName,
     );
   }
+}
+
+/** A bare module specifier (`fs`, `node:fs`, `@scope/pkg`), not a file path. */
+function isBareSpecifier(specifier: string): boolean {
+  return (
+    !specifier.startsWith(".") &&
+    !specifier.startsWith("/") &&
+    !specifier.startsWith("\\") &&
+    !/^[A-Za-z]:[\\/]/.test(specifier)
+  );
 }

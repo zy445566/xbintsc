@@ -221,4 +221,258 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     `;
     expect(runProgram(source, { extensions: true })).toBe("Reply from Thread: U09NRSBEQVRB");
   });
+
+  it("operates on file descriptors", () => {
+    const base = join(harness.workdir, `fd_${Math.random().toString(36).slice(2)}`);
+    const source = `
+      import { Buffer } from "buffer";
+      import { closeSync, fchmodSync, fchownSync, fdatasyncSync, fstatSync, fsyncSync, ftruncateSync, futimesSync, linkSync, mkdirSync, openSync, readFileSync, readSync, readvSync, rmSync, statSync, writeSync, writevSync } from "fs";
+      const base = ${JSON.stringify(base)};
+      mkdirSync(base);
+      const path = base + "/f.txt";
+      const fd = openSync(path, "w+");
+      writeSync(fd, "hello");
+      writeSync(fd, Buffer.from(" world"), 0, 6, 5);
+      const head = Buffer.alloc(5);
+      console.log("read", readSync(fd, head, 0, 5, 0), head.toString());
+      console.log("size", fstatSync(fd).size);
+      fsyncSync(fd);
+      fdatasyncSync(fd);
+      fchmodSync(fd, 0o600);
+      fchownSync(fd, -1, -1);
+      futimesSync(fd, 1000, 2000);
+      ftruncateSync(fd, 5);
+      console.log("truncated", readFileSync(path), fstatSync(fd).size);
+      closeSync(fd);
+
+      const vectorFd = openSync(base + "/v.txt", "w+");
+      writevSync(vectorFd, [Buffer.from("abc"), Buffer.from("def")]);
+      const first = Buffer.alloc(3);
+      const second = Buffer.alloc(3);
+      console.log("readv", readvSync(vectorFd, [first, second], 0), first.toString(), second.toString());
+      closeSync(vectorFd);
+
+      linkSync(path, base + "/hard.txt");
+      console.log("hard", readFileSync(base + "/hard.txt"), statSync(base + "/hard.txt").isFile());
+      try { closeSync(9999); } catch (error) { console.log("close error", error.code); }
+      rmSync(base, { recursive: true });
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      "read 5 hello\nsize 11\ntruncated hello 5\nreadv 6 abc def\nhard hello true\nclose error EBADF",
+    );
+  });
+
+  it("changes file metadata", () => {
+    const base = join(harness.workdir, `meta_${Math.random().toString(36).slice(2)}`);
+    const source = `
+      import { accessSync, chmodSync, chownSync, constants, lchmodSync, lchownSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, statfsSync, truncateSync, utimesSync, writeFileSync } from "fs";
+      const base = ${JSON.stringify(base)};
+      mkdirSync(base);
+      const path = base + "/f.txt";
+      writeFileSync(path, "abcdef");
+      accessSync(path);
+      accessSync(path, constants.R_OK | constants.W_OK);
+      chmodSync(path, 0o600);
+      lchmodSync(path, 0o644);
+      console.log("mode", (statSync(path).mode & 0o777) === 0o644);
+      chownSync(path, -1, -1);
+      lchownSync(path, -1, -1);
+      truncateSync(path, 3);
+      utimesSync(path, 1000, 2000);
+      console.log("trunc", readFileSync(path), Math.round(statSync(path).mtimeMs / 1000));
+      utimesSync(path, new Date(1000), new Date(2000));
+      console.log("date", statSync(path).mtimeMs === 2000);
+      writeFileSync(path, "aGVsbG8", "base64url");
+      console.log("b64url", readFileSync(path), readFileSync(path, "base64url"));
+      const temporary = mkdtempSync(base + "/t-");
+      console.log("mkdtemp", statSync(temporary).isDirectory(), statfsSync(base).bsize >= 0);
+      try { accessSync(base + "/missing"); } catch (error) { console.log("access", error.code); }
+      try { truncateSync(base + "/missing", 0); } catch (error) { console.log("truncate", error.code); }
+      rmSync(base, { recursive: true });
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      "mode true\ntrunc abc 2000\ndate true\nb64url hello aGVsbG8\nmkdtemp true true\naccess ENOENT\ntruncate ENOENT",
+    );
+  });
+
+  it("copies files and directories with cpSync", () => {
+    const base = join(harness.workdir, `cp_${Math.random().toString(36).slice(2)}`);
+    const source = `
+      import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+      const base = ${JSON.stringify(base)};
+      mkdirSync(base + "/src/sub", { recursive: true });
+      writeFileSync(base + "/src/a.txt", "AAA");
+      writeFileSync(base + "/src/sub/b.txt", "BBB");
+      cpSync(base + "/src/a.txt", base + "/copy.txt");
+      console.log("file", readFileSync(base + "/copy.txt"));
+      cpSync(base + "/src", base + "/dst", { recursive: true });
+      console.log("dir", readFileSync(base + "/dst/a.txt"), readFileSync(base + "/dst/sub/b.txt"));
+      writeFileSync(base + "/copy.txt", "KEEP");
+      cpSync(base + "/src/a.txt", base + "/copy.txt", { force: false });
+      console.log("force", readFileSync(base + "/copy.txt"));
+      try { cpSync(base + "/src/a.txt", base + "/copy.txt", { force: false, errorOnExist: true }); }
+      catch (error) { console.log("exist", error.code); }
+      try { cpSync(base + "/src", base + "/dst2"); } catch (error) { console.log("dir", error.code); }
+      rmSync(base, { recursive: true });
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      "file AAA\ndir AAA BBB\nforce KEEP\nexist EEXIST\ndir EISDIR",
+    );
+  });
+
+  it("lists directories and matches globs", () => {
+    const base = join(harness.workdir, `list_${Math.random().toString(36).slice(2)}`);
+    const source = `
+      import { globSync, mkdirSync, opendirSync, rmSync, writeFileSync } from "fs";
+      const base = ${JSON.stringify(base)};
+      mkdirSync(base + "/sub/deep", { recursive: true });
+      writeFileSync(base + "/a.txt", "a");
+      writeFileSync(base + "/b.md", "b");
+      writeFileSync(base + "/sub/c.txt", "c");
+      writeFileSync(base + "/sub/deep/d.txt", "d");
+      const dir = opendirSync(base);
+      const names = [];
+      let entry = dir.readSync();
+      while (entry !== null) { names.push(entry.name); entry = dir.readSync(); }
+      console.log("dir", names.sort().join(","));
+      dir.closeSync();
+      const asyncDir = opendirSync(base + "/sub");
+      const seen = [];
+      asyncDir.read((error, item) => { if (item) seen.push(item.name); });
+      asyncDir.close(() => seen.push("closed"));
+      console.log("async", seen.sort().join(","));
+      console.log("star", globSync("*.txt", { cwd: base }).join(","));
+      console.log("rec", globSync("**/*.txt", { cwd: base }).sort().join(","));
+      console.log("question", globSync("?.txt", { cwd: base }).join(","));
+      console.log("class", globSync("[ab].txt", { cwd: base }).join(","));
+      console.log("array", globSync(["*.md", "*.txt"], { cwd: base }).sort().join(","));
+      const entries = globSync("*.txt", { cwd: base, withFileTypes: true });
+      console.log("dirent", entries.map((item) => item.name + ":" + item.isFile()).join(","));
+      try { opendirSync(base + "/missing"); } catch (error) { console.log("opendir", error.code); }
+      rmSync(base, { recursive: true });
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      "dir a.txt,b.md,sub\nasync closed,deep\nstar a.txt\nrec a.txt,sub/c.txt,sub/deep/d.txt\nquestion a.txt\nclass a.txt\narray a.txt,b.md\ndirent a.txt:true\nopendir ENOENT",
+    );
+  });
+
+  it("supports symbolic links and readlinkSync", () => {
+    if (process.platform === "win32") return;
+    const base = join(harness.workdir, `sym_${Math.random().toString(36).slice(2)}`);
+    const source = `
+      import { cpSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from "fs";
+      const base = ${JSON.stringify(base)};
+      mkdirSync(base);
+      writeFileSync(base + "/target.txt", "TARGET");
+      symlinkSync(base + "/target.txt", base + "/link.txt");
+      console.log("readlink", readlinkSync(base + "/link.txt") === base + "/target.txt");
+      console.log("types", lstatSync(base + "/link.txt").isSymbolicLink(), statSync(base + "/link.txt").isFile());
+      cpSync(base + "/link.txt", base + "/copied.txt");
+      console.log("kept", lstatSync(base + "/copied.txt").isSymbolicLink());
+      cpSync(base + "/link.txt", base + "/deref.txt", { dereference: true });
+      console.log("deref", lstatSync(base + "/deref.txt").isFile(), readFileSync(base + "/deref.txt"));
+      rmSync(base, { recursive: true });
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      "readlink true\ntypes true true\nkept true\nderef true TARGET",
+    );
+  });
+
+  it("exposes fs constants and the watch API", () => {
+    const source = `
+      import { constants, unwatchFile, watch, watchFile } from "fs";
+      console.log("consts", constants.F_OK, constants.R_OK, constants.W_OK, constants.X_OK, constants.COPYFILE_EXCL, constants.O_RDONLY !== undefined, constants.S_IFREG !== undefined);
+      const watcher = watch(".", () => {});
+      console.log("watch", typeof watcher.close, typeof watcher.on);
+      watcher.close();
+      const poll = watchFile(".", { interval: 100 }, () => {});
+      console.log("watchFile", typeof poll.close, poll.kind === "file");
+      poll.close();
+      unwatchFile(".");
+      console.log("unwatch ok");
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      "consts 0 4 2 1 1 true true\nwatch function function\nwatchFile function true\nunwatch ok",
+    );
+  });
+
+  it("supports fs/promises and FileHandle", () => {
+    const base = join(harness.workdir, `promises_${Math.random().toString(36).slice(2)}`);
+    const source = `
+      import { Buffer } from "buffer";
+      import { constants, promises as fsp } from "fs";
+      import { constants as promisesConstants, readFile as readFileAsync } from "fs/promises";
+      const base = ${JSON.stringify(base)};
+      async function main() {
+        console.log("constants", fsp.constants.R_OK === constants.R_OK, promisesConstants.F_OK === 0);
+        await fsp.mkdir(base, { recursive: true });
+        await fsp.writeFile(base + "/a.txt", "hello");
+        await fsp.appendFile(base + "/a.txt", " world");
+        console.log("read", await readFileAsync(base + "/a.txt"));
+        console.log("stat", (await fsp.stat(base + "/a.txt")).size, (await fsp.lstat(base + "/a.txt")).isFile());
+        await fsp.access(base + "/a.txt");
+        console.log("readdir", (await fsp.readdir(base, { withFileTypes: true })).length, (await fsp.realpath(base)).length > 0);
+        console.log("statfs", (await fsp.statfs(base)).bsize >= 0);
+        console.log("mkdtemp", (await fsp.mkdtemp(base + "/t-")).length > base.length);
+        await fsp.copyFile(base + "/a.txt", base + "/copy.txt");
+        await fsp.rename(base + "/copy.txt", base + "/renamed.txt");
+        await fsp.cp(base + "/renamed.txt", base + "/cp.txt");
+        await fsp.chmod(base + "/a.txt", 0o600);
+        await fsp.lchmod(base + "/a.txt", 0o644);
+        await fsp.chown(base + "/a.txt", -1, -1);
+        await fsp.lchown(base + "/a.txt", -1, -1);
+        await fsp.truncate(base + "/a.txt", 5);
+        await fsp.utimes(base + "/a.txt", 1000, 2000);
+        await fsp.lutimes(base + "/a.txt", 1000, 2000);
+        await fsp.link(base + "/a.txt", base + "/hard.txt");
+        console.log("trunc", await fsp.readFile(base + "/a.txt"), (await fsp.glob("*.txt", { cwd: base })).length >= 1);
+        const dir = await fsp.opendir(base);
+        console.log("opendir", dir.readSync().name.length > 0);
+        dir.closeSync();
+        (await fsp.watch(base)).close();
+        await fsp.unlink(base + "/hard.txt");
+        try { await fsp.readFile(base + "/missing.txt"); } catch (error) { console.log("reject", error.code); }
+
+        const handle = await fsp.open(base + "/h.txt", "w+");
+        console.log("fd", handle.fd > 0);
+        await handle.writeFile("abcdef");
+        await handle.sync();
+        await handle.datasync();
+        await handle.truncate(3);
+        await handle.chmod(0o600);
+        await handle.chown(-1, -1);
+        await handle.utimes(1000, 2000);
+        await handle.write(Buffer.from("XY"), 0, 2, 1);
+        console.log("handle", (await handle.stat()).size);
+        const bytes = Buffer.alloc(3);
+        await handle.read(bytes, 0, 3, 0);
+        console.log("handle read", bytes.toString());
+        await handle.close();
+        const reader = await fsp.open(base + "/h.txt", "r");
+        console.log("handle readall", await reader.readFile("utf8"));
+        await reader.close();
+        try { await fsp.open(base + "/missing.txt"); } catch (error) { console.log("open reject", error.code); }
+        await fsp.rm(base, { recursive: true, force: true });
+      }
+      main();
+    `;
+    expect(runProgram(source, { extensions: true })).toBe(
+      [
+        "constants true true",
+        "read hello world",
+        "stat 11 true",
+        "readdir 1 true",
+        "statfs true",
+        "mkdtemp true",
+        "trunc hello true",
+        "opendir true",
+        "reject ENOENT",
+        "fd true",
+        "handle 3",
+        "handle read aXY",
+        "handle readall aXY",
+        "open reject ENOENT",
+      ].join("\n"),
+    );
+  });
 });

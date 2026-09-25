@@ -34,27 +34,34 @@ src/extensions/node/           runtime/ext_node/
   fs/read-file.ts                  fs/fs_common.h
   fs/write-file.ts                 fs/promises.c
   fs/fs-ops.ts                     fs/streams.c
-  fs/streams.ts                     path/path.c
-  path/index.ts                    os/os.c
-  os/index.ts                      process/process.c
-  process/index.ts                 buffer/buffer.c
-  buffer/index.ts                  stream/stream.c
-  stream/index.ts                  net/net.c
-  net/index.ts                     dgram/dgram.c
-  dgram/index.ts                   http/http.c
-  http/index.ts                    node_common.h (event emitter / encoding helpers)
-  fs-promises/index.ts             crypto/crypto.c
-  crypto/index.ts                  url/url.c
-  url/index.ts                     child_process/child_process.c
-  child_process/index.ts           events/events.c
-  events/index.ts                  util/util.c
-  util/index.ts                    querystring/querystring.c
-  querystring/index.ts             assert/assert.c
-  assert/index.ts                  test/test.c
-  test/index.ts                    zlib/zlib.c
-  zlib/index.ts                    stream/pipeline.c
-  stream-promises/index.ts         worker_threads/worker_threads.c
-  worker_threads/index.ts
+  fs/streams.ts                     fs/fd_ops.c
+  path/index.ts                     fs/meta_ops.c
+  os/index.ts                       fs/link_ops.c
+  process/index.ts                  fs/copy_ops.c
+  buffer/index.ts                   fs/dir.c
+  stream/index.ts                   fs/glob.c
+  net/index.ts                      fs/watch.c
+  dgram/index.ts                    fs/constants.c
+  http/index.ts                     path/path.c
+  fs-promises/index.ts              os/os.c
+  crypto/index.ts                   process/process.c
+  url/index.ts                      buffer/buffer.c
+  child_process/index.ts            stream/stream.c
+  events/index.ts                   net/net.c
+  util/index.ts                     dgram/dgram.c
+  querystring/index.ts              http/http.c
+  assert/index.ts                   node_common.h (event emitter / encoding helpers)
+  test/index.ts                     crypto/crypto.c
+  zlib/index.ts                     url/url.c
+  stream-promises/index.ts          child_process/child_process.c
+  worker_threads/index.ts           events/events.c
+                                    util/util.c
+                                    querystring/querystring.c
+                                    assert/assert.c
+                                    test/test.c
+                                    zlib/zlib.c
+                                    stream/pipeline.c
+                                    worker_threads/worker_threads.c
 ```
 
 - Core event loop: `runtime/xt_loop.c` (a `select(2)` reactor). The generated module's `main` calls `xt_run_event_loop()` after draining microtasks; it returns immediately when no fds are registered, so pure-computation programs are unaffected.
@@ -78,19 +85,52 @@ Location: `src/extensions/node/fs/*.ts`, `runtime/ext_node/fs/*.c`
 | --- | --- | --- |
 | `readFileSync(path[, options])` | `xt_node_read_text_file` | synchronously read a file, returns a string; supports encoding options |
 | `readTextFile(path)` | `xt_node_read_text_file` | alias of `readFileSync` (same symbol) |
-| `writeFileSync(path, data[, options])` | `xt_node_write_file` | overwrite write |
-| `appendFileSync(path, data[, options])` | `xt_node_append_file` | append write |
+| `writeFileSync(path, data[, options])` | `xt_node_write_file` | overwrite write; accepts a string or a `Buffer` |
+| `appendFileSync(path, data[, options])` | `xt_node_append_file` | append write; accepts a string or a `Buffer` |
 | `existsSync(path)` | `xt_node_exists` | whether it exists, returns a boolean |
-| `readdirSync(path)` | `xt_node_read_dir` | returns an array of directory entry names |
-| `mkdirSync(path[, options])` | `xt_node_mkdir` | create a directory; `{ recursive: true }` creates recursively |
+| `readdirSync(path[, options])` | `xt_node_read_dir` | directory entry names; `{ withFileTypes: true }` returns `Dirent`s, `{ recursive: true }` recurses |
+| `mkdirSync(path[, options])` | `xt_node_mkdir` | create a directory; `{ recursive: true }` creates recursively, `{ mode }` is honoured |
 | `rmSync(path[, options])` | `xt_node_rm` | delete a file/directory; `{ recursive: true }` deletes recursively |
+| `rmdirSync(path[, options])` | `xt_node_rmdir` | delete an empty directory |
 | `unlinkSync(path)` | `xt_node_unlink` | delete a file |
-| `rmdirSync(path)` | `xt_node_rmdir` | delete an empty directory |
 | `renameSync(oldPath, newPath)` | `xt_node_rename` | rename / move |
-| `copyFileSync(src, dest)` | `xt_node_copy_file` | copy a file |
+| `copyFileSync(src, dest[, flags])` | `xt_node_copy_file` | copy a file; honours `COPYFILE_EXCL` |
+| `cpSync(src, dest[, options])` | `xt_node_cp` | recursive copy; `recursive`, `force`, `errorOnExist`, `dereference`, `preserveTimestamps` |
 | `realpathSync(path)` | `xt_node_realpath` | resolve to an absolute path |
 | `statSync(path)` | `xt_node_stat` | file metadata object (follows symlinks) |
 | `lstatSync(path)` | `xt_node_lstat` | file metadata object (does not follow symlinks) |
+| `statfsSync(path)` | `xt_node_statfs` | filesystem statistics (`bsize`, `blocks`, `bfree`, …) |
+| `accessSync(path[, mode])` | `xt_node_access` | check accessibility |
+| `chmodSync(path, mode)` | `xt_node_chmod` | change permissions |
+| `lchmodSync(path, mode)` | `xt_node_lchmod` | change symlink permissions |
+| `chownSync(path, uid, gid)` | `xt_node_chown` | change ownership |
+| `lchownSync(path, uid, gid)` | `xt_node_lchown` | change symlink ownership |
+| `truncateSync(path[, len])` | `xt_node_truncate` | truncate a file |
+| `utimesSync(path, atime, mtime)` | `xt_node_utimes` | set access/modification time (number of seconds or a `Date`) |
+| `lutimesSync(path, atime, mtime)` | `xt_node_lutimes` | set symlink times |
+| `mkdtempSync(prefix)` | `xt_node_mkdtemp` | create a unique temporary directory |
+| `linkSync(existing, newPath)` | `xt_node_link` | hard link |
+| `symlinkSync(target, path[, type])` | `xt_node_symlink` | symbolic link |
+| `readlinkSync(path)` | `xt_node_readlink` | read a symbolic link target |
+| `opendirSync(path[, options])` | `xt_node_opendir` | returns a `Dir` (`readSync` / `closeSync` / `read` / `close`) |
+| `globSync(pattern[, options])` | `xt_node_glob` | glob matching (`*`, `?`, `[...]`, `**`), `{ cwd, withFileTypes }` |
+| `openSync(path[, flags[, mode]])` | `xt_node_open` | open a file descriptor |
+| `closeSync(fd)` | `xt_node_close` | close a descriptor |
+| `readSync(fd, buffer, offset, length, position)` | `xt_node_read` | read into a `Buffer` |
+| `writeSync(fd, data[, offset[, length[, position]]])` | `xt_node_write` | write a string / `Buffer` |
+| `readvSync(fd, buffers[, position])` | `xt_node_readv` | scatter read |
+| `writevSync(fd, buffers[, position])` | `xt_node_writev` | gather write |
+| `fstatSync(fd)` | `xt_node_fstat` | `stat` for a descriptor |
+| `fsyncSync(fd)` / `fdatasyncSync(fd)` | `xt_node_fsync` / `xt_node_fdatasync` | flush a descriptor |
+| `ftruncateSync(fd[, len])` | `xt_node_ftruncate` | truncate a descriptor |
+| `fchmodSync(fd, mode)` | `xt_node_fchmod` | `chmod` for a descriptor |
+| `fchownSync(fd, uid, gid)` | `xt_node_fchown` | `chown` for a descriptor |
+| `futimesSync(fd, atime, mtime)` | `xt_node_futimes` | `utimes` for a descriptor |
+| `watch(filename[, options][, listener])` | `xt_node_watch` | returns an emitter-shaped watcher (never fires; see §2.6) |
+| `watchFile(filename[, options], listener)` | `xt_node_watch_file` | polling-shaped `StatWatcher` (never fires) |
+| `unwatchFile(filename[, listener])` | `xt_node_unwatch_file` | stop watching |
+| `constants` | `xt_fs_constants` | `F_OK` / `R_OK` / `W_OK` / `X_OK`, `COPYFILE_*`, `O_*`, `S_IF*` (host values) |
+| `promises` | `xt_fs_promises` | the `fs/promises` facade (see §11) |
 
 ### 2.2 Encoding support
 
@@ -102,12 +142,16 @@ encoding string or `{ encoding: "..." }`:
 | default / `utf8` / `utf-8` / `ascii` / `latin1` / `binary` | raw UTF-8 text | write as text bytes |
 | `hex` | lowercase hex string | parse hex then write |
 | `base64` | Base64 string | parse Base64 then write |
+| `base64url` | Base64url string | parse Base64url then write |
+| `utf16le` / `ucs2` | raw bytes read as text (no UTF-16 decoding) | write as UTF-8 text |
 
-> Since xbintsc currently has no `Buffer` value type, binary reads are always returned as strings.
+> `readFileSync` still returns a **string** by default rather than a `Buffer`,
+> even though the `Buffer` class exists, so that `console.log(readFileSync(p))`
+> keeps printing text.
 
 ### 2.3 `statSync` return structure
 
-Returns a plain object with numeric properties: `size`, `mode`, `uid`, `gid`, `dev`, `ino`, `nlink`, `rdev`, `blksize`, `blocks`, `mtimeMs`, `atimeMs`, `ctimeMs`.
+Returns a plain object with numeric properties: `size`, `mode`, `uid`, `gid`, `dev`, `ino`, `nlink`, `rdev`, `blksize`, `blocks`, `atimeMs`, `mtimeMs`, `ctimeMs`, `birthtimeMs`.
 Methods (native closures, callable): `isFile()`, `isDirectory()`, `isSymbolicLink()`, `isFIFO()`, `isSocket()`, `isBlockDevice()`, `isCharacterDevice()`.
 
 ### 2.4 How to call
@@ -125,9 +169,40 @@ console.log(existsSync("/tmp/out.txt"));
 
 ### 2.5 Error handling
 
-On open / operation failure, it prints `xbintsc: cannot ... 'path'` to stderr and
-returns `undefined` (`existsSync` returns `false`); it does not throw `Error` /
-`ENOENT` exceptions (xbintsc does not yet have a catchable exception system).
+On failure the functions **throw** a Node-shaped `Error` object carrying
+`name` (`Error`), `message`, `code` (e.g. `ENOENT`), `errno` (the numeric
+`errno`), `syscall` and `path`. `existsSync` still returns a boolean and never
+throws.
+
+```ts
+import { readFileSync } from "fs";
+try {
+  readFileSync("/does/not/exist");
+} catch (error) {
+  console.log((error as any).code); // ENOENT
+}
+```
+
+### 2.6 Deviations from Node
+
+- **No asynchronous I/O scheduler** (the event loop is a `select(2)` reactor with
+  no timers), so the callback-style `fs` functions (`readFile`, `writeFile`,
+  `open`, …) are *not* provided; use `fs/promises` or the `*Sync` forms.
+- `watch` / `watchFile` / `unwatchFile` return API-shaped emitter objects whose
+  `.close()` / `.on()` methods exist but which **never emit** events.
+- `Dir.read(cb)` / `Dir.close(cb)` invoke the callback **synchronously**.
+- `readFileSync` returns a string by default instead of a `Buffer`.
+- `utf16le` / `ucs2` are treated as raw bytes on read (no UTF-16 decoding).
+- `mkdtempSync` appends 6 random characters to the prefix regardless of whether
+  it ends in `XXXXXX`.
+- `globSync` supports `*`, `?`, `[...]` and `**` but not the `exclude` callback
+  or `follow`; `**` does not descend through symlinks (matching Node's default).
+- `cpSync` is implemented on top of the synchronous helpers; symlinks are copied
+  as symlinks unless `dereference: true` is set.
+- **Windows**: `readlinkSync` raises `ENOSYS`; `chmodSync` / `lchmodSync` /
+  `chownSync` / `lchownSync` / `fchmodSync` / `fchownSync` are no-ops;
+  `statfsSync` returns zeroed fields.
+- **macOS / Windows**: `lutimesSync` falls back to `utimesSync`.
 
 ---
 
@@ -323,20 +398,45 @@ closes.
 Location: `src/extensions/node/fs-promises/index.ts`, `runtime/ext_node/fs/promises.c`
 
 There is no asynchronous I/O scheduler, so each function wraps the corresponding
-synchronous `fs` implementation in an **already-settled Promise**, exported from
-the `fs/promises` module: `readFile`, `writeFile`, `appendFile`, `mkdir`,
-`readdir`, `rm`, `unlink`, `rmdir`, `rename`, `copyFile`, `realpath`, `stat`,
-`lstat`, `access`.
+synchronous `fs` implementation in an **already-settled Promise**. Failures
+**reject** with the same Node-shaped `Error` (with `code` / `errno` / `syscall` /
+`path`) that the synchronous form throws. `fs.promises` is also reachable from
+the `fs` module (`import { promises as fsp } from "fs"`), and both namespaces
+expose a `constants` object.
+
+Promise exports: `readFile`, `writeFile`, `appendFile`, `mkdir`, `readdir`,
+`rm`, `unlink`, `rmdir`, `rename`, `copyFile`, `cp`, `realpath`, `stat`,
+`lstat`, `statfs`, `access`, `open`, `chmod`, `lchmod`, `chown`, `lchown`,
+`truncate`, `utimes`, `lutimes`, `link`, `symlink`, `readlink`, `mkdtemp`,
+`opendir`, `glob`, `watch`.
+
+`open(...)` resolves to a **`FileHandle`** with:
+`read`, `write`, `readFile`, `writeFile`, `appendFile`, `close`, `stat`,
+`truncate`, `chmod`, `chown`, `utimes`, `sync`, `datasync`.
 
 ```ts
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile, open } from "fs/promises";
 
 async function main(): Promise<void> {
   await writeFile("/tmp/a.txt", "hi");
   console.log(await readFile("/tmp/a.txt"));
+  const handle = await open("/tmp/a.txt", "r");
+  console.log(await handle.readFile("utf8"));
+  await handle.close();
 }
 main();
 ```
+
+### 11.1 Deviations from Node
+
+- Because I/O is synchronous, the Promise settles before the returned value is
+  awaited (the event loop does not yield).
+- `FileHandle.appendFile` behaves like `writeFile` (it writes at the current
+  file position rather than appending).
+- `FileHandle.readFile()` reads from the current file-descriptor offset.
+- `Dir.read` / `Dir.close` (both the sync and promise/callback forms) complete
+  immediately.
+- `watch` resolves to the same never-emitting watcher object as `fs.watch`.
 
 ---
 
@@ -455,10 +555,12 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | Category | Contents |
 | --- | --- |
 | Extension registration | `nodeExtension` (`--ext node`), `NodeModule` interface, `resolveFrom` utility |
-| fs read | `readFileSync`, `readTextFile` (`xt_node_read_text_file`), supports hex / base64 |
-| fs write | `writeFileSync`, `appendFileSync`, supports hex / base64 |
-| fs directories | `readdirSync`, `mkdirSync`, `rmSync`, `unlinkSync`, `rmdirSync` |
-| fs other | `existsSync`, `renameSync`, `copyFileSync`, `realpathSync`, `statSync`, `lstatSync` |
+| fs read | `readFileSync`, `readTextFile` (`xt_node_read_text_file`), supports hex / base64 / base64url |
+| fs write | `writeFileSync`, `appendFileSync`, supports hex / base64 / base64url; string or `Buffer` |
+| fs directories | `readdirSync` (`withFileTypes` / `recursive`), `mkdirSync`, `rmSync`, `unlinkSync`, `rmdirSync`, `opendirSync` (`Dir`), `globSync`, `mkdtempSync` |
+| fs other | `existsSync`, `renameSync`, `copyFileSync`, `cpSync`, `realpathSync`, `statSync`, `lstatSync`, `statfsSync`, `accessSync`, `chmodSync`, `chownSync`, `lchmodSync`, `lchownSync`, `truncateSync`, `utimesSync`, `lutimesSync`, `linkSync`, `symlinkSync`, `readlinkSync`, `watch`, `watchFile`, `unwatchFile` |
+| fs descriptors | `openSync`, `closeSync`, `readSync`, `writeSync`, `readvSync`, `writevSync`, `fstatSync`, `fsyncSync`, `fdatasyncSync`, `ftruncateSync`, `fchmodSync`, `fchownSync`, `futimesSync` |
+| fs constants | `constants` (`F_OK`, `R_OK`, `W_OK`, `X_OK`, `COPYFILE_*`, `O_*`, `S_IF*`) |
 | path | `join` `resolve` `normalize` `dirname` `basename` `extname` `isAbsolute` `relative` |
 | os | `platform` `arch` `type` `release` `endianness` `homedir` `tmpdir` `hostname` `totalmem` `freemem` `cpus` |
 | process | `cwd` `exit` `uptime` `hrtime` `getuid`; `platform` `arch` `pid` `ppid` `argv` `env` `version` `title` |
@@ -479,7 +581,7 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | crypto | `createHash(algorithm)` with `update`/`digest` and the streaming API (`setEncoding`/`write`/`end`/`read`); SHA-1 and SHA-256 |
 | globals | `btoa` / `atob` base64 helpers |
 | url | `pathToFileURL` `fileURLToPath` |
-| fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `realpath` `stat` `lstat` `access` |
+| fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `cp` `realpath` `stat` `lstat` `statfs` `access` `open` `chmod` `lchmod` `chown` `lchown` `truncate` `utimes` `lutimes` `link` `symlink` `readlink` `mkdtemp` `opendir` `glob` `watch` `constants`; `FileHandle` |
 | Event loop | `xt_loop` (`select` reactor), `xt_run_event_loop()`, `xt_loop_add/update/remove` |
 | Calling convention | uniform `(argc, argv)` ABI, returns `xt_value` |
 | Linking | after registration, compiles `runtime/ext_node/**` and links it with the runtime |

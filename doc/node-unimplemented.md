@@ -15,26 +15,31 @@ is missing**.
 
 ## 1. Unimplemented in the `fs` module
 
-`fs` currently implements synchronous read/write, directory operations and
-`statSync`, and `fs/promises` is provided as a "wrapper over the synchronous
-implementation" (see [node-implemented.md](./node-implemented.md)); the rest is
-still unimplemented:
+`fs` now implements the **synchronous** API surface (files, directories,
+descriptors, metadata, links, `cp`, `glob`, `Dir`, `constants`) and
+`fs/promises` wraps each synchronous function in an already-settled Promise
+(see [node-implemented.md](./node-implemented.md)). The rest is still
+unimplemented because xbintsc has **no asynchronous I/O scheduler / event
+loop**:
 
 | Unimplemented API | Category |
 | --- | --- |
-| `readFile` / `writeFile` / `appendFile` | async callback-style read/write (`fs/promises` provides a Promise version) |
-| `watch` / `watchFile` | file watching |
-| `openSync` / `closeSync` / `readSync` / `writeSync` | file-descriptor-level operations |
-| `mkdtempSync` | temporary directory creation |
-| `linkSync` / `symlinkSync` / `readlinkSync` | hard links / symlinks |
-| `truncateSync` / `chmodSync` / `chownSync` / `utimesSync` | metadata modification |
+| `readFile` / `writeFile` / `appendFile` / `open` / `close` / `read` / `write` / `stat` / … | callback-style async file operations (`fs/promises` provides the Promise forms) |
 | `createReadStream` / `createWriteStream` | streaming read/write |
+| `watch` / `watchFile` | **real** file watching: the functions exist but the returned objects never emit (the event loop has no timers/inotify backend) |
+| `openAsBlob`, `statfs` callback form, `rmdir` `maxRetries` / `retryDelay` | misc. options requiring async retry |
+| `glob` `exclude` / `follow`, `cp` `filter` | option callbacks |
 
 ### 1.1 Read semantics gaps
 
-- `readFileSync` supports encoding options (default/`utf8`/`ascii`/`latin1`/`binary`/`hex`/`base64`), but **does not return a `Buffer`**: even though `Buffer` exists (simulated as a plain object), `readFileSync` still returns a string.
-- The error handling of `fs/promises` differs from Node: a failure in the underlying synchronous implementation only prints to stderr and resolves to `undefined`, so the **Promise does not reject** (xbintsc does not yet have a catchable exception system).
-- Error handling differs from Node: on open failure it only prints to stderr and returns `undefined`, and does not throw `Error` / `ENOENT` exceptions (xbintsc does not yet have a catchable exception system).
+- `readFileSync` supports encoding options (default/`utf8`/`ascii`/`latin1`/`binary`/ `hex`/`base64`/`base64url`), but **does not return a `Buffer`** by default: even though `Buffer` exists (simulated as a plain object), `readFileSync` still returns a string. Pass a `Buffer`-producing path or read raw bytes explicitly.
+- `utf16le` / `ucs2` decoding is not implemented (the bytes are returned as text).
+- `watch` / `watchFile` / `unwatchFile` return API-shaped emitter objects whose `.close()` / `.on()` methods exist but which **never fire** events.
+- `Dir.read(cb)` / `Dir.close(cb)` and the async form of `FileHandle` methods complete **synchronously** (the callback/Promise is invoked immediately).
+- `mkdtempSync` always appends 6 random characters to the prefix (it does not require a trailing `XXXXXX`).
+- `globSync` supports `*`, `?`, `[...]` and `**` but not the `exclude` callback or `follow`; `**` does not descend through symlinks (matching Node's default).
+- `cpSync` symlink handling follows Node for the common cases but `verbatimSymlinks` is not supported.
+- Platform deviations: on Windows `readlinkSync` raises `ENOSYS` and `chmodSync` / `lchmodSync` / `chownSync` / `lchownSync` / `fchmodSync` / `fchownSync` are no-ops; `statfsSync` returns zeroed fields on Windows/AIX/Sun; `lutimesSync` falls back to `utimesSync` on macOS/Windows.
 
 ---
 
@@ -115,11 +120,19 @@ design examples of the extension mechanism and are **not yet implemented**:
 ## 6. Quick reference: Node extension unimplemented list
 
 ```
-Implemented (fs): readFileSync (with encoding), readTextFile, writeFileSync, appendFileSync,
-                  existsSync, readdirSync, mkdirSync, rmSync, unlinkSync, rmdirSync,
-                  renameSync, copyFileSync, realpathSync, statSync, lstatSync
+Implemented (fs): the full synchronous surface — readFileSync (with encoding), readTextFile,
+                  writeFileSync, appendFileSync, existsSync, readdirSync (withFileTypes/recursive),
+                  mkdirSync, rmSync, unlinkSync, rmdirSync, renameSync, copyFileSync, cpSync,
+                  realpathSync, statSync, lstatSync, statfsSync, accessSync, chmodSync, lchmodSync,
+                  chownSync, lchownSync, truncateSync, utimesSync, lutimesSync, mkdtempSync,
+                  linkSync, symlinkSync, readlinkSync, opendirSync (Dir), globSync, watch,
+                  watchFile, unwatchFile, constants,
+                  openSync, closeSync, readSync, writeSync, readvSync, writevSync, fstatSync,
+                  fsyncSync, fdatasyncSync, ftruncateSync, fchmodSync, fchownSync, futimesSync
 Implemented (fs/promises): readFile, writeFile, appendFile, mkdir, readdir, rm, unlink,
-                           rmdir, rename, copyFile, realpath, stat, lstat, access
+                           rmdir, rename, copyFile, cp, realpath, stat, lstat, statfs, access,
+                           open (FileHandle), chmod, lchmod, chown, lchown, truncate, utimes,
+                           lutimes, link, symlink, readlink, mkdtemp, opendir, glob, watch, constants
 Implemented (other modules): path (join/resolve/normalize/dirname/basename/extname/isAbsolute/relative),
                              os (platform/arch/type/release/endianness/homedir/tmpdir/hostname/totalmem/freemem/cpus),
                              process (cwd/exit/uptime/hrtime/getuid/platform/arch/pid/ppid/argv/env/version/title),
@@ -137,9 +150,10 @@ Implemented (other modules): path (join/resolve/normalize/dirname/basename/extna
                              zlib (createGzip only), stream/promises (pipeline only),
                              worker_threads (Worker/isMainThread/workerData/parentPort only)
 
-Unimplemented (fs): readFile, writeFile, appendFile (async callback-style), watch/watchFile,
-                    open/read/write/close, mkdtempSync, link/symlink/readlink,
-                    chmod/chown/utimes/truncate, Buffer return
+Unimplemented (fs): callback-style async file operations (readFile/writeFile/appendFile/open/
+                    read/write/close), createReadStream/createWriteStream, real file watching
+                    (watch/watchFile objects never emit),
+                    glob exclude/follow, cp filter, utf16le decoding, Buffer return from readFileSync
 
 Unimplemented (other modules): https, readline, tls, cluster, vm
 

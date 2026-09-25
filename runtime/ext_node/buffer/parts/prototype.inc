@@ -52,3 +52,10 @@ unsigned char *xt_node_buffer_bytes(xt_value value, size_t *outLength) {
   *outLength = length;
   return bytes;
 }
+
+/* Cross-module helpers used by the fs module to fill/read Buffer objects. */
+uint32_t xt_node_buffer_length(xt_value value) { return xt_buffer_length(value); }
+
+void xt_node_buffer_set(xt_value value, uint32_t index, unsigned char byte) {
+  xt_buffer_put(value, index, byte);
+}

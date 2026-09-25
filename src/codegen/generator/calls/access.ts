@@ -106,6 +106,21 @@ export const accessCallMethods: AccessCallMethods = {
         }
       }
     }
+    // Modules with no namespace dispatcher (`fs`, ...) can still expose value
+    // getters (`fs.constants`, `fs.promises`). Lower `fs.constants` the same
+    // way a named `import { constants } from "fs"` is lowered.
+    if (node.expression.kind === SyntaxKind.Identifier) {
+      const moduleExports = this.moduleExportsOfSymbol(
+        this.binding.symbolOfIdentifier.get(node.expression as Identifier),
+      );
+      const exported = moduleExports?.[node.name.text];
+      if (exported?.valueSymbol) {
+        this.extraDeclarations.add(`declare i64 @${exported.valueSymbol}(i32, i64*)`);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @${exported.valueSymbol}(i32 0, i64* null)`);
+        return result;
+      }
+    }
     const object = this.emitExpression(node.expression);
     return this.emitPropertyGet(object, node.name.text);
   },

@@ -7,9 +7,13 @@
  *
  * `readFileSync(path[, options])` reads a file and returns its contents as a
  * string. `options` may be an encoding string or an object with an `encoding`
- * property; `"utf8"` (the default), `"ascii"`, `"latin1"` and `"binary"` return
- * the raw bytes, while `"hex"` and `"base64"` return encoded strings. There is
- * no `Buffer` type yet, so binary reads always come back as text.
+ * property; `"utf8"` (the default), `"ascii"`, `"latin1"` and `"binary"`
+ * return the raw bytes, while `"hex"`, `"base64"` and `"base64url"` return
+ * encoded strings.
+ *
+ * Deviation: Node returns a `Buffer` when no encoding is given. xbintsc has no
+ * dedicated binary value type, so the default result is a UTF-8 string (raw
+ * byte values are preserved for ASCII/latin1 content).
  */
 
 #include "rt.h"
@@ -23,7 +27,7 @@ xt_value xt_node_read_text_file(int32_t argc, xt_value *argv) {
 
   FILE *file = fopen(path, "rb");
   if (!file) {
-    fprintf(stderr, "xbintsc: cannot open '%s'\n", path);
+    xt_fs_error("open", path);
     return xt_undefined();
   }
   fseek(file, 0, SEEK_END);

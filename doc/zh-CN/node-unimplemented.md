@@ -12,23 +12,26 @@
 
 ## 1. `fs` 模块未实现
 
-当前 `fs` 已实现同步读写、目录操作与 `statSync`，`fs/promises` 已以「包装同步实现」的形式提供（见 [node-implemented.md](node-implemented.md)），其余仍未实现：
+`fs` 现在实现了**同步** API 表面（文件、目录、描述符、元数据、链接、`cp`、`glob`、`Dir`、`constants`），`fs/promises` 将每个同步函数包进已 settle 的 Promise（见 [node-implemented.md](node-implemented.md)）。其余仍未实现，因为 xbintsc **没有异步 I/O 调度器 / 事件循环**：
 
 | 未实现 API | 类别 |
 | --- | --- |
-| `readFile` / `writeFile` / `appendFile` | 异步回调式读写（`fs/promises` 提供了 Promise 版） |
-| `watch` / `watchFile` | 文件监听 |
-| `openSync` / `closeSync` / `readSync` / `writeSync` | 文件描述符级操作 |
-| `mkdtempSync` | 临时目录创建 |
-| `linkSync` / `symlinkSync` / `readlinkSync` | 硬链接 / 符号链接 |
-| `truncateSync` / `chmodSync` / `chownSync` / `utimesSync` | 元数据修改 |
+| `readFile` / `writeFile` / `appendFile` / `open` / `close` / `read` / `write` / `stat` / … | 回调式异步文件操作（`fs/promises` 提供 Promise 形式） |
 | `createReadStream` / `createWriteStream` | 流式读写 |
+| `watch` / `watchFile` | **真正的**文件监听：函数存在但返回对象从不触发（事件循环无定时器/inotify 后端） |
+| `openAsBlob`、`statfs` 回调形式、`rmdir` 的 `maxRetries` / `retryDelay` | 需异步重试的杂项选项 |
+| `glob` 的 `exclude` / `follow`、`cp` 的 `filter` | 选项回调 |
 
 ### 1.1 读取语义缺口
 
-- `readFileSync` 支持编码选项（默认/`utf8`/`ascii`/`latin1`/`binary`/`hex`/`base64`），但**不返回 `Buffer`**：即使提供了 `Buffer`（以普通对象模拟），`readFileSync` 仍以字符串返回。
-- `fs/promises` 的错误处理与 Node 不符：底层同步实现失败只打印 stderr 并解析为 `undefined`，**Promise 不会 reject**（xbintsc 尚无可捕获异常体系）。
-- 错误处理与 Node 不符：打开失败只打印 stderr 并返回 `undefined`，不会抛出 `Error` / `ENOENT` 等异常（xbintsc 尚无可捕获异常体系）。
+- `readFileSync` 支持编码选项（默认/`utf8`/`ascii`/`latin1`/`binary`/`hex`/`base64`/`base64url`），但默认**不返回 `Buffer`**：即使提供了 `Buffer`（以普通对象模拟），`readFileSync` 仍以字符串返回。要读取原始字节请显式指定。
+- 未实现 `utf16le` / `ucs2` 解码（按文本返回字节）。
+- `watch` / `watchFile` / `unwatchFile` 返回 API 形态的发射器对象，`.close()` / `.on()` 方法存在但**不会触发**事件。
+- `Dir.read(cb)` / `Dir.close(cb)` 与 `FileHandle` 异步方法都会**同步**完成（回调/Promise 立即被调用）。
+- `mkdtempSync` 总是向前缀追加 6 个随机字符（不要求以 `XXXXXX` 结尾）。
+- `globSync` 支持 `*`、`?`、`[...]`、`**`，但不支持 `exclude` 回调与 `follow`；`**` 不跟随符号链接（与 Node 默认一致）。
+- `cpSync` 的符号链接处理在常见场景下与 Node 一致，但不支持 `verbatimSymlinks`。
+- 平台差异：Windows 上 `readlinkSync` 抛 `ENOSYS`，`chmodSync` / `lchmodSync` / `chownSync` / `lchownSync` / `fchmodSync` / `fchownSync` 为空操作；`statfsSync` 在 Windows/AIX/Sun 返回全零字段；`lutimesSync` 在 macOS/Windows 退化为 `utimesSync`。
 
 ---
 
@@ -93,11 +96,19 @@ Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { read
 ## 6. 速查：Node 扩展未实现清单
 
 ```
-已实现（fs）：readFileSync（含编码）、readTextFile、writeFileSync、appendFileSync、
-              existsSync、readdirSync、mkdirSync、rmSync、unlinkSync、rmdirSync、
-              renameSync、copyFileSync、realpathSync、statSync、lstatSync
+已实现（fs）：完整同步表面 —— readFileSync（含编码）、readTextFile、
+              writeFileSync、appendFileSync、existsSync、readdirSync（withFileTypes/recursive）、
+              mkdirSync、rmSync、unlinkSync、rmdirSync、renameSync、copyFileSync、cpSync、
+              realpathSync、statSync、lstatSync、statfsSync、accessSync、chmodSync、lchmodSync、
+              chownSync、lchownSync、truncateSync、utimesSync、lutimesSync、mkdtempSync、
+              linkSync、symlinkSync、readlinkSync、opendirSync（Dir）、globSync、watch、
+              watchFile、unwatchFile、constants、
+              openSync、closeSync、readSync、writeSync、readvSync、writevSync、fstatSync、
+              fsyncSync、fdatasyncSync、ftruncateSync、fchmodSync、fchownSync、futimesSync
 已实现（fs/promises）：readFile、writeFile、appendFile、mkdir、readdir、rm、unlink、
-                      rmdir、rename、copyFile、realpath、stat、lstat、access
+                      rmdir、rename、copyFile、cp、realpath、stat、lstat、statfs、access、
+                      open（FileHandle）、chmod、lchmod、chown、lchown、truncate、utimes、
+                      lutimes、link、symlink、readlink、mkdtemp、opendir、glob、watch、constants
 已实现（其它模块）：path（join/resolve/normalize/dirname/basename/extname/isAbsolute/relative）、
                     os（platform/arch/type/release/endianness/homedir/tmpdir/hostname/totalmem/freemem/cpus）、
                     process（cwd/exit/uptime/hrtime/getuid/platform/arch/pid/ppid/argv/env/version/title）、
@@ -115,9 +126,9 @@ Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { read
                     zlib（仅 createGzip）、stream/promises（仅 pipeline）、
                     worker_threads（仅 Worker/isMainThread/workerData/parentPort）
 
-未实现（fs）：readFile、writeFile、appendFile（异步回调式）、watch/watchFile、
-              open/read/write/close、mkdtempSync、link/symlink/readlink、
-              chmod/chown/utimes/truncate、Buffer 返回
+未实现（fs）：回调式异步文件操作（readFile/writeFile/appendFile/open/read/write/close）、
+              createReadStream/createWriteStream、真正的文件监听（watch/watchFile 对象从不触发）、
+              glob exclude/follow、cp filter、utf16le 解码、readFileSync 返回 Buffer
 
 未实现（其它模块）：https、readline、tls、cluster、vm
 

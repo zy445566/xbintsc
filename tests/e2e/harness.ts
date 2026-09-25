@@ -4,9 +4,9 @@
  * clang-compatible compiler is available.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect } from "vitest";
 import { build } from "../../src/driver/compiler.js";
@@ -87,11 +87,17 @@ export function describeE2E(
       rmSync(workdir, { recursive: true, force: true });
     });
 
+    const writeProgramFiles = (files: Record<string, string>): void => {
+      for (const [relative, contents] of Object.entries(files)) {
+        const path = join(workdir, relative);
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, contents);
+      }
+    };
+
     const runProgramFull = (source: string, runOptions: RunOptions = {}): RunResult => {
       const entry = join(workdir, `${runOptions.name ?? `program_${Math.random().toString(36).slice(2)}`}.ts`);
-      for (const [relative, contents] of Object.entries(runOptions.files ?? {})) {
-        writeFileSync(join(workdir, relative), contents);
-      }
+      writeProgramFiles(runOptions.files ?? {});
       writeFileSync(entry, source);
       const extensions = runOptions.extensions ? createDefaultRegistry().register(nodeExtension) : undefined;
       const result = build(entry, {
@@ -111,9 +117,7 @@ export function describeE2E(
 
     const runNodeProgram = (source: string, runOptions: NodeRunOptions = {}): string => {
       const entry = join(workdir, `${runOptions.name ?? `node_${Math.random().toString(36).slice(2)}`}.ts`);
-      for (const [relative, contents] of Object.entries(runOptions.files ?? {})) {
-        writeFileSync(join(workdir, relative), contents);
-      }
+      writeProgramFiles(runOptions.files ?? {});
       writeFileSync(entry, source);
       const executed = spawnSync(process.execPath, ["--import", "tsx", entry], {
         encoding: "utf8",

@@ -128,12 +128,13 @@ None known at the expression level.
 | Namespace import `import * as ns` | ✓ lowered to a synthetic object literal holding every export |
 | Circular dependencies | ✗ errors out (no circular initialization semantics) |
 | Live bindings | ✗ namespace objects and imported bindings are snapshots at module-evaluation time |
-| Third-party / npm dependencies | ✗ not implemented (relative `.ts` files only) |
+| ESM `node_modules` packages | ✓ bare specifiers resolve up the tree through `exports` / `module` / `main`, including scoped packages and subpaths; the package sources are bundled like relative modules |
+| CommonJS `require` / `module.exports` | ✗ `require()` is rejected with a diagnostic pointing at the ESM `import` form |
 
 > Extension modules (such as `fs`) are importable by bare or `node:`-prefixed
 > specifier — `import { readFileSync } from "fs"` / `import path from "path"` —
 > and resolve to their runtime entries (named, default and namespace forms).
-> Relative modules are bundled at the driver layer.
+> Relative modules and ESM packages under `node_modules` are bundled at the driver layer.
 
 ---
 
@@ -230,7 +231,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Self-hosting | ✓ the compiler compiles itself: `xbintsc build src/cli/main.ts` produces a working binary, and the emitted IR is stable from generation 1 onward. The runtime is still C |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
 | Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` implemented; String.normalize / structuredClone missing |
-| Multi-file module bundling | partial: relative-path `.ts` bundling, namespace imports and bare-specifier extension module imports implemented; circular dependencies / npm / live bindings not implemented |
+| Multi-file module bundling | partial: relative-path `.ts` bundling, ESM `node_modules` packages, namespace imports and bare-specifier extension module imports implemented; circular dependencies / CommonJS / live bindings not implemented |
 | A real async runtime / event loop | ✗ (Promise is a synchronous microtask model) |
 | Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), verified in CI |
 | Precise ECMAScript number / string / comparison semantics | partial, see section 8 |
@@ -251,7 +252,7 @@ Unimplemented (classes/OO): abstract/implements, access control,
 
 Unimplemented (standard library): String.normalize, structuredClone
 
-Unimplemented (modules): circular dependencies, npm dependencies, live bindings
+Unimplemented (modules): circular dependencies, CommonJS `require`, live bindings
 
 Unimplemented (type system): type checking, generic instantiation, assertion
                              semantics, optional-chaining narrowing

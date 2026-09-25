@@ -78,6 +78,19 @@ export function compileString(source: string, fileName = "input.ts", extensions?
 }
 
 /**
+ * Every module specifier the registry can resolve at code generation time (the
+ * registered platform modules plus the hints for known-but-disabled
+ * extensions). Bare imports outside this set are looked up in `node_modules`
+ * and bundled as source.
+ */
+function externalModuleSpecifiers(registry: ExtensionRegistry): Set<string> {
+  return new Set([
+    ...Object.keys(registry.modules()),
+    ...Object.keys(registry.moduleHints()),
+  ]);
+}
+
+/**
  * Compile a file to LLVM IR, bundling every reachable relative module first so
  * that imports from other TypeScript sources resolve exactly like `build`.
  */
@@ -88,6 +101,7 @@ export function compileEntry(entryPath: string, extensions?: ExtensionRegistry):
   const diagnostics = new DiagnosticBag();
   const parser = new Parser(file, diagnostics);
   let sourceFile = parser.parseSourceFile();
+  const registry = extensions ?? createDefaultRegistry();
   const isModule = sourceFile.statements.some(
     (statement) =>
       statement.kind === SyntaxKind.ImportDeclaration ||
@@ -95,10 +109,9 @@ export function compileEntry(entryPath: string, extensions?: ExtensionRegistry):
       statement.kind === SyntaxKind.ExportAssignment,
   );
   if (isModule) {
-    const bundled = bundleModules(absoluteEntry, diagnostics);
+    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry));
     if (bundled) sourceFile = bundled.sourceFile;
   }
-  const registry = extensions ?? createDefaultRegistry();
   const { ir } = generate(sourceFile, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
@@ -172,7 +185,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   );
   let cacheText = sourceText;
   if (isModule) {
-    const bundled = bundleModules(absoluteEntry, diagnostics);
+    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry));
     if (bundled) {
       sourceFile = bundled.sourceFile;
       cacheText = bundled.text;

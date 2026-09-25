@@ -235,6 +235,11 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           const nameValue = this.stringValue(identifier.text);
           return this.runtimeCall("xt_error_constructor", [nameValue]);
         }
+        // A bare `require` reference is CommonJS; steer the user to `import`.
+        if (identifier.text === "require") {
+          this.reportRequireUse(identifier);
+          return i64(XT_UNDEFINED);
+        }
         this.diagnostics.error(
           DiagnosticCode.CannotFindName,
           `Cannot find name '${identifier.text}'`,

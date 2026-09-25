@@ -162,8 +162,8 @@ export class GeneratorContext {
     if (!symbols.some((symbol) => this.usedAsValue(symbol))) return;
     this.diagnostics.error(
       DiagnosticCode.ModuleNotFound,
-      `module '${specifier}' is not supported: xbintsc can only import built-in platform modules and ` +
-        "relative '.ts' files; third-party npm packages (node_modules) are not implemented yet",
+      `module '${specifier}' is not supported: xbintsc can import built-in platform modules, ` +
+        "relative '.ts' files and ESM packages under node_modules; CommonJS packages are not supported",
       declaration.moduleSpecifier,
       this.sourceFile.fileName,
     );
@@ -414,6 +414,34 @@ export class GeneratorContext {
       this.sourceFile.fileName,
     );
   }
+
+  /**
+   * Report a CommonJS `require(...)` use. xbintsc has no CommonJS module
+   * runtime, so point the user at the ESM `import` form (with the requested
+   * module in the hint when it is a string literal).
+   */
+  reportRequireUse(node: Node): void {
+    const specifier = requireSpecifier(node);
+    const replacement = specifier
+      ? `use an ESM import instead, e.g. \`import value from ${JSON.stringify(specifier)}\``
+      : "use an ESM `import` statement instead";
+    this.diagnostics.error(
+      DiagnosticCode.UnsupportedFeature,
+      `CommonJS \`require()\` is not supported; ${replacement}`,
+      node,
+      this.sourceFile.fileName,
+    );
+  }
+}
+
+/** The string literal passed to `require("...")`, when there is one. */
+function requireSpecifier(node: Node): string | undefined {
+  if (node.kind !== SyntaxKind.CallExpression) return undefined;
+  const first = (node as { arguments?: readonly Node[] }).arguments?.[0];
+  if (first && first.kind === SyntaxKind.StringLiteral) {
+    return (first as unknown as { value: string }).value;
+  }
+  return undefined;
 }
 
 /** A bare module specifier (`fs`, `node:fs`, `@scope/pkg`), not a file path. */

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -79,6 +79,23 @@ describe("compileString", () => {
     expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
   });
 
+  it("steers a CommonJS require() at the ESM import form", () => {
+    const { diagnostics } = compileString('const fs = require("fs");\nfs;', "require.ts");
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.code).toBe(DiagnosticCode.UnsupportedFeature);
+    expect(errors[0]!.message).toContain("`require()` is not supported");
+    expect(errors[0]!.message).toContain('import value from "fs"');
+  });
+
+  it("steers a bare require reference at the ESM import form", () => {
+    const { diagnostics } = compileString("const loader = require;\nloader;", "require-value.ts");
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.message).toContain("`require()` is not supported");
+    expect(errors[0]!.message).toContain("ESM `import` statement");
+  });
+
   it("names a missing export of a registered module", () => {
     const registry = createDefaultRegistry().register(nodeExtension);
     const { diagnostics } = compileString(
@@ -102,6 +119,20 @@ describe("compileEntry", () => {
     const { ir, diagnostics } = compileEntry(entry);
     expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
     // Both the imported constant and the message are lowered into one module.
+    expect(ir).toContain("@xt_add");
+  });
+
+  it("bundles a package from node_modules", () => {
+    const directory = temporaryDirectory();
+    const packageDir = join(directory, "node_modules", "mathx");
+    mkdirSync(packageDir, { recursive: true });
+    writeFileSync(join(packageDir, "package.json"), '{ "name": "mathx", "main": "index.js" }');
+    writeFileSync(join(packageDir, "index.js"), "export const value = 40;\n");
+    const entry = join(directory, "main.ts");
+    writeFileSync(entry, 'import { value } from "mathx";\nconsole.log(value + 2);\n');
+
+    const { ir, diagnostics } = compileEntry(entry);
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
     expect(ir).toContain("@xt_add");
   });
 });

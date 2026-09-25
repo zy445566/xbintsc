@@ -1,6 +1,6 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { bundleModules } from "../../src/driver/modules.js";
 import { DiagnosticBag, DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
@@ -17,7 +17,11 @@ function temporaryDirectory(): string {
 
 function writeFiles(files: Record<string, string>): string {
   const directory = temporaryDirectory();
-  for (const [name, content] of Object.entries(files)) writeFileSync(join(directory, name), content);
+  for (const [name, content] of Object.entries(files)) {
+    const path = join(directory, name);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, content);
+  }
   return directory;
 }
 
@@ -116,6 +120,54 @@ describe("bundleModules", () => {
   it("keeps external (extension) imports in place", () => {
     const directory = writeFiles({
       "main.ts": 'import fs from "node:fs";\nfs.readFileSync("f.txt");',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result!.sourceFile.statements[0]!.kind).toBe(SyntaxKind.ImportDeclaration);
+  });
+
+  it("bundles a package resolved from node_modules", () => {
+    const directory = writeFiles({
+      "node_modules/mathx/package.json": '{ "name": "mathx", "main": "index.js" }',
+      "node_modules/mathx/index.js": "export function add(a, b) { return a + b; }\nexport const two = 2;",
+      "main.ts": 'import { add, two } from "mathx";\nadd(two, 1);',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+    // The package import is lowered away; only the merged statements remain.
+    expect(result!.sourceFile.statements.some((s) => s.kind === SyntaxKind.ImportDeclaration)).toBe(false);
+  });
+
+  it("resolves scoped packages, subpaths and the exports map", () => {
+    const directory = writeFiles({
+      "node_modules/@scope/tool/package.json":
+        '{ "name": "@scope/tool", "exports": { ".": { "import": "./dist/index.js" }, "./extra": "./dist/extra.js" } }',
+      "node_modules/@scope/tool/dist/index.js": 'export const name = "scoped";',
+      "node_modules/@scope/tool/dist/extra.js": "export const extra = 42;",
+      "main.ts": 'import { name } from "@scope/tool";\nimport { extra } from "@scope/tool/extra";\nname;\nextra;',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(3);
+  });
+
+  it("prefers a known platform module over a same-named package", () => {
+    const directory = writeFiles({
+      "node_modules/fs/package.json": '{ "name": "fs", "main": "index.js" }',
+      "node_modules/fs/index.js": "export const fake = true;",
+      "main.ts": 'import fs from "fs";\nfs;',
+    });
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag, new Set(["fs"]));
+    expect(bag.hasErrors).toBe(false);
+    // The platform `fs` import is left for code generation, not bundled.
+    expect(result!.sourceFile.statements[0]!.kind).toBe(SyntaxKind.ImportDeclaration);
+  });
+
+  it("leaves an unresolvable bare specifier for the generator", () => {
+    const directory = writeFiles({
+      "main.ts": 'import { z } from "zod";\nz;',
     });
     const { result, bag } = bundle(join(directory, "main.ts"));
     expect(bag.hasErrors).toBe(false);

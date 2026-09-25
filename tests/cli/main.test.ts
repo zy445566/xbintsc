@@ -167,6 +167,15 @@ describe("cli", () => {
     expect(output).not.toContain("cannot be used as a value");
   });
 
+  it("tells the user to replace require with an ESM import", () => {
+    const entry = writeProgram('const fs = require("fs");\nfs;');
+    const { io, err } = capture();
+    expect(run(["emit", entry], io)).toBe(1);
+    const output = err.join("");
+    expect(output).toContain("`require()` is not supported");
+    expect(output).toContain('import value from "fs"');
+  });
+
   it("registers a native extension from a manifest", () => {
     const entry = writeProgram("console.log(1);");
     const directory = temporaryDirectory();

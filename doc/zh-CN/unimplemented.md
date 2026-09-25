@@ -99,9 +99,10 @@
 | 命名空间导入 `import * as ns` | ✓ 降级为持有全部导出的合成对象字面量 |
 | 循环依赖 | ✗ 直接报错（不做循环初始化语义） |
 | 实时绑定（live bindings） | ✗ 命名空间对象与导入绑定是模块求值时的快照 |
-| 第三方 / npm 依赖 | ✗ 未实现（仅相对路径 `.ts` 文件） |
+| ESM `node_modules` 包 | ✓ 裸说明符沿目录树解析，支持 `exports` / `module` / `main`、作用域包与子路径；包源码与相对模块一样被打包 |
+| CommonJS `require` / `module.exports` | ✗ `require()` 会报错并提示改用 ESM `import` |
 
-> 扩展模块（如 `fs`）可通过裸名称或 `node:` 前缀的 `import` 引入 —— `import { readFileSync } from "fs"` / `import path from "path"` —— 并解析到运行时入口（具名、默认与命名空间形式均可）。相对模块仍在驱动层打包。
+> 扩展模块（如 `fs`）可通过裸名称或 `node:` 前缀的 `import` 引入 —— `import { readFileSync } from "fs"` / `import path from "path"` —— 并解析到运行时入口（具名、默认与命名空间形式均可）。相对模块与 `node_modules` 中的 ESM 包仍在驱动层打包。
 
 ---
 
@@ -194,7 +195,7 @@
 | 自举（self-hosting） | ✓ 编译器已能自编译：`xbintsc build src/cli/main.ts` 可产出可用二进制，且从第 1 代起产出的 IR 保持稳定。运行时仍为 C |
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
 | 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` 已实现；String.normalize / structuredClone 缺失 |
-| 多文件模块打包 | 部分：相对路径 `.ts` 打包、命名空间导入、裸说明符扩展模块导入已实现；循环依赖 / npm / 实时绑定未实现 |
+| 多文件模块打包 | 部分：相对路径 `.ts` 打包、ESM `node_modules` 包、命名空间导入、裸说明符扩展模块导入已实现；循环依赖 / CommonJS / 实时绑定未实现 |
 | 真正的异步运行时 / 事件循环 | ✗（Promise 为同步微任务模型） |
 | Windows 二进制产物验证 | 构建层已适配（`.exe` 后缀、链接参数分支），并在 CI 中验证 |
 | 精确的 ECMAScript 数值 / 字符串 / 比较语义 | 部分，见第 8 节 |
@@ -214,7 +215,7 @@
 
 未实现（标准库）：String.normalize、structuredClone
 
-未实现（模块）：循环依赖、npm 依赖、实时绑定
+未实现（模块）：循环依赖、CommonJS `require`、实时绑定
 
 未实现（类型系统）：类型检查、泛型实例化、断言语义、可选链类型窄化
 

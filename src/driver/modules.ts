@@ -13,7 +13,7 @@
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
   ModifierKind,
   SyntaxKind,
@@ -55,19 +55,24 @@ export interface BundleResult {
   readonly moduleCount: number;
 }
 
-const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".cts", "/index.ts", "/index.tsx"];
+/** Source extensions probed for an extension-less or `.js` specifier. */
+const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".cts"];
+/** File extensions a directory `index` entry may use. */
+const INDEX_SUFFIXES = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+/** Conditions consulted, in order, when reading a package `exports` map. */
+const EXPORT_CONDITIONS = ["import", "module", "default", "node", "require"];
 
-/**
- * Bare module specifiers (`fs`, `node:fs`, `@scope/pkg`) are not files to
- * bundle: they are resolved at code generation time against the registered
- * extension modules.
- */
-function isExternalSpecifier(specifier: string): boolean {
-  return !specifier.startsWith(".") && !isAbsolute(specifier);
+/** A specifier is a file path (`./x`, `../x`, `/x`) rather than a package. */
+function isRelativeSpecifier(specifier: string): boolean {
+  return specifier.startsWith(".") || isAbsolute(specifier);
 }
 
-function resolveModule(fromDir: string, specifier: string): string | undefined {
-  const base = resolve(fromDir, specifier);
+/**
+ * Resolve a path on disk, tolerating TypeScript's `.js` import convention
+ * (`import "./foo.js"` pointing at `foo.ts`) and Node's directory/`index`
+ * conventions.
+ */
+function resolvePath(base: string): string | undefined {
   // TypeScript sources are imported using their emitted `.js` extension
   // (`import ... from "./foo.js"`), so map the extension back to the source
   // file before probing the usual suffixes.
@@ -84,7 +89,195 @@ function resolveModule(fromDir: string, specifier: string): string | undefined {
     const candidate = base + suffix;
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
   }
+  if (existsSync(base) && statSync(base).isDirectory()) return resolveDirectory(base);
   return undefined;
+}
+
+/** Resolve a directory to its package entry or an `index` file. */
+function resolveDirectory(directory: string): string | undefined {
+  const pkg = readPackageJson(directory);
+  if (pkg && typeof pkg.main === "string") {
+    const main = resolvePath(resolve(directory, pkg.main));
+    if (main) return main;
+  }
+  for (const suffix of INDEX_SUFFIXES) {
+    const candidate = join(directory, `index${suffix}`);
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  return undefined;
+}
+
+function resolveModule(fromDir: string, specifier: string): string | undefined {
+  return resolvePath(resolve(fromDir, specifier));
+}
+
+interface PackageJson {
+  readonly main?: string;
+  readonly module?: string;
+  readonly exports?: unknown;
+}
+
+function readPackageJson(directory: string): PackageJson | undefined {
+  const file = join(directory, "package.json");
+  if (!existsSync(file) || !statSync(file).isFile()) return undefined;
+  try {
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as PackageJson) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Split `pkg/sub/path` or `@scope/pkg/sub/path` into package name and subpath. */
+function splitPackageSpecifier(specifier: string): { packageName: string; subpath: string } {
+  const parts = specifier.split("/");
+  if (specifier.startsWith("@")) {
+    return { packageName: parts.slice(0, 2).join("/"), subpath: parts.slice(2).join("/") };
+  }
+  return { packageName: parts[0] ?? specifier, subpath: parts.slice(1).join("/") };
+}
+
+/**
+ * Resolve a bare specifier against the `node_modules` directories above
+ * `fromDir`, following a package's `exports` map and falling back to
+ * `module`/`main`/`index`. Packages that only ship CommonJS resolve here too;
+ * their `require` calls are then rejected during code generation.
+ */
+function resolveNodePackage(fromDir: string, specifier: string): string | undefined {
+  const { packageName, subpath } = splitPackageSpecifier(specifier);
+  if (!packageName || packageName.startsWith(".")) return undefined;
+  let directory = fromDir;
+  for (;;) {
+    const packageDir = join(directory, "node_modules", packageName);
+    if (existsSync(packageDir) && statSync(packageDir).isDirectory()) {
+      const resolved = subpath
+        ? resolvePackageSubpath(packageDir, subpath)
+        : resolvePackageEntry(packageDir);
+      if (resolved) return resolved;
+    }
+    const parent = dirname(directory);
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+}
+
+function resolvePackageEntry(packageDir: string): string | undefined {
+  const pkg = readPackageJson(packageDir);
+  if (pkg) {
+    const exported = resolveExportTarget(subpathValue(pkg.exports, "."));
+    if (exported) {
+      const resolved = resolvePath(resolve(packageDir, exported));
+      if (resolved) return resolved;
+    }
+    if (typeof pkg.module === "string") {
+      const resolved = resolvePath(resolve(packageDir, pkg.module));
+      if (resolved) return resolved;
+    }
+    if (typeof pkg.main === "string") {
+      const resolved = resolvePath(resolve(packageDir, pkg.main));
+      if (resolved) return resolved;
+    }
+  }
+  return resolveDirectory(packageDir);
+}
+
+function resolvePackageSubpath(packageDir: string, subpath: string): string | undefined {
+  const pkg = readPackageJson(packageDir);
+  const exported = resolveExportTarget(subpathValue(pkg?.exports, `./${subpath}`));
+  if (exported) {
+    const resolved = resolvePath(resolve(packageDir, exported));
+    if (resolved) return resolved;
+  }
+  return resolvePath(join(packageDir, subpath));
+}
+
+/** Pick the export target for a subpath (`"."` or `"./sub"`) from an exports map. */
+function subpathValue(exportsField: unknown, subpath: string): unknown {
+  if (exportsField === undefined) return undefined;
+  if (typeof exportsField === "string" || Array.isArray(exportsField)) {
+    return subpath === "." ? exportsField : undefined;
+  }
+  if (!exportsField || typeof exportsField !== "object") return undefined;
+  const record = exportsField as Record<string, unknown>;
+  const keys = Object.keys(record);
+  // A map without `.`-prefixed keys is a condition map for the root export.
+  if (!keys.some((key) => key.startsWith("."))) {
+    return subpath === "." ? exportsField : undefined;
+  }
+  if (subpath in record) return record[subpath];
+  // Wildcard patterns such as `"./*": "./dist/*.js"`.
+  for (const key of keys) {
+    const star = key.indexOf("*");
+    if (star === -1) continue;
+    const prefix = key.slice(0, star);
+    const suffix = key.slice(star + 1);
+    if (subpath.startsWith(prefix) && subpath.endsWith(suffix)) {
+      const matched = subpath.slice(prefix.length, subpath.length - suffix.length);
+      return substituteStar(record[key], matched);
+    }
+  }
+  return undefined;
+}
+
+function substituteStar(target: unknown, matched: string): unknown {
+  if (typeof target === "string") return target.split("*").join(matched);
+  if (Array.isArray(target)) return target.map((entry) => substituteStar(entry, matched));
+  if (target && typeof target === "object") {
+    const record: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(target)) record[key] = substituteStar(value, matched);
+    return record;
+  }
+  return target;
+}
+
+/** Pick a runtime string from a (possibly conditional) exports target. */
+function resolveExportTarget(target: unknown): string | undefined {
+  if (typeof target === "string") return target;
+  if (Array.isArray(target)) {
+    for (const entry of target) {
+      const resolved = resolveExportTarget(entry);
+      if (resolved) return resolved;
+    }
+    return undefined;
+  }
+  if (target && typeof target === "object") {
+    const record = target as Record<string, unknown>;
+    for (const condition of EXPORT_CONDITIONS) {
+      if (condition in record) {
+        const resolved = resolveExportTarget(record[condition]);
+        if (resolved) return resolved;
+      }
+    }
+  }
+  return undefined;
+}
+
+type DependencyResolution =
+  | { readonly kind: "external" }
+  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "missing" };
+
+/**
+ * Classify an import specifier. Known platform modules (extension modules and
+ * `node:` builtins) are left for code generation; relative paths and
+ * `node_modules` packages are resolved to a source file to bundle; a relative
+ * path that does not exist is an error.
+ */
+function classifyDependency(
+  fromDir: string,
+  specifier: string,
+  externalSpecifiers: ReadonlySet<string>,
+): DependencyResolution {
+  if (specifier.startsWith("node:") || externalSpecifiers.has(specifier)) {
+    return { kind: "external" };
+  }
+  const resolved = isRelativeSpecifier(specifier)
+    ? resolveModule(fromDir, specifier)
+    : resolveNodePackage(fromDir, specifier);
+  if (resolved) return { kind: "file", path: resolved };
+  // A bare specifier that is not a file may still be a platform module the
+  // generator knows about (e.g. when the caller passes no extension registry).
+  return isRelativeSpecifier(specifier) ? { kind: "missing" } : { kind: "external" };
 }
 
 function hasModifier(node: Node, kind: ModifierKind): boolean {
@@ -111,7 +304,11 @@ function declarationName(node: Node): Identifier | undefined {
 }
 
 /** Load, parse and bind the entry module and every module it imports. */
-function loadGraph(entryPath: string, diagnostics: DiagnosticBag): ModuleRecord[] | undefined {
+function loadGraph(
+  entryPath: string,
+  diagnostics: DiagnosticBag,
+  externalSpecifiers: ReadonlySet<string>,
+): ModuleRecord[] | undefined {
   const records = new Map<string, ModuleRecord>();
   const order: ModuleRecord[] = [];
   const visiting = new Set<string>();
@@ -152,9 +349,9 @@ function loadGraph(entryPath: string, diagnostics: DiagnosticBag): ModuleRecord[
     for (const statement of sourceFile.statements) {
       const specifier = moduleSpecifierOf(statement);
       if (!specifier) continue;
-      if (isExternalSpecifier(specifier)) continue;
-      const dependency = resolveModule(dirname(path), specifier);
-      if (!dependency) {
+      const dependency = classifyDependency(dirname(path), specifier, externalSpecifiers);
+      if (dependency.kind === "external") continue;
+      if (dependency.kind === "missing") {
         diagnostics.error(
           DiagnosticCode.CodegenError,
           `Cannot resolve module '${specifier}' from '${path}'`,
@@ -164,7 +361,7 @@ function loadGraph(entryPath: string, diagnostics: DiagnosticBag): ModuleRecord[
         failed = true;
         continue;
       }
-      load(dependency);
+      load(dependency.path);
     }
     visiting.delete(path);
     order.push(record);
@@ -215,14 +412,18 @@ function topLevelSymbols(record: ModuleRecord): SymbolInfo[] {
  * Merge every module's statements into a single file. Dependencies come first
  * (post-order over the import graph), the entry module last.
  */
-export function bundleModules(entryPath: string, diagnostics: DiagnosticBag): BundleResult | undefined {
-  const records = loadGraph(entryPath, diagnostics);
+export function bundleModules(
+  entryPath: string,
+  diagnostics: DiagnosticBag,
+  externalSpecifiers: ReadonlySet<string> = new Set(),
+): BundleResult | undefined {
+  const records = loadGraph(entryPath, diagnostics, externalSpecifiers);
   if (!records) return undefined;
 
   const byPath = new Map(records.map((record) => [record.path, record]));
   const dependencyOf = (record: ModuleRecord, specifier: string): ModuleRecord | undefined => {
-    const resolved = resolveModule(dirname(record.path), specifier);
-    return resolved ? byPath.get(resolved) : undefined;
+    const resolution = classifyDependency(dirname(record.path), specifier, externalSpecifiers);
+    return resolution.kind === "file" ? byPath.get(resolution.path) : undefined;
   };
 
   // Phase 1: record every top-level binding and pick a unique final name.
@@ -328,8 +529,14 @@ export function bundleModules(entryPath: string, diagnostics: DiagnosticBag): Bu
   for (const record of records) {
     for (const statement of record.sourceFile.statements) {
       if (statement.kind === SyntaxKind.ImportDeclaration) {
-        // External (extension) imports stay in place for code generation.
-        if (isExternalSpecifier((statement as ImportDeclaration).moduleSpecifier.value)) {
+        // External (extension / built-in) imports stay in place for codegen.
+        const declaration = statement as ImportDeclaration;
+        const resolution = classifyDependency(
+          dirname(record.path),
+          declaration.moduleSpecifier.value,
+          externalSpecifiers,
+        );
+        if (resolution.kind === "external") {
           merged.push(statement);
         } else {
           const synthetic = namespaceStatements.get(statement);

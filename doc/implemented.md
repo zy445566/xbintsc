@@ -122,7 +122,7 @@ Location: `src/parser/parser.ts`, `src/ast/nodes.ts`
 - `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules are lowered to a synthetic object literal; extension modules such as `path` are also supported), `import type`
 - `export default`, `export { a as b }`, `export *`, `export =`
 - Import attributes (`with` / `assert`)
-- The **runtime semantics** of `import` / `export` are handled at the driver layer by `src/driver/modules.ts`: it recursively resolves relative dependencies, renames top-level symbols with a per-module prefix, rewrites references, merges into a single file and rebinds. Circular dependencies error out.
+- The **runtime semantics** of `import` / `export` are handled at the driver layer by `src/driver/modules.ts`: it recursively resolves relative dependencies *and* bare `node_modules` packages (following `exports` / `module` / `main` and package subpaths), renames top-level symbols with a per-module prefix, rewrites references, merges into a single file and rebinds. Packages must be ESM; CommonJS `require()` is rejected with a hint to use `import`. Circular dependencies error out.
 
 ### 3.5 ASI
 
@@ -350,7 +350,7 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 | Functions | Default parameters, rest parameters, capturing closures, `this` binding, lexical `this` in arrow functions, `call`/`apply`/`bind`, `name`/`length` |
 | Classes / OO | Constructors, instance fields, methods, `static`, inheritance `extends`/`super`, prototype chain, `instanceof` |
 | Async | `async`/`await`, `Promise` (`then/catch/finally`, `resolve/reject/all/allSettled/race`), synchronous microtask queue |
-| Modules | `import`/`export` (named / default / re-export / `export *` / `export type`), multi-file bundling over relative paths (`.js` specifiers resolve to `.ts` sources), bare specifiers resolved to extension modules |
+| Modules | `import`/`export` (named / default / re-export / `export *` / `export type`), multi-file bundling over relative paths (`.js` specifiers resolve to `.ts` sources) and ESM `node_modules` packages (`exports` / `module` / `main`, scoped packages and subpaths), bare specifiers resolved to extension modules; CommonJS `require()` is rejected with an `import` hint |
 | Standard library | Array / string / number / object extension methods, `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `Symbol`, `Error` family, `Object/Array/Number/String/Symbol` statics, `console.*` |
 | Value model | 64-bit NaN-boxing, uniform function ABI (including `this`), closure environments, object prototype chains |
 | Runtime | Strings / objects / arrays / closures / arithmetic / comparison / catchable exceptions / Promise / collections / symbols / generators / `console` |

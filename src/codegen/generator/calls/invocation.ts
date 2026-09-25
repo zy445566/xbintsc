@@ -91,8 +91,14 @@ export const invocationCallMethods: InvocationCallMethods = {
       return result;
     }
     if (callee.kind === SyntaxKind.Identifier) {
-      if ((callee as Identifier).text === "super") return this.emitSuperConstructor(node);
-      const symbol = this.binding.symbolOfIdentifier.get(callee as Identifier);
+      const identifier = callee as Identifier;
+      if (identifier.text === "super") return this.emitSuperConstructor(node);
+      const symbol = this.binding.symbolOfIdentifier.get(identifier);
+      // `require("x")` is CommonJS; the ESM form is the only supported import.
+      if (!symbol && identifier.text === "require") {
+        this.reportRequireUse(node);
+        return i64(XT_UNDEFINED);
+      }
       if (symbol && symbol.kind === SymbolKind.Import) {
         const exported = this.importExports.get(symbol.id);
         if (exported) return this.emitModuleExport(node, exported);

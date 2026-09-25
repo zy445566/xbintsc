@@ -31,27 +31,34 @@ src/extensions/node/           runtime/ext_node/
   fs/read-file.ts                  fs/fs_common.h
   fs/write-file.ts                 fs/promises.c
   fs/fs-ops.ts                     fs/streams.c
-  fs/streams.ts                     path/path.c
-  path/index.ts                    os/os.c
-  os/index.ts                      process/process.c
-  process/index.ts                 buffer/buffer.c
-  buffer/index.ts                  stream/stream.c
-  stream/index.ts                  net/net.c
-  net/index.ts                     dgram/dgram.c
-  dgram/index.ts                   http/http.c
-  http/index.ts                    node_common.h（事件发射器 / 编码助手）
-  fs-promises/index.ts             crypto/crypto.c
-  crypto/index.ts                  url/url.c
-  url/index.ts                     child_process/child_process.c
-  child_process/index.ts           events/events.c
-  events/index.ts                  util/util.c
-  util/index.ts                    querystring/querystring.c
-  querystring/index.ts             assert/assert.c
-  assert/index.ts                  test/test.c
-  test/index.ts                    zlib/zlib.c
-  zlib/index.ts                    stream/pipeline.c
-  stream-promises/index.ts         worker_threads/worker_threads.c
-  worker_threads/index.ts
+  fs/streams.ts                     fs/fd_ops.c
+  path/index.ts                    fs/meta_ops.c
+  os/index.ts                       fs/link_ops.c
+  process/index.ts                  fs/copy_ops.c
+  buffer/index.ts                   fs/dir.c
+  stream/index.ts                   fs/glob.c
+  net/index.ts                      fs/watch.c
+  dgram/index.ts                    fs/constants.c
+  http/index.ts                     path/path.c
+  fs-promises/index.ts              os/os.c
+  crypto/index.ts                   process/process.c
+  url/index.ts                      buffer/buffer.c
+  child_process/index.ts            stream/stream.c
+  events/index.ts                   net/net.c
+  util/index.ts                     dgram/dgram.c
+  querystring/index.ts              http/http.c
+  assert/index.ts                   node_common.h（事件发射器 / 编码助手）
+  test/index.ts                     crypto/crypto.c
+  zlib/index.ts                     url/url.c
+  stream-promises/index.ts          child_process/child_process.c
+  worker_threads/index.ts           events/events.c
+                                    util/util.c
+                                    querystring/querystring.c
+                                    assert/assert.c
+                                    test/test.c
+                                    zlib/zlib.c
+                                    stream/pipeline.c
+                                    worker_threads/worker_threads.c
 ```
 
 - 核心事件循环：`runtime/xt_loop.c`（`select(2)` 反应堆），生成模块的 `main` 在微任务清空后调用 `xt_run_event_loop()`；无可注册 fd 时立即返回，因此纯计算程序不受影响。
@@ -75,19 +82,52 @@ src/extensions/node/           runtime/ext_node/
 | --- | --- | --- |
 | `readFileSync(path[, options])` | `xt_node_read_text_file` | 同步读取文件，返回字符串；支持编码选项 |
 | `readTextFile(path)` | `xt_node_read_text_file` | `readFileSync` 的别名（同一符号） |
-| `writeFileSync(path, data[, options])` | `xt_node_write_file` | 覆盖写入 |
-| `appendFileSync(path, data[, options])` | `xt_node_append_file` | 追加写入 |
+| `writeFileSync(path, data[, options])` | `xt_node_write_file` | 覆盖写入；接受字符串或 `Buffer` |
+| `appendFileSync(path, data[, options])` | `xt_node_append_file` | 追加写入；接受字符串或 `Buffer` |
 | `existsSync(path)` | `xt_node_exists` | 是否存在，返回布尔值 |
-| `readdirSync(path)` | `xt_node_read_dir` | 返回目录项名称数组 |
-| `mkdirSync(path[, options])` | `xt_node_mkdir` | 创建目录，`{ recursive: true }` 递归创建 |
+| `readdirSync(path[, options])` | `xt_node_read_dir` | 目录项名称；`{ withFileTypes: true }` 返回 `Dirent`，`{ recursive: true }` 递归 |
+| `mkdirSync(path[, options])` | `xt_node_mkdir` | 创建目录，`{ recursive: true }` 递归创建，`{ mode }` 生效 |
 | `rmSync(path[, options])` | `xt_node_rm` | 删除文件/目录，`{ recursive: true }` 递归删除 |
 | `unlinkSync(path)` | `xt_node_unlink` | 删除文件 |
 | `rmdirSync(path)` | `xt_node_rmdir` | 删除空目录 |
 | `renameSync(oldPath, newPath)` | `xt_node_rename` | 重命名 / 移动 |
-| `copyFileSync(src, dest)` | `xt_node_copy_file` | 复制文件 |
+| `copyFileSync(src, dest[, flags])` | `xt_node_copy_file` | 复制文件；支持 `COPYFILE_EXCL` |
+| `cpSync(src, dest[, options])` | `xt_node_cp` | 递归复制；`recursive` / `force` / `errorOnExist` / `dereference` / `preserveTimestamps` |
 | `realpathSync(path)` | `xt_node_realpath` | 解析为绝对路径 |
 | `statSync(path)` | `xt_node_stat` | 文件元信息对象（跟随符号链接） |
 | `lstatSync(path)` | `xt_node_lstat` | 文件元信息对象（不跟随符号链接） |
+| `statfsSync(path)` | `xt_node_statfs` | 文件系统统计（`bsize` / `blocks` / `bfree` …） |
+| `accessSync(path[, mode])` | `xt_node_access` | 检查可访问性 |
+| `chmodSync(path, mode)` | `xt_node_chmod` | 修改权限 |
+| `lchmodSync(path, mode)` | `xt_node_lchmod` | 修改符号链接权限 |
+| `chownSync(path, uid, gid)` | `xt_node_chown` | 修改属主 |
+| `lchownSync(path, uid, gid)` | `xt_node_lchown` | 修改符号链接属主 |
+| `truncateSync(path[, len])` | `xt_node_truncate` | 截断文件 |
+| `utimesSync(path, atime, mtime)` | `xt_node_utimes` | 设置访问/修改时间（秒数或 `Date`） |
+| `lutimesSync(path, atime, mtime)` | `xt_node_lutimes` | 设置符号链接时间 |
+| `mkdtempSync(prefix)` | `xt_node_mkdtemp` | 创建唯一临时目录 |
+| `linkSync(existing, newPath)` | `xt_node_link` | 硬链接 |
+| `symlinkSync(target, path[, type])` | `xt_node_symlink` | 符号链接 |
+| `readlinkSync(path)` | `xt_node_readlink` | 读取符号链接目标 |
+| `opendirSync(path[, options])` | `xt_node_opendir` | 返回 `Dir`（`readSync` / `closeSync` / `read` / `close`） |
+| `globSync(pattern[, options])` | `xt_node_glob` | glob 匹配（`*` / `?` / `[...]` / `**`），`{ cwd, withFileTypes }` |
+| `openSync(path[, flags[, mode]])` | `xt_node_open` | 打开文件描述符 |
+| `closeSync(fd)` | `xt_node_close` | 关闭描述符 |
+| `readSync(fd, buffer, offset, length, position)` | `xt_node_read` | 读入 `Buffer` |
+| `writeSync(fd, data[, offset[, length[, position]]])` | `xt_node_write` | 写入字符串 / `Buffer` |
+| `readvSync(fd, buffers[, position])` | `xt_node_readv` | 分散读 |
+| `writevSync(fd, buffers[, position])` | `xt_node_writev` | 聚集写 |
+| `fstatSync(fd)` | `xt_node_fstat` | 描述符的 `stat` |
+| `fsyncSync(fd)` / `fdatasyncSync(fd)` | `xt_node_fsync` / `xt_node_fdatasync` | 刷新描述符 |
+| `ftruncateSync(fd[, len])` | `xt_node_ftruncate` | 截断描述符 |
+| `fchmodSync(fd, mode)` | `xt_node_fchmod` | 描述符的 `chmod` |
+| `fchownSync(fd, uid, gid)` | `xt_node_fchown` | 描述符的 `chown` |
+| `futimesSync(fd, atime, mtime)` | `xt_node_futimes` | 描述符的 `utimes` |
+| `watch(filename[, options][, listener])` | `xt_node_watch` | 返回发射器形态的 watcher（不会触发，见 §2.6） |
+| `watchFile(filename[, options], listener)` | `xt_node_watch_file` | 轮询形态的 `StatWatcher`（不会触发） |
+| `unwatchFile(filename[, listener])` | `xt_node_unwatch_file` | 停止监听 |
+| `constants` | `xt_fs_constants` | `F_OK` / `R_OK` / `W_OK` / `X_OK`、`COPYFILE_*`、`O_*`、`S_IF*`（宿主值） |
+| `promises` | `xt_fs_promises` | `fs/promises` 门面（见 §11） |
 
 ### 2.2 编码支持
 
@@ -98,12 +138,14 @@ src/extensions/node/           runtime/ext_node/
 | 默认 / `utf8` / `utf-8` / `ascii` / `latin1` / `binary` | 原始 UTF-8 文本 | 按文本字节写入 |
 | `hex` | 小写十六进制字符串 | 解析十六进制后写入 |
 | `base64` | Base64 字符串 | 解析 Base64 后写入 |
+| `base64url` | Base64url 字符串 | 解析 Base64url 后写入 |
+| `utf16le` / `ucs2` | 按文本直接读取原始字节（不做 UTF-16 解码） | 按 UTF-8 文本写入 |
 
-> 由于 xbintsc 目前没有 `Buffer` 值类型，二进制读取始终以字符串返回。
+> `readFileSync` 默认仍返回**字符串**而不是 `Buffer`（即使 `Buffer` 类已存在），这样 `console.log(readFileSync(p))` 仍打印文本。
 
 ### 2.3 `statSync` 返回结构
 
-返回普通对象，数值属性：`size`、`mode`、`uid`、`gid`、`dev`、`ino`、`nlink`、`rdev`、`blksize`、`blocks`、`mtimeMs`、`atimeMs`、`ctimeMs`。
+返回普通对象，数值属性：`size`、`mode`、`uid`、`gid`、`dev`、`ino`、`nlink`、`rdev`、`blksize`、`blocks`、`atimeMs`、`mtimeMs`、`ctimeMs`、`birthtimeMs`。
 方法（原生闭包，可调用）：`isFile()`、`isDirectory()`、`isSymbolicLink()`、`isFIFO()`、`isSocket()`、`isBlockDevice()`、`isCharacterDevice()`。
 
 ### 2.4 调用方式
@@ -120,7 +162,29 @@ console.log(existsSync("/tmp/out.txt"));
 
 ### 2.5 错误处理
 
-打开 / 操作失败时向 stderr 打印 `xbintsc: cannot ... 'path'` 并返回 `undefined`（`existsSync` 返回 `false`），不会抛出 `Error` / `ENOENT` 异常（xbintsc 尚无可捕获异常体系）。
+失败时函数会**抛出** Node 形态的 `Error` 对象，带有 `name`（`Error`）、`message`、`code`（如 `ENOENT`）、`errno`（数值 `errno`）、`syscall` 与 `path`。`existsSync` 仍返回布尔值，不会抛出。
+
+```ts
+import { readFileSync } from "fs";
+try {
+  readFileSync("/does/not/exist");
+} catch (error) {
+  console.log((error as any).code); // ENOENT
+}
+```
+
+### 2.6 与 Node 的差异
+
+- **没有异步 I/O 调度器**（事件循环是无定时器的 `select(2)` 反应堆），因此不提供回调式 `fs` 函数（`readFile`、`writeFile`、`open` 等）；请使用 `fs/promises` 或 `*Sync` 形式。
+- `watch` / `watchFile` / `unwatchFile` 返回 API 形态的发射器对象，`.close()` / `.on()` 方法存在，但**不会触发**事件。
+- `Dir.read(cb)` / `Dir.close(cb)` 会**同步**调用回调。
+- `readFileSync` 默认返回字符串而不是 `Buffer`。
+- `utf16le` / `ucs2` 读取时按原始字节处理（不做 UTF-16 解码）。
+- `mkdtempSync` 无论前缀是否以 `XXXXXX` 结尾，都会追加 6 个随机字符。
+- `globSync` 支持 `*`、`?`、`[...]`、`**`，但不支持 `exclude` 回调与 `follow`；`**` 不跟随符号链接（与 Node 默认一致）。
+- `cpSync` 基于同步助手实现；除非 `dereference: true`，否则符号链接按符号链接复制。
+- **Windows**：`readlinkSync` 抛 `ENOSYS`；`chmodSync` / `lchmodSync` / `chownSync` / `lchownSync` / `fchmodSync` / `fchownSync` 为空操作；`statfsSync` 返回全零字段。
+- **macOS / Windows**：`lutimesSync` 退化为 `utimesSync`。
 
 ---
 
@@ -295,17 +359,32 @@ UDP 套接字。`dgram.createSocket(type | options[, cb])` 返回 EventEmitter�
 
 实现位置：`src/extensions/node/fs-promises/index.ts`、`runtime/ext_node/fs/promises.c`
 
-无异步 I/O 调度器，故每个函数把对应的同步 `fs` 实现包进**已 settle 的 Promise**，由 `fs/promises` 模块导出：`readFile`、`writeFile`、`appendFile`、`mkdir`、`readdir`、`rm`、`unlink`、`rmdir`、`rename`、`copyFile`、`realpath`、`stat`、`lstat`、`access`。
+无异步 I/O 调度器，故每个函数把对应的同步 `fs` 实现包进**已 settle 的 Promise**。失败时会以同步形式抛出的同构 Node `Error`（含 `code` / `errno` / `syscall` / `path`）**reject**。`fs.promises` 也可从 `fs` 模块访问（`import { promises as fsp } from "fs"`），两个命名空间都暴露 `constants` 对象。
+
+Promise 导出：`readFile`、`writeFile`、`appendFile`、`mkdir`、`readdir`、`rm`、`unlink`、`rmdir`、`rename`、`copyFile`、`cp`、`realpath`、`stat`、`lstat`、`statfs`、`access`、`open`、`chmod`、`lchmod`、`chown`、`lchown`、`truncate`、`utimes`、`lutimes`、`link`、`symlink`、`readlink`、`mkdtemp`、`opendir`、`glob`、`watch`。
+
+`open(...)` 解析为 **`FileHandle`**，带有：`read`、`write`、`readFile`、`writeFile`、`appendFile`、`close`、`stat`、`truncate`、`chmod`、`chown`、`utimes`、`sync`、`datasync`。
 
 ```ts
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile, open } from "fs/promises";
 
 async function main(): Promise<void> {
   await writeFile("/tmp/a.txt", "hi");
   console.log(await readFile("/tmp/a.txt"));
+  const handle = await open("/tmp/a.txt", "r");
+  console.log(await handle.readFile("utf8"));
+  await handle.close();
 }
 main();
 ```
+
+### 11.1 与 Node 的差异
+
+- 由于 I/O 是同步的，Promise 在返回值被 `await` 之前就已 settle（事件循环不会让出）。
+- `FileHandle.appendFile` 行为同 `writeFile`（在当前位置写入而非追加）。
+- `FileHandle.readFile()` 从当前文件描述符偏移处读取。
+- `Dir.read` / `Dir.close`（同步与 Promise/回调两种形式）都会立即完成。
+- `watch` 解析为与 `fs.watch` 相同的不会触发的 watcher 对象。
 
 ---
 
@@ -422,10 +501,12 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | 类别 | 内容 |
 | --- | --- |
 | 扩展注册 | `nodeExtension`（`--ext node`）、`NodeModule` 接口、`resolveFrom` 工具 |
-| fs 读取 | `readFileSync`、`readTextFile`（`xt_node_read_text_file`），支持 hex / base64 |
-| fs 写入 | `writeFileSync`、`appendFileSync`，支持 hex / base64 |
-| fs 目录 | `readdirSync`、`mkdirSync`、`rmSync`、`unlinkSync`、`rmdirSync` |
-| fs 其它 | `existsSync`、`renameSync`、`copyFileSync`、`realpathSync`、`statSync`、`lstatSync` |
+| fs 读取 | `readFileSync`、`readTextFile`（`xt_node_read_text_file`），支持 hex / base64 / base64url |
+| fs 写入 | `writeFileSync`、`appendFileSync`，支持 hex / base64 / base64url；字符串或 `Buffer` |
+| fs 目录 | `readdirSync`（`withFileTypes` / `recursive`）、`mkdirSync`、`rmSync`、`unlinkSync`、`rmdirSync`、`opendirSync`（`Dir`）、`globSync`、`mkdtempSync` |
+| fs 其它 | `existsSync`、`renameSync`、`copyFileSync`、`cpSync`、`realpathSync`、`statSync`、`lstatSync`、`statfsSync`、`accessSync`、`chmodSync`、`chownSync`、`lchmodSync`、`lchownSync`、`truncateSync`、`utimesSync`、`lutimesSync`、`linkSync`、`symlinkSync`、`readlinkSync`、`watch`、`watchFile`、`unwatchFile` |
+| fs 描述符 | `openSync`、`closeSync`、`readSync`、`writeSync`、`readvSync`、`writevSync`、`fstatSync`、`fsyncSync`、`fdatasyncSync`、`ftruncateSync`、`fchmodSync`、`fchownSync`、`futimesSync` |
+| fs 常量 | `constants`（`F_OK`、`R_OK`、`W_OK`、`X_OK`、`COPYFILE_*`、`O_*`、`S_IF*`） |
 | path | `join` `resolve` `normalize` `dirname` `basename` `extname` `isAbsolute` `relative` |
 | os | `platform` `arch` `type` `release` `endianness` `homedir` `tmpdir` `hostname` `totalmem` `freemem` `cpus` |
 | process | `cwd` `exit` `uptime` `hrtime` `getuid`；`platform` `arch` `pid` `ppid` `argv` `env` `version` `title` |
@@ -446,7 +527,7 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | crypto | `createHash(algorithm)`，含 `update`/`digest` 与流式 API（`setEncoding`/`write`/`end`/`read`）；支持 SHA-1 与 SHA-256 |
 | 全局函数 | `btoa` / `atob` base64 辅助函数 |
 | url | `pathToFileURL` `fileURLToPath` |
-| fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `realpath` `stat` `lstat` `access` |
+| fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `cp` `realpath` `stat` `lstat` `statfs` `access` `open` `chmod` `lchmod` `chown` `lchown` `truncate` `utimes` `lutimes` `link` `symlink` `readlink` `mkdtemp` `opendir` `glob` `watch` `constants`；`FileHandle` |
 | 事件循环 | `xt_loop`（`select` 反应堆）、`xt_run_event_loop()`、`xt_loop_add/update/remove` |
 | 调用约定 | 统一 `(argc, argv)` ABI，返回 `xt_value` |
 | 链接方式 | 注册后编译 `runtime/ext_node/**` 并随运行时一起链接 |

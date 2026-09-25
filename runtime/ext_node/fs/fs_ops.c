@@ -5,116 +5,14 @@
  *     existsSync, readdirSync, mkdirSync, rmSync, unlinkSync, rmdirSync,
  *     renameSync, copyFileSync, realpathSync, statSync, lstatSync
  *
- * Error handling is intentionally Node-compatible in spirit but not in
- * mechanics: xbintsc has no try/catch that can catch native errors yet, so
- * failures print to stderr and return `undefined` (or `false` for
- * `existsSync`) instead of throwing `ENOENT`-style exceptions.
+ * Error handling follows Node: failures throw a shaped Error (see
+ * `xt_fs_error`), which `fs/promises` converts into a rejected Promise.
  */
 
 #include "rt.h"
 #include "fs_common.h"
 
 #include <errno.h>
-
-#if defined(_WIN32)
-#include <direct.h>
-#include <io.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-
-typedef struct _stat xt_fs_stat_t;
-#define xt_fs_stat_fn _stat
-#define xt_fs_lstat_fn _stat
-#define xt_fs_access _access
-
-#ifndef F_OK
-#define F_OK 0
-#endif
-#ifndef S_ISREG
-#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
-#endif
-#ifndef S_ISDIR
-#define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
-#endif
-#ifndef S_ISLNK
-#define S_ISLNK(m) 0
-#endif
-#ifndef S_ISFIFO
-#define S_ISFIFO(m) 0
-#endif
-#ifndef S_ISSOCK
-#define S_ISSOCK(m) 0
-#endif
-#ifndef S_ISBLK
-#define S_ISBLK(m) 0
-#endif
-#ifndef S_ISCHR
-#define S_ISCHR(m) (((m) & _S_IFMT) == _S_IFCHR)
-#endif
-
-/* Directory iteration backed by the CRT's _findfirst/_findnext. */
-typedef struct {
-  intptr_t handle;
-  struct _finddata_t entry;
-} xt_fs_dir;
-
-static int xt_fs_dir_open(xt_fs_dir *dir, const char *path) {
-  size_t length = strlen(path);
-  char *pattern = (char *)malloc(length + 3);
-  if (!pattern) return 0;
-  memcpy(pattern, path, length);
-  pattern[length] = '/';
-  pattern[length + 1] = '*';
-  pattern[length + 2] = '\0';
-  dir->handle = _findfirst(pattern, &dir->entry);
-  free(pattern);
-  return dir->handle != -1;
-}
-
-static int xt_fs_dir_next(xt_fs_dir *dir) { return _findnext(dir->handle, &dir->entry) == 0; }
-
-static const char *xt_fs_dir_name(xt_fs_dir *dir) { return dir->entry.name; }
-
-static void xt_fs_dir_close(xt_fs_dir *dir) { _findclose(dir->handle); }
-#else
-#include <dirent.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-
-typedef struct stat xt_fs_stat_t;
-#define xt_fs_stat_fn stat
-#define xt_fs_lstat_fn lstat
-#define xt_fs_access access
-
-typedef struct {
-  DIR *handle;
-  struct dirent *entry;
-} xt_fs_dir;
-
-static int xt_fs_dir_open(xt_fs_dir *dir, const char *path) {
-  dir->handle = opendir(path);
-  dir->entry = NULL;
-  return dir->handle != NULL;
-}
-
-static int xt_fs_dir_next(xt_fs_dir *dir) {
-  dir->entry = readdir(dir->handle);
-  return dir->entry != NULL;
-}
-
-static const char *xt_fs_dir_name(xt_fs_dir *dir) { return dir->entry->d_name; }
-
-static void xt_fs_dir_close(xt_fs_dir *dir) { closedir(dir->handle); }
-#endif
-
-#if defined(_WIN32)
-#define xt_fs_mkdir_one(path) _mkdir(path)
-#define xt_fs_rmdir_one(path) _rmdir(path)
-#else
-#define xt_fs_mkdir_one(path) mkdir(path, 0777)
-#define xt_fs_rmdir_one(path) rmdir(path)
-#endif
 
 /* ------------------------------------------------------------------------- */
 /* existsSync                                                                */
@@ -138,7 +36,7 @@ static void xt_fs_define_stat_method(xt_value object, const char *name, unsigned
 /* Build the Node `Dirent`-shaped object (`name` plus stat predicates) for a
    single directory entry. Types come from `lstat`, matching Node's `d_type`
    based `Dirent` (a symlink reports `isSymbolicLink()` true). */
-static xt_value xt_node_dirent_result(const char *dir, const char *name) {
+xt_value xt_node_dirent_result(const char *dir, const char *name) {
   size_t size = strlen(dir) + strlen(name) + 2;
   char *full = (char *)malloc(size);
   unsigned int mode = 0;
@@ -161,6 +59,77 @@ static xt_value xt_node_dirent_result(const char *dir, const char *name) {
   return object;
 }
 
+typedef struct {
+  xt_value *items;
+  size_t count;
+  size_t capacity;
+} xt_fs_list;
+
+static void xt_fs_list_push(xt_fs_list *list, xt_value value) {
+  if (list->count == list->capacity) {
+    list->capacity = list->capacity ? list->capacity * 2 : 16;
+    xt_value *grown = (xt_value *)realloc(list->items, sizeof(xt_value) * list->capacity);
+    if (!grown) return;
+    list->items = grown;
+  }
+  list->items[list->count++] = value;
+}
+
+/* Depth-first walk used by `readdirSync(path, { recursive: true })`. `prefix`
+   is the directory path relative to `base` (empty for the root, otherwise
+   ending in `/`). */
+static void xt_fs_readdir_into(const char *base, const char *prefix, int withFileTypes, int recursive,
+                               xt_fs_list *list) {
+  size_t baseLength = strlen(base);
+  size_t prefixLength = strlen(prefix);
+  size_t dirSize = baseLength + prefixLength + 2;
+  char *dirPath = (char *)malloc(dirSize);
+  if (!dirPath) return;
+  if (prefixLength == 0) snprintf(dirPath, dirSize, "%s", base);
+  else snprintf(dirPath, dirSize, "%s/%s", base, prefix);
+  size_t dirLength = strlen(dirPath);
+  while (dirLength > 1 && dirPath[dirLength - 1] == '/') dirPath[--dirLength] = '\0';
+
+  xt_fs_dir dir;
+  if (!xt_fs_dir_open(&dir, dirPath)) {
+    xt_fs_error("open directory", dirPath);
+    free(dirPath);
+    return;
+  }
+  while (xt_fs_dir_next(&dir)) {
+    const char *name = xt_fs_dir_name(&dir);
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
+    size_t nameLength = strlen(name);
+    size_t relSize = prefixLength + nameLength + 1;
+    char *relative = (char *)malloc(relSize);
+    if (!relative) continue;
+    snprintf(relative, relSize, "%s%s", prefix, name);
+    xt_fs_list_push(list, withFileTypes ? xt_node_dirent_result(dirPath, name) : xt_string_from_cstr(relative));
+
+    if (recursive) {
+      size_t fullSize = dirLength + nameLength + 2;
+      char *full = (char *)malloc(fullSize);
+      if (full) {
+        snprintf(full, fullSize, "%s/%s", dirPath, name);
+        xt_fs_stat_t info;
+        if (xt_fs_lstat_fn(full, &info) == 0 && S_ISDIR(info.st_mode)) {
+          size_t childSize = relSize + 1;
+          char *child = (char *)malloc(childSize);
+          if (child) {
+            snprintf(child, childSize, "%s/", relative);
+            xt_fs_readdir_into(base, child, withFileTypes, recursive, list);
+            free(child);
+          }
+        }
+        free(full);
+      }
+    }
+    free(relative);
+  }
+  xt_fs_dir_close(&dir);
+  free(dirPath);
+}
+
 xt_value xt_node_read_dir(int32_t argc, xt_value *argv) {
   if (argc < 1) return xt_undefined();
   const char *path = xt_string_data(xt_to_string(argv[0]));
@@ -168,38 +137,18 @@ xt_value xt_node_read_dir(int32_t argc, xt_value *argv) {
 
   /* `readdirSync(path, { withFileTypes: true })` yields `Dirent` objects;
      without the option the result is a plain array of entry names. */
-  int withFileTypes =
-      argc > 1 && XT_IS_OBJECT(argv[1]) && xt_truthy(xt_object_get_cstr(argv[1], "withFileTypes"));
+  xt_value options = argc > 1 ? argv[1] : XT_UNDEFINED;
+  int withFileTypes = XT_IS_OBJECT(options) && xt_truthy(xt_object_get_cstr(options, "withFileTypes"));
+  int recursive = XT_IS_OBJECT(options) && xt_truthy(xt_object_get_cstr(options, "recursive"));
 
-  xt_fs_dir dir;
-  if (!xt_fs_dir_open(&dir, path)) {
-    xt_fs_error("open directory", path);
-    return xt_undefined();
-  }
+  xt_fs_list list;
+  list.items = NULL;
+  list.count = 0;
+  list.capacity = 0;
+  xt_fs_readdir_into(path, "", withFileTypes, recursive, &list);
 
-  size_t count = 0;
-  size_t capacity = 16;
-  xt_value *items = (xt_value *)malloc(sizeof(xt_value) * capacity);
-  if (!items) {
-    xt_fs_dir_close(&dir);
-    return xt_undefined();
-  }
-
-  while (xt_fs_dir_next(&dir)) {
-    const char *name = xt_fs_dir_name(&dir);
-    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
-    if (count == capacity) {
-      capacity *= 2;
-      xt_value *grown = (xt_value *)realloc(items, sizeof(xt_value) * capacity);
-      if (!grown) break;
-      items = grown;
-    }
-    items[count++] = withFileTypes ? xt_node_dirent_result(path, name) : xt_string_from_cstr(name);
-  }
-  xt_fs_dir_close(&dir);
-
-  xt_value result = xt_array_new((int32_t)count, items);
-  free(items);
+  xt_value result = xt_array_new((int32_t)list.count, list.items);
+  free(list.items);
   return result;
 }
 
@@ -214,7 +163,7 @@ static int xt_fs_recursive(xt_value options) {
   return 1;
 }
 
-static int xt_fs_mkdir_recursive(const char *path) {
+static int xt_fs_mkdir_recursive(const char *path, int mode) {
   size_t length = strlen(path);
   char *copy = (char *)malloc(length + 1);
   if (!copy) return -1;
@@ -225,7 +174,7 @@ static int xt_fs_mkdir_recursive(const char *path) {
     if (copy[i] != '/' && copy[i] != '\0') continue;
     char saved = copy[i];
     copy[i] = '\0';
-    if (xt_fs_mkdir_one(copy) != 0 && errno != EEXIST) {
+    if (xt_fs_mkdir_mode(copy, mode) != 0 && errno != EEXIST) {
       free(copy);
       return -1;
     }
@@ -240,11 +189,17 @@ xt_value xt_node_mkdir(int32_t argc, xt_value *argv) {
   const char *path = xt_string_data(xt_to_string(argv[0]));
   if (!path) return xt_undefined();
 
-  if (argc > 1 && xt_fs_recursive(argv[1])) {
-    if (xt_fs_mkdir_recursive(path) != 0) xt_fs_error("create directory", path);
+  xt_value options = argc > 1 ? argv[1] : XT_UNDEFINED;
+  int mode = 0777;
+  if (XT_IS_OBJECT(options) && !XT_IS_UNDEFINED(xt_object_get_cstr(options, "mode"))) {
+    mode = (int)xt_to_number(xt_object_get_cstr(options, "mode"));
+  }
+
+  if (argc > 1 && xt_fs_recursive(options)) {
+    if (xt_fs_mkdir_recursive(path, mode) != 0) xt_fs_error("create directory", path);
     return xt_undefined();
   }
-  if (xt_fs_mkdir_one(path) != 0 && errno != EEXIST) xt_fs_error("create directory", path);
+  if (xt_fs_mkdir_mode(path, mode) != 0 && errno != EEXIST) xt_fs_error("create directory", path);
   return xt_undefined();
 }
 
@@ -318,6 +273,12 @@ xt_value xt_node_copy_file(int32_t argc, xt_value *argv) {
   const char *from = xt_string_data(xt_to_string(argv[0]));
   const char *to = xt_string_data(xt_to_string(argv[1]));
   if (!from || !to) return xt_undefined();
+
+  int flags = argc > 2 ? (int)xt_to_number(argv[2]) : 0;
+  if ((flags & 1) && xt_fs_access(to, F_OK) == 0) {
+    xt_fs_raise_errno(EEXIST, "copyfile", to);
+    return xt_undefined();
+  }
 
   FILE *source = fopen(from, "rb");
   if (!source) {
@@ -400,7 +361,7 @@ static double xt_fs_seconds_ms(long seconds, long nanoseconds) {
   return (double)seconds * 1000.0 + (double)nanoseconds / 1000000.0;
 }
 
-static xt_value xt_node_stat_result(const xt_fs_stat_t *info) {
+xt_value xt_node_stat_result(const xt_fs_stat_t *info) {
   xt_value object = xt_object_new();
   xt_object_set(object, xt_string_from_cstr("size"), xt_number((double)info->st_size));
   xt_object_set(object, xt_string_from_cstr("mode"), xt_number((double)info->st_mode));

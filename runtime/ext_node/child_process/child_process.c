@@ -112,6 +112,11 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
     return make_result(-1, "", "could not create temporary files");
   }
 
+  /* Flush anything the parent has already buffered on stdout/stderr before
+   * redirecting the descriptors; otherwise that pending output would be
+   * flushed into the child's capture file (and lost from the real stdout). */
+  fflush(stdout);
+  fflush(stderr);
   int saved_out = _dup(_fileno(stdout));
   int saved_err = _dup(_fileno(stderr));
   _dup2(_fileno(out_file), _fileno(stdout));

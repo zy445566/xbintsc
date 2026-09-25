@@ -31,6 +31,124 @@
 #endif
 
 #if defined(_WIN32)
+static int xt_fs_errno_from_win32(DWORD error) {
+  switch (error) {
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_PATH_NOT_FOUND:
+    case ERROR_INVALID_NAME:
+    case ERROR_BAD_PATHNAME:
+    case ERROR_BAD_NETPATH:
+    case ERROR_INVALID_DRIVE:
+      return ENOENT;
+    case ERROR_ACCESS_DENIED:
+    case ERROR_SHARING_VIOLATION:
+    case ERROR_LOCK_VIOLATION:
+      return EACCES;
+    case ERROR_DIRECTORY:
+      return ENOTDIR;
+#ifdef ENAMETOOLONG
+    case ERROR_FILENAME_EXCED_RANGE:
+      return ENAMETOOLONG;
+#endif
+    case ERROR_NOT_ENOUGH_MEMORY:
+    case ERROR_OUTOFMEMORY:
+      return ENOMEM;
+    default:
+      return EINVAL;
+  }
+}
+
+/* FILETIME (100 ns ticks since 1601-01-01 UTC) -> Unix seconds, in UTC.
+ * Unlike the CRT's `_stat` this never round-trips through the local time zone,
+ * so epoch-relative times stay representable regardless of the machine's
+ * timezone (matching libuv/Node). */
+static long long xt_fs_filetime_to_seconds(const FILETIME *time) {
+  unsigned long long value = ((unsigned long long)time->dwHighDateTime << 32) | time->dwLowDateTime;
+  if (value == 0) return 0;
+  return ((long long)value - 116444736000000000LL) / 10000000LL;
+}
+
+static void xt_fs_win_fill_stat(xt_fs_stat_t *out, DWORD attributes, DWORD volume,
+                                unsigned long long index, unsigned int links, long long size,
+                                const FILETIME *creation, const FILETIME *access,
+                                const FILETIME *write) {
+  memset(out, 0, sizeof(*out));
+  if (attributes & FILE_ATTRIBUTE_DIRECTORY) {
+    out->st_mode = _S_IFDIR;
+    size = 0;
+  } else {
+    out->st_mode = _S_IFREG;
+  }
+  if (attributes & FILE_ATTRIBUTE_READONLY) {
+    out->st_mode |= _S_IREAD | (_S_IREAD >> 3) | (_S_IREAD >> 6);
+  } else {
+    out->st_mode |= (_S_IREAD | _S_IWRITE) | ((_S_IREAD | _S_IWRITE) >> 3) |
+                    ((_S_IREAD | _S_IWRITE) >> 6);
+  }
+  out->st_size = size;
+  out->st_dev = volume;
+  out->st_ino = index;
+  out->st_nlink = links ? links : 1;
+  out->st_ctime = xt_fs_filetime_to_seconds(creation);
+  out->st_atime = xt_fs_filetime_to_seconds(access);
+  out->st_mtime = xt_fs_filetime_to_seconds(write);
+}
+
+int xt_fs_win_stat(const char *path, xt_fs_stat_t *out) {
+  WIN32_FILE_ATTRIBUTE_DATA data;
+  if (!path || !GetFileAttributesExA(path, GetFileExInfoStandard, &data)) {
+    errno = xt_fs_errno_from_win32(GetLastError());
+    return -1;
+  }
+  long long size = ((long long)data.nFileSizeHigh << 32) | data.nFileSizeLow;
+  xt_fs_win_fill_stat(out, data.dwFileAttributes, 0, 0, 1, size, &data.ftCreationTime,
+                      &data.ftLastAccessTime, &data.ftLastWriteTime);
+  /* Best effort: fill the volume serial, file index and link count like Node. */
+  HANDLE handle = CreateFileA(path, FILE_READ_ATTRIBUTES,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                              OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
+  if (handle != INVALID_HANDLE_VALUE) {
+    BY_HANDLE_FILE_INFORMATION info;
+    if (GetFileInformationByHandle(handle, &info)) {
+      out->st_dev = info.dwVolumeSerialNumber;
+      out->st_ino = ((unsigned long long)info.nFileIndexHigh << 32) | info.nFileIndexLow;
+      out->st_nlink = info.nNumberOfLinks ? info.nNumberOfLinks : 1;
+    }
+    CloseHandle(handle);
+  }
+  return 0;
+}
+
+int xt_fs_win_lstat(const char *path, xt_fs_stat_t *out) { return xt_fs_win_stat(path, out); }
+
+int xt_fs_win_fstat(int fd, xt_fs_stat_t *out) {
+  intptr_t os_handle = _get_osfhandle(fd);
+  if (os_handle == -1) {
+    errno = EBADF;
+    return -1;
+  }
+  BY_HANDLE_FILE_INFORMATION info;
+  if (GetFileInformationByHandle((HANDLE)os_handle, &info)) {
+    long long size = ((long long)info.nFileSizeHigh << 32) | info.nFileSizeLow;
+    xt_fs_win_fill_stat(out, info.dwFileAttributes, info.dwVolumeSerialNumber,
+                        ((unsigned long long)info.nFileIndexHigh << 32) | info.nFileIndexLow,
+                        info.nNumberOfLinks, size, &info.ftCreationTime, &info.ftLastAccessTime,
+                        &info.ftLastWriteTime);
+    return 0;
+  }
+  DWORD type = GetFileType((HANDLE)os_handle);
+  if (type == FILE_TYPE_CHAR || type == FILE_TYPE_PIPE) {
+    memset(out, 0, sizeof(*out));
+    out->st_mode = (type == FILE_TYPE_PIPE ? _S_IFIFO : _S_IFCHR) | _S_IREAD | _S_IWRITE |
+                   (_S_IREAD >> 3) | (_S_IWRITE >> 3) | (_S_IREAD >> 6) | (_S_IWRITE >> 6);
+    out->st_nlink = 1;
+    out->st_ino = (unsigned long long)(uintptr_t)os_handle;
+    return 0;
+  }
+  errno = xt_fs_errno_from_win32(GetLastError());
+  return -1;
+}
+
 static int xt_fs_win_truncate(const char *path, long long length) {
   int fd = _open(path, _O_RDWR | _O_BINARY);
   if (fd < 0) return -1;

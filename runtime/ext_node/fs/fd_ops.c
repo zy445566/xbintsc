@@ -23,7 +23,6 @@
 #if defined(_WIN32)
 #include <io.h>
 #include <windows.h>
-#define xt_fs_fstat_fn _fstat
 #define xt_fs_fsync _commit
 #define xt_fs_fdatasync _commit
 #define xt_fs_ftruncate(fd, length) _chsize_s((fd), (long long)(length))

@@ -1,12 +1,14 @@
 /* -- search --------------------------------------------------------------- */
 
 static const unsigned char *xt_buffer_search_needle(xt_value value, const char *encoding, size_t *length,
-                                                     unsigned char *single) {
+                                                     unsigned char *single, int *heapAllocated) {
   if (XT_IS_NUMBER(value)) {
     *single = (unsigned char)((int32_t)xt_to_number(value) & 0xff);
     *length = 1;
+    *heapAllocated = 0;
     return single;
   }
+  *heapAllocated = 1;
   if (xt_buffer_is(value)) {
     uint32_t n = xt_buffer_length(value);
     unsigned char *bytes = (unsigned char *)malloc(n ? n : 1);
@@ -28,13 +30,15 @@ static xt_value xt_buffer_method_index_of(xt_value thisValue, xt_value env, int3
   const char *encoding = argc > 2 ? xt_node_encoding(argv[2]) : NULL;
   size_t needleLength = 0;
   unsigned char single = 0;
-  const unsigned char *needle = xt_buffer_search_needle(xt_arg_at(argc, argv, 0), encoding, &needleLength, &single);
+  int needleOnHeap = 0;
+  const unsigned char *needle =
+      xt_buffer_search_needle(xt_arg_at(argc, argv, 0), encoding, &needleLength, &single, &needleOnHeap);
   uint32_t length = xt_buffer_length(thisValue);
   int32_t start = argc > 1 ? (int32_t)xt_to_number(argv[1]) : (reverse ? (int32_t)length - 1 : 0);
   if (start < 0) start += (int32_t)length;
   if (start < 0) start = 0;
   if (needleLength == 0 || needleLength > length) {
-    if (!xt_buffer_is(xt_arg_at(argc, argv, 0))) free((void *)needle);
+    if (needleOnHeap) free((void *)needle);
     return xt_number(-1);
   }
   int found = -1;
@@ -68,7 +72,7 @@ static xt_value xt_buffer_method_index_of(xt_value thisValue, xt_value env, int3
       }
     }
   }
-  if (!xt_buffer_is(xt_arg_at(argc, argv, 0))) free((void *)needle);
+  if (needleOnHeap) free((void *)needle);
   return xt_number((double)found);
 }
 

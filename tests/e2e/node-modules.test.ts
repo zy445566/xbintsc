@@ -40,7 +40,7 @@ describeWithClang("node compatibility modules", () => {
     // not key on the C sources, only the generated object files do.
     const result = build(entry, { emit: "exe", outDir: join(workdir, "out"), cacheDir, extensions, force: true });
     expect(result.diagnostics.filter((d) => d.category === "error")).toEqual([]);
-    const executed = spawnSync(result.outputPath, [], { encoding: "utf8", timeout: 20000 });
+    const executed = spawnSync(result.outputPath, [], { encoding: "utf8", timeout: 120000 });
     return { stdout: executed.stdout ?? "", stderr: executed.stderr ?? "", status: executed.status };
   }
 

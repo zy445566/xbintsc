@@ -186,6 +186,51 @@ describe("bundleModules", () => {
     expect(result?.moduleCount).toBe(2);
   });
 
+  it("resolves an extension-less import to a `.js` source", () => {
+    const directory = writeFiles({
+      "util.js": "export function add(a, b) { return a + b; }",
+      "main.js": 'import { add } from "./util";\nconsole.log(add(1, 2));',
+    });
+    const { result, bag } = bundle(join(directory, "main.js"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+  });
+
+  it("prefers a `.ts` source over a `.js` sibling for an extension-less import", () => {
+    const directory = writeFiles({
+      "util.ts": "export const kind = \"ts\";",
+      "util.js": 'export const kind = "js";',
+      "main.ts": 'import { kind } from "./util";\nkind;',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+    // The `.ts` source is bundled, so the `.js` sibling's string is absent.
+    expect(result!.text).toContain('"ts"');
+    expect(result!.text).not.toContain('"js"');
+  });
+
+  it("maps `.mjs`/`.cjs` specifiers to `.mts`/`.cts` sources", () => {
+    const directory = writeFiles({
+      "a.mts": "export const a = 1;",
+      "b.cts": "export const b = 2;",
+      "main.ts": 'import { a } from "./a.mjs";\nimport { b } from "./b.cjs";\na;\nb;',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(3);
+  });
+
+  it("bundles a `.js` entry module through extension-less imports", () => {
+    const directory = writeFiles({
+      "math.js": "export const two = 2;",
+      "main.js": 'import { two } from "./math";\nconsole.log(two);',
+    });
+    const { result, bag } = bundle(join(directory, "main.js"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+  });
+
   it("reports a dependency that cannot be resolved", () => {
     const directory = writeFiles({ "main.ts": 'import { x } from "./missing";\nx;' });
     const { result, bag } = bundle(join(directory, "main.ts"));

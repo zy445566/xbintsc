@@ -55,8 +55,12 @@ export interface BundleResult {
   readonly moduleCount: number;
 }
 
-/** Source extensions probed for an extension-less or `.js` specifier. */
-const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".cts"];
+/**
+ * Source extensions probed for an extension-less specifier. TypeScript suffixes
+ * are tried before their JavaScript counterparts so a project that ships both
+ * `foo.ts` and a compiled `foo.js` prefers the source it is compiled from.
+ */
+const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 /** File extensions a directory `index` entry may use. */
 const INDEX_SUFFIXES = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 /** Conditions consulted, in order, when reading a package `exports` map. */
@@ -73,14 +77,28 @@ function isRelativeSpecifier(specifier: string): boolean {
  * conventions.
  */
 function resolvePath(base: string): string | undefined {
-  // TypeScript sources are imported using their emitted `.js` extension
-  // (`import ... from "./foo.js"`), so map the extension back to the source
-  // file before probing the usual suffixes.
+  // A JavaScript specifier may refer to a TypeScript source that will emit it
+  // (`import "./foo.js"` pointing at `foo.ts`). Probe the matching TypeScript
+  // extensions after the literal path: `.js`/`.jsx` -> `.ts`/`.tsx`,
+  // `.mjs` -> `.mts`, `.cjs` -> `.cts`.
   const candidates = [base];
-  const jsExtension = /\.(?:m|c)?jsx?$/.exec(base);
+  const jsExtension = /\.((?:m|c)?jsx?)$/.exec(base);
   if (jsExtension) {
     const stem = base.slice(0, jsExtension.index);
-    candidates.push(`${stem}.ts`, `${stem}.tsx`, `${stem}.mts`, `${stem}.cts`);
+    switch (jsExtension[1]) {
+      case "jsx":
+        candidates.push(`${stem}.tsx`, `${stem}.ts`);
+        break;
+      case "mjs":
+        candidates.push(`${stem}.mts`);
+        break;
+      case "cjs":
+        candidates.push(`${stem}.cts`);
+        break;
+      default:
+        candidates.push(`${stem}.ts`, `${stem}.tsx`);
+        break;
+    }
   }
   for (const candidate of candidates) {
     if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;

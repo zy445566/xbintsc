@@ -339,6 +339,7 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       const asyncDir = opendirSync(base + "/sub");
       const seen = [];
       asyncDir.read((error, item) => { if (item) seen.push(item.name); });
+      asyncDir.read((error, item) => { if (item) seen.push(item.name); });
       asyncDir.close(() => seen.push("closed"));
       console.log("async", seen.sort().join(","));
       console.log("star", globSync("*.txt", { cwd: base }).join(","));
@@ -352,7 +353,7 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       rmSync(base, { recursive: true });
     `;
     expect(runProgram(source, { extensions: true })).toBe(
-      "dir a.txt,b.md,sub\nasync closed,deep\nstar a.txt\nrec a.txt,sub/c.txt,sub/deep/d.txt\nquestion a.txt\nclass a.txt\narray a.txt,b.md\ndirent a.txt:true\nopendir ENOENT",
+      "dir a.txt,b.md,sub\nasync c.txt,closed,deep\nstar a.txt\nrec a.txt,sub/c.txt,sub/deep/d.txt\nquestion a.txt\nclass a.txt\narray a.txt,b.md\ndirent a.txt:true\nopendir ENOENT",
     );
   });
 

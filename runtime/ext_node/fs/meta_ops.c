@@ -20,7 +20,7 @@
 
 #if defined(_WIN32)
 #include <io.h>
-#include <sys/utime.h>
+#include <windows.h>
 #define xt_fs_chmod_fn _chmod
 #define xt_fs_truncate_path(path, length) xt_fs_win_truncate(path, length)
 #else
@@ -37,6 +37,33 @@ static int xt_fs_win_truncate(const char *path, long long length) {
   int result = _chsize_s(fd, length);
   _close(fd);
   return result;
+}
+
+/* Unix seconds -> Windows FILETIME (100 ns ticks since 1601-01-01 UTC). The CRT
+ * `_utime`/`_utimbuf` path goes through local time, which is both lossy around
+ * DST boundaries and ABI-fragile across MSVC/MinGW; matching libuv's direct
+ * conversion keeps the result exact and identical to Node. */
+static void xt_fs_unix_to_filetime(double seconds, FILETIME *out) {
+  long long ticks = (long long)(seconds * 10000000.0) + 116444736000000000LL;
+  unsigned long long value = (unsigned long long)ticks;
+  out->dwLowDateTime = (DWORD)value;
+  out->dwHighDateTime = (DWORD)(value >> 32);
+}
+
+static int xt_fs_set_file_times(HANDLE handle, double atime, double mtime) {
+  FILETIME access_time;
+  FILETIME modify_time;
+  FILETIME *access_ptr = NULL;
+  FILETIME *modify_ptr = NULL;
+  if (atime == atime) {
+    xt_fs_unix_to_filetime(atime, &access_time);
+    access_ptr = &access_time;
+  }
+  if (mtime == mtime) {
+    xt_fs_unix_to_filetime(mtime, &modify_time);
+    modify_ptr = &modify_time;
+  }
+  return SetFileTime(handle, NULL, access_ptr, modify_ptr) ? 0 : -1;
 }
 #endif
 
@@ -144,13 +171,16 @@ xt_value xt_node_utimes(int32_t argc, xt_value *argv) {
   double atime = xt_fs_time_seconds(argv[1]);
   double mtime = xt_fs_time_seconds(argv[2]);
 #if defined(_WIN32)
-  struct _utimbuf times;
-  times.actime = (time_t)atime;
-  times.modtime = (time_t)mtime;
-  if (!path || _utime(path, &times) != 0) {
+  HANDLE handle = path ? CreateFileA(path, FILE_WRITE_ATTRIBUTES,
+                                     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                                     OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL)
+                        : INVALID_HANDLE_VALUE;
+  if (handle == INVALID_HANDLE_VALUE || xt_fs_set_file_times(handle, atime, mtime) != 0) {
+    if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle);
     xt_fs_raise_path("utime", path);
     return xt_undefined();
   }
+  CloseHandle(handle);
   return xt_undefined();
 #else
   struct timeval times[2];

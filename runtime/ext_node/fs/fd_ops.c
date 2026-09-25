@@ -22,7 +22,7 @@
 
 #if defined(_WIN32)
 #include <io.h>
-#include <sys/utime.h>
+#include <windows.h>
 #define xt_fs_fstat_fn _fstat
 #define xt_fs_fsync _commit
 #define xt_fs_fdatasync _commit
@@ -37,6 +37,33 @@
 #define xt_fs_fdatasync fdatasync
 #endif
 #define xt_fs_ftruncate(fd, length) ftruncate((fd), (off_t)(length))
+#endif
+
+#if defined(_WIN32)
+/* See meta_ops.c: set times through `SetFileTime` so the conversion is exact
+ * and does not depend on the CRT's local-time `_utimbuf` ABI. */
+static void xt_fs_unix_to_filetime(double seconds, FILETIME *out) {
+  long long ticks = (long long)(seconds * 10000000.0) + 116444736000000000LL;
+  unsigned long long value = (unsigned long long)ticks;
+  out->dwLowDateTime = (DWORD)value;
+  out->dwHighDateTime = (DWORD)(value >> 32);
+}
+
+static int xt_fs_set_file_times(HANDLE handle, double atime, double mtime) {
+  FILETIME access_time;
+  FILETIME modify_time;
+  FILETIME *access_ptr = NULL;
+  FILETIME *modify_ptr = NULL;
+  if (atime == atime) {
+    xt_fs_unix_to_filetime(atime, &access_time);
+    access_ptr = &access_time;
+  }
+  if (mtime == mtime) {
+    xt_fs_unix_to_filetime(mtime, &modify_time);
+    modify_ptr = &modify_time;
+  }
+  return SetFileTime(handle, NULL, access_ptr, modify_ptr) ? 0 : -1;
+}
 #endif
 
 /* Bytes backing a string or Buffer value; caller frees. */
@@ -358,10 +385,8 @@ xt_value xt_node_futimes(int32_t argc, xt_value *argv) {
   double atime = xt_fs_time_seconds(argv[1]);
   double mtime = xt_fs_time_seconds(argv[2]);
 #if defined(_WIN32)
-  struct _utimbuf times;
-  times.actime = (time_t)atime;
-  times.modtime = (time_t)mtime;
-  if (_futime(fd, &times) != 0) {
+  intptr_t os_handle = _get_osfhandle(fd);
+  if (os_handle == -1 || xt_fs_set_file_times((HANDLE)os_handle, atime, mtime) != 0) {
     xt_fs_raise_path("futime", NULL);
     return xt_undefined();
   }

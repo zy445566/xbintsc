@@ -52,6 +52,26 @@ static xt_try_frame *g_try_top = NULL;
 int32_t xt_program_argc = 0;
 char **xt_program_argv = NULL;
 
+#if defined(_WIN32)
+/*
+ * The UCRT validates its low-level I/O arguments and, when one is out of
+ * range, calls the invalid-parameter handler. The default handler terminates
+ * the process through `_invoke_watson`, which fast-fails with exit status
+ * 0xC0000409. That makes POSIX-style calls such as `close(9999)` abort instead
+ * of reporting `EBADF`. Install a no-op handler so the CRT returns its normal
+ * error code (and sets `errno`) instead of crashing.
+ */
+static void __cdecl xt_noop_invalid_parameter_handler(const wchar_t *expression, const wchar_t *function_name,
+                                                      const wchar_t *file_name, unsigned int line_number,
+                                                      uintptr_t reserved) {
+  (void)expression;
+  (void)function_name;
+  (void)file_name;
+  (void)line_number;
+  (void)reserved;
+}
+#endif
+
 void xt_set_program_args(int32_t argc, char **argv) {
 #if defined(_WIN32)
   /* Keep stdout/stderr in binary mode so `\n` is not translated to `\r\n`,
@@ -59,6 +79,7 @@ void xt_set_program_args(int32_t argc, char **argv) {
      sockets (the generated `main` calls this before running the program). */
   _setmode(_fileno(stdout), _O_BINARY);
   _setmode(_fileno(stderr), _O_BINARY);
+  _set_invalid_parameter_handler(xt_noop_invalid_parameter_handler);
   WSADATA wsaData;
   WSAStartup(MAKEWORD(2, 2), &wsaData);
 #endif

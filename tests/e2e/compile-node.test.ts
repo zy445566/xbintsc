@@ -264,6 +264,11 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
 
   it("changes file metadata", () => {
     const base = join(harness.workdir, `meta_${Math.random().toString(36).slice(2)}`);
+    // Windows only tracks the read-only attribute, so a writable file always
+    // reports the canonical 0o666 and `lchmodSync` (a no-op there) cannot make
+    // the requested 0o644 observable. Everywhere else the chmod/lchmod pair is
+    // what determines the mode.
+    const expectedMode = process.platform === "win32" ? "0o666" : "0o644";
     const source = `
       import { accessSync, chmodSync, chownSync, constants, lchmodSync, lchownSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, statfsSync, truncateSync, utimesSync, writeFileSync } from "fs";
       const base = ${JSON.stringify(base)};
@@ -274,7 +279,7 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       accessSync(path, constants.R_OK | constants.W_OK);
       chmodSync(path, 0o600);
       lchmodSync(path, 0o644);
-      console.log("mode", (statSync(path).mode & 0o777) === 0o644);
+      console.log("mode", (statSync(path).mode & 0o777) === ${expectedMode});
       chownSync(path, -1, -1);
       lchownSync(path, -1, -1);
       truncateSync(path, 3);
@@ -339,6 +344,7 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       const asyncDir = opendirSync(base + "/sub");
       const seen = [];
       asyncDir.read((error, item) => { if (item) seen.push(item.name); });
+      asyncDir.read((error, item) => { if (item) seen.push(item.name); });
       asyncDir.close(() => seen.push("closed"));
       console.log("async", seen.sort().join(","));
       console.log("star", globSync("*.txt", { cwd: base }).join(","));
@@ -352,7 +358,7 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       rmSync(base, { recursive: true });
     `;
     expect(runProgram(source, { extensions: true })).toBe(
-      "dir a.txt,b.md,sub\nasync closed,deep\nstar a.txt\nrec a.txt,sub/c.txt,sub/deep/d.txt\nquestion a.txt\nclass a.txt\narray a.txt,b.md\ndirent a.txt:true\nopendir ENOENT",
+      "dir a.txt,b.md,sub\nasync c.txt,closed,deep\nstar a.txt\nrec a.txt,sub/c.txt,sub/deep/d.txt\nquestion a.txt\nclass a.txt\narray a.txt,b.md\ndirent a.txt:true\nopendir ENOENT",
     );
   });
 

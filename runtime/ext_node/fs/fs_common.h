@@ -27,9 +27,32 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-typedef struct _stat xt_fs_stat_t;
-#define xt_fs_stat_fn _stat
-#define xt_fs_lstat_fn _stat
+/* Stat results are filled from Win32 directly. The CRT's `_stat` converts the
+ * FILETIME through the *local* time zone before producing `time_t`, so a time
+ * near the Unix epoch (e.g. `utimesSync(path, 1000, 2000)`) maps to 1969 on a
+ * machine west of UTC and the CRT reports an unrepresentable `st_mtime` (-1).
+ * Reading the Win32 FILETIME and converting it to Unix seconds in UTC like
+ * libuv/Node keeps the values exact and timezone independent. */
+typedef struct {
+  long long st_size;
+  unsigned int st_mode;
+  unsigned int st_uid;
+  unsigned int st_gid;
+  unsigned int st_dev;
+  unsigned long long st_ino;
+  unsigned int st_nlink;
+  unsigned int st_rdev;
+  long long st_mtime; /* seconds since the Unix epoch */
+  long long st_atime;
+  long long st_ctime;
+} xt_fs_stat_t;
+
+int xt_fs_win_stat(const char *path, xt_fs_stat_t *out);
+int xt_fs_win_lstat(const char *path, xt_fs_stat_t *out);
+int xt_fs_win_fstat(int fd, xt_fs_stat_t *out);
+#define xt_fs_stat_fn xt_fs_win_stat
+#define xt_fs_lstat_fn xt_fs_win_lstat
+#define xt_fs_fstat_fn xt_fs_win_fstat
 #define xt_fs_access _access
 #define xt_fs_mkdir_mode(path, mode) _mkdir(path)
 #define xt_fs_mkdir_one(path) _mkdir(path)

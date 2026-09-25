@@ -654,6 +654,21 @@ describeE2E("end-to-end compilation", (harness) => {
     expect(runProgram(source)).toBe("42");
   });
 
+  it("bundles JavaScript modules through extension-less imports", () => {
+    const source = `
+      import { add } from "./js_dep";
+      console.log(add(2, 3));
+    `;
+    expect(
+      runProgram(source, {
+        files: {
+          "js_dep.js": 'export { add } from "./js_math";',
+          "js_math.js": "export function add(a, b) { return a + b; }",
+        },
+      }),
+    ).toBe("5");
+  });
+
   it("supports destructuring bindings, enums, regexes and Error", () => {
     const source = `
       const [a, b = 7, ...rest] = [1, undefined, 3, 4];

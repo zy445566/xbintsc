@@ -153,10 +153,10 @@ jobs:
       # Reports the C runtime coverage gathered above, and enforces a floor.
       # The script skips (rather than fails) on a host without a matching
       # llvm-profdata/llvm-cov, so the gate only applies where it can measure.
-      # 55% sits well under the ~72% a full local run reaches; raise it once the
-      # per-platform numbers have been observed for a while.
+      # A full local run reaches ~85%; 80 leaves headroom for per-platform
+      # differences in the compiled extensions.
       - name: Runtime (C) coverage
-        run: npm run coverage:runtime -- --report-only --threshold 70
+        run: npm run coverage:runtime -- --report-only --threshold 80
 
   compile-examples:
     name: Compile examples (${{ matrix.os }})

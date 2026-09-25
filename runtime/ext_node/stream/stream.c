@@ -145,6 +145,17 @@ static xt_value xt_stream_method_is_paused(xt_value thisValue, xt_value env, int
 
 static xt_value xt_stream_transform_flush(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 
+/* No-op write callback used when `end(chunk)` forwards the chunk to `write`:
+ * the caller's `write` hook may invoke its completion callback, which must not
+ * be the user's `end` callback and must not be missing. */
+static xt_value xt_stream_noop(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)thisValue;
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return xt_undefined();
+}
+
 static xt_value xt_stream_method_write(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   xt_value chunk = xt_arg(argc, argv, 0);
@@ -168,10 +179,12 @@ static xt_value xt_stream_method_write(xt_value thisValue, xt_value env, int32_t
 
   xt_value writeFn = xt_object_get_cstr(thisValue, "__write");
   if (XT_IS_FUNCTION(writeFn)) {
+    xt_value writeCallback =
+        XT_IS_FUNCTION(callback) ? callback : xt_closure_new((void *)xt_stream_noop, 0, NULL);
     xt_value args[3];
     args[0] = chunk;
     args[1] = encoding;
-    args[2] = callback;
+    args[2] = writeCallback;
     xt_call_with_this(writeFn, thisValue, 3, args);
   }
 
@@ -190,7 +203,11 @@ static xt_value xt_stream_method_end(xt_value thisValue, xt_value env, int32_t a
   xt_value callback = XT_UNDEFINED;
   if (argc >= 1 && !xt_truthy(xt_is_nullish(chunk))) {
     xt_value writeFn = xt_object_get_cstr(thisValue, "write");
-    if (XT_IS_FUNCTION(writeFn)) xt_call_with_this(writeFn, thisValue, 1, &chunk);
+    if (XT_IS_FUNCTION(writeFn)) {
+      xt_value noop = xt_closure_new((void *)xt_stream_noop, 0, NULL);
+      xt_value writeArgs[3] = {chunk, xt_undefined(), noop};
+      xt_call_with_this(writeFn, thisValue, 3, writeArgs);
+    }
   }
   for (int32_t i = 0; i < argc; i++) {
     if (XT_IS_FUNCTION(argv[i])) callback = argv[i];

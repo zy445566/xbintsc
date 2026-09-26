@@ -34,6 +34,15 @@ CXX="${CXX:-$(find_tool clang++ g++ c++)}" || {
 }
 
 mkdir -p "$here/build"
-"$CXX" -O2 -fPIC -Wall -Wextra -I"$runtime" -c "$here/mathx.cpp" -o "$here/build/mathx.o"
+
+# Position-independent code is the Unix default; the MSVC ABI (Windows) rejects
+# `-fPIC` outright, so only pass it on non-Windows hosts.
+pic_flag="-fPIC"
+case "$(uname -s)" in
+  MINGW* | MSYS* | CYGWIN*) pic_flag="" ;;
+esac
+
+# shellcheck disable=SC2086  # $pic_flag must split into an optional flag.
+"$CXX" -O2 $pic_flag -Wall -Wextra -I"$runtime" -c "$here/mathx.cpp" -o "$here/build/mathx.o"
 
 echo "built $here/build/mathx.o with $CXX"

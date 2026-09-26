@@ -18,9 +18,8 @@
  * {
  *   "name": "mathx",
  *   "description": "C++ math helpers",
- *   "objects": ["build/libmathx.a"],
- *   "linkerFlags": ["-lm"],
- *   "linkerFlagsByPlatform": { "linux": ["-lstdc++"], "darwin": ["-lc++"] },
+ *   "objects": ["build/mathx.o"],
+ *   "linkerFlagsByPlatform": { "linux": ["-lstdc++", "-lm"], "darwin": ["-lc++"], "win32": ["-lmsvcprt"] },
  *   "builtins": { "fastAdd": { "symbol": "mathx_add" } },
  *   "modules": {
  *     "mathx": {

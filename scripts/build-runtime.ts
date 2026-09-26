@@ -29,16 +29,15 @@ const outDir = join(runtimeDir, "lib", platformSlug());
 const objDir = join(root, "build", "runtime-obj");
 
 if (process.platform === "win32") {
-  // The Windows release ships no prebuilt archives yet: the current MSVC CI
-  // cannot produce MinGW-compatible objects, so the driver compiles the C
-  // sources on demand. Revisit once the bundled MinGW-w64 ABI lands.
-  // See doc/self-contained-roadmap.md.
-  console.log("xbintsc: skipped runtime archives on Windows until the MinGW-w64 toolchain lands");
+  // The driver links with the MSVC ABI on Windows, where the prebuilt archives
+  // are unnecessary: `build` compiles the runtime C sources on demand with the
+  // user's clang. (Producing MSVC-compatible COFF `.lib` archives is possible
+  // but not worth the extra step.)
+  console.log("xbintsc: skipping runtime archives on Windows; the driver compiles the C sources on demand");
   process.exit(0);
 }
 
-// Use the same toolchain the driver will: a bundled clang when present, with its
-// `LD_LIBRARY_PATH` (the legacy `libtinfo.so.5` on Linux) threaded through.
+// Use the same toolchain the driver will.
 const toolchain = resolveToolchain();
 const clang = toolchain.clang;
 const childEnv = Object.assign({}, process.env, toolchain.env);
@@ -54,7 +53,7 @@ function findArchiver(clangPath: string): string {
   const exe = process.platform === "win32" ? ".exe" : "";
   const candidates = [
     process.env.xbintsc_AR,
-    // A bundled toolchain ships `llvm-ar` next to clang.
+    // A clang install usually ships `llvm-ar` next to the driver.
     dir === "." ? undefined : join(dir, `llvm-ar${exe}`),
     "llvm-ar",
     "ar",

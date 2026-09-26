@@ -268,7 +268,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - `nativeObjects()` 链接以 `(argc, argv)` ABI 暴露 `extern "C"` 符号的预编译对象/静态库；JSON manifest 把它们映射为 builtins/modules（`linkerFlags` / `linkerFlagsByPlatform` 用于 C++/Rust 运行时）。
   - 编写辅助位于 `runtime/xt_ext.h`（C/C++）与 `runtime/xt_ext.rs`（Rust）；可运行工程在 `examples/extensions/`。
   - 驱动原样链接这些产物，增量缓存会对其内容取指纹，因此重建库会使缓存二进制失效。
-  - CI 在 Linux、macOS、Windows 上都会构建两种语言的示例；Windows 使用自带的 MinGW-w64 工具链（C++ `-lc++ -static`，Rust `*-pc-windows-gnullvm` + `-lntdll -static`）。
+  - CI 在 Linux、macOS、Windows 上都会构建两种语言的示例；Windows 下系统 clang 链接 MSVC ABI（C++ `-lmsvcprt`，Rust `*-pc-windows-msvc` 加 Windows 系统库）。
 
 ---
 

@@ -11,12 +11,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# The compiler resolves its C toolchain as: bundled `vendor/<os>-<arch>/` first,
-# then the system `PATH` (see `src/driver/toolchain-provider.ts`). We deliberately
-# do not pin `xbintsc_CLANG` here so each job can pick the right one — on Windows
-# arm64 the image's clang targets the MSVC ABI while we ship MinGW-w64, so that
-# job fetches and uses the bundled toolchain instead.
-
+# xbintsc does not bundle a compiler: every job installs a clang-compatible
+# toolchain and `src/driver/toolchain-provider.ts` resolves it from the system
+# `PATH`. On Windows the target ABI is MSVC, so each Windows job imports the
+# Visual Studio build environment (`vcvarsall`) before running anything.
+#
 # Every host architecture is covered, but these are native builds, not
 # cross-compilation: each runner builds and tests its own architecture.
 #   Linux x64      -> ubuntu-latest
@@ -72,57 +71,50 @@ jobs:
         # report below needs alongside clang.
         run: sudo apt-get update && sudo apt-get install -y clang llvm
 
-      # Windows arm64 has no MinGW-w64 clang in the image and the MSVC one emits
-      # MSVC-ABI objects, so it uses the bundled llvm-mingw toolchain instead.
       - name: Install clang (Windows x64)
-        if: runner.os == 'Windows' && runner.arch != 'ARM64'
+        if: runner.os == 'Windows' && runner.arch == 'X64'
         shell: pwsh
         run: |
           choco install llvm --no-progress -y
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      # clang on Windows needs the MSVC/SDK environment (INCLUDE, LIB, PATH)
-      # to find the C standard library headers and the linker.
-      # ilammy/msvc-dev-cmd still runs on Node 20 (which GitHub now forces onto
-      # Node 24), so import the Visual Studio build environment directly instead
-      # of depending on a deprecated action.
-      - name: Set up the MSVC environment (Windows x64)
-        if: runner.os == 'Windows' && runner.arch != 'ARM64'
+      # clang on Windows needs the MSVC/SDK environment (INCLUDE, LIB, PATH) to
+      # find the C standard library headers, the import libraries and the
+      # linker. Import the Visual Studio build environment directly instead of
+      # depending on the deprecated ilammy/msvc-dev-cmd action. Windows on ARM
+      # uses the image's clang (its default target is MSVC), plus the ARM64
+      # MSVC tools.
+      - name: Set up the MSVC environment (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $arch = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
+          $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.arm64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
+
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = (& $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath).Trim()
-          if (-not $vsPath) { throw "Visual Studio C++ build tools were not found." }
+          if (-not (Test-Path $vswhere)) {
+            $vswhere = "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
+          }
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
+
+          $vsPath = (& $vswhere -latest -products * -requires $component -property installationPath).Trim()
+          if (-not $vsPath) { throw "Visual Studio C++ build tools ($component) were not found." }
 
           $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
           if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found at $vcvars" }
 
-          cmd /c "`"$vcvars`" x64 && set" | ForEach-Object {
+          cmd /c "`"$vcvars`" $arch && set" | ForEach-Object {
             if ($_ -match '^([^=]+)=(.*)$') {
               "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
             }
           }
 
       - name: Verify the toolchain
-        if: "!(runner.os == 'Windows' && runner.arch == 'ARM64')"
         shell: bash
         run: clang --version
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Cache the bundled toolchain (Windows arm64)
-        if: runner.os == 'Windows' && runner.arch == 'ARM64'
-        uses: actions/cache@v6
-        with:
-          path: vendor
-          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
-
-      - name: Fetch the bundled toolchain (Windows arm64)
-        if: runner.os == 'Windows' && runner.arch == 'ARM64'
-        run: npx tsx scripts/fetch-toolchain.ts
 
       - name: Type check
         run: npm run typecheck
@@ -185,43 +177,38 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang
 
       - name: Install clang (Windows x64)
-        if: runner.os == 'Windows' && runner.arch != 'ARM64'
+        if: runner.os == 'Windows' && runner.arch == 'X64'
         shell: pwsh
         run: |
           choco install llvm --no-progress -y
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Set up the MSVC environment (Windows x64)
-        if: runner.os == 'Windows' && runner.arch != 'ARM64'
+      - name: Set up the MSVC environment (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $arch = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
+          $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.arm64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
+
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = (& $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath).Trim()
-          if (-not $vsPath) { throw "Visual Studio C++ build tools were not found." }
+          if (-not (Test-Path $vswhere)) {
+            $vswhere = "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
+          }
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
+
+          $vsPath = (& $vswhere -latest -products * -requires $component -property installationPath).Trim()
+          if (-not $vsPath) { throw "Visual Studio C++ build tools ($component) were not found." }
 
           $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
           if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found at $vcvars" }
 
-          cmd /c "`"$vcvars`" x64 && set" | ForEach-Object {
+          cmd /c "`"$vcvars`" $arch && set" | ForEach-Object {
             if ($_ -match '^([^=]+)=(.*)$') {
               "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
             }
           }
 
       - run: npm ci
-
-      - name: Cache the bundled toolchain (Windows arm64)
-        if: runner.os == 'Windows' && runner.arch == 'ARM64'
-        uses: actions/cache@v6
-        with:
-          path: vendor
-          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
-
-      - name: Fetch the bundled toolchain (Windows arm64)
-        if: runner.os == 'Windows' && runner.arch == 'ARM64'
-        run: npx tsx scripts/fetch-toolchain.ts
 
       - name: Build the hello example
         run: npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
@@ -233,35 +220,16 @@ jobs:
         run: npx tsx src/cli/main.ts run examples/node/read.ts --ext node --out build/examples
 
       # Native (C++/Rust) extensions are compiled to `extern "C"` objects/static
-      # libraries and linked by xbintsc. Windows x64 fetches the bundled
-      # MinGW-w64 toolchain here (after the MSVC-built `hello` examples, which
-      # stay on the system clang); Windows arm64 fetched it above because its
-      # `hello` example already needs it. Every platform therefore links the
-      # extensions with a GNU-ABI compiler, and the platform-specific linker
-      # flags live in each manifest's `linkerFlagsByPlatform` block.
-      - name: Cache the bundled toolchain (Windows x64)
-        if: runner.os == 'Windows' && runner.arch != 'ARM64'
-        uses: actions/cache@v6
-        with:
-          path: vendor
-          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
-
-      - name: Fetch the bundled toolchain (Windows x64)
-        if: runner.os == 'Windows' && runner.arch != 'ARM64'
-        run: npx tsx scripts/fetch-toolchain.ts
-
+      # libraries and linked by xbintsc. The Windows job links with the MSVC ABI
+      # (the system clang plus the Visual Studio tools), and each manifest's
+      # `linkerFlagsByPlatform` block carries the platform-specific runtime
+      # libraries.
       - name: Build the C++ native extension
         shell: bash
         run: |
           set -euo pipefail
           if [ "${{ runner.os }}" = "Windows" ]; then
-            case "${{ runner.arch }}" in
-              ARM64) slug=win32-arm64 ;;
-              *)     slug=win32-x64 ;;
-            esac
-            ws="$(cygpath -m "$GITHUB_WORKSPACE")"
-            export CXX="$ws/vendor/$slug/bin/clang++.exe"
-            export AR="$ws/vendor/$slug/bin/llvm-ar.exe"
+            export CXX=clang++
           fi
           bash examples/extensions/cpp/build.sh
 
@@ -274,8 +242,8 @@ jobs:
           set -euo pipefail
           if [ "${{ runner.os }}" = "Windows" ]; then
             case "${{ runner.arch }}" in
-              ARM64) rust_target=aarch64-pc-windows-gnullvm ;;
-              *)     rust_target=x86_64-pc-windows-gnullvm ;;
+              ARM64) rust_target=aarch64-pc-windows-msvc ;;
+              *)     rust_target=x86_64-pc-windows-msvc ;;
             esac
             rustup target add "$rust_target"
             export RUST_TARGET="$rust_target"
@@ -312,26 +280,32 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang
 
       - name: Install clang (Windows x64)
-        if: runner.os == 'Windows' && runner.arch != 'ARM64'
+        if: runner.os == 'Windows' && runner.arch == 'X64'
         shell: pwsh
         run: |
           choco install llvm --no-progress -y
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Set up the MSVC environment (Windows x64)
-        if: runner.os == 'Windows' && runner.arch != 'ARM64'
+      - name: Set up the MSVC environment (Windows)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $arch = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
+          $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.arm64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
+
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = (& $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath).Trim()
-          if (-not $vsPath) { throw "Visual Studio C++ build tools were not found." }
+          if (-not (Test-Path $vswhere)) {
+            $vswhere = "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
+          }
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
+
+          $vsPath = (& $vswhere -latest -products * -requires $component -property installationPath).Trim()
+          if (-not $vsPath) { throw "Visual Studio C++ build tools ($component) were not found." }
 
           $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
           if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found at $vcvars" }
 
-          cmd /c "`"$vcvars`" x64 && set" | ForEach-Object {
+          cmd /c "`"$vcvars`" $arch && set" | ForEach-Object {
             if ($_ -match '^([^=]+)=(.*)$') {
               "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
             }
@@ -339,17 +313,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Cache the bundled toolchain (Windows arm64)
-        if: runner.os == 'Windows' && runner.arch == 'ARM64'
-        uses: actions/cache@v6
-        with:
-          path: vendor
-          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
-
-      - name: Fetch the bundled toolchain (Windows arm64)
-        if: runner.os == 'Windows' && runner.arch == 'ARM64'
-        run: npx tsx scripts/fetch-toolchain.ts
 
       # Bootstrap the compiler with itself and prove the emitted LLVM IR is a
       # fixpoint: source -> gen1 binary -> gen2 IR == gen1 IR.
@@ -400,58 +363,10 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # Proves an end user needs no compiler installed: on Linux/Windows the toolchain
-  # is fetched into vendor/ and used; on macOS the system Command Line Tools are
-  # used (the recorded prerequisite).
-  self-contained:
-    name: Self-contained (${{ matrix.os }})
-    if: github.event_name != 'pull_request'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest        # Linux x64
-          - ubuntu-24.04-arm     # Linux arm64
-          - macos-15-intel       # macOS x64
-          - macos-15             # macOS arm64
-          - windows-latest       # Windows x64
-          - windows-11-arm       # Windows arm64
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-
-      - run: npm ci
-
-      - name: Cache the bundled toolchain
-        uses: actions/cache@v6
-        with:
-          path: vendor
-          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
-
-      - name: Fetch the bundled toolchain
-        run: npx tsx scripts/fetch-toolchain.ts
-
-      - name: Report the resolved toolchain
-        run: npx tsx src/cli/main.ts doctor
-
-      - name: Assert the bundled toolchain is used (Linux/Windows)
-        if: runner.os != 'macOS'
-        shell: bash
-        run: npx tsx src/cli/main.ts doctor | grep -q "(vendor)"
-
-      - name: Build and run a program
-        run: |
-          npx tsx src/cli/main.ts build examples/hello.ts --out build/self-contained
-          npx tsx src/cli/main.ts run examples/hello.ts --out build/self-contained
-
-  # Assemble the self-contained release archives: the self-hosted binary plus the
-  # bundled toolchain and prebuilt runtime, one per platform. `release.yml`
-  # downloads these and attaches them to a GitHub Release.
+  # Assemble the release archives: the self-hosted binary plus the prebuilt
+  # runtime, one per platform. No toolchain is bundled (see
+  # `doc/requirements.md`). `release.yml` downloads these and attaches them to a
+  # GitHub Release.
   package:
     name: Package (${{ matrix.os }})
     if: github.event_name != 'pull_request'
@@ -482,15 +397,6 @@ jobs:
         with:
           name: xbintsc-${{ runner.os }}-${{ runner.arch }}
           path: dist
-
-      - name: Cache the bundled toolchain
-        uses: actions/cache@v6
-        with:
-          path: vendor
-          key: vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/driver/toolchain-download.ts') }}
-
-      - name: Fetch the bundled toolchain
-        run: npx tsx scripts/fetch-toolchain.ts
 
       - name: Build the prebuilt runtime archives
         run: npm run runtime

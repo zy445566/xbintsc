@@ -97,8 +97,9 @@ C++ or Rust project compiled to an `extern "C"` object or static archive can be
 linked in and exposed through a JSON manifest (`src/extensions/native.ts`,
 `--ext-native`). The driver links the artifacts verbatim and the generator binds
 their symbols exactly like the C runtime, so the extension language is invisible
-to the core compiler. Windows is covered too: xbintsc links with its bundled
-MinGW-w64 toolchain there, so the examples build against that GNU ABI. See
+to the core compiler. Windows is covered too: xbintsc links with the toolchain
+found on `PATH` (the MSVC ABI when LLVM + the Visual Studio C++ build tools are
+installed), and each manifest declares any platform-specific linker flags. See
 `examples/extensions/` and `runtime/xt_ext.h` / `runtime/xt_ext.rs`.
 
 ## Self-hosting roadmap

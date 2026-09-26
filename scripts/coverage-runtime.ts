@@ -160,9 +160,9 @@ function runs(command: string): boolean {
 
 /**
  * Locate the LLVM tool `name` (`llvm-profdata`/`llvm-cov`) that matches the
- * clang the driver resolved. The bundled toolchains ship the tools next to
- * clang and cover the versioned system installs, so search there first: mixing
- * versions makes `llvm-profdata` reject the profile format.
+ * clang the driver resolved. Prefer the tool next to clang, then the
+ * version-suffixed system installs: mixing versions makes `llvm-profdata`
+ * reject the profile format.
  */
 function findTool(clang: string, name: string): string | undefined {
   const exe = process.platform === "win32" ? ".exe" : "";
@@ -282,7 +282,7 @@ function main(): void {
       profdataTool ? undefined : "llvm-profdata",
       covTool ? undefined : "llvm-cov",
     ].filter(Boolean).join(", ");
-    skip(`${missing} not found for ${clang}; install LLVM or use the bundled toolchain`, options.strict);
+    skip(`${missing} not found for ${clang}; install the LLVM tools (llvm-profdata, llvm-cov)`, options.strict);
   }
 
   if (!options.reportOnly) runTests(options);

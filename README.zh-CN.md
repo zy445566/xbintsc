@@ -64,15 +64,14 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 ## 使用方法
 
 > **使用前请先确认：** 各平台的运行前置条件见
-> [使用前置要求](./doc/zh-CN/requirements.md)。若使用下方的预编译独立发布包，
-> 相关部分为
-> [使用前置要求 → 预编译发布包](./doc/zh-CN/requirements.md#预编译发布包推荐)
-> （Windows/Linux 自带工具链；macOS 需要 Xcode Command Line Tools）。
+> [使用前置要求](./doc/zh-CN/requirements.md)。xbintsc 不再自带编译器，每个平台
+> 都需要安装兼容 clang 的工具链（macOS：Xcode Command Line Tools；Linux：
+> clang+lld；Windows：LLVM + Visual Studio C++ 生成工具）。
 
 ### 预编译独立发布包
 
 每个 [GitHub Release](https://github.com/zy445566/xbintsc/releases/latest) 都会附上
-各平台的自包含归档，并在旁边附 `.sha256` 校验文件：
+各平台的发布归档，并在旁边附 `.sha256` 校验文件：
 
 | 平台 | 归档 |
 | --- | --- |
@@ -84,9 +83,10 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 
 `<version>` 是发布版本号（例如 `0.3.8`），会写入归档文件名，避免不同版本的下载文件相互覆盖。
 
-每个归档解压后都是一个 `xbintsc-<os>-<arch>/` 目录，其中已包含编译器
-（`bin/xbintsc[.exe]`）、C 运行时与自带工具链，因此**无需 Node.js，也无需系统编译器**。
-解压后把 `bin/` 加入 `PATH`（或直接调用 `bin/xbintsc`）即可，无需任何安装步骤。
+每个归档解压后都是一个 `xbintsc-<os>-<arch>/` 目录，其中包含编译器
+（`bin/xbintsc[.exe]`）与 C 运行时。它**无需 Node.js**，但你需要先安装对应平台
+的工具链（见 [使用前置要求](./doc/zh-CN/requirements.md)）。解压后把 `bin/` 加入
+`PATH`（或直接调用 `bin/xbintsc`）即可，xbintsc 本身无需安装步骤。
 
 **macOS / Linux 示例** —— 此处以 `xbintsc-<version>-darwin-arm64.tar.zst` 为例（请按你的平台
 换成 `-linux-x64` 等）：
@@ -106,10 +106,12 @@ tar -xf xbintsc-<version>-darwin-arm64.tar.zst
 ./build/hello
 ```
 
-**Windows 示例** —— 从
+**Windows 示例** —— 先安装 LLVM 与 Visual Studio C++ 生成工具（见
+[使用前置要求](./doc/zh-CN/requirements.md)），再从
 [Releases 页面](https://github.com/zy445566/xbintsc/releases/latest) 下载对应归档
 （此处为 `xbintsc-<version>-win32-x64.tar.zst`；Windows on ARM 请用 `-arm64`），
-然后在 PowerShell 中执行（Windows 10+ 自带 `tar`）：
+然后在 **x64 Native Tools Command Prompt for VS 2022**（Windows on ARM 用
+**ARM64 Native Tools**）中执行以下命令 —— Windows 10+ 自带 `tar`：
 
 ```powershell
 # 1. 校验哈希（可选，但推荐）
@@ -247,8 +249,8 @@ xbintsc run examples/extensions/cpp/demo.ts \
 ```jsonc
 {
   "name": "mathx-cpp",
-  "objects": ["build/libmathx.a"],
-  "linkerFlagsByPlatform": { "linux": ["-lstdc++"], "darwin": ["-lc++"], "win32": ["-lc++", "-static"] },
+  "objects": ["build/mathx.o"],
+  "linkerFlagsByPlatform": { "linux": ["-lstdc++", "-lm"], "darwin": ["-lc++"], "win32": ["-lmsvcprt"] },
   "builtins": { "cppClamp": { "symbol": "mathx_clamp" } },
   "modules": { "mathx": { "exports": { "add": { "symbol": "mathx_add" } } } }
 }
@@ -276,25 +278,24 @@ V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改�
 都会带上 `-fprofile-instr-generate -fcoverage-mapping`），运行测试后用
 `llvm-cov` 把采集到的 profile 映射回 `runtime/`。加 `-- --report-only`
 可只对上一次插桩运行留下的 profile 重新出报告，加 `-- --threshold 60`
-可在低于覆盖率门槛时失败；CI 固定以 `--threshold 70` 运行，runtime 覆盖率回退会直接
+可在低于覆盖率门槛时失败；CI 固定以 `--threshold 80` 运行，runtime 覆盖率回退会直接
 让 job 失败。插桩产物存放在 `xbintsc_CACHE_DIR` 指向的独立缓存，
 因为对象缓存的 key 不包含编译参数：与普通缓存共用会静默复用未插桩的对象。
 脚本还会设置 `xbintsc_PREFER_PREBUILT=0`，强制从源码编译 runtime，而不是链接
 未插桩的 `runtime/lib` 预编译归档。
-需要与解析到的 clang 版本匹配的 `llvm-profdata`/`llvm-cov`（自带工具链中已包含）；
+需要与解析到的 clang 版本匹配的 `llvm-profdata`/`llvm-cov`；
 缺失时脚本会打印警告并跳过。
 
 ## 运行要求
 
 完整的分平台要求见 [使用前置要求](./doc/zh-CN/requirements.md)。若只使用预编译的
-独立二进制，相关部分为
-[使用前置要求 → 预编译发布包](./doc/zh-CN/requirements.md#预编译发布包推荐)
-（Windows/Linux 自带工具链；macOS 需要 Xcode Command Line Tools）。
+独立二进制，见
+[使用前置要求](./doc/zh-CN/requirements.md)。
 
 - Node.js 22+ —— 仅从源码运行/构建时需要；发布版二进制是独立的
 - macOS：Xcode Command Line Tools（`xcode-select --install`）
-- Windows：无需额外安装 —— 自带 MinGW-w64 工具链
-- Linux：系统 C 库（glibc）
+- Windows：LLVM + Visual Studio C++ 生成工具（MSVC ABI）
+- Linux：发行版提供的 `clang` 与 `lld`
 - 若要自行编译二进制：`PATH` 中有兼容 `clang` 的 C 编译器（可用 `xbintsc_CLANG` 覆盖）
 
 用 `xbintsc doctor` 检查环境。

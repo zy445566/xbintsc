@@ -2,14 +2,13 @@
 # Build the Rust extension into a static library that xbintsc links.
 #
 #   ./build.sh                              # host target
-#   RUST_TARGET=x86_64-pc-windows-gnullvm ./build.sh
+#   RUST_TARGET=x86_64-pc-windows-msvc ./build.sh
 #
 # Requires a Rust toolchain (`cargo`). The archive is copied to the canonical
 # `target/release/libmathx.a`, which `xbintsc.manifest.json` points at.
 #
-# On Windows the bundled MinGW-w64 toolchain is the linker, so build the
-# `*-pc-windows-gnullvm` target (the `*-pc-windows-msvc` target produces MSVC
-# objects the MinGW linker cannot consume).
+# On Windows, xbintsc links with the MSVC ABI, so build the
+# `*-pc-windows-msvc` target to match the system clang.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,14 +22,23 @@ fi
 target="${RUST_TARGET:-}"
 if [ -n "$target" ]; then
   cargo build --release --target "$target"
-  built="target/$target/release/libmathx.a"
+  dir="target/$target/release"
 else
   cargo build --release
-  built="target/release/libmathx.a"
+  dir="target/release"
 fi
 
-if [ ! -f "$built" ]; then
-  echo "expected $here/$built to exist after the build" >&2
+# Rust names the static library `libmathx.a` on Unix but `mathx.lib` on Windows
+# MSVC; accept either.
+built=""
+for candidate in "$dir/libmathx.a" "$dir/mathx.lib"; do
+  if [ -f "$candidate" ]; then
+    built="$candidate"
+    break
+  fi
+done
+if [ -z "$built" ]; then
+  echo "expected a static library under $here/$dir after the build" >&2
   exit 1
 fi
 

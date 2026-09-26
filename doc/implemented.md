@@ -276,7 +276,7 @@ Location: `src/extensions/registry.ts`, `src/extensions/node/`
   - `nativeObjects()` links pre-built objects/static archives that expose `extern "C"` symbols with the `(argc, argv)` ABI; a JSON manifest maps them onto builtins/modules (`linkerFlags` / `linkerFlagsByPlatform` cover C++/Rust runtimes).
   - Authoring helpers live in `runtime/xt_ext.h` (C/C++) and `runtime/xt_ext.rs` (Rust); runnable projects are under `examples/extensions/`.
   - The driver links the artifacts verbatim and the incremental cache fingerprints their contents, so a rebuilt library invalidates the cached binary.
-  - CI builds both language examples on Linux, macOS and Windows; on Windows the bundled MinGW-w64 toolchain is used (C++ `-lc++ -static`, Rust `*-pc-windows-gnullvm` with `-lntdll -static`).
+  - CI builds both language examples on Linux, macOS and Windows; on Windows the system clang links with the MSVC ABI (C++ `-lmsvcprt`, Rust `*-pc-windows-msvc` plus the Windows system libraries).
 
 ---
 

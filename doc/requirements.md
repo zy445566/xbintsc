@@ -1,21 +1,25 @@
 # xbintsc Requirements
 
 This page lists what a machine needs in order for `xbintsc` to **compile and
-link native binaries**. Only the toolchain is platform-sensitive; `xbintsc emit`
-(pure LLVM IR text) has no requirements on any platform.
+link native binaries**. xbintsc does not bundle a compiler, so every host needs
+a clang-compatible toolchain installed. `xbintsc emit` (pure LLVM IR text) has
+no requirements on any platform.
 
 ## Summary
 
 | Platform | Requirement | Provided by |
 | --- | --- | --- |
-| Linux | system C library (glibc) | the OS |
+| Linux | `clang` + `lld` (a glibc distribution) | the user (package manager) |
 | macOS | **Xcode Command Line Tools** | the user (install once) |
-| Windows | none beyond the OS | xbintsc ships a MinGW-w64 ABI toolchain |
+| Windows | **LLVM** + **Visual Studio C++ build tools** (MSVC ABI) | the user (install once) |
 | any | `xbintsc emit` | nothing |
+
+The Windows release targets the **MSVC ABI**: clang uses the
+Windows SDK and the MSVC C/C++ runtime/headers.
 
 ## Prebuilt releases (recommended)
 
-Download the self-contained archive for your platform from
+Download the archive for your platform from
 [GitHub Releases](https://github.com/zy445566/xbintsc/releases/latest) (each one
 has a `.sha256` beside it):
 
@@ -27,7 +31,7 @@ has a `.sha256` beside it):
 
 (`.tar.gz` is used only when `zstd` is unavailable on the build machine.)
 
-`<version>` is the release version (for example `0.3.8`), embedded in the asset
+`<version>` is the release version (for example `0.3.14`), embedded in the asset
 name so downloads from different releases do not collide.
 
 Every archive unpacks to the same layout:
@@ -35,12 +39,15 @@ Every archive unpacks to the same layout:
 ```text
 xbintsc-<os>-<arch>/
   bin/xbintsc[.exe]      the compiler
-  runtime/               C runtime + prebuilt runtime/lib/<os>-<arch>/
-  vendor/<os>-<arch>/    bundled toolchain (Linux/Windows)
+  runtime/               C runtime sources + prebuilt runtime/lib/<os>-<arch>/
 ```
 
-Unpack it and put `bin/` on `PATH` (or call `bin/xbintsc` directly) — there is no
-install step. Verify the download against the checksum first:
+Windows archives omit the prebuilt `runtime/lib/`; the driver compiles the C
+runtime on demand with the user's clang.
+
+Unpack it, put `bin/` on `PATH` (or call `bin/xbintsc` directly), and install the
+toolchain for your platform below. Verify the download against the checksum
+first:
 
 ```sh
 sha256sum -c xbintsc-<version>-linux-x64.tar.zst.sha256   # macOS: shasum -a 256 -c
@@ -62,32 +69,49 @@ xcode-select -p            # prints the active developer directory
 xcrun --show-sdk-path      # prints the SDK path
 ```
 
-If they are missing, `xbintsc build` fails with a clear message pointing here.
-`xbintsc emit` still works without them.
+## Linux — install clang and lld
 
-## Linux
+A normal glibc-based distribution plus `clang` and `lld` is enough:
 
-A normal glibc-based distribution is enough — nothing to install. The bundle
-ships clang + lld together with the shared libraries they need (notably the
-legacy `libtinfo.so.5`), so a system without a compiler works out of the box.
-Static binaries (optional, later) will use a bundled musl CRT.
+```sh
+sudo apt-get install -y clang lld        # Debian / Ubuntu
+sudo dnf install -y clang lld            # Fedora / RHEL
+sudo pacman -S --needed clang lld        # Arch
+sudo zypper install -y clang lld         # openSUSE
+sudo apk add clang lld                   # Alpine
+```
 
-## Windows
+Verify with `clang --version`. If xbintsc uses the wrong linker, set
+`xbintsc_CLANG` to the clang you want and/or pass extra flags through
+`xbintsc_LINKER_ARGS` (for example `-fuse-ld=lld`).
 
-Nothing to install. xbintsc ships a **MinGW-w64** ABI toolchain (clang + lld +
-CRT + import libraries) with the release, so `xbintsc build` works on a clean
-Windows install.
+## Windows — install LLVM and the MSVC C++ build tools
+
+Install LLVM and the Visual Studio C++ build tools with `winget`:
+
+```powershell
+winget install -e --id LLVM.LLVM
+winget install -e --id Microsoft.VisualStudio.2022.BuildTools `
+  --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+clang needs the MSVC/SDK environment (`INCLUDE`, `LIB`, `PATH`) to find the C
+standard library headers, the import libraries and the linker. Open an
+**x64 Native Tools Command Prompt for VS 2022** (or an **ARM64 Native Tools**
+prompt on Windows on ARM) before running `xbintsc`, or import the environment
+yourself:
+
+```powershell
+& "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
+```
+
+Verify with `clang --version` (chocolatey also works: `choco install llvm`).
 
 ## Building from source (contributors only)
 
 - Node.js ≥ 22 is required only to run/build the compiler itself. The released
   standalone binaries do **not** need Node.
-- A C compiler is required only to rebuild the runtime
-  (`npm run runtime`) — not to **use** a released xbintsc.
-- `npm run fetch-toolchain` downloads the toolchain xbintsc bundles and unpacks it
-  into `vendor/<os>-<arch>/`; `resolveToolchain()` then prefers it over `PATH`
-  (Linux: LLVM, Windows: llvm-mingw). On macOS this is a no-op — the Command Line
-  Tools are used. `xbintsc_LINKER_ARGS` / `xbintsc_CLANG` override the result.
+- A C compiler is required to rebuild the runtime (`npm run runtime`).
 - `npm run package-release` assembles the per-platform release archive
   (`xbintsc-<os>-<arch>.tar.{gz,zst}` + `.sha256`) into `dist/release/`.
 
@@ -97,5 +121,5 @@ Windows install.
 xbintsc doctor
 ```
 
-`doctor` reports the resolved toolchain (env / bundled / system), its version and
-location, and the runtime-library directory.
+`doctor` reports the resolved toolchain (env / system), its version and location,
+and the runtime-library directory.

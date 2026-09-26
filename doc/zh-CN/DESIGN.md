@@ -89,7 +89,7 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 `extern "C"` 对象文件或静态库，可以经 JSON manifest 链接并暴露
 （`src/extensions/native.ts`、`--ext-native`）。驱动会原样链接这些产物，生成器
 像绑定 C 运行时那样绑定它们的符号，因此扩展使用何种语言对核心编译器透明。Windows
-同样覆盖：xbintsc 在那里使用自带的 MinGW-w64 工具链链接，示例即针对该 GNU ABI 构建。
+同样覆盖：Windows 下 xbintsc 使用系统 clang 按 MSVC ABI 链接，示例即针对该 ABI 构建。
 参见 `examples/extensions/` 与 `runtime/xt_ext.h` / `runtime/xt_ext.rs`。
 
 ## 自举路线

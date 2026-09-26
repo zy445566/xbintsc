@@ -14,9 +14,9 @@
  * bogus target (`STATUS_BAD_FUNCTION_TABLE`, 0xC00000FF). Windows ARM64 has
  * no `_setjmp` at all: the generated IR uses `_setjmpex(buf, entry-sp)` with
  * the stack pointer on entry (`@llvm.sponentry`), exactly as clang lowers a C
- * `setjmp` there. The C runtime (see `xt_try_setjmp`) calls whatever the
- * active `<setjmp.h>` declares — one argument on MSVC (clang injects the
- * frame) and two on MinGW-w64. `_setjmp`/`_setjmpex` are used rather than the
+ * `setjmp` there. The C runtime (see `xt_try_setjmp`) calls clang's
+ * `_setjmp` built-in so it gets the same frame injection (lowered to
+ * `_setjmpex` on ARM64). `_setjmp`/`_setjmpex` are used rather than the
  * exported `setjmp` symbol, whose Windows ABI is an incompatible two-argument
  * routine; on Linux/macOS `_setjmp` takes only the buffer and pairs with
  * `longjmp` (the XSI `_longjmp` does not exist on Windows).

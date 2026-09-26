@@ -4,11 +4,10 @@
  * Each case compiles a tiny native library to an `extern "C"` object/archive,
  * describes it with a manifest and links it into a TypeScript program. The
  * suite is skipped when the corresponding native toolchain is unavailable, so
- * on a bare CI image nothing is compiled. Windows is skipped here (see
- * examples/extensions/README.md): this suite resolves a compiler/archiver from
- * `PATH`, which on Windows is the MSVC-ABI clang, while xbintsc links with the
- * bundled MinGW-w64 toolchain. Windows coverage lives in the `compile-examples`
- * CI job, which points `CXX`/`AR` at that bundled toolchain.
+ * on a bare CI image nothing is compiled. Windows is skipped here: the suite's
+ * manifests only carry Unix linker flags, and Windows uses the MSVC ABI. Windows
+ * coverage lives in the `compile-examples` CI job, which links the example
+ * manifests (with their `linkerFlagsByPlatform.win32` entries).
  */
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -62,7 +61,7 @@ function buildCppArchive(dir: string, source: string, stem: string): string {
   return archivePath;
 }
 
-// Skipped on Windows: this suite uses PATH clang (MSVC ABI); see the file header.
+// Skipped on Windows: this suite's manifests only carry Unix linker flags.
 describe.skipIf(!cxx || !ar || process.platform === "win32")("native C++ extension", () => {
   let workdir: string;
   beforeAll(() => {
@@ -138,7 +137,7 @@ describe.skipIf(!cxx || !ar || process.platform === "win32")("native C++ extensi
   });
 });
 
-// Skipped on Windows: this suite uses PATH clang (MSVC ABI); see the file header.
+// Skipped on Windows: this suite's manifests only carry Unix linker flags.
 describe.skipIf(!cargo || !cxx || !ar || process.platform === "win32")("native Rust extension", () => {
   let workdir: string;
   beforeAll(() => {

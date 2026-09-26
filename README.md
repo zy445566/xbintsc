@@ -69,15 +69,15 @@ be replaced without touching the compiler.
 ## Usage
 
 > **Before you start:** check the per-platform prerequisites in
-> [Requirements](./doc/requirements.md). If you use the prebuilt standalone
-> archives below, the relevant part is
-> [Requirements → Prebuilt releases](./doc/requirements.md#prebuilt-releases-recommended)
-> (Windows/Linux bundle their toolchain; macOS needs the Xcode Command Line Tools).
+> [Requirements](./doc/requirements.md). xbintsc does not bundle a compiler, so
+> every platform needs a clang-compatible toolchain installed (macOS: Xcode
+> Command Line Tools; Linux: clang+lld; Windows: LLVM + Visual Studio C++ build
+> tools).
 
 ### Prebuilt standalone archives
 
 Every [GitHub Release](https://github.com/zy445566/xbintsc/releases/latest) attaches a
-self-contained archive per platform, plus a `.sha256` checksum next to it:
+release archive per platform, plus a `.sha256` checksum next to it:
 
 | Platform | Archive |
 | --- | --- |
@@ -90,10 +90,11 @@ self-contained archive per platform, plus a `.sha256` checksum next to it:
 `<version>` is the release version (for example `0.3.8`), embedded in the asset
 name so downloads from different releases do not collide.
 
-Each archive unpacks to a `xbintsc-<os>-<arch>/` folder that already contains the
-compiler (`bin/xbintsc[.exe]`), the C runtime and the bundled toolchain, so it needs
-**no Node.js and no system compiler**. Unpack it and put `bin/` on `PATH` (or call
-`bin/xbintsc` directly) — there is no install step.
+Each archive unpacks to a `xbintsc-<os>-<arch>/` folder containing the compiler
+(`bin/xbintsc[.exe]`) and the C runtime. It needs **no Node.js**, but you must
+have the platform toolchain installed (see [Requirements](./doc/requirements.md)).
+Unpack it and put `bin/` on `PATH` (or call `bin/xbintsc` directly) — there is no
+install step for xbintsc itself.
 
 **macOS / Linux example** — here using `xbintsc-<version>-darwin-arm64.tar.zst` (swap in
 `-linux-x64`, etc. for your platform):
@@ -113,10 +114,12 @@ tar -xf xbintsc-<version>-darwin-arm64.tar.zst
 ./build/hello
 ```
 
-**Windows example** — download an archive from the
+**Windows example** — install LLVM and the Visual Studio C++ build tools (see
+[Requirements](./doc/requirements.md)), then download an archive from the
 [Releases page](https://github.com/zy445566/xbintsc/releases/latest) (here
-`xbintsc-<version>-win32-x64.tar.zst`; use `-arm64` on Windows on ARM), then in PowerShell
-(Windows 10+ ships `tar`):
+`xbintsc-<version>-win32-x64.tar.zst`; use `-arm64` on Windows on ARM) and run the
+commands below in an **x64 Native Tools Command Prompt for VS 2022** (Windows on
+ARM: **ARM64 Native Tools**) — Windows 10+ ships `tar`:
 
 ```powershell
 # 1. Verify the checksum (optional but recommended)
@@ -259,8 +262,8 @@ xbintsc run examples/extensions/cpp/demo.ts \
 ```jsonc
 {
   "name": "mathx-cpp",
-  "objects": ["build/libmathx.a"],
-  "linkerFlagsByPlatform": { "linux": ["-lstdc++"], "darwin": ["-lc++"], "win32": ["-lc++", "-static"] },
+  "objects": ["build/mathx.o"],
+  "linkerFlagsByPlatform": { "linux": ["-lstdc++", "-lm"], "darwin": ["-lc++"], "win32": ["-lmsvcprt"] },
   "builtins": { "cppClamp": { "symbol": "mathx_clamp" } },
   "modules": { "mathx": { "exports": { "add": { "symbol": "mathx_add" } } } }
 }
@@ -291,26 +294,23 @@ covers the C runtime with clang's source instrumentation instead: it exports
 the collected profiles against `runtime/` with `llvm-cov`. Pass
 `-- --report-only` to only re-report profiles from an earlier instrumented run,
 or `-- --threshold 60` to fail below a coverage bar. CI runs the report with
-`--threshold 70`, so a runtime-coverage regression fails the job. The instrumented objects
+`--threshold 80`, so a runtime-coverage regression fails the job. The instrumented objects
 live in `xbintsc_CACHE_DIR`, a separate cache from `.xbintsc`, because the
 object cache key does not include compiler flags: sharing one cache would
 silently reuse un-instrumented objects. It also sets `xbintsc_PREFER_PREBUILT=0`
 so the runtime is compiled from source rather than linked from an
 un-instrumented `runtime/lib` archive. Requires `llvm-profdata`/`llvm-cov`
-matching the resolved clang (the bundled toolchains provide them); the script
+matching the resolved clang; the script
 skips with a warning when they are missing.
 
 ## Requirements
 
-See [Requirements](./doc/requirements.md) for the full, per-platform list. If you
-only use the prebuilt standalone binaries, the relevant part is
-[Requirements → Prebuilt releases](./doc/requirements.md#prebuilt-releases-recommended)
-(Windows/Linux bundle their toolchain; macOS needs the Xcode Command Line Tools).
+See [Requirements](./doc/requirements.md) for the full, per-platform list.
 
 - Node.js 22+ — only to run/build from source; released binaries are standalone
 - macOS: the Xcode Command Line Tools (`xcode-select --install`)
-- Windows: nothing extra — the MinGW-w64 toolchain is bundled
-- Linux: a system C library (glibc)
+- Windows: LLVM + the Visual Studio C++ build tools (MSVC ABI)
+- Linux: `clang` and `lld` from your distribution
 - To build a binary yourself: a `clang`-compatible compiler on `PATH`
   (override with `xbintsc_CLANG`)
 

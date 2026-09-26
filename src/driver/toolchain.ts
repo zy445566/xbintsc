@@ -64,8 +64,13 @@ export function findClang(runner: Runner = realRunner): string {
     "cc",
   ].filter((candidate): candidate is string => Boolean(candidate));
   for (const candidate of candidates) {
-    const result = runner.run(candidate, ["--version"]);
-    if (result.status === 0) return candidate;
+    let status: number;
+    try {
+      status = runner.run(candidate, ["--version"]).status;
+    } catch {
+      continue;
+    }
+    if (status === 0) return candidate;
   }
   throw new ToolchainError("clang --version", 1, "No C compiler found. Set xbintsc_CLANG to a clang binary.");
 }

@@ -20,7 +20,6 @@
  * runtime directory on the include path:
  *
  *     clang++ -O2 -fPIC -I<runtime> -c mathx.cpp -o mathx.o
- *     ar rcs libmathx.a mathx.o
  */
 #ifndef XT_EXT_H
 #define XT_EXT_H

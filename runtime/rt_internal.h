@@ -224,31 +224,18 @@ typedef struct xt_try_frame {
   struct xt_try_frame *prev;
   xt_value exception;
 } xt_try_frame;
-/* Call `_setjmp` the way the active `<setjmp.h>` declares it. The two Windows
- * C runtimes differ:
+/* Save a try frame with clang's `_setjmp` built-in.
  *
- *  - MSVC/UCRT declares `_setjmp(jmp_buf)` with one visible argument and lets
- *    clang treat it as a built-in that injects the caller's frame address
- *    (`@llvm.frameaddress(0)`) as a hidden second argument. Writing the frame
- *    by hand is a compile error ("too many arguments to function call").
- *  - MinGW-w64 (the vendored llvm-mingw toolchain) declares
- *    `_setjmp(jmp_buf, void *frame)` itself, so the frame must be passed
- *    explicitly -- exactly what its own `setjmp` macro does.
- *
- * The generated IR emits the two-argument form, because it is already IR and
- * clang will not rewrite it. On Windows ARM64 it names `_setjmpex` (and the
- * entry stack pointer from `llvm.sponentry`) instead, matching clang's own
- * lowering there. `_setjmp`/`_setjmpex` (rather than the `setjmp` macro) is
- * used so it pairs with the plain `longjmp` in `xt_throw`. */
-#if defined(_WIN32) && !defined(__MINGW32__)
+ * The generated IR passes the frame explicitly because it is already IR and
+ * clang will not rewrite it. This C helper instead calls `_setjmp(buf)` and lets
+ * clang supply the frame: on Windows x64 it injects the caller's frame address
+ * (`@llvm.frameaddress(0)`) into `_JUMP_BUFFER.Frame` so `longjmp` can feed it
+ * to `RtlUnwind`; on Windows ARM64, where the UCRT has no `_setjmp`, it lowers
+ * the call to `_setjmpex` with the entry stack pointer (`@llvm.sponentry`). On
+ * Linux/macOS `_setjmp` takes only the buffer and pairs with `longjmp`.
+ * `_setjmp` is used rather than the exported `setjmp` symbol, whose Windows ABI
+ * is an incompatible two-argument routine. */
 #define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
-#elif defined(_WIN32) && defined(__aarch64__)
-#define xt_try_setjmp(framePtr) _setjmpex(((xt_try_frame *)(framePtr))->buf, __builtin_sponentry())
-#elif defined(_WIN32)
-#define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf, __builtin_frame_address(0))
-#else
-#define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
-#endif
 void *xt_try_mark(void);
 void xt_try_restore(void *mark);
 

@@ -237,14 +237,16 @@ typedef struct xt_try_frame {
  * The generated IR emits the two-argument form, because it is already IR and
  * clang will not rewrite it. On Windows ARM64 it names `_setjmpex` (and the
  * entry stack pointer from `llvm.sponentry`) instead, matching clang's own
- * lowering there; that target has no `_setjmp` in either runtime, so it is
- * checked before the runtime-specific cases below. `_setjmp`/`_setjmpex`
- * (rather than the `setjmp` macro) is used so it pairs with the plain `longjmp`
- * in `xt_throw`. */
-#if defined(_WIN32) && defined(__aarch64__)
-#define xt_try_setjmp(framePtr) _setjmpex(((xt_try_frame *)(framePtr))->buf, __builtin_sponentry())
-#elif defined(_WIN32) && !defined(__MINGW32__)
+ * lowering there. `_setjmp`/`_setjmpex` (rather than the `setjmp` macro) is
+ * used so it pairs with the plain `longjmp` in `xt_throw`.
+ *
+ * Note: on MSVC the `_setjmp` built-in already handles ARM64 (clang lowers it
+ * to `_setjmpex` and injects the entry stack pointer), so the explicit
+ * `_setjmpex` case below is only reached for MinGW-w64. */
+#if defined(_WIN32) && !defined(__MINGW32__)
 #define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
+#elif defined(_WIN32) && defined(__aarch64__)
+#define xt_try_setjmp(framePtr) _setjmpex(((xt_try_frame *)(framePtr))->buf, __builtin_sponentry())
 #elif defined(_WIN32)
 #define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf, __builtin_frame_address(0))
 #else

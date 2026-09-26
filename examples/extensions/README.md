@@ -79,7 +79,10 @@ XT_EXT_FN(mathx_add) {
 ```
 
 ```bash
+# Unix:
 clang++ -O2 -fPIC -I<runtime> -c mathx.cpp -o mathx.o
+# Windows (MSVC ABI): clang rejects -fPIC, so omit it.
+clang++ -O2 -I<runtime> -c mathx.cpp -o mathx.o
 ```
 
 ### Rust

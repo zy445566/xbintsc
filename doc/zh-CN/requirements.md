@@ -13,7 +13,7 @@ xbintsc 不再自带编译器，因此每个平台都需要安装一个兼容 cl
 | Windows | **LLVM** + **Visual Studio C++ 生成工具**（MSVC ABI） | 用户一次性安装 |
 | 任意 | `xbintsc emit` | 无需任何东西 |
 
-Windows 发布包面向 **MSVC ABI**（不再是 MinGW-w64）：clang 使用 Windows SDK
+Windows 发布包面向 **MSVC ABI**：clang 使用 Windows SDK
 以及 MSVC 的 C/C++ 运行库与头文件。
 
 ## 预编译发布包（推荐）

@@ -14,7 +14,7 @@ no requirements on any platform.
 | Windows | **LLVM** + **Visual Studio C++ build tools** (MSVC ABI) | the user (install once) |
 | any | `xbintsc emit` | nothing |
 
-The Windows release targets the **MSVC ABI** (not MinGW-w64): clang uses the
+The Windows release targets the **MSVC ABI**: clang uses the
 Windows SDK and the MSVC C/C++ runtime/headers.
 
 ## Prebuilt releases (recommended)

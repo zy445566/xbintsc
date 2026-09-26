@@ -18,10 +18,9 @@
 #include <stdint.h>
 
 /* POSIX `ssize_t` is not exposed by the MSVC/UCRT headers clang uses on
- * Windows, but MinGW-w64 and every Unix libc define
- * it. Alias the Windows pointer-sized signed integer so the runtime's POSIX
- * shims compile unchanged across toolchains. */
-#if defined(_WIN32) && !defined(__MINGW32__) && !defined(_SSIZE_T_DEFINED)
+ * Windows (every Unix libc defines it). Alias the Windows pointer-sized signed
+ * integer so the runtime's POSIX shims compile unchanged. */
+#if defined(_WIN32) && !defined(_SSIZE_T_DEFINED)
 typedef intptr_t ssize_t;
 #define _SSIZE_T_DEFINED
 #endif

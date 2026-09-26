@@ -12,12 +12,11 @@ import {
 /**
  * True when a `try` frame must be saved with `_setjmpex` rather than `_setjmp`.
  *
- * 64-bit Windows on ARM has no `_setjmp`: both the UCRT and MinGW-w64 declare
- * `setjmp` as `_setjmpex(buf, sponentry)` there, so the linker expects
- * `_setjmpex` (with the caller's stack pointer at entry, `llvm.sponentry`,
- * instead of its frame pointer). clang lowers a C `setjmp` on this target to
- * exactly that pair. Checked at code-generation time because xbintsc builds for
- * its own host.
+ * 64-bit Windows on ARM has no `_setjmp`: the UCRT declares `setjmp` as
+ * `_setjmpex(buf, sponentry)` there, so the linker expects `_setjmpex` (with the
+ * caller's stack pointer at entry, `llvm.sponentry`, instead of its frame
+ * pointer). clang lowers a C `setjmp` on this target to exactly that pair.
+ * Checked at code-generation time because xbintsc builds for its own host.
  */
 export function requiresSetjmpex(platform: string, arch: string): boolean {
   return platform === "win32" && arch === "arm64";

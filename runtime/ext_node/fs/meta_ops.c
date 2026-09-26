@@ -158,9 +158,9 @@ static int xt_fs_win_truncate(const char *path, long long length) {
 }
 
 /* Unix seconds -> Windows FILETIME (100 ns ticks since 1601-01-01 UTC). The CRT
- * `_utime`/`_utimbuf` path goes through local time, which is both lossy around
- * DST boundaries and ABI-fragile across MSVC/MinGW; matching libuv's direct
- * conversion keeps the result exact and identical to Node. */
+ * `_utime`/`_utimbuf` path goes through local time, which is lossy around DST
+ * boundaries; matching libuv's direct conversion keeps the result exact and
+ * identical to Node. */
 static void xt_fs_unix_to_filetime(double seconds, FILETIME *out) {
   long long ticks = (long long)(seconds * 10000000.0) + 116444736000000000LL;
   unsigned long long value = (unsigned long long)ticks;

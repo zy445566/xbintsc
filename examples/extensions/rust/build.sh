@@ -28,8 +28,8 @@ else
   dir="target/release"
 fi
 
-# Rust names the static library `libmathx.a` on Unix/MinGW but `mathx.lib` on
-# Windows MSVC; accept either.
+# Rust names the static library `libmathx.a` on Unix but `mathx.lib` on Windows
+# MSVC; accept either.
 built=""
 for candidate in "$dir/libmathx.a" "$dir/mathx.lib"; do
   if [ -f "$candidate" ]; then

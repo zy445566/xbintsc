@@ -1,6 +1,6 @@
 /*
  * `timegm` and `gmtime_r` are POSIX extensions that Windows' CRT does not
- * provide. MinGW-w64 (the bundled Windows toolchain) is affected too: its
+ * provide. MinGW-w64 is affected too: its
  * <time.h> only exposes `gmtime_r` when `_POSIX_C_SOURCE` is set and has no
  * `timegm` at all, so wrap the MSVC-style equivalents for every `_WIN32` build.
  */

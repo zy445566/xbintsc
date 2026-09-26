@@ -1,12 +1,11 @@
 {
   "name": "mathx-cpp",
   "description": "C++ math helpers compiled to extern \"C\" and linked by xbintsc",
-  "objects": ["build/libmathx.a"],
-  "linkerFlags": ["-lm"],
+  "objects": ["build/mathx.o"],
   "linkerFlagsByPlatform": {
-    "linux": ["-lstdc++"],
+    "linux": ["-lstdc++", "-lm"],
     "darwin": ["-lc++"],
-    "win32": ["-lc++", "-static"]
+    "win32": ["-lmsvcprt"]
   },
   "builtins": {
     "cppClamp": { "symbol": "mathx_clamp" }

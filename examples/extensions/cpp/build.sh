@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build the C++ extension into a static archive that xbintsc links.
+# Build the C++ extension into an object file that xbintsc links.
 #
-#   ./build.sh                 # auto-detects clang++/g++ and llvm-ar/ar
-#   CXX=g++-13 AR=ar ./build.sh
+#   ./build.sh                 # auto-detects clang++/g++
+#   CXX=g++-13 ./build.sh
 #
-# The result is `build/libmathx.a`, which `xbintsc.manifest.json` points at.
+# The result is `build/mathx.o`, which `xbintsc.manifest.json` points at.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,13 +32,8 @@ CXX="${CXX:-$(find_tool clang++ g++ c++)}" || {
   echo "no C++ compiler found (set CXX to clang++/g++)" >&2
   exit 1
 }
-AR="${AR:-$(find_tool llvm-ar ar)}" || {
-  echo "no archiver found (set AR to llvm-ar/ar)" >&2
-  exit 1
-}
 
 mkdir -p "$here/build"
 "$CXX" -O2 -fPIC -Wall -Wextra -I"$runtime" -c "$here/mathx.cpp" -o "$here/build/mathx.o"
-"$AR" rcs "$here/build/libmathx.a" "$here/build/mathx.o"
 
-echo "built $here/build/libmathx.a with $CXX"
+echo "built $here/build/mathx.o with $CXX"

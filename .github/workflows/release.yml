@@ -105,10 +105,10 @@ jobs:
       - name: Publish to npm
         run: npm publish --provenance
 
-      # Collect the self-contained archives that CI assembled for the release
+      # Collect the release archives that CI assembled for the release
       # commit, and stage them under release-friendly names. Raw per-platform
       # binaries (e.g. .exe) are intentionally not published.
-      - name: Download the self-contained release archives
+      - name: Download the release archives
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -161,7 +161,7 @@ jobs:
           echo "Using binaries from CI run ${run_id}."
 
           rm -rf .ci-artifacts release-assets
-          # Only the self-contained archives assembled by the `package` job are
+          # Only the release archives assembled by the `package` job are
           # published; the raw self-hosted binaries are left out of the release.
           gh run download "${run_id}" --pattern 'release-*' --dir .ci-artifacts
 

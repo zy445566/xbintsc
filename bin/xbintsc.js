@@ -5,8 +5,7 @@
  * Resolution order:
  *   1. a native compiler for this platform — an `xbintsc_BINARY` override, an
  *      installed `@xbintsc/<os>-<arch>` package, or a co-located `bin/xbintsc`.
- *      This is what a self-contained install provides; it needs no Node
- *      toolchain at runtime.
+ *      This is what a packaged install provides; it needs no Node at runtime.
  *   2. the compiled CLI in `dist/` (a checkout that ran `npm run build`).
  *   3. the TypeScript sources through `tsx` (a plain checkout).
  */

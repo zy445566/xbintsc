@@ -172,7 +172,10 @@ function doctor(io: CliIo): number {
     io.stdout(`toolchain  : ${toolchain.clang} (${toolchain.source})\n`);
     io.stdout(`compiler   : ${firstLine(version) || "unknown"}\n`);
   } catch {
-    io.stdout("toolchain  : not found (install the Xcode Command Line Tools or set xbintsc_CLANG)\n");
+    io.stdout("toolchain  : not found\n");
+    io.stdout("  install one of: Xcode Command Line Tools (`xcode-select --install`) on macOS,\n");
+    io.stdout("  clang+lld (apt/dnf/pacman) on Linux, or LLVM + Visual Studio C++ build tools on Windows,\n");
+    io.stdout("  then re-run; or set xbintsc_CLANG to a clang binary. See doc/requirements.md.\n");
   }
 
   try {

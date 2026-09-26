@@ -13,7 +13,7 @@ The intended workflow is exactly that of a normal native build:
 mathx.cpp / lib.rs
    │  clang++ -c  /  cargo build          (an external build)
    ▼
-libmathx.a            extern "C" symbols + xt ABI
+libmathx.a / mathx.o  extern "C" symbols + xt ABI
    │  xbintsc build demo.ts --ext-native xbintsc.manifest.json
    ▼
 demo                  one standalone executable
@@ -30,12 +30,11 @@ the objects verbatim and wires the bindings like any other extension.
 {
   "name": "mathx-cpp",                      // required, unique
   "description": "…",                       // optional
-  "objects": ["build/libmathx.a"],          // .o / .a / .lib, relative to this file
-  "linkerFlags": ["-lm"],                   // flags for every platform
+  "objects": ["build/mathx.o"],             // .o / .a / .lib, relative to this file
   "linkerFlagsByPlatform": {                // per-OS flags (C++/Rust runtimes)
-    "linux":  ["-lstdc++"],
+    "linux":  ["-lstdc++", "-lm"],
     "darwin": ["-lc++"],
-    "win32":  ["-lc++", "-static"]
+    "win32":  ["-lmsvcprt"]
   },
   "builtins": {                             // globals callable without import
     "cppClamp": { "symbol": "mathx_clamp" }
@@ -81,7 +80,6 @@ XT_EXT_FN(mathx_add) {
 
 ```bash
 clang++ -O2 -fPIC -I<runtime> -c mathx.cpp -o mathx.o
-ar rcs libmathx.a mathx.o
 ```
 
 ### Rust
@@ -105,8 +103,8 @@ crate-type = ["staticlib"]
 
 ```bash
 cargo build --release    # -> target/release/libmathx.a
-# Windows (MinGW): build the gnullvm target instead
-cargo build --release --target x86_64-pc-windows-gnullvm
+# Windows (MSVC ABI): use the matching MSVC target
+cargo build --release --target x86_64-pc-windows-msvc
 ```
 
 ## The examples in this directory
@@ -155,28 +153,26 @@ build("demo.ts", { extensions });
 
 ## Platform notes
 
-All three platforms are supported on the bundled toolchains:
+xbintsc links with whatever clang it resolves from `PATH`, so build the
+extension with the **same** ABI:
 
-| OS | Compiler xbintsc links with | C++ runtime flag | Rust target | Rust extra flag |
+| OS | Compiler xbintsc links with | C++ runtime flag | Rust target | Rust extra flags |
 | --- | --- | --- | --- | --- |
-| Linux | bundled LLVM | `-lstdc++` | host | `-lpthread -ldl -lm` |
+| Linux | system clang | `-lstdc++` | host | `-lpthread -ldl -lm` |
 | macOS | Xcode Command Line Tools | `-lc++` | host | `-liconv -framework Security` |
-| Windows | bundled MinGW-w64 (llvm-mingw) | `-lc++ -static` | `*-pc-windows-gnullvm` | `-lntdll -static` |
+| Windows | system clang (MSVC ABI) | `-lmsvcprt` | `*-pc-windows-msvc` | the Windows system libraries (see `rust/xbintsc.manifest.json`) |
 
 The mechanism is ABI-agnostic — it links whatever objects/archives you give it.
-On Windows you must build against the **same** toolchain xbintsc links with:
+On Windows, run the build from an **x64/ARM64 Native Tools Command Prompt** so
+clang finds the MSVC headers, import libraries and linker, and build the C++
+object / Rust static library with the same MSVC ABI:
 
-- **C++**: use the bundled `clang++`/`llvm-ar` (MinGW-w64, UCRT, libc++), as the
-  `compile-examples` CI job does. An MSVC-built `.obj`/`.lib` is a different ABI
-  and will not link; if you prefer MSVC, ship the artifacts it produces and list
-  its C++ runtime in `linkerFlagsByPlatform.win32` instead.
-- **Rust**: build the `x86_64-pc-windows-gnullvm` (x64) or
-  `aarch64-pc-windows-gnullvm` (arm64) target — *not* the default
-  `*-pc-windows-msvc` — so the archive is MinGW-compatible, and add `-lntdll`
-  for Rust's standard library.
-- **`-static`** keeps the produced executable free of the toolchain's runtime
-  DLLs (`libc++.dll`, `libunwind.dll`): without it the link prefers the shared
-  import libraries and the binary fails to start off the build machine.
+- **C++**: compile with the system `clang++` (MSVC ABI) and list `-lmsvcprt` in
+  `linkerFlagsByPlatform.win32`.
+- **Rust**: build the `x86_64-pc-windows-msvc` (x64) or
+  `aarch64-pc-windows-msvc` (arm64) target and add the Windows system libraries
+  Rust's `std` needs to `linkerFlagsByPlatform.win32` (see the example manifest).
+- The example manifests list the exact per-platform flags.
 
 The `compile-examples` CI job (`.github/workflows/ci.yml`) builds both language
 examples on every OS in the matrix, Windows included.

@@ -78,11 +78,30 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   if (win == NULL || !win->open) return;
   win->open = 0;
   xt_gui_emit(win, "close");
+  win->document.reset();
+  win->html.clear();
   if (win->window != NULL && g_device != NULL) {
     SDL_ReleaseWindowFromGPUDevice(g_device, win->window);
   }
   if (win->window != NULL) SDL_DestroyWindow(win->window);
   win->window = NULL;
+}
+
+void xt_gui_window_viewport(XtGuiWindow *win, float *width, float *height) {
+  int w = win->width;
+  int h = win->height;
+  if (win->window != NULL) SDL_GetWindowSize(win->window, &w, &h);
+  if (width != NULL) *width = (float)w;
+  if (height != NULL) *height = (float)h;
+}
+
+static XtGuiWindow *xt_gui_find_by_window_id(SDL_WindowID id) {
+  SDL_Window *window = SDL_GetWindowFromID(id);
+  if (window == NULL) return NULL;
+  for (int i = 0; i < g_window_count; i++) {
+    if (g_windows[i].window == window) return &g_windows[i];
+  }
+  return NULL;
 }
 
 static void xt_gui_handle_event(const SDL_Event *event) {
@@ -91,14 +110,16 @@ static void xt_gui_handle_event(const SDL_Event *event) {
     return;
   }
   if (event->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
-    SDL_Window *window = SDL_GetWindowFromID(event->window.windowID);
-    if (window == NULL) return;
-    for (int i = 0; i < g_window_count; i++) {
-      if (g_windows[i].open && g_windows[i].window == window) {
-        xt_gui_quit_window(&g_windows[i]);
-        return;
-      }
-    }
+    XtGuiWindow *win = xt_gui_find_by_window_id(event->window.windowID);
+    if (win != NULL && win->open) xt_gui_quit_window(win);
+    return;
+  }
+  if (event->type == SDL_EVENT_WINDOW_RESIZED) {
+    XtGuiWindow *win = xt_gui_find_by_window_id(event->window.windowID);
+    if (win == NULL || !win->open) return;
+    win->width = event->window.data1;
+    win->height = event->window.data2;
+    if (win->document != NULL) win->document->restyle((float)win->width, (float)win->height);
   }
 }
 
@@ -182,6 +203,10 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   record->window = window;
   record->open = 1;
   record->ready = 0;
+  record->width = width;
+  record->height = height;
+  record->html.clear();
+  record->document.reset();
 
   xt_value object = xt_object_new_with_proto(xt_gui_window_proto());
   record->object = object;

@@ -28,6 +28,11 @@ xt_value xt_gui_quit(int32_t argc, xt_value *argv);
 
 #include <SDL3/SDL.h>
 
+#include <memory>
+#include <string>
+
+#include "document.h"
+
 /* One live window. `object` is the JavaScript-visible handle; the record is
  * addressed from it through the hidden `__xt_gui_index` property. */
 struct XtGuiWindow {
@@ -35,6 +40,10 @@ struct XtGuiWindow {
   xt_value object;
   int open;
   int ready;
+  std::string html;
+  std::unique_ptr<xtgui::XtDocument> document;
+  int width;
+  int height;
 };
 
 /** Resolve a window handle (`this`) to its record, or NULL for a foreign value. */
@@ -47,6 +56,8 @@ void xt_gui_quit_window(XtGuiWindow *win);
 void xt_gui_emit(XtGuiWindow *win, const char *event);
 /** Acquire a swapchain frame for `win` and clear it (placeholder paint). */
 void xt_gui_render_window(XtGuiWindow *win);
+/** Current logical window size (CSS viewport), in pixels. */
+void xt_gui_window_viewport(XtGuiWindow *win, float *width, float *height);
 
 #endif /* __cplusplus */
 

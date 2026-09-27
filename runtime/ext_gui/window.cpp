@@ -36,11 +36,25 @@ static xt_value win_set_size(xt_value self, xt_value env, int32_t argc, xt_value
 
 static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
-  xt_value html = argc >= 1 ? xt_to_string(xt_arg(argc, argv, 0)) : xt_string_from_cstr("");
-  xt_object_set(self, xt_string_from_cstr("__xt_gui_html"), html);
-  /* Painting the document is milestone M3+; for now this only stores it and
-   * notifies listeners so the wiring can be exercised. */
-  xt_gui_emit(xt_gui_window_from_this(self), "load");
+  std::string html;
+  if (argc >= 1) {
+    xt_value text = xt_to_string(xt_arg(argc, argv, 0));
+    const char *data = xt_string_data(text);
+    if (data != nullptr) html = data;
+  }
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win != nullptr) {
+    win->html = html;
+    win->document = std::make_unique<xtgui::XtDocument>();
+    float width = 0;
+    float height = 0;
+    xt_gui_window_viewport(win, &width, &height);
+    win->document->load(html, width, height);
+  }
+  xt_object_set(self, xt_string_from_cstr("__xt_gui_html"), xt_string_from_cstr(html.c_str()));
+  /* Painting the document is milestone M3b+; the parsed tree and computed
+   * styles are available now (see `computedStyle`). */
+  xt_gui_emit(win, "load");
   return XT_UNDEFINED;
 }
 
@@ -49,6 +63,47 @@ static xt_value win_get_html(xt_value self, xt_value env, int32_t argc, xt_value
   (void)argc;
   (void)argv;
   return xt_object_get_cstr(self, "__xt_gui_html");
+}
+
+/** Diagnostic/test hook: computed value of `property` for the first match of
+ * `selector`, or an empty string. */
+static xt_value win_computed_style(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || win->document == nullptr || argc < 2) return xt_string_from_cstr("");
+  xt_value selectorValue = xt_to_string(xt_arg(argc, argv, 0));
+  xt_value propertyValue = xt_to_string(xt_arg(argc, argv, 1));
+  const char *selector = xt_string_data(selectorValue);
+  const char *property = xt_string_data(propertyValue);
+  if (selector == nullptr || property == nullptr) return xt_string_from_cstr("");
+  const xtgui::Node *node = win->document->querySelector(selector);
+  if (node == nullptr) return xt_string_from_cstr("");
+  const xtgui::XtStyle *style = win->document->styleOf(node);
+  if (style == nullptr) return xt_string_from_cstr("");
+  std::string text = xtgui::xt_style_property_to_string(*style, property);
+  return xt_string_from_cstr(text.c_str());
+}
+
+/** Diagnostic/test hook: serialized DOM. */
+static xt_value win_document_tree(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || win->document == nullptr) return xt_string_from_cstr("");
+  std::string text = win->document->toDebugString();
+  return xt_string_from_cstr(text.c_str());
+}
+
+/** Diagnostic/test hook: number of elements matching a selector. */
+static xt_value win_query_count(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || win->document == nullptr || argc < 1) return xt_number(0);
+  xt_value selectorValue = xt_to_string(xt_arg(argc, argv, 0));
+  const char *selector = xt_string_data(selectorValue);
+  if (selector == nullptr) return xt_number(0);
+  return xt_number((double)win->document->querySelectorAll(selector).size());
 }
 
 static xt_value win_set_background(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
@@ -133,6 +188,9 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "setSize", (void *)win_set_size);
   define_method(proto, "loadHTML", (void *)win_load_html);
   define_method(proto, "getHTML", (void *)win_get_html);
+  define_method(proto, "computedStyle", (void *)win_computed_style);
+  define_method(proto, "documentTree", (void *)win_document_tree);
+  define_method(proto, "queryCount", (void *)win_query_count);
   define_method(proto, "setBackground", (void *)win_set_background);
   define_method(proto, "close", (void *)win_close);
   define_method(proto, "isOpen", (void *)win_is_open);

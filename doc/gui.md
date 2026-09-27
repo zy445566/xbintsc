@@ -1,9 +1,11 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M2 complete** — a TypeScript program can open a GPU-backed SDL3
-window, receive lifecycle events, and exit cleanly. This document records the
-locked decisions, the architecture, and the milestone plan for a cross-platform
-GUI extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
+Status: **M3a complete** — HTML parsing, CSS selector matching, the cascade and
+computed styles are in place (M2 already opened a GPU-backed SDL3 window with
+lifecycle events). Layout and painting are the next steps. This document records
+the locked decisions, the architecture, the milestone plan and the current
+progress of a cross-platform GUI extension that renders an HTML/CSS UI with its
+own GPU-accelerated engine.
 
 ## Goals
 
@@ -87,7 +89,7 @@ import { createWindow, run, quit } from "gui";
 
 const win = createWindow({ title: "Demo", width: 900, height: 600 });
 win.setBackground("#14161c");
-win.loadHTML(INDEX_HTML);              // stores the document (paint lands in M3+)
+win.loadHTML(INDEX_HTML);              // parses HTML/CSS and computes styles
 win.on("ready", () => console.log("first frame presented"));
 win.on("close", () => console.log("window closed"));
 
@@ -98,10 +100,53 @@ Methods implemented on a window handle: `setTitle` / `setSize` / `loadHTML` /
 `getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`. Events emitted:
 `ready` (after the first presented frame), `load` and `close`.
 
+### Diagnostics (until paint lands in M4)
+
+So the HTML/CSS pipeline is testable before there is a renderer, a window
+handle exposes three read-only hooks:
+
+```ts
+win.computedStyle(selector, property)  // e.g. ("#main", "width") -> "60%"
+win.queryCount(selector)               // number of matching elements
+win.documentTree()                     // serialized DOM (debugging)
+```
+
+They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
+specificity, inheritance and `!important`. They will stay useful afterwards for
+debugging.
+
+### Implemented HTML/CSS subset (M3a)
+
+**HTML parser** (`runtime/ext_gui/dom.{h,cpp}`): tags/attributes/text,
+comments and doctype skipped, entity decoding (named + numeric/hex), void
+elements, raw-text elements (`<style>`/`<script>`), and the common implicit
+close rules (`li`, `dt`/`dd`, `option`, `p`, headings, table cells/rows).
+
+**CSS parser** (`runtime/ext_gui/css.{h,cpp}`): comments and at-rules skipped
+(for now), rules with multiple selectors, and declarations. Selectors: type,
+`.class`, `#id`, attribute (`=`, `~=`, `|=`, `^=`, `$=`, `*=`), the four
+combinators (descendant, child, adjacent and general sibling) and the
+pseudo-classes `:first-child`, `:last-child`, `:only-child`, `:empty`,
+`:root`, `:not(...)`, `:nth-child(an+b)`, `:disabled`, `:checked`. Values:
+lengths (`px`, `%`, `em`, `rem`, `vw`, `vh`, `pt`, `pc`, `in`, `cm`, `mm`, `q`),
+colors (hex, `rgb()`/`rgba()`, a named subset), numbers, keywords and shorthands
+(`margin`/`padding`/`border`/`flex`).
+
+**Cascade & computed style** (`runtime/ext_gui/style.{h,cpp}`): a small built-in
+UA stylesheet, author rules sorted by `(!important, specificity, source order)`,
+then inline `style=""` (highest specificity, but non-`!important` inline loses to
+`!important`), plus CSS inheritance of the text properties. Relative lengths are
+kept unresolved until layout, except `font-size` (resolved against the *parent*
+font size) and `line-height`.
+
+**Document** (`runtime/ext_gui/document.{h,cpp}`): owns the DOM tree, gathers
+`<style>` text into one stylesheet, computes styles for a viewport and offers
+`querySelector`/`querySelectorAll`/`styleOf`.
+
 Multiple windows fall out of the object model: `createWindow` returns a native
-object handle; each handle owns its own `SDL_Window`/GPU surface and (from M3)
-its own DOM tree. `run()` drives one shared main loop that ticks every window and
-exits when the last one closes.
+object handle; each handle owns its own `SDL_Window`/GPU surface and its own DOM
+tree. `run()` drives one shared main loop that ticks every window and exits when
+the last one closes.
 
 ## Event loop integration
 
@@ -171,13 +216,25 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
    - `createWindow` / `run` / `quit` + `on`/`off` window methods work
      end-to-end (`runtime/ext_gui/`, `scripts/build-gui.ts`).
 3. **M3 — HTML/CSS subset**
-   - HTML parser, selector matching, cascade, block/inline flow + Flexbox.
-4. **M4 — paint + text**
+   - **M3a — parse + cascade** ✅ HTML parser, DOM tree, CSS parser, selector
+     matching, UA/author/inline cascade, inheritance, computed style
+     (`dom.*`, `css.*`, `style.*`, `document.*`).
+   - **M3b — layout** block/inline flow + Flexbox (to do).
+4. **M4 — paint + text + display list**
    - display list, rounded rects/gradients/borders, HarfBuzz+FreeType text.
 5. **M5 — input + events**
    - hit testing, `:hover`/`:focus`, click/scroll/keyboard → TS handlers.
 6. **M6 — images, then CSS transitions/animations.**
 7. **M7 — CI builds `gui.a` per platform and attaches it to releases.**
+
+## Progress log
+
+- **M1** ✅ generic `xt_loop_poll`/`xt_loop_set_main`; `gui` extension skeleton.
+- **M2** ✅ SDL3 window + SDL_GPU clear, multiple windows, `createWindow`/`run`.
+- **M3a** ✅ HTML parser (`dom.*`), CSS parser/matcher (`css.*`), cascade and
+  computed style (`style.*`), document model (`document.*`),
+  `computedStyle`/`queryCount`/`documentTree`, e2e coverage.
+- **M3b** ⏳ layout (block/inline flow + Flexbox).
 
 ## Open questions
 

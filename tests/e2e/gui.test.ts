@@ -191,6 +191,7 @@ describe.skipIf(!available)("gui extension", () => {
         console.log("a=" + rect("#row .a"));
         console.log("b=" + rect("#row .b"));
         console.log("wrap=" + rect("#wrap"));
+        console.log("lh=" + win.fontMetrics(10).lineHeight);
       });
       win.loadHTML(HTML);
       run();
@@ -207,8 +208,12 @@ describe.skipIf(!available)("gui extension", () => {
     // Flex row: `.a` keeps 50px, `.b` grows into the remaining 240px after a 10px gap.
     expect(value("a")).toBe("0,134,50,20");
     expect(value("b")).toBe("60,134,240,20");
-    // 60px-wide box wraps "aaaa bbbb" / "cccc dddd" onto two 12px-tall lines.
-    expect(value("wrap")).toBe("0,154,60,24");
+    // 60px-wide box wraps "aaaa bbbb" / "cccc dddd" onto two lines. The line
+    // height comes from the real font metrics, so assert against them rather
+    // than hard-coding a pixel value (fonts differ per platform).
+    const wrap = value("wrap").split(",").map(Number);
+    expect(wrap.slice(0, 3)).toEqual([0, 154, 60]);
+    expect(wrap[3]).toBeCloseTo(2 * Number(value("lh")), 1);
   });
 
   it("builds a display list of backgrounds and borders", () => {
@@ -256,5 +261,46 @@ describe.skipIf(!available)("gui extension", () => {
     expect(occurrences("#00ff00ff")).toBe(4); // four border edges
     // The background rectangle carries the 8px corner radius.
     expect(list).toContain("r=8.0 color=#ff0000ff");
+  });
+
+  it("shapes and measures text with the font stack", () => {
+    const { stdout } = compileAndRun(
+      "text",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "text", width: 400, height: 300 });
+      win.on("ready", () => {
+        const fm16 = win.fontMetrics(16);
+        console.log("ready=" + fm16.ready);
+        console.log("lh16=" + fm16.lineHeight);
+        console.log("ascent16=" + fm16.ascent);
+        console.log("m16=" + win.measureText("Hello", 16));
+        console.log("m32=" + win.measureText("Hello", 32));
+        console.log("empty=" + win.measureText("", 16));
+        console.log("wide=" + (win.measureText("WWWW", 16) > win.measureText("iiii", 16)));
+        win.close();
+      });
+      win.loadHTML("<html><body></body></html>");
+      run();
+      `,
+    );
+    const value = (label: string): string => {
+      const line = stdout.split("\n").find((entry) => entry.startsWith(`${label}=`));
+      expect(line, `missing ${label} in:\n${stdout}`).toBeDefined();
+      return line!.slice(label.length + 1).trim();
+    };
+
+    // Metrics are positive and scale ~linearly with the font size (this holds
+    // for both the real shaper and the no-font fallback).
+    const m16 = Number(value("m16"));
+    const m32 = Number(value("m32"));
+    expect(m16).toBeGreaterThan(0);
+    expect(m32).toBeGreaterThan(m16 * 1.8);
+    expect(m32).toBeLessThan(m16 * 2.2);
+    expect(Number(value("lh16"))).toBeGreaterThan(0);
+    expect(Number(value("ascent16"))).toBeGreaterThan(0);
+    expect(value("empty")).toBe("0");
+    expect(value("wide")).toBe("true");
   });
 });

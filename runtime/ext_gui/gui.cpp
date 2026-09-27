@@ -147,6 +147,7 @@ void xt_gui_render_window(XtGuiWindow *win) {
   if (cmd == NULL) return;
   SDL_GPUTexture *swapchain = NULL;
   SDL_AcquireGPUSwapchainTexture(cmd, win->window, &swapchain, NULL, NULL);
+  bool firstFrame = false;
   if (swapchain != NULL) {
     SDL_GPUColorTargetInfo target;
     memset(&target, 0, sizeof(target));
@@ -160,14 +161,13 @@ void xt_gui_render_window(XtGuiWindow *win) {
     SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
     if (can_paint) xt_gui_renderer_draw(cmd, pass, &win->geometry, viewport_width, viewport_height);
     SDL_EndGPURenderPass(pass);
-    /* The first presented frame marks the window ready; handlers registered
-     * after `createWindow` are guaranteed to see this event. */
-    if (!win->ready) {
-      win->ready = 1;
-      xt_gui_emit(win, "ready");
-    }
+    firstFrame = !win->ready;
+    win->ready = 1;
   }
   SDL_SubmitGPUCommandBuffer(cmd);
+  /* The first presented frame marks the window ready. Emitting after the
+   * submit lets a `ready` handler safely close/destroy the window. */
+  if (firstFrame) xt_gui_emit(win, "ready");
 }
 
 /* -- createWindow(options) ------------------------------------------------ */

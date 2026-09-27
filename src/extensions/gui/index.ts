@@ -78,6 +78,10 @@ export const guiExtension: Extension = {
         "-framework", "GameController",
         "-framework", "Metal",
         "-framework", "QuartzCore",
+        /* HarfBuzz's CoreText shaper (macOS system fonts). */
+        "-framework", "CoreText",
+        "-framework", "CoreGraphics",
+        "-framework", "CoreFoundation",
         "-weak_framework", "CoreHaptics",
         "-lpthread",
         "-lm",

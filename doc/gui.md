@@ -1,13 +1,13 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M4a complete** — HTML parsing, CSS selector matching, the cascade,
+Status: **M4b in progress** — HTML parsing, CSS selector matching, the cascade,
 computed styles and layout (block, inline and Flexbox) are in place, and the
-engine now *paints*: it builds a display list and renders it through SDL_GPU.
-The M2–M3 foundation already opened a GPU-backed SDL3 window with lifecycle
-events. Real fonts (HarfBuzz + FreeType) are the rest of M4. This document
-records the locked decisions, the architecture, the milestone plan and the
-current progress of a cross-platform GUI extension that renders an HTML/CSS UI
-with its own GPU-accelerated engine.
+engine *paints*: it builds a display list and renders it through SDL_GPU. The
+HarfBuzz + FreeType text stack is now linked in and drives real text metrics;
+glyph-atlas painting is the remaining M4 work. This document records the locked
+decisions, the architecture, the milestone plan and the current progress of a
+cross-platform GUI extension that renders an HTML/CSS UI with its own
+GPU-accelerated engine.
 
 ## Goals
 
@@ -76,6 +76,9 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | Glyph raster | **FreeType** | glyph outlines → GPU atlas / SDF |
 | Images | **stb_image** (later libpng/libjpeg) | single header to start |
 
+Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`
+(overridable with `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION`).
+
 Alternative if SDL3 is rejected: **GLFW + OpenGL 3.3** (simpler, but OpenGL is
 deprecated on macOS and gives no modern GPU abstraction). **wgpu-native** if the
 engine were Rust.
@@ -139,6 +142,8 @@ win.documentTree()                     // serialized DOM (debugging)
 win.layoutTree()                       // serialized layout boxes (debugging)
 win.paintCount()                       // number of shapes in the display list
 win.paintList()                        // serialized display list (debugging)
+win.measureText(text, fontSize?, family?)  // shaped advance width in pixels
+win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
 ```
 
 They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
@@ -158,8 +163,8 @@ with absolute (viewport-relative) geometry:
   formatting context with greedy, word-based line breaking, `text-align` and
   `line-height`. A wrapped text box stores one fragment per line. Inline
   elements get the union of their descendants' geometry; `display: inline-block`
-  is laid out atomically with a shrink-to-fit width. Text metrics are an
-  approximation until the M4 text stack lands (`xt_layout_text_width`).
+  is laid out atomically with a shrink-to-fit width. Text is measured with the
+  HarfBuzz/FreeType stack (see *Implemented text*).
 - **Flexbox** — single-line `row`/`column` (and the `-reverse` variants) with
   `gap`, `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and
   `align-items` (including `stretch` when the cross size is definite).
@@ -194,9 +199,29 @@ per window and draws it through a single SDL_GPU graphics pipeline:
 
 The window background (`setBackground`) is the render-pass clear colour.
 
-Still to do in M4: real text — HarfBuzz shaping, FreeType rasterisation, a glyph
-atlas and text quads in the display list — plus gradients. The approximate
-`xt_layout_text_width` will be replaced when the font stack lands.
+Still to do in M4: glyph rendering (glyph atlas + textured text quads in the
+display list) and gradients.
+
+### Implemented text stack (M4b)
+
+`runtime/ext_gui/text.{h,cpp}` wraps **HarfBuzz** (shaping) and **FreeType**
+(metrics + eventual rasterisation). Both are built statically and linked into
+`gui.a` by `scripts/build-gui.ts`.
+
+- Fonts are resolved from well-known system paths (Helvetica/Arial on macOS,
+  DejaVu/Liberation on Linux, Segoe UI/Arial on Windows), overridable with
+  `XT_GUI_FONT` (and `XT_GUI_FONT_MONO`), and cached per `(family class, size)`.
+  Only regular upright faces are used for now; weight/italic selection is a
+  later refinement.
+- `xt_text_measure_width` shapes the run with HarfBuzz (so kerning and
+  ligatures are honoured), `xt_text_metrics` returns FreeType's ascent /
+  descent / normal line height. When no font file can be found the module falls
+  back to a deterministic per-byte approximation, so layout still works.
+- Layout now uses these real metrics for text widths, line breaking and
+  `line-height: normal`; `measureText`/`fontMetrics` expose them to tests.
+
+Glyph rasterisation into a texture atlas and the textured draw call are the
+remaining M4b work; until then text affects geometry but is not yet drawn.
 
 Multiple windows fall out of the object model: `createWindow` returns a native
 object handle; each handle owns its own `SDL_Window`/GPU surface and its own DOM
@@ -243,9 +268,10 @@ This keeps network I/O, timers and `await` working inside a GUI program.
 - Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`
   (gitignored; fetched on demand).
 - `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
-  default `release-3.2.10`), builds `libSDL3.a`, compiles the engine and merges
-  everything into `runtime/lib/<os>-<arch>/gui.a` (same convention as `core.a`),
-  statically bundling SDL3.
+  default `release-3.2.10`), builds `libSDL3.a`, fetches and builds static
+  FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), compiles the
+  engine and merges everything into `runtime/lib/<os>-<arch>/gui.a` (same
+  convention as `core.a`), statically bundling all three.
 - `src/extensions/gui/index.ts` exposes the archive through `nativeObjects()`
   and the OS frameworks through `linkerFlags()`.
 - The existing cache fingerprint already hashes `nativeObjects()` contents, so
@@ -280,8 +306,11 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
 4. **M4 — paint + text + display list**
    - **M4a — display list + GPU shapes** ✅ background/border display list,
      rounded-rect SDL_GPU pipeline (`paint.*`, `renderer.*`).
-   - **M4b — text** ⬜ HarfBuzz + FreeType, glyph atlas, real text metrics,
-     then gradients.
+   - **M4b-1 — text stack + metrics** ✅ HarfBuzz + FreeType linked into
+     `gui.a`, font resolution/caching, shaping-based text metrics used by
+     layout (`text.*`, `measureText`/`fontMetrics`).
+   - **M4b-2 — glyph rendering** ⬜ FreeType rasterisation, glyph atlas,
+     textured text quads in the display list, then gradients.
 5. **M5 — input + events**
    - hit testing, `:hover`/`:focus`, click/scroll/keyboard → TS handlers.
 6. **M6 — images, then CSS transitions/animations.**
@@ -299,6 +328,9 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
   coverage.
 - **M4a** ✅ display list (`paint.*`) and the SDL_GPU 2D renderer with an MSL
   rounded-rect pipeline (`renderer.*`), `paintList`/`paintCount`, e2e coverage.
+- **M4b-1** ✅ FreeType + HarfBuzz fetched/built/merged into `gui.a`, the text
+  module (`text.*`) with font resolution, HarfBuzz shaping and FreeType metrics,
+  real text metrics in layout, `measureText`/`fontMetrics`, e2e coverage.
 
 ## Open questions
 

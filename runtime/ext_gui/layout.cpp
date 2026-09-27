@@ -4,8 +4,8 @@
  * The algorithm is intentionally a pragmatic subset:
  *   - Block flow: consecutive inline-level children form an anonymous inline
  *     formatting context; block-level children are stacked vertically.
- *   - Inline flow: greedy, word-based line breaking with `text-align`; text
- *     metrics are approximated (real shaping arrives with M4).
+ *   - Inline flow: greedy, word-based line breaking with `text-align`; text is
+ *     measured with the HarfBuzz/FreeType stack in `text.h`.
  *   - Flexbox: single-line row/column with grow/shrink, gap, justify-content
  *     and align-items.
  * Margins do not collapse yet, and only static positioning is honoured.
@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <cfloat>
 #include <cstring>
+
+#include "text.h"
 
 namespace xtgui {
 namespace {
@@ -58,19 +60,16 @@ bool isAuto(const Length &length) {
   return length.unit == Unit::Auto || length.unit == Unit::Invalid || length.unit == Unit::None;
 }
 
-/* Per-character advance as a fraction of the font size; deliberately crude but
- * deterministic. Replaced by real shaping in M4. */
-float charAdvance(unsigned char c) {
-  if (c < 0x20 || c == 0x7f) return 0.0f;
-  if (c >= 0x80) return 0.55f;
-  char ch = (char)c;
-  if (ch == ' ') return 0.28f;
-  if (std::strchr("ilj|.,:;'!`", ch) != nullptr) return 0.26f;
-  if (std::strchr("mwMW@%", ch) != nullptr) return 0.85f;
-  if (ch >= '0' && ch <= '9') return 0.56f;
-  if (ch >= 'A' && ch <= 'Z') return 0.64f;
-  if (std::strchr("()[]{}<>/\\\"", ch) != nullptr) return 0.36f;
-  return 0.52f;
+/* Per-character advance as a fraction of the font size is no longer needed
+ * here: text metrics come from the shaping stack (see `text.h`). */
+
+FontSpec specOf(const XtStyle &style) {
+  FontSpec spec;
+  spec.family = style.font_family;
+  spec.pixel_size = style.font_size;
+  spec.weight = style.font_weight;
+  spec.italic = style.font_style == FontStyle::Italic;
+  return spec;
 }
 
 float lineHeightOf(const XtStyle &style) {
@@ -78,10 +77,16 @@ float lineHeightOf(const XtStyle &style) {
     return style.line_height.value > 0 ? style.line_height.value * style.font_size : style.font_size * 1.2f;
   }
   if (style.line_height.unit == Unit::Px) return style.line_height.value;
-  return style.font_size * 1.2f;
+  float lineHeight = 0;
+  xt_text_metrics(specOf(style), nullptr, nullptr, &lineHeight);
+  return lineHeight > 0 ? lineHeight : style.font_size * 1.2f;
 }
 
-float ascentOf(const XtStyle &style) { return style.font_size * 0.8f; }
+float ascentOf(const XtStyle &style) {
+  float ascent = 0;
+  xt_text_metrics(specOf(style), &ascent, nullptr, nullptr);
+  return ascent > 0 ? ascent : style.font_size * 0.8f;
+}
 
 struct Layouter {
   const std::unordered_map<const Node *, XtStyle> *styles = nullptr;
@@ -107,11 +112,7 @@ struct Layouter {
   }
 
   float textWidth(const std::string &text, const XtStyle &style) const {
-    bool monospace = style.font_family.find("mono") != std::string::npos;
-    float factor = monospace ? 0.6f : 1.0f;
-    float width = 0;
-    for (char c : text) width += charAdvance((unsigned char)c) * factor;
-    return width * style.font_size;
+    return xt_text_measure_width(text, specOf(style));
   }
 
   float horizontalEdges(const LayoutBox *box) const {
@@ -646,11 +647,7 @@ std::string dumpBox(const LayoutBox *box, int depth) {
 }  // namespace
 
 float xt_layout_text_width(const std::string &text, const XtStyle &style) {
-  bool monospace = style.font_family.find("mono") != std::string::npos;
-  float factor = monospace ? 0.6f : 1.0f;
-  float width = 0;
-  for (char c : text) width += charAdvance((unsigned char)c) * factor;
-  return width * style.font_size;
+  return xt_text_measure_width(text, specOf(style));
 }
 
 void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *, XtStyle> &styles,

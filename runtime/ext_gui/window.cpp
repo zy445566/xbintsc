@@ -11,6 +11,7 @@
 #include "gui_engine.h"
 
 #include "paint.h"
+#include "text.h"
 
 static xt_value g_window_proto = XT_UNDEFINED;
 
@@ -186,6 +187,52 @@ static xt_value win_paint_count(xt_value self, xt_value env, int32_t argc, xt_va
   return xt_number((double)list.rects.size());
 }
 
+/** Build a `FontSpec` from trailing method arguments: [text], size, family. */
+static xtgui::FontSpec xt_gui_font_spec(int32_t argc, xt_value *argv, int sizeIndex, int familyIndex) {
+  xtgui::FontSpec spec;
+  if (argc > sizeIndex && XT_IS_NUMBER(xt_arg(argc, argv, sizeIndex))) {
+    double size = xt_to_number(xt_arg(argc, argv, sizeIndex));
+    if (size > 0) spec.pixel_size = (float)size;
+  }
+  if (argc > familyIndex && XT_IS_STRING(xt_arg(argc, argv, familyIndex))) {
+    const char *family = xt_string_data(xt_arg(argc, argv, familyIndex));
+    if (family != nullptr) spec.family = family;
+  }
+  return spec;
+}
+
+/** Diagnostic/test hook: shaped width of `text` at `fontSize` (optional) in
+ * the given family (optional). */
+static xt_value win_measure_text(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)self;
+  (void)env;
+  std::string text;
+  if (argc >= 1) {
+    xt_value value = xt_to_string(xt_arg(argc, argv, 0));
+    const char *data = xt_string_data(value);
+    if (data != nullptr) text = data;
+  }
+  xtgui::FontSpec spec = xt_gui_font_spec(argc, argv, 1, 2);
+  return xt_number((double)xtgui::xt_text_measure_width(text, spec));
+}
+
+/** Diagnostic/test hook: vertical metrics at `fontSize` (optional). */
+static xt_value win_font_metrics(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)self;
+  (void)env;
+  xtgui::FontSpec spec = xt_gui_font_spec(argc, argv, 0, 1);
+  float ascent = 0;
+  float descent = 0;
+  float lineHeight = 0;
+  xtgui::xt_text_metrics(spec, &ascent, &descent, &lineHeight);
+  xt_value object = xt_object_new();
+  xt_object_set(object, xt_string_from_cstr("ascent"), xt_number(ascent));
+  xt_object_set(object, xt_string_from_cstr("descent"), xt_number(descent));
+  xt_object_set(object, xt_string_from_cstr("lineHeight"), xt_number(lineHeight));
+  xt_object_set(object, xt_string_from_cstr("ready"), xtgui::xt_text_ready() ? XT_TRUE : XT_FALSE);
+  return object;
+}
+
 static xt_value win_close(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   (void)argc;
@@ -267,6 +314,8 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "setBackground", (void *)win_set_background);
   define_method(proto, "paintList", (void *)win_paint_list);
   define_method(proto, "paintCount", (void *)win_paint_count);
+  define_method(proto, "measureText", (void *)win_measure_text);
+  define_method(proto, "fontMetrics", (void *)win_font_metrics);
   define_method(proto, "close", (void *)win_close);
   define_method(proto, "isOpen", (void *)win_is_open);
   define_method(proto, "on", (void *)win_on);

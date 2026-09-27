@@ -23,12 +23,14 @@
 
 namespace xtgui {
 
-/** A positioned text fragment (a wrapped text box can span several lines). */
+/** A positioned text fragment (a wrapped text box can span several lines).
+ * `text` holds the run this fragment covers (a word or a run of spaces). */
 struct TextFragment {
   float x = 0;
   float y = 0;
   float width = 0;
   float height = 0;
+  std::string text;
 };
 
 struct LayoutBox {
@@ -75,7 +77,7 @@ class LayoutTree {
   XtStyle root_style_;
 };
 
-/** Text width under `style` (approximate until M4's font stack). */
+/** Text width under `style` (shaped with the HarfBuzz/FreeType stack). */
 float xt_layout_text_width(const std::string &text, const XtStyle &style);
 
 }  // namespace xtgui

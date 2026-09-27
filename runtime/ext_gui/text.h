@@ -12,7 +12,9 @@
 #ifndef XT_GUI_TEXT_H
 #define XT_GUI_TEXT_H
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace xtgui {
 
@@ -27,9 +29,34 @@ struct FontSpec {
 /** Opaque loaded face (defined in text.cpp). */
 struct Font;
 
+/** A positioned, shaped glyph (pixels). */
+struct ShapedGlyph {
+  uint32_t glyph = 0;
+  float x_advance = 0;
+  float x_offset = 0;
+  float y_offset = 0;
+};
+
+/** An 8-bit grayscale glyph bitmap, as produced by FreeType. */
+struct GlyphImage {
+  int width = 0;
+  int height = 0;
+  int left = 0;  // x offset from the pen
+  int top = 0;   // y offset above the baseline
+  std::vector<unsigned char> pixels;
+};
+
 /** Load (or fetch from the cache) the font for `spec`, or null if none is
  * available. The returned pointer stays valid until `xt_text_shutdown`. */
 Font *xt_text_resolve(const FontSpec &spec);
+
+/** Shape `utf8` with `font`, appending glyphs to `out`; returns the total
+ * advance width in pixels. `out` is not cleared. */
+float xt_text_shape_run(const std::string &utf8, Font *font, std::vector<ShapedGlyph> &out);
+
+/** Rasterise `glyph` from `font` into a grayscale bitmap. Returns false when
+ * the glyph has no outline (e.g. a space) or cannot be rendered. */
+bool xt_text_rasterize(Font *font, uint32_t glyph, GlyphImage &out);
 
 /** Shaped horizontal advance of `utf8` in pixels. Falls back to a deterministic
  * approximation when no font file can be loaded. */

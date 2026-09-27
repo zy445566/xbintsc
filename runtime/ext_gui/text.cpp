@@ -15,6 +15,7 @@
 #include <hb-ot.h>
 
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -105,6 +106,44 @@ float charAdvance(unsigned char c) {
   if (ch >= 'A' && ch <= 'Z') return 0.64f;
   if (std::strchr("()[]{}<>/\\\"", ch) != nullptr) return 0.36f;
   return 0.52f;
+}
+
+/* Decode one UTF-8 sequence starting at `index`; advances `index`. */
+uint32_t decodeUtf8(const std::string &text, size_t &index) {
+  unsigned char first = (unsigned char)text[index];
+  if (first < 0x80) {
+    index += 1;
+    return first;
+  }
+  uint32_t code_point = 0;
+  size_t extra = 0;
+  if ((first & 0xe0) == 0xc0) {
+    code_point = first & 0x1f;
+    extra = 1;
+  } else if ((first & 0xf0) == 0xe0) {
+    code_point = first & 0x0f;
+    extra = 2;
+  } else if ((first & 0xf8) == 0xf0) {
+    code_point = first & 0x07;
+    extra = 3;
+  } else {
+    index += 1;
+    return 0xfffd;
+  }
+  if (index + extra >= text.size()) {
+    index = text.size();
+    return 0xfffd;
+  }
+  for (size_t i = 1; i <= extra; i++) {
+    unsigned char next = (unsigned char)text[index + i];
+    if ((next & 0xc0) != 0x80) {
+      index += 1;
+      return 0xfffd;
+    }
+    code_point = (code_point << 6) | (next & 0x3f);
+  }
+  index += extra + 1;
+  return code_point;
 }
 
 float approximateWidth(const std::string &utf8, float pixel_size, const std::string &family) {
@@ -230,19 +269,75 @@ Font *xt_text_resolve(const FontSpec &spec) {
 
 float xt_text_measure_width(const std::string &utf8, const FontSpec &spec) {
   Font *font = xt_text_resolve(spec);
-  if (font == nullptr || font->hb_font == nullptr) {
-    return approximateWidth(utf8, spec.pixel_size, spec.family);
+  if (font == nullptr) return approximateWidth(utf8, spec.pixel_size, spec.family);
+  std::vector<ShapedGlyph> glyphs;
+  return xt_text_shape_run(utf8, font, glyphs);
+}
+
+float xt_text_shape_run(const std::string &utf8, Font *font, std::vector<ShapedGlyph> &out) {
+  if (font == nullptr) return 0;
+  float total = 0;
+  if (font->hb_font == nullptr) {
+    /* HarfBuzz unavailable: fall back to FreeType's per-codepoint advances. */
+    size_t index = 0;
+    while (index < utf8.size()) {
+      uint32_t code_point = decodeUtf8(utf8, index);
+      FT_UInt glyph = FT_Get_Char_Index(font->ft_face, code_point);
+      float advance = 0;
+      if (FT_Load_Glyph(font->ft_face, glyph, FT_LOAD_DEFAULT) == 0) {
+        advance = font->ft_face->glyph->advance.x / 64.0f;
+      }
+      ShapedGlyph shaped;
+      shaped.glyph = glyph;
+      shaped.x_advance = advance;
+      total += advance;
+      out.push_back(shaped);
+    }
+    return total;
   }
+
   hb_buffer_t *buffer = hb_buffer_create();
   hb_buffer_add_utf8(buffer, utf8.c_str(), (int)utf8.size(), 0, -1);
   hb_buffer_guess_segment_properties(buffer);
   hb_shape(font->hb_font, buffer, nullptr, 0);
   unsigned count = hb_buffer_get_length(buffer);
+  hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buffer, nullptr);
   hb_glyph_position_t *positions = hb_buffer_get_glyph_positions(buffer, nullptr);
-  long long advance = 0;
-  for (unsigned i = 0; i < count; i++) advance += positions[i].x_advance;
+  for (unsigned i = 0; i < count; i++) {
+    ShapedGlyph shaped;
+    shaped.glyph = infos[i].codepoint;
+    shaped.x_advance = positions[i].x_advance / 64.0f;
+    shaped.x_offset = positions[i].x_offset / 64.0f;
+    shaped.y_offset = positions[i].y_offset / 64.0f;
+    total += shaped.x_advance;
+    out.push_back(shaped);
+  }
   hb_buffer_destroy(buffer);
-  return (float)advance / 64.0f;
+  return total;
+}
+
+bool xt_text_rasterize(Font *font, uint32_t glyph, GlyphImage &out) {
+  out.width = 0;
+  out.height = 0;
+  out.left = 0;
+  out.top = 0;
+  out.pixels.clear();
+  if (font == nullptr || font->ft_face == nullptr) return false;
+  if (FT_Load_Glyph(font->ft_face, glyph, FT_LOAD_DEFAULT) != 0) return false;
+  if (FT_Render_Glyph(font->ft_face->glyph, FT_RENDER_MODE_NORMAL) != 0) return false;
+  FT_GlyphSlot slot = font->ft_face->glyph;
+  const FT_Bitmap &bitmap = slot->bitmap;
+  out.left = slot->bitmap_left;
+  out.top = slot->bitmap_top;
+  if (bitmap.width == 0 || bitmap.rows == 0) return false;
+  out.width = (int)bitmap.width;
+  out.height = (int)bitmap.rows;
+  out.pixels.resize((size_t)bitmap.width * bitmap.rows);
+  for (unsigned row = 0; row < bitmap.rows; row++) {
+    const unsigned char *source = bitmap.buffer + (ptrdiff_t)row * bitmap.pitch;
+    std::memcpy(out.pixels.data() + (size_t)row * bitmap.width, source, bitmap.width);
+  }
+  return true;
 }
 
 void xt_text_metrics(const FontSpec &spec, float *ascent, float *descent, float *line_height) {

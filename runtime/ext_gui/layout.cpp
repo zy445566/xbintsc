@@ -402,7 +402,7 @@ struct Layouter {
           float dy = cursorY + item->box->margin_top - item->box->y;
           translate(item->box, dx, dy);
         } else {
-          item->box->fragments.push_back({x, cursorY, item->width, height});
+          item->box->fragments.push_back({x, cursorY, item->width, height, item->text});
         }
         x += item->width;
       }

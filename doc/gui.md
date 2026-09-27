@@ -1,13 +1,12 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M4b in progress** — HTML parsing, CSS selector matching, the cascade,
+Status: **M4b complete** — HTML parsing, CSS selector matching, the cascade,
 computed styles and layout (block, inline and Flexbox) are in place, and the
-engine *paints*: it builds a display list and renders it through SDL_GPU. The
-HarfBuzz + FreeType text stack is now linked in and drives real text metrics;
-glyph-atlas painting is the remaining M4 work. This document records the locked
-decisions, the architecture, the milestone plan and the current progress of a
-cross-platform GUI extension that renders an HTML/CSS UI with its own
-GPU-accelerated engine.
+engine *paints*: it builds a display list of rectangles and shaped text runs and
+renders them through SDL_GPU. The HarfBuzz + FreeType text stack drives real
+metrics and a glyph atlas. This document records the locked decisions, the
+architecture, the milestone plan and the current progress of a cross-platform
+GUI extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -161,10 +160,10 @@ with absolute (viewport-relative) geometry:
   is resolved, including percentages against the containing block width.
 - **Inline flow** — consecutive inline-level children form an anonymous inline
   formatting context with greedy, word-based line breaking, `text-align` and
-  `line-height`. A wrapped text box stores one fragment per line. Inline
-  elements get the union of their descendants' geometry; `display: inline-block`
-  is laid out atomically with a shrink-to-fit width. Text is measured with the
-  HarfBuzz/FreeType stack (see *Implemented text*).
+  `line-height`. Inline elements get the union of their descendants' geometry;
+  `display: inline-block` is laid out atomically with a shrink-to-fit width.
+  Each text fragment remembers the run it covers, so paint can shape it. Text is
+  measured with the HarfBuzz/FreeType stack (see *Implemented text*).
 - **Flexbox** — single-line `row`/`column` (and the `-reverse` variants) with
   `gap`, `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and
   `align-items` (including `stretch` when the cross size is definite).
@@ -176,31 +175,36 @@ offsets (`relative`/`absolute`/`fixed`), `overflow` clipping and floats.
 `<style>` text into one stylesheet, computes styles and layout for a viewport and
 offers `querySelector`/`querySelectorAll`/`styleOf`/`boxOf`.
 
-### Implemented paint (M4a)
+### Implemented paint (M4a/M4b)
 
 `runtime/ext_gui/paint.{h,cpp}` walks the layout tree in painter's order and
-emits a backend-agnostic `DisplayList` of shapes. Today it emits **backgrounds**
-(with `border-radius`) and **borders** (four solid edges). `DisplayList::dump()`
-feeds `paintList()`/`paintCount()`.
+emits a backend-agnostic `DisplayList` with two parallel lists: **rectangles**
+(backgrounds and four solid border edges, with `border-radius`) and **text runs**
+(each carrying its text, colour and resolved `FontSpec`). Keeping them separate
+lets the renderer draw all rectangles, then all text on top, with one draw call
+per list. `DisplayList::dump()` feeds `paintList()`/`paintCount()`.
 
-`runtime/ext_gui/renderer.{h,cpp}` turns that list into one batched vertex buffer
-per window and draws it through a single SDL_GPU graphics pipeline:
+`runtime/ext_gui/renderer.{h,cpp}` turns that list into two batched vertex
+buffers per window (one for shapes, one for glyph quads) drawn through two
+SDL_GPU graphics pipelines:
 
-- The shared pipeline is created lazily from the device's supported shader
-  format. On macOS it compiles the embedded **MSL** source directly (SDL_GPU
-  `SHADERFORMAT_MSL`); Vulkan/D3D12 need SPIR-V/DXIL blobs and are a build-time
-  TODO (see *Open questions*).
-- A **rounded-rectangle distance field** in the fragment shader gives
+- The shared pipelines are created lazily from the device's supported shader
+  format. On macOS the renderer compiles the embedded **MSL** source directly
+  (SDL_GPU `SHADERFORMAT_MSL`); Vulkan/D3D12 need SPIR-V/DXIL blobs and are a
+  build-time TODO (see *Open questions*).
+- A **rounded-rectangle distance field** in the shape fragment shader gives
   antialiased fills; the vertex carries `position`, `local`, `half extents`,
   `radius` and colour, and a viewport-size push constant does the projection.
   Alpha blending is enabled.
+- The text pipeline samples a **single shared grayscale glyph atlas**
+  (`R8_UNORM`, 2048², shelf-packed, LINEAR filtering) and draws each glyph as a
+  textured quad (`position`, `uv`, colour), modulating alpha by the coverage.
 - Geometry is uploaded only when the document or viewport changes
   (`geometry.dirty`), so steady-state frames are bind-and-draw.
 
 The window background (`setBackground`) is the render-pass clear colour.
 
-Still to do in M4: glyph rendering (glyph atlas + textured text quads in the
-display list) and gradients.
+Still to do in M4: gradients.
 
 ### Implemented text stack (M4b)
 
@@ -217,11 +221,12 @@ display list) and gradients.
   ligatures are honoured), `xt_text_metrics` returns FreeType's ascent /
   descent / normal line height. When no font file can be found the module falls
   back to a deterministic per-byte approximation, so layout still works.
-- Layout now uses these real metrics for text widths, line breaking and
+- `xt_text_shape_run` returns positioned glyphs and `xt_text_rasterize` renders
+  an 8-bit bitmap; the renderer packs those into the atlas. On HiDPI displays
+  glyphs are rasterised at `font_size * SDL_GetWindowPixelDensity` while quads
+  are positioned in logical pixels, so text stays crisp.
+- Layout uses these real metrics for text widths, line breaking and
   `line-height: normal`; `measureText`/`fontMetrics` expose them to tests.
-
-Glyph rasterisation into a texture atlas and the textured draw call are the
-remaining M4b work; until then text affects geometry but is not yet drawn.
 
 Multiple windows fall out of the object model: `createWindow` returns a native
 object handle; each handle owns its own `SDL_Window`/GPU surface and its own DOM
@@ -244,7 +249,7 @@ plain native call the TypeScript program controls. Each tick it:
 
 1. pumps SDL window/input events for every window,
 2. builds/uploads the display list when it changed and renders every open
-   window (clear pass + shape geometry),
+   window (clear pass + shape geometry + text geometry),
 3. calls `xt_loop_poll(0)` and `xt_drain_microtasks()` so sockets/timers and
    `await` continuations keep making progress,
 4. repeats until all windows close or `quit()` is called.
@@ -309,8 +314,9 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
    - **M4b-1 — text stack + metrics** ✅ HarfBuzz + FreeType linked into
      `gui.a`, font resolution/caching, shaping-based text metrics used by
      layout (`text.*`, `measureText`/`fontMetrics`).
-   - **M4b-2 — glyph rendering** ⬜ FreeType rasterisation, glyph atlas,
-     textured text quads in the display list, then gradients.
+   - **M4b-2 — glyph rendering** ✅ FreeType rasterisation, a shared shelf-packed
+     glyph atlas, textured text quads in the display list and HiDPI-aware raster
+     scaling. Gradients remain.
 5. **M5 — input + events**
    - hit testing, `:hover`/`:focus`, click/scroll/keyboard → TS handlers.
 6. **M6 — images, then CSS transitions/animations.**
@@ -331,6 +337,9 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
 - **M4b-1** ✅ FreeType + HarfBuzz fetched/built/merged into `gui.a`, the text
   module (`text.*`) with font resolution, HarfBuzz shaping and FreeType metrics,
   real text metrics in layout, `measureText`/`fontMetrics`, e2e coverage.
+- **M4b-2** ✅ glyph atlas + textured text pipeline in `renderer.*`, shaped text
+  runs in `paint.*`, `xt_text_shape_run`/`xt_text_rasterize` in `text.*`, HiDPI
+  raster scaling, e2e coverage.
 
 ## Open questions
 

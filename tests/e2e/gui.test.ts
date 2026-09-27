@@ -263,6 +263,40 @@ describe.skipIf(!available)("gui extension", () => {
     expect(list).toContain("r=8.0 color=#ff0000ff");
   });
 
+  it("emits shaped text runs into the display list", () => {
+    const { stdout } = compileAndRun(
+      "text-runs",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #t { font-size: 20px; color: #0000ff; }
+      </style></head><body>
+        <div id="t">Hi</div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "text-runs", width: 400, height: 300 });
+      win.on("ready", () => {
+        const r = win.getBoundingClientRect("#t");
+        console.log("rect=" + r.x + "," + r.y + "," + r.width + "," + r.height);
+        console.log("paint-list-start");
+        console.log(win.paintList());
+        console.log("paint-list-end");
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("paint-list-start"), stdout.indexOf("paint-list-end"));
+    // The text fragment carries the resolved font size and colour.
+    expect(list).toContain('text x=0.0');
+    expect(list).toContain('size=20.0');
+    expect(list).toContain('color=#0000ffff "Hi"');
+  });
+
   it("shapes and measures text with the font stack", () => {
     const { stdout } = compileAndRun(
       "text",

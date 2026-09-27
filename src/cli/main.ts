@@ -24,7 +24,6 @@ import { resolveToolchain } from "../driver/toolchain-provider.js";
 import { realRunner } from "../driver/toolchain.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { bundledExtensions } from "../extensions/catalog.js";
-import { nodeExtension } from "../extensions/node/index.js";
 import { nativeExtensionFromManifest } from "../extensions/native.js";
 
 export interface CliIo {
@@ -100,9 +99,11 @@ function buildRegistry(flags: Map<string, string | boolean>): ExtensionRegistry 
   const registry = createDefaultRegistry();
   const requested = flags.get("ext");
   if (typeof requested === "string") {
+    const bundled = bundledExtensions();
     for (const name of requested.split(",").map((n) => n.trim()).filter(Boolean)) {
-      if (name === "node") registry.register(nodeExtension);
-      else throw new Error(`Unknown extension '${name}'`);
+      const extension = bundled.find((candidate) => candidate.name === name);
+      if (!extension) throw new Error(`Unknown extension '${name}'`);
+      registry.register(extension);
     }
   }
   // Each `--ext-native` value is a manifest path describing a pre-built C++ or

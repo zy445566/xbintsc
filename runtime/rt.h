@@ -241,6 +241,28 @@ void xt_loop_remove(int fd);
 void xt_run_event_loop(void);
 int xt_loop_has_work(void);
 
+/**
+ * Run one iteration of the reactor, waiting up to `timeout_ms` for readiness
+ * (`< 0` blocks until an event arrives, `0` polls without sleeping). Returns
+ * the number of active watchers still registered, or a negative value when the
+ * wait itself failed.
+ *
+ * Hosts that own their main loop (a GUI toolkit, an embedder, ...) call this
+ * periodically instead of `xt_run_event_loop` so timers, sockets and promise
+ * microtasks keep draining between their own events. When there are no
+ * watchers it returns immediately, so a host with no I/O is unaffected.
+ */
+int xt_loop_poll(int timeout_ms);
+
+/**
+ * A host-provided main loop. When set, `xt_run_event_loop` delegates to it
+ * instead of blocking on `select(2)`. This lets an extension drive the process
+ * main loop (e.g. a window toolkit on the UI thread) while still pumping the
+ * reactor through `xt_loop_poll`. Call with `NULL` to restore the default.
+ */
+typedef void (*xt_main_loop_fn)(void);
+void xt_loop_set_main(xt_main_loop_fn fn);
+
 /* -- global functions ------------------------------------------------------ */
 xt_value xt_parse_int(int32_t argc, xt_value *argv);
 xt_value xt_parse_float(int32_t argc, xt_value *argv);

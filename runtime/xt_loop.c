@@ -81,36 +81,63 @@ void xt_loop_remove(int fd) {
   xt_loop_active_count--;
 }
 
+/* A host (GUI toolkit, embedder) can take over the main loop; see
+ * `xt_loop_set_main`. `NULL` keeps the default blocking behaviour. */
+static xt_main_loop_fn xt_loop_main = NULL;
+
+void xt_loop_set_main(xt_main_loop_fn fn) { xt_loop_main = fn; }
+
+int xt_loop_poll(int timeout_ms) {
+  if (xt_loop_active_count <= 0) return 0;
+
+  fd_set readSet;
+  fd_set writeSet;
+  FD_ZERO(&readSet);
+  FD_ZERO(&writeSet);
+  int maxFd = -1;
+  for (int i = 0; i < xt_loop_watcher_count; i++) {
+    xt_loop_watcher *watcher = &xt_loop_watchers[i];
+    if (!watcher->active) continue;
+    if (watcher->events & XT_IO_READ) FD_SET(watcher->fd, &readSet);
+    if (watcher->events & XT_IO_WRITE) FD_SET(watcher->fd, &writeSet);
+    if (watcher->fd > maxFd) maxFd = watcher->fd;
+  }
+  if (maxFd < 0) return 0;
+
+  struct timeval timeout;
+  struct timeval *timeoutPtr = NULL;
+  if (timeout_ms >= 0) {
+    timeout.tv_sec = timeout_ms / 1000;
+    timeout.tv_usec = (timeout_ms % 1000) * 1000;
+    timeoutPtr = &timeout;
+  }
+
+  int ready = select(maxFd + 1, &readSet, &writeSet, NULL, timeoutPtr);
+  if (ready < 0) return -1;
+  if (ready == 0) return xt_loop_active_count;
+
+  /* Collect the ready watchers first: handlers may add/remove descriptors. */
+  for (int i = 0; i < xt_loop_watcher_count; i++) {
+    xt_loop_watcher *watcher = &xt_loop_watchers[i];
+    if (!watcher->active) continue;
+    int events = 0;
+    if ((watcher->events & XT_IO_READ) && FD_ISSET(watcher->fd, &readSet)) events |= XT_IO_READ;
+    if ((watcher->events & XT_IO_WRITE) && FD_ISSET(watcher->fd, &writeSet)) events |= XT_IO_WRITE;
+    if (events) watcher->handler(watcher->userdata, events);
+  }
+  xt_drain_microtasks();
+  return xt_loop_active_count;
+}
+
 void xt_run_event_loop(void) {
+  /* A host that owns the main loop (GUI toolkit) takes precedence: it is
+     responsible for calling `xt_loop_poll` while it runs. */
+  if (xt_loop_main != NULL) {
+    xt_loop_main();
+    return;
+  }
   while (xt_loop_active_count > 0) {
-    fd_set readSet;
-    fd_set writeSet;
-    FD_ZERO(&readSet);
-    FD_ZERO(&writeSet);
-    int maxFd = -1;
-    for (int i = 0; i < xt_loop_watcher_count; i++) {
-      xt_loop_watcher *watcher = &xt_loop_watchers[i];
-      if (!watcher->active) continue;
-      if (watcher->events & XT_IO_READ) FD_SET(watcher->fd, &readSet);
-      if (watcher->events & XT_IO_WRITE) FD_SET(watcher->fd, &writeSet);
-      if (watcher->fd > maxFd) maxFd = watcher->fd;
-    }
-    if (maxFd < 0) break;
-
-    int ready = select(maxFd + 1, &readSet, &writeSet, NULL, NULL);
-    if (ready < 0) break;
-    if (ready == 0) continue;
-
-    /* Collect the ready watchers first: handlers may add/remove descriptors. */
-    for (int i = 0; i < xt_loop_watcher_count; i++) {
-      xt_loop_watcher *watcher = &xt_loop_watchers[i];
-      if (!watcher->active) continue;
-      int events = 0;
-      if ((watcher->events & XT_IO_READ) && FD_ISSET(watcher->fd, &readSet)) events |= XT_IO_READ;
-      if ((watcher->events & XT_IO_WRITE) && FD_ISSET(watcher->fd, &writeSet)) events |= XT_IO_WRITE;
-      if (events) watcher->handler(watcher->userdata, events);
-    }
-    xt_drain_microtasks();
+    if (xt_loop_poll(-1) < 0) break;
   }
 }
 

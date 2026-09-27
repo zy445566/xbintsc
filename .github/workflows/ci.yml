@@ -253,6 +253,20 @@ jobs:
       - name: Run the Rust native extension example
         run: npx tsx src/cli/main.ts run examples/extensions/rust/demo.ts --ext-native examples/extensions/rust/xbintsc.manifest.json --out build/examples
 
+      # The GUI engine statically links SDL3 + FreeType + HarfBuzz into
+      # `runtime/lib/<os>-<arch>/gui.a`; building it compiles those libraries
+      # from source, so it is slower. It is provisional until the per-platform
+      # archives are validated in CI: Windows still needs the MSVC toolchain
+      # (and D3D12/DXIL), and headless Linux needs a software Vulkan driver to
+      # run the example. `continue-on-error` keeps the build green meanwhile.
+      - name: Build the GUI archive and run the GUI example
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          npm run gui
+          XT_GUI_AUTOCLOSE_MS=1500 npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui --out build/examples
+
   self-host:
     name: Self-host (${{ matrix.os }})
     if: github.event_name != 'pull_request'
@@ -400,6 +414,14 @@ jobs:
 
       - name: Build the prebuilt runtime archives
         run: npm run runtime
+
+      # Best effort: `package-release` copies all of `runtime/`, so a `gui.a`
+      # built here is shipped automatically. It is skipped where the archive
+      # cannot be produced yet (see the compile-examples job).
+      - name: Build the GUI archive (optional)
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        run: npm run gui
 
       - name: Assemble the release archive
         run: npm run package-release

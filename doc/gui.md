@@ -362,6 +362,8 @@ This keeps network I/O, timers and `await` working inside a GUI program.
   convention as `core.a`), statically bundling all three.
 - `src/extensions/gui/index.ts` exposes the archive through `nativeObjects()`
   and the OS frameworks through `linkerFlags()`.
+- CI builds `gui.a` before assembling the release archive so it ships inside
+  `runtime/lib/<slug>/` (the release tarball copies the whole `runtime/` tree).
 - The existing cache fingerprint already hashes `nativeObjects()` contents, so
   rebuilding `gui.a` invalidates cached binaries automatically.
 
@@ -399,7 +401,8 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
      layout (`text.*`, `measureText`/`fontMetrics`).
    - **M4b-2 — glyph rendering** ✅ FreeType rasterisation, a shared shelf-packed
      glyph atlas, textured text quads in the display list and HiDPI-aware raster
-     scaling. Gradients remain.5. **M5 — input + events** ✅
+     scaling. Gradients remain.
+5. **M5 — input + events** ✅
    - hit testing (`LayoutTree::hitTest`), pointer/wheel/keyboard events delivered
      to TS handlers with a payload, `:hover`/`:focus` stateful matching and
      restyle (`css.*`, `style.*`, `document.*`, `gui.cpp`), plus the
@@ -410,6 +413,14 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
    - **M6b — transitions/animations** ✅ `transition` shorthand + longhands,
      animated `background-color`/`color`/`border-color`/`border-radius`, retargeting
      and `win.advance(ms)`. `@keyframes` remain.
+7. **M7 — CI & releases** 🚧 a provisional build of `gui.a` (and a headless
+   `XT_GUI_AUTOCLOSE_MS` run of the example) is wired into the `compile-examples`
+   job on Linux and macOS, and the `package` job builds the archive before
+   assembling the release so it ships inside the existing runtime archive
+   (`package-release` copies all of `runtime/`). Both steps are
+   `continue-on-error` while they are validated in CI. Still open: the MSVC
+   archive and D3D12/DXIL on Windows, the Linux X11/Wayland build headers and a
+   software Vulkan driver for headless runs.
 7. **M7 — CI builds `gui.a` per platform and attaches it to releases.**
 
 ## Progress log

@@ -84,7 +84,8 @@
 | `AggregateError` 构造器 | ✓ `new AggregateError(errors, message)`；`Promise.any` 现以其作为 rejection |
 | 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | ✓ 数组、字符串、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象均可在 `for...of` / 展开中使用 |
 | 生成器（`function*`、`yield`、`yield*`、`next`/`throw`/`return`） | ✓ 基于有栈协程实现；支持 `for...of`、展开与委托。`return()` 直接结束，不执行 `finally` |
-| 定时器 / I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
+| 定时器 | ✓ 核心事件循环提供 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`（返回数字 id，无 `Timeout` 对象；无 `setImmediate` / `queueMicrotask`） |
+| I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
 
 ---
 
@@ -177,7 +178,7 @@
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | bump arena 永不释放，无 GC；长生命周期程序内存持续增长 |
 | 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 报告声明的 arity，但调用不做校验 |
-| `async` / `await` | **同步微任务模型**：`await` 在已 settle 的 promise 上同步继续；无真正的事件循环，无法等待定时器 / I/O |
+| `async` / `await` | **同步微任务模型**：`await` 在已 settle 的 promise 上同步继续。定时器与套接字仅在程序主体执行完后由事件循环运行，因此无法等待由定时器回调 settle 的 promise |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
 | `Error.stack` | 未捕获 |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见第 4 节） |

@@ -64,7 +64,7 @@ src/extensions/node/           runtime/ext_node/
                                     worker_threads/worker_threads.c
 ```
 
-- Core event loop: `runtime/xt_loop.c` (a `select(2)` reactor). The generated module's `main` calls `xt_run_event_loop()` after draining microtasks; it returns immediately when no fds are registered, so pure-computation programs are unaffected.
+- Core event loop: `runtime/xt_loop.c` (a `select(2)` reactor). The generated module's `main` calls `xt_run_event_loop()` after draining microtasks; it returns immediately when no fds or timers are registered, so pure-computation programs are unaffected.
 
 - The `NodeModule` interface:
   - `name`: the module name (e.g. `fs`)
@@ -185,9 +185,10 @@ try {
 
 ### 2.6 Deviations from Node
 
-- **No asynchronous I/O scheduler** (the event loop is a `select(2)` reactor with
-  no timers), so the callback-style `fs` functions (`readFile`, `writeFile`,
-  `open`, …) are *not* provided; use `fs/promises` or the `*Sync` forms.
+- **No asynchronous I/O scheduler** (the event loop is a `select(2)` reactor
+  with timers and sockets but no callback-style `fs` backend), so the
+  callback-style `fs` functions (`readFile`, `writeFile`, `open`, …) are *not*
+  provided; use `fs/promises` or the `*Sync` forms.
 - `watch` / `watchFile` / `unwatchFile` return API-shaped emitter objects whose
   `.close()` / `.on()` methods exist but which **never emit** events.
 - `Dir.read(cb)` / `Dir.close(cb)` invoke the callback **synchronously**.
@@ -579,9 +580,9 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | util | `format` `formatWithOptions` `inspect` `isDeepStrictEqual` `inherits` `deprecate` `promisify`; `isString/isNumber/isBoolean/isUndefined/isNull/isFunction/isArray/isObject/isBuffer/isDate/isRegExp/isPromise/isError` |
 | querystring | `parse`/`decode` `stringify`/`encode` `escape` `unescape` |
 | crypto | `createHash(algorithm)` with `update`/`digest` and the streaming API (`setEncoding`/`write`/`end`/`read`); SHA-1 and SHA-256 |
-| globals | `btoa` / `atob` base64 helpers |
+| globals | `btoa` / `atob` base64 helpers; timers `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` (numeric ids, no `Timeout` object) |
 | url | `pathToFileURL` `fileURLToPath` |
 | fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `cp` `realpath` `stat` `lstat` `statfs` `access` `open` `chmod` `lchmod` `chown` `lchown` `truncate` `utimes` `lutimes` `link` `symlink` `readlink` `mkdtemp` `opendir` `glob` `watch` `constants`; `FileHandle` |
-| Event loop | `xt_loop` (`select` reactor), `xt_run_event_loop()`, `xt_loop_add/update/remove` |
+| Event loop | `xt_loop` (`select` reactor), `xt_run_event_loop()`, `xt_loop_add/update/remove`, timer queue (`xt_set_timeout` / `xt_set_interval` / `xt_clear_*`) |
 | Calling convention | uniform `(argc, argv)` ABI, returns `xt_value` |
 | Linking | after registration, compiles `runtime/ext_node/**` and links it with the runtime |

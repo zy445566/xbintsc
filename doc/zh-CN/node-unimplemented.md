@@ -12,13 +12,13 @@
 
 ## 1. `fs` 模块未实现
 
-`fs` 现在实现了**同步** API 表面（文件、目录、描述符、元数据、链接、`cp`、`glob`、`Dir`、`constants`），`fs/promises` 将每个同步函数包进已 settle 的 Promise（见 [node-implemented.md](node-implemented.md)）。其余仍未实现，因为 xbintsc **没有异步 I/O 调度器 / 事件循环**：
+`fs` 现在实现了**同步** API 表面（文件、目录、描述符、元数据、链接、`cp`、`glob`、`Dir`、`constants`），`fs/promises` 将每个同步函数包进已 settle 的 Promise（见 [node-implemented.md](node-implemented.md)）。其余仍未实现，因为 xbintsc 的 `fs` **没有异步 I/O 调度器后端**（核心事件循环已提供定时器与套接字）：
 
 | 未实现 API | 类别 |
 | --- | --- |
 | `readFile` / `writeFile` / `appendFile` / `open` / `close` / `read` / `write` / `stat` / … | 回调式异步文件操作（`fs/promises` 提供 Promise 形式） |
 | `createReadStream` / `createWriteStream` | 流式读写 |
-| `watch` / `watchFile` | **真正的**文件监听：函数存在但返回对象从不触发（事件循环无定时器/inotify 后端） |
+| `watch` / `watchFile` | **真正的**文件监听：函数存在但返回对象从不触发（无 inotify/kqueue 后端） |
 | `openAsBlob`、`statfs` 回调形式、`rmdir` 的 `maxRetries` / `retryDelay` | 需异步重试的杂项选项 |
 | `glob` 的 `exclude` / `follow`、`cp` 的 `filter` | 选项回调 |
 
@@ -58,7 +58,6 @@
 | `global` / `globalThis` | 无 |
 | `__dirname` / `__filename` | 无 |
 | `require` / `module` / `exports` | 无（xbintsc 无 CommonJS 模块运行时） |
-| `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask` | 无定时器 |
 | 未 `import` 的 `fs.readFileSync(...)` | ✗ 不支持。`fs` 不是全局对象；请先导入（`import fs from "fs"` 或 `import * as fs from "node:fs"`），之后 `fs.readFileSync(...)` 会下降为该模块的运行时符号。 |
 
 Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { readFileSync } from "fs"`、`import path from "path"`、`import { platform } from "node:os"`）。具名与命名空间导入都会解析到扩展模块的运行时入口。
@@ -73,11 +72,12 @@ Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { read
 
 - 核心事件循环 `runtime/xt_loop.c`（`select(2)` 反应堆），`net` / `dgram` / `http` 均构建于其上。
 - `Promise`、`async` / `await` 已可用（见核心文档），`fs/promises` 返回 Promise。
+- 定时器已作为全局函数提供：`setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` 运行在核心反应堆上，并在仍有定时器时保持进程存活。
 - 提供独立的 `EventEmitter`（`events` 模块，同时也是全局构造函数）；流与套接字额外具备内部发射器方法（`on` / `addListener` / `once` / `off` / `removeListener` / `emit`）。
 
 仍未实现：
 
-- 定时器 `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask`。
+- `setImmediate` / `queueMicrotask` 以及 Node 的 `Timeout` 对象（`setTimeout` 返回数字 id）。
 - 真正的异步 I/O 调度：`fs/promises` 实质是同步操作的即时 settle 包装，不会在等待 I/O 时让出。
 - 流与套接字的内置 `once` 等同 `on`（不具「触发一次后移除」语义）；`events` 模块的 `EventEmitter` 实现了真正的 `once`。
 - `net` 的 `connect` 为阻塞式；HTTP 响应要求 `Connection: close`，不做 keep-alive / 分块传输 / 流水线复用。
@@ -135,8 +135,7 @@ Node 模块通过裸名称或 `node:` 前缀的 `import` 引入（`import { read
 未实现（全局/命名空间）：global/globalThis、__dirname、__filename、
                         require/module/exports、fs.readFileSync(...) 命名空间调用
 
-未实现（异步）：定时器 setTimeout / setInterval / setImmediate / queueMicrotask、
-                真正异步 I/O 调度、keep-alive
+未实现（异步）：setImmediate / queueMicrotask、真正异步 I/O 调度、keep-alive
 
 未实现（平台）：Bun 扩展（仅设计示例）
 ```

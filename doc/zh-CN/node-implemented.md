@@ -61,7 +61,7 @@ src/extensions/node/           runtime/ext_node/
                                     worker_threads/worker_threads.c
 ```
 
-- 核心事件循环：`runtime/xt_loop.c`（`select(2)` 反应堆），生成模块的 `main` 在微任务清空后调用 `xt_run_event_loop()`；无可注册 fd 时立即返回，因此纯计算程序不受影响。
+- 核心事件循环：`runtime/xt_loop.c`（`select(2)` 反应堆），生成模块的 `main` 在微任务清空后调用 `xt_run_event_loop()`；无可注册 fd 或定时器时立即返回，因此纯计算程序不受影响。
 
 - `NodeModule` 接口：
   - `name`：模块名（如 `fs`）
@@ -175,7 +175,7 @@ try {
 
 ### 2.6 与 Node 的差异
 
-- **没有异步 I/O 调度器**（事件循环是无定时器的 `select(2)` 反应堆），因此不提供回调式 `fs` 函数（`readFile`、`writeFile`、`open` 等）；请使用 `fs/promises` 或 `*Sync` 形式。
+- **没有异步 I/O 调度器**（事件循环是配有定时器与套接字、但无回调式 `fs` 后端的 `select(2)` 反应堆），因此不提供回调式 `fs` 函数（`readFile`、`writeFile`、`open` 等）；请使用 `fs/promises` 或 `*Sync` 形式。
 - `watch` / `watchFile` / `unwatchFile` 返回 API 形态的发射器对象，`.close()` / `.on()` 方法存在，但**不会触发**事件。
 - `Dir.read(cb)` / `Dir.close(cb)` 会**同步**调用回调。
 - `readFileSync` 默认返回字符串而不是 `Buffer`。
@@ -525,9 +525,9 @@ console.log(stringify({ x: "a b" })); // x=a+b
 | util | `format` `formatWithOptions` `inspect` `isDeepStrictEqual` `inherits` `deprecate` `promisify`；`isString/isNumber/isBoolean/isUndefined/isNull/isFunction/isArray/isObject/isBuffer/isDate/isRegExp/isPromise/isError` |
 | querystring | `parse`/`decode` `stringify`/`encode` `escape` `unescape` |
 | crypto | `createHash(algorithm)`，含 `update`/`digest` 与流式 API（`setEncoding`/`write`/`end`/`read`）；支持 SHA-1 与 SHA-256 |
-| 全局函数 | `btoa` / `atob` base64 辅助函数 |
+| 全局函数 | `btoa` / `atob` base64 辅助函数；定时器 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`（返回数字 id，无 `Timeout` 对象） |
 | url | `pathToFileURL` `fileURLToPath` |
 | fs/promises | `readFile` `writeFile` `appendFile` `mkdir` `readdir` `rm` `unlink` `rmdir` `rename` `copyFile` `cp` `realpath` `stat` `lstat` `statfs` `access` `open` `chmod` `lchmod` `chown` `lchown` `truncate` `utimes` `lutimes` `link` `symlink` `readlink` `mkdtemp` `opendir` `glob` `watch` `constants`；`FileHandle` |
-| 事件循环 | `xt_loop`（`select` 反应堆）、`xt_run_event_loop()`、`xt_loop_add/update/remove` |
+| 事件循环 | `xt_loop`（`select` 反应堆）、`xt_run_event_loop()`、`xt_loop_add/update/remove`、定时器队列（`xt_set_timeout` / `xt_set_interval` / `xt_clear_*`） |
 | 调用约定 | 统一 `(argc, argv)` ABI，返回 `xt_value` |
 | 链接方式 | 注册后编译 `runtime/ext_node/**` 并随运行时一起链接 |

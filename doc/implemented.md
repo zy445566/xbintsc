@@ -224,7 +224,7 @@ Location: `src/codegen/llvm.ts`
   - Closures (arrow functions / function expressions) and capture environment construction
 - Classes: constructor closure + prototype object, stored in an LLVM global (`@class.<id>`); instance fields are initialized before the constructor body; `static` members live in the constructor's property bag; `extends` sets up the prototype chain; `super(...)` is invoked through a hidden `__ctor` on the prototype.
 - `async`: wrapped with `xt_promise_resolve` before returning; `await` calls `xt_await` (drives the microtask queue and raises an exception on rejection).
-- Standard library calls: `console.*`, `Math.*`, `Object.*`, array / string methods all go through `xt_call_method` / `xt_math_call` / `xt_object_*`; `JSON`/`Date`/`Map`/`Set`/`RegExp`/`Promise` statics and constructors go through their `xt_*` functions; global functions (`parseInt` etc.) go through `xt_parse_int` etc.
+- Standard library calls: `console.*`, `Math.*`, `Object.*`, array / string methods all go through `xt_call_method` / `xt_math_call` / `xt_object_*`; `JSON`/`Date`/`Map`/`Set`/`RegExp`/`Promise` statics and constructors go through their `xt_*` functions; global functions (`parseInt`, `setTimeout`, etc.) go through `xt_parse_int`, `xt_set_timeout`, etc.
 - Global string pool (`@.str.N` private constants, UTF-8 escaped).
 - Builtin calls: `console.log` / `info` / `warn` / `error`, `Math.*`, `Object.*`, array / string methods, global functions, extension builtins (uniform `(argc, argv)` ABI).
 - `main` entry point (returns 0, calls the module function, and runs `xt_drain_microtasks` before returning).

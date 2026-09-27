@@ -301,6 +301,10 @@ XT_BUILTIN_TRAMPOLINE(xt_builtin_value_encodeURIComponent, xt_encode_uri_compone
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_encodeURI, xt_encode_uri)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_decodeURIComponent, xt_decode_uri_component)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_decodeURI, xt_decode_uri)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_setTimeout, xt_set_timeout)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_clearTimeout, xt_clear_timeout)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_setInterval, xt_set_interval)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_clearInterval, xt_clear_interval)
 
 xt_value xt_in(xt_value key, xt_value value) {
   if (XT_IS_OBJECT(value)) return xt_object_has(value, key);

@@ -113,7 +113,8 @@ None known at the expression level.
 | `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
 | Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | ✓ arrays, strings, `Map`, `Set`, generators and any object exposing `[Symbol.iterator]()` are iterable in `for...of` / spread |
 | Generators (`function*`, `yield`, `yield*`, `next`/`throw`/`return`) | ✓ implemented with stackful coroutines; `for...of`, spread and delegation supported. `return()` completes without running `finally` |
-| Timers / I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
+| Timers | ✓ `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` on the core event loop (numeric ids, no `Timeout` object; no `setImmediate` / `queueMicrotask`) |
+| I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
 
 ---
 
@@ -210,7 +211,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Bump arena never frees; no GC; long-lived programs grow continuously |
 | Function `arity` / argument count | No argument count validation; `fn.length` reports the declared arity but calls are never checked against it |
-| `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously; no real event loop, so timers / I/O cannot be awaited |
+| `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously. Timers and sockets run on the event loop only after the program body, so a promise settled from a timer callback cannot be awaited |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
 | `Error.stack` | Not captured |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see section 4) |

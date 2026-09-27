@@ -293,6 +293,73 @@ static xt_value win_off(xt_value self, xt_value env, int32_t argc, xt_value *arg
   return self;
 }
 
+/* -- input diagnostics ---------------------------------------------------- */
+
+static double xt_gui_number_or(xt_value value, double fallback) {
+  return XT_IS_NUMBER(value) ? xt_to_number(value) : fallback;
+}
+
+/** Test/debug hook: CSS-like descriptor of the deepest element at (x, y). */
+static xt_value win_hit_test(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || win->document == nullptr || argc < 2) return xt_string_from_cstr("");
+  float x = (float)xt_to_number(xt_arg(argc, argv, 0));
+  float y = (float)xt_to_number(xt_arg(argc, argv, 1));
+  std::string target = xt_gui_hit_test(win, x, y);
+  return xt_string_from_cstr(target.c_str());
+}
+
+/** Test/debug hook: synthesise an input event and deliver it to handlers.
+ * `win.sendEvent("click", { x, y, button, clicks })`,
+ * `win.sendEvent("wheel", { x, y, deltaX, deltaY })` or
+ * `win.sendEvent("keydown", { key, code })`. */
+static xt_value win_send_event(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || argc < 1) return XT_FALSE;
+  const char *type = xt_string_data(xt_to_string(xt_arg(argc, argv, 0)));
+  if (type == nullptr) return XT_FALSE;
+  xt_value options = xt_arg(argc, argv, 1);
+  double x = 0;
+  double y = 0;
+  if (XT_IS_OBJECT(options)) {
+    x = xt_gui_number_or(xt_object_get_cstr(options, "x"), 0);
+    y = xt_gui_number_or(xt_object_get_cstr(options, "y"), 0);
+  }
+  std::string name(type);
+  if (name == "wheel") {
+    double delta_x = 0;
+    double delta_y = 0;
+    if (XT_IS_OBJECT(options)) {
+      delta_x = xt_gui_number_or(xt_object_get_cstr(options, "deltaX"), 0);
+      delta_y = xt_gui_number_or(xt_object_get_cstr(options, "deltaY"), 0);
+    }
+    xt_gui_dispatch_wheel(win, (float)x, (float)y, (float)delta_x, (float)delta_y);
+    return XT_TRUE;
+  }
+  if (name == "keydown" || name == "keyup") {
+    const char *key = "";
+    const char *code = "";
+    if (XT_IS_OBJECT(options)) {
+      xt_value key_value = xt_object_get_cstr(options, "key");
+      xt_value code_value = xt_object_get_cstr(options, "code");
+      if (XT_IS_STRING(key_value)) key = xt_string_data(key_value);
+      if (XT_IS_STRING(code_value)) code = xt_string_data(code_value);
+    }
+    xt_gui_dispatch_key(win, type, key, code);
+    return XT_TRUE;
+  }
+  int button = -1;
+  int clicks = 0;
+  if (XT_IS_OBJECT(options)) {
+    button = (int)xt_gui_number_or(xt_object_get_cstr(options, "button"), -1);
+    clicks = (int)xt_gui_number_or(xt_object_get_cstr(options, "clicks"), 0);
+  }
+  xt_gui_dispatch_pointer(win, type, (float)x, (float)y, button, clicks);
+  return XT_TRUE;
+}
+
 /* -- prototype ------------------------------------------------------------ */
 
 static void define_method(xt_value proto, const char *name, void *fn) {
@@ -320,6 +387,8 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "isOpen", (void *)win_is_open);
   define_method(proto, "on", (void *)win_on);
   define_method(proto, "off", (void *)win_off);
+  define_method(proto, "hitTest", (void *)win_hit_test);
+  define_method(proto, "sendEvent", (void *)win_send_event);
   g_window_proto = proto;
   return proto;
 }

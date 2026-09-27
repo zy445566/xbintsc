@@ -62,6 +62,10 @@ std::unique_ptr<Node> xt_html_parse(const std::string &html);
 /** Serialize a subtree; used by diagnostics and tests. */
 std::string xt_dom_to_string(const Node *node);
 
+/** A short CSS-like descriptor for a node, e.g. `div#main.card` (events and
+ * diagnostics). Text/document nodes use `#text` / `#document`. */
+std::string xt_dom_describe(const Node *node);
+
 } // namespace xtgui
 
 #endif /* XT_GUI_DOM_H */

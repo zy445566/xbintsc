@@ -24,6 +24,8 @@ void XtDocument::collectStyleText(const Node *node, std::string *out) const {
 
 void XtDocument::load(const std::string &html, float viewportWidth, float viewportHeight) {
   root_ = xt_html_parse(html);
+  hover_ = nullptr;
+  focus_ = nullptr;
   std::string css;
   collectStyleText(root_.get(), &css);
   sheet_ = xt_css_parse_stylesheet(css);
@@ -34,9 +36,26 @@ void XtDocument::restyle(float viewportWidth, float viewportHeight) {
   viewportWidth_ = viewportWidth;
   viewportHeight_ = viewportHeight;
   if (root_ != nullptr) {
-    xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight);
+    MatchState state;
+    state.hover = hover_;
+    state.focus = focus_;
+    xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight, state);
     layout_.compute(root_.get(), styles_, viewportWidth, viewportHeight);
   }
+}
+
+bool XtDocument::setHover(const Node *node) {
+  if (hover_ == node) return false;
+  hover_ = node;
+  restyle(viewportWidth_, viewportHeight_);
+  return true;
+}
+
+bool XtDocument::setFocus(const Node *node) {
+  if (focus_ == node) return false;
+  focus_ = node;
+  restyle(viewportWidth_, viewportHeight_);
+  return true;
 }
 
 const XtStyle *XtDocument::styleOf(const Node *node) const {

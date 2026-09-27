@@ -1,12 +1,13 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M4b complete** — HTML parsing, CSS selector matching, the cascade,
+Status: **M5 complete** — HTML parsing, CSS selector matching, the cascade,
 computed styles and layout (block, inline and Flexbox) are in place, and the
 engine *paints*: it builds a display list of rectangles and shaped text runs and
-renders them through SDL_GPU. The HarfBuzz + FreeType text stack drives real
-metrics and a glyph atlas. This document records the locked decisions, the
-architecture, the milestone plan and the current progress of a cross-platform
-GUI extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
+renders them through SDL_GPU. Input events (mouse, wheel, keyboard) are hit
+tested and delivered to native TS handlers, and `:hover`/`:focus` are matched
+dynamically. This document records the locked decisions, the architecture, the
+milestone plan and the current progress of a cross-platform GUI extension that
+renders an HTML/CSS UI with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -102,7 +103,26 @@ run();                                 // drives the main loop until all windows
 
 Methods implemented on a window handle: `setTitle` / `setSize` / `loadHTML` /
 `getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`. Events emitted:
-`ready` (after the first presented frame), `load` and `close`.
+`ready` (after the first presented frame), `load`, `close`, and the input events
+`mousemove`, `mousedown`, `mouseup`, `click`, `wheel`, `keydown`, `keyup`.
+
+Input handlers receive a single payload object (lifecycle handlers receive none):
+
+```ts
+win.on("click", (e) => console.log(e.x, e.y, e.button, e.target));
+win.on("wheel", (e) => console.log(e.deltaX, e.deltaY));
+win.on("keydown", (e) => console.log(e.key, e.code, e.ctrl, e.shift, e.alt, e.meta));
+```
+
+| Field | Events | Meaning |
+| --- | --- | --- |
+| `x`, `y` / `clientX`, `clientY` | pointer, wheel | viewport-relative logical pixels |
+| `button` | pointer | `0` left, `1` middle, `2` right (`-1` for move) |
+| `clicks` | pointer | click count reported by the OS |
+| `deltaX`, `deltaY` | wheel | scroll amount (`deltaY` positive = down) |
+| `key`, `code` | keyboard | key name and physical scancode name |
+| `repeat`, `ctrl`, `shift`, `alt`, `meta` | keyboard | modifiers |
+| `target` | pointer, wheel | deepest element under the point as a CSS-like descriptor (`div#main.card`), or absent |
 
 ### Implemented HTML/CSS subset (M3a)
 
@@ -116,7 +136,8 @@ close rules (`li`, `dt`/`dd`, `option`, `p`, headings, table cells/rows).
 `.class`, `#id`, attribute (`=`, `~=`, `|=`, `^=`, `$=`, `*=`), the four
 combinators (descendant, child, adjacent and general sibling) and the
 pseudo-classes `:first-child`, `:last-child`, `:only-child`, `:empty`,
-`:root`, `:not(...)`, `:nth-child(an+b)`, `:disabled`, `:checked`. Values:
+`:root`, `:not(...)`, `:nth-child(an+b)`, `:disabled`, `:checked`, plus the
+stateful `:hover` and `:focus` (see *Implemented input*). Values:
 lengths (`px`, `%`, `em`, `rem`, `vw`, `vh`, `pt`, `pc`, `in`, `cm`, `mm`, `q`),
 colors (hex, `rgb()`/`rgba()`, a named subset), numbers, keywords and shorthands
 (`margin`/`padding`/`border`/`flex`).
@@ -143,6 +164,8 @@ win.paintCount()                       // number of shapes in the display list
 win.paintList()                        // serialized display list (debugging)
 win.measureText(text, fontSize?, family?)  // shaped advance width in pixels
 win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
+win.hitTest(x, y)                      // deepest element descriptor, or ""
+win.sendEvent(type, options?)          // synthesise input (testing)
 ```
 
 They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
@@ -205,6 +228,24 @@ SDL_GPU graphics pipelines:
 The window background (`setBackground`) is the render-pass clear colour.
 
 Still to do in M4: gradients.
+
+### Implemented input (M5)
+
+`LayoutTree::hitTest` returns the deepest box containing a point (probing later
+siblings first so the topmost element wins), and `xt_dom_describe` turns the
+element into the `div#id.class` descriptor carried by event payloads.
+
+- SDL pointer/wheel/key events are routed to the owning window, hit tested, and
+delivered to the handlers registered with `on`. `mousedown` also moves focus.
+- `:hover` matches the hovered element **and its ancestors** (so hovering a child
+  lights up its parents); `:focus` matches the focused element. When either
+  changes, `XtDocument::setHover`/`setFocus` recompute styles and layout and mark
+  the window's geometry dirty, so the change is painted on the next frame.
+- `win.hitTest(x, y)` and `win.sendEvent(type, options)` expose hit testing and
+  synthetic input so the whole path is testable headlessly (the e2e suite drives
+  clicks, wheels and keys without a real mouse).
+
+Still to do for full input: text selection, drag, IME and clipboard.
 
 ### Implemented text stack (M4b)
 
@@ -317,8 +358,11 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
    - **M4b-2 — glyph rendering** ✅ FreeType rasterisation, a shared shelf-packed
      glyph atlas, textured text quads in the display list and HiDPI-aware raster
      scaling. Gradients remain.
-5. **M5 — input + events**
-   - hit testing, `:hover`/`:focus`, click/scroll/keyboard → TS handlers.
+5. **M5 — input + events** ✅
+   - hit testing (`LayoutTree::hitTest`), pointer/wheel/keyboard events delivered
+     to TS handlers with a payload, `:hover`/`:focus` stateful matching and
+     restyle (`css.*`, `style.*`, `document.*`, `gui.cpp`), plus the
+     `hitTest`/`sendEvent` test hooks.
 6. **M6 — images, then CSS transitions/animations.**
 7. **M7 — CI builds `gui.a` per platform and attaches it to releases.**
 
@@ -340,6 +384,9 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
 - **M4b-2** ✅ glyph atlas + textured text pipeline in `renderer.*`, shaped text
   runs in `paint.*`, `xt_text_shape_run`/`xt_text_rasterize` in `text.*`, HiDPI
   raster scaling, e2e coverage.
+- **M5** ✅ hit testing + input events (`LayoutTree::hitTest`, `xt_dom_describe`,
+  `xt_gui_dispatch_*`), `:hover`/`:focus` in the matcher with dynamic restyle,
+  `hitTest`/`sendEvent` test hooks, e2e coverage.
 
 ## Open questions
 

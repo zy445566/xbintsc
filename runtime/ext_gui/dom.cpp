@@ -449,4 +449,24 @@ std::string xt_dom_to_string(const Node *node) {
   return out;
 }
 
+std::string xt_dom_describe(const Node *node) {
+  if (node == nullptr) return "";
+  if (node->isText()) return "#text";
+  if (!node->isElement()) return "#document";
+  std::string out = node->tag;
+  const std::string *id = node->attr("id");
+  if (id != nullptr && !id->empty()) out += "#" + *id;
+  const std::string *classes = node->attr("class");
+  if (classes != nullptr) {
+    size_t index = 0;
+    while (index < classes->size()) {
+      while (index < classes->size() && std::isspace((unsigned char)(*classes)[index])) index++;
+      size_t start = index;
+      while (index < classes->size() && !std::isspace((unsigned char)(*classes)[index])) index++;
+      if (index > start) out += "." + classes->substr(start, index - start);
+    }
+  }
+  return out;
+}
+
 }  // namespace xtgui

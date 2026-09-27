@@ -701,6 +701,26 @@ const LayoutBox *LayoutTree::find(const Node *node) const {
   return it == index_.end() ? nullptr : it->second;
 }
 
+namespace {
+
+const LayoutBox *hitTestBox(const LayoutBox *box, float x, float y) {
+  if (box == nullptr || box->display == Display::None) return nullptr;
+  /* Later siblings paint on top, so probe them first. */
+  for (auto it = box->children.rbegin(); it != box->children.rend(); ++it) {
+    if (const LayoutBox *hit = hitTestBox(it->get(), x, y)) return hit;
+  }
+  if (x >= box->x && x < box->x + box->width && y >= box->y && y < box->y + box->height) {
+    return box;
+  }
+  return nullptr;
+}
+
+}  // namespace
+
+const LayoutBox *LayoutTree::hitTest(float x, float y) const {
+  return hitTestBox(root_.get(), x, y);
+}
+
 std::string LayoutTree::dump() const {
   return root_ == nullptr ? std::string() : dumpBox(root_.get(), 0);
 }

@@ -26,6 +26,12 @@ class XtDocument {
   void load(const std::string &html, float viewportWidth, float viewportHeight);
   /** Recompute styles (e.g. after the viewport size changed). */
   void restyle(float viewportWidth, float viewportHeight);
+  /** Set the hovered/focused element; restyles when it changed. Returns true
+   * when the dynamic state (and therefore the styles) changed. */
+  bool setHover(const Node *node);
+  bool setFocus(const Node *node);
+  const Node *hover() const { return hover_; }
+  const Node *focus() const { return focus_; }
 
   const Node *root() const { return root_.get(); }
   const StyleSheet &sheet() const { return sheet_; }
@@ -46,6 +52,8 @@ class XtDocument {
   StyleSheet sheet_;
   std::unordered_map<const Node *, XtStyle> styles_;
   LayoutTree layout_;
+  const Node *hover_ = nullptr;
+  const Node *focus_ = nullptr;
   float viewportWidth_ = 0.0f;
   float viewportHeight_ = 0.0f;
 };

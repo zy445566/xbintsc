@@ -25,6 +25,8 @@ const INDEX_HTML = `
       .card h1 { font-size: 1.5em; color: rgb(20, 22, 28); }
       #title { font-weight: bold; }
       .card > .row { margin-top: 4px; }
+      .card:hover { background: #f0f4ff; }
+      #title:focus { color: #2b6cff; }
     </style>
   </head>
   <body>
@@ -53,6 +55,12 @@ win.on("ready", () => {
   console.log("paint shapes   =", win.paintCount());
   console.log(win.paintList().split("\n").filter(Boolean).slice(0, 3).join("\n"));
 });
+
+// Input events carry a payload (coordinates + the deepest element, as a
+// CSS-like descriptor). Pointer input also drives `:hover` / `:focus`.
+win.on("mousemove", (event: any) => console.log("hover:", event.target));
+win.on("click", (event: any) => console.log("click:", event.x, event.y, event.target));
+win.on("keydown", (event: any) => console.log("key:", event.key, "ctrl=", event.ctrl));
 
 win.on("close", () => {
   console.log("gui closed");

@@ -58,10 +58,21 @@ xt_value xt_gui_window_proto(void);
 void xt_gui_quit_window(XtGuiWindow *win);
 /** Deliver `event` (no arguments) to handlers registered with `on`. */
 void xt_gui_emit(XtGuiWindow *win, const char *event);
+/** Deliver `event` with a single `payload` argument (input events). */
+void xt_gui_emit_payload(XtGuiWindow *win, const char *event, xt_value payload);
 /** Acquire a swapchain frame for `win` and clear it (placeholder paint). */
 void xt_gui_render_window(XtGuiWindow *win);
 /** Current logical window size (CSS viewport), in pixels. */
 void xt_gui_window_viewport(XtGuiWindow *win, float *width, float *height);
+/** CSS-like descriptor of the deepest element at (x, y), or `""` (test/debug). */
+std::string xt_gui_hit_test(XtGuiWindow *win, float x, float y);
+/** Synthesise a pointer event (`mousemove`/`mousedown`/`mouseup`/`click`). */
+void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float y, int button,
+                             int clicks);
+/** Synthesise a wheel event. */
+void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y);
+/** Synthesise a key event (`keydown`/`keyup`). */
+void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code);
 
 #endif /* __cplusplus */
 

@@ -72,11 +72,18 @@ struct StyleSheet {
   std::vector<Rule> rules;
 };
 
+/** Dynamic element state consulted by `:hover` / `:focus` while matching. */
+struct MatchState {
+  const Node *hover = nullptr;
+  const Node *focus = nullptr;
+};
+
 StyleSheet xt_css_parse_stylesheet(const std::string &text);
 std::vector<ComplexSelector> xt_css_parse_selector_list(const std::string &text);
 std::vector<Declaration> xt_css_parse_declarations(const std::string &text);
 
 bool xt_css_match(const Node *node, const ComplexSelector &selector);
+bool xt_css_match(const Node *node, const ComplexSelector &selector, const MatchState &state);
 
 Length xt_css_parse_length(const std::string &value);
 Color xt_css_parse_color(const std::string &value);

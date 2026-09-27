@@ -627,11 +627,20 @@ bool matchesNth(int index, const std::string &expression) {
   return diff <= 0 && (-diff) % (-a) == 0;
 }
 
-bool matchPseudo(const Node *node, const std::string &pseudo) {
+bool isHoverTarget(const Node *node, const Node *hover) {
+  for (const Node *current = hover; current != nullptr; current = current->parent) {
+    if (current == node) return true;
+  }
+  return false;
+}
+
+bool matchPseudo(const Node *node, const std::string &pseudo, const MatchState &state) {
   if (pseudo == "first-child") return node->elementIndex() == 0 && node->elementSiblingCount() > 0;
   if (pseudo == "last-child") return node->elementIndex() == node->elementSiblingCount() - 1;
   if (pseudo == "only-child") return node->elementSiblingCount() == 1;
   if (pseudo == "root") return node->parent != nullptr && node->parent->isDocument();
+  if (pseudo == "hover") return isHoverTarget(node, state.hover);
+  if (pseudo == "focus") return node == state.focus;
   if (pseudo == "empty") {
     for (const std::unique_ptr<Node> &child : node->children) {
       if (child->isElement()) return false;
@@ -661,16 +670,15 @@ bool matchPseudo(const Node *node, const std::string &pseudo) {
       if (!hasClass(node, name)) return true;
     }
     for (const std::string &nested : compound.pseudoClasses) {
-      if (!matchPseudo(node, nested)) return true;
+      if (!matchPseudo(node, nested, state)) return true;
     }
     return false;
   }
-  /* Dynamic pseudo-classes (`:hover`, `:focus`, ...) never match a static
-   * cascade; stateful matching arrives with input handling (M5). */
+  /* Truly unknown / unsupported pseudo-classes never match. */
   return false;
 }
 
-bool matchCompound(const Node *node, const CompoundSelector &compound) {
+bool matchCompound(const Node *node, const CompoundSelector &compound, const MatchState &state) {
   if (!node->isElement()) return false;
   if (!compound.tag.empty() && node->tag != compound.tag) return false;
   if (!compound.id.empty()) {
@@ -684,21 +692,23 @@ bool matchCompound(const Node *node, const CompoundSelector &compound) {
     if (!matchAttribute(node, attr)) return false;
   }
   for (const std::string &pseudo : compound.pseudoClasses) {
-    if (!matchPseudo(node, pseudo)) return false;
+    if (!matchPseudo(node, pseudo, state)) return false;
   }
   return true;
 }
 
-bool matchAt(const Node *node, const ComplexSelector &selector, size_t index) {
-  if (!matchCompound(node, selector.compounds[index])) return false;
+bool matchAt(const Node *node, const ComplexSelector &selector, size_t index,
+             const MatchState &state) {
+  if (!matchCompound(node, selector.compounds[index], state)) return false;
   if (index == 0) return true;
   Combinator combinator = selector.combinators[index - 1];
   if (combinator == Combinator::Child) {
-    return node->parent != nullptr && node->parent->isElement() && matchAt(node->parent, selector, index - 1);
+    return node->parent != nullptr && node->parent->isElement() &&
+           matchAt(node->parent, selector, index - 1, state);
   }
   if (combinator == Combinator::Descendant) {
     for (const Node *parent = node->parent; parent != nullptr; parent = parent->parent) {
-      if (parent->isElement() && matchAt(parent, selector, index - 1)) return true;
+      if (parent->isElement() && matchAt(parent, selector, index - 1, state)) return true;
     }
     return false;
   }
@@ -709,12 +719,12 @@ bool matchAt(const Node *node, const ComplexSelector &selector, size_t index) {
       if (sibling.get() == node) break;
       if (sibling->isElement()) previous = sibling.get();
     }
-    return previous != nullptr && matchAt(previous, selector, index - 1);
+    return previous != nullptr && matchAt(previous, selector, index - 1, state);
   }
   /* General sibling combinator (`~`): any previous element sibling. */
   for (const std::unique_ptr<Node> &sibling : node->parent->children) {
     if (sibling.get() == node) break;
-    if (sibling->isElement() && matchAt(sibling.get(), selector, index - 1)) return true;
+    if (sibling->isElement() && matchAt(sibling.get(), selector, index - 1, state)) return true;
   }
   return false;
 }
@@ -722,8 +732,12 @@ bool matchAt(const Node *node, const ComplexSelector &selector, size_t index) {
 }  // namespace
 
 bool xt_css_match(const Node *node, const ComplexSelector &selector) {
+  return xt_css_match(node, selector, MatchState());
+}
+
+bool xt_css_match(const Node *node, const ComplexSelector &selector, const MatchState &state) {
   if (selector.compounds.empty()) return false;
-  return matchAt(node, selector, selector.compounds.size() - 1);
+  return matchAt(node, selector, selector.compounds.size() - 1, state);
 }
 
 }  // namespace xtgui

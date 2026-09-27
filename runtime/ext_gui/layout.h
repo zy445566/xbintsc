@@ -68,6 +68,8 @@ class LayoutTree {
 
   const LayoutBox *root() const { return root_.get(); }
   const LayoutBox *find(const Node *node) const;
+  /** Deepest box whose border box contains the viewport-relative point. */
+  const LayoutBox *hitTest(float x, float y) const;
   /** Human-readable geometry dump, for diagnostics/tests. */
   std::string dump() const;
 

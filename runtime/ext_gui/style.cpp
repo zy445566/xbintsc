@@ -488,7 +488,8 @@ static void finalizeStyle(XtStyle *style, const ApplyContext &context) {
 }
 
 void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &sheet,
-                 std::unordered_map<const Node *, XtStyle> &out, const ApplyContext &context) {
+                 std::unordered_map<const Node *, XtStyle> &out, const ApplyContext &context,
+                 const MatchState &state) {
   const XtStyle *childParent = parent;
   if (node->isElement()) {
     XtStyle style = xt_style_initial();
@@ -514,7 +515,7 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
     std::vector<Candidate> candidates;
     for (const Rule &rule : sheet.rules) {
       for (const ComplexSelector &selector : rule.selectors) {
-        if (!xt_css_match(node, selector)) continue;
+        if (!xt_css_match(node, selector, state)) continue;
         for (const Declaration &declaration : rule.declarations) {
           candidates.push_back({declaration.important ? 1 : 0, selector.specificity, rule.order, &declaration});
         }
@@ -538,7 +539,7 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
     childParent = &out[node];
   }
   for (const std::unique_ptr<Node> &child : node->children) {
-    computeNode(child.get(), childParent, sheet, out, context);
+    computeNode(child.get(), childParent, sheet, out, context, state);
   }
 }
 
@@ -546,12 +547,12 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
 
 void xt_style_compute(const Node *root, const StyleSheet &sheet,
                       std::unordered_map<const Node *, XtStyle> &out, float viewportWidth,
-                      float viewportHeight) {
+                      float viewportHeight, const MatchState &state) {
   out.clear();
   ApplyContext context;
   context.viewportWidth = viewportWidth;
   context.viewportHeight = viewportHeight;
-  computeNode(root, nullptr, sheet, out, context);
+  computeNode(root, nullptr, sheet, out, context, state);
 }
 
 /* -- diagnostics ---------------------------------------------------------- */

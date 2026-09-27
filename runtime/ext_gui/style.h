@@ -90,10 +90,11 @@ struct XtStyle {
 /** Initial (non-inherited) style; inherited fields are overridden from the parent. */
 XtStyle xt_style_initial();
 
-/** Cascade UA + author + inline declarations into `out` for the document root. */
+/** Cascade UA + author + inline declarations into `out` for the document root.
+ * `state` supplies `:hover`/`:focus` for dynamic selector matching. */
 void xt_style_compute(const Node *root, const StyleSheet &sheet,
                       std::unordered_map<const Node *, XtStyle> &out, float viewportWidth,
-                      float viewportHeight);
+                      float viewportHeight, const MatchState &state = MatchState());
 
 /** Format a computed property for diagnostics/tests (`computedStyle(sel, prop)`). */
 std::string xt_style_property_to_string(const XtStyle &style, const std::string &property);

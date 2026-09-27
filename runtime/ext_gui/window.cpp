@@ -106,6 +106,38 @@ static xt_value win_query_count(xt_value self, xt_value env, int32_t argc, xt_va
   return xt_number((double)win->document->querySelectorAll(selector).size());
 }
 
+/** Diagnostic/test hook: laid-out border box of the first match of `selector`,
+ * as `{ x, y, width, height }` (viewport-relative), or `undefined`. */
+static xt_value win_get_bounding_rect(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || win->document == nullptr || argc < 1) return XT_UNDEFINED;
+  xt_value selectorValue = xt_to_string(xt_arg(argc, argv, 0));
+  const char *selector = xt_string_data(selectorValue);
+  if (selector == nullptr) return XT_UNDEFINED;
+  const xtgui::Node *node = win->document->querySelector(selector);
+  if (node == nullptr) return XT_UNDEFINED;
+  const xtgui::LayoutBox *box = win->document->boxOf(node);
+  if (box == nullptr) return XT_UNDEFINED;
+  xt_value object = xt_object_new();
+  xt_object_set(object, xt_string_from_cstr("x"), xt_number(box->x));
+  xt_object_set(object, xt_string_from_cstr("y"), xt_number(box->y));
+  xt_object_set(object, xt_string_from_cstr("width"), xt_number(box->width));
+  xt_object_set(object, xt_string_from_cstr("height"), xt_number(box->height));
+  return object;
+}
+
+/** Diagnostic/test hook: serialized layout box tree. */
+static xt_value win_layout_tree(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || win->document == nullptr) return xt_string_from_cstr("");
+  std::string text = win->document->layout().dump();
+  return xt_string_from_cstr(text.c_str());
+}
+
 static xt_value win_set_background(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   XtGuiWindow *win = xt_gui_window_from_this(self);
@@ -191,6 +223,8 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "computedStyle", (void *)win_computed_style);
   define_method(proto, "documentTree", (void *)win_document_tree);
   define_method(proto, "queryCount", (void *)win_query_count);
+  define_method(proto, "getBoundingClientRect", (void *)win_get_bounding_rect);
+  define_method(proto, "layoutTree", (void *)win_layout_tree);
   define_method(proto, "setBackground", (void *)win_set_background);
   define_method(proto, "close", (void *)win_close);
   define_method(proto, "isOpen", (void *)win_is_open);

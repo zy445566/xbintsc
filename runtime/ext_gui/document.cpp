@@ -33,13 +33,18 @@ void XtDocument::load(const std::string &html, float viewportWidth, float viewpo
 void XtDocument::restyle(float viewportWidth, float viewportHeight) {
   viewportWidth_ = viewportWidth;
   viewportHeight_ = viewportHeight;
-  if (root_ != nullptr) xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight);
+  if (root_ != nullptr) {
+    xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight);
+    layout_.compute(root_.get(), styles_, viewportWidth, viewportHeight);
+  }
 }
 
 const XtStyle *XtDocument::styleOf(const Node *node) const {
   auto it = styles_.find(node);
   return (it == styles_.end()) ? nullptr : &it->second;
 }
+
+const LayoutBox *XtDocument::boxOf(const Node *node) const { return layout_.find(node); }
 
 std::vector<const Node *> XtDocument::querySelectorAll(const std::string &selectorText) const {
   std::vector<const Node *> matches;

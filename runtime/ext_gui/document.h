@@ -15,6 +15,7 @@
 
 #include "css.h"
 #include "dom.h"
+#include "layout.h"
 #include "style.h"
 
 namespace xtgui {
@@ -29,6 +30,8 @@ class XtDocument {
   const Node *root() const { return root_.get(); }
   const StyleSheet &sheet() const { return sheet_; }
   const XtStyle *styleOf(const Node *node) const;
+  const LayoutBox *boxOf(const Node *node) const;
+  const LayoutTree &layout() const { return layout_; }
   /** First element matching a CSS selector (a small querySelector). */
   const Node *querySelector(const std::string &selectorText) const;
   /** Elements matching a CSS selector, in document order. */
@@ -42,6 +45,7 @@ class XtDocument {
   std::unique_ptr<Node> root_;
   StyleSheet sheet_;
   std::unordered_map<const Node *, XtStyle> styles_;
+  LayoutTree layout_;
   float viewportWidth_ = 0.0f;
   float viewportHeight_ = 0.0f;
 };

@@ -159,4 +159,55 @@ describe.skipIf(!available)("gui extension", () => {
     expect(value("li-count")).toBe("3");
     expect(value("lead-count")).toBe("1");
   });
+
+  it("lays out block, inline and flex boxes", () => {
+    const { stdout } = compileAndRun(
+      "layout",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #box { width: 200px; height: 100px; padding: 10px; border: 2px solid #000; margin: 5px; }
+        #row { display: flex; width: 300px; gap: 10px; }
+        #row .a { width: 50px; height: 20px; }
+        #row .b { flex: 1; height: 20px; }
+        #wrap { width: 60px; font-size: 10px; }
+      </style></head><body>
+        <div id="box">hello</div>
+        <div id="row"><div class="a"></div><div class="b"></div></div>
+        <div id="wrap">aaaa bbbb cccc dddd</div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "layout", width: 800, height: 600 });
+      win.on("ready", () => {
+        const rect = (selector) => {
+          const r = win.getBoundingClientRect(selector);
+          return r.x + "," + r.y + "," + r.width + "," + r.height;
+        };
+        console.log("box=" + rect("#box"));
+        console.log("a=" + rect("#row .a"));
+        console.log("b=" + rect("#row .b"));
+        console.log("wrap=" + rect("#wrap"));
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const value = (label: string): string => {
+      const line = stdout.split("\n").find((entry) => entry.startsWith(`${label}=`));
+      expect(line, `missing ${label} in:\n${stdout}`).toBeDefined();
+      return line!.slice(label.length + 1).trim();
+    };
+
+    // Border box = content + padding (20) + border (4); margin offsets by 5.
+    expect(value("box")).toBe("5,5,224,124");
+    // Flex row: `.a` keeps 50px, `.b` grows into the remaining 240px after a 10px gap.
+    expect(value("a")).toBe("0,134,50,20");
+    expect(value("b")).toBe("60,134,240,20");
+    // 60px-wide box wraps "aaaa bbbb" / "cccc dddd" onto two 12px-tall lines.
+    expect(value("wrap")).toBe("0,154,60,24");
+  });
 });

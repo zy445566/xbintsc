@@ -1,11 +1,11 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M3a complete** — HTML parsing, CSS selector matching, the cascade and
-computed styles are in place (M2 already opened a GPU-backed SDL3 window with
-lifecycle events). Layout and painting are the next steps. This document records
-the locked decisions, the architecture, the milestone plan and the current
-progress of a cross-platform GUI extension that renders an HTML/CSS UI with its
-own GPU-accelerated engine.
+Status: **M3 complete** — HTML parsing, CSS selector matching, the cascade,
+computed styles and layout (block, inline and Flexbox) are in place (M2 already
+opened a GPU-backed SDL3 window with lifecycle events). Painting is the next
+milestone. This document records the locked decisions, the architecture, the
+milestone plan and the current progress of a cross-platform GUI extension that
+renders an HTML/CSS UI with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -100,21 +100,6 @@ Methods implemented on a window handle: `setTitle` / `setSize` / `loadHTML` /
 `getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`. Events emitted:
 `ready` (after the first presented frame), `load` and `close`.
 
-### Diagnostics (until paint lands in M4)
-
-So the HTML/CSS pipeline is testable before there is a renderer, a window
-handle exposes three read-only hooks:
-
-```ts
-win.computedStyle(selector, property)  // e.g. ("#main", "width") -> "60%"
-win.queryCount(selector)               // number of matching elements
-win.documentTree()                     // serialized DOM (debugging)
-```
-
-They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
-specificity, inheritance and `!important`. They will stay useful afterwards for
-debugging.
-
 ### Implemented HTML/CSS subset (M3a)
 
 **HTML parser** (`runtime/ext_gui/dom.{h,cpp}`): tags/attributes/text,
@@ -139,9 +124,48 @@ then inline `style=""` (highest specificity, but non-`!important` inline loses t
 kept unresolved until layout, except `font-size` (resolved against the *parent*
 font size) and `line-height`.
 
+### Diagnostics (until paint lands in M4)
+
+So the HTML/CSS pipeline is testable before there is a renderer, a window
+handle exposes three read-only hooks:
+
+```ts
+win.computedStyle(selector, property)  // e.g. ("#main", "width") -> "60%"
+win.queryCount(selector)               // number of matching elements
+win.getBoundingClientRect(selector)    // { x, y, width, height } (border box)
+win.documentTree()                     // serialized DOM (debugging)
+win.layoutTree()                       // serialized layout boxes (debugging)
+```
+
+They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
+specificity, inheritance, `!important` and layout geometry. They will stay useful
+afterwards for debugging.
+
+### Implemented layout (M3)
+
+`runtime/ext_gui/layout.{h,cpp}` turns the styled DOM into a `LayoutBox` tree
+with absolute (viewport-relative) geometry:
+
+- **Block flow** — block-level children stack vertically (no margin collapsing
+  yet); `display: none` generates no box; `width: auto` fills the containing
+  block, `height: auto` wraps the content. The box model (margin/padding/border)
+  is resolved, including percentages against the containing block width.
+- **Inline flow** — consecutive inline-level children form an anonymous inline
+  formatting context with greedy, word-based line breaking, `text-align` and
+  `line-height`. A wrapped text box stores one fragment per line. Inline
+  elements get the union of their descendants' geometry; `display: inline-block`
+  is laid out atomically with a shrink-to-fit width. Text metrics are an
+  approximation until the M4 text stack lands (`xt_layout_text_width`).
+- **Flexbox** — single-line `row`/`column` (and the `-reverse` variants) with
+  `gap`, `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and
+  `align-items` (including `stretch` when the cross size is definite).
+
+Not yet implemented: margin collapsing, multi-line flex wrapping, `position`
+offsets (`relative`/`absolute`/`fixed`), `overflow` clipping and floats.
+
 **Document** (`runtime/ext_gui/document.{h,cpp}`): owns the DOM tree, gathers
-`<style>` text into one stylesheet, computes styles for a viewport and offers
-`querySelector`/`querySelectorAll`/`styleOf`.
+`<style>` text into one stylesheet, computes styles and layout for a viewport and
+offers `querySelector`/`querySelectorAll`/`styleOf`/`boxOf`.
 
 Multiple windows fall out of the object model: `createWindow` returns a native
 object handle; each handle owns its own `SDL_Window`/GPU surface and its own DOM
@@ -215,11 +239,12 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
    - SDL3 window, SDL_GPU swapchain, multiple windows, main-loop integration.
    - `createWindow` / `run` / `quit` + `on`/`off` window methods work
      end-to-end (`runtime/ext_gui/`, `scripts/build-gui.ts`).
-3. **M3 — HTML/CSS subset**
+3. **M3 — HTML/CSS subset** ✅
    - **M3a — parse + cascade** ✅ HTML parser, DOM tree, CSS parser, selector
      matching, UA/author/inline cascade, inheritance, computed style
      (`dom.*`, `css.*`, `style.*`, `document.*`).
-   - **M3b — layout** block/inline flow + Flexbox (to do).
+   - **M3b — layout** ✅ block/inline flow + Flexbox (`layout.*`),
+     `getBoundingClientRect`/`layoutTree`.
 4. **M4 — paint + text + display list**
    - display list, rounded rects/gradients/borders, HarfBuzz+FreeType text.
 5. **M5 — input + events**
@@ -234,7 +259,9 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
 - **M3a** ✅ HTML parser (`dom.*`), CSS parser/matcher (`css.*`), cascade and
   computed style (`style.*`), document model (`document.*`),
   `computedStyle`/`queryCount`/`documentTree`, e2e coverage.
-- **M3b** ⏳ layout (block/inline flow + Flexbox).
+- **M3b** ✅ layout (`layout.*`): block flow, inline formatting context with line
+  breaking, single-line Flexbox, `getBoundingClientRect`/`layoutTree`, e2e
+  coverage.
 
 ## Open questions
 

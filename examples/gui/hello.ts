@@ -48,6 +48,8 @@ win.on("ready", () => {
   console.log("row margin-top =", win.computedStyle(".card > .row", "margin-top"));
   console.log("body margin    =", win.computedStyle("body", "margin-top"));
   console.log("card count     =", win.queryCount(".card"));
+  const card = win.getBoundingClientRect(".card");
+  console.log("card rect      =", card.x, card.y, card.width, card.height);
 });
 
 win.on("close", () => {

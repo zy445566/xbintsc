@@ -1,0 +1,9 @@
+#!/bin/sh
+#
+# Bump the patch version on every commit and fold it into that commit.
+# No git tag is created here - release.yml owns tags.
+# Installed via: git config core.hooksPath .githooks
+set -eu
+
+npm version patch --no-git-tag-version --ignore-scripts >/dev/null
+git add package.json package-lock.json

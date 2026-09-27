@@ -40,6 +40,7 @@ struct XtGuiWindow {
   SDL_Window *window;
   xt_value object;
   int open;
+  double last_frame_ms;
   int ready;
   std::string html;
   std::unique_ptr<xtgui::XtDocument> document;

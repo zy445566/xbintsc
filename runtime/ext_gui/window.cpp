@@ -187,6 +187,16 @@ static xt_value win_paint_count(xt_value self, xt_value env, int32_t argc, xt_va
   return xt_number((double)list.rects.size());
 }
 
+/** Diagnostic/test hook: advance the CSS transition clock by `ms`. */
+static xt_value win_advance(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || win->document == nullptr) return XT_UNDEFINED;
+  double ms = argc > 0 ? xt_to_number(xt_arg(argc, argv, 0)) : 0.0;
+  if (win->document->advance(ms)) win->geometry.dirty = 1;
+  return XT_UNDEFINED;
+}
+
 /** Build a `FontSpec` from trailing method arguments: [text], size, family. */
 static xtgui::FontSpec xt_gui_font_spec(int32_t argc, xt_value *argv, int sizeIndex, int familyIndex) {
   xtgui::FontSpec spec;
@@ -381,6 +391,7 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "setBackground", (void *)win_set_background);
   define_method(proto, "paintList", (void *)win_paint_list);
   define_method(proto, "paintCount", (void *)win_paint_count);
+  define_method(proto, "advance", (void *)win_advance);
   define_method(proto, "measureText", (void *)win_measure_text);
   define_method(proto, "fontMetrics", (void *)win_font_metrics);
   define_method(proto, "close", (void *)win_close);

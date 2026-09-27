@@ -271,6 +271,12 @@ void xt_gui_render_window(XtGuiWindow *win) {
   float viewport_height = 0;
   xt_gui_window_viewport(win, &viewport_width, &viewport_height);
 
+  /* Drive CSS transitions. */
+  double now = (double)SDL_GetTicks();
+  double delta = win->last_frame_ms > 0.0 ? now - win->last_frame_ms : 0.0;
+  win->last_frame_ms = now;
+  if (win->document != nullptr && win->document->advance(delta)) win->geometry.dirty = 1;
+
   /* Rebuild the geometry only when the document or viewport changed. */
   bool can_paint = xt_gui_renderer_ensure(g_device, win->window);
   if (can_paint && win->geometry.dirty && win->document != nullptr) {
@@ -371,6 +377,7 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   record->geometry = XtGuiGeometry();
   record->text_geometry = XtGuiGeometry();
   record->image_geometry = XtGuiGeometry();
+  record->last_frame_ms = 0.0;
   record->background[0] = 0.08f;
   record->background[1] = 0.09f;
   record->background[2] = 0.11f;

@@ -21,11 +21,12 @@ const INDEX_HTML = `
         padding: 8px;
         background: #ffffff;
         border-radius: 6px;
+        transition: background-color 250ms ease, border-radius 250ms ease;
       }
       .card h1 { font-size: 1.5em; color: rgb(20, 22, 28); }
       #title { font-weight: bold; }
       .card > .row { margin-top: 4px; }
-      .card:hover { background: #f0f4ff; }
+      .card:hover { background: #f0f4ff; border-radius: 12px; }
       #title:focus { color: #2b6cff; }
     </style>
   </head>

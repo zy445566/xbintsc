@@ -450,6 +450,62 @@ describe.skipIf(!available)("gui extension", () => {
     expect(value("focus-bg")).toBe("rgb(0, 255, 0)"); // :focus wins over :hover
   });
 
+  it("interpolates CSS transitions as the clock advances", () => {
+    const { stdout } = compileAndRun(
+      "transition",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #box {
+          width: 100px; height: 50px; background-color: #000000; color: #888888;
+          border-radius: 0px;
+          transition: background-color 1000ms linear, color 500ms linear, border-radius 1000ms linear;
+        }
+        #box:hover { background-color: #ffffff; color: #0000ff; border-radius: 10px; }
+      </style></head><body>
+        <div id="box">hi</div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "transition", width: 400, height: 300 });
+      win.on("ready", () => {
+        win.sendEvent("mousemove", { x: 50, y: 25 });
+        console.log("start=" + win.computedStyle("#box", "background-color"));
+        win.advance(250);
+        console.log("q1-bg=" + win.computedStyle("#box", "background-color"));
+        console.log("q1-color=" + win.computedStyle("#box", "color"));
+        win.advance(250);
+        console.log("q2-bg=" + win.computedStyle("#box", "background-color"));
+        console.log("q2-color=" + win.computedStyle("#box", "color"));
+        console.log("q2-radius=" + win.computedStyle("#box", "border-radius"));
+        win.advance(500);
+        console.log("end-bg=" + win.computedStyle("#box", "background-color"));
+        console.log("end-radius=" + win.computedStyle("#box", "border-radius"));
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const value = (label: string): string => {
+      const line = stdout.split("\n").find((entry) => entry.startsWith(`${label}=`));
+      expect(line, `missing ${label} in:\n${stdout}`).toBeDefined();
+      return line!.slice(label.length + 1).trim();
+    };
+
+    expect(value("start")).toBe("rgb(0, 0, 0)"); // 0% progress at t=0
+    expect(value("q1-bg")).toBe("rgb(64, 64, 64)"); // 25% of black->white
+    expect(value("q1-color")).toBe("rgb(68, 68, 196)"); // 50% of the 500ms color run
+    expect(value("q2-bg")).toBe("rgb(128, 128, 128)"); // halfway
+    expect(value("q2-color")).toBe("rgb(0, 0, 255)"); // finished
+    expect(value("q2-radius")).toBe("5px");
+    expect(value("end-bg")).toBe("rgb(255, 255, 255)"); // finished
+    expect(value("end-radius")).toBe("10px");
+  });
+
   it("shapes and measures text with the font stack", () => {
     const { stdout } = compileAndRun(
       "text",

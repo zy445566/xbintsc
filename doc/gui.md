@@ -1,14 +1,14 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M6 in progress** — HTML parsing, CSS selector matching, the cascade,
+Status: **M6 complete** — HTML parsing, CSS selector matching, the cascade,
 computed styles and layout (block, inline and Flexbox) are in place, and the
 engine *paints*: it builds a display list of rectangles, images and shaped text
 runs and renders them through SDL_GPU. Input events are hit tested and delivered
-to native TS handlers, `:hover`/`:focus` are matched dynamically, and `<img>` is
-sized from its intrinsic dimensions and drawn from a texture. This document
-records the locked decisions, the architecture, the milestone plan and the
-current progress of a cross-platform GUI extension that renders an HTML/CSS UI
-with its own GPU-accelerated engine.
+to native TS handlers, `:hover`/`:focus` are matched dynamically, `<img>` is
+sized from its intrinsic dimensions and drawn from a texture, and CSS transitions
+animate paint properties. This document records the locked decisions, the
+architecture, the milestone plan and the current progress of a cross-platform GUI
+extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -167,6 +167,7 @@ win.measureText(text, fontSize?, family?)  // shaped advance width in pixels
 win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
 win.hitTest(x, y)                      // deepest element descriptor, or ""
 win.sendEvent(type, options?)          // synthesise input (testing)
+win.advance(ms)                        // step the CSS transition clock (testing)
 ```
 
 They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
@@ -264,6 +265,29 @@ size cache (`stbi_info`). Paths accept a `file://` prefix and percent-encoding.
 
 Still to do for images: CSS `background-image: url(...)`, `data:` URIs,
 `object-fit` and 9-slice borders.
+
+### Implemented transitions (M6b)
+
+`XtDocument` runs CSS transitions between the *target* computed styles (the
+cascade for the current `:hover`/`:focus` state) and the *displayed* styles used
+for layout and paint. When a state change alters a transitioned property, a
+running transition is recorded and re-applied every frame until it finishes;
+the engine advances the clock with real frame deltas (`XtDocument::advance`),
+and `win.advance(ms)` lets tests step it deterministically.
+
+- Supported properties: `background-color`, `color`, `border-color`,
+  `border-radius`; `transition: all` covers them. Structural/layout-affecting
+  properties are not animated yet (that would relayout every frame).
+- Both the `transition` shorthand and the `transition-property` / `-duration` /
+  `-delay` / `-timing-function` longhands are parsed; time values accept `s` and
+  `ms`; timing functions are `linear`, `ease`, `ease-in`, `ease-out` and
+  `ease-in-out` (`ease` is a smoothstep approximation).
+- Retargeting mid-flight starts a new transition from the current interpolated
+  value, so reversing a hover animates smoothly from wherever it was.
+- `computedStyle()` reports the displayed (interpolated) value, so transitions
+  are directly observable in tests.
+
+Still to do for animation: `@keyframes` animations and `cubic-bezier(...)`.
 
 ### Implemented text stack (M4b)
 
@@ -383,7 +407,9 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
 6. **M6 — images, then CSS transitions/animations**
    - **M6a — images** ✅ stb_image decode, `<img>` replaced-element layout,
      per-file GPU textures and textured quads (`image.*`, `paint.*`, `renderer.*`).
-   - **M6b — transitions/animations** ⬜ tweened properties, `@keyframes`.
+   - **M6b — transitions/animations** ✅ `transition` shorthand + longhands,
+     animated `background-color`/`color`/`border-color`/`border-radius`, retargeting
+     and `win.advance(ms)`. `@keyframes` remain.
 7. **M7 — CI builds `gui.a` per platform and attaches it to releases.**
 
 ## Progress log
@@ -410,6 +436,8 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
 - **M6a** ✅ image decoding (`image.*`, vendored stb_image), `<img>` intrinsic
   sizing in layout, `PaintImage` in the display list, per-file RGBA textures and
   an image pipeline in `renderer.*`, e2e coverage.
+- **M6b** ✅ CSS transitions (parsing in `style.*`, an animation clock and
+  transition state in `document.*`, `advance`/`advance(ms)` hooks, e2e coverage).
 
 ## Open questions
 

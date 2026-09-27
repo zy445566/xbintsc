@@ -12,6 +12,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "css.h"
 #include "dom.h"
@@ -28,6 +29,15 @@ enum class WhiteSpace { Normal, NoWrap, Pre, PreWrap, PreLine };
 enum class Overflow { Visible, Hidden, Scroll, Auto };
 enum class BorderStyle { None, Solid, Dashed, Dotted };
 enum class FontStyle { Normal, Italic };
+enum class TimingFunction { Linear, Ease, EaseIn, EaseOut, EaseInOut };
+
+/** One `transition` entry: which property, how long, how it eases. */
+struct TransitionSpec {
+  std::string property = "all";
+  float duration = 0.0f;  // seconds
+  float delay = 0.0f;     // seconds
+  TimingFunction timing = TimingFunction::Ease;
+};
 
 struct Edges {
   Length top;
@@ -85,6 +95,9 @@ struct XtStyle {
   Overflow overflow = Overflow::Visible;
   int z_index = 0;
   bool has_z_index = false;
+
+  /** `transition` specs; not inherited. Applied by `XtDocument`. */
+  std::vector<TransitionSpec> transitions;
 };
 
 /** Initial (non-inherited) style; inherited fields are overridden from the parent. */

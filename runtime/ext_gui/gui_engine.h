@@ -32,6 +32,7 @@ xt_value xt_gui_quit(int32_t argc, xt_value *argv);
 #include <string>
 
 #include "document.h"
+#include "renderer.h"
 
 /* One live window. `object` is the JavaScript-visible handle; the record is
  * addressed from it through the hidden `__xt_gui_index` property. */
@@ -42,6 +43,8 @@ struct XtGuiWindow {
   int ready;
   std::string html;
   std::unique_ptr<xtgui::XtDocument> document;
+  XtGuiGeometry geometry;
+  float background[4];
   int width;
   int height;
 };

@@ -11,6 +11,7 @@
  */
 
 #include "gui_engine.h"
+#include "paint.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -80,6 +81,7 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   xt_gui_emit(win, "close");
   win->document.reset();
   win->html.clear();
+  if (g_device != NULL) xt_gui_geometry_destroy(g_device, &win->geometry);
   if (win->window != NULL && g_device != NULL) {
     SDL_ReleaseWindowFromGPUDevice(g_device, win->window);
   }
@@ -120,6 +122,7 @@ static void xt_gui_handle_event(const SDL_Event *event) {
     win->width = event->window.data1;
     win->height = event->window.data2;
     if (win->document != NULL) win->document->restyle((float)win->width, (float)win->height);
+    win->geometry.dirty = 1;
   }
 }
 
@@ -127,6 +130,19 @@ static void xt_gui_handle_event(const SDL_Event *event) {
 
 void xt_gui_render_window(XtGuiWindow *win) {
   if (win == NULL || !win->open || win->window == NULL || g_device == NULL) return;
+  float viewport_width = 0;
+  float viewport_height = 0;
+  xt_gui_window_viewport(win, &viewport_width, &viewport_height);
+
+  /* Rebuild the geometry only when the document or viewport changed. */
+  bool can_paint = xt_gui_renderer_ensure(g_device, win->window);
+  if (can_paint && win->geometry.dirty && win->document != nullptr) {
+    xtgui::DisplayList list;
+    xtgui::xt_paint_build(win->document->layout().root(), list);
+    xt_gui_geometry_upload(g_device, &win->geometry, list);
+    win->geometry.dirty = 0;
+  }
+
   SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(g_device);
   if (cmd == NULL) return;
   SDL_GPUTexture *swapchain = NULL;
@@ -135,13 +151,14 @@ void xt_gui_render_window(XtGuiWindow *win) {
     SDL_GPUColorTargetInfo target;
     memset(&target, 0, sizeof(target));
     target.texture = swapchain;
-    target.clear_color.r = 0.08f;
-    target.clear_color.g = 0.09f;
-    target.clear_color.b = 0.11f;
-    target.clear_color.a = 1.0f;
+    target.clear_color.r = win->background[0];
+    target.clear_color.g = win->background[1];
+    target.clear_color.b = win->background[2];
+    target.clear_color.a = win->background[3];
     target.load_op = SDL_GPU_LOADOP_CLEAR;
     target.store_op = SDL_GPU_STOREOP_STORE;
     SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+    if (can_paint) xt_gui_renderer_draw(cmd, pass, &win->geometry, viewport_width, viewport_height);
     SDL_EndGPURenderPass(pass);
     /* The first presented frame marks the window ready; handlers registered
      * after `createWindow` are guaranteed to see this event. */
@@ -207,6 +224,11 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   record->height = height;
   record->html.clear();
   record->document.reset();
+  record->geometry = XtGuiGeometry();
+  record->background[0] = 0.08f;
+  record->background[1] = 0.09f;
+  record->background[2] = 0.11f;
+  record->background[3] = 1.0f;
 
   xt_value object = xt_object_new_with_proto(xt_gui_window_proto());
   record->object = object;
@@ -259,6 +281,7 @@ extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
     for (int i = 0; i < g_window_count; i++) {
       if (g_windows[i].open) xt_gui_quit_window(&g_windows[i]);
     }
+    xt_gui_renderer_destroy(device);
     SDL_DestroyGPUDevice(device);
     g_device = NULL;
   }

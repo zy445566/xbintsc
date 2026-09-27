@@ -50,6 +50,8 @@ win.on("ready", () => {
   console.log("card count     =", win.queryCount(".card"));
   const card = win.getBoundingClientRect(".card");
   console.log("card rect      =", card.x, card.y, card.width, card.height);
+  console.log("paint shapes   =", win.paintCount());
+  console.log(win.paintList().split("\n").filter(Boolean).slice(0, 3).join("\n"));
 });
 
 win.on("close", () => {

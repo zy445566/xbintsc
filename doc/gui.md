@@ -1,11 +1,13 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M3 complete** — HTML parsing, CSS selector matching, the cascade,
-computed styles and layout (block, inline and Flexbox) are in place (M2 already
-opened a GPU-backed SDL3 window with lifecycle events). Painting is the next
-milestone. This document records the locked decisions, the architecture, the
-milestone plan and the current progress of a cross-platform GUI extension that
-renders an HTML/CSS UI with its own GPU-accelerated engine.
+Status: **M4a complete** — HTML parsing, CSS selector matching, the cascade,
+computed styles and layout (block, inline and Flexbox) are in place, and the
+engine now *paints*: it builds a display list and renders it through SDL_GPU.
+The M2–M3 foundation already opened a GPU-backed SDL3 window with lifecycle
+events. Real fonts (HarfBuzz + FreeType) are the rest of M4. This document
+records the locked decisions, the architecture, the milestone plan and the
+current progress of a cross-platform GUI extension that renders an HTML/CSS UI
+with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -124,10 +126,10 @@ then inline `style=""` (highest specificity, but non-`!important` inline loses t
 kept unresolved until layout, except `font-size` (resolved against the *parent*
 font size) and `line-height`.
 
-### Diagnostics (until paint lands in M4)
+### Diagnostics
 
-So the HTML/CSS pipeline is testable before there is a renderer, a window
-handle exposes three read-only hooks:
+So the HTML/CSS/paint pipeline is testable without a GPU, a window handle
+exposes read-only hooks:
 
 ```ts
 win.computedStyle(selector, property)  // e.g. ("#main", "width") -> "60%"
@@ -135,6 +137,8 @@ win.queryCount(selector)               // number of matching elements
 win.getBoundingClientRect(selector)    // { x, y, width, height } (border box)
 win.documentTree()                     // serialized DOM (debugging)
 win.layoutTree()                       // serialized layout boxes (debugging)
+win.paintCount()                       // number of shapes in the display list
+win.paintList()                        // serialized display list (debugging)
 ```
 
 They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
@@ -167,6 +171,33 @@ offsets (`relative`/`absolute`/`fixed`), `overflow` clipping and floats.
 `<style>` text into one stylesheet, computes styles and layout for a viewport and
 offers `querySelector`/`querySelectorAll`/`styleOf`/`boxOf`.
 
+### Implemented paint (M4a)
+
+`runtime/ext_gui/paint.{h,cpp}` walks the layout tree in painter's order and
+emits a backend-agnostic `DisplayList` of shapes. Today it emits **backgrounds**
+(with `border-radius`) and **borders** (four solid edges). `DisplayList::dump()`
+feeds `paintList()`/`paintCount()`.
+
+`runtime/ext_gui/renderer.{h,cpp}` turns that list into one batched vertex buffer
+per window and draws it through a single SDL_GPU graphics pipeline:
+
+- The shared pipeline is created lazily from the device's supported shader
+  format. On macOS it compiles the embedded **MSL** source directly (SDL_GPU
+  `SHADERFORMAT_MSL`); Vulkan/D3D12 need SPIR-V/DXIL blobs and are a build-time
+  TODO (see *Open questions*).
+- A **rounded-rectangle distance field** in the fragment shader gives
+  antialiased fills; the vertex carries `position`, `local`, `half extents`,
+  `radius` and colour, and a viewport-size push constant does the projection.
+  Alpha blending is enabled.
+- Geometry is uploaded only when the document or viewport changes
+  (`geometry.dirty`), so steady-state frames are bind-and-draw.
+
+The window background (`setBackground`) is the render-pass clear colour.
+
+Still to do in M4: real text — HarfBuzz shaping, FreeType rasterisation, a glyph
+atlas and text quads in the display list — plus gradients. The approximate
+`xt_layout_text_width` will be replaced when the font stack lands.
+
 Multiple windows fall out of the object model: `createWindow` returns a native
 object handle; each handle owns its own `SDL_Window`/GPU surface and its own DOM
 tree. `run()` drives one shared main loop that ticks every window and exits when
@@ -187,7 +218,8 @@ expose an explicit `run()`; **M2 uses the explicit `run()`** so the window is a
 plain native call the TypeScript program controls. Each tick it:
 
 1. pumps SDL window/input events for every window,
-2. renders every open window (a clear pass for now),
+2. builds/uploads the display list when it changed and renders every open
+   window (clear pass + shape geometry),
 3. calls `xt_loop_poll(0)` and `xt_drain_microtasks()` so sockets/timers and
    `await` continuations keep making progress,
 4. repeats until all windows close or `quit()` is called.
@@ -246,7 +278,10 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
    - **M3b — layout** ✅ block/inline flow + Flexbox (`layout.*`),
      `getBoundingClientRect`/`layoutTree`.
 4. **M4 — paint + text + display list**
-   - display list, rounded rects/gradients/borders, HarfBuzz+FreeType text.
+   - **M4a — display list + GPU shapes** ✅ background/border display list,
+     rounded-rect SDL_GPU pipeline (`paint.*`, `renderer.*`).
+   - **M4b — text** ⬜ HarfBuzz + FreeType, glyph atlas, real text metrics,
+     then gradients.
 5. **M5 — input + events**
    - hit testing, `:hover`/`:focus`, click/scroll/keyboard → TS handlers.
 6. **M6 — images, then CSS transitions/animations.**
@@ -262,6 +297,8 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
 - **M3b** ✅ layout (`layout.*`): block flow, inline formatting context with line
   breaking, single-line Flexbox, `getBoundingClientRect`/`layoutTree`, e2e
   coverage.
+- **M4a** ✅ display list (`paint.*`) and the SDL_GPU 2D renderer with an MSL
+  rounded-rect pipeline (`renderer.*`), `paintList`/`paintCount`, e2e coverage.
 
 ## Open questions
 
@@ -269,3 +306,7 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
   X11 first, Wayland later.)
 - Windows: needs an MSVC-compatible `.lib` and a D3D12/DXIL SDL3 build; the
   build script currently stops with a clear message there.
+- **Shaders on non-Metal backends:** the renderer embeds MSL source (compiled by
+  SDL_GPU at runtime on macOS). Vulkan needs SPIR-V and D3D12 needs DXIL; those
+  require `glslc`/`dxc` at build time. Until then the non-Metal path clears the
+  window and skips geometry (logged once).

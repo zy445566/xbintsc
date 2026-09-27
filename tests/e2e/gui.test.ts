@@ -210,4 +210,51 @@ describe.skipIf(!available)("gui extension", () => {
     // 60px-wide box wraps "aaaa bbbb" / "cccc dddd" onto two 12px-tall lines.
     expect(value("wrap")).toBe("0,154,60,24");
   });
+
+  it("builds a display list of backgrounds and borders", () => {
+    const { stdout } = compileAndRun(
+      "paint",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; background-color: #123456; }
+        #box { width: 100px; height: 40px; background: #ff0000; border: 4px solid #00ff00; border-radius: 8px; }
+      </style></head><body>
+        <div id="box">x</div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "paint", width: 800, height: 600 });
+      win.on("ready", () => {
+        const r = win.getBoundingClientRect("#box");
+        console.log("box-rect=" + r.x + "," + r.y + "," + r.width + "," + r.height);
+        console.log("paint-count=" + win.paintCount());
+        console.log("paint-list-start");
+        console.log(win.paintList());
+        console.log("paint-list-end");
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const value = (label: string): string => {
+      const line = stdout.split("\n").find((entry) => entry.startsWith(`${label}=`));
+      expect(line, `missing ${label} in:\n${stdout}`).toBeDefined();
+      return line!.slice(label.length + 1).trim();
+    };
+    const list = stdout.slice(stdout.indexOf("paint-list-start"), stdout.indexOf("paint-list-end"));
+    const occurrences = (needle: string): number => list.split(needle).length - 1;
+
+    // Border box = 100x40 content + 4px border on every side.
+    expect(value("box-rect")).toBe("0,0,108,48");
+    // body background + #box background + 4 border edges.
+    expect(value("paint-count")).toBe("6");
+    expect(occurrences("#123456ff")).toBe(1); // body background
+    expect(occurrences("#ff0000ff")).toBe(1); // #box background
+    expect(occurrences("#00ff00ff")).toBe(4); // four border edges
+    // The background rectangle carries the 8px corner radius.
+    expect(list).toContain("r=8.0 color=#ff0000ff");
+  });
 });

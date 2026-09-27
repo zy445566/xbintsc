@@ -243,14 +243,16 @@ int xt_loop_has_work(void);
 
 /**
  * Run one iteration of the reactor, waiting up to `timeout_ms` for readiness
- * (`< 0` blocks until an event arrives, `0` polls without sleeping). Returns
- * the number of active watchers still registered, or a negative value when the
- * wait itself failed.
+ * (`< 0` blocks until an event arrives, `0` polls without sleeping), and then
+ * fire any timers that have come due. The wait is shortened to the nearest
+ * timer deadline so a timer-only program still sleeps. Returns the number of
+ * active watchers (descriptors plus timers) still registered, or a negative
+ * value when the wait itself failed.
  *
  * Hosts that own their main loop (a GUI toolkit, an embedder, ...) call this
  * periodically instead of `xt_run_event_loop` so timers, sockets and promise
- * microtasks keep draining between their own events. When there are no
- * watchers it returns immediately, so a host with no I/O is unaffected.
+ * microtasks keep draining between their own events. When there is no work it
+ * returns immediately, so a host with no I/O is unaffected.
  */
 int xt_loop_poll(int timeout_ms);
 
@@ -262,6 +264,15 @@ int xt_loop_poll(int timeout_ms);
  */
 typedef void (*xt_main_loop_fn)(void);
 void xt_loop_set_main(xt_main_loop_fn fn);
+
+/* -- timers --------------------------------------------------------------- */
+/* The JS timer globals, implemented on top of the reactor above. Each returns
+ * a numeric id (or `undefined` for the `clear*` pair); callbacks are ordinary
+ * closure values and extra arguments after the delay are forwarded to them. */
+xt_value xt_set_timeout(int32_t argc, xt_value *argv);
+xt_value xt_clear_timeout(int32_t argc, xt_value *argv);
+xt_value xt_set_interval(int32_t argc, xt_value *argv);
+xt_value xt_clear_interval(int32_t argc, xt_value *argv);
 
 /* -- global functions ------------------------------------------------------ */
 xt_value xt_parse_int(int32_t argc, xt_value *argv);

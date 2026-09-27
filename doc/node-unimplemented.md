@@ -19,14 +19,15 @@ is missing**.
 descriptors, metadata, links, `cp`, `glob`, `Dir`, `constants`) and
 `fs/promises` wraps each synchronous function in an already-settled Promise
 (see [node-implemented.md](./node-implemented.md)). The rest is still
-unimplemented because xbintsc has **no asynchronous I/O scheduler / event
-loop**:
+unimplemented because xbintsc has **no asynchronous I/O scheduler** for file
+operations (the `fs` module has no reactor backend; the core event loop does
+provide timers and sockets):
 
 | Unimplemented API | Category |
 | --- | --- |
 | `readFile` / `writeFile` / `appendFile` / `open` / `close` / `read` / `write` / `stat` / … | callback-style async file operations (`fs/promises` provides the Promise forms) |
 | `createReadStream` / `createWriteStream` | streaming read/write |
-| `watch` / `watchFile` | **real** file watching: the functions exist but the returned objects never emit (the event loop has no timers/inotify backend) |
+| `watch` / `watchFile` | **real** file watching: the functions exist but the returned objects never emit (there is no inotify/kqueue backend) |
 | `openAsBlob`, `statfs` callback form, `rmdir` `maxRetries` / `retryDelay` | misc. options requiring async retry |
 | `glob` `exclude` / `follow`, `cp` `filter` | option callbacks |
 
@@ -72,7 +73,6 @@ implemented, and `crypto` / `url` / `child_process` / `zlib` /
 | `global` / `globalThis` | none |
 | `__dirname` / `__filename` | none |
 | `require` / `module` / `exports` | none (xbintsc has no CommonJS module runtime) |
-| `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask` | no timers |
 | `fs.readFileSync(...)` without an `import` | ✗ unsupported. `fs` is not a global; import it first (`import fs from "fs"` or `import * as fs from "node:fs"`) and `fs.readFileSync(...)` lowers to the module's runtime symbol. |
 
 Node modules are reached through `import` with a bare or `node:`-prefixed
@@ -96,11 +96,12 @@ Implemented:
 
 - Core event loop `runtime/xt_loop.c` (a `select(2)` reactor); `net` / `dgram` / `http` are all built on it.
 - `Promise`, `async` / `await` are available (see the core documents); `fs/promises` returns Promises.
+- Timers are available as globals: `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` run on the core reactor and keep the process alive until no timer remains.
 - A standalone `EventEmitter` is provided by the `events` module (also a global constructor); streams and sockets additionally carry internal emitter methods (`on` / `addListener` / `once` / `off` / `removeListener` / `emit`).
 
 Still unimplemented:
 
-- Timers `setTimeout` / `setInterval` / `setImmediate` / `queueMicrotask`.
+- `setImmediate` / `queueMicrotask` and Node's `Timeout` object (`setTimeout` returns a numeric id).
 - A real asynchronous I/O scheduler: `fs/promises` is essentially an immediate-settle wrapper around synchronous operations and does not yield while waiting for I/O.
 - On streams and sockets the built-in `once` is equivalent to `on` (no "remove after firing once" semantics); the `events` module's `EventEmitter` does implement real `once`.
 - `net`'s `connect` is blocking; HTTP responses require `Connection: close`, with no keep-alive / chunked transfer / pipelining.
@@ -160,8 +161,7 @@ Unimplemented (other modules): https, readline, tls, cluster, vm
 Unimplemented (global/namespace): global/globalThis, __dirname, __filename,
                                   require/module/exports, fs.readFileSync(...) namespace calls
 
-Unimplemented (async): timers setTimeout / setInterval / setImmediate / queueMicrotask,
-                       real async I/O scheduling, keep-alive
+Unimplemented (async): setImmediate / queueMicrotask, real async I/O scheduling, keep-alive
 
 Unimplemented (platform): Bun extension (design example only)
 ```

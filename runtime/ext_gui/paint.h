@@ -43,15 +43,26 @@ struct PaintText {
   FontSpec font;
 };
 
+/** An image to draw, scaled into the given rectangle (viewport-relative). */
+struct PaintImage {
+  float x = 0;
+  float y = 0;
+  float width = 0;
+  float height = 0;
+  std::string src;
+};
+
 struct DisplayList {
   std::vector<PaintRect> rects;
   std::vector<PaintText> texts;
+  std::vector<PaintImage> images;
 
   void clear() {
     rects.clear();
     texts.clear();
+    images.clear();
   }
-  bool empty() const { return rects.empty() && texts.empty(); }
+  bool empty() const { return rects.empty() && texts.empty() && images.empty(); }
   /** Human-readable dump, one shape per line (for diagnostics/tests). */
   std::string dump() const;
 };

@@ -25,8 +25,18 @@ const available = existsSync(archivePath) && process.platform !== "win32";
 
 describe.skipIf(!available)("gui extension", () => {
   let workdir: string;
+  let logoPath: string;
   beforeAll(() => {
     workdir = mkdtempSync(join(tmpdir(), "xbintsc-gui-"));
+    // A 4x4 PNG: left half red, right half blue (base64-encoded inline).
+    logoPath = join(workdir, "logo.png");
+    writeFileSync(
+      logoPath,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFElEQVR42mP4z8DwH4Sh1H8G0gUALFAf4eNWqTEAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
   });
   afterAll(() => {
     rmSync(workdir, { recursive: true, force: true });
@@ -214,6 +224,42 @@ describe.skipIf(!available)("gui extension", () => {
     const wrap = value("wrap").split(",").map(Number);
     expect(wrap.slice(0, 3)).toEqual([0, 154, 60]);
     expect(wrap[3]).toBeCloseTo(2 * Number(value("lh")), 1);
+  });
+
+  it("sizes and paints images (intrinsic and explicit)", () => {
+    const { stdout } = compileAndRun(
+      "image",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #logo { width: 40px; height: 40px; }
+      </style></head><body>
+        <img id="logo" src="${logoPath}">
+        <img id="natural" src="${logoPath}">
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "image", width: 400, height: 300 });
+      win.on("ready", () => {
+        const logo = win.getBoundingClientRect("#logo");
+        console.log("logo=" + logo.width + "x" + logo.height);
+        const natural = win.getBoundingClientRect("#natural");
+        console.log("natural=" + natural.width + "x" + natural.height);
+        console.log(win.paintList().trim());
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    // Explicit CSS size wins; without one the intrinsic 4x4 size is used.
+    expect(stdout).toContain("logo=40x40");
+    expect(stdout).toContain("natural=4x4");
+    expect(stdout).toContain(`image x=0.0 y=0.0 w=40.0 h=40.0 src=${logoPath}`);
+    expect(stdout).toContain(`image x=0.0 y=40.0 w=4.0 h=4.0 src=${logoPath}`);
   });
 
   it("builds a display list of backgrounds and borders", () => {

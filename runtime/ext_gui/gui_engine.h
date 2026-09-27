@@ -45,6 +45,7 @@ struct XtGuiWindow {
   std::unique_ptr<xtgui::XtDocument> document;
   XtGuiGeometry geometry;
   XtGuiGeometry text_geometry;
+  XtGuiGeometry image_geometry;
   float background[4];
   int width;
   int height;

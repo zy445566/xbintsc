@@ -127,6 +127,7 @@ static void applyUserAgentStyle(const Node *node, XtStyle *style) {
   if (tag == "button" || tag == "input" || tag == "select" || tag == "textarea") {
     style->display = Display::InlineBlock;
   }
+  if (tag == "img") style->display = Display::InlineBlock;
   if (tag == "body") style->margin.set({8.0f, Unit::Px});
   if (tag == "p") style->margin.top = style->margin.bottom = {16.0f, Unit::Px};
   if (tag == "blockquote") {

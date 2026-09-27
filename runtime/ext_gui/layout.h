@@ -4,8 +4,8 @@
  * `LayoutTree::compute` turns the styled DOM into a tree of `LayoutBox`es with
  * absolute (viewport-relative) geometry. It implements the slice a UI needs:
  * block flow, a simple inline formatting context with greedy line breaking
- * (text metrics are an approximation until the M4 text stack lands) and
- * single-line Flexbox.
+ * (text metrics come from the HarfBuzz/FreeType stack) and single-line
+ * Flexbox. `<img>` is a replaced element sized from its intrinsic dimensions.
  *
  * Coordinates are absolute: `x`/`y` is the border-box origin measured from the
  * viewport's top-left corner.
@@ -40,6 +40,12 @@ struct LayoutBox {
   bool is_text = false;
   std::string text;               // only for text boxes
   std::vector<TextFragment> fragments;
+
+  /* Replaced element (currently `<img>`): source + intrinsic pixel size. */
+  bool is_image = false;
+  std::string image_src;
+  float intrinsic_width = 0;
+  float intrinsic_height = 0;
 
   Display display = Display::Inline;
 

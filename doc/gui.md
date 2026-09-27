@@ -1,13 +1,14 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M5 complete** — HTML parsing, CSS selector matching, the cascade,
+Status: **M6 in progress** — HTML parsing, CSS selector matching, the cascade,
 computed styles and layout (block, inline and Flexbox) are in place, and the
-engine *paints*: it builds a display list of rectangles and shaped text runs and
-renders them through SDL_GPU. Input events (mouse, wheel, keyboard) are hit
-tested and delivered to native TS handlers, and `:hover`/`:focus` are matched
-dynamically. This document records the locked decisions, the architecture, the
-milestone plan and the current progress of a cross-platform GUI extension that
-renders an HTML/CSS UI with its own GPU-accelerated engine.
+engine *paints*: it builds a display list of rectangles, images and shaped text
+runs and renders them through SDL_GPU. Input events are hit tested and delivered
+to native TS handlers, `:hover`/`:focus` are matched dynamically, and `<img>` is
+sized from its intrinsic dimensions and drawn from a texture. This document
+records the locked decisions, the architecture, the milestone plan and the
+current progress of a cross-platform GUI extension that renders an HTML/CSS UI
+with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -74,7 +75,7 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | GPU | **SDL_GPU** (SDL3) | one render path over Metal / Vulkan / D3D12; avoids three backends |
 | Text shaping | **HarfBuzz** | correct complex-script shaping |
 | Glyph raster | **FreeType** | glyph outlines → GPU atlas / SDF |
-| Images | **stb_image** (later libpng/libjpeg) | single header to start |
+| Images | **stb_image** (vendored header) | single header to start |
 
 Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`
 (overridable with `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION`).
@@ -247,6 +248,23 @@ delivered to the handlers registered with `on`. `mousedown` also moves focus.
 
 Still to do for full input: text selection, drag, IME and clipboard.
 
+### Implemented images (M6a)
+
+`runtime/ext_gui/image.{h,cpp}` wraps the vendored **stb_image** header
+decoding PNG/JPEG/BMP/GIF/TGA to RGBA8, with a decode cache and a header-only
+size cache (`stbi_info`). Paths accept a `file://` prefix and percent-encoding.
+
+- `<img>` is a replaced element (`display: inline-block`): layout gives it the
+  CSS size when set, otherwise the intrinsic pixel size, and preserves the
+  aspect ratio when only one axis is constrained. The intrinsic size is read
+  from the file header (no full decode) while building the box tree.
+- Paint emits one `PaintImage` per `<img>`; the renderer decodes/uploads each
+  unique `src` to an RGBA texture (cached by path) and draws textured quads,
+  batching consecutive quads that share a texture.
+
+Still to do for images: CSS `background-image: url(...)`, `data:` URIs,
+`object-fit` and 9-slice borders.
+
 ### Implemented text stack (M4b)
 
 `runtime/ext_gui/text.{h,cpp}` wraps **HarfBuzz** (shaping) and **FreeType**
@@ -357,13 +375,15 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
      layout (`text.*`, `measureText`/`fontMetrics`).
    - **M4b-2 — glyph rendering** ✅ FreeType rasterisation, a shared shelf-packed
      glyph atlas, textured text quads in the display list and HiDPI-aware raster
-     scaling. Gradients remain.
-5. **M5 — input + events** ✅
+     scaling. Gradients remain.5. **M5 — input + events** ✅
    - hit testing (`LayoutTree::hitTest`), pointer/wheel/keyboard events delivered
      to TS handlers with a payload, `:hover`/`:focus` stateful matching and
      restyle (`css.*`, `style.*`, `document.*`, `gui.cpp`), plus the
      `hitTest`/`sendEvent` test hooks.
-6. **M6 — images, then CSS transitions/animations.**
+6. **M6 — images, then CSS transitions/animations**
+   - **M6a — images** ✅ stb_image decode, `<img>` replaced-element layout,
+     per-file GPU textures and textured quads (`image.*`, `paint.*`, `renderer.*`).
+   - **M6b — transitions/animations** ⬜ tweened properties, `@keyframes`.
 7. **M7 — CI builds `gui.a` per platform and attaches it to releases.**
 
 ## Progress log
@@ -387,6 +407,9 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
 - **M5** ✅ hit testing + input events (`LayoutTree::hitTest`, `xt_dom_describe`,
   `xt_gui_dispatch_*`), `:hover`/`:focus` in the matcher with dynamic restyle,
   `hitTest`/`sendEvent` test hooks, e2e coverage.
+- **M6a** ✅ image decoding (`image.*`, vendored stb_image), `<img>` intrinsic
+  sizing in layout, `PaintImage` in the display list, per-file RGBA textures and
+  an image pipeline in `renderer.*`, e2e coverage.
 
 ## Open questions
 

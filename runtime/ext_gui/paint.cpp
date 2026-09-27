@@ -91,6 +91,16 @@ void paintBox(const LayoutBox *box, DisplayList &out) {
         addRect(out, box->x, box->y + top, left, inner_height, 0.0f, bc);
         addRect(out, box->x + box->width - right, box->y + top, right, inner_height, 0.0f, bc);
       }
+      if (box->is_image && !box->image_src.empty() && box->content_width > 0.0f &&
+          box->content_height > 0.0f) {
+        PaintImage image;
+        image.x = box->content_x;
+        image.y = box->content_y;
+        image.width = box->content_width;
+        image.height = box->content_height;
+        image.src = box->image_src;
+        out.images.push_back(std::move(image));
+      }
     }
   }
 
@@ -114,6 +124,11 @@ std::string DisplayList::dump() const {
     std::snprintf(buffer, sizeof(buffer),
                   "text x=%.1f baseline=%.1f size=%.1f color=%s \"%s\"\n", run.x, run.baseline,
                   run.font.pixel_size, formatColor(run.color).c_str(), run.text.c_str());
+    text += buffer;
+  }
+  for (const PaintImage &image : images) {
+    std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f src=%s\n", image.x,
+                  image.y, image.width, image.height, image.src.c_str());
     text += buffer;
   }
   return text;

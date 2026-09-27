@@ -18,6 +18,7 @@
 #include <cstring>
 
 #include "text.h"
+#include "image.h"
 
 namespace xtgui {
 namespace {
@@ -128,6 +129,7 @@ struct Layouter {
   float preferredContentWidth(const LayoutBox *box, float available) const {
     const XtStyle &style = *box->style;
     if (!isAuto(style.width)) return px(style.width, available, style.font_size, 0.0f);
+    if (box->is_image && box->intrinsic_width > 0) return box->intrinsic_width;
     float best = 0;
     for (const std::unique_ptr<LayoutBox> &child : box->children) {
       if (child->display == Display::None) continue;
@@ -213,6 +215,11 @@ struct Layouter {
       contentHeight = clampSize(contentHeight, style.min_height, style.max_height,
                                 availableHeight < 0 ? contentHeight : availableHeight, em);
       if (contentHeight < 0) contentHeight = 0;
+    }
+    /* Replaced elements keep their aspect ratio when only one axis is set. */
+    if (box->is_image && forcedContentHeight < 0 && isAuto(style.height) &&
+        box->intrinsic_width > 0 && box->intrinsic_height > 0) {
+      contentHeight = contentWidth * box->intrinsic_height / box->intrinsic_width;
     }
     box->content_height = contentHeight;
     box->height = box->border_top + box->padding_top + contentHeight + box->padding_bottom + box->border_bottom;
@@ -617,6 +624,19 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
   box->node = node;
   box->style = style;
   box->display = style != nullptr ? style->display : Display::Block;
+  if (node->isElement() && node->isTag("img")) {
+    box->is_image = true;
+    const std::string *src = node->attr("src");
+    if (src != nullptr) {
+      box->image_src = *src;
+      int width = 0;
+      int height = 0;
+      if (xt_image_size(*src, &width, &height)) {
+        box->intrinsic_width = (float)width;
+        box->intrinsic_height = (float)height;
+      }
+    }
+  }
   for (const std::unique_ptr<Node> &child : node->children) {
     std::unique_ptr<LayoutBox> childBox = buildBoxTree(child.get(), styles, style);
     if (childBox != nullptr) {

@@ -94,6 +94,7 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   if (g_device != NULL) {
     xt_gui_geometry_destroy(g_device, &win->geometry);
     xt_gui_geometry_destroy(g_device, &win->text_geometry);
+    xt_gui_geometry_destroy(g_device, &win->image_geometry);
   }
   if (win->window != NULL && g_device != NULL) {
     SDL_ReleaseWindowFromGPUDevice(g_device, win->window);
@@ -278,6 +279,7 @@ void xt_gui_render_window(XtGuiWindow *win) {
     xt_gui_geometry_upload(g_device, &win->geometry, list);
     float density = SDL_GetWindowPixelDensity(win->window);
     xt_gui_text_upload(g_device, &win->text_geometry, list, density > 0.0f ? density : 1.0f);
+    xt_gui_image_upload(g_device, &win->image_geometry, list);
     win->geometry.dirty = 0;
   }
 
@@ -300,6 +302,7 @@ void xt_gui_render_window(XtGuiWindow *win) {
     if (can_paint) {
       xt_gui_renderer_draw(cmd, pass, &win->geometry, viewport_width, viewport_height);
       xt_gui_text_draw(cmd, pass, &win->text_geometry, viewport_width, viewport_height);
+      xt_gui_image_draw(cmd, pass, &win->image_geometry, viewport_width, viewport_height);
     }
     SDL_EndGPURenderPass(pass);
     firstFrame = !win->ready;
@@ -367,6 +370,7 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   record->document.reset();
   record->geometry = XtGuiGeometry();
   record->text_geometry = XtGuiGeometry();
+  record->image_geometry = XtGuiGeometry();
   record->background[0] = 0.08f;
   record->background[1] = 0.09f;
   record->background[2] = 0.11f;

@@ -1,11 +1,13 @@
 /*
  * xbintsc GUI engine — SDL_GPU 2D renderer.
  *
- * Two graphics pipelines share one device:
+ * Three graphics pipelines share one device:
  *   - a shape pipeline that draws every `PaintRect` as triangles, using a
  *     rounded-rectangle distance field for antialiased fills;
  *   - a text pipeline that draws glyphs as textured quads from a shared
- *     grayscale glyph atlas (FreeType rasterises, this file packs/upload).
+ *     grayscale glyph atlas (FreeType rasterises, this file packs/upload);
+ *   - an image pipeline that draws `PaintImage` quads sampling per-file RGBA
+ *     textures decoded by `image.*`.
  *
  * Geometry is batched into one vertex buffer per window and one draw call per
  * list. Pipelines are created lazily from the device's supported shader format;
@@ -53,5 +55,14 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
 /** Draw the text geometry (glyph atlas bound) inside an active render pass. */
 void xt_gui_text_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGuiGeometry *geometry,
                       float viewport_width, float viewport_height);
+/** Decode/upload `list.images` and build the image quad geometry (one batch per
+ * texture). Textures are cached by source path. */
+void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
+                         const xtgui::DisplayList &list);
+/** Draw the image geometry (binds each batch's texture) inside a render pass. */
+void xt_gui_image_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGuiGeometry *geometry,
+                       float viewport_width, float viewport_height);
+/** Release the image texture cache (after SDL_WaitForGPUIdle). */
+void xt_gui_image_textures_destroy(SDL_GPUDevice *device);
 
 #endif /* XT_GUI_RENDERER_H */

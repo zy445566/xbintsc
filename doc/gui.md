@@ -1,14 +1,16 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M6 complete** — HTML parsing, CSS selector matching, the cascade,
-computed styles and layout (block, inline and Flexbox) are in place, and the
-engine *paints*: it builds a display list of rectangles, images and shaped text
-runs and renders them through SDL_GPU. Input events are hit tested and delivered
-to native TS handlers, `:hover`/`:focus` are matched dynamically, `<img>` is
-sized from its intrinsic dimensions and drawn from a texture, and CSS transitions
-animate paint properties. This document records the locked decisions, the
-architecture, the milestone plan and the current progress of a cross-platform GUI
-extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
+Status: **M7** — features (M1–M6) are complete: HTML parsing, CSS selector
+matching, the cascade, computed styles and layout (block, inline and Flexbox) are
+in place, and the engine *paints*: it builds a display list of rectangles, images
+and shaped text runs and renders them through SDL_GPU. Input events are hit
+tested and delivered to native TS handlers, `:hover`/`:focus` are matched
+dynamically, `<img>` is sized from its intrinsic dimensions and drawn from a
+texture, and CSS transitions animate paint properties. The per-platform prebuilt
+archive now builds and runs in CI on Linux and macOS (Windows provisional). This
+document records the locked decisions, the architecture, the milestone plan and
+the current progress of a cross-platform GUI extension that renders an HTML/CSS
+UI with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -356,14 +358,20 @@ This keeps network I/O, timers and `await` working inside a GUI program.
 - Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`
   (gitignored; fetched on demand).
 - `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
-  default `release-3.2.10`), builds `libSDL3.a`, fetches and builds static
+  default `release-3.2.10`), builds a static SDL3, fetches and builds static
   FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), compiles the
-  engine and merges everything into `runtime/lib/<os>-<arch>/gui.a` (same
-  convention as `core.a`), statically bundling all three.
+  engine and merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
+  `gui.lib` with the MSVC ABI on Windows), same convention as `core.a`,
+  statically bundling all three. The merge uses `libtool` on macOS and
+  `ar -M` (GNU/LLVM) elsewhere; CMake archives are discovered under the build
+  root or `Release/` for either generator style.
 - `src/extensions/gui/index.ts` exposes the archive through `nativeObjects()`
-  and the OS frameworks through `linkerFlags()`.
+  (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the OS frameworks
+  through `linkerFlags()`.
 - CI builds `gui.a` before assembling the release archive so it ships inside
   `runtime/lib/<slug>/` (the release tarball copies the whole `runtime/` tree).
+  The archive is built and the example is run on Linux (under Xvfb, with the
+  lavapipe software Vulkan driver) and macOS; Windows is provisional.
 - The existing cache fingerprint already hashes `nativeObjects()` contents, so
   rebuilding `gui.a` invalidates cached binaries automatically.
 
@@ -377,6 +385,23 @@ xbintsc run examples/gui/hello.ts --ext gui
 
 Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
 which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
+
+On a headless Linux box, install the SDL3 build headers and run under Xvfb with a
+software Vulkan driver:
+
+```sh
+sudo apt-get install -y clang cmake libx11-dev libxext-dev libxrandr-dev \
+  libxcursor-dev libxi-dev libxinerama-dev libxfixes-dev libxkbcommon-dev \
+  libwayland-dev wayland-protocols libdecor-0-dev libasound2-dev libpulse-dev \
+  libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
+  libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
+npm run runtime && npm run gui
+xvfb-run -a --server-args="-screen 0 1280x720x24" \
+  npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
+```
+
+Those are the packages the CI `compile-examples` job installs. The X11 backend is
+used by default; Wayland is enabled too but not yet exercised.
 
 ## Milestones
 
@@ -413,15 +438,18 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
    - **M6b — transitions/animations** ✅ `transition` shorthand + longhands,
      animated `background-color`/`color`/`border-color`/`border-radius`, retargeting
      and `win.advance(ms)`. `@keyframes` remain.
-7. **M7 — CI & releases** 🚧 a provisional build of `gui.a` (and a headless
-   `XT_GUI_AUTOCLOSE_MS` run of the example) is wired into the `compile-examples`
-   job on Linux and macOS, and the `package` job builds the archive before
-   assembling the release so it ships inside the existing runtime archive
-   (`package-release` copies all of `runtime/`). Both steps are
-   `continue-on-error` while they are validated in CI. Still open: the MSVC
-   archive and D3D12/DXIL on Windows, the Linux X11/Wayland build headers and a
-   software Vulkan driver for headless runs.
-7. **M7 — CI builds `gui.a` per platform and attaches it to releases.**
+7. **M7 — CI & releases** ✅ (Linux/macOS build) / 🚧 (run + Windows)
+   - `compile-examples` builds `gui.a` on Linux and macOS (required), then runs
+     the example and `tests/e2e/gui.test.ts` under Xvfb + lavapipe on Linux
+     (required). The macOS run is provisional until a WindowServer is confirmed.
+   - The `package` job builds `gui.a` before assembling the release, so it ships
+     inside the existing runtime archive (`package-release` copies all of
+     `runtime/`).
+   - `vendor/` (SDL3/FreeType/HarfBuzz, the slow part) is cached per OS/arch,
+     keyed by `scripts/build-gui.ts`.
+   - Windows (build + run) stays provisional (`continue-on-error`) until the
+     MSVC-compatible `gui.lib` and D3D12/DXIL shader path are validated; see
+     *Open questions*.
 
 ## Progress log
 
@@ -449,13 +477,19 @@ which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
   an image pipeline in `renderer.*`, e2e coverage.
 - **M6b** ✅ CSS transitions (parsing in `style.*`, an animation clock and
   transition state in `document.*`, `advance`/`advance(ms)` hooks, e2e coverage).
+- **M7** ✅ builds `gui.a` in CI on Linux and macOS (required) and runs the
+  example plus the GUI e2e suite under Xvfb on Linux; `package` ships `gui.a`,
+  `vendor/` is cached, and the `ar -M` merge works on GNU/Linux and macOS.
+  macOS runs and all of Windows remain provisional in CI.
 
 ## Open questions
 
 - Whether Linux ships X11, Wayland, or both in the first cut. (Decision:
   X11 first, Wayland later.)
-- Windows: needs an MSVC-compatible `.lib` and a D3D12/DXIL SDL3 build; the
-  build script currently stops with a clear message there.
+- Windows: an MSVC-compatible `gui.lib` (COFF objects + `ar -M`/`llvm-ar`) is
+  produced by `scripts/build-gui.ts`, but it has not been validated in CI yet,
+  so the Windows step is `continue-on-error` and `package` skips it. It also
+  needs an SDL3 build with the D3D12/DXIL backend (DXIL requires `dxc`).
 - **Shaders on non-Metal backends:** the renderer embeds MSL source (compiled by
   SDL_GPU at runtime on macOS). Vulkan needs SPIR-V and D3D12 needs DXIL; those
   require `glslc`/`dxc` at build time. Until then the non-Metal path clears the

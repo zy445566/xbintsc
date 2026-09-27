@@ -21,10 +21,10 @@
  * needs to bind the top-level functions.
  */
 
-import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Extension, ExtensionModule } from "../registry.js";
 import { findRuntimeDir, platformSlug } from "../../driver/paths.js";
+import { findRuntimeLibrary } from "../../driver/runtime-lib.js";
 
 /** Top-level `gui` module bindings. */
 const guiModule: ExtensionModule = {
@@ -37,7 +37,8 @@ const guiModule: ExtensionModule = {
   },
 };
 
-/** Absolute path to the per-platform prebuilt GUI archive. */
+/** Absolute path to the per-platform prebuilt GUI archive (`gui.a`, or
+ * `gui.lib` with the MSVC ABI on Windows). */
 function guiArchive(): string {
   return join(findRuntimeDir(), "lib", platformSlug(), "gui.a");
 }
@@ -46,10 +47,10 @@ export const guiExtension: Extension = {
   name: "gui",
   description: "GPU-accelerated HTML/CSS GUI (self-hosted renderer, no webview)",
   nativeObjects: () => {
-    const archive = guiArchive();
-    if (!existsSync(archive)) {
+    const archive = findRuntimeLibrary("gui");
+    if (archive === undefined) {
       throw new Error(
-        `GUI native library not found at ${archive}.\n` +
+        `GUI native library not found at ${guiArchive()} (or gui.lib).\n` +
           `Build it for ${platformSlug()} first (see doc/gui.md).`,
       );
     }
@@ -90,10 +91,14 @@ export const guiExtension: Extension = {
     }
     if (process.platform === "win32") {
       return [
+        /* SDL_GPU D3D12 backend. */
         "-ld3d12", "-ldxgi", "-ldxguid",
+        /* Win32 / COM / multimedia services SDL3 uses. */
         "-luser32", "-lgdi32", "-lshell32",
         "-lole32", "-loleaut32", "-luuid", "-ladvapi32",
-        "-lstdc++",
+        "-lwinmm", "-limm32", "-lversion", "-lsetupapi",
+        /* The engine is C++; link the MSVC C++ runtime. */
+        "-lmsvcprt",
       ];
     }
     return ["-lX11", "-lwayland-client", "-lEGL", "-lGL", "-ldl", "-lpthread", "-lstdc++"];

@@ -174,7 +174,17 @@ jobs:
 
       - name: Install a C compiler (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: |
+          sudo apt-get update
+          # clang + cmake build the GUI archive; the dev headers let SDL3 enable
+          # its X11/Wayland backends, and xvfb + lavapipe let the example run
+          # headlessly.
+          sudo apt-get install -y clang cmake \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxinerama-dev libxfixes-dev libxkbcommon-dev libwayland-dev \
+            wayland-protocols libdecor-0-dev libasound2-dev libpulse-dev \
+            libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
+            libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
 
       - name: Install clang (Windows x64)
         if: runner.os == 'Windows' && runner.arch == 'X64'
@@ -209,6 +219,20 @@ jobs:
           }
 
       - run: npm ci
+
+      # Building SDL3/FreeType/HarfBuzz from source is the slow part of the GUI
+      # archive; cache them, keyed by the build script (which pins the versions).
+      - name: Cache the GUI vendored libraries
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/SDL
+            vendor/freetype
+            vendor/freetype-build
+            vendor/harfbuzz
+            vendor/harfbuzz-build
+          key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts') }}
 
       - name: Build the hello example
         run: npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
@@ -254,18 +278,46 @@ jobs:
         run: npx tsx src/cli/main.ts run examples/extensions/rust/demo.ts --ext-native examples/extensions/rust/xbintsc.manifest.json --out build/examples
 
       # The GUI engine statically links SDL3 + FreeType + HarfBuzz into
-      # `runtime/lib/<os>-<arch>/gui.a`; building it compiles those libraries
-      # from source, so it is slower. It is provisional until the per-platform
-      # archives are validated in CI: Windows still needs the MSVC toolchain
-      # (and D3D12/DXIL), and headless Linux needs a software Vulkan driver to
-      # run the example. `continue-on-error` keeps the build green meanwhile.
-      - name: Build the GUI archive and run the GUI example
+      # `runtime/lib/<os>-<arch>/gui.a`. Building compiles those libraries from
+      # source, so it is slower (they are cached per OS/arch).
+      - name: Build the GUI archive (Linux/macOS)
         if: runner.os != 'Windows'
-        continue-on-error: true
+        run: npm run gui
+
+      # Linux runs the example and the GUI e2e suite headlessly under Xvfb with
+      # the lavapipe software Vulkan driver; this path is validated.
+      - name: Run the GUI example + e2e tests (Linux, Xvfb)
+        if: runner.os == 'Linux'
+        env:
+          XT_GUI_AUTOCLOSE_MS: "1500"
         run: |
           set -euo pipefail
+          xvfb-run -a --server-args="-screen 0 1280x720x24" \
+            npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui --out build/examples
+          xvfb-run -a --server-args="-screen 0 1280x720x24" npx vitest run tests/e2e/gui.test.ts
+
+      # macOS runners may not expose a WindowServer to the process; keep this
+      # provisional until confirmed.
+      - name: Run the GUI example + e2e tests (macOS, provisional)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        env:
+          XT_GUI_AUTOCLOSE_MS: "1500"
+        run: |
+          set -euo pipefail
+          npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui --out build/examples
+          npx vitest run tests/e2e/gui.test.ts
+
+      # Windows needs MSVC-compatible archives (and D3D12/DXIL) validated in CI
+      # before this can be required.
+      - name: Build the GUI archive (Windows, provisional)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        env:
+          XT_GUI_AUTOCLOSE_MS: "1500"
+        run: |
           npm run gui
-          XT_GUI_AUTOCLOSE_MS=1500 npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui --out build/examples
+          npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui --out build/examples
 
   self-host:
     name: Self-host (${{ matrix.os }})
@@ -406,6 +458,18 @@ jobs:
 
       - run: npm ci
 
+      - name: Cache the GUI vendored libraries
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/SDL
+            vendor/freetype
+            vendor/freetype-build
+            vendor/harfbuzz
+            vendor/harfbuzz-build
+          key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts') }}
+
       - name: Download the self-hosted compiler
         uses: actions/download-artifact@v8
         with:
@@ -415,12 +479,11 @@ jobs:
       - name: Build the prebuilt runtime archives
         run: npm run runtime
 
-      # Best effort: `package-release` copies all of `runtime/`, so a `gui.a`
-      # built here is shipped automatically. It is skipped where the archive
-      # cannot be produced yet (see the compile-examples job).
-      - name: Build the GUI archive (optional)
+      # `package-release` copies all of `runtime/`, so the `gui.a` built here is
+      # shipped automatically. Built on Linux/macOS; Windows is skipped until the
+      # MSVC archive is validated (see the compile-examples job).
+      - name: Build the GUI archive
         if: runner.os != 'Windows'
-        continue-on-error: true
         run: npm run gui
 
       - name: Assemble the release archive

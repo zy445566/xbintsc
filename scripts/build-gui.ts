@@ -14,17 +14,20 @@
  *   2. build `libSDL3.a` with CMake,
  *   2b. fetch + build static FreeType and HarfBuzz for text,
  *   3. compile the engine translation units,
- *   4. merge everything into `gui.a` (libtool on macOS, `ar -M` elsewhere).
+ *   4. merge everything into `gui.a` (libtool on macOS, `ar -M` elsewhere;
+ *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
  *
  * Environment:
  *   xbintsc_CXX    C++ compiler override (default: clang++/c++/g++)
  *   xbintsc_CMAKE  CMake override (default: a vendored CMake, then `cmake`)
+ *   xbintsc_AR     archiver override (default: llvm-ar, then ar)
  *   SDL3_TAG       SDL3 git tag to check out (default: release-3.2.10)
  *   FREETYPE_VERSION  FreeType version (default: 2.13.3)
  *   HARFBUZZ_VERSION  HarfBuzz version (default: 10.1.0)
  *
- * Windows is not supported yet: it needs an MSVC-compatible `.lib` and a
- * D3D12/DXIL SDL3 build.
+ * On Windows the engine is compiled with `clang++` against the MSVC ABI (run
+ * from a Visual Studio developer prompt so `INCLUDE`/`LIB` are set) and merged
+ * into a COFF `gui.lib` with `llvm-ar`.
  */
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
@@ -39,16 +42,16 @@ const engineDir = join(runtimeDir, "ext_gui");
 const vendorDir = join(root, "vendor");
 const sdlSrc = join(vendorDir, "SDL");
 const sdlBuild = join(sdlSrc, "build");
-const sdlArchive = join(sdlBuild, "libSDL3.a");
 const freetypeSrc = join(vendorDir, "freetype");
 const freetypeBuild = join(vendorDir, "freetype-build");
-const freetypeArchive = join(freetypeBuild, "libfreetype.a");
 const harfbuzzSrc = join(vendorDir, "harfbuzz");
 const harfbuzzBuild = join(vendorDir, "harfbuzz-build");
-const harfbuzzArchive = join(harfbuzzBuild, "libharfbuzz.a");
 const objDir = join(root, "build", "gui-obj");
 const outDir = join(runtimeDir, "lib", platformSlug());
-const output = join(outDir, "gui.a");
+
+const isWindows = process.platform === "win32";
+const objectSuffix = isWindows ? ".obj" : ".o";
+const output = join(outDir, isWindows ? "gui.lib" : "gui.a");
 
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
 const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
@@ -59,10 +62,6 @@ const HARFBUZZ_URL = `https://github.com/harfbuzz/harfbuzz/releases/download/${H
 function fail(message: string): never {
   console.error(`xbintsc: ${message}`);
   process.exit(1);
-}
-
-if (process.platform === "win32") {
-  fail("building gui.a is not supported on Windows yet (needs an MSVC .lib + D3D12/DXIL SDL3 build)");
 }
 
 function run(
@@ -123,6 +122,45 @@ function findArchiver(): string {
   return ar;
 }
 
+/** First of `candidates` that exists on disk (CMake generators place static
+ * libraries either at the build root or under `Release/`). */
+function firstExisting(candidates: readonly string[]): string | undefined {
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/** Locate a library CMake produced, accepting the POSIX and MSVC names and
+ * falling back to a version-suffixed MSVC name (e.g. `freetype-2.13.3.lib`). */
+function builtLibrary(buildDir: string, names: readonly string[], pattern?: RegExp): string | undefined {
+  const candidates: string[] = [];
+  for (const name of names) {
+    candidates.push(join(buildDir, name));
+    candidates.push(join(buildDir, "Release", name));
+    candidates.push(join(buildDir, "Debug", name));
+  }
+  const exact = firstExisting(candidates);
+  if (exact || !pattern) return exact;
+  for (const dir of [buildDir, join(buildDir, "Release"), join(buildDir, "Debug")]) {
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir)) {
+      if (pattern.test(entry)) return join(dir, entry);
+    }
+  }
+  return undefined;
+}
+
+function sdlArchive(): string | undefined {
+  return builtLibrary(sdlBuild, ["libSDL3.a", "SDL3-static.lib", "SDL3.lib"], /^SDL3[-\w.]*\.lib$/);
+}
+function freetypeArchive(): string | undefined {
+  return builtLibrary(freetypeBuild, ["libfreetype.a", "freetype.lib"], /^freetype[-\d.]*\.lib$/);
+}
+function harfbuzzArchive(): string | undefined {
+  return builtLibrary(harfbuzzBuild, ["libharfbuzz.a", "harfbuzz.lib"], /^harfbuzz[-\d.]*\.lib$/);
+}
+
 /* -- 1. SDL3 source ------------------------------------------------------- */
 
 if (!existsSync(join(sdlSrc, "CMakeLists.txt"))) {
@@ -133,7 +171,8 @@ if (!existsSync(join(sdlSrc, "CMakeLists.txt"))) {
 
 /* -- 2. static SDL3 ------------------------------------------------------- */
 
-if (!existsSync(sdlArchive)) {
+const existingSdlArchive = sdlArchive();
+if (!existingSdlArchive) {
   const cmake = findCmake();
   console.log(`xbintsc: building static SDL3 with ${cmake}`);
   const configureArgs = [
@@ -148,7 +187,7 @@ if (!existsSync(sdlArchive)) {
   run(cmake, configureArgs);
   run(cmake, ["--build", sdlBuild, "--config", "Release", "--target", "SDL3-static", "--parallel"]);
 } else {
-  console.log("xbintsc: reusing existing vendor/SDL/build/libSDL3.a");
+  console.log(`xbintsc: reusing existing ${existingSdlArchive}`);
 }
 
 /* -- 2b. FreeType + HarfBuzz (text) --------------------------------------- */
@@ -175,7 +214,7 @@ function ensureTarballSource(name: string, url: string, extractedName: string): 
 ensureTarballSource("freetype", FREETYPE_URL, `freetype-${FREETYPE_VERSION}`);
 ensureTarballSource("harfbuzz", HARFBUZZ_URL, `harfbuzz-${HARFBUZZ_VERSION}`);
 
-if (!existsSync(freetypeArchive)) {
+if (!existsSync(freetypeArchive() ?? "")) {
   const cmake = findCmake();
   console.log("xbintsc: building static FreeType");
   run(cmake, [
@@ -192,10 +231,10 @@ if (!existsSync(freetypeArchive)) {
   ]);
   run(cmake, ["--build", freetypeBuild, "--config", "Release", "--parallel"]);
 } else {
-  console.log("xbintsc: reusing existing vendor/freetype-build/libfreetype.a");
+  console.log(`xbintsc: reusing existing ${freetypeArchive()}`);
 }
 
-if (!existsSync(harfbuzzArchive)) {
+if (!existsSync(harfbuzzArchive() ?? "")) {
   const cmake = findCmake();
   console.log("xbintsc: building static HarfBuzz");
   run(cmake, [
@@ -213,7 +252,7 @@ if (!existsSync(harfbuzzArchive)) {
   ]);
   run(cmake, ["--build", harfbuzzBuild, "--config", "Release", "--parallel"]);
 } else {
-  console.log("xbintsc: reusing existing vendor/harfbuzz-build/libharfbuzz.a");
+  console.log(`xbintsc: reusing existing ${harfbuzzArchive()}`);
 }
 
 /* -- 3. engine objects ---------------------------------------------------- */
@@ -232,34 +271,43 @@ const sources = readdirSync(engineDir)
   .sort();
 
 const objects: string[] = [];
+const cxxFlags = ["-std=c++17", "-O2", "-Wall", "-Wextra", ...includeFlags];
+/* The MSVC ABI rejects `-fPIC`; position independence is the default elsewhere. */
+if (!isWindows) cxxFlags.splice(3, 0, "-fPIC");
 for (const source of sources) {
-  const object = join(objDir, source.replace(/\.cpp$/, ".o"));
+  const object = join(objDir, source.replace(/\.cpp$/, objectSuffix));
   console.log(`xbintsc: compiling ${source}`);
-  run(cxx, [
-    "-std=c++17", "-O2", "-Wall", "-Wextra", "-fPIC",
-    ...includeFlags,
-    "-c", join(engineDir, source), "-o", object,
-  ]);
+  run(cxx, [...cxxFlags, "-c", join(engineDir, source), "-o", object]);
   objects.push(object);
 }
 
-/* -- 4. merge into gui.a -------------------------------------------------- */
+/* -- 4. merge into gui.a / gui.lib ---------------------------------------- */
+
+const sdl = sdlArchive();
+const freetype = freetypeArchive();
+const harfbuzz = harfbuzzArchive();
+if (!sdl || !freetype || !harfbuzz) {
+  fail("one of the SDL3/FreeType/HarfBuzz archives was not found after building");
+}
+const libraries = [sdl, freetype, harfbuzz];
 
 mkdirSync(outDir, { recursive: true });
+rmSync(output, { force: true });
 if (process.platform === "darwin") {
   /* libtool warns about the empty object files SDL3's archive carries; hide it
    * unless the merge actually fails. */
-  run("libtool", ["-static", "-o", output, ...objects, sdlArchive, freetypeArchive, harfbuzzArchive], {
+  run("libtool", ["-static", "-o", output, ...objects, ...libraries], {
     quietStderr: true,
   });
 } else {
+  /* `ar -M` (GNU/LLVM) merges archives through an MRI script. Windows paths are
+   * normalised to `/` so the MRI parser does not read `\` as an escape. */
+  const mri = (path: string): string => path.replace(/\\/g, "/");
   const ar = findArchiver();
   const script = [
-    `create ${output}`,
-    ...objects.map((object) => `addmod ${object}`),
-    `addlib ${sdlArchive}`,
-    `addlib ${freetypeArchive}`,
-    `addlib ${harfbuzzArchive}`,
+    `create ${mri(output)}`,
+    ...objects.map((object) => `addmod ${mri(object)}`),
+    ...libraries.map((library) => `addlib ${mri(library)}`),
     "save",
     "end",
   ].join("\n");

@@ -18,6 +18,7 @@ export default tseslint.config(
       "node_modules/**",
       "runtime/**",
       "scratch/**",
+      "vendor/**",
       "examples/**",
       "**/*.d.ts",
       "**/*.js",

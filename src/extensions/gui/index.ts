@@ -64,9 +64,23 @@ export const guiExtension: Extension = {
   linkerFlags: () => {
     if (process.platform === "darwin") {
       return [
+        "-framework", "CoreMedia",
+        "-framework", "CoreVideo",
         "-framework", "Cocoa",
+        "-weak_framework", "UniformTypeIdentifiers",
+        "-framework", "IOKit",
+        "-framework", "ForceFeedback",
+        "-framework", "Carbon",
+        "-framework", "CoreAudio",
+        "-framework", "AudioToolbox",
+        "-framework", "AVFoundation",
+        "-framework", "Foundation",
+        "-framework", "GameController",
         "-framework", "Metal",
         "-framework", "QuartzCore",
+        "-weak_framework", "CoreHaptics",
+        "-lpthread",
+        "-lm",
         "-lc++",
       ];
     }

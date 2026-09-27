@@ -1,8 +1,9 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **design / early implementation**. This document records the locked
-decisions, the architecture, and the milestone plan for a cross-platform GUI
-extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
+Status: **M2 complete** — a TypeScript program can open a GPU-backed SDL3
+window, receive lifecycle events, and exit cleanly. This document records the
+locked decisions, the architecture, and the milestone plan for a cross-platform
+GUI extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -34,6 +35,7 @@ extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
 | 4 | The engine is **not self-hosted** (it is C/C++, not TS), but must not affect the compiler's platform-agnostic design. Delivered as a per-platform prebuilt archive linked via `nativeObjects`. |
 | 5 | The **event loop is generic**: the runtime exposes a generic main-loop hook and a poll primitive; nothing GUI-specific enters `runtime/`. |
 | 6 | **Multiple windows** are supported by the core object model. |
+| 7 | Third-party low-level libs are **statically linked into `gui.a`** so releases stay self-contained; only OS frameworks are added at link time. |
 
 ## Architecture
 
@@ -44,7 +46,7 @@ extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
         gui extension bindings  (src/extensions/gui)
                 │  xt_gui_* symbols  (uniform (argc, argv) ABI)
                 ▼
-             libgui.a                ── the self-hosted engine (C/C++)
+             gui.a                  ── the self-hosted engine (C/C++)
    ┌───────────────┬──────────────────┬───────────────────┐
    ▼               ▼                  ▼                   ▼
  HTML parser   CSS cascade +      Layout             GPU compositor
@@ -60,7 +62,7 @@ extension that renders an HTML/CSS UI with its own GPU-accelerated engine.
 The engine never talks to the compiler. The compiler only sees an `Extension`
 with `nativeObjects()`, `linkerFlags()` and `modules()`.
 
-## Proposed stack (needs confirmation)
+## Stack (confirmed)
 
 | Concern | Choice | Why |
 | --- | --- | --- |
@@ -78,21 +80,28 @@ engine were Rust.
 > xbintsc stays "download and run"; only OS frameworks are added by
 > `linkerFlags()`.
 
-## TS-facing API (first cut)
+## TS-facing API
 
 ```ts
 import { createWindow, run, quit } from "gui";
 
 const win = createWindow({ title: "Demo", width: 900, height: 600 });
-win.loadHTML(INDEX_HTML);          // string or embedded asset
-win.on("ready", () => win.eval(`document.body.textContent = "hi"`));
+win.setBackground("#14161c");
+win.loadHTML(INDEX_HTML);              // stores the document (paint lands in M3+)
+win.on("ready", () => console.log("first frame presented"));
+win.on("close", () => console.log("window closed"));
 
-run();                             // drives the main loop until all windows close
+run();                                 // drives the main loop until all windows close
 ```
 
+Methods implemented on a window handle: `setTitle` / `setSize` / `loadHTML` /
+`getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`. Events emitted:
+`ready` (after the first presented frame), `load` and `close`.
+
 Multiple windows fall out of the object model: `createWindow` returns a native
-object handle; each handle owns its own `SDL_Window`/GPU surface and DOM tree.
-`run()` starts one shared main loop that ticks every window.
+object handle; each handle owns its own `SDL_Window`/GPU surface and (from M3)
+its own DOM tree. `run()` drives one shared main loop that ticks every window and
+exits when the last one closes.
 
 ## Event loop integration
 
@@ -104,12 +113,18 @@ The runtime change (already landed):
   loop. `xt_run_event_loop()` delegates to it; the generated `main` is unchanged.
 - `xt_loop_set_main(NULL)` restores the default `select(2)` loop.
 
-The GUI engine registers its own loop. Each tick it:
+The GUI engine can either register its own loop through `xt_loop_set_main`, or
+expose an explicit `run()`; **M2 uses the explicit `run()`** so the window is a
+plain native call the TypeScript program controls. Each tick it:
 
 1. pumps SDL window/input events for every window,
-2. calls `xt_loop_poll(0)` to service sockets/timers and drain microtasks,
-3. renders dirty windows,
+2. renders every open window (a clear pass for now),
+3. calls `xt_loop_poll(0)` and `xt_drain_microtasks()` so sockets/timers and
+   `await` continuations keep making progress,
 4. repeats until all windows close or `quit()` is called.
+
+The `xt_loop_set_main` hook remains available for hosts that want to own the
+loop themselves.
 
 This keeps network I/O, timers and `await` working inside a GUI program.
 
@@ -124,22 +139,37 @@ This keeps network I/O, timers and `await` working inside a GUI program.
 
 ## Packaging & build
 
-- Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`.
-- A build script produces `runtime/lib/<os>-<arch>/gui.a` (same convention as
-  `core.a`), statically bundling the vendored libs.
+- Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`
+  (gitignored; fetched on demand).
+- `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
+  default `release-3.2.10`), builds `libSDL3.a`, compiles the engine and merges
+  everything into `runtime/lib/<os>-<arch>/gui.a` (same convention as `core.a`),
+  statically bundling SDL3.
 - `src/extensions/gui/index.ts` exposes the archive through `nativeObjects()`
   and the OS frameworks through `linkerFlags()`.
 - The existing cache fingerprint already hashes `nativeObjects()` contents, so
   rebuilding `gui.a` invalidates cached binaries automatically.
 
+### Running the example
+
+```sh
+npm run runtime      # rebuild core.a after a runtime change
+npm run gui          # build runtime/lib/<os>-<arch>/gui.a (fetches SDL3 once)
+xbintsc run examples/gui/hello.ts --ext gui
+```
+
+Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
+which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
+
 ## Milestones
 
-1. **M1 — foundation** (this branch)
+1. **M1 — foundation** ✅
    - Generic `xt_loop_poll` / `xt_loop_set_main` in the runtime.
    - `gui` extension skeleton + generic CLI extension registration.
-2. **M2 — window + GPU clear**
-   - SDL3 window, SDL_GPU swapchain, multi-window, main-loop integration.
-   - `createWindow` / `run` / `quit` work end-to-end.
+2. **M2 — window + GPU clear** ✅
+   - SDL3 window, SDL_GPU swapchain, multiple windows, main-loop integration.
+   - `createWindow` / `run` / `quit` + `on`/`off` window methods work
+     end-to-end (`runtime/ext_gui/`, `scripts/build-gui.ts`).
 3. **M3 — HTML/CSS subset**
    - HTML parser, selector matching, cascade, block/inline flow + Flexbox.
 4. **M4 — paint + text**
@@ -151,5 +181,7 @@ This keeps network I/O, timers and `await` working inside a GUI program.
 
 ## Open questions
 
-- Confirm the **SDL3 + SDL_GPU** stack (Q3 in the design discussion).
-- Whether Linux ships X11, Wayland, or both in the first cut.
+- Whether Linux ships X11, Wayland, or both in the first cut. (Decision:
+  X11 first, Wayland later.)
+- Windows: needs an MSVC-compatible `.lib` and a D3D12/DXIL SDL3 build; the
+  build script currently stops with a clear message there.

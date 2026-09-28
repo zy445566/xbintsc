@@ -275,7 +275,7 @@ window payload.
 ### Backward compatibility
 
 The legacy window payload keeps its **string** `e.target`
-(`tests/e2e/gui.test.ts` asserts `e.target === "div#inner"`). Only the *element*
+(`tests/e2e/gui-*.test.ts` asserts `e.target === "div#inner"`). Only the *element*
 Event's `target` is a handle, whose descriptor (`toString`) matches the same
 `div#id.class` string. `make_dom_event` deliberately does **not** copy the
 legacy `target` field over the handle.
@@ -328,7 +328,7 @@ legacy `target` field over the handle.
 
 ## Testing
 
-- **M8**: a new e2e case in `tests/e2e/gui.test.ts` covering handle identity,
+- **M8**: a new e2e case in `tests/e2e/gui-*.test.ts` covering handle identity,
   traversal, attributes, `classList`, inline `style`, `createElement` +
   `appendChild` + `removeChild`, `getBoundingClientRect`, element bubbling,
   `stopPropagation`, `el.click()` and **window-level `e.target` compatibility**.

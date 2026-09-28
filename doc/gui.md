@@ -178,7 +178,7 @@ win.sendEvent(type, options?)          // synthesise input (testing)
 win.advance(ms)                        // step the CSS transition clock (testing)
 ```
 
-They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
+They are used by `tests/e2e/gui-*.test.ts` to assert parsing, selector matching,
 specificity, inheritance, `!important` and layout geometry. They will stay useful
 afterwards for debugging.
 
@@ -475,7 +475,7 @@ xbintsc run examples/gui/hello.ts --ext gui
 ```
 
 Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
-which the e2e test (`tests/e2e/gui.test.ts`) uses to run headlessly.
+which the e2e test (`tests/e2e/gui-*.test.ts`) uses to run headlessly.
 
 On a headless Linux box, install the SDL3 build headers and run under Xvfb with a
 software Vulkan driver:
@@ -531,7 +531,7 @@ used by default; Wayland is enabled too but not yet exercised.
      and `win.advance(ms)`. `@keyframes` remain.
 7. **M7 — CI & releases** ✅ (Linux/macOS build) / 🚧 (run + Windows)
    - `compile-examples` builds `gui.a` on Linux and macOS (required), then runs
-     the example and `tests/e2e/gui.test.ts` under Xvfb + lavapipe on Linux
+     the example and `tests/e2e/gui-*.test.ts` under Xvfb + lavapipe on Linux
      (required). The macOS run is provisional until a WindowServer is confirmed;
      it is guarded so a failure is logged without annotating the run.
    - The `package` job builds `gui.a` before assembling the release, so it ships
@@ -600,14 +600,14 @@ used by default; Wayland is enabled too but not yet exercised.
 - **M8** ✅ element/document handles (`dom_api.*`), DOM mutation with lazy
   restyle/relayout (`document.*`, `xt_gui_flush_dom`), element event dispatch
   with capture/bubble and `stopPropagation` (`dom_api.*`, `gui.cpp`), and e2e
-  coverage in `tests/e2e/gui.test.ts`.
+  coverage in `tests/e2e/gui-*.test.ts`.
 - **M9a** ✅ extensions can register asset loaders keyed by file extension;
   `bundleModules`/`loadGraph` consult them after reading a file. Unit tests in
   `tests/driver/modules.test.ts`.
 - **M9b** ✅ `import page from "./page.html"` compiles inline `<script lang="ts">`
   bodies into AOT functions registered at startup and run by `win.loadHTML`
   (before first layout; `DOMContentLoaded` then `load`). Unit tests in
-  `tests/extensions/gui.test.ts`, e2e in `tests/e2e/gui.test.ts`.
+  `tests/extensions/gui.test.ts`, e2e in `tests/e2e/gui-*.test.ts`.
 - **M9c** ✅ external `<script src>` files are read, their imports hoisted
   (specifiers rewritten from the HTML dir) and their body wrapped/registered;
   missing files and import-binding collisions are diagnostics. Loader errors are
@@ -615,7 +615,7 @@ used by default; Wayland is enabled too but not yet exercised.
 - **M10** ✅ `requestAnimationFrame`/`cancelAnimationFrame` on window handles
   (callbacks run with the frame timestamp before layout each frame) plus
   `offsetWidth`/`offsetHeight`/`contains` on element handles; e2e coverage in
-  `tests/e2e/gui.test.ts`.
+  `tests/e2e/gui-*.test.ts`.
 
 ## Open questions
 

@@ -1,5 +1,8 @@
 // Minimal GUI example: opens a GPU-backed window, loads an HTML/CSS document
-// and reads back computed styles. Build and run with:
+// and reads back computed styles. The document lives in `hello.html` next to
+// this file and carries an inline `<script lang="ts">` that wires up a
+// reactive counter (no JS engine involved — the body is AOT-compiled). Build
+// and run with:
 //
 //   xbintsc run examples/gui/hello.ts --ext gui
 //
@@ -8,36 +11,9 @@
 //   XT_GUI_AUTOCLOSE_MS=500 xbintsc run examples/gui/hello.ts --ext gui
 
 import { createWindow, run } from "gui";
-
-const INDEX_HTML = `
-<html>
-  <head>
-    <style>
-      body { margin: 0; background-color: #fafafa; font-size: 16px; }
-      .card {
-        display: flex;
-        flex-direction: column;
-        width: 50%;
-        padding: 8px;
-        background: #ffffff;
-        border-radius: 6px;
-        transition: background-color 250ms ease, border-radius 250ms ease;
-      }
-      .card h1 { font-size: 1.5em; color: rgb(20, 22, 28); }
-      #title { font-weight: bold; }
-      .card > .row { margin-top: 4px; }
-      .card:hover { background: #f0f4ff; border-radius: 12px; }
-      #title:focus { color: #2b6cff; }
-    </style>
-  </head>
-  <body>
-    <div class="card" id="card">
-      <h1 id="title">Hello from xbintsc</h1>
-      <div class="row">a flex row</div>
-    </div>
-  </body>
-</html>
-`;
+// The `.html` asset loader compiles the inline `<script>` into native code and
+// replaces it with a marker; `loadHTML` runs it once the document is parsed.
+import page from "./hello.html";
 
 const win = createWindow({ title: "xbintsc gui", width: 640, height: 480 });
 
@@ -55,6 +31,22 @@ win.on("ready", () => {
   console.log("card rect      =", card.x, card.y, card.width, card.height);
   console.log("paint shapes   =", win.paintCount());
   console.log(win.paintList().split("\n").filter(Boolean).slice(0, 3).join("\n"));
+
+  // The counter is entirely driven by the page's inline script: clicking a
+  // button dispatches an element event that the script handler reacts to.
+  const count = win.document.getElementById("count");
+  const inc = win.document.getElementById("inc");
+  const dec = win.document.getElementById("dec");
+  const reset = win.document.getElementById("reset");
+  console.log("counter init   =", count.textContent, "class=", count.className);
+  inc.click();
+  inc.click();
+  inc.click();
+  dec.click();
+  console.log("counter +3 -1  =", count.textContent, "class=", count.className);
+  console.log("counter color  =", win.computedStyle("#count", "color"));
+  reset.click();
+  console.log("counter reset  =", count.textContent, "class=", count.className);
 });
 
 // Input events carry a payload (coordinates + the deepest element, as a
@@ -68,7 +60,7 @@ win.on("close", () => {
 });
 
 win.setBackground("#14161c");
-win.loadHTML(INDEX_HTML);
+win.loadHTML(page);
 
 run();
 console.log("gui exited");

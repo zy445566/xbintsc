@@ -52,6 +52,24 @@ export interface ExtensionModule {
   readonly namespace?: string;
 }
 
+/** The result of an extension asset loader rewriting one imported file. */
+export interface AssetLoadResult {
+  /**
+   * The TypeScript source the bundler parses in place of the raw file. It may
+   * contain its own `import`/`export` statements, which are followed normally.
+   */
+  readonly moduleSource: string;
+  /**
+   * Extra files the transformed module depends on that are *not* reached
+   * through imports (for cache invalidation). Imported files are already
+   * tracked by the bundler.
+   */
+  readonly dependencies?: readonly string[];
+}
+
+/** Rewrites an imported file (selected by extension) into a TS module. */
+export type AssetLoader = (path: string, source: string) => AssetLoadResult;
+
 export interface Extension {
   readonly name: string;
   /** Description shown by `xbintsc ext list`. */
@@ -75,6 +93,13 @@ export interface Extension {
   builtins?(): Readonly<Record<string, BuiltinFunction>>;
   /** Modules importable as `import ... from "<specifier>"`. */
   modules?(): Readonly<Record<string, ExtensionModule>>;
+  /**
+   * Rewrite imported assets into TS modules, keyed by file extension
+   * (including the dot, e.g. `".html"`). The bundler consults these right
+   * after reading a file and before parsing it, so the core compiler never
+   * learns about any particular asset format.
+   */
+  assetLoaders?(): Readonly<Record<string, AssetLoader>>;
 }
 
 export class ExtensionRegistry {
@@ -155,6 +180,20 @@ export class ExtensionRegistry {
           exports: { ...existing?.exports, ...module.exports },
         };
       }
+    }
+    return merged;
+  }
+
+  /**
+   * Flatten every registered extension's asset loaders, keyed by file
+   * extension. A later extension overrides an earlier one for the same
+   * extension (mirroring `modules()`).
+   */
+  assetLoaders(): Readonly<Record<string, AssetLoader>> {
+    const merged: Record<string, AssetLoader> = {};
+    for (const extension of this.extensions.values()) {
+      const loaders = extension.assetLoaders?.();
+      if (loaders) Object.assign(merged, loaders);
     }
     return merged;
   }

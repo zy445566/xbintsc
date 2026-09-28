@@ -246,3 +246,45 @@ describe("bundleModules", () => {
     expect(bag.diagnostics.some((d) => d.message.includes("Cannot find module"))).toBe(true);
   });
 });
+
+describe("asset loaders", () => {
+  it("rewrites a matching asset extension into a TS module", () => {
+    const directory = writeFiles({
+      "data.foo": "hello",
+      "main.ts": 'import value from "./data.foo";\nconsole.log(value);',
+    });
+    const seen: Array<[string, string]> = [];
+    const loader = (path: string, source: string) => {
+      seen.push([path, source]);
+      return { moduleSource: `export default ${JSON.stringify(source)};` };
+    };
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag, new Set(), { ".foo": loader });
+    expect(bag.hasErrors).toBe(false);
+    expect(seen).toEqual([[join(directory, "data.foo"), "hello"]]);
+    expect(result?.text).toContain('export default "hello"');
+  });
+
+  it("follows imports from a loader-generated module", () => {
+    const directory = writeFiles({
+      "widget.html": "<div></div>",
+      "helper.ts": "export const n = 41;",
+      "main.ts": 'import html from "./widget.html";\nconsole.log(html);',
+    });
+    const loader = () => ({
+      moduleSource: 'import { n } from "./helper";\nexport default "loaded-" + n;',
+    });
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag, new Set(), { ".html": loader });
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(3);
+  });
+
+  it("leaves files with other extensions untouched", () => {
+    const directory = writeFiles({ "main.ts": "console.log(1);" });
+    const loader = () => ({ moduleSource: 'throw new Error("should not run");' });
+    const bag = new DiagnosticBag();
+    bundleModules(join(directory, "main.ts"), bag, new Set(), { ".html": loader });
+    expect(bag.hasErrors).toBe(false);
+  });
+});

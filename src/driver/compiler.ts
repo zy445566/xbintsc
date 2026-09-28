@@ -109,7 +109,7 @@ export function compileEntry(entryPath: string, extensions?: ExtensionRegistry):
       statement.kind === SyntaxKind.ExportAssignment,
   );
   if (isModule) {
-    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry));
+    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry), registry.assetLoaders());
     if (bundled) sourceFile = bundled.sourceFile;
   }
   const { ir } = generate(sourceFile, diagnostics, {
@@ -185,7 +185,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   );
   let cacheText = sourceText;
   if (isModule) {
-    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry));
+    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry), registry.assetLoaders());
     if (bundled) {
       sourceFile = bundled.sourceFile;
       cacheText = bundled.text;

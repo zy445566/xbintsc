@@ -89,6 +89,7 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   if (win == NULL || !win->open) return;
   win->open = 0;
   xt_gui_emit(win, "close");
+  win->animation_frames.clear();
   xt_gui_handles_reset(win);
   win->document_object = XT_UNDEFINED;
   win->document.reset();
@@ -288,6 +289,19 @@ static void xt_gui_handle_event(const SDL_Event *event) {
 
 /* -- rendering ------------------------------------------------------------ */
 
+void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms) {
+  if (win == NULL || win->animation_frames.empty()) return;
+  /* Swap the queue out first: a callback that calls requestAnimationFrame
+   * again schedules for the *next* frame, not this one. */
+  std::vector<XtGuiAnimationFrame> frames;
+  frames.swap(win->animation_frames);
+  for (const XtGuiAnimationFrame &frame : frames) {
+    if (!win->open) break;
+    xt_value arg = xt_number(timestamp_ms);
+    xt_call_with_this(frame.fn, win->object, 1, &arg);
+  }
+}
+
 void xt_gui_render_window(XtGuiWindow *win) {
   if (win == NULL || !win->open || win->window == NULL || g_device == NULL) return;
   float viewport_width = 0;
@@ -298,6 +312,9 @@ void xt_gui_render_window(XtGuiWindow *win) {
   double now = (double)SDL_GetTicks();
   double delta = win->last_frame_ms > 0.0 ? now - win->last_frame_ms : 0.0;
   win->last_frame_ms = now;
+  /* Animation-frame callbacks run before layout, so any DOM mutation they make
+   * is picked up by this same frame. */
+  xt_gui_run_animation_frames(win, now);
   if (win->document != nullptr && win->document->advance(delta)) win->geometry.dirty = 1;
 
   /* A DOM mutation from a handler invalidates the tree: restyle/relayout
@@ -405,6 +422,8 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   record->text_geometry = XtGuiGeometry();
   record->image_geometry = XtGuiGeometry();
   record->last_frame_ms = 0.0;
+  record->animation_frames.clear();
+  record->next_animation_frame_id = 1;
   record->background[0] = 0.08f;
   record->background[1] = 0.09f;
   record->background[2] = 0.11f;

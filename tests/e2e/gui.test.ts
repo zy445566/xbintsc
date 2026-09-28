@@ -592,6 +592,8 @@ describe.skipIf(!available)("gui extension", () => {
         console.log("toggle=" + inner.classList.toggle("hot") + ":" + inner.className);
         inner.style.setProperty("color", "#00ff00");
         console.log("style=" + inner.style.getPropertyValue("color") + ":" + win.computedStyle("#inner", "color"));
+        console.log("offset=" + box.offsetWidth + "x" + box.offsetHeight);
+        console.log("contains=" + box.contains(inner) + ":" + inner.contains(box));
         const created = doc.createElement("div");
         created.id = "new";
         created.textContent = "hi";
@@ -640,6 +642,8 @@ describe.skipIf(!available)("gui extension", () => {
     expect(value("class")).toBe("hot warm:true");
     expect(value("toggle")).toBe("false:warm"); // toggle removed the existing class
     expect(value("style")).toBe("#00ff00:rgb(0, 255, 0)");
+    expect(value("offset")).toBe("100x50");
+    expect(value("contains")).toBe("true:false");
     expect(value("created")).toBe("true:hi:16px");
     expect(value("removed")).toBe("false:true");
     // Element listeners fire target-first, then bubble to the ancestor. The
@@ -734,5 +738,44 @@ button.addEventListener("click", () => {
     };
     /* 0 -> 1 -> 3 proves the hoisted import (double) is linked. */
     expect(value("srcAfter")).toBe("3");
+  });
+
+  it("runs requestAnimationFrame callbacks each frame and honours cancelAnimationFrame", () => {
+    const { stdout } = compileAndRun(
+      "raf",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "raf", width: 320, height: 240 });
+      let frames = 0;
+      const tick = (t: number) => {
+        frames = frames + 1;
+        win.document.getElementById("label").textContent = String(frames);
+        if (frames < 3) win.requestAnimationFrame(tick);
+        else {
+          console.log("frames=" + frames + ":" + (t > 0));
+          console.log("label=" + win.document.getElementById("label").textContent);
+          win.close();
+        }
+      };
+      win.on("ready", () => {
+        const cancelled = win.requestAnimationFrame(() => console.log("cancelled-ran"));
+        win.cancelAnimationFrame(cancelled);
+        const id = win.requestAnimationFrame(tick);
+        console.log("id=" + (id > 0));
+      });
+      win.loadHTML("<div id='label'>0</div>");
+      run();
+      `,
+    );
+    const value = (label: string): string => {
+      const line = stdout.split("\n").find((entry) => entry.startsWith(`${label}=`));
+      expect(line, `missing ${label} in:\n${stdout}`).toBeDefined();
+      return line!.slice(label.length + 1).trim();
+    };
+    expect(value("id")).toBe("true");
+    expect(value("frames")).toBe("3:true"); // callback receives a timestamp
+    expect(value("label")).toBe("3"); // the DOM write was visible on the next read
+    expect(stdout).not.toContain("cancelled-ran");
   });
 });

@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M8** — features (M1–M7) are complete: HTML parsing, CSS selector
+Status: **M10** — features (M1–M10) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline and Flexbox) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
 and shaped text runs and renders them through SDL_GPU. Input events are hit
@@ -9,7 +9,8 @@ dynamically, `<img>` is sized from its intrinsic dimensions and drawn from a
 texture, and CSS transitions animate paint properties. **M8** adds an interactive
 DOM: element handles with stable identity, mutation (`appendChild`, `textContent`,
 `classList`, `style`, …) and element-level events with capture/bubbling.
-**M9** (planned) adds AOT-compiled `<script>` bodies — see `doc/gui-scripts.md`.
+**M9** compiles `<script>` bodies ahead of time (inline and `<script src>`) — see
+`doc/gui-scripts.md`. **M10** adds `requestAnimationFrame` plus a few DOM helpers.
 This document records the locked decisions, the architecture, the milestone plan
 and the current progress of a cross-platform GUI extension that renders an
 HTML/CSS UI with its own GPU-accelerated engine.
@@ -203,6 +204,8 @@ box.removeChild(created);
 
 inner.addEventListener("click", (e) => console.log(e.target.id, e.currentTarget.id));
 inner.click();                          // synthesise a click at the element
+console.log(box.offsetWidth, box.offsetHeight);   // rounded border box
+console.log(box.contains(inner));                 // descendant test
 ```
 
 Mutations mark the document dirty; the engine restyles + relayouts lazily (before
@@ -245,6 +248,24 @@ so a script module can `import` helpers and still see `document`. Scripts are
 network) never executes, and `src` URLs (`https://…`, `data:…`) are ignored.
 Everything runs in document order after parsing (effectively deferred). See
 `doc/gui-scripts.md` for the full design.
+
+### Animation frames (M10)
+
+`requestAnimationFrame` runs a callback once on the next frame; the callback
+receives the frame timestamp (ms) and may mutate the DOM, which is restyled and
+repainted in the same frame. Re-queue from inside the callback to animate:
+
+```ts
+const win = createWindow({ title: "anim", width: 320, height: 240 });
+let n = 0;
+const tick = (t: number) => {
+  win.document.getElementById("label").textContent = String(n++);
+  if (n < 120) win.requestAnimationFrame(tick); // id returned; cancelAnimationFrame(id) drops it
+};
+win.on("ready", () => win.requestAnimationFrame(tick));
+win.loadHTML("<div id='label'>0</div>");
+run();
+```
 
 ### Implemented layout (M3)
 
@@ -528,7 +549,7 @@ used by default; Wayland is enabled too but not yet exercised.
      `window.cpp`), element events with capture + bubble phases and
      `stopPropagation`, and window-level `e.target` compatibility. No compiler
      changes. See `doc/gui-scripts.md`.
-9. **M9 — AOT `<script>`** 🚧
+9. **M9 — AOT `<script>`** ✅
    - **M9a** ✅ — generic `Extension.assetLoaders` hook + bundler integration.
    - **M9b** ✅ — gui `.html` asset loader (`src/extensions/gui/html.ts`): inline
      bodies are wrapped in `__xt_script_<hash>(window, document)` functions,
@@ -539,6 +560,12 @@ used by default; Wayland is enabled too but not yet exercised.
      top-level imports are hoisted (specifiers rewritten from the HTML dir) and
      their body is wrapped/registered; missing files and import-binding
      collisions become diagnostics. Everything runs in document order.
+10. **M10 — polish** ✅
+    - `win.requestAnimationFrame(fn)` / `win.cancelAnimationFrame(id)`; callbacks
+      run at the top of each frame with the frame timestamp and may mutate the
+      DOM (`gui.cpp`, `window.cpp`, `gui_engine.h`).
+    - `Element.offsetWidth` / `offsetHeight` (rounded border box, flushes pending
+      mutations) and `Element.contains(other)` (`dom_api.cpp`).
 
 ## Progress log
 
@@ -585,6 +612,10 @@ used by default; Wayland is enabled too but not yet exercised.
   (specifiers rewritten from the HTML dir) and their body wrapped/registered;
   missing files and import-binding collisions are diagnostics. Loader errors are
   caught by `loadGraph` and reported as build errors.
+- **M10** ✅ `requestAnimationFrame`/`cancelAnimationFrame` on window handles
+  (callbacks run with the frame timestamp before layout each frame) plus
+  `offsetWidth`/`offsetHeight`/`contains` on element handles; e2e coverage in
+  `tests/e2e/gui.test.ts`.
 
 ## Open questions
 

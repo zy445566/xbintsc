@@ -286,7 +286,7 @@ legacy `target` field over the handle.
   - `runtime/ext_gui/dom_api.{h,cpp}`, `document.{h,cpp}`, `dom.{h,cpp}`,
     `gui_engine.h`, `gui.cpp`, `window.cpp`, e2e coverage.
   - No compiler changes; independently testable.
-- **M9 — AOT `<script>`** 🚧
+- **M9 — AOT `<script>`** ✅
   - **M9a** ✅ — `Extension.assetLoaders` in `src/extensions/registry.ts` +
     bundler integration in `src/driver/bundler/{graph,merge}.ts`; unit tests.
   - **M9b** ✅ — gui `.html` loader (`src/extensions/gui/html.ts`), the
@@ -299,13 +299,16 @@ legacy `target` field over the handle.
     deferred). e2e coverage.
   - **M9d** *(optional)* — detect inline HTML in template literals passed to
     `win.loadHTML(...)` and transform them too (fragile; deferred).
-- **M10 — polish** — `requestAnimationFrame`, a few more DOM helpers, docs.
+- **M10 — polish** ✅ — `requestAnimationFrame`/`cancelAnimationFrame` on the
+  window, `offsetWidth`/`offsetHeight`/`contains` on elements, docs.
 
 ### Landing order
 
 1. M8 (this branch) — pure engine work, no compiler impact.
 2. M9a — the generic hook + bundler wiring (unit-testable with a fake loader).
 3. M9b — the minimal end-to-end script path (inline `<script>` only).
+4. M9c — external `<script src>`.
+5. M10 — animation frames and helpers.
 
 ## Open risks
 
@@ -333,6 +336,9 @@ legacy `target` field over the handle.
   rewrites `*.foo` and records dependencies.
 - **M9b**: an e2e case with an inline `<script>` incrementing a counter on
   click, asserted through `console.log` from the handler.
+- **M10**: e2e cases for `requestAnimationFrame` (runs each frame, re-queues,
+  receives a timestamp, honours `cancelAnimationFrame`) and for
+  `offsetWidth`/`offsetHeight`/`contains`.
 
 ## Docs to update
 

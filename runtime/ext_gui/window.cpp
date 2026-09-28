@@ -10,6 +10,8 @@
 
 #include "gui_engine.h"
 
+#include <algorithm>
+
 #include "paint.h"
 #include "text.h"
 
@@ -281,6 +283,34 @@ static xt_value win_is_open(xt_value self, xt_value env, int32_t argc, xt_value 
   return (win != NULL && win->open) ? XT_TRUE : XT_FALSE;
 }
 
+/** `requestAnimationFrame(fn)` -> id. The callback runs once on the next frame
+ * with the frame timestamp (ms) as its only argument. */
+static xt_value win_request_animation_frame(xt_value self, xt_value env, int32_t argc,
+                                            xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == NULL || !win->open) return xt_number(0);
+  xt_value fn = xt_arg(argc, argv, 0);
+  if (!XT_IS_FUNCTION(fn)) return xt_number(0);
+  int id = win->next_animation_frame_id++;
+  win->animation_frames.push_back(XtGuiAnimationFrame{id, fn});
+  return xt_number((double)id);
+}
+
+/** `cancelAnimationFrame(id)` drops a callback queued for the next frame. */
+static xt_value win_cancel_animation_frame(xt_value self, xt_value env, int32_t argc,
+                                           xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == NULL || argc < 1) return XT_UNDEFINED;
+  int id = (int)xt_to_number(xt_arg(argc, argv, 0));
+  std::vector<XtGuiAnimationFrame> &frames = win->animation_frames;
+  frames.erase(std::remove_if(frames.begin(), frames.end(),
+                              [id](const XtGuiAnimationFrame &frame) { return frame.id == id; }),
+               frames.end());
+  return XT_UNDEFINED;
+}
+
 static xt_value win_on(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   if (argc >= 2) {
@@ -424,6 +454,8 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "fontMetrics", (void *)win_font_metrics);
   define_method(proto, "close", (void *)win_close);
   define_method(proto, "isOpen", (void *)win_is_open);
+  define_method(proto, "requestAnimationFrame", (void *)win_request_animation_frame);
+  define_method(proto, "cancelAnimationFrame", (void *)win_cancel_animation_frame);
   define_method(proto, "on", (void *)win_on);
   define_method(proto, "off", (void *)win_off);
   define_method(proto, "hitTest", (void *)win_hit_test);

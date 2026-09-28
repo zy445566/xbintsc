@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -885,6 +886,42 @@ METHOD(node_get_bounding_rect) {
   return object;
 }
 
+/** Laid-out border-box size, rounded like the browser `offsetWidth`/
+ * `offsetHeight` (0 when the element has no box yet). Applies pending
+ * mutations first so a read after a write is up to date. */
+static xt_value node_offset_dimension(xt_value self, bool width) {
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || win == nullptr || win->document == nullptr) return xt_number(0);
+  xt_gui_flush_dom(win);
+  const xtgui::LayoutBox *box = win->document->boxOf(node);
+  if (box == nullptr) return xt_number(0);
+  return xt_number((double)std::lround(width ? box->width : box->height));
+}
+
+METHOD(node_offset_width_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return node_offset_dimension(self, true);
+}
+
+METHOD(node_offset_height_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return node_offset_dimension(self, false);
+}
+
+METHOD(node_contains) {
+  (void)env;
+  xtgui::Node *node = resolve_node(self, nullptr);
+  if (node == nullptr || argc < 1) return XT_FALSE;
+  xtgui::Node *other = resolve_node(xt_arg(argc, argv, 0), nullptr);
+  if (other == nullptr) return XT_FALSE;
+  return node->contains(other) ? XT_TRUE : XT_FALSE;
+}
+
 METHOD(node_focus) {
   (void)env;
   (void)argc;
@@ -1125,6 +1162,8 @@ static xt_value node_proto() {
   define_getter(proto, "isConnected", (void *)node_is_connected_get);
   define_getter(proto, "classList", (void *)node_class_list_get);
   define_getter(proto, "style", (void *)node_style_get);
+  define_getter(proto, "offsetWidth", (void *)node_offset_width_get);
+  define_getter(proto, "offsetHeight", (void *)node_offset_height_get);
   /* Setters. */
   define_setter(proto, "id", (void *)node_id_set);
   define_setter(proto, "className", (void *)node_class_name_set);
@@ -1146,6 +1185,7 @@ static xt_value node_proto() {
   define_method(proto, "remove", (void *)node_remove);
   define_method(proto, "cloneNode", (void *)node_clone_node);
   define_method(proto, "getBoundingClientRect", (void *)node_get_bounding_rect);
+  define_method(proto, "contains", (void *)node_contains);
   define_method(proto, "focus", (void *)node_focus);
   define_method(proto, "blur", (void *)node_blur);
   define_method(proto, "click", (void *)node_click);

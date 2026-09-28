@@ -46,6 +46,12 @@ struct XtGuiNodeListener {
   bool capture;
 };
 
+/** One pending `requestAnimationFrame` callback. */
+struct XtGuiAnimationFrame {
+  int id;
+  xt_value fn;
+};
+
 /* One live window. `object` is the JavaScript-visible handle; the record is
  * addressed from it through the hidden `__xt_gui_index` property. */
 struct XtGuiWindow {
@@ -76,6 +82,9 @@ struct XtGuiWindow {
   std::unordered_map<const xtgui::Node *, std::vector<XtGuiNodeListener>> node_listeners;
   /** Set by a DOM mutation; consumed by the frame loop before repainting. */
   int struct_dirty = 0;
+  /** Callbacks queued for the next frame, plus the id counter. */
+  std::vector<XtGuiAnimationFrame> animation_frames;
+  int next_animation_frame_id = 1;
 };
 
 /** Resolve a window handle (`this`) to its record, or NULL for a foreign value. */
@@ -106,6 +115,9 @@ void xt_gui_emit(XtGuiWindow *win, const char *event);
 void xt_gui_emit_payload(XtGuiWindow *win, const char *event, xt_value payload);
 /** Acquire a swapchain frame for `win` and clear it (placeholder paint). */
 void xt_gui_render_window(XtGuiWindow *win);
+/** Run every callback queued with `requestAnimationFrame` for the frame at
+ * `timestamp_ms`, then clear the queue. */
+void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms);
 /** Current logical window size (CSS viewport), in pixels. */
 void xt_gui_window_viewport(XtGuiWindow *win, float *width, float *height);
 /** CSS-like descriptor of the deepest element at (x, y), or `""` (test/debug). */

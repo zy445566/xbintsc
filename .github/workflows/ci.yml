@@ -295,7 +295,10 @@ jobs:
           set -euo pipefail
           xvfb-run -a --server-args="-screen 0 1280x720x24" \
             npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui --out build/examples
-          xvfb-run -a --server-args="-screen 0 1280x720x24" npx vitest run 'tests/e2e/gui-*.test.ts'
+          # vitest positional filters are substrings, not globs, so
+          # `tests/e2e/gui-*.test.ts` matches nothing. `tests/e2e/gui` covers
+          # every split GUI e2e suite (gui-dom, gui-paint, ...).
+          xvfb-run -a --server-args="-screen 0 1280x720x24" npx vitest run tests/e2e/gui
 
       # macOS runners may not expose a WindowServer to the process, so this run
       # is provisional (see doc/gui.md). A failure is recorded in the log and
@@ -311,7 +314,7 @@ jobs:
             echo "GUI example failed; the macOS run is provisional (see doc/gui.md)."
             exit 0
           fi
-          if ! npx vitest run 'tests/e2e/gui-*.test.ts'; then
+          if ! npx vitest run tests/e2e/gui; then
             echo "GUI e2e suite failed; the macOS run is provisional (see doc/gui.md)."
             exit 0
           fi

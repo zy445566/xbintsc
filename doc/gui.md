@@ -1,16 +1,18 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M7** — features (M1–M6) are complete: HTML parsing, CSS selector
+Status: **M8** — features (M1–M7) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline and Flexbox) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
 and shaped text runs and renders them through SDL_GPU. Input events are hit
 tested and delivered to native TS handlers, `:hover`/`:focus` are matched
 dynamically, `<img>` is sized from its intrinsic dimensions and drawn from a
-texture, and CSS transitions animate paint properties. The per-platform prebuilt
-archive now builds and runs in CI on Linux and macOS (Windows provisional). This
-document records the locked decisions, the architecture, the milestone plan and
-the current progress of a cross-platform GUI extension that renders an HTML/CSS
-UI with its own GPU-accelerated engine.
+texture, and CSS transitions animate paint properties. **M8** adds an interactive
+DOM: element handles with stable identity, mutation (`appendChild`, `textContent`,
+`classList`, `style`, …) and element-level events with capture/bubbling.
+**M9** (planned) adds AOT-compiled `<script>` bodies — see `doc/gui-scripts.md`.
+This document records the locked decisions, the architecture, the milestone plan
+and the current progress of a cross-platform GUI extension that renders an
+HTML/CSS UI with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -27,16 +29,19 @@ UI with its own GPU-accelerated engine.
 
 ## Non-goals (for now)
 
-- Executing page `<script>`. Logic lives in **xbintsc-compiled native TS**; the
-  HTML/CSS only describes the interface.
-- A JS engine (QuickJS/V8/...). Explicitly out of scope.
+- Executing **runtime** page `<script>` (scripts fetched over the network or
+  created dynamically). **Compile-time** scripts are AOT-compiled by xbintsc and
+  do run — see `doc/gui-scripts.md`. Logic may also live in native TS called
+  back through `xt_call_with_this`.
+- A JS engine (QuickJS/V8/...). Explicitly out of scope; there is no runtime
+  interpreter/JIT, so `<script>` bodies are compiled ahead of time.
 - Full web compatibility / a browser. We implement a practical HTML/CSS subset.
 
 ## Locked decisions
 
 | # | Decision |
 | --- | --- |
-| 1 | **No page JS engine.** All behaviour is native TS, called back through `xt_call_with_this`. |
+| 1 | **No page JS engine.** Behaviour is native TS, called back through `xt_call_with_this`. `<script>` bodies are **AOT-compiled** by xbintsc itself (no interpreter) — see `doc/gui-scripts.md`. |
 | 2 | Third-party **low-level** libraries are allowed (GPU backend, text shaping, image decode). HTML/CSS parsing + layout + paint scheduling are self-written. |
 | 3 | **GPU acceleration is mandatory.** |
 | 4 | The engine is **not self-hosted** (it is C/C++, not TS), but must not affect the compiler's platform-agnostic design. Delivered as a per-platform prebuilt archive linked via `nativeObjects`. |
@@ -175,6 +180,37 @@ win.advance(ms)                        // step the CSS transition clock (testing
 They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
 specificity, inheritance, `!important` and layout geometry. They will stay useful
 afterwards for debugging.
+
+### Interactive DOM (M8)
+
+`win.document` returns the document handle; element handles have stable identity
+and read/write properties, attributes, traversal and geometry:
+
+```ts
+const doc = win.document;
+const box = doc.querySelector("#box");
+const inner = doc.querySelector("#inner");
+inner.textContent = "hi";              // write
+inner.classList.add("hot");
+inner.style.setProperty("color", "#0f0");
+inner.setAttribute("data-role", "lead");
+console.log(inner.id, inner.tagName, doc.querySelector("#box") === box);
+
+const created = doc.createElement("div");
+created.textContent = "added";
+box.appendChild(created);
+box.removeChild(created);
+
+inner.addEventListener("click", (e) => console.log(e.target.id, e.currentTarget.id));
+inner.click();                          // synthesise a click at the element
+```
+
+Mutations mark the document dirty; the engine restyles + relayouts lazily (before
+the next read or frame). `inner = …`/`innerHTML = …` do **not** run scripts.
+Element events support capture and bubble phases, `stopPropagation`, `once`, and
+bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps its
+**string** `e.target` (`div#id.class`); the element `Event.target` is a handle
+whose descriptor matches the same string.
 
 ### Implemented layout (M3)
 
@@ -451,6 +487,19 @@ used by default; Wayland is enabled too but not yet exercised.
    - Windows (build + run) stays provisional until the MSVC-compatible
      `gui.lib` and D3D12/DXIL shader path are validated; a failure is logged
      without annotating the run (see *Open questions*).
+8. **M8 — interactive DOM** ✅
+   - Element/document handles with stable identity, read/write properties via
+     runtime accessors, traversal/attributes/queries, mutation with lazy
+     restyle/relayout (`dom_api.*`, `document.*`, `dom.*`, `gui.cpp`,
+     `window.cpp`), element events with capture + bubble phases and
+     `stopPropagation`, and window-level `e.target` compatibility. No compiler
+     changes. See `doc/gui-scripts.md`.
+9. **M9 — AOT `<script>`** 🚧 (planned)
+   - **M9a** — generic `Extension.assetLoaders` hook + bundler integration.
+   - **M9b** — gui `.html` asset loader (hash inline bodies, `data-xt-id`
+     markers, `__xt_script_<hash>` modules), `__registerScript` builtin and
+     `loadHTML` execution with `DOMContentLoaded`/`load`.
+   - **M9c** — `<script src>` resolved as module imports; `defer` ordering.
 
 ## Progress log
 
@@ -482,6 +531,10 @@ used by default; Wayland is enabled too but not yet exercised.
   example plus the GUI e2e suite under Xvfb on Linux; `package` ships `gui.a`,
   `vendor/` is cached, and the `ar -M` merge works on GNU/Linux and macOS.
   macOS runs and all of Windows remain provisional in CI.
+- **M8** ✅ element/document handles (`dom_api.*`), DOM mutation with lazy
+  restyle/relayout (`document.*`, `xt_gui_flush_dom`), element event dispatch
+  with capture/bubble and `stopPropagation` (`dom_api.*`, `gui.cpp`), and e2e
+  coverage in `tests/e2e/gui.test.ts`.
 
 ## Open questions
 

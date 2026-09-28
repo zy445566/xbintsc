@@ -100,11 +100,6 @@ jobs:
       - name: Preview package contents
         run: npm pack --dry-run
 
-      # No NODE_AUTH_TOKEN needed: npm authenticates via GitHub OIDC
-      # (id-token: write) against the npm trusted publisher config.
-      - name: Publish to npm
-        run: npm publish --provenance
-
       # Collect the release archives that CI assembled for the release
       # commit, and stage them under release-friendly names. Raw per-platform
       # binaries (e.g. .exe) are intentionally not published.
@@ -201,3 +196,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: gh release create "${TAG}" --title "${TAG}" --generate-notes release-assets/*
+
+      # No NODE_AUTH_TOKEN needed: npm authenticates via GitHub OIDC
+      # (id-token: write) against the npm trusted publisher config.
+      - name: Publish to npm
+        run: npm publish --provenance

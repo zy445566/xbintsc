@@ -441,15 +441,16 @@ used by default; Wayland is enabled too but not yet exercised.
 7. **M7 — CI & releases** ✅ (Linux/macOS build) / 🚧 (run + Windows)
    - `compile-examples` builds `gui.a` on Linux and macOS (required), then runs
      the example and `tests/e2e/gui.test.ts` under Xvfb + lavapipe on Linux
-     (required). The macOS run is provisional until a WindowServer is confirmed.
+     (required). The macOS run is provisional until a WindowServer is confirmed;
+     it is guarded so a failure is logged without annotating the run.
    - The `package` job builds `gui.a` before assembling the release, so it ships
      inside the existing runtime archive (`package-release` copies all of
      `runtime/`).
    - `vendor/` (SDL3/FreeType/HarfBuzz, the slow part) is cached per OS/arch,
      keyed by `scripts/build-gui.ts`.
-   - Windows (build + run) stays provisional (`continue-on-error`) until the
-     MSVC-compatible `gui.lib` and D3D12/DXIL shader path are validated; see
-     *Open questions*.
+   - Windows (build + run) stays provisional until the MSVC-compatible
+     `gui.lib` and D3D12/DXIL shader path are validated; a failure is logged
+     without annotating the run (see *Open questions*).
 
 ## Progress log
 
@@ -488,8 +489,9 @@ used by default; Wayland is enabled too but not yet exercised.
   X11 first, Wayland later.)
 - Windows: an MSVC-compatible `gui.lib` (COFF objects + `ar -M`/`llvm-ar`) is
   produced by `scripts/build-gui.ts`, but it has not been validated in CI yet,
-  so the Windows step is `continue-on-error` and `package` skips it. It also
-  needs an SDL3 build with the D3D12/DXIL backend (DXIL requires `dxc`).
+  so the Windows step is provisional (the job stays green) and `package` skips
+  it. It also needs an SDL3 build with the D3D12/DXIL backend (DXIL requires
+  `dxc`).
 - **Shaders on non-Metal backends:** the renderer embeds MSL source (compiled by
   SDL_GPU at runtime on macOS). Vulkan needs SPIR-V and D3D12 needs DXIL; those
   require `glslc`/`dxc` at build time. Until then the non-Metal path clears the

@@ -63,6 +63,26 @@ class XtDocument {
   const Node *querySelector(const std::string &selectorText) const;
   /** Elements matching a CSS selector, in document order. */
   std::vector<const Node *> querySelectorAll(const std::string &selectorText) const;
+
+  /* -- DOM mutation (element handles) ------------------------------------ */
+  /** Create a detached element/text node owned by the document. */
+  Node *createElement(const std::string &tag);
+  Node *createTextNode(const std::string &text);
+  /** Move `child` under `parent` (from its current parent or the detached pool). */
+  Node *appendChild(Node *parent, Node *child);
+  Node *insertBefore(Node *parent, Node *child, Node *reference);
+  bool removeChild(Node *parent, Node *child);
+  Node *replaceChild(Node *parent, Node *newChild, Node *oldChild);
+  /** Release a node from the document entirely (still owned, detached). */
+  void detach(Node *node);
+
+  /** Mark the document as needing a restyle/relayout before the next paint. */
+  void invalidate() { dirty_ = true; }
+  bool takeDirty() {
+    bool was = dirty_;
+    dirty_ = false;
+    return was;
+  }
   /** Serialized DOM, for diagnostics. */
   std::string toDebugString() const;
 
@@ -72,6 +92,9 @@ class XtDocument {
   void updateDisplay();
 
   std::unique_ptr<Node> root_;
+  /** Detached nodes (created or removed) stay alive here so handles remain valid. */
+  std::unordered_map<const Node *, std::unique_ptr<Node>> detached_;
+  bool dirty_ = false;
   StyleSheet sheet_;
   std::unordered_map<const Node *, XtStyle> styles_;   // target (cascade)
   std::unordered_map<const Node *, XtStyle> display_;  // after transitions

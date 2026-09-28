@@ -48,6 +48,8 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win != nullptr) {
     win->html = html;
+    /* Fresh document: invalidate every previously handed-out handle. */
+    xt_gui_handles_reset(win);
     win->document = std::make_unique<xtgui::XtDocument>();
     float width = 0;
     float height = 0;
@@ -69,12 +71,21 @@ static xt_value win_get_html(xt_value self, xt_value env, int32_t argc, xt_value
   return xt_object_get_cstr(self, "__xt_gui_html");
 }
 
+/** The `document` handle for this window (created on first access). */
+static xt_value win_document_get(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return xt_gui_document_handle(xt_gui_window_from_this(self));
+}
+
 /** Diagnostic/test hook: computed value of `property` for the first match of
  * `selector`, or an empty string. */
 static xt_value win_computed_style(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr || argc < 2) return xt_string_from_cstr("");
+  xt_gui_flush_dom(win);
   xt_value selectorValue = xt_to_string(xt_arg(argc, argv, 0));
   xt_value propertyValue = xt_to_string(xt_arg(argc, argv, 1));
   const char *selector = xt_string_data(selectorValue);
@@ -95,6 +106,7 @@ static xt_value win_document_tree(xt_value self, xt_value env, int32_t argc, xt_
   (void)argv;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr) return xt_string_from_cstr("");
+  xt_gui_flush_dom(win);
   std::string text = win->document->toDebugString();
   return xt_string_from_cstr(text.c_str());
 }
@@ -104,6 +116,7 @@ static xt_value win_query_count(xt_value self, xt_value env, int32_t argc, xt_va
   (void)env;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr || argc < 1) return xt_number(0);
+  xt_gui_flush_dom(win);
   xt_value selectorValue = xt_to_string(xt_arg(argc, argv, 0));
   const char *selector = xt_string_data(selectorValue);
   if (selector == nullptr) return xt_number(0);
@@ -116,6 +129,7 @@ static xt_value win_get_bounding_rect(xt_value self, xt_value env, int32_t argc,
   (void)env;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr || argc < 1) return XT_UNDEFINED;
+  xt_gui_flush_dom(win);
   xt_value selectorValue = xt_to_string(xt_arg(argc, argv, 0));
   const char *selector = xt_string_data(selectorValue);
   if (selector == nullptr) return XT_UNDEFINED;
@@ -138,6 +152,7 @@ static xt_value win_layout_tree(xt_value self, xt_value env, int32_t argc, xt_va
   (void)argv;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr) return xt_string_from_cstr("");
+  xt_gui_flush_dom(win);
   std::string text = win->document->layout().dump();
   return xt_string_from_cstr(text.c_str());
 }
@@ -169,6 +184,7 @@ static xt_value win_paint_list(xt_value self, xt_value env, int32_t argc, xt_val
   (void)argv;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr) return xt_string_from_cstr("");
+  xt_gui_flush_dom(win);
   xtgui::DisplayList list;
   xtgui::xt_paint_build(win->document->layout().root(), list);
   std::string text = list.dump();
@@ -182,6 +198,7 @@ static xt_value win_paint_count(xt_value self, xt_value env, int32_t argc, xt_va
   (void)argv;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr) return xt_number(0);
+  xt_gui_flush_dom(win);
   xtgui::DisplayList list;
   xtgui::xt_paint_build(win->document->layout().root(), list);
   return xt_number((double)list.rects.size());
@@ -314,6 +331,7 @@ static xt_value win_hit_test(xt_value self, xt_value env, int32_t argc, xt_value
   (void)env;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr || argc < 2) return xt_string_from_cstr("");
+  xt_gui_flush_dom(win);
   float x = (float)xt_to_number(xt_arg(argc, argv, 0));
   float y = (float)xt_to_number(xt_arg(argc, argv, 1));
   std::string target = xt_gui_hit_test(win, x, y);
@@ -376,10 +394,15 @@ static void define_method(xt_value proto, const char *name, void *fn) {
   xt_object_set(proto, xt_string_from_cstr(name), xt_closure_new(fn, 0, NULL));
 }
 
+static void define_getter(xt_value proto, const char *name, void *fn) {
+  xt_object_define_getter(proto, xt_string_from_cstr(name), xt_closure_new(fn, 0, NULL));
+}
+
 xt_value xt_gui_window_proto(void) {
   if (XT_IS_OBJECT(g_window_proto)) return g_window_proto;
   xt_value proto = xt_object_new();
   define_method(proto, "setTitle", (void *)win_set_title);
+  define_getter(proto, "document", (void *)win_document_get);
   define_method(proto, "setSize", (void *)win_set_size);
   define_method(proto, "loadHTML", (void *)win_load_html);
   define_method(proto, "getHTML", (void *)win_get_html);

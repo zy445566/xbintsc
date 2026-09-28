@@ -24,6 +24,8 @@ void XtDocument::collectStyleText(const Node *node, std::string *out) const {
 
 void XtDocument::load(const std::string &html, float viewportWidth, float viewportHeight) {
   root_ = xt_html_parse(html);
+  detached_.clear();
+  dirty_ = false;
   hover_ = nullptr;
   focus_ = nullptr;
   styles_.clear();
@@ -259,6 +261,94 @@ const Node *XtDocument::querySelector(const std::string &selectorText) const {
 
 std::string XtDocument::toDebugString() const {
   return root_ == nullptr ? std::string() : xt_dom_to_string(root_.get());
+}
+
+/* -- DOM mutation --------------------------------------------------------- */
+
+Node *XtDocument::createElement(const std::string &tag) {
+  auto node = std::make_unique<Node>(NodeType::Element);
+  node->tag = tag;
+  Node *raw = node.get();
+  detached_[raw] = std::move(node);
+  return raw;
+}
+
+Node *XtDocument::createTextNode(const std::string &text) {
+  auto node = std::make_unique<Node>(NodeType::Text);
+  node->text = text;
+  Node *raw = node.get();
+  detached_[raw] = std::move(node);
+  return raw;
+}
+
+namespace {
+
+/** Take ownership of a node that is either attached or sitting in the pool. */
+std::unique_ptr<Node> takeNode(
+    Node *node, std::unordered_map<const Node *, std::unique_ptr<Node>> &pool) {
+  if (node->parent != nullptr) return node->parent->detachChild(node);
+  auto it = pool.find(node);
+  if (it == pool.end()) return nullptr;
+  std::unique_ptr<Node> owned = std::move(it->second);
+  pool.erase(it);
+  return owned;
+}
+
+}  // namespace
+
+Node *XtDocument::appendChild(Node *parent, Node *child) {
+  if (parent == nullptr || child == nullptr) return nullptr;
+  if (!parent->isElement() || child->isDocument() || child == root_.get()) return nullptr;
+  if (child->contains(parent)) return nullptr; /* reject cycles */
+  std::unique_ptr<Node> owned = takeNode(child, detached_);
+  if (owned == nullptr) return nullptr;
+  invalidate();
+  return parent->append(std::move(owned));
+}
+
+Node *XtDocument::insertBefore(Node *parent, Node *child, Node *reference) {
+  if (reference == nullptr) return appendChild(parent, child);
+  if (parent == nullptr || child == nullptr || child == reference) return child;
+  if (!parent->isElement() || child->isDocument() || child == root_.get()) return nullptr;
+  if (child->contains(parent)) return nullptr; /* reject cycles */
+  bool reference_is_child = false;
+  for (const std::unique_ptr<Node> &entry : parent->children) {
+    if (entry.get() == reference) {
+      reference_is_child = true;
+      break;
+    }
+  }
+  if (!reference_is_child) return nullptr;
+  std::unique_ptr<Node> owned = takeNode(child, detached_);
+  if (owned == nullptr) return nullptr;
+  invalidate();
+  return parent->insertChild(std::move(owned), reference);
+}
+
+bool XtDocument::removeChild(Node *parent, Node *child) {
+  if (parent == nullptr || child == nullptr || child->parent != parent) return false;
+  std::unique_ptr<Node> owned = parent->detachChild(child);
+  if (owned == nullptr) return false;
+  detached_[child] = std::move(owned);
+  invalidate();
+  return true;
+}
+
+Node *XtDocument::replaceChild(Node *parent, Node *newChild, Node *oldChild) {
+  if (parent == nullptr || oldChild == nullptr || oldChild->parent != parent) return nullptr;
+  if (newChild == oldChild) return newChild;
+  if (newChild != nullptr && !insertBefore(parent, newChild, oldChild)) return nullptr;
+  removeChild(parent, oldChild);
+  return newChild;
+}
+
+void XtDocument::detach(Node *node) {
+  if (node == nullptr || node == root_.get()) return;
+  if (node->parent != nullptr) {
+    std::unique_ptr<Node> owned = node->parent->detachChild(node);
+    if (owned != nullptr) detached_[node] = std::move(owned);
+  }
+  invalidate();
 }
 
 }  // namespace xtgui

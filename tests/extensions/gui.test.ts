@@ -153,4 +153,52 @@ describe("gui .html asset loader", () => {
     expect(moduleSource.indexOf(hashString(first))).toBeLessThan(moduleSource.indexOf(hashString(second)));
     expect(parseDiagnostics(moduleSource)).toBe(0);
   });
+
+  it("hoists namespace, side-effect and re-export statements", () => {
+    const directory = writeFiles({
+      "app.ts": [
+        'import * as util from "./util";',
+        'import "./side-effect";',
+        'import defaultExport, { named } from "./mixed";',
+        'const a = 1;',
+        'export { a };',
+        'export { x } from "./x";',
+        'export * from "./y";',
+        'export default 42;',
+        'export default function defaultFn() { return 0; }',
+        'console.log(util, defaultExport, named);',
+      ].join("\n"),
+    });
+    const htmlPath = join(directory, "page.html");
+    const { moduleSource } = loadHtmlAsset(htmlPath, `<script src="./app.ts"></script>`);
+    expect(moduleSource).toContain('import * as util from "./util"');
+    expect(moduleSource).toContain('import {} from "./side-effect"');
+    expect(moduleSource).toContain('import defaultExport, { named } from "./mixed"');
+    expect(moduleSource).toContain('export { x } from "./x"');
+    expect(moduleSource).toContain('export * from "./y"');
+    /* The local `export { a }` and `export default` are blanked out. */
+    expect(moduleSource).not.toContain("export default 42");
+    expect(moduleSource).not.toContain("export default function");
+    expect(moduleSource).toContain("function defaultFn()");
+    expect(moduleSource).toContain("console.log(util, defaultExport, named);");
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("hoists a bare (non-relative) import unchanged", () => {
+    const directory = writeFiles({ "app.ts": 'import "pkg";\nconsole.log(1);' });
+    const htmlPath = join(directory, "page.html");
+    const { moduleSource } = loadHtmlAsset(htmlPath, `<script src="./app.ts"></script>`);
+    expect(moduleSource).toContain('import {} from "pkg"');
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("reads single-quoted, unquoted and query-string src attributes", () => {
+    const directory = writeFiles({ "app.ts": "console.log(1);" });
+    const htmlPath = join(directory, "page.html");
+    for (const src of ["'./app.ts'", "./app.ts", '"./app.ts?v=1#frag"']) {
+      const { moduleSource } = loadHtmlAsset(htmlPath, `<script src=${src}></script>`);
+      expect(moduleSource, src).toContain("__registerScript");
+      expect(parseDiagnostics(moduleSource), src).toBe(0);
+    }
+  });
 });

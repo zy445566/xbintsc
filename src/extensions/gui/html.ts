@@ -138,7 +138,12 @@ function compileModuleSource(htmlPath: string, scriptPath: string): CompiledModu
   for (const statement of parsed.statements) {
     if (statement.kind === SyntaxKind.ImportDeclaration) {
       const declaration = statement as ImportDeclaration;
-      imports.push(rewriteSpecifierText(htmlPath, scriptPath, source, statement, declaration.moduleSpecifier));
+      /* The front-end has no side-effect `import "x"` form; spell it as an
+       * empty named import so the dependency is still loaded. */
+      const hoisted = declaration.importClause
+        ? rewriteSpecifierText(htmlPath, scriptPath, source, statement, declaration.moduleSpecifier)
+        : `import {} from ${JSON.stringify(rewriteSpecifier(htmlPath, scriptPath, declaration.moduleSpecifier.value))}`;
+      imports.push(hoisted);
       localNames.push(...importLocalNames(declaration));
       blank(statement.start, statement.end);
       continue;

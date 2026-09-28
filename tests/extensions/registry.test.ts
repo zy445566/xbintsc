@@ -49,6 +49,45 @@ describe("ExtensionRegistry", () => {
     expect(modules.querystring?.exports?.parse?.symbol).toBe("xt_querystring_parse");
   });
 
+  it("merges modules that share a specifier", () => {
+    const first: Extension = {
+      name: "first",
+      modules: () => ({ shared: { namespace: "first", exports: { a: { symbol: "xt_a" } } } }),
+    };
+    const second: Extension = {
+      name: "second",
+      modules: () => ({ shared: { exports: { b: { symbol: "xt_b" } } } }),
+    };
+    const registry = new ExtensionRegistry().register(first).register(second);
+    const shared = registry.modules().shared;
+    expect(shared?.namespace).toBe("first"); // later extension inherits the namespace
+    expect(shared?.exports?.a?.symbol).toBe("xt_a");
+    expect(shared?.exports?.b?.symbol).toBe("xt_b");
+  });
+
+  it("hints an extension that exposes no modules", () => {
+    const registry = createDefaultRegistry().hintExtension(demoExtension);
+    expect(registry.moduleHints()).toEqual({});
+  });
+
+  it("flattens asset loaders, letting a later extension override", () => {
+    const first = (path: string, source: string) => ({ moduleSource: `${source}:first` });
+    const second = (path: string, source: string) => ({ moduleSource: `${source}:second` });
+    const withLoaders: Extension = {
+      name: "with-loaders",
+      assetLoaders: () => ({ ".foo": first, ".bar": first }),
+    };
+    const withoutLoaders: Extension = { name: "without-loaders" };
+    const overriding: Extension = { name: "overriding", assetLoaders: () => ({ ".foo": second }) };
+    const registry = new ExtensionRegistry()
+      .register(withLoaders)
+      .register(withoutLoaders)
+      .register(overriding);
+    const loaders = registry.assetLoaders();
+    expect(loaders[".foo"]).toBe(second);
+    expect(loaders[".bar"]).toBe(first);
+  });
+
   it("collects runtime sources and linker flags", () => {
     const registry = new ExtensionRegistry().register(demoExtension);
     expect(registry.runtimeSources()).toEqual(["/tmp/demo.c"]);

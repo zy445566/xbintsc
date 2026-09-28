@@ -1,10 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { loadHtmlAsset } from "../../src/extensions/gui/html.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { DiagnosticBag } from "../../src/diagnostics/diagnostic.js";
 import { SourceFile } from "../../src/diagnostics/source.js";
 import { Parser } from "../../src/parser/parser.js";
 import { hashString } from "../../src/driver/cache.js";
+
+const directories: string[] = [];
+
+/** Write a temp tree of files and return its root directory. */
+function writeFiles(files: Record<string, string>): string {
+  const directory = mkdtempSync(join(tmpdir(), "xbintsc-gui-loader-"));
+  directories.push(directory);
+  for (const [name, contents] of Object.entries(files)) {
+    const path = join(directory, name);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, contents);
+  }
+  return directory;
+}
+
+afterEach(() => {
+  while (directories.length > 0) rmSync(directories.pop()!, { recursive: true, force: true });
+});
 
 /** Parse a generated module and return its diagnostics. */
 function parseDiagnostics(source: string): number {
@@ -50,12 +71,70 @@ describe("gui .html asset loader", () => {
     expect(json.moduleSource).toContain("application/json");
   });
 
-  it("leaves external (src) scripts and empty bodies untouched", () => {
-    const src = loadHtmlAsset("a.html", `<script src="./app.ts"></script>`);
-    expect(htmlOf(src.moduleSource)).toContain('src="./app.ts"');
+  it("leaves URL src scripts and empty bodies untouched", () => {
+    const src = loadHtmlAsset("a.html", `<script src="https://cdn.example/app.js"></script>`);
+    expect(htmlOf(src.moduleSource)).toContain('src="https://cdn.example/app.js"');
     expect(src.moduleSource).not.toContain("__registerScript");
     const empty = loadHtmlAsset("b.html", `<script></script>`);
     expect(empty.moduleSource).not.toContain("__registerScript");
+  });
+
+  it("compiles an external <script src> file into a registered function", () => {
+    const directory = writeFiles({
+      "app.ts": "const b = document.getElementById('b');\nb.textContent = 'ready';",
+    });
+    const htmlPath = join(directory, "page.html");
+    const body = "const b = document.getElementById('b');\nb.textContent = 'ready';";
+    const id = hashString(body);
+    const { moduleSource } = loadHtmlAsset(htmlPath, `<script src="./app.ts"></script>`);
+    expect(moduleSource).toContain(`function __xt_script_${id}(window: any, document: any): void {`);
+    expect(moduleSource).toContain("b.textContent = 'ready';");
+    expect(htmlOf(moduleSource)).toContain(`<script data-xt-id="${id}"></script>`);
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("hoists imports from an external script, rewriting them from the HTML dir", () => {
+    const directory = writeFiles({
+      "scripts/app.ts": 'import { size } from "../lib/util";\nconsole.log(size);',
+      "lib/util.ts": "export const size = 1;",
+    });
+    const htmlPath = join(directory, "page.html");
+    const { moduleSource } = loadHtmlAsset(htmlPath, `<script src="./scripts/app.ts"></script>`);
+    expect(moduleSource).toContain('import { size } from "./lib/util"');
+    expect(moduleSource).toContain("console.log(size);");
+    expect(moduleSource).not.toContain("../lib/util");
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("strips export modifiers from an external script", () => {
+    const directory = writeFiles({
+      "app.ts": "export const a = 1;\nexport function f() { return a; }",
+    });
+    const htmlPath = join(directory, "page.html");
+    const { moduleSource } = loadHtmlAsset(htmlPath, `<script src="./app.ts"></script>`);
+    expect(moduleSource).toContain("const a = 1;");
+    expect(moduleSource).not.toContain("export const");
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("reports a missing external script", () => {
+    const directory = writeFiles({ "page.html": "" });
+    expect(() => loadHtmlAsset(join(directory, "page.html"), `<script src="./missing.ts"></script>`)).toThrow(
+      /not found/,
+    );
+  });
+
+  it("rejects colliding imported bindings across external scripts", () => {
+    const directory = writeFiles({
+      "a.ts": 'import { x } from "./x";\nconsole.log(x);',
+      "b.ts": 'import { x } from "./y";\nconsole.log(x);',
+      "x.ts": "export const x = 1;",
+      "y.ts": "export const x = 2;",
+    });
+    const htmlPath = join(directory, "page.html");
+    expect(() =>
+      loadHtmlAsset(htmlPath, `<script src="./a.ts"></script><script src="./b.ts"></script>`),
+    ).toThrow(/already imported/);
   });
 
   it("emits only the HTML string when there are no scripts", () => {

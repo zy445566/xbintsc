@@ -152,6 +152,37 @@ export default __html;
   run after the full document is parsed and the first layout is computed, in
   document order. `DOMContentLoaded` then `load` are fired on `window`.
 
+### 2b. External `<script src>`
+
+`<script src="./app.ts">` is read relative to the HTML file, parsed, and split:
+its top-level `import`/`export … from` statements are **hoisted** to the
+generated module (with relative specifiers rewritten so they resolve from the
+HTML file's directory), and the remaining statements are wrapped in the script
+function. This is how an external script still runs at `loadHTML` time while
+being able to `import` other modules.
+
+Two limitations are enforced with clear errors rather than silent breakage:
+
+- a missing `src` file throws (turned into a bundler diagnostic), and
+- two `src` scripts that import the same local binding name collide; the user
+  must alias one of them. (Non-conflicting or identical imports are fine.)
+
+`src` URLs (`https://…`, `data:…`, `//host`) are left untouched — they are not
+compile-time assets and never run.
+
+```html
+<button id="b">0</button>
+<script src="./counter.ts"></script>
+```
+
+```ts
+// counter.ts
+import { double } from "./helper";
+const b = document.getElementById("b");
+let n = 0;
+b.addEventListener("click", () => { n = double(n) + 1; b.textContent = String(n); });
+```
+
 ### 3. Runtime execution
 
 `win.loadHTML(html)`:
@@ -261,8 +292,11 @@ legacy `target` field over the handle.
   - **M9b** ✅ — gui `.html` loader (`src/extensions/gui/html.ts`), the
     `__registerScript` builtin, the script registry (`runtime/ext_gui/script.cpp`),
     `loadHTML` execution and `DOMContentLoaded`/`load`; e2e coverage.
-  - **M9c** — `<script src>` resolved relative to the HTML file and compiled as
-    a module import; `defer`/module ordering.
+  - **M9c** ✅ — `<script src>` files are read, their top-level imports are
+    hoisted (specifiers rewritten to resolve from the HTML file) and their body
+    is wrapped and registered; missing files and import-binding collisions
+    surface as diagnostics. All scripts run in document order (effectively
+    deferred). e2e coverage.
   - **M9d** *(optional)* — detect inline HTML in template literals passed to
     `win.loadHTML(...)` and transform them too (fragile; deferred).
 - **M10 — polish** — `requestAnimationFrame`, a few more DOM helpers, docs.
@@ -283,9 +317,11 @@ legacy `target` field over the handle.
   network fetches) do not run. Documented.
 - **Template-literal HTML** passed to `win.loadHTML(…)` is not transformed in
   M9b (only imported assets are). M9d addresses this if needed.
-- **Assets.** `<script src>` needs the bundler to resolve imports relative to
-  the HTML asset; handled in M9c together with the dependency list returned by
-  the loader.
+- **Import-binding collisions** between external `<script src>` files. Detected
+  and reported (alias the import); a per-script rename with reference rewriting
+  is possible later.
+- **Assets.** `<script src>` is resolved relative to the HTML asset; URL `src`
+  values are ignored. There is no fetch/network loading.
 
 ## Testing
 

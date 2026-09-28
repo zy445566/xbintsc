@@ -237,9 +237,13 @@ run();
 ```
 
 The two parameters (`window`, `document`) are ordinary function arguments, so
-script locals need no global-object machinery. Scripts are **compile-time
-assets**: HTML created at runtime (`innerHTML`, fetched over the network) never
-executes. `src` scripts are resolved as module imports in M9c. See
+script locals need no global-object machinery. External scripts work too:
+`<script src="./counter.ts">` is read at compile time, its imports are hoisted
+(rewritten to resolve from the HTML file) and its body is wrapped the same way —
+so a script module can `import` helpers and still see `document`. Scripts are
+**compile-time assets**: HTML created at runtime (`innerHTML`, fetched over the
+network) never executes, and `src` URLs (`https://…`, `data:…`) are ignored.
+Everything runs in document order after parsing (effectively deferred). See
 `doc/gui-scripts.md` for the full design.
 
 ### Implemented layout (M3)
@@ -531,7 +535,10 @@ used by default; Wayland is enabled too but not yet exercised.
      registered through the `__registerScript` builtin and replaced by
      `<script data-xt-id="<hash>">` markers; `win.loadHTML` runs the matching
      functions after parsing and fires `DOMContentLoaded` then `load`.
-   - **M9c** — `<script src>` resolved as module imports; `defer` ordering.
+   - **M9c** ✅ — `<script src>` files are read relative to the HTML, their
+     top-level imports are hoisted (specifiers rewritten from the HTML dir) and
+     their body is wrapped/registered; missing files and import-binding
+     collisions become diagnostics. Everything runs in document order.
 
 ## Progress log
 
@@ -574,6 +581,10 @@ used by default; Wayland is enabled too but not yet exercised.
   bodies into AOT functions registered at startup and run by `win.loadHTML`
   (before first layout; `DOMContentLoaded` then `load`). Unit tests in
   `tests/extensions/gui.test.ts`, e2e in `tests/e2e/gui.test.ts`.
+- **M9c** ✅ external `<script src>` files are read, their imports hoisted
+  (specifiers rewritten from the HTML dir) and their body wrapped/registered;
+  missing files and import-binding collisions are diagnostics. Loader errors are
+  caught by `loadGraph` and reported as build errors.
 
 ## Open questions
 

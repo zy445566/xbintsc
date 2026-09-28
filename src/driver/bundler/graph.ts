@@ -56,7 +56,20 @@ export function loadGraph(
     /* An extension may rewrite an imported asset (e.g. `.html`) into a TS
      * module before it is parsed. The core only sees the transformed text. */
     const loader = assetLoaders[extname(path).toLowerCase()];
-    const text = loader ? loader(path, raw).moduleSource : raw;
+    let text = raw;
+    if (loader) {
+      try {
+        text = loader(path, raw).moduleSource;
+      } catch (error) {
+        diagnostics.error(
+          DiagnosticCode.CodegenError,
+          error instanceof Error ? error.message : String(error),
+        );
+        failed = true;
+        visiting.delete(path);
+        return undefined;
+      }
+    }
     const file = new SourceFile(path, text);
     const parser = new Parser(file, diagnostics);
     const sourceFile = parser.parseSourceFile();

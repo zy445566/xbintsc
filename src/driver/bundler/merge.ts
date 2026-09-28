@@ -27,6 +27,7 @@ import {
 import type { BindingName } from "../../ast/declarations.js";
 import { SymbolKind } from "../../binder/binder.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
+import type { AssetLoader } from "../../extensions/registry.js";
 import { loadGraph } from "./graph.js";
 import { classifyDependency } from "./resolve.js";
 import {
@@ -43,8 +44,9 @@ export function bundleModules(
   entryPath: string,
   diagnostics: DiagnosticBag,
   externalSpecifiers: ReadonlySet<string> = new Set(),
+  assetLoaders: Readonly<Record<string, AssetLoader>> = {},
 ): BundleResult | undefined {
-  const records = loadGraph(entryPath, diagnostics, externalSpecifiers);
+  const records = loadGraph(entryPath, diagnostics, externalSpecifiers, assetLoaders);
   if (!records) return undefined;
 
   const byPath = new Map(records.map((record) => [record.path, record]));

@@ -89,6 +89,9 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   if (win == NULL || !win->open) return;
   win->open = 0;
   xt_gui_emit(win, "close");
+  win->animation_frames.clear();
+  xt_gui_handles_reset(win);
+  win->document_object = XT_UNDEFINED;
   win->document.reset();
   win->html.clear();
   if (g_device != NULL) {
@@ -109,6 +112,19 @@ void xt_gui_window_viewport(XtGuiWindow *win, float *width, float *height) {
   if (win->window != NULL) SDL_GetWindowSize(win->window, &w, &h);
   if (width != NULL) *width = (float)w;
   if (height != NULL) *height = (float)h;
+}
+
+void xt_gui_flush_dom(XtGuiWindow *win) {
+  if (win == NULL || win->document == nullptr) return;
+  bool mutated = win->struct_dirty != 0;
+  win->struct_dirty = 0;
+  if (win->document->takeDirty()) mutated = true;
+  if (!mutated) return;
+  float width = 0;
+  float height = 0;
+  xt_gui_window_viewport(win, &width, &height);
+  win->document->restyle(width, height);
+  win->geometry.dirty = 1;
 }
 
 static XtGuiWindow *xt_gui_find_by_window_id(SDL_WindowID id) {
@@ -164,10 +180,13 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
                              int clicks) {
   if (win == NULL || !win->open) return;
   xt_gui_update_hover(win, x, y);
+  const xtgui::Node *node = xt_gui_hit_node(win, x, y);
   if (strcmp(type, "mousedown") == 0 && win->document != nullptr) {
-    if (win->document->setFocus(xt_gui_hit_node(win, x, y))) win->geometry.dirty = 1;
+    if (win->document->setFocus(node)) win->geometry.dirty = 1;
   }
-  xt_gui_emit_payload(win, type, xt_gui_pointer_payload(type, win, x, y, button, clicks));
+  xt_value payload = xt_gui_pointer_payload(type, win, x, y, button, clicks);
+  if (node != nullptr) xt_gui_emit_dom_event(win, type, node, payload);
+  xt_gui_emit_payload(win, type, payload);
 }
 
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y) {
@@ -175,6 +194,8 @@ void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, fl
   xt_value payload = xt_gui_pointer_payload("wheel", win, x, y, -1, 0);
   xt_object_set(payload, xt_string_from_cstr("deltaX"), xt_number(delta_x));
   xt_object_set(payload, xt_string_from_cstr("deltaY"), xt_number(delta_y));
+  const xtgui::Node *node = xt_gui_hit_node(win, x, y);
+  if (node != nullptr) xt_gui_emit_dom_event(win, "wheel", node, payload);
   xt_gui_emit_payload(win, "wheel", payload);
 }
 
@@ -194,7 +215,10 @@ static xt_value xt_gui_key_payload(const char *type, const char *key, const char
 
 void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code) {
   if (win == NULL || !win->open) return;
-  xt_gui_emit_payload(win, type, xt_gui_key_payload(type, key, code, false, false, false, false, false));
+  xt_value payload = xt_gui_key_payload(type, key, code, false, false, false, false, false);
+  const xtgui::Node *node = win->document != nullptr ? win->document->focus() : nullptr;
+  if (node != nullptr) xt_gui_emit_dom_event(win, type, node, payload);
+  xt_gui_emit_payload(win, type, payload);
 }
 
 static void xt_gui_handle_event(const SDL_Event *event) {
@@ -265,6 +289,19 @@ static void xt_gui_handle_event(const SDL_Event *event) {
 
 /* -- rendering ------------------------------------------------------------ */
 
+void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms) {
+  if (win == NULL || win->animation_frames.empty()) return;
+  /* Swap the queue out first: a callback that calls requestAnimationFrame
+   * again schedules for the *next* frame, not this one. */
+  std::vector<XtGuiAnimationFrame> frames;
+  frames.swap(win->animation_frames);
+  for (const XtGuiAnimationFrame &frame : frames) {
+    if (!win->open) break;
+    xt_value arg = xt_number(timestamp_ms);
+    xt_call_with_this(frame.fn, win->object, 1, &arg);
+  }
+}
+
 void xt_gui_render_window(XtGuiWindow *win) {
   if (win == NULL || !win->open || win->window == NULL || g_device == NULL) return;
   float viewport_width = 0;
@@ -275,7 +312,14 @@ void xt_gui_render_window(XtGuiWindow *win) {
   double now = (double)SDL_GetTicks();
   double delta = win->last_frame_ms > 0.0 ? now - win->last_frame_ms : 0.0;
   win->last_frame_ms = now;
+  /* Animation-frame callbacks run before layout, so any DOM mutation they make
+   * is picked up by this same frame. */
+  xt_gui_run_animation_frames(win, now);
   if (win->document != nullptr && win->document->advance(delta)) win->geometry.dirty = 1;
+
+  /* A DOM mutation from a handler invalidates the tree: restyle/relayout
+   * before (re)building the geometry. */
+  xt_gui_flush_dom(win);
 
   /* Rebuild the geometry only when the document or viewport changed. */
   bool can_paint = xt_gui_renderer_ensure(g_device, win->window);
@@ -378,6 +422,8 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   record->text_geometry = XtGuiGeometry();
   record->image_geometry = XtGuiGeometry();
   record->last_frame_ms = 0.0;
+  record->animation_frames.clear();
+  record->next_animation_frame_id = 1;
   record->background[0] = 0.08f;
   record->background[1] = 0.09f;
   record->background[2] = 0.11f;

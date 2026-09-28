@@ -1,16 +1,19 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M7** — features (M1–M6) are complete: HTML parsing, CSS selector
+Status: **M10** — features (M1–M10) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline and Flexbox) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
 and shaped text runs and renders them through SDL_GPU. Input events are hit
 tested and delivered to native TS handlers, `:hover`/`:focus` are matched
 dynamically, `<img>` is sized from its intrinsic dimensions and drawn from a
-texture, and CSS transitions animate paint properties. The per-platform prebuilt
-archive now builds and runs in CI on Linux and macOS (Windows provisional). This
-document records the locked decisions, the architecture, the milestone plan and
-the current progress of a cross-platform GUI extension that renders an HTML/CSS
-UI with its own GPU-accelerated engine.
+texture, and CSS transitions animate paint properties. **M8** adds an interactive
+DOM: element handles with stable identity, mutation (`appendChild`, `textContent`,
+`classList`, `style`, …) and element-level events with capture/bubbling.
+**M9** compiles `<script>` bodies ahead of time (inline and `<script src>`) — see
+`doc/gui-scripts.md`. **M10** adds `requestAnimationFrame` plus a few DOM helpers.
+This document records the locked decisions, the architecture, the milestone plan
+and the current progress of a cross-platform GUI extension that renders an
+HTML/CSS UI with its own GPU-accelerated engine.
 
 ## Goals
 
@@ -27,16 +30,19 @@ UI with its own GPU-accelerated engine.
 
 ## Non-goals (for now)
 
-- Executing page `<script>`. Logic lives in **xbintsc-compiled native TS**; the
-  HTML/CSS only describes the interface.
-- A JS engine (QuickJS/V8/...). Explicitly out of scope.
+- Executing **runtime** page `<script>` (scripts fetched over the network or
+  created dynamically). **Compile-time** scripts are AOT-compiled by xbintsc and
+  do run — see `doc/gui-scripts.md`. Logic may also live in native TS called
+  back through `xt_call_with_this`.
+- A JS engine (QuickJS/V8/...). Explicitly out of scope; there is no runtime
+  interpreter/JIT, so `<script>` bodies are compiled ahead of time.
 - Full web compatibility / a browser. We implement a practical HTML/CSS subset.
 
 ## Locked decisions
 
 | # | Decision |
 | --- | --- |
-| 1 | **No page JS engine.** All behaviour is native TS, called back through `xt_call_with_this`. |
+| 1 | **No page JS engine.** Behaviour is native TS, called back through `xt_call_with_this`. `<script>` bodies are **AOT-compiled** by xbintsc itself (no interpreter) — see `doc/gui-scripts.md`. |
 | 2 | Third-party **low-level** libraries are allowed (GPU backend, text shaping, image decode). HTML/CSS parsing + layout + paint scheduling are self-written. |
 | 3 | **GPU acceleration is mandatory.** |
 | 4 | The engine is **not self-hosted** (it is C/C++, not TS), but must not affect the compiler's platform-agnostic design. Delivered as a per-platform prebuilt archive linked via `nativeObjects`. |
@@ -175,6 +181,91 @@ win.advance(ms)                        // step the CSS transition clock (testing
 They are used by `tests/e2e/gui.test.ts` to assert parsing, selector matching,
 specificity, inheritance, `!important` and layout geometry. They will stay useful
 afterwards for debugging.
+
+### Interactive DOM (M8)
+
+`win.document` returns the document handle; element handles have stable identity
+and read/write properties, attributes, traversal and geometry:
+
+```ts
+const doc = win.document;
+const box = doc.querySelector("#box");
+const inner = doc.querySelector("#inner");
+inner.textContent = "hi";              // write
+inner.classList.add("hot");
+inner.style.setProperty("color", "#0f0");
+inner.setAttribute("data-role", "lead");
+console.log(inner.id, inner.tagName, doc.querySelector("#box") === box);
+
+const created = doc.createElement("div");
+created.textContent = "added";
+box.appendChild(created);
+box.removeChild(created);
+
+inner.addEventListener("click", (e) => console.log(e.target.id, e.currentTarget.id));
+inner.click();                          // synthesise a click at the element
+console.log(box.offsetWidth, box.offsetHeight);   // rounded border box
+console.log(box.contains(inner));                 // descendant test
+```
+
+Mutations mark the document dirty; the engine restyles + relayouts lazily (before
+the next read or frame). `inner = …`/`innerHTML = …` do **not** run scripts.
+Element events support capture and bubble phases, `stopPropagation`, `once`, and
+bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps its
+**string** `e.target` (`div#id.class`); the element `Event.target` is a handle
+whose descriptor matches the same string.
+
+### AOT scripts (M9)
+
+Import an `.html` file that contains inline `<script lang="ts">` bodies; the
+loader compiles each body into a native function and `win.loadHTML(page)` runs
+them once the document is parsed (no JavaScript engine, no runtime `eval`):
+
+```ts
+import { createWindow, run } from "gui";
+import page from "./page.html";
+
+const win = createWindow({ title: "counter", width: 320, height: 240 });
+win.loadHTML(page);
+run();
+```
+
+```html
+<button id="b">0</button>
+<script lang="ts">
+  const b = document.getElementById("b");
+  let n = 0;
+  b.addEventListener("click", () => { b.textContent = String(++n); });
+</script>
+```
+
+The two parameters (`window`, `document`) are ordinary function arguments, so
+script locals need no global-object machinery. External scripts work too:
+`<script src="./counter.ts">` is read at compile time, its imports are hoisted
+(rewritten to resolve from the HTML file) and its body is wrapped the same way —
+so a script module can `import` helpers and still see `document`. Scripts are
+**compile-time assets**: HTML created at runtime (`innerHTML`, fetched over the
+network) never executes, and `src` URLs (`https://…`, `data:…`) are ignored.
+Everything runs in document order after parsing (effectively deferred). See
+`doc/gui-scripts.md` for the full design.
+
+### Animation frames (M10)
+
+`requestAnimationFrame` runs a callback once on the next frame; the callback
+receives the frame timestamp (ms) and may mutate the DOM, which is restyled and
+repainted in the same frame. Re-queue from inside the callback to animate:
+
+```ts
+const win = createWindow({ title: "anim", width: 320, height: 240 });
+let n = 0;
+const tick = (t: number) => {
+  win.document.getElementById("label").textContent = String(n++);
+  if (n < 120) win.requestAnimationFrame(tick); // id returned; cancelAnimationFrame(id) drops it
+};
+win.on("ready", () => win.requestAnimationFrame(tick));
+win.loadHTML("<div id='label'>0</div>");
+run();
+```
 
 ### Implemented layout (M3)
 
@@ -451,6 +542,30 @@ used by default; Wayland is enabled too but not yet exercised.
    - Windows (build + run) stays provisional until the MSVC-compatible
      `gui.lib` and D3D12/DXIL shader path are validated; a failure is logged
      without annotating the run (see *Open questions*).
+8. **M8 — interactive DOM** ✅
+   - Element/document handles with stable identity, read/write properties via
+     runtime accessors, traversal/attributes/queries, mutation with lazy
+     restyle/relayout (`dom_api.*`, `document.*`, `dom.*`, `gui.cpp`,
+     `window.cpp`), element events with capture + bubble phases and
+     `stopPropagation`, and window-level `e.target` compatibility. No compiler
+     changes. See `doc/gui-scripts.md`.
+9. **M9 — AOT `<script>`** ✅
+   - **M9a** ✅ — generic `Extension.assetLoaders` hook + bundler integration.
+   - **M9b** ✅ — gui `.html` asset loader (`src/extensions/gui/html.ts`): inline
+     bodies are wrapped in `__xt_script_<hash>(window, document)` functions,
+     registered through the `__registerScript` builtin and replaced by
+     `<script data-xt-id="<hash>">` markers; `win.loadHTML` runs the matching
+     functions after parsing and fires `DOMContentLoaded` then `load`.
+   - **M9c** ✅ — `<script src>` files are read relative to the HTML, their
+     top-level imports are hoisted (specifiers rewritten from the HTML dir) and
+     their body is wrapped/registered; missing files and import-binding
+     collisions become diagnostics. Everything runs in document order.
+10. **M10 — polish** ✅
+    - `win.requestAnimationFrame(fn)` / `win.cancelAnimationFrame(id)`; callbacks
+      run at the top of each frame with the frame timestamp and may mutate the
+      DOM (`gui.cpp`, `window.cpp`, `gui_engine.h`).
+    - `Element.offsetWidth` / `offsetHeight` (rounded border box, flushes pending
+      mutations) and `Element.contains(other)` (`dom_api.cpp`).
 
 ## Progress log
 
@@ -482,6 +597,25 @@ used by default; Wayland is enabled too but not yet exercised.
   example plus the GUI e2e suite under Xvfb on Linux; `package` ships `gui.a`,
   `vendor/` is cached, and the `ar -M` merge works on GNU/Linux and macOS.
   macOS runs and all of Windows remain provisional in CI.
+- **M8** ✅ element/document handles (`dom_api.*`), DOM mutation with lazy
+  restyle/relayout (`document.*`, `xt_gui_flush_dom`), element event dispatch
+  with capture/bubble and `stopPropagation` (`dom_api.*`, `gui.cpp`), and e2e
+  coverage in `tests/e2e/gui.test.ts`.
+- **M9a** ✅ extensions can register asset loaders keyed by file extension;
+  `bundleModules`/`loadGraph` consult them after reading a file. Unit tests in
+  `tests/driver/modules.test.ts`.
+- **M9b** ✅ `import page from "./page.html"` compiles inline `<script lang="ts">`
+  bodies into AOT functions registered at startup and run by `win.loadHTML`
+  (before first layout; `DOMContentLoaded` then `load`). Unit tests in
+  `tests/extensions/gui.test.ts`, e2e in `tests/e2e/gui.test.ts`.
+- **M9c** ✅ external `<script src>` files are read, their imports hoisted
+  (specifiers rewritten from the HTML dir) and their body wrapped/registered;
+  missing files and import-binding collisions are diagnostics. Loader errors are
+  caught by `loadGraph` and reported as build errors.
+- **M10** ✅ `requestAnimationFrame`/`cancelAnimationFrame` on window handles
+  (callbacks run with the frame timestamp before layout each frame) plus
+  `offsetWidth`/`offsetHeight`/`contains` on element handles; e2e coverage in
+  `tests/e2e/gui.test.ts`.
 
 ## Open questions
 

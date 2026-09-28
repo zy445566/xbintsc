@@ -22,6 +22,8 @@ extern "C" {
 xt_value xt_gui_create_window(int32_t argc, xt_value *argv);
 xt_value xt_gui_run(int32_t argc, xt_value *argv);
 xt_value xt_gui_quit(int32_t argc, xt_value *argv);
+/** `__registerScript(id, fn)`: record an AOT-compiled `<script>` body. */
+xt_value xt_register_script(int32_t argc, xt_value *argv);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -30,9 +32,25 @@ xt_value xt_gui_quit(int32_t argc, xt_value *argv);
 
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "document.h"
 #include "renderer.h"
+
+/** One element-level event listener registered through `addEventListener`. */
+struct XtGuiNodeListener {
+  std::string type;
+  xt_value fn;
+  bool once;
+  bool capture;
+};
+
+/** One pending `requestAnimationFrame` callback. */
+struct XtGuiAnimationFrame {
+  int id;
+  xt_value fn;
+};
 
 /* One live window. `object` is the JavaScript-visible handle; the record is
  * addressed from it through the hidden `__xt_gui_index` property. */
@@ -50,10 +68,43 @@ struct XtGuiWindow {
   float background[4];
   int width;
   int height;
+
+  /* -- DOM object model (element handles + events) ----------------------- */
+  /** `document` handle for this window (lazily created). */
+  xt_value document_object = XT_UNDEFINED;
+  /** Bumped on every `loadHTML`; stale handles no-op. */
+  double doc_generation = 1.0;
+  /** Node -> table index / cached handle, so identity is stable. */
+  std::vector<xtgui::Node *> node_order;
+  std::unordered_map<const xtgui::Node *, int> node_index;
+  std::unordered_map<const xtgui::Node *, xt_value> node_handles;
+  /** Element-level listeners, keyed by node. */
+  std::unordered_map<const xtgui::Node *, std::vector<XtGuiNodeListener>> node_listeners;
+  /** Set by a DOM mutation; consumed by the frame loop before repainting. */
+  int struct_dirty = 0;
+  /** Callbacks queued for the next frame, plus the id counter. */
+  std::vector<XtGuiAnimationFrame> animation_frames;
+  int next_animation_frame_id = 1;
 };
 
 /** Resolve a window handle (`this`) to its record, or NULL for a foreign value. */
 XtGuiWindow *xt_gui_window_from_this(xt_value thisValue);
+/** The `document` handle for `win` (created on first use). */
+xt_value xt_gui_document_handle(XtGuiWindow *win);
+/** Node handle for `node` (created and cached on first use). */
+xt_value xt_gui_node_handle(XtGuiWindow *win, const xtgui::Node *node);
+/** Drop every cached handle/listener and bump the document generation. */
+void xt_gui_handles_reset(XtGuiWindow *win);
+/** Deliver `type` to element listeners along the propagation path. */
+void xt_gui_emit_dom_event(XtGuiWindow *win, const char *type, const xtgui::Node *target,
+                           xt_value legacy_payload);
+/** Synthesise a DOM event whose target is `target` (used by element.click()). */
+void xt_gui_dispatch_to_node(XtGuiWindow *win, const xtgui::Node *target, const char *type);
+/** Apply any pending DOM mutation (restyle/relayout) before a synchronous read. */
+void xt_gui_flush_dom(XtGuiWindow *win);
+/** Run every registered `<script data-xt-id>` body found in the document, in
+ * document order, passing `(windowHandle, documentHandle)`. */
+void xt_gui_run_scripts(XtGuiWindow *win);
 /** Shared prototype carrying the window methods. */
 xt_value xt_gui_window_proto(void);
 /** Release GPU claim + destroy the window and mark the record closed. */
@@ -64,6 +115,9 @@ void xt_gui_emit(XtGuiWindow *win, const char *event);
 void xt_gui_emit_payload(XtGuiWindow *win, const char *event, xt_value payload);
 /** Acquire a swapchain frame for `win` and clear it (placeholder paint). */
 void xt_gui_render_window(XtGuiWindow *win);
+/** Run every callback queued with `requestAnimationFrame` for the frame at
+ * `timestamp_ms`, then clear the queue. */
+void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms);
 /** Current logical window size (CSS viewport), in pixels. */
 void xt_gui_window_viewport(XtGuiWindow *win, float *width, float *height);
 /** CSS-like descriptor of the deepest element at (x, y), or `""` (test/debug). */

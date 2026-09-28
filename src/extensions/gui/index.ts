@@ -25,6 +25,7 @@ import { join } from "node:path";
 import type { Extension, ExtensionModule } from "../registry.js";
 import { findRuntimeDir, platformSlug } from "../../driver/paths.js";
 import { findRuntimeLibrary } from "../../driver/runtime-lib.js";
+import { loadHtmlAsset } from "./html.js";
 
 /** Top-level `gui` module bindings. */
 const guiModule: ExtensionModule = {
@@ -104,4 +105,14 @@ export const guiExtension: Extension = {
     return ["-lX11", "-lwayland-client", "-lEGL", "-lGL", "-ldl", "-lpthread", "-lstdc++"];
   },
   modules: () => ({ gui: guiModule }),
+  /**
+   * `__registerScript(id, fn)` is emitted by the `.html` asset loader and
+   * called at module initialization; it records the AOT-compiled `<script>`
+   * body so the engine can run it after parsing a document.
+   */
+  builtins: () => ({
+    __registerScript: { symbol: "xt_register_script" },
+  }),
+  /** Rewrite imported `.html` assets (see `html.ts`). */
+  assetLoaders: () => ({ ".html": loadHtmlAsset }),
 };

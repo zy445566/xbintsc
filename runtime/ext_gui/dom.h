@@ -49,6 +49,13 @@ struct Node {
   Node *addText(const std::string &data);
   Node *append(std::unique_ptr<Node> child);
 
+  /** Detach a direct child, transferring ownership to the caller. */
+  std::unique_ptr<Node> detachChild(Node *child);
+  /** Insert `child` before `reference` (append when `reference` is nullptr). */
+  Node *insertChild(std::unique_ptr<Node> child, Node *reference);
+  /** True when `node` is this node or a descendant of it. */
+  bool contains(const Node *node) const;
+
   /** First element child (skips text), or NULL. */
   Node *firstElementChild() const;
   /** Total number of element children with the same tag, and this node's index. */

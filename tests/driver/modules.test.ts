@@ -246,3 +246,77 @@ describe("bundleModules", () => {
     expect(bag.diagnostics.some((d) => d.message.includes("Cannot find module"))).toBe(true);
   });
 });
+
+describe("asset loaders", () => {
+  it("rewrites a matching asset extension into a TS module", () => {
+    const directory = writeFiles({
+      "data.foo": "hello",
+      "main.ts": 'import value from "./data.foo";\nconsole.log(value);',
+    });
+    const seen: Array<[string, string]> = [];
+    const loader = (path: string, source: string) => {
+      seen.push([path, source]);
+      return { moduleSource: `export default ${JSON.stringify(source)};` };
+    };
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag, new Set(), { ".foo": loader });
+    expect(bag.hasErrors).toBe(false);
+    expect(seen).toEqual([[join(directory, "data.foo"), "hello"]]);
+    expect(result?.text).toContain('export default "hello"');
+  });
+
+  it("follows imports from a loader-generated module", () => {
+    const directory = writeFiles({
+      "widget.html": "<div></div>",
+      "helper.ts": "export const n = 41;",
+      "main.ts": 'import html from "./widget.html";\nconsole.log(html);',
+    });
+    const loader = () => ({
+      moduleSource: 'import { n } from "./helper";\nexport default "loaded-" + n;',
+    });
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag, new Set(), { ".html": loader });
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(3);
+  });
+
+  it("leaves files with other extensions untouched", () => {
+    const directory = writeFiles({ "main.ts": "console.log(1);" });
+    const loader = () => ({ moduleSource: 'throw new Error("should not run");' });
+    const bag = new DiagnosticBag();
+    bundleModules(join(directory, "main.ts"), bag, new Set(), { ".html": loader });
+    expect(bag.hasErrors).toBe(false);
+  });
+
+  it("reports a loader that throws as a build diagnostic", () => {
+    const directory = writeFiles({
+      "data.foo": "boom",
+      "main.ts": 'import value from "./data.foo";\nconsole.log(value);',
+    });
+    const loader = () => {
+      throw new Error("loader exploded");
+    };
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag, new Set(), { ".foo": loader });
+    expect(result).toBeUndefined();
+    expect(bag.hasErrors).toBe(true);
+    expect(bag.diagnostics.some((diagnostic) => diagnostic.message.includes("loader exploded"))).toBe(true);
+  });
+
+  it("reports an unresolvable relative import", () => {
+    const directory = writeFiles({ "main.ts": 'import value from "./missing";\nconsole.log(value);' });
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag);
+    expect(result).toBeUndefined();
+    expect(bag.hasErrors).toBe(true);
+    expect(bag.diagnostics.some((diagnostic) => diagnostic.message.includes("Cannot resolve module"))).toBe(true);
+  });
+
+  it("reports a missing entry file", () => {
+    const directory = writeFiles({ "main.ts": "console.log(1);" });
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "nope.ts"), bag);
+    expect(result).toBeUndefined();
+    expect(bag.diagnostics.some((diagnostic) => diagnostic.message.includes("Cannot find module"))).toBe(true);
+  });
+});

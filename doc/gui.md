@@ -212,6 +212,36 @@ bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps it
 **string** `e.target` (`div#id.class`); the element `Event.target` is a handle
 whose descriptor matches the same string.
 
+### AOT scripts (M9)
+
+Import an `.html` file that contains inline `<script lang="ts">` bodies; the
+loader compiles each body into a native function and `win.loadHTML(page)` runs
+them once the document is parsed (no JavaScript engine, no runtime `eval`):
+
+```ts
+import { createWindow, run } from "gui";
+import page from "./page.html";
+
+const win = createWindow({ title: "counter", width: 320, height: 240 });
+win.loadHTML(page);
+run();
+```
+
+```html
+<button id="b">0</button>
+<script lang="ts">
+  const b = document.getElementById("b");
+  let n = 0;
+  b.addEventListener("click", () => { b.textContent = String(++n); });
+</script>
+```
+
+The two parameters (`window`, `document`) are ordinary function arguments, so
+script locals need no global-object machinery. Scripts are **compile-time
+assets**: HTML created at runtime (`innerHTML`, fetched over the network) never
+executes. `src` scripts are resolved as module imports in M9c. See
+`doc/gui-scripts.md` for the full design.
+
 ### Implemented layout (M3)
 
 `runtime/ext_gui/layout.{h,cpp}` turns the styled DOM into a `LayoutBox` tree
@@ -494,11 +524,13 @@ used by default; Wayland is enabled too but not yet exercised.
      `window.cpp`), element events with capture + bubble phases and
      `stopPropagation`, and window-level `e.target` compatibility. No compiler
      changes. See `doc/gui-scripts.md`.
-9. **M9 — AOT `<script>`** 🚧 (planned)
-   - **M9a** — generic `Extension.assetLoaders` hook + bundler integration.
-   - **M9b** — gui `.html` asset loader (hash inline bodies, `data-xt-id`
-     markers, `__xt_script_<hash>` modules), `__registerScript` builtin and
-     `loadHTML` execution with `DOMContentLoaded`/`load`.
+9. **M9 — AOT `<script>`** 🚧
+   - **M9a** ✅ — generic `Extension.assetLoaders` hook + bundler integration.
+   - **M9b** ✅ — gui `.html` asset loader (`src/extensions/gui/html.ts`): inline
+     bodies are wrapped in `__xt_script_<hash>(window, document)` functions,
+     registered through the `__registerScript` builtin and replaced by
+     `<script data-xt-id="<hash>">` markers; `win.loadHTML` runs the matching
+     functions after parsing and fires `DOMContentLoaded` then `load`.
    - **M9c** — `<script src>` resolved as module imports; `defer` ordering.
 
 ## Progress log
@@ -535,6 +567,13 @@ used by default; Wayland is enabled too but not yet exercised.
   restyle/relayout (`document.*`, `xt_gui_flush_dom`), element event dispatch
   with capture/bubble and `stopPropagation` (`dom_api.*`, `gui.cpp`), and e2e
   coverage in `tests/e2e/gui.test.ts`.
+- **M9a** ✅ extensions can register asset loaders keyed by file extension;
+  `bundleModules`/`loadGraph` consult them after reading a file. Unit tests in
+  `tests/driver/modules.test.ts`.
+- **M9b** ✅ `import page from "./page.html"` compiles inline `<script lang="ts">`
+  bodies into AOT functions registered at startup and run by `win.loadHTML`
+  (before first layout; `DOMContentLoaded` then `load`). Unit tests in
+  `tests/extensions/gui.test.ts`, e2e in `tests/e2e/gui.test.ts`.
 
 ## Open questions
 

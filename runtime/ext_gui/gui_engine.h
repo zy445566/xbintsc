@@ -22,6 +22,8 @@ extern "C" {
 xt_value xt_gui_create_window(int32_t argc, xt_value *argv);
 xt_value xt_gui_run(int32_t argc, xt_value *argv);
 xt_value xt_gui_quit(int32_t argc, xt_value *argv);
+/** `__registerScript(id, fn)`: record an AOT-compiled `<script>` body. */
+xt_value xt_register_script(int32_t argc, xt_value *argv);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -91,6 +93,9 @@ void xt_gui_emit_dom_event(XtGuiWindow *win, const char *type, const xtgui::Node
 void xt_gui_dispatch_to_node(XtGuiWindow *win, const xtgui::Node *target, const char *type);
 /** Apply any pending DOM mutation (restyle/relayout) before a synchronous read. */
 void xt_gui_flush_dom(XtGuiWindow *win);
+/** Run every registered `<script data-xt-id>` body found in the document, in
+ * document order, passing `(windowHandle, documentHandle)`. */
+void xt_gui_run_scripts(XtGuiWindow *win);
 /** Shared prototype carrying the window methods. */
 xt_value xt_gui_window_proto(void);
 /** Release GPU claim + destroy the window and mark the record closed. */

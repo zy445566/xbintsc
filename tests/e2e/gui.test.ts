@@ -43,7 +43,14 @@ describe.skipIf(!available)("gui extension", () => {
   });
 
   /** Compile a program and run it with the auto-close hook, returning stdout. */
-  function compileAndRun(name: string, source: string): { stdout: string; status: number | null } {
+  function compileAndRun(
+    name: string,
+    source: string,
+    extraFiles: Record<string, string> = {},
+  ): { stdout: string; status: number | null } {
+    for (const [fileName, contents] of Object.entries(extraFiles)) {
+      writeFileSync(join(workdir, fileName), contents);
+    }
     const entry = join(workdir, `${name}.ts`);
     writeFileSync(entry, source);
     const extensions = createDefaultRegistry().register(guiExtension);
@@ -641,5 +648,50 @@ describe.skipIf(!available)("gui extension", () => {
     expect(stdout).toContain("event=box:inner");
     expect(value("winCompat")).toBe("win:div#inner.warm");
     expect(value("stopped")).toBe("inner");
+  });
+
+  it("compiles inline <script> bodies from an imported .html asset", () => {
+    const { stdout } = compileAndRun(
+      "script",
+      `
+      import { createWindow, run } from "gui";
+      import page from "./page.html";
+
+      const win = createWindow({ title: "script", width: 320, height: 240 });
+      win.on("ready", () => {
+        const button = win.document.getElementById("b");
+        button.click();
+        button.click();
+        console.log("after=" + win.document.getElementById("count").textContent);
+        console.log("button=" + button.textContent);
+        win.close();
+      });
+      win.loadHTML(page);
+      run();
+      `,
+      {
+        "page.html": `<html><body>
+  <div id="count">0</div>
+  <button id="b">0</button>
+  <script lang="ts">
+    const button = document.getElementById("b");
+    const label = document.getElementById("count");
+    let n = 0;
+    button.addEventListener("click", () => {
+      n = n + 1;
+      button.textContent = String(n);
+      label.textContent = String(n);
+    });
+  </script>
+</body></html>`,
+      },
+    );
+    const value = (label: string): string => {
+      const line = stdout.split("\n").find((entry) => entry.startsWith(`${label}=`));
+      expect(line, `missing ${label} in:\n${stdout}`).toBeDefined();
+      return line!.slice(label.length + 1).trim();
+    };
+    expect(value("after")).toBe("2");
+    expect(value("button")).toBe("2");
   });
 });

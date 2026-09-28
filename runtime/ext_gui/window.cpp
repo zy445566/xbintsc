@@ -56,10 +56,15 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
     xt_gui_window_viewport(win, &width, &height);
     win->document->load(html, width, height);
     win->geometry.dirty = 1;
+    /* Run the AOT-compiled `<script>` bodies now that the tree is parsed, so
+     * `document.getElementById(...)` resolves, then settle the first layout. */
+    xt_gui_run_scripts(win);
+    xt_gui_flush_dom(win);
   }
   xt_object_set(self, xt_string_from_cstr("__xt_gui_html"), xt_string_from_cstr(html.c_str()));
   /* Painting the document is milestone M3b+; the parsed tree and computed
    * styles are available now (see `computedStyle`). */
+  xt_gui_emit(win, "DOMContentLoaded");
   xt_gui_emit(win, "load");
   return XT_UNDEFINED;
 }

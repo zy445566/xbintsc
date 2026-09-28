@@ -109,7 +109,6 @@ interface Extension {
 The bundler (`src/driver/bundler/graph.ts`) consults the registry immediately
 after `readFileSync`, *before* parsing. The core stays platform-agnostic: it
 only knows "an extension may transform the bytes of `*.foo` into TS".
-
 The `gui` extension registers an `.html` loader. A plain `import html from
 "./index.html"` therefore yields a **string constant** by default, and (when
 the file contains `<script>`) a **side-effecting module** that registers the
@@ -138,12 +137,13 @@ function __xt_script_a1b2(window: any, document: any): void {
   let n = 0;
   b.addEventListener("click", () => { b.textContent = String(++n); });
 }
-__registerScript(() => "a1b2…", __xt_script_a1b2);
+__registerScript("a1b2…", __xt_script_a1b2);
 export default __html;
 ```
 
-- The id is `sha1(body)`; the body is replaced by an empty marker element so
-  the engine can find it in document order.
+- The id is a content hash of the body (sha256, first 32 hex chars); the body is
+  replaced by an empty marker element so the engine can find it in document
+  order.
 - `window` and `document` are **function parameters**, so script globals resolve
   as ordinary locals — **no compiler changes**, no global object.
 - `__registerScript(id, fn)` is a new runtime builtin that stores the closure in
@@ -251,16 +251,16 @@ legacy `target` field over the handle.
 
 ## Milestones
 
-- **M8 — DOM object model + mutation + element events** (this branch)
+- **M8 — DOM object model + mutation + element events** ✅
   - `runtime/ext_gui/dom_api.{h,cpp}`, `document.{h,cpp}`, `dom.{h,cpp}`,
     `gui_engine.h`, `gui.cpp`, `window.cpp`, e2e coverage.
   - No compiler changes; independently testable.
-- **M9 — AOT `<script>`**
-  - **M9a** — `Extension.assetLoaders` in `src/extensions/registry.ts` + bundler
-    integration in `src/driver/bundler/graph.ts`.
-  - **M9b** — gui `.html` loader (hash body, emit `data-xt-id` marker +
-    `__xt_script_<hash>` module), `__registerScript` builtin, `loadHTML`
-    execution and `DOMContentLoaded`/`load`.
+- **M9 — AOT `<script>`** 🚧
+  - **M9a** ✅ — `Extension.assetLoaders` in `src/extensions/registry.ts` +
+    bundler integration in `src/driver/bundler/{graph,merge}.ts`; unit tests.
+  - **M9b** ✅ — gui `.html` loader (`src/extensions/gui/html.ts`), the
+    `__registerScript` builtin, the script registry (`runtime/ext_gui/script.cpp`),
+    `loadHTML` execution and `DOMContentLoaded`/`load`; e2e coverage.
   - **M9c** — `<script src>` resolved relative to the HTML file and compiled as
     a module import; `defer`/module ordering.
   - **M9d** *(optional)* — detect inline HTML in template literals passed to

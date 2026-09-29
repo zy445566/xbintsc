@@ -218,6 +218,12 @@ xt_value xt_crypto_create_hash(int32_t argc, xt_value *argv);
 /* -- node:child_process --------------------------------------------------- */
 xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv);
 
+/* -- fetch ---------------------------------------------------------------- */
+/** Implements the global `fetch(input, init)`; returns a settled promise. */
+xt_value xt_fetch(int32_t argc, xt_value *argv);
+/** Construct a `TypeError` with one message argument (used by `fetch`). */
+xt_value xt_type_error_ctor(int32_t argc, xt_value *argv);
+
 /* -- promises / async ----------------------------------------------------- */
 xt_value xt_promise_resolve(xt_value value);
 xt_value xt_promise_reject(xt_value value);

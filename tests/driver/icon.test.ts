@@ -18,7 +18,13 @@ import { bundlePathFor, infoPlist, packageMacApp } from "../../src/driver/mac-bu
 import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
+import { findRuntimeDir, platformSlug } from "../../src/driver/paths.js";
 import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
+
+/** The GUI suite only runs when the native archive has been built (see gui-helpers). */
+const guiAvailable =
+  existsSync(join(findRuntimeDir(), "lib", platformSlug(), "gui.a")) &&
+  process.platform !== "win32";
 
 const LOGO_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFElEQVR42mP4z8DwH4Sh1H8G0gUALFAf4eNWqTEAAAAASUVORK5CYII=";
@@ -430,7 +436,7 @@ describe("build integration", () => {
     expect(linkCall.args.some((arg) => arg.includes("icon-") && arg.endsWith(".o"))).toBe(true);
   });
 
-  it("links an empty icon object for GUI programs without an icon", () => {
+  it.skipIf(!guiAvailable)("links an empty icon object for GUI programs without an icon", () => {
     const directory = temporaryDirectory();
     const entry = join(directory, "main.ts");
     writeFileSync(entry, "console.log(1);");

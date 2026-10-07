@@ -225,14 +225,16 @@ void xt_gc_register_root_provider(void (*provider)(void)) {
 
 void xt_gc_push_stack(uintptr_t low, uintptr_t high) {
   if (g_stack_depth >= XT_GC_MAX_STACKS) return;
-  /* The region below this one is now suspended: remember how far up its stack
-   * was live so a collection taken while the new region runs still scans it. */
-  uintptr_t here = (uintptr_t)&high;
-  if (g_stack_depth > 0) g_stack_regions[g_stack_depth - 1].scan_low = here;
   g_stack_regions[g_stack_depth].low = low;
   g_stack_regions[g_stack_depth].high = high;
   g_stack_regions[g_stack_depth].scan_low = low;
   g_stack_depth++;
+}
+
+void xt_gc_suspend(uintptr_t sp) {
+  if (g_stack_depth <= 0) return;
+  uintptr_t *scan = &g_stack_regions[g_stack_depth - 1].scan_low;
+  if (*scan == UINTPTR_MAX || sp < *scan) *scan = sp;
 }
 
 void xt_gc_pop_stack(void) {

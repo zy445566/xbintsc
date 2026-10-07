@@ -158,9 +158,13 @@ void xt_gc_register_root_provider(void (*provider)(void));
 
 /* Track the active C stack so the conservative scan has an upper bound. The
  * initial region is installed by `xt_gc_init`; each generator pushes its own
- * private stack while it runs. Every active region is scanned, not just the
- * top one, so suspended callers stay reachable. */
+ * private stack while it runs. Before switching to a deeper region the caller
+ * records where its own stack was suspended, so every active region is scanned
+ * and suspended callers stay reachable. */
 void xt_gc_push_stack(uintptr_t low, uintptr_t high);
+/* Mark the currently-executing region as suspended at `sp` (its frames above
+ * `sp` stay live while a deeper generator region runs). */
+void xt_gc_suspend(uintptr_t sp);
 void xt_gc_pop_stack(void);
 
 /* Marking primitives used by root providers and per-kind trace hooks. */

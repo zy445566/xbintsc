@@ -54,6 +54,11 @@ typedef struct xt_generator {
 #ifdef _WIN32
   void *fiber;
   void *caller_fiber;
+  /* `SwitchToFiber` keeps the resumer's callee-saved registers in an opaque
+   * fiber context (POSIX stores them in `caller`), so snapshot them for the
+   * collector before switching away. */
+  jmp_buf caller_regs;
+  int has_caller_regs;
 #else
   ucontext_t ctx;
   ucontext_t caller;
@@ -105,7 +110,11 @@ static void xt_generator_run(xt_generator *gen) {
     MEMORY_BASIC_INFORMATION info;
     uintptr_t here = (uintptr_t)&info;
     if (VirtualQuery((LPCVOID)here, &info, sizeof(info))) {
-      gen->stack = (char *)info.AllocationBase;
+      /* Use the *committed* region containing the current frame: a Windows
+       * stack reserves more than it commits, and `AllocationBase + RegionSize`
+       * can fall in uncommitted memory. `BaseAddress + RegionSize` is the
+       * stack top. */
+      gen->stack = (char *)info.BaseAddress;
       gen->stack_size = info.RegionSize;
     }
   }
@@ -168,6 +177,9 @@ static void xt_generator_dispose(xt_generator *gen) {
     gen->fiber = NULL;
   }
   gen->caller_fiber = NULL;
+  /* `DeleteFiber` releases the stack: never scan it again. */
+  gen->stack = NULL;
+  gen->stack_size = 0;
 #else
   if (gen->stack) {
     free(gen->stack);
@@ -180,6 +192,11 @@ static void xt_generator_resume(xt_generator *gen) {
   if (!gen->booted) xt_generator_boot(gen);
   xt_generator *previous = g_active_generator;
   g_active_generator = gen;
+  /* Record where the current (calling) stack suspends before switching away.
+   * On Windows the first push happens inside the fiber once its stack bounds
+   * are known, so the caller's region must be marked suspended here, on the
+   * caller's own stack. */
+  xt_gc_suspend((uintptr_t)&gen);
   if (gen->stack && gen->stack_size && !gen->stack_pushed) {
     xt_gc_push_stack((uintptr_t)gen->stack, (uintptr_t)gen->stack + gen->stack_size);
     gen->stack_pushed = 1;
@@ -187,6 +204,8 @@ static void xt_generator_resume(xt_generator *gen) {
   void *caller_try = xt_try_mark();
   xt_try_restore(gen->saved_try_top);
 #ifdef _WIN32
+  _setjmp(gen->caller_regs);
+  gen->has_caller_regs = 1;
   gen->caller_fiber = GetCurrentFiber();
   SwitchToFiber(gen->fiber);
 #else
@@ -227,6 +246,8 @@ void xt_generator_gc_trace(xt_header *header) {
 #ifndef _WIN32
   /* Registers saved by `swapcontext` at the last yield are not on the stack. */
   xt_gc_scan_region(&gen->ctx, sizeof(gen->ctx));
+#else
+  if (gen->has_caller_regs) xt_gc_scan_region(&gen->caller_regs, sizeof(gen->caller_regs));
 #endif
 }
 

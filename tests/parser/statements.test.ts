@@ -65,6 +65,21 @@ describe("statement parsing", () => {
     expect(statements("export default function f() {}").diagnostics).toHaveLength(0);
     expect(statements("export default class C {}").diagnostics).toHaveLength(0);
   });
+
+  it("treats `module` and `namespace` as identifiers in expression position", () => {
+    const { stmts, diagnostics } = statements(
+      'module.exports = { a: 1 };\nmodule.exports.b = 2;\nvar namespace = module;',
+    );
+    expect(diagnostics).toHaveLength(0);
+    expect(stmts[0].kind).toBe(SyntaxKind.ExpressionStatement);
+    expect(stmts[1].kind).toBe(SyntaxKind.ExpressionStatement);
+    expect(stmts[2].kind).toBe(SyntaxKind.VariableStatement);
+  });
+
+  it("still parses ambient module declarations", () => {
+    expect(statements("module M { export const x = 1; }").stmts[0].kind).toBe(SyntaxKind.ModuleDeclaration);
+    expect(statements('module "m" {}').stmts[0].kind).toBe(SyntaxKind.ModuleDeclaration);
+  });
 });
 
 describe("class member parsing", () => {

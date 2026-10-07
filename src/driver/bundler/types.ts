@@ -17,6 +17,14 @@ export interface ModuleRecord {
   readonly originalNames: Map<number, string>;
   /** final name of every top-level symbol */
   readonly finalNames: Map<number, string>;
+  /**
+   * True when the module is CommonJS (it references `require`, `module` or
+   * `exports` as a free identifier). Its `exports` map points at synthetic
+   * per-module bindings lowered by the bundler.
+   */
+  commonjs: boolean;
+  /** Synthetic `module` object for a CommonJS module (`<prefix>$cjs_module`). */
+  cjsModule?: string;
 }
 
 export interface BundleResult {

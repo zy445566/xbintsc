@@ -29,6 +29,7 @@ import { SymbolKind } from "../../binder/binder.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import type { AssetLoader } from "../../extensions/registry.js";
 import { loadGraph } from "./graph.js";
+import { lowerCommonJSRequires, prepareCommonJS } from "./commonjs.js";
 import { classifyDependency } from "./resolve.js";
 import {
   declarationName,
@@ -63,6 +64,10 @@ export function bundleModules(
       record.finalNames.set(symbol.id, record.prefix + symbol.name);
     }
   }
+
+  // Phase 1b: give every CommonJS module its `module`/`exports` state and
+  // record its export surface, so later phases can re-export it.
+  for (const record of records) prepareCommonJS(record);
 
   // Phase 2: collect each module's exported names.
   for (const record of records) {
@@ -115,6 +120,16 @@ export function bundleModules(
         }
       }
     }
+  }
+
+  // Phase 2b: resolve `require("...")` calls now that every module's export
+  // surface is known (a required ESM module becomes a namespace object).
+  for (const record of records) {
+    lowerCommonJSRequires(record, {
+      resolve: (fromDir, specifier) => classifyDependency(fromDir, specifier, externalSpecifiers),
+      recordFor: (path) => byPath.get(path),
+      diagnostics,
+    });
   }
 
   // Phase 3: rewrite imported names and record re-exports. Namespace imports

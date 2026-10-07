@@ -114,7 +114,7 @@ source.ts
 - `import default, { named } from "..."`、`import * as ns from "..."`（相对模块的命名空间导入会降级为合成对象字面量；扩展模块如 `path` 亦已支持）、`import type`
 - `export default`、`export { a as b }`、`export *`、`export =`
 - import attributes（`with` / `assert`）
-- `import` / `export` 的**运行时语义**由 `src/driver/modules.ts` 在驱动层完成：递归解析相对依赖**以及裸名称的 `node_modules` ESM 包**（遵循 `exports` / `module` / `main` 与包子路径），按模块前缀重命名顶层符号、改写引用，合并为单文件后重新绑定。包必须为 ESM；CommonJS `require()` 会报错并提示改用 `import`。循环依赖报错。
+- `import` / `export` 的**运行时语义**由 `src/driver/modules.ts` 在驱动层完成：递归解析相对依赖**以及裸名称的 `node_modules` 包**（遵循 `exports` / `module` / `main` 与包子路径），按模块前缀重命名顶层符号、改写引用，合并为单文件后重新绑定。包可以是 ESM 或 CommonJS：`node_modules` 内的 CJS 文件会获得合成的 `module` / `exports`，`require` 调用被降级为依赖的导出对象，静态识别出的导出对 ESM 导入方可见；`node_modules` 之外的 `require()` 仍报错并提示改用 `import`。循环依赖报错。
 
 ### 3.5 ASI
 
@@ -353,7 +353,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 函数 | 默认参数、剩余参数、捕获闭包、`this` 绑定、箭头函数词法 `this`、`call`/`apply`/`bind`、`name`/`length` |
 | 类 / OO | 构造函数、实例字段、方法、`static`、继承 `extends`/`super`、原型链、`instanceof` |
 | 异步 | `async`/`await`、`Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`）、同步微任务队列 |
-| 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包（`.js` 系列说明符解析到对应 `.ts` 源码，省略后缀时优先 TypeScript 后缀而非同名的 JavaScript 文件；纯 `.js` / `.jsx` / `.mjs` / `.cjs` 源码也可直接打包）与 ESM `node_modules` 包（`exports` / `module` / `main`、作用域包与子路径），裸说明符解析到扩展模块；CommonJS `require()` 报错并提示改用 `import` |
+| 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包（`.js` 系列说明符解析到对应 `.ts` 源码，省略后缀时优先 TypeScript 后缀而非同名的 JavaScript 文件；纯 `.js` / `.jsx` / `.mjs` / `.cjs` 源码也可直接打包）与 `node_modules` 包（`exports` / `module` / `main`、作用域包与子路径），裸说明符解析到扩展模块；`node_modules` 内的 CommonJS 包会被降级（`require` / `module.exports` / `exports`），用户代码中的 `require()` 报错并提示改用 `import` |
 | 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、类型化数组、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`Symbol`、`Error` 家族、`Object/Array/Number/String/Symbol` 静态、`console.*` |
 | 值模型 | 64 位 NaN-boxing、统一函数 ABI（含 `this`）、闭包环境、对象原型链 |
 | 运行时 | 字符串 / 对象 / 数组 / 类型化数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / symbol / 生成器 / `fetch` / `console` |

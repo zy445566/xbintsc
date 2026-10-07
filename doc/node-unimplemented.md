@@ -72,7 +72,7 @@ implemented, and `crypto` / `url` / `child_process` / `zlib` /
 | --- | --- |
 | `global` / `globalThis` | none |
 | `__dirname` / `__filename` | none |
-| `require` / `module` / `exports` | none (xbintsc has no CommonJS module runtime) |
+| `require` / `module` / `exports` | only inside `node_modules` packages (the bundler lowers them); user code must use ESM `import` |
 | `fs.readFileSync(...)` without an `import` | ✗ unsupported. `fs` is not a global; import it first (`import fs from "fs"` or `import * as fs from "node:fs"`) and `fs.readFileSync(...)` lowers to the module's runtime symbol. |
 
 Node modules are reached through `import` with a bare or `node:`-prefixed

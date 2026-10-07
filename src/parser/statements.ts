@@ -195,8 +195,16 @@ export const statementMethods: StatementMethods = {
       case TokenKind.EnumKeyword:
         return this.parseEnumDeclaration([]);
       case TokenKind.NamespaceKeyword:
-      case TokenKind.ModuleKeyword:
-        return this.parseModuleDeclaration([]);
+      case TokenKind.ModuleKeyword: {
+        // `module` is a contextual keyword: `module.exports` / `module(x)` are
+        // ordinary expressions, only `module Foo {}` / `module "x" {}` is a
+        // declaration.
+        const next = this.lookAhead(1);
+        if (this.isIdentifierLike(next) || next.kind === TokenKind.StringLiteral) {
+          return this.parseModuleDeclaration([]);
+        }
+        break;
+      }
       case TokenKind.DeclareKeyword: {
         const modifiers = this.tryParseModifiers();
         return this.parseStatementWithModifiers(modifiers);
@@ -228,8 +236,13 @@ export const statementMethods: StatementMethods = {
       case TokenKind.EnumKeyword:
         return this.parseEnumDeclaration(modifiers);
       case TokenKind.NamespaceKeyword:
-      case TokenKind.ModuleKeyword:
-        return this.parseModuleDeclaration(modifiers);
+      case TokenKind.ModuleKeyword: {
+        const next = this.lookAhead(1);
+        if (this.isIdentifierLike(next) || next.kind === TokenKind.StringLiteral) {
+          return this.parseModuleDeclaration(modifiers);
+        }
+        return this.parseExpressionStatement();
+      }
       default:
         return this.parseExpressionStatement();
     }

@@ -149,7 +149,7 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 | Circular dependencies | ✗ errors out (no circular initialization semantics) |
 | Live bindings | ✗ namespace objects and imported bindings are snapshots at module-evaluation time |
 | ESM `node_modules` packages | ✓ bare specifiers resolve up the tree through `exports` / `module` / `main`, including scoped packages and subpaths; the package sources are bundled like relative modules |
-| CommonJS `require` / `module.exports` | ✗ `require()` is rejected with a diagnostic pointing at the ESM `import` form |
+| CommonJS `require` / `module.exports` | ✓ inside `node_modules` only: the bundler gives each CommonJS package a synthetic `module` / `exports` pair, lowers `require("x")` to the bundled dependency's exports, and hoists external/built-in `require`s into ESM imports. `require()` in user code (outside `node_modules`) is still rejected with a diagnostic pointing at the ESM `import` form. |
 
 > Extension modules (such as `fs`) are importable by bare or `node:`-prefixed
 > specifier — `import { readFileSync } from "fs"` / `import path from "path"` —
@@ -272,7 +272,9 @@ Unimplemented (classes/OO): abstract/implements, access control,
 
 Unimplemented (standard library): String.normalize, structuredClone
 
-Unimplemented (modules): circular dependencies, CommonJS `require`, live bindings
+Unimplemented (modules): circular dependencies, live bindings, dynamic
+                           `require(expr)`, `require.resolve` / `require.cache`,
+                           `__dirname` / `__filename`
 
 Unimplemented (type system): type checking, generic instantiation, assertion
                              semantics, optional-chaining narrowing

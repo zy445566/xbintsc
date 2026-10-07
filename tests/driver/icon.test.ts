@@ -26,6 +26,10 @@ const guiAvailable =
   existsSync(join(findRuntimeDir(), "lib", platformSlug(), "gui.a")) &&
   process.platform !== "win32";
 
+/** Resource compilers are discovered with the platform's executable suffix. */
+const EXE_SUFFIX = process.platform === "win32" ? ".exe" : "";
+const LLVM_RC = `llvm-rc${EXE_SUFFIX}`;
+
 const LOGO_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFElEQVR42mP4z8DwH4Sh1H8G0gUALFAf4eNWqTEAAAAASUVORK5CYII=";
 
@@ -222,7 +226,7 @@ describe("resolveResourceCompiler", () => {
 
     const { runner, calls } = recordingRunner();
     const clang = join(temporaryDirectory(), "bin", "clang");
-    expect(resolveResourceCompiler(runner, clang)).toEqual({ tool: "llvm-rc", kind: "llvm-rc" });
+    expect(resolveResourceCompiler(runner, clang)).toEqual({ tool: LLVM_RC, kind: "llvm-rc" });
     expect(calls.some((call) => call.command === clang)).toBe(false);
   });
 
@@ -236,7 +240,7 @@ describe("resolveResourceCompiler", () => {
     process.env.xbintsc_RC = "broken-rc";
     try {
       const { runner } = recordingRunner((command) => (command === "broken-rc" ? { status: 1 } : {}));
-      expect(resolveResourceCompiler(runner, "clang")).toEqual({ tool: "llvm-rc", kind: "llvm-rc" });
+      expect(resolveResourceCompiler(runner, "clang")).toEqual({ tool: LLVM_RC, kind: "llvm-rc" });
     } finally {
       if (previous === undefined) delete process.env.xbintsc_RC;
       else process.env.xbintsc_RC = previous;
@@ -419,7 +423,15 @@ describe("build integration", () => {
     const entry = join(directory, "main.ts");
     writeFileSync(entry, "console.log(1);");
     const icon = writePng(directory, "logo.png");
-    const { runner, calls } = recordingRunner();
+    // Simulate a real toolchain: create the files each stage is expected to
+    // produce (the icon object and, on Windows, the PE resource).
+    const { runner, calls } = recordingRunner((_command, args) => {
+      const dashO = args.indexOf("-o");
+      const slashFo = args.indexOf("/fo");
+      const output = dashO >= 0 ? args[dashO + 1] : slashFo >= 0 ? args[slashFo + 1] : undefined;
+      if (output) writeFileSync(output, "");
+      return {};
+    });
 
     const result = build(entry, {
       emit: "exe",

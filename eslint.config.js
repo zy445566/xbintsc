@@ -7,6 +7,7 @@
  * matter for a compiler (unused variables, explicit `any`, `const`).
  */
 import eslint from "@eslint/js";
+import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
@@ -21,11 +22,23 @@ export default tseslint.config(
       "vendor/**",
       "examples/**",
       "**/*.d.ts",
-      "**/*.js",
     ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    files: ["**/*.js", "**/*.mjs", "**/*.cjs"],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    /* Applies to every linted code file (ts/tsx/js/mjs/cjs).
+       Keep files focused: split by responsibility instead of growing a monolith. */
+    rules: {
+      "max-lines": ["error", { max: 600 }],
+    },
+  },
   {
     files: ["**/*.ts"],
     rules: {

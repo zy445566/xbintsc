@@ -39,6 +39,9 @@ export default tseslint.config(
       "@typescript-eslint/no-unsafe-declaration-merging": "off",
       "prefer-const": "error",
       eqeqeq: ["error", "always", { null: "ignore" }],
+      /* Keep source files focused: a single file must not exceed 600 lines.
+         Split by responsibility instead of growing a monolith. */
+      "max-lines": ["error", { max: 600 }],
     },
   },
 );

@@ -14,6 +14,7 @@
 
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
@@ -25,6 +26,15 @@ import { realRunner } from "../driver/toolchain.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { bundledExtensions } from "../extensions/catalog.js";
 import { nativeExtensionFromManifest } from "../extensions/native.js";
+import { resolveResourceCompiler } from "../driver/win-icon.js";
+import {
+  CONFIG_FILE_NAME,
+  findProjectConfig,
+  loadProjectConfig,
+  resolveConfigPaths,
+  type AppConfig,
+  type ProjectConfig,
+} from "../driver/config.js";
 
 export interface CliIo {
   readonly stdout: (text: string) => void;
@@ -43,7 +53,18 @@ interface ParsedArgs {
   readonly passthrough: string[];
 }
 
-const VALUE_FLAGS = new Set(["output", "out", "emit", "optimize", "ext", "ext-native"]);
+const VALUE_FLAGS = new Set([
+  "output",
+  "out",
+  "emit",
+  "optimize",
+  "ext",
+  "ext-native",
+  "config",
+  "icon",
+  "app-id",
+  "app-name",
+]);
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
   const positionals: string[] = [];
@@ -95,29 +116,22 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   return { command: positionals.shift(), positionals, flags, passthrough };
 }
 
-function buildRegistry(flags: Map<string, string | boolean>): ExtensionRegistry {
+function buildRegistry(extNames: readonly string[], nativeManifests: readonly string[]): ExtensionRegistry {
   const registry = createDefaultRegistry();
-  const requested = flags.get("ext");
-  if (typeof requested === "string") {
-    const bundled = bundledExtensions();
-    for (const name of requested.split(",").map((n) => n.trim()).filter(Boolean)) {
-      const extension = bundled.find((candidate) => candidate.name === name);
-      if (!extension) throw new Error(`Unknown extension '${name}'`);
-      registry.register(extension);
-    }
+  const bundled = bundledExtensions();
+  for (const name of extNames) {
+    const extension = bundled.find((candidate) => candidate.name === name);
+    if (!extension) throw new Error(`Unknown extension '${name}'`);
+    registry.register(extension);
   }
-  // Each `--ext-native` value is a manifest path describing a pre-built C++ or
-  // Rust library; several manifests may be comma separated.
-  const native = flags.get("ext-native");
-  if (typeof native === "string") {
-    for (const manifest of native.split(",").map((n) => n.trim()).filter(Boolean)) {
-      registry.register(nativeExtensionFromManifest(manifest));
-    }
+  // Each manifest describes a pre-built C++ or Rust library.
+  for (const manifest of nativeManifests) {
+    registry.register(nativeExtensionFromManifest(manifest));
   }
   // Hint the extensions that ship with xbintsc but were not enabled, so a
   // missing `import` of a known module points at the flag that enables it
   // (`pass --ext node`) instead of failing later with a confusing error.
-  for (const extension of bundledExtensions()) {
+  for (const extension of bundled) {
     if (!registry.has(extension.name)) registry.hintExtension(extension);
   }
   return registry;
@@ -131,6 +145,11 @@ function printDiagnostics(diagnostics: readonly Diagnostic[], fileName: string, 
     source = undefined;
   }
   for (const diagnostic of diagnostics) {
+    // Driver-level diagnostics (icon, config, …) have no source location.
+    if (diagnostic.fileName === undefined && diagnostic.start === undefined) {
+      io.stderr(`error TS${diagnostic.code}: ${diagnostic.message}\n`);
+      continue;
+    }
     io.stderr(formatDiagnostic(diagnostic, source) + "\n");
   }
 }
@@ -153,6 +172,13 @@ Options:
       --ext <names>     Comma separated extensions (e.g. node)
       --ext-native <m>  Register a C++/Rust extension from a JSON manifest
                         (comma separated for several)
+      --config <path>   Use a project config (default: auto-detect
+                        ${CONFIG_FILE_NAME})
+      --no-config       Do not read any project config
+      --icon <path>     Embed an application icon (PNG/ICO/ICNS)
+      --bundle          macOS: also produce a .app bundle
+      --app-name <name> Bundle / display name
+      --app-id <id>     macOS bundle identifier (e.g. com.example.demo)
       --force           Ignore the incremental cache
       --verbose         Print progress information
 `;
@@ -190,7 +216,68 @@ function doctor(io: CliIo): number {
   } catch {
     io.stdout("runtime lib: unavailable\n");
   }
+
+  try {
+    const toolchain = resolveToolchain();
+    const resource = resolveResourceCompiler(realRunner, toolchain.clang);
+    io.stdout(`icon res   : ${resource ? `${resource.tool} (${resource.kind})` : "none (.exe icon disabled)"}\n`);
+  } catch {
+    io.stdout("icon res   : unknown\n");
+  }
   return 0;
+}
+
+type ConfigResolution =
+  | { readonly ok: true; readonly config: ProjectConfig }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * Resolve the project config for a command: `--config <path>` selects one
+ * explicitly, `--no-config` disables discovery, otherwise we walk up from the
+ * entry file (or the cwd) looking for {@link CONFIG_FILE_NAME}.
+ */
+function resolveProjectConfig(
+  flags: Map<string, string | boolean>,
+  cliEntry: string | undefined,
+): ConfigResolution {
+  try {
+    const explicit = flags.get("config");
+    if (typeof explicit === "string") {
+      return { ok: true, config: resolveConfigPaths(loadProjectConfig(explicit)) };
+    }
+    if (flags.has("no-config")) return { ok: true, config: {} };
+    const startDir = cliEntry ? dirname(resolve(cliEntry)) : process.cwd();
+    const found = findProjectConfig(startDir);
+    if (!found) return { ok: true, config: {} };
+    return { ok: true, config: resolveConfigPaths(loadProjectConfig(found)) };
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+/** Merge `app.*` config with the CLI overrides (`--icon`, `--bundle`, …). */
+function mergeAppConfig(flags: Map<string, string | boolean>, config: ProjectConfig): AppConfig {
+  const base = config.app ?? {};
+  const name = typeof flags.get("app-name") === "string" ? (flags.get("app-name") as string) : base.name;
+  const bundleId = typeof flags.get("app-id") === "string" ? (flags.get("app-id") as string) : base.bundleId;
+  const bundle = flags.has("bundle") ? true : base.bundle;
+  const icon = typeof flags.get("icon") === "string" ? (flags.get("icon") as string) : base.icon;
+  return {
+    ...(name !== undefined ? { name } : {}),
+    ...(bundleId !== undefined ? { bundleId } : {}),
+    ...(bundle !== undefined ? { bundle } : {}),
+    ...(icon !== undefined ? { icon } : {}),
+  };
+}
+
+/** Split a comma-separated CLI flag into a trimmed, non-empty list. */
+function listFlag(flags: Map<string, string | boolean>, name: string): string[] | undefined {
+  const value = flags.get(name);
+  if (typeof value !== "string") return undefined;
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 export function run(argv: readonly string[], io: CliIo = defaultIo): number {
@@ -212,12 +299,20 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   }
 
   if (command === "emit") {
-    const entry = args.positionals[0];
-    if (!entry) {
-      io.stderr("xbintsc: emit requires a source file\n");
+    const cliEntry = args.positionals[0];
+    const resolved = resolveProjectConfig(args.flags, cliEntry);
+    if (!resolved.ok) {
+      io.stderr(`xbintsc: ${resolved.error}\n`);
       return 1;
     }
-    const registry = buildRegistry(args.flags);
+    const entry = cliEntry ?? resolved.config.entry;
+    if (!entry) {
+      io.stderr(`xbintsc: emit requires a source file (or 'entry' in ${CONFIG_FILE_NAME})\n`);
+      return 1;
+    }
+    const extNames = listFlag(args.flags, "ext") ?? resolved.config.extensions ?? [];
+    const nativeManifests = listFlag(args.flags, "ext-native") ?? resolved.config.extNative ?? [];
+    const registry = buildRegistry(extNames, nativeManifests);
     const { ir, diagnostics } = compileEntry(entry, registry);
     if (diagnostics.some((d) => d.category === "error")) {
       printDiagnostics(diagnostics, entry, io);
@@ -228,21 +323,33 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   }
 
   if (command === "build" || command === "run") {
-    const entry = args.positionals[0];
+    const cliEntry = args.positionals[0];
+    const resolved = resolveProjectConfig(args.flags, cliEntry);
+    if (!resolved.ok) {
+      io.stderr(`xbintsc: ${resolved.error}\n`);
+      return 1;
+    }
+    const config = resolved.config;
+    const entry = cliEntry ?? config.entry;
     if (!entry) {
-      io.stderr(`xbintsc: ${command} requires a source file\n`);
+      io.stderr(`xbintsc: ${command} requires a source file (or 'entry' in ${CONFIG_FILE_NAME})\n`);
       return 1;
     }
     const emit = (args.flags.get("emit") as EmitKind | undefined) ?? "exe";
-    const optimize = (args.flags.get("optimize") as string | undefined) ?? "2";
+    const optimize = (args.flags.get("optimize") as string | undefined) ?? config.optimize ?? "2";
+    const extNames = listFlag(args.flags, "ext") ?? config.extensions ?? [];
+    const nativeManifests = listFlag(args.flags, "ext-native") ?? config.extNative ?? [];
+    const registry = buildRegistry(extNames, nativeManifests);
+
     const result = build(entry, {
-      output: typeof args.flags.get("output") === "string" ? (args.flags.get("output") as string) : undefined,
-      outDir: typeof args.flags.get("out") === "string" ? (args.flags.get("out") as string) : undefined,
+      output: typeof args.flags.get("output") === "string" ? (args.flags.get("output") as string) : config.output,
+      outDir: typeof args.flags.get("out") === "string" ? (args.flags.get("out") as string) : config.outDir,
       emit,
       optimize: optimize as "0" | "1" | "2" | "3",
-      force: Boolean(args.flags.get("force")),
+      force: Boolean(args.flags.get("force")) || config.force === true,
       verbose: Boolean(args.flags.get("verbose")),
-      extensions: buildRegistry(args.flags),
+      extensions: registry,
+      app: mergeAppConfig(args.flags, config),
     });
 
     if (result.diagnostics.some((d) => d.category === "error")) {
@@ -251,7 +358,8 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
     }
 
     if (command === "build") {
-      io.stdout(`xbintsc: wrote ${result.outputPath}${result.cached ? " (cached)" : ""}\n`);
+      const bundle = result.bundlePath ? ` (bundle: ${result.bundlePath})` : "";
+      io.stdout(`xbintsc: wrote ${result.outputPath}${result.cached ? " (cached)" : ""}${bundle}\n`);
       return 0;
     }
 

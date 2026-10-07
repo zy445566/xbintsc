@@ -179,9 +179,41 @@ CLI options:
 -O0..-O3              Optimization level (default: -O2)
     --ext <names>     Comma separated extensions (e.g. node)
     --ext-native <m>  Register a C++/Rust extension from a JSON manifest
+    --config <path>   Use a project config (default: xbintsc.config.json)
+    --no-config       Do not read any project config
+    --icon <path>     Embed an application icon (PNG/ICO/ICNS)
+    --bundle          macOS: also produce a .app bundle
+    --app-name <name> Bundle / display name
+    --app-id <id>     macOS bundle identifier (e.g. com.example.demo)
     --force           Ignore the incremental cache
     --verbose         Print progress information
 ```
+
+### Project config & application icon
+
+Build options can be checked in as `xbintsc.config.json`, so `xbintsc build`
+needs no arguments. All paths resolve against the config file's directory, and
+any CLI flag overrides the matching config field:
+
+```json
+{
+  "entry": "src/app.ts",
+  "outDir": "build",
+  "extensions": ["gui"],
+  "app": {
+    "name": "Demo",
+    "icon": "assets/app.png",
+    "bundle": true,
+    "bundleId": "com.example.demo"
+  }
+}
+```
+
+The icon is embedded into the binary at compile time (`--icon` / `app.icon`).
+On Windows it becomes a PE resource (Explorer/taskbar icon); on macOS `--bundle`
+lays out `Demo.app` with an `AppIcon.icns`; on every platform a `gui` program
+sets its window/Dock icon from the embedded image at startup. See
+[doc/icon.md](./doc/icon.md).
 
 ### Programmatic API
 
@@ -320,3 +352,4 @@ Check your environment with `xbintsc doctor`.
 
 - [Implemented features](./doc/implemented.md)
 - [Unimplemented features](./doc/unimplemented.md)
+- [Application icons & project config](./doc/icon.md)

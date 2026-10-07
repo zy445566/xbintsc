@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../doc/xbintsc.config.schema.json",
+  "entry": "app.ts",
+  "outDir": "build",
+  "extensions": ["gui"],
+  "app": {
+    "name": "IconDemo",
+    "icon": "logo.png",
+    "bundleId": "com.example.icondemo"
+  }
+}

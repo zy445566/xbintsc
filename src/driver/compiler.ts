@@ -9,7 +9,7 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
-import { DiagnosticBag, type Diagnostic } from "../diagnostics/diagnostic.js";
+import { DiagnosticBag, DiagnosticCode, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { Parser } from "../parser/parser.js";
 import { generate } from "../codegen/llvm.js";
@@ -20,6 +20,10 @@ import { BuildCache, hashParts } from "./cache.js";
 import { findRuntimeDir } from "./paths.js";
 import { findRuntimeLibrary } from "./runtime-lib.js";
 import { resolveToolchain } from "./toolchain-provider.js";
+import { ensureIconObject, readIcon, EMPTY_ICON, IconError, type IconInfo } from "./icon.js";
+import { ensureWindowsIconResource, resolveResourceCompiler } from "./win-icon.js";
+import { bundlePathFor, packageMacApp } from "./mac-bundle.js";
+import type { AppConfig } from "./config.js";
 import {
   compileC,
   compileIr,
@@ -47,6 +51,10 @@ export interface BuildOptions {
   /** Prefer a prebuilt `runtime/lib/<os>-<arch>/*.a` archive when present (default true). */
   readonly preferPrebuilt?: boolean;
   readonly write?: boolean;
+  /** Application icon embedded into the binary (shorthand for `app.icon`). */
+  readonly icon?: string;
+  /** Application metadata: name, icon and macOS bundle settings. */
+  readonly app?: AppConfig;
 }
 
 export interface BuildResult {
@@ -55,6 +63,8 @@ export interface BuildResult {
   readonly cached: boolean;
   readonly diagnostics: readonly Diagnostic[];
   readonly ir?: string;
+  /** macOS `.app` bundle produced by `app.bundle` (darwin only). */
+  readonly bundlePath?: string;
 }
 
 export interface CompileStringResult {
@@ -192,6 +202,21 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     }
   }
 
+  const app = options.app ?? {};
+  const iconPath = options.icon ?? app.icon;
+  let icon: IconInfo | undefined;
+  if (iconPath) {
+    try {
+      icon = readIcon(iconPath);
+    } catch (error) {
+      if (error instanceof IconError) {
+        diagnostics.error(DiagnosticCode.IOError, error.message);
+        return { outputPath, cached: false, diagnostics: diagnostics.diagnostics };
+      }
+      throw error;
+    }
+  }
+
   const runtimeDir = findRuntimeDir();
   const cacheKey = hashParts([
     COMPILER_VERSION,
@@ -201,12 +226,22 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     process.platform,
     registryFingerprint(registry),
     runtimeFingerprint(runtimeDir),
+    icon ? hashParts(["icon", icon.format, Buffer.from(icon.bytes).toString("base64")]) : "",
+    app.name ?? "",
+    String(app.bundle ?? false),
+    app.bundleId ?? "",
   ]);
 
+  // A `.app` bundle is deterministic from the output path and name, so it can be
+  // part of the cache key before the bundle actually exists.
+  const bundle =
+    process.platform === "darwin" && emit === "exe" && app.bundle === true
+      ? bundlePathFor(outputPath, app.name ?? baseName)
+      : undefined;
   const cache = new BuildCache(cacheDir);
-  const outputs = [outputPath];
+  const outputs = bundle ? [outputPath, bundle] : [outputPath];
   if (!options.force && !diagnostics.hasErrors && cache.isFresh(cacheKey, outputs)) {
-    return { outputPath, cached: true, diagnostics: [] };
+    return { outputPath, cached: true, diagnostics: [], ...(bundle ? { bundlePath: bundle } : {}) };
   }
 
   const { ir } = generate(sourceFile, diagnostics, {
@@ -259,9 +294,32 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     toolchain.env,
   );
 
+  const iconObjects: string[] = [];
+  // The GUI extension references the icon symbols unconditionally, so a GUI
+  // program gets an (empty) icon object even with no icon configured.
+  if (icon !== undefined || registry.has("gui")) {
+    try {
+      iconObjects.push(ensureIconObject(runner, clang, cacheDir, icon ?? EMPTY_ICON, toolchain.env));
+      if (icon && process.platform === "win32") {
+        const resourceCompiler = resolveResourceCompiler(runner, clang);
+        if (resourceCompiler) {
+          iconObjects.push(ensureWindowsIconResource(runner, cacheDir, icon, resourceCompiler, toolchain.env));
+        } else if (options.verbose) {
+          process.stderr.write("xbintsc: no llvm-rc/windres found; skipping the embedded .exe icon\n");
+        }
+      }
+    } catch (error) {
+      if (error instanceof IconError) {
+        diagnostics.error(DiagnosticCode.ToolchainError, error.message);
+        return { outputPath, irPath, cached: false, diagnostics: diagnostics.diagnostics, ir };
+      }
+      throw error;
+    }
+  }
+
   link(runner, {
     clang,
-    objectPaths: [objectPath, ...runtimeObjects, ...extensionObjects, ...nativeObjects],
+    objectPaths: [objectPath, ...runtimeObjects, ...extensionObjects, ...nativeObjects, ...iconObjects],
     outputPath,
     linkerFlags: [
       ...toolchain.linkerArgs,
@@ -272,9 +330,27 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     env: toolchain.env,
   });
 
+  const bundlePath =
+    bundle !== undefined
+      ? packageMacApp({
+          executablePath: outputPath,
+          name: app.name ?? baseName,
+          bundleId: app.bundleId ?? defaultBundleId(baseName),
+          ...(icon ? { icon } : {}),
+          runner,
+          env: toolchain.env,
+        })
+      : undefined;
+
   cache.record(cacheKey, outputs);
   cache.save();
-  return { outputPath, irPath, cached: false, diagnostics: [], ir };
+  return { outputPath, irPath, cached: false, diagnostics: [], ir, ...(bundlePath ? { bundlePath } : {}) };
+}
+
+/** Default `CFBundleIdentifier` for a bundle when none is configured. */
+function defaultBundleId(name: string): string {
+  const sanitized = name.replace(/[^A-Za-z0-9.-]/g, "");
+  return `com.xbintsc.${sanitized || "app"}`;
 }
 
 interface RuntimeObjects {

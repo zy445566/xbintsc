@@ -15,6 +15,7 @@
 
 #include "gui_internal.h"
 
+#include "image.h"
 #include "paint.h"
 
 #include <stdio.h>
@@ -27,6 +28,41 @@ int g_sdl_initialized = 0;
 int g_quit = 0;
 XtGuiWindow g_windows[XT_GUI_MAX_WINDOWS];
 int g_window_count = 0;
+
+/* Optional application icon embedded at compile time by the driver (`--icon` /
+ * `app.icon`). The symbols live in a small object the driver links into every
+ * GUI program (an empty object when no icon is configured), so the references
+ * are plain: `xt_app_icon_size == 0` means "no icon". */
+extern "C" {
+extern const unsigned char xt_app_icon_data[];
+extern const unsigned long long xt_app_icon_size;
+extern const char xt_app_icon_format[];
+extern const unsigned int xt_app_icon_width;
+extern const unsigned int xt_app_icon_height;
+}
+
+/**
+ * Set the window / taskbar / Dock icon from the embedded PNG, if any. Decoding
+ * goes through the same stb_image path as `<img>`, so the icon needs no extra
+ * dependency. Failures are silent: an icon is cosmetic and must never stop the
+ * program from starting.
+ */
+void xt_gui_apply_icon(SDL_Window *window) {
+  if (window == NULL) return;
+  size_t size = (size_t)xt_app_icon_size;
+  if (size == 0) return;
+  if (strcmp(xt_app_icon_format, "png") != 0) return;
+
+  xtgui::Image image;
+  if (!xtgui::xt_image_decode(xt_app_icon_data, size, &image)) return;
+  if (image.width <= 0 || image.height <= 0) return;
+
+  SDL_Surface *surface = SDL_CreateSurfaceFrom(
+      image.width, image.height, SDL_PIXELFORMAT_RGBA32, image.pixels.data(), image.width * 4);
+  if (surface == NULL) return;
+  SDL_SetWindowIcon(window, surface);
+  SDL_DestroySurface(surface);
+}
 
 /* -- initialisation ------------------------------------------------------- */
 
@@ -141,6 +177,7 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
     SDL_DestroyWindow(window);
     return XT_UNDEFINED;
   }
+  xt_gui_apply_icon(window);
 
   int index = g_window_count++;
   XtGuiWindow *record = &g_windows[index];

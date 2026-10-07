@@ -64,6 +64,33 @@ void xt_number_to_js_string(double d, char *buffer, size_t size) {
   }
   int negative = d < 0;
   double x = negative ? -d : d;
+
+  /* Integers up to 2^53 have a unique shortest round-tripping representation:
+   * themselves. Print them straight from their integer value so we never touch
+   * the `%e` + `strtod` loop below, whose libc conversion is mis-rounded for
+   * some inputs on the Windows ARM64 UCRT (12502500 used to come out as
+   * 12502500.000000002). Values above 2^53 can have a shorter neighbour, so
+   * they keep using the general path. */
+  if (x <= 9007199254740992.0) {
+    double whole;
+    if (modf(x, &whole) == 0.0) {
+      char intbuf[32];
+      snprintf(intbuf, sizeof(intbuf), "%.0f", x);
+      if (negative) {
+        size_t len = strlen(intbuf);
+        if (len + 1 < size) {
+          buffer[0] = '-';
+          memcpy(buffer + 1, intbuf, len + 1);
+        } else if (size > 0) {
+          buffer[0] = '\0';
+        }
+      } else {
+        snprintf(buffer, size, "%s", intbuf);
+      }
+      return;
+    }
+  }
+
   char sci[64];
   for (int p = 1; p <= 17; p++) {
     snprintf(sci, sizeof(sci), "%.*e", p - 1, x);

@@ -87,6 +87,25 @@
 | 定时器 | ✓ 核心事件循环提供 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`（返回数字 id，无 `Timeout` 对象；无 `setImmediate` / `queueMicrotask`） |
 | I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
 
+### 3.4 类型化数组
+
+已实现：`Uint8Array`、`Int8Array`、`Uint8ClampedArray`、`Uint16Array`、
+`Int16Array`、`Uint32Array`、`Int32Array`、`Float32Array`、`Float64Array`，支持
+`new X(n)` / `new X(数组样)`、`X.from` / `X.of`、`BYTES_PER_ELEMENT`、按类型强制的
+元素写入，以及 `fill` / `set` / `slice` / `subarray` / `join` / `toString` /
+`indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` /
+`some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` /
+`at` / `keys` / `values` / `entries`。已知差异：
+
+| 功能 | 现状 |
+| --- | --- |
+| `subarray` | ~ 返回副本，而非共享缓冲区上的视图 |
+| `keys` / `values` / `entries` | ~ 返回数组，而非迭代器对象 |
+| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` 语义 | ✗ 无底层缓冲区类型；`.byteOffset` 恒为 0 |
+| `BigInt64Array` / `BigUint64Array` | ✗ 未实现 |
+| `instanceof Uint8Array` | ✗ 全局构造器不是一等公民值，`x instanceof Uint8Array` 会报 `Cannot find name 'Uint8Array'` |
+| 基于 `Buffer` / `ArrayBuffer` 的类型化数组视图 | ✗ 构造器仅能从长度 / 数组样 / 类型化数组复制 |
+
 ---
 
 ## 4. 模块系统

@@ -116,6 +116,25 @@ None known at the expression level.
 | Timers | ✓ `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` on the core event loop (numeric ids, no `Timeout` object; no `setImmediate` / `queueMicrotask`) |
 | I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
 
+### 3.4 Typed arrays
+
+Implemented: `Uint8Array`, `Int8Array`, `Uint8ClampedArray`, `Uint16Array`,
+`Int16Array`, `Uint32Array`, `Int32Array`, `Float32Array`, `Float64Array` with
+`new X(n)` / `new X(arrayLike)`, `X.from` / `X.of`, `BYTES_PER_ELEMENT`, coerced
+element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` /
+`indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` /
+`some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` /
+`at` / `keys` / `values` / `entries`. Known divergences:
+
+| Feature | Status |
+| --- | --- |
+| `subarray` | ~ returns a copy, not a view over a shared buffer |
+| `keys` / `values` / `entries` | ~ return arrays, not iterator objects |
+| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` semantics | ✗ no backing buffer type; `.byteOffset` is always 0 |
+| `BigInt64Array` / `BigUint64Array` | ✗ not implemented |
+| `instanceof Uint8Array` | ✗ global constructors are not first-class values, so `x instanceof Uint8Array` fails with `Cannot find name 'Uint8Array'` |
+| Typed-array views over a `Buffer` / `ArrayBuffer` | ✗ constructors copy from a length / array-like / typed array only |
+
 ---
 
 ## 4. Module system

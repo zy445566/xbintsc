@@ -231,7 +231,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 `runtime/xt_stdlib.c`、`runtime/xt_stdlib2.c`、`runtime/xt_promise.c`、`runtime/xt_builtins.c`、
 `runtime/xt_io.c`，共享私有头 `runtime/rt_internal.h`；公开 ABI 见 `runtime/rt.h`。
 
-- 分配器：bump arena，`calloc` 分配，永不释放（GC 已隔离在 `xt_alloc` 之后）。
+- 分配器：`xt_alloc` 背后的非移动标记-清扫回收器（显式根、子系统根提供者与保守 C 栈扫描）。
 - 值构造：`xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`。
 - 字符串：UTF-8 存储、拼接、相等比较、格式化数字转字符串。
 - 类型转换：`xt_truthy`、`xt_to_number`、`xt_to_string`、`xt_typeof`。

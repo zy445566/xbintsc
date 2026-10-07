@@ -45,6 +45,11 @@ typedef struct xt_generator {
   int done;
   int threw;
   int booted;
+  /* Private stack bounds, registered as an active stack region while the
+   * generator runs and scanned conservatively while it is suspended. */
+  char *stack;
+  size_t stack_size;
+  int stack_pushed;
   void *saved_try_top;
 #ifdef _WIN32
   void *fiber;
@@ -52,7 +57,6 @@ typedef struct xt_generator {
 #else
   ucontext_t ctx;
   ucontext_t caller;
-  char *stack;
 #endif
 } xt_generator;
 
@@ -93,6 +97,23 @@ static void xt_generator_suspend(xt_generator *gen) {
 
 /* Runs on the generator's private stack. */
 static void xt_generator_run(xt_generator *gen) {
+#ifdef _WIN32
+  /* The fiber stack is not observable from the outside; capture its bounds
+   * here (before the body allocates anything) so a collection during the body
+   * has a valid scan region. */
+  if (!gen->stack) {
+    MEMORY_BASIC_INFORMATION info;
+    uintptr_t here = (uintptr_t)&info;
+    if (VirtualQuery((LPCVOID)here, &info, sizeof(info))) {
+      gen->stack = (char *)info.AllocationBase;
+      gen->stack_size = info.RegionSize;
+    }
+  }
+#endif
+  if (gen->stack && gen->stack_size && !gen->stack_pushed) {
+    xt_gc_push_stack((uintptr_t)gen->stack, (uintptr_t)gen->stack + gen->stack_size);
+    gen->stack_pushed = 1;
+  }
   void *boundary = xt_try_enter();
   if (xt_try_setjmp(boundary) == 0) {
     xt_function *function = (xt_function *)XT_GET_PTR(gen->function);
@@ -127,6 +148,7 @@ static void xt_generator_boot(xt_generator *gen) {
   size_t size = 1 << 20;
   gen->stack = (char *)malloc(size);
   if (!gen->stack) abort();
+  gen->stack_size = size;
   if (getcontext(&gen->ctx) != 0) abort();
   gen->ctx.uc_stack.ss_sp = gen->stack;
   gen->ctx.uc_stack.ss_size = size;
@@ -158,6 +180,10 @@ static void xt_generator_resume(xt_generator *gen) {
   if (!gen->booted) xt_generator_boot(gen);
   xt_generator *previous = g_active_generator;
   g_active_generator = gen;
+  if (gen->stack && gen->stack_size && !gen->stack_pushed) {
+    xt_gc_push_stack((uintptr_t)gen->stack, (uintptr_t)gen->stack + gen->stack_size);
+    gen->stack_pushed = 1;
+  }
   void *caller_try = xt_try_mark();
   xt_try_restore(gen->saved_try_top);
 #ifdef _WIN32
@@ -168,8 +194,50 @@ static void xt_generator_resume(xt_generator *gen) {
 #endif
   gen->saved_try_top = xt_try_mark();
   xt_try_restore(caller_try);
+  if (gen->stack_pushed) {
+    xt_gc_pop_stack();
+    gen->stack_pushed = 0;
+  }
   if (gen->done) xt_generator_dispose(gen);
   g_active_generator = previous;
+}
+
+/* The active generator is only reachable through this static pointer, and its
+ * private stack holds values that are invisible to a scan of the main stack. */
+static void xt_generator_gc_scan_roots(void) {
+  if (!g_active_generator) return;
+  xt_gc_mark_header((xt_header *)g_active_generator);
+}
+
+static void xt_generator_gc_register(void) {
+  static int registered = 0;
+  if (registered) return;
+  registered = 1;
+  xt_gc_register_root_provider(xt_generator_gc_scan_roots);
+}
+
+void xt_generator_gc_trace(xt_header *header) {
+  xt_generator *gen = (xt_generator *)header;
+  size_t payload = header->size > sizeof(xt_header) ? header->size - sizeof(xt_header) : 0;
+  xt_gc_scan_region((const char *)header + sizeof(xt_header), payload);
+  if (gen->args && gen->argc > 0) {
+    xt_gc_scan_region(gen->args, sizeof(xt_value) * (size_t)gen->argc);
+  }
+  if (gen->stack && gen->stack_size) xt_gc_scan_region(gen->stack, gen->stack_size);
+#ifndef _WIN32
+  /* Registers saved by `swapcontext` at the last yield are not on the stack. */
+  xt_gc_scan_region(&gen->ctx, sizeof(gen->ctx));
+#endif
+}
+
+void xt_generator_gc_release(xt_header *header) {
+  xt_generator *gen = (xt_generator *)header;
+  free(gen->args);
+#ifdef _WIN32
+  if (gen->fiber) DeleteFiber(gen->fiber);
+#else
+  free(gen->stack);
+#endif
 }
 
 xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, xt_value *argv) {
@@ -177,6 +245,10 @@ xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, x
   gen->function = function;
   gen->this_value = thisValue;
   gen->argc = argc;
+  gen->args = NULL;
+  gen->stack = NULL;
+  gen->stack_size = 0;
+  gen->stack_pushed = 0;
   gen->result = XT_UNDEFINED;
   gen->sent = XT_UNDEFINED;
   gen->iter_value = XT_UNDEFINED;
@@ -185,6 +257,7 @@ xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, x
     if (!gen->args) abort();
     memcpy(gen->args, argv, sizeof(xt_value) * (size_t)argc);
   }
+  xt_generator_gc_register();
   return XT_FROM_PTR(XT_TAG_OBJECT, gen);
 }
 

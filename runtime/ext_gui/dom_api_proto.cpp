@@ -20,6 +20,7 @@ static void define_setter(xt_value proto, const char *name, void *fn) {
 }
 
 xt_value node_proto() {
+  xt_gc_add_root(&g_node_proto);
   if (XT_IS_OBJECT(g_node_proto)) return g_node_proto;
   xt_value proto = xt_object_new();
   /* Getters. */
@@ -78,6 +79,7 @@ xt_value node_proto() {
 }
 
 xt_value document_proto() {
+  xt_gc_add_root(&g_document_proto);
   if (XT_IS_OBJECT(g_document_proto)) return g_document_proto;
   xt_value proto = xt_object_new_with_proto(node_proto());
   define_getter(proto, "body", (void *)doc_body_get);
@@ -97,6 +99,7 @@ xt_value document_proto() {
 }
 
 xt_value event_proto() {
+  xt_gc_add_root(&g_event_proto);
   if (XT_IS_OBJECT(g_event_proto)) return g_event_proto;
   xt_value proto = xt_object_new();
   define_method(proto, "preventDefault", (void *)event_prevent_default);
@@ -107,6 +110,7 @@ xt_value event_proto() {
 }
 
 xt_value class_list_proto() {
+  xt_gc_add_root(&g_class_list_proto);
   if (XT_IS_OBJECT(g_class_list_proto)) return g_class_list_proto;
   xt_value proto = xt_object_new();
   define_method(proto, "add", (void *)class_list_add);
@@ -118,6 +122,7 @@ xt_value class_list_proto() {
 }
 
 xt_value style_proto() {
+  xt_gc_add_root(&g_style_proto);
   if (XT_IS_OBJECT(g_style_proto)) return g_style_proto;
   xt_value proto = xt_object_new();
   define_method(proto, "setProperty", (void *)style_set_property);

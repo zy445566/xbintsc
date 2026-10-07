@@ -27,6 +27,8 @@ export interface RunOptions {
   timeout?: number;
   /** Extra modules written next to the entry file, keyed by relative path. */
   files?: Record<string, string>;
+  /** Extra environment variables for the compiled binary (e.g. XT_GC_THRESHOLD). */
+  env?: Record<string, string>;
 }
 
 export interface RunResult {
@@ -110,6 +112,7 @@ export function describeE2E(
       expect(result.diagnostics.filter((d) => d.category === "error")).toEqual([]);
       const executed = spawnSync(result.outputPath, [], {
         encoding: "utf8",
+        ...(runOptions.env ? { env: { ...process.env, ...runOptions.env } } : {}),
         ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
       });
       return { stdout: executed.stdout ?? "", stderr: executed.stderr ?? "", status: executed.status };

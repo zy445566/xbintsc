@@ -57,6 +57,7 @@ static int g_well_known_ready = 0;
 static void xt_symbol_init_well_known(void) {
   if (g_well_known_ready) return;
   g_well_known_ready = 1;
+  xt_gc_add_root_range(g_well_known, XT_WELL_KNOWN_COUNT);
   for (int i = 0; i < XT_WELL_KNOWN_COUNT; i++) {
     char buffer[64];
     snprintf(buffer, sizeof(buffer), "Symbol.%s", XT_WELL_KNOWN_NAMES[i]);
@@ -116,6 +117,7 @@ xt_value xt_symbol(int32_t argc, xt_value *argv) {
 static xt_value g_symbol_registry = XT_UNDEFINED;
 
 xt_value xt_symbol_for(xt_value key) {
+  xt_gc_add_root(&g_symbol_registry);
   xt_value keyString = xt_to_string(key);
   if (g_symbol_registry == XT_UNDEFINED) g_symbol_registry = xt_object_new();
   xt_value existing = xt_object_get(g_symbol_registry, keyString);

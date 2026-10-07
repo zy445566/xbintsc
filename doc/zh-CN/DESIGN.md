@@ -44,8 +44,8 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 ### 运行时
 
 `runtime/xt_runtime.c` 实现字符串、对象、数组、闭包、算术、比较、异常与
-类 Node 的 `console.log` 打印。当前使用 bump arena，不释放内存——GC 被有意
-推迟并隔离在 `xt_alloc` 之后，后续可在不改动编译器的前提下替换为精确/保守回收。
+类 Node 的 `console.log` 打印。现在 `xt_alloc` 背后使用非移动标记-清扫回收器
+（显式根、子系统根提供者与保守 C 栈扫描），其内部实现对编译器保持隔离。
 
 ### llc 的替代
 

@@ -228,7 +228,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | First-class built-in methods | Implemented as unbound method values (see section 5); `fn.toString()` returns a placeholder rather than source text |
 | `for...in` | Enumerates own keys of objects / arrays / strings; does not include prototype-chain properties |
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
-| Memory management | Bump arena never frees; no GC; long-lived programs grow continuously |
+| Memory management | Non-moving mark-sweep collector behind `xt_alloc`: explicit roots, subsystem root providers and a conservative C-stack scan. Single-threaded and stop-the-world; no moving/compaction or generational mode |
 | Function `arity` / argument count | No argument count validation; `fn.length` reports the declared arity but calls are never checked against it |
 | `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously. Timers and sockets run on the event loop only after the program body, so a promise settled from a timer callback cannot be awaited |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
@@ -247,7 +247,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 
 | Item | Status |
 | --- | --- |
-| GC (garbage collection) | ✗ deliberately deferred; `xt_alloc` is isolated but not yet replaced with a precise / conservative collector |
+| GC (garbage collection) | ✓ non-moving mark-sweep in `xt_alloc.c`, armed by a live-heap threshold (`XT_GC_THRESHOLD`) or `xt_gc_collect()`; explicit roots + root providers + conservative active-stack scan. No compaction, weak references or background collection |
 | Self-hosting | ✓ the compiler compiles itself: `xbintsc build src/cli/main.ts` produces a working binary, and the emitted IR is stable from generation 1 onward. The runtime is still C |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
 | Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` implemented; String.normalize / structuredClone missing |
@@ -279,8 +279,8 @@ Unimplemented (modules): circular dependencies, live bindings, dynamic
 Unimplemented (type system): type checking, generic instantiation, assertion
                              semantics, optional-chaining narrowing
 
-Unimplemented (runtime): GC, a real async event loop, UTF-16 string length,
+Unimplemented (runtime): a real async event loop, UTF-16 string length,
                          Object.prototype identity, global-regex lastIndex
 
-Unimplemented (engineering): GC replacement, type checker
+Unimplemented (engineering): type checker
 ```

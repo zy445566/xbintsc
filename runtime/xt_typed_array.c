@@ -142,6 +142,11 @@ static void xt_ta_define(xt_value proto, const char *name, void *fn) {
 }
 
 static xt_value xt_ta_proto(int kind) {
+  static int registered = 0;
+  if (!registered) {
+    registered = 1;
+    xt_gc_add_root_range(xt_ta_protos, XT_TA_KIND_COUNT);
+  }
   if (kind < 0 || kind >= XT_TA_KIND_COUNT) return XT_UNDEFINED;
   if (xt_ta_protos[kind]) return xt_ta_protos[kind];
   xt_value proto = xt_object_new();

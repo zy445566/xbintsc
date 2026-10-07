@@ -47,9 +47,10 @@ delegated to `@xt_*` runtime calls.
 ### Runtime
 
 `runtime/xt_runtime.c` implements strings, objects, arrays, closures, arithmetic,
-comparison, exceptions and Node-like `console.log` inspection. It uses a bump
-arena and never frees — garbage collection is deliberately deferred and isolated
-behind `xt_alloc`, so it can later be replaced without touching the compiler.
+comparison, exceptions and Node-like `console.log` inspection. It uses a
+non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem
+root providers and a conservative C-stack scan), so the collector's internals
+stay isolated from the compiler.
 
 ### Replacing llc
 

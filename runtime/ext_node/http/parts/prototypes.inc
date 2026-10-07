@@ -2,6 +2,7 @@
 
 static xt_value xt_http_server_proto(void) {
   static xt_value proto = 0;
+  xt_gc_add_root(&proto);
   if (proto) return proto;
   proto = xt_object_new();
   xt_node_install_emitter(proto);
@@ -13,6 +14,7 @@ static xt_value xt_http_server_proto(void) {
 
 static xt_value xt_http_response_proto(void) {
   static xt_value proto = 0;
+  xt_gc_add_root(&proto);
   if (proto) return proto;
   proto = xt_object_new();
   xt_node_install_emitter(proto);
@@ -28,6 +30,7 @@ static xt_value xt_http_response_proto(void) {
 
 static xt_value xt_http_request_proto(void) {
   static xt_value proto = 0;
+  xt_gc_add_root(&proto);
   if (proto) return proto;
   proto = xt_object_new();
   xt_node_install_emitter(proto);
@@ -37,6 +40,7 @@ static xt_value xt_http_request_proto(void) {
 
 static xt_value xt_http_client_proto(void) {
   static xt_value proto = 0;
+  xt_gc_add_root(&proto);
   if (proto) return proto;
   proto = xt_object_new();
   xt_node_install_emitter(proto);
@@ -49,6 +53,7 @@ static xt_value xt_http_client_proto(void) {
 
 static xt_value xt_http_client_response_proto(void) {
   static xt_value proto = 0;
+  xt_gc_add_root(&proto);
   if (proto) return proto;
   proto = xt_object_new();
   xt_node_install_emitter(proto);

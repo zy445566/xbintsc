@@ -139,6 +139,12 @@ void *xt_alloc(size_t size, int kind);
 /* Record the current stack as the base of the root set. Call once, as early as
  * possible, before any allocation (generated `main` does this). */
 void xt_gc_init(void);
+/* Record the high bound of the main stack. The generated `main` passes the
+ * address of one of its own locals, which lives above every frame its callees
+ * ever use, so the conservative scan reaches spilled roots. Without this the
+ * bound would be taken from inside the runtime and would cut off the top of
+ * the caller's frame. Safe to call before `xt_gc_init`. */
+void xt_gc_set_stack_base(void *base);
 /* Enable automatic collection once the heap crosses the threshold. Programs
  * that never arm the collector still get `xt_gc_collect()` on demand. */
 void xt_gc_arm(void);

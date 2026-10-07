@@ -162,6 +162,19 @@ size_t xt_heap_allocations(void) { return g_heap_allocations; }
 /* Collector configuration                                                   */
 /* ------------------------------------------------------------------------- */
 
+void xt_gc_set_stack_base(void *base) {
+  uintptr_t high = (uintptr_t)base;
+  if (high == 0) return;
+  if (g_stack_depth == 0) {
+    g_stack_regions[0].low = 0;
+    g_stack_regions[0].high = high;
+    g_stack_regions[0].scan_low = UINTPTR_MAX;
+    g_stack_depth = 1;
+  } else if (high > g_stack_regions[0].high) {
+    g_stack_regions[0].high = high;
+  }
+}
+
 void xt_gc_init(void) {
   if (g_gc_initialised) return;
   g_gc_initialised = 1;
@@ -171,6 +184,10 @@ void xt_gc_init(void) {
     g_stack_regions[0].high = high;
     g_stack_regions[0].scan_low = UINTPTR_MAX;
     g_stack_depth = 1;
+  } else if (high > g_stack_regions[0].high) {
+    /* `xt_gc_set_stack_base` normally installed a bound above the caller's
+     * frame already; keep the higher of the two. */
+    g_stack_regions[0].high = high;
   }
   const char *env = getenv("XT_GC_THRESHOLD");
   if (env && *env) {

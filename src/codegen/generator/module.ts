@@ -234,6 +234,9 @@ export const moduleMethods: ModuleMethods = {
     this.functions.push(
       [
         "define i32 @main(i32 %argc, i8** %argv) {",
+        "  %stackbase = alloca i64",
+        "  %stackbase.ptr = bitcast i64* %stackbase to i8*",
+        "  call void @xt_gc_set_stack_base(i8* %stackbase.ptr)",
         "  call void @xt_gc_init()",
         ...rootLines,
         "  call void @xt_gc_arm()",

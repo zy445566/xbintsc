@@ -24,6 +24,18 @@ describeE2E("gc diag", (harness) => {
       if (sum !== (sum | 0) && badSum < 0) badSum = i;
     }
     const afterLoop = sum;
+    // Variant that keeps every closure alive, so a precise array scan must
+    // retain the boxes even if a register/stack root is missed.
+    const keep: any[] = [];
+    let ksum = 0;
+    let kbad = -1;
+    for (let i = 0; i < 5000; i++) {
+      const f = makeAdder(i);
+      keep.push(f);
+      const t = f(1);
+      if (t !== i + 1 && kbad < 0) kbad = i;
+      ksum += t;
+    }
     let dsum = 0;
     for (let i = 0; i < 5000; i++) dsum += direct(i, 1);
     let psum = 0;
@@ -43,6 +55,7 @@ describeE2E("gc diag", (harness) => {
     console.log(
       "closure=" + (sum === (sum | 0)) + ":" + sum +
       " afterLoop=" + afterLoop +
+      " keep=" + (ksum === (ksum | 0)) + ":" + ksum + " kbad=" + kbad +
       " direct=" + (dsum === (dsum | 0)) + ":" + dsum +
       " plain=" + (psum === (psum | 0)) + ":" + psum +
       " badTerm=" + badTerm + " badSum=" + badSum +
@@ -58,8 +71,8 @@ describeE2E("gc diag", (harness) => {
     const withGc = harness.runProgram(src, gc);
     const withoutGc = harness.runProgram(src);
     const expected =
-      "gc[closure=true:12502500 afterLoop=12502500 direct=true:12502500 plain=true:12502500 badTerm=-1 badSum=-1 first=1 last=5000 m=3000 mg=2999 s=3000 sh=true taSum=1498500 re=bbb gsum=285 err=RangeError:boom] " +
-      "nogc[closure=true:12502500 afterLoop=12502500 direct=true:12502500 plain=true:12502500 badTerm=-1 badSum=-1 first=1 last=5000 m=3000 mg=2999 s=3000 sh=true taSum=1498500 re=bbb gsum=285 err=RangeError:boom]";
+      "gc[closure=true:12502500 afterLoop=12502500 keep=true:12502500 kbad=-1 direct=true:12502500 plain=true:12502500 badTerm=-1 badSum=-1 first=1 last=5000 m=3000 mg=2999 s=3000 sh=true taSum=1498500 re=bbb gsum=285 err=RangeError:boom] " +
+      "nogc[closure=true:12502500 afterLoop=12502500 keep=true:12502500 kbad=-1 direct=true:12502500 plain=true:12502500 badTerm=-1 badSum=-1 first=1 last=5000 m=3000 mg=2999 s=3000 sh=true taSum=1498500 re=bbb gsum=285 err=RangeError:boom]";
     expect("gc[" + withGc.trim() + "] nogc[" + withoutGc.trim() + "]").toBe(expected);
   });
 });

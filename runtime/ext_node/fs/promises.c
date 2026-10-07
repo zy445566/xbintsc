@@ -242,6 +242,7 @@ XT_FS_PROMISES_FACADE(xt_node_p_open, _)
 
 xt_value xt_fs_promises(void) {
   static xt_value cached = 0;
+  xt_gc_add_root(&cached);
   if (XT_IS_OBJECT(cached)) return cached;
   xt_value object = xt_object_new();
 #define XT_FS_PROMISE_METHOD(jsName, name)                                                         \

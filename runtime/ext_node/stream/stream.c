@@ -363,6 +363,7 @@ xt_value xt_stream_static(xt_value name, int32_t argc, xt_value *argv) {
 
 static xt_value xt_stream_proto(void) {
   static xt_value proto = 0;
+  xt_gc_add_root(&proto);
   if (proto) return proto;
   proto = xt_object_new();
   xt_node_install_emitter(proto);

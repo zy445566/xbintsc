@@ -2,6 +2,7 @@
 
 static xt_value xt_buffer_proto(void) {
   static xt_value proto = 0;
+  xt_gc_add_root(&proto);
   if (proto) return proto;
   proto = xt_object_new();
   xt_node_define_method(proto, "toString", (void *)xt_buffer_method_to_string);

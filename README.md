@@ -62,9 +62,12 @@ delegated to `@xt_*` runtime calls.
 comparison, exceptions and Node-like `console.log` inspection. The C code is
 split by function across translation units (`xt_alloc.c`, `xt_values.c`,
 `xt_containers.c`, `xt_stdlib.c`, `xt_builtins.c`, `xt_io.c`) sharing the
-private `runtime/rt_internal.h`. It uses a bump arena and never frees — garbage
-collection is deliberately deferred and isolated behind `xt_alloc`, so it can
-be replaced without touching the compiler.
+private `runtime/rt_internal.h`. Heap objects are allocated by `xt_alloc` and
+reclaimed by a non-moving mark-sweep collector: roots are explicit value slots
+(module globals, prototype caches), runtime root providers (the event loop,
+the promise microtask queue) and a conservative scan of the active C stack.
+Collection is armed automatically once the live heap crosses a threshold
+(`XT_GC_THRESHOLD`) and can also run on demand.
 
 ## Usage
 

@@ -195,7 +195,7 @@
 | 内置方法一等公民 | 以未绑定方法值实现（见第 5 节）；`fn.toString()` 返回占位字符串而非源码文本 |
 | `for...in` | 枚举对象 / 数组 / 字符串的自身键；不含原型链属性 |
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
-| 内存管理 | bump arena 永不释放，无 GC；长生命周期程序内存持续增长 |
+| 内存管理 | 非移动标记-清扫回收器（在 `xt_alloc` 之后）：显式根、子系统根提供者与保守 C 栈扫描。单线程、stop-the-world；无移动/压缩与分代 |
 | 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 报告声明的 arity，但调用不做校验 |
 | `async` / `await` | **同步微任务模型**：`await` 在已 settle 的 promise 上同步继续。定时器与套接字仅在程序主体执行完后由事件循环运行，因此无法等待由定时器回调 settle 的 promise |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
@@ -211,7 +211,7 @@
 
 | 项 | 现状 |
 | --- | --- |
-| GC（垃圾回收） | ✗ 有意推迟；`xt_alloc` 已隔离，但尚未替换为精确 / 保守回收器 |
+| GC（垃圾回收） | ✓ `xt_alloc.c` 中的非移动标记-清扫，按存活堆阈值（`XT_GC_THRESHOLD`）或 `xt_gc_collect()` 触发；显式根 + 根提供者 + 保守活动栈扫描。无压缩、弱引用或后台回收 |
 | 自举（self-hosting） | ✓ 编译器已能自编译：`xbintsc build src/cli/main.ts` 可产出可用二进制，且从第 1 代起产出的 IR 保持稳定。运行时仍为 C |
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
 | 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` 已实现；String.normalize / structuredClone 缺失 |
@@ -240,8 +240,8 @@
 
 未实现（类型系统）：类型检查、泛型实例化、断言语义、可选链类型窄化
 
-未实现（运行时）：GC、真正的异步事件循环、UTF-16 length、
+未实现（运行时）：真正的异步事件循环、UTF-16 length、
                   Object.prototype 身份、全局正则 lastIndex
 
-未实现（工程）：GC 替换、类型检查器
+未实现（工程）：类型检查器
 ```

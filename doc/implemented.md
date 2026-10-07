@@ -239,7 +239,7 @@ Location: `runtime/xt_alloc.c`, `runtime/xt_values.c`, `runtime/xt_containers.c`
 `runtime/xt_stdlib.c`, `runtime/xt_stdlib2.c`, `runtime/xt_promise.c`, `runtime/xt_builtins.c`,
 `runtime/xt_io.c`, sharing the private header `runtime/rt_internal.h`; the public ABI is in `runtime/rt.h`.
 
-- Allocator: bump arena, `calloc`-backed, never frees (GC is isolated behind `xt_alloc`).
+- Allocator: non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem root providers and a conservative C-stack scan).
 - Value construction: `xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`.
 - Strings: UTF-8 storage, concatenation, equality comparison, formatted number-to-string.
 - Type conversion: `xt_truthy`, `xt_to_number`, `xt_to_string`, `xt_typeof`.

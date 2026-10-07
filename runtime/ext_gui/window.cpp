@@ -434,6 +434,7 @@ static void define_getter(xt_value proto, const char *name, void *fn) {
 }
 
 xt_value xt_gui_window_proto(void) {
+  xt_gc_add_root(&g_window_proto);
   if (XT_IS_OBJECT(g_window_proto)) return g_window_proto;
   xt_value proto = xt_object_new();
   define_method(proto, "setTitle", (void *)win_set_title);

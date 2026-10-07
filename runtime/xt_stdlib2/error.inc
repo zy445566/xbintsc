@@ -19,6 +19,7 @@ static int xt_error_is_family(const char *name) {
 static xt_value xt_error_root_proto = XT_UNDEFINED;
 
 static xt_value xt_error_proto_for(const char *name) {
+  xt_gc_add_root(&xt_error_root_proto);
   if (!XT_IS_OBJECT(xt_error_root_proto)) {
     xt_error_root_proto = xt_object_new();
     xt_object_set(xt_error_root_proto, xt_string_from_cstr("name"),

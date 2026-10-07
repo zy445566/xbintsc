@@ -63,6 +63,8 @@ static xt_value xt_promise_value(xt_promise *promise) {
   return XT_FROM_PTR(XT_TAG_OBJECT, promise);
 }
 
+static void xt_promise_gc_register(void);
+
 static xt_promise *xt_promise_new(void) {
   xt_promise *promise = (xt_promise *)xt_alloc(sizeof(xt_promise), XT_OBJECT_KIND_PROMISE);
   promise->state = XT_PROMISE_PENDING;
@@ -70,7 +72,50 @@ static xt_promise *xt_promise_new(void) {
   promise->reactions = NULL;
   promise->reaction_count = 0;
   promise->reaction_capacity = 0;
+  xt_promise_gc_register();
   return promise;
+}
+
+/* Reactions are plain `malloc` blocks referenced from promises and from the
+ * microtask queue, so neither can be found by scanning the heap: the queue is
+ * a root provider and a promise traces the reactions it still owns. */
+static void xt_promise_gc_scan_roots(void) {
+  for (uint32_t i = xt_microtask_head; i < xt_microtask_count; i++) {
+    xt_reaction *reaction = xt_microtasks[i];
+    if (!reaction) continue;
+    xt_gc_mark_header((xt_header *)reaction->promise);
+    xt_gc_mark_value(reaction->on_fulfilled);
+    xt_gc_mark_value(reaction->on_rejected);
+    xt_gc_mark_header((xt_header *)reaction->result);
+  }
+}
+
+static void xt_promise_gc_register(void) {
+  static int registered = 0;
+  if (registered) return;
+  registered = 1;
+  xt_gc_register_root_provider(xt_promise_gc_scan_roots);
+}
+
+void xt_promise_gc_trace(xt_header *header) {
+  xt_promise *promise = (xt_promise *)header;
+  xt_gc_mark_value(promise->value);
+  for (uint32_t i = 0; i < promise->reaction_count; i++) {
+    xt_reaction *reaction = promise->reactions[i];
+    if (!reaction) continue;
+    xt_gc_mark_header((xt_header *)reaction->promise);
+    xt_gc_mark_value(reaction->on_fulfilled);
+    xt_gc_mark_value(reaction->on_rejected);
+    xt_gc_mark_header((xt_header *)reaction->result);
+  }
+}
+
+void xt_promise_gc_release(xt_header *header) {
+  xt_promise *promise = (xt_promise *)header;
+  /* Pending reactions are owned solely by the promise; queued ones live in
+   * `xt_microtasks` and are freed as they run. */
+  for (uint32_t i = 0; i < promise->reaction_count; i++) free(promise->reactions[i]);
+  free(promise->reactions);
 }
 
 static void xt_promise_settle(xt_promise *promise, int state, xt_value value);
@@ -122,6 +167,7 @@ static xt_value xt_promise_run_reactions(void) {
     } else {
       xt_promise_settle(reaction->result, XT_PROMISE_REJECTED, promise->value);
     }
+    free(reaction);
   }
   xt_microtask_head = 0;
   xt_microtask_count = 0;

@@ -130,14 +130,22 @@ static int64_t xt_timer_next_due(void) {
 static void xt_timer_compact(void) {
   uint32_t write = 0;
   for (uint32_t read = 0; read < xt_timer_count; read++) {
-    if (!xt_timers[read].active) continue;
+    if (!xt_timers[read].active) {
+      free(xt_timers[read].args);
+      xt_timers[read].args = NULL;
+      xt_timers[read].argc = 0;
+      continue;
+    }
     if (write != read) xt_timers[write] = xt_timers[read];
     write++;
   }
   xt_timer_count = write;
 }
 
+static void xt_loop_gc_register(void);
+
 static uint64_t xt_timer_add(xt_value callback, int64_t delay_ms, int64_t interval_ms, int32_t argc, xt_value *argv) {
+  xt_loop_gc_register();
   if (xt_timer_count >= xt_timer_capacity) {
     xt_timer_capacity = xt_timer_capacity == 0 ? 16 : xt_timer_capacity * 2;
     xt_timer *grown = (xt_timer *)realloc(xt_timers, sizeof(xt_timer) * xt_timer_capacity);
@@ -168,6 +176,31 @@ static int xt_timer_cancel(uint64_t id) {
     }
   }
   return 0;
+}
+
+/* Watchers and pending timers hold values outside the value graph: the timer
+ * callbacks/arguments live in the flat array, and extension watchers keep an
+ * `xt_value *` box in their opaque userdata (the `xt_loop_add` convention). */
+static void xt_loop_gc_scan_roots(void) {
+  for (int i = 0; i < xt_loop_watcher_count; i++) {
+    if (!xt_loop_watchers[i].active) continue;
+    xt_value *boxed = (xt_value *)xt_loop_watchers[i].userdata;
+    if (boxed) xt_gc_mark_value(*boxed);
+  }
+  for (uint32_t i = 0; i < xt_timer_count; i++) {
+    if (!xt_timers[i].active) continue;
+    xt_gc_mark_value(xt_timers[i].callback);
+    if (xt_timers[i].args && xt_timers[i].argc > 0) {
+      xt_gc_scan_region(xt_timers[i].args, sizeof(xt_value) * (size_t)xt_timers[i].argc);
+    }
+  }
+}
+
+static void xt_loop_gc_register(void) {
+  static int registered = 0;
+  if (registered) return;
+  registered = 1;
+  xt_gc_register_root_provider(xt_loop_gc_scan_roots);
 }
 
 /* Invoke every timer whose deadline has passed. Timers scheduled by a callback
@@ -232,6 +265,7 @@ xt_value xt_clear_interval(int32_t argc, xt_value *argv) {
 
 int xt_loop_add(int fd, int events, xt_io_handler handler, void *userdata) {
   if (fd < 0 || !handler) return -1;
+  xt_loop_gc_register();
   xt_loop_watcher *existing = xt_loop_find(fd);
   if (existing) {
     existing->events = events;

@@ -362,6 +362,16 @@ void xt_println(xt_value v);
 size_t xt_heap_bytes(void);
 size_t xt_heap_allocations(void);
 
+/* -- garbage collector ---------------------------------------------------- */
+/**
+ * Register `slot` as a GC root: a static prototype cache or any value cell
+ * that lives outside the heap graph. The slot may be registered before it
+ * holds a value; it is marked on every collection and registration is
+ * idempotent. `xt_gc_add_root_range` registers `count` consecutive cells.
+ */
+void xt_gc_add_root(xt_value *slot);
+void xt_gc_add_root_range(xt_value *base, size_t count);
+
 #ifdef __cplusplus
 }
 #endif

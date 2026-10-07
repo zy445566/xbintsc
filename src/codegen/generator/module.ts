@@ -227,9 +227,19 @@ export const moduleMethods: ModuleMethods = {
 
   emitMain(): void {
     const moduleName = this.functionName(this.binding.moduleFunction);
+    // Module bindings and class constructors live in globals; register them as
+    // GC roots before the module body runs so a collection cannot free them.
+    const roots = [...this.classGlobals.values(), ...this.moduleGlobals.values()];
+    const rootLines = roots.map((name) => `  call void @xt_gc_add_root(i64* ${name})`);
     this.functions.push(
       [
         "define i32 @main(i32 %argc, i8** %argv) {",
+        "  %stackbase = alloca i64",
+        "  %stackbase.ptr = bitcast i64* %stackbase to i8*",
+        "  call void @xt_gc_set_stack_base(i8* %stackbase.ptr)",
+        "  call void @xt_gc_init()",
+        ...rootLines,
+        "  call void @xt_gc_arm()",
         "  call void @xt_set_program_args(i32 %argc, i8** %argv)",
         `  %result = call i64 @${moduleName}(i64 ${i64(XT_UNDEFINED)}, i64 ${i64(XT_UNDEFINED)}, i32 0, i64* null)`,
         "  call void @xt_drain_microtasks()",

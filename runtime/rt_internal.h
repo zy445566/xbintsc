@@ -52,7 +52,8 @@
 #define XT_OBJECT_KIND_GENERATOR 13
 #define XT_OBJECT_KIND_ITERATOR 14
 
-/* Common header for every heap object. */
+/* Common header for every heap object. `flags` bit 0 is the collector's mark
+ * bit; it is cleared on every surviving object at the end of a sweep. */
 typedef struct xt_header {
   uint8_t kind;
   uint8_t flags;
@@ -60,6 +61,8 @@ typedef struct xt_header {
   uint32_t size;
   struct xt_header *gc_next;
 } xt_header;
+
+#define XT_GC_MARK 0x01u
 
 typedef struct {
   xt_header header;
@@ -122,8 +125,66 @@ typedef struct {
   uint8_t is_generator;
 } xt_function;
 
-/* Allocation (xt_alloc.c). */
+/* Allocation and garbage collection (xt_alloc.c).
+ *
+ * The collector is a non-moving mark-sweep over the linked list of every
+ * allocation. Roots are (a) explicitly registered value slots, (b) root
+ * providers registered by runtime subsystems and extensions, and (c) a
+ * conservative scan of the active C stack (plus a setjmp buffer for the
+ * callee-saved registers). Heap objects are traced precisely for their own
+ * value fields, with a conservative scan of their payload for the raw pointer
+ * fields that older code still stores directly. */
 void *xt_alloc(size_t size, int kind);
+
+/* Record the current stack as the base of the root set. Call once, as early as
+ * possible, before any allocation (generated `main` does this). */
+void xt_gc_init(void);
+/* Record the high bound of the main stack. The generated `main` passes the
+ * address of one of its own locals, which lives above every frame its callees
+ * ever use, so the conservative scan reaches spilled roots. Without this the
+ * bound would be taken from inside the runtime and would cut off the top of
+ * the caller's frame. Safe to call before `xt_gc_init`. */
+void xt_gc_set_stack_base(void *base);
+/* Enable automatic collection once the heap crosses the threshold. Programs
+ * that never arm the collector still get `xt_gc_collect()` on demand. */
+void xt_gc_arm(void);
+/* Run a full collection now. Re-entrant calls are ignored. */
+void xt_gc_collect(void);
+/* Override the automatic trigger threshold (bytes of live heap). */
+void xt_gc_set_threshold(size_t bytes);
+
+/* Explicit roots: the address of a slot that always holds a live value (a
+ * module global, a runtime prototype cache, ...). */
+void xt_gc_add_root(xt_value *slot);
+void xt_gc_add_root_range(xt_value *base, size_t count);
+/* Subsystems whose live set is not reachable through value slots (the event
+ * loop's timers, the promise microtask queue, ...) register a provider that
+ * marks its reachable objects. Providers run during every collection. */
+void xt_gc_register_root_provider(void (*provider)(void));
+
+/* Track the active C stack so the conservative scan has an upper bound. The
+ * initial region is installed by `xt_gc_init`; each generator pushes its own
+ * private stack while it runs. Before switching to a deeper region the caller
+ * records where its own stack was suspended, so every active region is scanned
+ * and suspended callers stay reachable. */
+void xt_gc_push_stack(uintptr_t low, uintptr_t high);
+/* Mark the currently-executing region as suspended at `sp` (its frames above
+ * `sp` stay live while a deeper generator region runs). */
+void xt_gc_suspend(uintptr_t sp);
+void xt_gc_pop_stack(void);
+
+/* Marking primitives used by root providers and per-kind trace hooks. */
+void xt_gc_mark_value(xt_value value);
+void xt_gc_mark_header(xt_header *header);
+/* Conservatively mark every pointer-sized word in `[base, base + bytes)`. */
+void xt_gc_scan_region(const void *base, size_t bytes);
+
+/* Kind-specific hooks for allocations with separately allocated sub-objects.
+ * Implemented by the translation unit that owns the representation. */
+void xt_promise_gc_trace(xt_header *header);
+void xt_promise_gc_release(xt_header *header);
+void xt_generator_gc_trace(xt_header *header);
+void xt_generator_gc_release(xt_header *header);
 
 /* Value / string helpers shared across translation units (xt_values.c). */
 xt_string *xt_string_alloc(size_t length);

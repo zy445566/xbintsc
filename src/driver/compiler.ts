@@ -366,6 +366,7 @@ export const RUNTIME_SOURCES = [
   "xt_values.c",
   "xt_bigint.c",
   "xt_containers.c",
+  "xt_typed_array.c",
   "xt_stdlib.c",
   "xt_stdlib2.c",
   "xt_promise.c",

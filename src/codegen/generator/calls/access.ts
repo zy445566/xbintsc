@@ -13,7 +13,7 @@ import {
   type PropertyAccessExpression,
 } from "../../../ast/nodes.js";
 import { i64, numberLiteral, XT_TRUE, XT_UNDEFINED } from "../../values.js";
-import { MATH_CONSTANTS, NAMESPACE_PROPERTIES, NUMBER_CONSTANTS } from "../tables.js";
+import { MATH_CONSTANTS, NAMESPACE_PROPERTIES, NUMBER_CONSTANTS, TYPED_ARRAYS } from "../tables.js";
 import type { Generator } from "../generator.js";
 
 export interface AccessCallMethods {
@@ -120,6 +120,14 @@ export const accessCallMethods: AccessCallMethods = {
         this.emit(`  ${result} = call i64 @${exported.valueSymbol}(i32 0, i64* null)`);
         return result;
       }
+    }
+    if (
+      node.expression.kind === SyntaxKind.Identifier &&
+      !this.binding.symbolOfIdentifier.get(node.expression as Identifier) &&
+      node.name.text === "BYTES_PER_ELEMENT"
+    ) {
+      const typed = TYPED_ARRAYS[(node.expression as Identifier).text];
+      if (typed) return numberLiteral(typed.bytes);
     }
     const object = this.emitExpression(node.expression);
     return this.emitPropertyGet(object, node.name.text);

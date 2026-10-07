@@ -286,4 +286,8 @@ int xt_value_equals(xt_value a, xt_value b);
 xt_array *xt_as_array(xt_value value);
 xt_value xt_arg_at(int32_t argc, xt_value *argv, int32_t index);
 
+/* Typed arrays (xt_typed_array.c). */
+int xt_typed_array_kind_of(xt_value value);
+double xt_typed_array_coerce(int kind, double value);
+
 #endif /* XT_RT_INTERNAL_H */

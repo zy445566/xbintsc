@@ -163,6 +163,37 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
     return xt_array_set(target, key, value);
   }
   if (XT_IS_FUNCTION(target)) return xt_object_set(target, key, value);
-  if (XT_IS_OBJECT(target)) return xt_object_set(target, key, value);
+  if (XT_IS_OBJECT(target)) {
+    /* Writes to a typed-array element are coerced to its element type. */
+    int typed = xt_typed_array_kind_of(target);
+    if (typed >= 0) {
+      if (XT_IS_STRING(key)) {
+        xt_string *k = xt_as_string(key);
+        if ((k->length == 6 && memcmp(k->data, "length", 6) == 0) ||
+            (k->length == 10 && memcmp(k->data, "byteLength", 10) == 0) ||
+            (k->length == 10 && memcmp(k->data, "byteOffset", 10) == 0)) {
+          xt_throw(xt_string_from_cstr("TypeError: Cannot assign to read only property"));
+          return value;
+        }
+      }
+      uint32_t index = 0;
+      int isIndex = 0;
+      if (XT_IS_NUMBER(key)) {
+        int32_t numeric = xt_to_int32(key);
+        if (numeric >= 0) {
+          index = (uint32_t)numeric;
+          isIndex = 1;
+        }
+      } else if (XT_IS_STRING(key)) {
+        isIndex = xt_key_is_array_index(xt_as_string(key), &index);
+      }
+      if (isIndex) {
+        double length = xt_to_number(xt_object_get_cstr(target, "length"));
+        if (index >= (uint32_t)length) return value; /* out-of-bounds writes are ignored */
+        return xt_object_set(target, key, xt_number(xt_typed_array_coerce(typed, xt_to_number(value))));
+      }
+    }
+    return xt_object_set(target, key, value);
+  }
   return value;
 }

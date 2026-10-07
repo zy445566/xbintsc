@@ -39,7 +39,7 @@ static int xt_is_iterator_state(xt_value value) {
  * any other object with a `Symbol.iterator` method is wrapped. */
 xt_value xt_iter_open(xt_value value) {
   if (XT_IS_ARRAY(value) || XT_IS_STRING(value) || xt_is_map(value) || xt_is_set(value) ||
-      xt_is_generator(value))
+      xt_is_generator(value) || xt_typed_array_kind_of(value) >= 0)
     return value;
   if (XT_IS_OBJECT(value)) {
     xt_value method = xt_object_get(value, xt_symbol_well_known("iterator"));

@@ -159,6 +159,42 @@ export const BUILTIN_FUNCTION_VALUES: Record<string, string> = {
   Symbol: "xt_builtin_value_symbol",
 };
 
+/** Typed-array globals: constructor, static dispatcher and element width. */
+export const TYPED_ARRAYS: Record<string, { ctor: string; static: string; bytes: number }> = {
+  Uint8Array: { ctor: "xt_ta_u8_ctor", static: "xt_ta_u8_static", bytes: 1 },
+  Int8Array: { ctor: "xt_ta_i8_ctor", static: "xt_ta_i8_static", bytes: 1 },
+  Uint8ClampedArray: { ctor: "xt_ta_u8c_ctor", static: "xt_ta_u8c_static", bytes: 1 },
+  Uint16Array: { ctor: "xt_ta_u16_ctor", static: "xt_ta_u16_static", bytes: 2 },
+  Int16Array: { ctor: "xt_ta_i16_ctor", static: "xt_ta_i16_static", bytes: 2 },
+  Uint32Array: { ctor: "xt_ta_u32_ctor", static: "xt_ta_u32_static", bytes: 4 },
+  Int32Array: { ctor: "xt_ta_i32_ctor", static: "xt_ta_i32_static", bytes: 4 },
+  Float32Array: { ctor: "xt_ta_f32_ctor", static: "xt_ta_f32_static", bytes: 4 },
+  Float64Array: { ctor: "xt_ta_f64_ctor", static: "xt_ta_f64_static", bytes: 8 },
+};
+
+const TYPED_ARRAY_CTORS: Record<string, string> = {
+  Uint8Array: "xt_ta_u8_ctor",
+  Int8Array: "xt_ta_i8_ctor",
+  Uint8ClampedArray: "xt_ta_u8c_ctor",
+  Uint16Array: "xt_ta_u16_ctor",
+  Int16Array: "xt_ta_i16_ctor",
+  Uint32Array: "xt_ta_u32_ctor",
+  Int32Array: "xt_ta_i32_ctor",
+  Float32Array: "xt_ta_f32_ctor",
+  Float64Array: "xt_ta_f64_ctor",
+};
+const TYPED_ARRAY_STATICS: Record<string, string> = {
+  Uint8Array: "xt_ta_u8_static",
+  Int8Array: "xt_ta_i8_static",
+  Uint8ClampedArray: "xt_ta_u8c_static",
+  Uint16Array: "xt_ta_u16_static",
+  Int16Array: "xt_ta_i16_static",
+  Uint32Array: "xt_ta_u32_static",
+  Int32Array: "xt_ta_i32_static",
+  Float32Array: "xt_ta_f32_static",
+  Float64Array: "xt_ta_f64_static",
+};
+
 /** Global namespaces whose static methods map to runtime dispatchers. */
 export const NAMESPACE_STATICS: Record<string, string> = {
   Math: "xt_math_call",
@@ -188,6 +224,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   util: "xt_util_static",
   querystring: "xt_querystring_static",
   assert: "xt_assert_static",
+  ...TYPED_ARRAY_STATICS,
 };
 
 /** Namespace identifiers whose property access maps to a runtime getter. */
@@ -215,6 +252,7 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   Server: "xt_net_server_ctor",
   EventEmitter: "xt_event_emitter_ctor",
   ...ERROR_CONSTRUCTORS,
+  ...TYPED_ARRAY_CTORS,
 };
 
 export const BUILTIN_METHODS = new Set<string>([

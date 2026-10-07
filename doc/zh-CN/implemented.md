@@ -201,7 +201,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 生成 LLVM IR 文本（`.ll`），无需自建寄存器分配（依赖 `alloca` + mem2reg）。
 - 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
 - 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`switch`，`try/catch/finally`，`break` / `continue` / `return`。
-  - `for...of` 与展开通过 `xt_iter_open` → `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象（`Map` 产出 `[key, value]` 对）；非可迭代值抛出 `TypeError`。
+  - `for...of` 与展开通过 `xt_iter_open` → `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、类型化数组、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象（`Map` 产出 `[key, value]` 对）；非可迭代值抛出 `TypeError`。
   - `switch` 以严格相等逐 `case` 测试，命中后执行并在 `break` 前穿透。
   - `try/catch/finally` 通过运行时 `_setjmp` 帧实现：`xt_try_enter` 入栈、`_setjmp` 捕获、`xt_throw` 长跳转；IR 会把调用方的帧地址（`@llvm.frameaddress(0)`）作为 `_setjmp` 的第二个参数传入，与 clang 编译 MSVC 时的降级方式一致：Windows UCRT 的 `_setjmp` 会把这个帧存入 `_JUMP_BUFFER.Frame`，`longjmp` 再交给 `RtlUnwind` 执行栈展开；若不传该参数，`longjmp` 会展开到错误目标（`STATUS_BAD_FUNCTION_TABLE`）。使用 `_setjmp` 而非导出的 `setjmp` 符号，因为后者的 Windows ABI 是不兼容的双参数例程。含 `try` 的函数会强制局部变量驻留内存（内联汇编逃生点）以保证长跳转后值不丢失。
   - `for...in` 复用 `xt_object_keys` 枚举键（数组 / 字符串得到字符串下标）。
@@ -209,6 +209,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - 标识符、数字、BigInt（任意精度）、字符串、模板、布尔、`null`、`undefined`、`arguments`
   - 算术 / 比较 / 逻辑 / 短路 / 条件 / 位运算 / 一元（含 `typeof` `void`）/ 前后缀增减 / 复合赋值 / 逻辑赋值
   - 数组字面量（含展开 `[...]`）、对象字面量（含简写 / 方法 / 对象展开 `{...obj}`）
+  - 类型化数组（`Uint8Array`、`Int8Array`、`Uint8ClampedArray`、`Uint16Array`、`Int16Array`、`Uint32Array`、`Int32Array`、`Float32Array`、`Float64Array`）：构造（`new X(n)` / `new X(可迭代)` / `X.from` / `X.of`）、`length` / `byteLength` / `byteOffset` / `BYTES_PER_ELEMENT`、按元素类型强制的读写（`ToIntN` / `ToUintN`、`Uint8ClampedArray` 舍入、`Float32` 单精度舍入）以及原型方法 `fill` / `set` / `slice` / `subarray` / `join` / `toString` / `indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` / `some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` / `at` / `keys` / `values` / `entries`。有意保留的差异见未实现文档（`subarray` 返回副本、迭代器方法返回数组、无 `ArrayBuffer`/`DataView`）。
   - 属性访问（含 `length` 特判、`Math` 常量）、元素访问、调用
   - 可选链 `?.` / `?.[]` / `?.()`：以空值判断短路到 `undefined`
   - `delete`、`in`、`instanceof`
@@ -239,6 +240,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 比较：`lt/le/gt/ge`、宽松 / 严格相等、`not`、`is_nullish`。
 - 对象：线性属性列表，`object_new/get/set/has/keys/values/entries/assign/spread`。
 - 数组：`array_new/get/set/push/length/spread`；对 `arr.length` 赋值会截断 / 扩展（与 JS 一致）；`iter_length` / `iter_value` 为数组、字符串、`Map`、`Set` 提供统一迭代视图。
+- 类型化数组（`xt_typed_array.c`）：以属性包对象表示，每种元素类型一个原型；读取返回已存值，写入按元素类型强制转换；提供 `from` / `of` 静态方法与完整原型方法集；`subarray` 返回副本。
 - Symbol（`xt_symbol.c`）：`Symbol(description)` 原始值（`XT_OBJECT_KIND_SYMBOL`）、13 个著名符号（`Symbol.iterator`、`Symbol.asyncIterator`、`Symbol.match` 等）、`Symbol.for` / `Symbol.keyFor` 全局注册表、`symbol.description` / `toString()` / `valueOf()`；symbol 可作为属性键（`Object.getOwnPropertySymbols`，symbol 键的 `get`/`set`/`in`/`delete`），会被 `Object.keys` / `values` / `entries` / `for...in` / `JSON.stringify` 跳过，打印为 `Symbol(desc)`。
 - 通用成员访问：`xt_get` / `xt_set`（对数组 / 对象 / 字符串分发）。
 - 标准库：`xt_call_method`（统一分发数组 / 字符串方法与对象上的函数属性）、`xt_math_call`（`Math.*` 与常量）、全局函数 `xt_parse_int/parse_float/is_nan/is_finite/number_ctor/string_ctor/boolean_ctor/fetch`。
@@ -336,7 +338,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 实现位置：`tests/`（`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`）
 
 - 各模块单元测试；e2e 在存在 `clang` 时真正编译并运行二进制，否则自动跳过。
-- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、`Map`/`Set` 的 `for...of`、数组 `length` 赋值与可迭代展开、多文件 `import`/`export`，以及全局 `fetch`（HTTP GET/POST、请求头、重定向、JSON/文本/二进制响应体与 `TypeError` 拒绝）。
+- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、`Map`/`Set` 的 `for...of`、数组 `length` 赋值与可迭代展开、多文件 `import`/`export`、类型化数组（元素强制转换、`from`/`of`、迭代与原型方法），以及全局 `fetch`（HTTP GET/POST、请求头、重定向、JSON/文本/二进制响应体与 `TypeError` 拒绝）。
 
 ---
 
@@ -352,9 +354,9 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 类 / OO | 构造函数、实例字段、方法、`static`、继承 `extends`/`super`、原型链、`instanceof` |
 | 异步 | `async`/`await`、`Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`）、同步微任务队列 |
 | 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包（`.js` 系列说明符解析到对应 `.ts` 源码，省略后缀时优先 TypeScript 后缀而非同名的 JavaScript 文件；纯 `.js` / `.jsx` / `.mjs` / `.cjs` 源码也可直接打包）与 ESM `node_modules` 包（`exports` / `module` / `main`、作用域包与子路径），裸说明符解析到扩展模块；CommonJS `require()` 报错并提示改用 `import` |
-| 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`Symbol`、`Error` 家族、`Object/Array/Number/String/Symbol` 静态、`console.*` |
+| 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、类型化数组、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`Symbol`、`Error` 家族、`Object/Array/Number/String/Symbol` 静态、`console.*` |
 | 值模型 | 64 位 NaN-boxing、统一函数 ABI（含 `this`）、闭包环境、对象原型链 |
-| 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / symbol / 生成器 / `fetch` / `console` |
+| 运行时 | 字符串 / 对象 / 数组 / 类型化数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / symbol / 生成器 / `fetch` / `console` |
 | 扩展 | 扩展注册表、`core`（print）、`node`（fs / path / os / process / buffer / stream / net / dgram / http，按说明符导入） |
 | 工具链 | clang 编译 IR/C、链接、增量缓存 |
 | 项目配置 | `xbintsc.config.json`（`entry` / `outDir` / `optimize` / `extensions` / `app`），支持查找与 CLI 优先级 |

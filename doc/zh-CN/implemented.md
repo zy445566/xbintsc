@@ -282,6 +282,8 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - C 运行时与扩展源按内容哈希缓存目标文件，只编译一次。
 - 工具链封装：查找 `clang`（可用 `xbintsc_CLANG` 覆盖）、编译 IR、编译 C、链接。
 - 链接参数：非 Windows 自动加 `-lm`；扩展可追加链接参数。
+- 项目编译配置（`src/driver/config.ts`、`xbintsc.config.json`）：`entry`、`outDir`、`output`、`optimize`、`extensions`、`extNative`、`force` 与 `app`（`name`、`icon`、`bundle`、`bundleId`）。从入口/当前目录向上查找，可用 `--config` 指定、`--no-config` 关闭；所有路径以配置文件所在目录为基准；CLI 参数优先于配置。
+- 应用图标（`src/driver/icon.ts`、`win-icon.ts`、`mac-bundle.ts`，`--icon`/`app.icon`）：PNG/ICO/ICNS 以 `xt_app_icon_*` 符号内嵌；Windows 上通过 `llvm-rc`/`windres` 合成 PE 资源；macOS 上打包为 `Foo.app`（用 `sips`/`iconutil` 生成 `AppIcon.icns`）。`gui` 扩展用内嵌字节调用 `SDL_SetWindowIcon`；`xbintsc_RC` 可覆盖资源编译器。
 
 ---
 
@@ -308,6 +310,12 @@ xbintsc help                        帮助
 -O0..-O3              优化级别（默认 -O2）
     --ext <names>     逗号分隔扩展（如 node）
     --ext-native <m>  从 JSON manifest 注册 C++/Rust 扩展
+    --config <path>   使用项目配置（默认自动查找 xbintsc.config.json）
+    --no-config       不读取任何项目配置
+    --icon <path>     内嵌应用图标（PNG/ICO/ICNS）
+    --bundle          macOS：同时生成 .app bundle
+    --app-name <name> bundle / 显示名称
+    --app-id <id>     macOS bundle 标识符（如 com.example.demo）
     --force           忽略增量缓存
     --verbose         打印进度信息
 ```
@@ -349,5 +357,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 运行时 | 字符串 / 对象 / 数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / symbol / 生成器 / `fetch` / `console` |
 | 扩展 | 扩展注册表、`core`（print）、`node`（fs / path / os / process / buffer / stream / net / dgram / http，按说明符导入） |
 | 工具链 | clang 编译 IR/C、链接、增量缓存 |
+| 项目配置 | `xbintsc.config.json`（`entry` / `outDir` / `optimize` / `extensions` / `app`），支持查找与 CLI 优先级 |
+| 应用图标 | 编译期内嵌（PNG/ICO/ICNS），Windows PE 资源、macOS `.app` bundle、`gui` 运行时窗口/Dock 图标 |
 | 自举 | `xbintsc` 可将 `src/cli/main.ts` 编译为原生二进制；产出的 IR 从第 1 代起达到不动点 |
 | 平台 | macOS / Linux / Windows（构建层面已适配，CI 见 `.github/workflows`） |

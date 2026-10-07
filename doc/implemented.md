@@ -290,6 +290,8 @@ Location: `src/driver/compiler.ts`, `src/driver/cache.ts`, `src/driver/toolchain
 - C runtime and extension sources are cached as object files by content hash and compiled only once.
 - Toolchain wrapper: locates `clang` (overridable with `xbintsc_CLANG`), compiles IR, compiles C, links.
 - Link flags: `-lm` is added automatically on non-Windows; extensions may append extra link flags.
+- Project config (`src/driver/config.ts`, `xbintsc.config.json`): `entry`, `outDir`, `output`, `optimize`, `extensions`, `extNative`, `force` and `app` (`name`, `icon`, `bundle`, `bundleId`). Discovered by walking up from the entry/cwd, overridable with `--config`, disabled with `--no-config`; every path resolves against the config directory; CLI flags win over config values.
+- Application icon (`src/driver/icon.ts`, `win-icon.ts`, `mac-bundle.ts`, `--icon`/`app.icon`): PNG/ICO/ICNS is embedded as `xt_app_icon_*` symbols, synthesized into a PE resource via `llvm-rc`/`windres` on Windows, and packaged into `Foo.app` (with `AppIcon.icns` via `sips`/`iconutil`) on macOS. The `gui` extension calls `SDL_SetWindowIcon` from the embedded bytes. `xbintsc_RC` overrides the resource compiler.
 
 ---
 
@@ -316,6 +318,12 @@ xbintsc help                        help
 -O0..-O3              Optimization level (default: -O2)
     --ext <names>     Comma separated extensions (e.g. node)
     --ext-native <m>  Register a C++/Rust extension from a JSON manifest
+    --config <path>   Use a project config (default: xbintsc.config.json)
+    --no-config       Do not read any project config
+    --icon <path>     Embed an application icon (PNG/ICO/ICNS)
+    --bundle          macOS: also produce a .app bundle
+    --app-name <name> Bundle / display name
+    --app-id <id>     macOS bundle identifier (e.g. com.example.demo)
     --force           Ignore the incremental cache
     --verbose         Print progress information
 ```
@@ -357,5 +365,7 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 | Runtime | Strings / objects / arrays / closures / arithmetic / comparison / catchable exceptions / Promise / collections / symbols / generators / `fetch` / `console` |
 | Extensions | Extension registry, `core` (print), `node` (fs / path / os / process / buffer / stream / net / dgram / http imported by specifier) |
 | Toolchain | clang compiles IR/C, linking, incremental cache |
+| Project config | `xbintsc.config.json` (`entry` / `outDir` / `optimize` / `extensions` / `app`), discovery + CLI precedence |
+| Application icon | compile-time embed (PNG/ICO/ICNS), PE resource on Windows, `.app` bundle on macOS, runtime window/Dock icon via `gui` |
 | Self-hosting | `xbintsc` compiles `src/cli/main.ts` to a native binary; the emitted IR is at a fixpoint from generation 1 |
 | Platforms | macOS / Linux / Windows (adapted at the build level, CI in `.github/workflows`) |

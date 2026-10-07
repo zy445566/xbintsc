@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -246,4 +246,63 @@ describe("cli", () => {
       expect(run(["run", entry, "--out", join(directory, "out")], io)).toBe(0);
     });
   }, 120000);
+
+  it("uses entry, outDir and extensions from --config", () => {
+    const directory = temporaryDirectory();
+    mkdirSync(join(directory, "src"), { recursive: true });
+    writeFileSync(join(directory, "src", "program.ts"), 'import { readFileSync } from "node:fs";\nreadFileSync("x");');
+    const config = join(directory, "xbintsc.config.json");
+    writeFileSync(
+      config,
+      JSON.stringify({ entry: "src/program.ts", outDir: "out", extensions: ["node"] }),
+    );
+    withWorkingDirectory(() => {
+      const { io, err } = capture();
+      expect(run(["build", "--config", config, "--emit", "ir"], io)).toBe(0);
+      expect(err.join("")).toBe("");
+      expect(existsSync(join(directory, "out", "program.ll"))).toBe(true);
+    });
+  });
+
+  it("discovers xbintsc.config.json by walking up from the entry", () => {
+    withWorkingDirectory((directory) => {
+      mkdirSync(join(directory, "src"), { recursive: true });
+      writeFileSync(join(directory, "src", "program.ts"), "console.log(1);");
+      writeFileSync(
+        join(directory, "xbintsc.config.json"),
+        JSON.stringify({ entry: "src/program.ts", outDir: "out" }),
+      );
+      const { io } = capture();
+      // No positional entry: it comes from the discovered config.
+      expect(run(["build", "--emit", "ir"], io)).toBe(0);
+    });
+  });
+
+  it("reports an invalid config", () => {
+    const directory = temporaryDirectory();
+    const config = join(directory, "xbintsc.config.json");
+    writeFileSync(config, "{ not json");
+    const { io, err } = capture();
+    expect(run(["build", "--config", config], io)).toBe(1);
+    expect(err.join("")).toContain("invalid JSON");
+  });
+
+  it("ignores config discovery with --no-config", () => {
+    withWorkingDirectory((directory) => {
+      writeFileSync(
+        join(directory, "xbintsc.config.json"),
+        JSON.stringify({ entry: "src/program.ts" }),
+      );
+      const { io, err } = capture();
+      expect(run(["build", "--no-config", "--emit", "ir"], io)).toBe(1);
+      expect(err.join("")).toContain("requires a source file");
+    });
+  });
+
+  it("reports a missing icon file", () => {
+    const entry = writeProgram();
+    const { io, err } = capture();
+    expect(run(["build", entry, "--emit", "ir", "--icon", join(temporaryDirectory(), "nope.png")], io)).toBe(1);
+    expect(err.join("")).toContain("Icon file not found");
+  });
 });

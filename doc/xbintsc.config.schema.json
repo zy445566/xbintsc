@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/xbintsc.config.schema.json",
+  "title": "xbintsc project config",
+  "description": "Project build configuration read from xbintsc.config.json.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional editor hint pointing at this schema."
+    },
+    "entry": {
+      "type": "string",
+      "description": "Entry TypeScript file, resolved against this config's directory."
+    },
+    "outDir": {
+      "type": "string",
+      "description": "Directory for build outputs (default: build/)."
+    },
+    "output": {
+      "type": "string",
+      "description": "Explicit output path, overriding outDir."
+    },
+    "optimize": {
+      "description": "Optimization level (default: 2).",
+      "enum": ["0", "1", "2", "3"]
+    },
+    "extensions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Bundled extensions to enable, e.g. [\"gui\", \"node\"]."
+    },
+    "extNative": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Paths to native C++/Rust extension manifests."
+    },
+    "force": {
+      "type": "boolean",
+      "description": "Ignore the incremental cache."
+    },
+    "app": {
+      "type": "object",
+      "description": "Application metadata and packaging.",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display / bundle name."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Application icon (PNG, ICO or ICNS)."
+        },
+        "bundle": {
+          "type": "boolean",
+          "description": "macOS only: also produce a <name>.app bundle."
+        },
+        "bundleId": {
+          "type": "string",
+          "description": "macOS CFBundleIdentifier, e.g. com.example.demo."
+        }
+      }
+    }
+  }
+}

@@ -120,9 +120,9 @@
 | 循环依赖 | ✗ 直接报错（不做循环初始化语义） |
 | 实时绑定（live bindings） | ✗ 命名空间对象与导入绑定是模块求值时的快照 |
 | ESM `node_modules` 包 | ✓ 裸说明符沿目录树解析，支持 `exports` / `module` / `main`、作用域包与子路径；包源码与相对模块一样被打包 |
-| CommonJS `require` / `module.exports` | ✗ `require()` 会报错并提示改用 ESM `import` |
+| CommonJS `require` / `module.exports` | ✓ 仅限 `node_modules` 内：打包器为每个 CommonJS 包注入合成的 `module` / `exports`，将 `require("x")` 降级为依赖的导出对象，并把外部/内置 `require` 提升为 ESM `import`。用户代码（`node_modules` 之外）的 `require()` 仍会报错并提示改用 ESM `import` |
 
-> 扩展模块（如 `fs`）可通过裸名称或 `node:` 前缀的 `import` 引入 —— `import { readFileSync } from "fs"` / `import path from "path"` —— 并解析到运行时入口（具名、默认与命名空间形式均可）。相对模块与 `node_modules` 中的 ESM 包仍在驱动层打包。
+> 扩展模块（如 `fs`）可通过裸名称或 `node:` 前缀的 `import` 引入 —— `import { readFileSync } from "fs"` / `import path from "path"` —— 并解析到运行时入口（具名、默认与命名空间形式均可）。相对模块与 `node_modules` 中的 ESM/CJS 包均在驱动层打包；CJS 包内的 `require` 会静态解析并内联。
 
 ---
 
@@ -235,7 +235,8 @@
 
 未实现（标准库）：String.normalize、structuredClone
 
-未实现（模块）：循环依赖、CommonJS `require`、实时绑定
+未实现（模块）：循环依赖、实时绑定、动态 `require(expr)`、
+                     `require.resolve` / `require.cache`、`__dirname` / `__filename`
 
 未实现（类型系统）：类型检查、泛型实例化、断言语义、可选链类型窄化
 

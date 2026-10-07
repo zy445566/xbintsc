@@ -12,6 +12,7 @@ import { SourceFile } from "../../diagnostics/source.js";
 import { Parser } from "../../parser/parser.js";
 import type { AssetLoader } from "../../extensions/registry.js";
 import { classifyDependency } from "./resolve.js";
+import { collectRequireSites, isNodeModulesPath, usesCommonJS } from "./commonjs.js";
 import type { ModuleRecord } from "./types.js";
 
 function moduleSpecifierOf(statement: Statement): string | undefined {
@@ -83,7 +84,11 @@ export function loadGraph(
       exports: new Map(),
       originalNames: new Map(),
       finalNames: new Map(),
+      commonjs: false,
     };
+    // `require` / `module` / `exports` are only honoured inside `node_modules`,
+    // so user code keeps its ESM-only diagnostic.
+    record.commonjs = isNodeModulesPath(path) && usesCommonJS(bindResult);
     records.set(path, record);
 
     for (const statement of sourceFile.statements) {
@@ -102,6 +107,15 @@ export function loadGraph(
         continue;
       }
       load(dependency.path);
+    }
+
+    // A CommonJS module's `require("...")` calls are dynamic import edges: the
+    // target must be bundled (and evaluated) before this module runs.
+    if (record.commonjs) {
+      for (const site of collectRequireSites(sourceFile, bindResult)) {
+        const dependency = classifyDependency(dirname(path), site.specifier, externalSpecifiers);
+        if (dependency.kind === "file") load(dependency.path);
+      }
     }
     visiting.delete(path);
     order.push(record);

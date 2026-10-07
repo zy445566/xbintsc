@@ -247,6 +247,121 @@ describe("bundleModules", () => {
   });
 });
 
+describe("CommonJS in node_modules", () => {
+  function requireCalls(node: Node): number {
+    let count = 0;
+    walk(node, (current) => {
+      if (current.kind !== SyntaxKind.CallExpression) return;
+      const callee = (current as unknown as { expression: Node }).expression;
+      if (callee.kind === SyntaxKind.Identifier && (callee as unknown as { text: string }).text === "require") count++;
+    });
+    return count;
+  }
+
+  it("lowers a require of another CommonJS package", () => {
+    const directory = writeFiles({
+      "node_modules/leftpad/package.json": '{ "name": "leftpad", "main": "index.js" }',
+      "node_modules/leftpad/index.js": 'exports.pad = function (s, n) { return s; };',
+      "node_modules/usecjs/package.json": '{ "name": "usecjs", "main": "index.js" }',
+      "node_modules/usecjs/index.js": 'var lp = require("leftpad");\nmodule.exports.run = function () { return lp.pad("x", 1); };',
+      "main.ts": 'import { run } from "usecjs";\nconsole.log(run());',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(3);
+    // The `require` call is rewritten away.
+    expect(requireCalls(result!.sourceFile)).toBe(0);
+    // Each `node_modules` module gets its own `exports` state.
+    const names = identifierTexts(result!.sourceFile);
+    expect(new Set(names.filter((name) => name.endsWith("$cjs_module"))).size).toBe(2);
+  });
+
+  it("exposes CommonJS named exports to ESM imports", () => {
+    const directory = writeFiles({
+      "node_modules/n/package.json": '{ "name": "n", "main": "index.js" }',
+      "node_modules/n/index.js": "exports.foo = 1;\nexports.bar = function () { return 2; };",
+      "main.ts": 'import { foo, bar } from "n";\nconsole.log(foo, bar());',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    const names = identifierTexts(result!.sourceFile);
+    expect(names.some((name) => name.endsWith("$cjs_foo"))).toBe(true);
+    expect(names.some((name) => name.endsWith("$cjs_bar"))).toBe(true);
+  });
+
+  it("exposes the whole `module.exports` object as the default export", () => {
+    const directory = writeFiles({
+      "node_modules/obj/package.json": '{ "name": "obj", "main": "index.js" }',
+      "node_modules/obj/index.js": 'module.exports = { a: 1, b: 2 };',
+      "main.ts": 'import o from "obj";\nconsole.log(o.a);',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(identifierTexts(result!.sourceFile).some((name) => name.endsWith("$cjs_default"))).toBe(true);
+  });
+
+  it("exposes a required ESM module as a synthetic namespace object", () => {
+    const directory = writeFiles({
+      "node_modules/c/package.json": '{ "name": "c", "main": "index.js" }',
+      "node_modules/c/index.js": 'var e = require("./dep.js");\nmodule.exports = function () { return e.hello(); };',
+      "node_modules/c/dep.js": 'export function hello() { return "hi"; }',
+      "main.ts": 'import f from "c";\nconsole.log(f());',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    let hasObjectLiteral = false;
+    walk(result!.sourceFile, (node) => {
+      if (node.kind === SyntaxKind.ObjectLiteralExpression) hasObjectLiteral = true;
+    });
+    expect(hasObjectLiteral).toBe(true);
+    expect(requireCalls(result!.sourceFile)).toBe(0);
+  });
+
+  it("hoists an external require into an ESM import", () => {
+    const directory = writeFiles({
+      "node_modules/useos/package.json": '{ "name": "useos", "main": "index.js" }',
+      "node_modules/useos/index.js": 'var os = require("node:os");\nmodule.exports = function () { return os.platform(); };',
+      "main.ts": 'import f from "useos";\nconsole.log(f());',
+    });
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag, new Set(["node:os"]));
+    expect(bag.hasErrors).toBe(false);
+    const imports = result!.sourceFile.statements.filter((s) => s.kind === SyntaxKind.ImportDeclaration);
+    expect(imports.length).toBe(1);
+    expect(requireCalls(result!.sourceFile)).toBe(0);
+  });
+
+  it("hoists a destructured external require into named imports", () => {
+    const directory = writeFiles({
+      "node_modules/usepath/package.json": '{ "name": "usepath", "main": "index.js" }',
+      "node_modules/usepath/index.js": 'const { basename } = require("node:path");\nmodule.exports = function () { return basename("/a/b"); };',
+      "main.ts": 'import f from "usepath";\nconsole.log(f());',
+    });
+    const bag = new DiagnosticBag();
+    const result = bundleModules(join(directory, "main.ts"), bag, new Set(["node:path"]));
+    expect(bag.hasErrors).toBe(false);
+    expect(result!.sourceFile.statements.filter((s) => s.kind === SyntaxKind.ImportDeclaration).length).toBe(1);
+  });
+
+  it("leaves `require` in user code untouched", () => {
+    const directory = writeFiles({ "main.ts": 'var x = require("./missing");\nconsole.log(x);' });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(result?.moduleCount).toBe(1);
+    expect(requireCalls(result!.sourceFile)).toBe(1);
+    expect(bag.diagnostics.some((d) => d.code === DiagnosticCode.UnsupportedFeature)).toBe(false);
+  });
+
+  it("reports a require with a non-literal argument", () => {
+    const directory = writeFiles({
+      "node_modules/dyn/package.json": '{ "name": "dyn", "main": "index.js" }',
+      "node_modules/dyn/index.js": 'var name = "leftpad";\nmodule.exports = require(name);',
+      "main.ts": 'import x from "dyn";\nconsole.log(x);',
+    });
+    const { bag } = bundle(join(directory, "main.ts"));
+    expect(bag.diagnostics.some((d) => d.code === DiagnosticCode.UnsupportedFeature)).toBe(true);
+  });
+});
+
 describe("asset loaders", () => {
   it("rewrites a matching asset extension into a TS module", () => {
     const directory = writeFiles({

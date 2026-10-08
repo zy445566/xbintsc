@@ -8,6 +8,12 @@
  * (run `npm run gui` first) and on Windows, where the archive is not produced
  * yet.
  *
+ * `XT_GUI_AUTOCLOSE_MS` is a *hang guard*, not a test budget: it is the wall
+ * clock the frame loop is allowed to run before it gives up and exits. A program
+ * that closes its own window ends the loop on its own, so a guard that is too
+ * tight only breaks tests that need several frames — raise it with
+ * `GuiRunOptions.autocloseMs` for those.
+ *
  * `createGuiHarness()` owns one temp directory per suite plus the shared 4x4
  * test PNG; the suite calls `setup()` in `beforeAll` and `cleanup()` in
  * `afterAll`.
@@ -30,10 +36,29 @@ export const guiAvailable = existsSync(archivePath) && process.platform !== "win
 
 export interface GuiRunResult {
   stdout: string;
+  stderr: string;
   status: number | null;
   /** Read a `label=value` line out of `stdout`, asserting the label exists. */
   value(label: string): string;
 }
+
+export interface GuiRunOptions {
+  /** Extra files written into the work directory before the build. */
+  files?: Record<string, string>;
+  /**
+   * Milliseconds the frame loop may run before `XT_GUI_AUTOCLOSE_MS` closes
+   * every window. A program whose handlers close the window does not need this
+   * at all — it is only the ceiling for a program that would otherwise hang, so
+   * raising it costs nothing when the test passes. Programs that need more than
+   * one rendered frame must raise it: the first frame does the one-time GPU work
+   * (shader and pipeline creation, the font atlas), which a software Vulkan
+   * driver on a loaded CI runner can stretch far past the default.
+   */
+  autocloseMs?: number;
+}
+
+/** Enough for programs whose whole body runs in the first frame's `ready` handler. */
+const DEFAULT_AUTOCLOSE_MS = 400;
 
 export interface GuiHarness {
   /** Absolute path of the 4x4 test PNG written during `setup()`. */
@@ -41,11 +66,7 @@ export interface GuiHarness {
   setup(): void;
   cleanup(): void;
   /** Compile a program and run it with the auto-close hook, returning stdout. */
-  compileAndRun(
-    name: string,
-    source: string,
-    extraFiles?: Record<string, string>,
-  ): GuiRunResult;
+  compileAndRun(name: string, source: string, options?: GuiRunOptions): GuiRunResult;
 }
 
 /** A 4x4 PNG: left half red, right half blue (base64-encoded inline). */
@@ -59,9 +80,9 @@ export function createGuiHarness(): GuiHarness {
   const compileAndRun = (
     name: string,
     source: string,
-    extraFiles: Record<string, string> = {},
+    options: GuiRunOptions = {},
   ): GuiRunResult => {
-    for (const [fileName, contents] of Object.entries(extraFiles)) {
+    for (const [fileName, contents] of Object.entries(options.files ?? {})) {
       writeFileSync(join(workdir, fileName), contents);
     }
     const entry = join(workdir, `${name}.ts`);
@@ -76,16 +97,20 @@ export function createGuiHarness(): GuiHarness {
     expect(result.diagnostics.filter((diagnostic) => diagnostic.category === "error")).toEqual([]);
     const executed = spawnSync(result.outputPath, [], {
       encoding: "utf8",
-      env: { ...process.env, XT_GUI_AUTOCLOSE_MS: "400" },
+      env: {
+        ...process.env,
+        XT_GUI_AUTOCLOSE_MS: String(options.autocloseMs ?? DEFAULT_AUTOCLOSE_MS),
+      },
     });
     expect(executed.status, executed.stderr).toBe(0);
     const stdout = executed.stdout;
+    const stderr = executed.stderr;
     const value = (label: string): string => {
       const line = stdout.split("\n").find((entry) => entry.startsWith(`${label}=`));
-      expect(line, `missing ${label} in:\n${stdout}`).toBeDefined();
+      expect(line, `missing ${label} in stdout:\n${stdout}\nstderr:\n${stderr}`).toBeDefined();
       return line!.slice(label.length + 1).trim();
     };
-    return { stdout, status: executed.status, value };
+    return { stdout, stderr, status: executed.status, value };
   };
 
   return {

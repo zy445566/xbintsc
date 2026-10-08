@@ -32,7 +32,8 @@ describe.skipIf(!guiAvailable)("gui extension — scripts", () => {
       run();
       `,
       {
-        "page.html": `<html><body>
+        files: {
+          "page.html": `<html><body>
   <div id="count">0</div>
   <button id="b">0</button>
   <script lang="ts">
@@ -46,6 +47,7 @@ describe.skipIf(!guiAvailable)("gui extension — scripts", () => {
     });
   </script>
 </body></html>`,
+        },
       },
     );
     expect(value("after")).toBe("2");
@@ -71,8 +73,9 @@ describe.skipIf(!guiAvailable)("gui extension — scripts", () => {
       run();
       `,
       {
-        "page-src.html": `<html><body><button id="b">0</button><script src="./counter.ts"></script></body></html>`,
-        "counter.ts": `
+        files: {
+          "page-src.html": `<html><body><button id="b">0</button><script src="./counter.ts"></script></body></html>`,
+          "counter.ts": `
 import { double } from "./helper";
 const button = document.getElementById("b");
 let n = 0;
@@ -81,7 +84,8 @@ button.addEventListener("click", () => {
   button.textContent = String(n);
 });
 `,
-        "helper.ts": "export function double(n: number) { return n * 2; }",
+          "helper.ts": "export function double(n: number) { return n * 2; }",
+        },
       },
     );
     /* 0 -> 1 -> 3 proves the hoisted import (double) is linked. */

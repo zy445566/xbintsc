@@ -174,4 +174,32 @@ describeE2E("garbage collector (stress: collect on every allocation)", (harness)
       gc,
     );
   });
+
+  it("keeps readdirSync Dirents alive while the walk sorts them", () => {
+    // `readdirSync(path, { withFileTypes: true })` used to accumulate entries in
+    // a raw buffer the collector cannot see, so a collection triggered by a
+    // later entry swept the `Dirent` objects created earlier; the next
+    // `entry.isDirectory()` then threw "object has no callable method
+    // 'isDirectory'". The self-host bootstrap performs exactly this walk (plus
+    // a comparator that allocates) while fingerprinting the runtime directory.
+    const files: Record<string, string> = { "dir-walk/sub/.keep": "" };
+    for (let i = 0; i < 40; i++) files[`dir-walk/f${i}.txt`] = "x";
+    harness.expectSameOutputAsNode(
+      `
+      import { readdirSync } from "node:fs";
+      import { join } from "node:path";
+      const base = join(${JSON.stringify(harness.workdir)}, "dir-walk");
+      const entries = readdirSync(base, { withFileTypes: true })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      let dirs = 0;
+      let files = 0;
+      for (const entry of entries) {
+        if (entry.isDirectory()) dirs++;
+        else if (entry.isFile()) files++;
+      }
+      console.log(entries.length + ":" + dirs + ":" + files);
+    `,
+      { ...gc, extensions: true, files },
+    );
+  });
 });

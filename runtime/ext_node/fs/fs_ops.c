@@ -59,27 +59,18 @@ xt_value xt_node_dirent_result(const char *dir, const char *name) {
   return object;
 }
 
-typedef struct {
-  xt_value *items;
-  size_t count;
-  size_t capacity;
-} xt_fs_list;
-
-static void xt_fs_list_push(xt_fs_list *list, xt_value value) {
-  if (list->count == list->capacity) {
-    list->capacity = list->capacity ? list->capacity * 2 : 16;
-    xt_value *grown = (xt_value *)realloc(list->items, sizeof(xt_value) * list->capacity);
-    if (!grown) return;
-    list->items = grown;
-  }
-  list->items[list->count++] = value;
-}
+/* Entries accumulate in an `xt_array`, not a raw `xt_value` buffer: the
+ * collector cannot see a plain malloc'd buffer, so a `Dirent` created earlier
+ * in the walk would be swept as soon as a later entry allocates (which is
+ * exactly the GC-stress failure "object has no callable method
+ * 'isDirectory'"). The array lives on the caller's stack, so the conservative
+ * stack scan keeps it, and every entry it holds, reachable. */
 
 /* Depth-first walk used by `readdirSync(path, { recursive: true })`. `prefix`
    is the directory path relative to `base` (empty for the root, otherwise
    ending in `/`). */
 static void xt_fs_readdir_into(const char *base, const char *prefix, int withFileTypes, int recursive,
-                               xt_fs_list *list) {
+                               xt_value list) {
   size_t baseLength = strlen(base);
   size_t prefixLength = strlen(prefix);
   size_t dirSize = baseLength + prefixLength + 2;
@@ -104,7 +95,7 @@ static void xt_fs_readdir_into(const char *base, const char *prefix, int withFil
     char *relative = (char *)malloc(relSize);
     if (!relative) continue;
     snprintf(relative, relSize, "%s%s", prefix, name);
-    xt_fs_list_push(list, withFileTypes ? xt_node_dirent_result(dirPath, name) : xt_string_from_cstr(relative));
+    xt_array_push(list, withFileTypes ? xt_node_dirent_result(dirPath, name) : xt_string_from_cstr(relative));
 
     if (recursive) {
       size_t fullSize = dirLength + nameLength + 2;
@@ -141,14 +132,8 @@ xt_value xt_node_read_dir(int32_t argc, xt_value *argv) {
   int withFileTypes = XT_IS_OBJECT(options) && xt_truthy(xt_object_get_cstr(options, "withFileTypes"));
   int recursive = XT_IS_OBJECT(options) && xt_truthy(xt_object_get_cstr(options, "recursive"));
 
-  xt_fs_list list;
-  list.items = NULL;
-  list.count = 0;
-  list.capacity = 0;
-  xt_fs_readdir_into(path, "", withFileTypes, recursive, &list);
-
-  xt_value result = xt_array_new((int32_t)list.count, list.items);
-  free(list.items);
+  xt_value result = xt_array_new(0, NULL);
+  xt_fs_readdir_into(path, "", withFileTypes, recursive, result);
   return result;
 }
 

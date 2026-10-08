@@ -70,16 +70,18 @@ static xt_value xt_process_env(void) {
 
 static xt_value xt_process_argv(void) {
   int32_t count = xt_program_argc;
-  if (count <= 0 || !xt_program_argv) return xt_array_new(0, NULL);
+  /* Fill an `xt_array` element by element rather than a raw `xt_value` buffer:
+     the collector cannot see a plain malloc'd buffer, so strings created here
+     would be swept as soon as a later element allocates (demonstrated by
+     `process.argv` returning recycled strings under GC stress). The array is a
+     stack local, so the conservative scan keeps it and its elements alive. */
+  xt_value result = xt_array_new(0, NULL);
+  if (count <= 0 || !xt_program_argv) return result;
   /* Node semantics: `[execPath, scriptPath, ...args]`. A standalone binary is
      both the executable and the script, so the executable path is repeated;
      user arguments therefore start at index 2, matching `node script.js a b`. */
-  xt_value *items = (xt_value *)malloc(sizeof(xt_value) * (size_t)(count + 1));
-  if (!items) return xt_array_new(0, NULL);
-  items[0] = xt_string_from_cstr(xt_program_argv[0]);
-  for (int32_t i = 0; i < count; i++) items[i + 1] = xt_string_from_cstr(xt_program_argv[i]);
-  xt_value result = xt_array_new(count + 1, items);
-  free(items);
+  xt_array_push(result, xt_string_from_cstr(xt_program_argv[0]));
+  for (int32_t i = 0; i < count; i++) xt_array_push(result, xt_string_from_cstr(xt_program_argv[i]));
   return result;
 }
 

@@ -363,13 +363,13 @@ static xt_value util_promisify_executor(xt_value thisValue, xt_value env, int32_
   xt_value resolve = xt_arg(argc, argv, 0);
   xt_value reject = xt_arg(argc, argv, 1);
   int32_t count = (int32_t)xt_to_number(xt_array_length(args));
-  xt_value *callArgs = (xt_value *)malloc(sizeof(xt_value) * (size_t)(count + 1));
-  if (!callArgs) return xt_undefined();
-  for (int32_t i = 0; i < count; i++) callArgs[i] = xt_array_get(args, xt_number((double)i));
+  /* An `xt_array` keeps the arguments, and the freshly created callback
+     closure, reachable if the call below triggers a collection. */
+  xt_value argArray = xt_array_new(0, NULL);
+  for (int32_t i = 0; i < count; i++) xt_array_push(argArray, xt_array_get(args, xt_number((double)i)));
   xt_value callbackEnv[2] = {resolve, reject};
-  callArgs[count] = xt_closure_new((void *)util_promisify_callback, 2, callbackEnv);
-  if (XT_IS_FUNCTION(fn)) xt_closure_call(fn, count + 1, callArgs);
-  free(callArgs);
+  xt_array_push(argArray, xt_closure_new((void *)util_promisify_callback, 2, callbackEnv));
+  if (XT_IS_FUNCTION(fn)) xt_closure_call(fn, count + 1, xt_as_array(argArray)->items);
   return xt_undefined();
 }
 

@@ -326,8 +326,10 @@ xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replac
     int32_t end = (int32_t)matches[0].rm_eo;
     xt_regexp_append(&out, &length, &capacity, text->data + cursor, (size_t)(start - cursor));
     if (useFunction) {
-      xt_value *args = (xt_value *)malloc(sizeof(xt_value) * (size_t)(jsTotal + 3));
-      args[0] = xt_string_new(text->data + start, (int64_t)(end - start));
+      /* Accumulate in an `xt_array` so the earlier match/group strings stay
+         reachable while later groups (and the callback itself) allocate. */
+      xt_value argArray = xt_array_new(0, NULL);
+      xt_array_push(argArray, xt_string_new(text->data + start, (int64_t)(end - start)));
       for (int g = 1; g <= jsTotal; g++) {
         xt_value groupValue = XT_UNDEFINED;
         for (int i = 0; i < groupCount; i++) {
@@ -337,12 +339,11 @@ xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replac
           }
           break;
         }
-        args[g] = groupValue;
+        xt_array_push(argArray, groupValue);
       }
-      args[jsTotal + 1] = xt_number((double)start);
-      args[jsTotal + 2] = xt_to_string(value);
-      xt_value produced = xt_closure_call(replacementValue, jsTotal + 3, args);
-      free(args);
+      xt_array_push(argArray, xt_number((double)start));
+      xt_array_push(argArray, xt_to_string(value));
+      xt_value produced = xt_closure_call(replacementValue, jsTotal + 3, xt_as_array(argArray)->items);
       xt_string *producedText = xt_as_string(xt_to_string(produced));
       if (producedText) xt_regexp_append(&out, &length, &capacity, producedText->data, producedText->length);
     } else {

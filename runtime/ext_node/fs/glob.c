@@ -10,21 +10,9 @@
 #include "../node_common.h"
 #include "fs_common.h"
 
-typedef struct {
-  xt_value *items;
-  size_t count;
-  size_t capacity;
-} xt_glob_list;
-
-static void xt_glob_push(xt_glob_list *list, xt_value value) {
-  if (list->count == list->capacity) {
-    list->capacity = list->capacity ? list->capacity * 2 : 16;
-    xt_value *grown = (xt_value *)realloc(list->items, sizeof(xt_value) * list->capacity);
-    if (!grown) return;
-    list->items = grown;
-  }
-  list->items[list->count++] = value;
-}
+/* Matches accumulate in an `xt_array` rather than a raw buffer so the garbage
+ * collector can see the `Dirent`/string entries created earlier in the walk;
+ * see the same note in `fs_ops.c`. */
 
 static char *xt_glob_join(const char *dir, const char *name) {
   size_t dirLength = strlen(dir);
@@ -96,11 +84,11 @@ static int xt_glob_is_dir(const char *path, int follow) {
 }
 
 static void xt_glob_walk(const char *dirPath, const char *pattern, const char *resultPrefix, int withFileTypes,
-                         xt_glob_list *list);
+                         xt_value list);
 
 /* Recurse one directory level for the `**` segment. */
 static void xt_glob_descend(const char *dirPath, const char *pattern, const char *resultPrefix, int withFileTypes,
-                            xt_glob_list *list) {
+                            xt_value list) {
   xt_fs_dir dir;
   if (!xt_fs_dir_open(&dir, dirPath)) return;
   while (xt_fs_dir_next(&dir)) {
@@ -123,7 +111,7 @@ static void xt_glob_descend(const char *dirPath, const char *pattern, const char
 }
 
 static void xt_glob_walk(const char *dirPath, const char *pattern, const char *resultPrefix, int withFileTypes,
-                         xt_glob_list *list) {
+                         xt_value list) {
   if (pattern[0] == '\0') {
     if (resultPrefix[0] != '\0') {
       size_t length = strlen(resultPrefix);
@@ -131,7 +119,7 @@ static void xt_glob_walk(const char *dirPath, const char *pattern, const char *r
       if (!trimmed) return;
       memcpy(trimmed, resultPrefix, length + 1);
       while (length > 1 && trimmed[length - 1] == '/') trimmed[--length] = '\0';
-      xt_glob_push(list, xt_string_from_cstr(trimmed));
+      xt_array_push(list, xt_string_from_cstr(trimmed));
       free(trimmed);
     }
     return;
@@ -165,13 +153,13 @@ static void xt_glob_walk(const char *dirPath, const char *pattern, const char *r
     char *child = xt_glob_join(dirPath, name);
     if (!child) continue;
     if (rest[0] == '\0') {
-      if (withFileTypes) xt_glob_push(list, xt_node_dirent_result(dirPath, name));
+      if (withFileTypes) xt_array_push(list, xt_node_dirent_result(dirPath, name));
       else {
         size_t size = strlen(resultPrefix) + strlen(name) + 1;
         char *result = (char *)malloc(size);
         if (result) {
           snprintf(result, size, "%s%s", resultPrefix, name);
-          xt_glob_push(list, xt_string_from_cstr(result));
+          xt_array_push(list, xt_string_from_cstr(result));
           free(result);
         }
       }
@@ -189,7 +177,7 @@ static void xt_glob_walk(const char *dirPath, const char *pattern, const char *r
   xt_fs_dir_close(&dir);
 }
 
-static void xt_glob_run(const char *pattern, const char *cwd, int withFileTypes, xt_glob_list *list) {
+static void xt_glob_run(const char *pattern, const char *cwd, int withFileTypes, xt_value list) {
   if (!pattern) return;
   const char *base = cwd && cwd[0] ? cwd : ".";
   const char *prefix = "";
@@ -209,24 +197,19 @@ xt_value xt_node_glob(int32_t argc, xt_value *argv) {
   xt_value cwdValue = XT_IS_OBJECT(options) ? xt_object_get_cstr(options, "cwd") : XT_UNDEFINED;
   if (XT_IS_STRING(cwdValue)) cwd = xt_string_data(cwdValue);
 
-  xt_glob_list list;
-  list.items = NULL;
-  list.count = 0;
-  list.capacity = 0;
+  xt_value result = xt_array_new(0, NULL);
 
   xt_value patternValue = argv[0];
   if (XT_IS_ARRAY(patternValue)) {
     int32_t count = (int32_t)xt_to_number(xt_array_length(patternValue));
     for (int32_t i = 0; i < count; i++) {
       xt_value item = xt_array_get(patternValue, xt_number((double)i));
-      if (XT_IS_STRING(item)) xt_glob_run(xt_string_data(item), cwd, withFileTypes, &list);
+      if (XT_IS_STRING(item)) xt_glob_run(xt_string_data(item), cwd, withFileTypes, result);
     }
   } else {
     const char *pattern = xt_node_cstr(patternValue);
-    xt_glob_run(pattern, cwd, withFileTypes, &list);
+    xt_glob_run(pattern, cwd, withFileTypes, result);
   }
 
-  xt_value result = xt_array_new((int32_t)list.count, list.items);
-  free(list.items);
   return result;
 }

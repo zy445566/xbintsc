@@ -272,9 +272,20 @@ run();
 `runtime/ext_gui/renderer.{h,cpp}` 把该列表转换为每个窗口两个批处理顶点缓冲
 （一个用于图形，一个用于字形四边形），通过两条 SDL_GPU 图形管线绘制：
 
-- 共享管线会依据设备支持的着色器格式延迟创建。在 macOS 上，渲染器直接编译
-  内嵌的 **MSL** 源码（SDL_GPU `SHADERFORMAT_MSL`）；Vulkan/D3D12 需要
-  SPIR-V/DXIL 二进制块，属于构建期 TODO（见 *待决问题*）。
+- 共享管线会依据设备支持的着色器格式延迟创建。SDL_GPU 的三个后端各自只接受一种
+  二进制格式，且都不会在运行时编译 GLSL/HLSL，因此引擎三种都随包提供，由
+  `selectShader`（`renderer_shaders.h`）挑选设备可用的那一种：Metal 用 **MSL**
+  （SDL 从内嵌源码编译）、Vulkan 用 **SPIR-V**
+  （`runtime/ext_gui/spirv/*.{vert,frag}`，由 `glslc` 编译）、Direct3D 12 用
+  **DXIL**（`shaders.hlsl`，由 `dxc` 编译）。
+  `scripts/build-gui-shaders.mjs` 重新生成内嵌二进制块，产物已提交，因此构建引擎
+  无需额外工具。各格式的描述符绑定不同——SPIR-V 遵循 `SDL_gpu_vulkan.c` 的布局
+  （uniform 在 `set=1, binding=0`，采样器在 `set=2, binding=0`，纹理在
+  `set=2, binding=1`）——且 glslc 会把所有入口点命名为 `main`，而 MSL/DXIL 保留
+  各自的描述性名称。
+  需注意：SDL 3.2.10 的 Direct3D 12 后端无法创建着色器中声明了 uniform buffer 的
+  图形管线（返回 `E_INVALIDARG`）；引擎正是用这种方式传视口，因此 DXIL 这条路已
+  构建但在上游修复前不可用。
 - 图形片元着色器中的**圆角矩形距离场**提供抗锯齿填充；顶点携带
   `position`、`local`、`half extents`、`radius` 与颜色，一个视口尺寸的
   push constant 负责投影。启用 alpha 混合。
@@ -571,7 +582,7 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
   （COFF 对象 + `ar -M`/`llvm-ar`），但尚未在 CI 中验证，因此 Windows 步骤
   为试验性（job 保持绿色），`package` 会跳过它。它还需要一个带 D3D12/DXIL
   后端的 SDL3 构建（DXIL 需要 `dxc`）。
-- **非 Metal 后端上的着色器：** 渲染器内嵌 MSL 源码（在 macOS 上由 SDL_GPU
-  在运行时编译）。Vulkan 需要 SPIR-V，D3D12 需要 DXIL；它们需要在构建期使用
-  `glslc`/`dxc`。在那之前，非 Metal 路径会清除窗口并跳过几何（只记录一次
-  日志）。
+- **D3D12 着色器：** SPIR-V（Vulkan）与 DXIL（Direct3D 12）二进制块均已构建并
+  内嵌，非 Metal 路径不再跳过几何绘制。但在 **SDL 3.2.10** 上 DXIL 仍不可用：
+  其 D3D12 后端会拒绝任何着色器中声明了 uniform buffer 的图形管线，而引擎正是
+  用这种方式传视口。SDL 升级后需重新确认。

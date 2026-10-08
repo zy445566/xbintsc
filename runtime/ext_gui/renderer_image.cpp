@@ -17,22 +17,26 @@ namespace xtgui {
 namespace renderer_detail {
 
 SDL_GPUGraphicsPipeline *createImagePipeline(SDL_GPUDevice *device, SDL_Window *reference) {
+  const ShaderSource image_vs = selectShader(device, ShaderProgram::Image, false);
+  const ShaderSource image_fs = selectShader(device, ShaderProgram::Image, true);
+  if (!image_vs.valid() || !image_fs.valid()) return nullptr;
+
   SDL_GPUShaderCreateInfo vs_info;
   memset(&vs_info, 0, sizeof(vs_info));
-  vs_info.code_size = strlen(kTextMSL);
-  vs_info.code = (const Uint8 *)kTextMSL;
-  vs_info.entrypoint = "vs_text";
-  vs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+  vs_info.code_size = image_vs.size;
+  vs_info.code = image_vs.code;
+  vs_info.entrypoint = image_vs.entry;
+  vs_info.format = image_vs.format;
   vs_info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
   vs_info.num_uniform_buffers = 1;
   SDL_GPUShader *vs = SDL_CreateGPUShader(device, &vs_info);
 
   SDL_GPUShaderCreateInfo fs_info;
   memset(&fs_info, 0, sizeof(fs_info));
-  fs_info.code_size = strlen(kTextMSL);
-  fs_info.code = (const Uint8 *)kTextMSL;
-  fs_info.entrypoint = "fs_image";
-  fs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+  fs_info.code_size = image_fs.size;
+  fs_info.code = image_fs.code;
+  fs_info.entrypoint = image_fs.entry;
+  fs_info.format = image_fs.format;
   fs_info.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
   fs_info.num_samplers = 1;
   SDL_GPUShader *fs = SDL_CreateGPUShader(device, &fs_info);

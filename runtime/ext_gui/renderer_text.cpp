@@ -187,22 +187,26 @@ void flushAtlas(SDL_GPUDevice *device) {
 }
 
 SDL_GPUGraphicsPipeline *createTextPipeline(SDL_GPUDevice *device, SDL_Window *reference) {
+  const ShaderSource text_vs = selectShader(device, ShaderProgram::Text, false);
+  const ShaderSource text_fs = selectShader(device, ShaderProgram::Text, true);
+  if (!text_vs.valid() || !text_fs.valid()) return nullptr;
+
   SDL_GPUShaderCreateInfo vs_info;
   memset(&vs_info, 0, sizeof(vs_info));
-  vs_info.code_size = strlen(kTextMSL);
-  vs_info.code = (const Uint8 *)kTextMSL;
-  vs_info.entrypoint = "vs_text";
-  vs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+  vs_info.code_size = text_vs.size;
+  vs_info.code = text_vs.code;
+  vs_info.entrypoint = text_vs.entry;
+  vs_info.format = text_vs.format;
   vs_info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
   vs_info.num_uniform_buffers = 1;
   SDL_GPUShader *vs = SDL_CreateGPUShader(device, &vs_info);
 
   SDL_GPUShaderCreateInfo fs_info;
   memset(&fs_info, 0, sizeof(fs_info));
-  fs_info.code_size = strlen(kTextMSL);
-  fs_info.code = (const Uint8 *)kTextMSL;
-  fs_info.entrypoint = "fs_text";
-  fs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+  fs_info.code_size = text_fs.size;
+  fs_info.code = text_fs.code;
+  fs_info.entrypoint = text_fs.entry;
+  fs_info.format = text_fs.format;
   fs_info.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
   fs_info.num_samplers = 1;
   SDL_GPUShader *fs = SDL_CreateGPUShader(device, &fs_info);

@@ -38,6 +38,10 @@ const IGNORED_DIRECTORIES = new Set([
 /** Vendored third-party sources that ship verbatim and are not ours to split. */
 const VENDORED_FILES = new Set([join("runtime", "ext_gui", "stb_image.h")]);
 
+/** Machine-generated files: they are reproduced from their sources by a script,
+ * so their size is not a sign of a module that needs splitting. */
+const GENERATED_FILES = new Set([join("runtime", "ext_gui", "renderer_shaders_data.h")]);
+
 interface Offense {
   file: string;
   lines: number;
@@ -65,7 +69,7 @@ function collect(dir: string, offenses: Offense[]): void {
     const dot = entry.name.lastIndexOf(".");
     if (dot < 0 || !CODE_EXTENSIONS.has(entry.name.slice(dot))) continue;
     const file = relative(root, full);
-    if (VENDORED_FILES.has(file)) continue;
+    if (VENDORED_FILES.has(file) || GENERATED_FILES.has(file)) continue;
     const lines = countLines(full);
     if (lines > MAX_LINES) offenses.push({ file, lines });
   }

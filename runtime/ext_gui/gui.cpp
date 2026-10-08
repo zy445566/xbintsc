@@ -73,7 +73,9 @@ static int ensure_init(void) {
     return 0;
   }
   /* Accept every shader format so the same code runs on Metal, Vulkan and
-   * D3D12; the backend only needs the one it supports. */
+   * D3D12; the backend only needs the one it supports. The engine ships MSL,
+   * SPIR-V and DXIL shaders accordingly, and picks the matching one in
+   * `renderer_shaders.h`. */
   SDL_GPUShaderFormat formats =
       SDL_GPU_SHADERFORMAT_MSL | SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL;
   g_device = SDL_CreateGPUDevice(formats, false, NULL);

@@ -53,6 +53,32 @@ const isWindows = process.platform === "win32";
 const objectSuffix = isWindows ? ".obj" : ".o";
 const output = join(outDir, isWindows ? "gui.lib" : "gui.a");
 
+/* CMake generator and ABI settings used for every vendored library. Ninja is
+ * selected on Windows because the Visual Studio generator imports the
+ * machine-wide MSBuild/vcpkg integration, whose `LIBPATH` shadows the Windows
+ * SDK and makes the compiler probe fail with
+ * `LNK1104: cannot open file 'ucrtd.lib'`.
+ *
+ * `CMAKE_MSVC_RUNTIME_LIBRARY` is pinned to the *static* CRT (`MultiThreaded`),
+ * which is clang's Windows default (`-defaultlib:libcmt`) and what xbintsc uses
+ * for its own runtime objects. Building the vendored libraries against the DLL
+ * CRT instead fails the final link with
+ * `LNK2038: mismatch detected for 'RuntimeLibrary'`. The variable only takes
+ * effect when policy CMP0091 is NEW, but FreeType and HarfBuzz declare
+ * `cmake_minimum_required` below 3.15, which defaults the policy to OLD and
+ * silently ignores it — hence `CMAKE_POLICY_DEFAULT_CMP0091`. The C/C++ compilers
+ * are pinned to the same clang the engine is compiled with, so every object in
+ * `gui.a` shares one ABI and optimization behaviour. */
+const cmakeGeneratorArgs: readonly string[] = isWindows
+  ? [
+      "-G", "Ninja",
+      "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+      "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
+      "-DCMAKE_C_COMPILER=clang",
+      "-DCMAKE_CXX_COMPILER=clang++",
+    ]
+  : [];
+
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
 const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
 const HARFBUZZ_VERSION = process.env.HARFBUZZ_VERSION || "10.1.0";
@@ -178,6 +204,7 @@ if (!existingSdlArchive) {
   const configureArgs = [
     "-S", sdlSrc,
     "-B", sdlBuild,
+    ...cmakeGeneratorArgs,
     "-DCMAKE_BUILD_TYPE=Release",
     "-DSDL_SHARED=OFF",
     "-DSDL_STATIC=ON",
@@ -220,6 +247,7 @@ if (!existsSync(freetypeArchive() ?? "")) {
   run(cmake, [
     "-S", freetypeSrc,
     "-B", freetypeBuild,
+    ...cmakeGeneratorArgs,
     "-DCMAKE_BUILD_TYPE=Release",
     "-DBUILD_SHARED_LIBS=OFF",
     /* We only need TrueType/OpenType outlines; skip the optional codecs. */
@@ -240,6 +268,7 @@ if (!existsSync(harfbuzzArchive() ?? "")) {
   run(cmake, [
     "-S", harfbuzzSrc,
     "-B", harfbuzzBuild,
+    ...cmakeGeneratorArgs,
     "-DCMAKE_BUILD_TYPE=Release",
     "-DBUILD_SHARED_LIBS=OFF",
     "-DHB_BUILD_UTILS=OFF",
@@ -272,6 +301,12 @@ const sources = readdirSync(engineDir)
 
 const objects: string[] = [];
 const cxxFlags = ["-std=c++17", "-O2", "-Wall", "-Wextra", ...includeFlags];
+/* The engine is C++ and the MSVC C++ runtime must match the static C CRT that
+ * clang links by default, so let every engine object record `libcpmt` as a
+ * default library. The extension itself only contributes the DLL import library
+ * (`-lmsvcprt`, `src/extensions/gui/index.ts`), which is inconsistent with that
+ * CRT and makes the final link fail with `LNK2038`/unresolved `__imp_*`. */
+if (isWindows) cxxFlags.push("-Xclang", "--dependent-lib=libcpmt");
 /* The MSVC ABI rejects `-fPIC`; position independence is the default elsewhere. */
 if (!isWindows) cxxFlags.splice(3, 0, "-fPIC");
 for (const source of sources) {

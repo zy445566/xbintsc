@@ -130,30 +130,32 @@ bool xt_gui_renderer_ensure(SDL_GPUDevice *device, SDL_Window *reference) {
   using namespace xtgui::renderer_detail;
   if (g_pipeline != nullptr) return true;
   if (g_renderer_failed) return false;
-  if ((SDL_GetGPUShaderFormats(device) & SDL_GPU_SHADERFORMAT_MSL) == 0) {
+  const ShaderSource fill_vs = selectShader(device, ShaderProgram::Fill, false);
+  const ShaderSource fill_fs = selectShader(device, ShaderProgram::Fill, true);
+  if (!fill_vs.valid() || !fill_fs.valid()) {
     fprintf(stderr,
-            "xt_gui: backend has no MSL shader support; shape/text painting disabled "
-            "(Vulkan/D3D12 shader blobs are a TODO)\n");
+            "xt_gui: backend supports neither Metal nor D3D12 shaders; shape/text painting "
+            "disabled (Vulkan SPIR-V blobs are a TODO)\n");
     g_renderer_failed = 1;
     return false;
   }
 
   SDL_GPUShaderCreateInfo vs_info;
   memset(&vs_info, 0, sizeof(vs_info));
-  vs_info.code_size = strlen(kFillMSL);
-  vs_info.code = (const Uint8 *)kFillMSL;
-  vs_info.entrypoint = "vs_main";
-  vs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+  vs_info.code_size = fill_vs.size;
+  vs_info.code = fill_vs.code;
+  vs_info.entrypoint = fill_vs.entry;
+  vs_info.format = fill_vs.format;
   vs_info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
   vs_info.num_uniform_buffers = 1;
   SDL_GPUShader *vs = SDL_CreateGPUShader(device, &vs_info);
 
   SDL_GPUShaderCreateInfo fs_info;
   memset(&fs_info, 0, sizeof(fs_info));
-  fs_info.code_size = strlen(kFillMSL);
-  fs_info.code = (const Uint8 *)kFillMSL;
-  fs_info.entrypoint = "fs_main";
-  fs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+  fs_info.code_size = fill_fs.size;
+  fs_info.code = fill_fs.code;
+  fs_info.entrypoint = fill_fs.entry;
+  fs_info.format = fill_fs.format;
   fs_info.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
   SDL_GPUShader *fs = SDL_CreateGPUShader(device, &fs_info);
 

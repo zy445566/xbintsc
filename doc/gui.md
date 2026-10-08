@@ -307,9 +307,22 @@ buffers per window (one for shapes, one for glyph quads) drawn through two
 SDL_GPU graphics pipelines:
 
 - The shared pipelines are created lazily from the device's supported shader
-  format. On macOS the renderer compiles the embedded **MSL** source directly
-  (SDL_GPU `SHADERFORMAT_MSL`); Vulkan/D3D12 need SPIR-V/DXIL blobs and are a
-  build-time TODO (see *Open questions*).
+  format. Each of SDL_GPU's three backends consumes a different binary and none
+  of them compiles GLSL/HLSL at runtime, so the engine ships all three and
+  `selectShader` (`renderer_shaders.h`) picks the one the device accepts:
+  **MSL** for Metal (compiled by SDL from the embedded source),
+  **SPIR-V** for Vulkan (`runtime/ext_gui/spirv/*.{vert,frag}`, compiled by
+  `glslc`), and **DXIL** for Direct3D 12 (`shaders.hlsl`, compiled by `dxc`).
+  `scripts/build-gui-shaders.mjs` regenerates the embedded blobs and the result
+  is committed, so nothing extra is needed to build the engine.
+  The descriptor bindings differ per format — SPIR-V follows what
+  `SDL_gpu_vulkan.c` builds (uniforms `set=1, binding=0`, samplers
+  `set=2, binding=0`, textures `set=2, binding=1`) — and glslc names every entry
+  point `main` where MSL/DXIL keep the descriptive names.
+  Note that SDL 3.2.10's Direct3D 12 backend cannot create a graphics pipeline
+  whose shaders declare a uniform buffer (it fails with `E_INVALIDARG`); the
+  engine passes the viewport that way, so the DXIL path is built but not usable
+  until that is resolved upstream.
 - A **rounded-rectangle distance field** in the shape fragment shader gives
   antialiased fills; the vertex carries `position`, `local`, `half extents`,
   `radius` and colour, and a viewport-size push constant does the projection.
@@ -626,7 +639,8 @@ used by default; Wayland is enabled too but not yet exercised.
   so the Windows step is provisional (the job stays green) and `package` skips
   it. It also needs an SDL3 build with the D3D12/DXIL backend (DXIL requires
   `dxc`).
-- **Shaders on non-Metal backends:** the renderer embeds MSL source (compiled by
-  SDL_GPU at runtime on macOS). Vulkan needs SPIR-V and D3D12 needs DXIL; those
-  require `glslc`/`dxc` at build time. Until then the non-Metal path clears the
-  window and skips geometry (logged once).
+- **D3D12 shaders:** the SPIR-V (Vulkan) and DXIL (Direct3D 12) blobs are built
+  and embedded, so the non-Metal path no longer skips geometry. DXIL remains
+  unusable on **SDL 3.2.10**: its D3D12 backend rejects any graphics pipeline
+  whose shaders declare a uniform buffer, and the engine passes the viewport that
+  way. Re-check after an SDL upgrade.

@@ -22,7 +22,16 @@ import { build, compileEntry, COMPILER_VERSION, type EmitKind } from "../driver/
 import { findRuntimeDir, platformSlug } from "../driver/paths.js";
 import { runtimeLibDir } from "../driver/runtime-lib.js";
 import { resolveToolchain } from "../driver/toolchain-provider.js";
-import { realRunner } from "../driver/toolchain.js";
+import { realRunner, ToolchainError } from "../driver/toolchain.js";
+import {
+  DOC_CLI,
+  DOC_TROUBLESHOOTING,
+  documentationHints,
+  thrownFailure,
+  toolchainPointer,
+  UNEXPECTED_FAILURE_HINT,
+  type DocumentationPointer,
+} from "./hints.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { bundledExtensions } from "../extensions/catalog.js";
 import { nativeExtensionFromManifest } from "../extensions/native.js";
@@ -45,6 +54,13 @@ const defaultIo: CliIo = {
   stdout: (text) => process.stdout.write(text),
   stderr: (text) => process.stderr.write(text),
 };
+
+/**
+ * `--no-hints` state for the current {@link run} call. A module-level flag (and
+ * not a parameter) keeps the hint layer out of the signatures of every helper
+ * that can fail.
+ */
+let hintsDisabled = false;
 
 interface ParsedArgs {
   readonly command?: string;
@@ -152,6 +168,46 @@ function printDiagnostics(diagnostics: readonly Diagnostic[], fileName: string, 
     }
     io.stderr(formatDiagnostic(diagnostic, source) + "\n");
   }
+  for (const hint of documentationHints(diagnostics)) emitHint(io, hint);
+}
+
+/** Print one `hint:` line unless the caller asked for plain output. */
+function emitHint(io: CliIo, line: string): void {
+  if (hintsDisabled) return;
+  io.stderr(`${line}\n`);
+}
+
+/**
+ * Report a failure that threw instead of becoming a diagnostic, ending with the
+ * documentation pointer that explains it. Without this a toolchain failure is a
+ * raw stack trace, which tells a reader nothing about which document answers
+ * the question.
+ */
+function reportThrown(error: unknown, io: CliIo): number {
+  const message =
+    error instanceof ToolchainError
+      ? `xbintsc: ${error.message}`
+      : `xbintsc: ${error instanceof Error ? error.message : String(error)}`;
+  io.stderr(`${message.trimEnd()}\n`);
+  const text = error instanceof ToolchainError ? error.message : message;
+  const pointer = error instanceof ToolchainError ? toolchainPointer(text) : thrownPointer(text);
+  emitHint(io, `hint: ${pointer.text} — see ${pointer.path}`);
+  return 1;
+}
+
+/** The document that explains a failure the CLI reports as a plain message. */
+function thrownPointer(message: string): DocumentationPointer {
+  return thrownFailure(message)?.pointer ?? UNEXPECTED_FAILURE_HINT;
+}
+
+/** Report a project-config failure, which never becomes a diagnostic bag. */
+function reportConfigError(error: string, io: CliIo): number {
+  io.stderr(`xbintsc: ${error}\n`);
+  const pointer = /JSON/i.test(error)
+    ? `hint: fix the JSON; an unreadable or malformed config fails the build — see ${DOC_TROUBLESHOOTING}`
+    : `hint: check the config path and its fields — see ${DOC_CLI}`;
+  emitHint(io, pointer);
+  return 1;
 }
 
 const HELP = `xbintsc ${COMPILER_VERSION} - TypeScript binary compiler
@@ -181,6 +237,14 @@ Options:
       --app-id <id>     macOS bundle identifier (e.g. com.example.demo)
       --force           Ignore the incremental cache
       --verbose         Print progress information
+      --no-hints        Do not append the "hint: … see <doc>" line to failures
+
+xbintsc compiles a subset of TypeScript to a native binary. Types are erased
+(never checked), Node modules need --ext node, third-party npm imports are not
+supported, and clang 16+ is required to link.
+
+Docs: doc/ai/README.md (task guide) - doc/ai/language-support.md (subset) -
+doc/ai/troubleshooting.md (failures) - llms.txt (index of every document)
 `;
 
 function firstLine(text: string): string {
@@ -281,6 +345,19 @@ function listFlag(flags: Map<string, string | boolean>, name: string): string[] 
 }
 
 export function run(argv: readonly string[], io: CliIo = defaultIo): number {
+  const disableHints = parseArgs(argv).flags.has("no-hints");
+  const previous = hintsDisabled;
+  hintsDisabled = disableHints;
+  try {
+    return dispatch(argv, io);
+  } catch (error) {
+    return reportThrown(error, io);
+  } finally {
+    hintsDisabled = previous;
+  }
+}
+
+function dispatch(argv: readonly string[], io: CliIo): number {
   const args = parseArgs(argv);
   const command = args.command;
 
@@ -301,13 +378,11 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   if (command === "emit") {
     const cliEntry = args.positionals[0];
     const resolved = resolveProjectConfig(args.flags, cliEntry);
-    if (!resolved.ok) {
-      io.stderr(`xbintsc: ${resolved.error}\n`);
-      return 1;
-    }
+    if (!resolved.ok) return reportConfigError(resolved.error, io);
     const entry = cliEntry ?? resolved.config.entry;
     if (!entry) {
       io.stderr(`xbintsc: emit requires a source file (or 'entry' in ${CONFIG_FILE_NAME})\n`);
+      emitHint(io, `hint: pass the entry file, or set 'entry' in ${CONFIG_FILE_NAME} — see ${DOC_CLI}`);
       return 1;
     }
     const extNames = listFlag(args.flags, "ext") ?? resolved.config.extensions ?? [];
@@ -325,14 +400,12 @@ export function run(argv: readonly string[], io: CliIo = defaultIo): number {
   if (command === "build" || command === "run") {
     const cliEntry = args.positionals[0];
     const resolved = resolveProjectConfig(args.flags, cliEntry);
-    if (!resolved.ok) {
-      io.stderr(`xbintsc: ${resolved.error}\n`);
-      return 1;
-    }
+    if (!resolved.ok) return reportConfigError(resolved.error, io);
     const config = resolved.config;
     const entry = cliEntry ?? config.entry;
     if (!entry) {
       io.stderr(`xbintsc: ${command} requires a source file (or 'entry' in ${CONFIG_FILE_NAME})\n`);
+      emitHint(io, `hint: pass the entry file, or set 'entry' in ${CONFIG_FILE_NAME} — see ${DOC_CLI}`);
       return 1;
     }
     const emit = (args.flags.get("emit") as EmitKind | undefined) ?? "exe";

@@ -5,6 +5,26 @@ link native binaries**. xbintsc does not bundle a compiler, so every host needs
 a clang-compatible toolchain installed. `xbintsc emit` (pure LLVM IR text) has
 no requirements on any platform.
 
+## Minimum versions
+
+| Requirement | Minimum | Notes |
+| --- | --- | --- |
+| clang / LLVM | **16** | The emitted IR uses opaque pointers, which LLVM 16 made the only pointer representation. |
+| Node.js | **22** | Only to run or build the compiler from source; released binaries are standalone and need no Node. |
+
+clang 15 and older fail on the first string literal in any program, with:
+
+```
+build/app.ll:382:37: error: '@.str.0' defined with type '[6 x i8]*' but expected 'i8*'
+  %r0 = call i64 @xt_string_new(i8* @.str.0, i64 5)
+```
+
+Typed pointers were removed in LLVM 16 ([release notes](https://github.com/llvm/llvm-project/blob/release/15.x/llvm/docs/ReleaseNotes.rst#changes-to-the-llvm-ir)),
+so check `clang --version` before anything else, and point xbintsc at a newer
+build with `xbintsc_CLANG` when the system clang is older. `xbintsc doctor`
+reports the resolved toolchain and its version. Working around the limitation by
+compiling the IR elsewhere is not supported.
+
 ## Summary
 
 | Platform | Requirement | Provided by |

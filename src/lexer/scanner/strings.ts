@@ -6,7 +6,20 @@
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { Token, TokenKind } from "../token.js";
 import { Char, isDigit, isLineBreak } from "../char.js";
+import { codePointBytes } from "../../codegen/generator/tables.js";
 import type { Scanner } from "../scanner.js";
+
+/**
+ * The bytes one escape sequence stands for. An escape names a code point, and a
+ * literal holds the UTF-8 bytes of that code point - the same bytes
+ * `String.fromCodePoint` produces at run time - spelled as one code unit per
+ * byte, so both hosts agree on what a literal's text is.
+ */
+function escapeText(code: number): string {
+  let text = "";
+  for (const byte of codePointBytes(code)) text += String.fromCharCode(byte);
+  return text;
+}
 
 export interface StringMethods {
   scanString(this: Scanner, start: number, precededByLineBreak: boolean, quote: number): Token;
@@ -65,16 +78,16 @@ export const stringMethods: StringMethods = {
           const close = this.text.indexOf("}", this.pos);
           const hex = this.text.slice(this.pos + 1, close);
           this.pos = close + 1;
-          return String.fromCodePoint(parseInt(hex, 16) || 0);
+          return escapeText(parseInt(hex, 16) || 0);
         } else {
           const hex = this.text.slice(this.pos, this.pos + 4);
           this.pos += 4;
-          return String.fromCharCode(parseInt(hex, 16) || 0);
+          return escapeText(parseInt(hex, 16) || 0);
         }
       case Char.LowerX: {
         const hex = this.text.slice(this.pos + 1, this.pos + 3);
         this.pos += 3;
-        return String.fromCharCode(parseInt(hex, 16) || 0);
+        return escapeText(parseInt(hex, 16) || 0);
       }
       case Char.Zero:
         // \0 is only a null escape when not followed by a digit.

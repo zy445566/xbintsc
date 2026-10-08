@@ -9,6 +9,7 @@ import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type Statem
 import { bind } from "../../binder/binder.js";
 import { DiagnosticBag, DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { SourceFile } from "../../diagnostics/source.js";
+import { sourceTextBytes } from "../../diagnostics/source-text.js";
 import { Parser } from "../../parser/parser.js";
 import type { AssetLoader } from "../../extensions/registry.js";
 import { classifyDependency } from "./resolve.js";
@@ -53,7 +54,7 @@ export function loadGraph(
       return undefined;
     }
     visiting.add(path);
-    const raw = readFileSync(path, "utf8");
+    const raw = sourceTextBytes(readFileSync(path, "utf8"));
     /* An extension may rewrite an imported asset (e.g. `.html`) into a TS
      * module before it is parsed. The core only sees the transformed text. */
     const loader = assetLoaders[extname(path).toLowerCase()];

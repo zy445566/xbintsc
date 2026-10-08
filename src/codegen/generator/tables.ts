@@ -327,25 +327,71 @@ export const KIND_NAMES = new Map<number, string>([
   [SyntaxKind.SwitchStatement, "switch statement"],
 ]);
 
+/**
+ * The UTF-8 bytes of one code point, which must be an ASCII byte or a Unicode
+ * scalar (`0..0x10ffff`, not a surrogate). Encoded by hand rather than with
+ * `String.fromCharCode`/`String.fromCodePoint`, which a self-hosted build would
+ * run through the runtime and encode a second time.
+ */
+export function codePointBytes(code: number): number[] {
+  if (code < 0x80) return [code];
+  if (code < 0x800) return [0xc0 | (code >> 6), 0x80 | (code & 0x3f)];
+  if (code < 0x10000) return [0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f)];
+  return [
+    0xf0 | (code >> 18),
+    0x80 | ((code >> 12) & 0x3f),
+    0x80 | ((code >> 6) & 0x3f),
+    0x80 | (code & 0x3f),
+  ];
+}
+
+/**
+ * The bytes a string literal stands for.
+ *
+ * A compiled string is a sequence of UTF-8 bytes (`"é".length` is 1 and
+ * `"😀".length` is 4 - see doc/ai/language-support.md). The text reaching this
+ * point is whatever a host's strings are, and both shapes have to produce the
+ * same bytes:
+ *
+ * - a UTF-16 host decodes a file into characters, so `é` is one code unit
+ *   (0xe9) and has to be encoded here;
+ * - the self-hosted runtime has no UTF-8 decoder, so `readFileSync` hands over
+ *   a file's bytes, and `é` is already `c3 a9`. Encoding that again is what
+ *   turned the three bytes of `—` into six and broke the self-hosting fixpoint.
+ *
+ * A code unit above 0xff can only be text, so its presence settles which shape
+ * this is: text is encoded (once), and text that is already a byte sequence is
+ * emitted as it is. A source file read on either host therefore lands on the
+ * same bytes, which is what the fixpoint needs.
+ */
 export function utf8Bytes(text: string): number[] {
+  if (!hasMultiByteUnit(text)) {
+    const bytes: number[] = [];
+    for (let index = 0; index < text.length; index++) bytes.push(text.charCodeAt(index) & 0xff);
+    return bytes;
+  }
   const bytes: number[] = [];
-  for (const character of text) {
-    const code = character.codePointAt(0)!;
-    if (code < 0x80) bytes.push(code);
-    else if (code < 0x800) {
-      bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
-    } else if (code < 0x10000) {
-      bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
-    } else {
-      bytes.push(
-        0xf0 | (code >> 18),
-        0x80 | ((code >> 12) & 0x3f),
-        0x80 | ((code >> 6) & 0x3f),
-        0x80 | (code & 0x3f),
-      );
+  const length = text.length;
+  for (let index = 0; index < length; index++) {
+    let code = text.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff && index + 1 < length) {
+      const low = text.charCodeAt(index + 1);
+      if (low >= 0xdc00 && low <= 0xdfff) {
+        code = 0x10000 + ((code - 0xd800) << 10) + (low - 0xdc00);
+        index++;
+      }
     }
+    for (const byte of codePointBytes(code)) bytes.push(byte);
   }
   return bytes;
+}
+
+/** Whether any code unit is above one byte, which means text, not bytes. */
+function hasMultiByteUnit(text: string): boolean {
+  for (let index = 0; index < text.length; index++) {
+    if (text.charCodeAt(index) > 0xff) return true;
+  }
+  return false;
 }
 
 export function escapeBytes(bytes: readonly number[]): string {

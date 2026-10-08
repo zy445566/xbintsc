@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { basename, extname, join, resolve } from "node:path";
 import { DiagnosticBag, DiagnosticCode, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
+import { sourceTextBytes } from "../diagnostics/source-text.js";
 import { Parser } from "../parser/parser.js";
 import { generate } from "../codegen/llvm.js";
 import { SyntaxKind } from "../ast/nodes.js";
@@ -106,7 +107,7 @@ function externalModuleSpecifiers(registry: ExtensionRegistry): Set<string> {
  */
 export function compileEntry(entryPath: string, extensions?: ExtensionRegistry): CompileStringResult {
   const absoluteEntry = resolve(entryPath);
-  const sourceText = readFileSync(absoluteEntry, "utf8");
+  const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
   const file = new SourceFile(absoluteEntry, sourceText);
   const diagnostics = new DiagnosticBag();
   const parser = new Parser(file, diagnostics);
@@ -170,7 +171,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const optimize = options.optimize ?? "2";
 
   const absoluteEntry = resolve(entryPath);
-  const sourceText = readFileSync(absoluteEntry, "utf8");
+  const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
 
   const baseName = basename(absoluteEntry, extname(absoluteEntry));
   const outputPath =

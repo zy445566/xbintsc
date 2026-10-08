@@ -10,6 +10,15 @@ function decoded(source: string): any {
   return tokens[0]!.value;
 }
 
+/**
+ * The text a code point's escape decodes to: its UTF-8 bytes, one code unit
+ * each (`escapeText` in the scanner spells them the same way, so both hosts
+ * store a literal the same).
+ */
+function escaped(code: number): string {
+  return Buffer.from(String.fromCodePoint(code), "utf8").toString("latin1");
+}
+
 describe("scanner string literals", () => {
   it("decodes the simple control escapes", () => {
     expect(decoded('"a\\nb"')).toBe("a\nb");
@@ -20,9 +29,13 @@ describe("scanner string literals", () => {
   });
 
   it("decodes braced, fixed-width and hex unicode escapes", () => {
-    expect(decoded('"\\u{1F600}"')).toBe("\u{1F600}");
+    // An escape names a code point; the literal holds that code point's UTF-8
+    // bytes, which codegen emits unchanged.
+    expect(decoded('"\\u{1F600}"')).toBe(escaped(0x1f600));
     expect(decoded('"\\u0041"')).toBe("A");
+    expect(decoded('"\\u00e9"')).toBe(escaped(0xe9));
     expect(decoded('"\\x41"')).toBe("A");
+    expect(decoded('"\\xe9"')).toBe(escaped(0xe9));
   });
 
   it("falls back to NUL for malformed escapes", () => {
@@ -41,7 +54,7 @@ describe("scanner string literals", () => {
   });
 
   it("keeps surrogate pairs and non-ASCII characters intact", () => {
-    expect(decoded('"héllo→"')).toBe("héllo→");
+    expect(decoded('"héllo→"')).toBe(Buffer.from("héllo→", "utf8").toString("latin1"));
   });
 
   it("reports an unterminated string when a line break is reached", () => {

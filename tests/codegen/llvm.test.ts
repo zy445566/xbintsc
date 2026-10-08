@@ -39,8 +39,25 @@ describe("codegen", () => {
 
   it("escapes non-ASCII bytes in string constants", () => {
     const { ir } = compileToIr('console.log("héllo→");');
-    expect(ir).toContain("\\C3\\A9");
-    expect(ir).toContain("\\E2\\86\\92");
+    expect(ir).toContain('c"h\\C3\\A9llo\\E2\\86\\92\\00"');
+  });
+
+  /*
+   * An escape names a code point, and its bytes are the UTF-8 encoding of it -
+   * exactly one encoding. Doing it twice is what turned `—` into six bytes in a
+   * self-hosted generation and broke the self-hosting fixpoint: the runtime's
+   * `String` statics already produce UTF-8 bytes, so codegen must not ask them
+   * to encode a second time.
+   */
+  it("encodes an escape once, not twice", () => {
+    const { ir } = compileToIr('console.log("\\u{2014}");');
+    expect(ir).toContain('c"\\E2\\80\\94\\00"');
+    expect(ir).not.toContain("\\C3\\A2");
+  });
+
+  it("encodes an astral escape as the four UTF-8 bytes it denotes", () => {
+    const { ir } = compileToIr('console.log("\\u{1F600}");');
+    expect(ir).toContain('c"\\F0\\9F\\98\\80\\00"');
   });
 
   it("lowers arithmetic to runtime helpers", () => {

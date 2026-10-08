@@ -128,8 +128,9 @@ describe("cli", () => {
 
   it("rejects unknown extensions", () => {
     const entry = writeProgram("console.log(1);");
-    const { io } = capture();
-    expect(() => run(["emit", entry, "--ext", "nope"], io)).toThrow(/Unknown extension/);
+    const { io, err } = capture();
+    expect(run(["emit", entry, "--ext", "nope"], io)).toBe(1);
+    expect(err.join("")).toContain("Unknown extension 'nope'");
   });
 
   it("accepts the node extension", () => {
@@ -191,11 +192,10 @@ describe("cli", () => {
 
   it("reports a missing native extension manifest", () => {
     const entry = writeProgram("console.log(1);");
-    const { io } = capture();
+    const { io, err } = capture();
     const missing = join(temporaryDirectory(), "nope.json");
-    expect(() => run(["emit", entry, "--ext-native", missing], io)).toThrow(
-      /Unable to read native extension manifest/,
-    );
+    expect(run(["emit", entry, "--ext-native", missing], io)).toBe(1);
+    expect(err.join("")).toContain("Unable to read native extension manifest");
   });
 
   it("reports doctor information", () => {

@@ -356,3 +356,28 @@ Check your environment with `xbintsc doctor`.
 - [Implemented features](./doc/implemented.md)
 - [Unimplemented features](./doc/unimplemented.md)
 - [Application icons & project config](./doc/icon.md)
+
+## Using xbintsc with an AI agent
+
+The compiler is strict about its language subset — types are erased rather than
+checked, Node modules need `--ext node`, third-party npm imports are unsupported,
+strings are UTF-8 bytes and `async` is a synchronous microtask model. An agent
+that assumes "TypeScript" means "what Node accepts" will write code that does
+not compile, so the documentation is layered for exactly that reader:
+
+- [AGENTS.md](./AGENTS.md) — the entry point for an agent working **in this
+  repository**: what xbintsc is, the repository map, the build gate and the rules.
+- [doc/ai/](./doc/ai) — the task-oriented guide for using the compiler, split by
+  task: [build recipe](./doc/ai/build-recipe.md),
+  [CLI and config](./doc/ai/cli.md),
+  [language support](./doc/ai/language-support.md),
+  [extensions](./doc/ai/extensions.md),
+  [troubleshooting](./doc/ai/troubleshooting.md),
+  [contributing](./doc/ai/contributing.md). Read the page for the task, not the
+  whole directory. Chinese: [doc/ai/zh-CN/](./doc/ai/zh-CN).
+- [llms.txt](./llms.txt) — a machine-readable index of every document, for a
+  tool that wants one fetch instead of a checkout.
+
+Failures point the way themselves: a compiler error ends with a
+`hint: … — see <document>` line naming the page that explains the fix. Pass
+`--no-hints` for plain output.

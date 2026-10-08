@@ -4,6 +4,25 @@
 xbintsc 不再自带编译器，因此每个平台都需要安装一个兼容 clang 的工具链。
 `xbintsc emit`（仅输出 LLVM IR 文本）在任何平台都没有要求。
 
+## 最低版本
+
+| 要求 | 最低版本 | 说明 |
+| --- | --- | --- |
+| clang / LLVM | **16** | 生成的 IR 使用不透明指针，而 LLVM 16 起不透明指针是唯一的指针表示。 |
+| Node.js | **22** | 仅用于从源码运行或构建编译器；发布二进制是独立的，不需要 Node。 |
+
+clang 15 及更旧版本会在任何程序的第一个字符串字面量处失败：
+
+```
+build/app.ll:382:37: error: '@.str.0' defined with type '[6 x i8]*' but expected 'i8*'
+  %r0 = call i64 @xt_string_new(i8* @.str.0, i64 5)
+```
+
+有类型指针在 LLVM 16 中被移除（[发布说明](https://github.com/llvm/llvm-project/blob/release/15.x/llvm/docs/ReleaseNotes.rst#changes-to-the-llvm-ir)），
+所以请先确认 `clang --version`；系统 clang 较旧时用 `xbintsc_CLANG` 指向新版。
+`xbintsc doctor` 会报告解析到的工具链及其版本。把 IR 拿到别处编译来绕过该限制
+是不受支持的。
+
 ## 总览
 
 | 平台 | 前置要求 | 由谁提供 |

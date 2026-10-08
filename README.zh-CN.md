@@ -304,3 +304,26 @@ V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改�
 
 - [已实现特性](./doc/zh-CN/implemented.md)
 - [未实现特性](./doc/zh-CN/unimplemented.md)
+
+## 让 AI 使用 xbintsc
+
+这个编译器对语言子集很严格——类型只被擦除而从不检查、Node 模块需要
+`--ext node`、不支持直接 import 第三方 npm 包、字符串按 UTF-8 字节计、`async`
+是同步微任务模型。如果 AI 把"TypeScript"当成"Node 能跑的 TypeScript"，写出来的
+代码就编译不过，因此文档正是按这类读者分层组织的：
+
+- [AGENTS.md](./AGENTS.md) —— **在本仓库内**工作的 AI 的入口：xbintsc 是什么、
+  仓库结构、构建门禁与改动规则。
+- [doc/ai/](./doc/ai) —— 面向使用者的任务导向指南，按任务拆分：
+  [构建配方](./doc/ai/zh-CN/build-recipe.md)、
+  [CLI 与配置](./doc/ai/zh-CN/cli.md)、
+  [语言支持范围](./doc/ai/zh-CN/language-support.md)、
+  [扩展](./doc/ai/zh-CN/extensions.md)、
+  [排错](./doc/ai/zh-CN/troubleshooting.md)、
+  [参与开发](./doc/ai/zh-CN/contributing.md)。只读当前任务需要的那一篇，不必通读。
+  英文版：[doc/ai/](./doc/ai)。
+- [llms.txt](./llms.txt) —— 所有文档的机器可读索引，让工具一次抓取即可，无需克隆
+  仓库。
+
+报错本身也会指路：编译器错误末尾会有一行 `hint: … — see <文档>`，指明解释该问题的
+页面；需要干净输出时加 `--no-hints`。

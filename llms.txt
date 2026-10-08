@@ -1,0 +1,45 @@
+# xbintsc
+
+> xbintsc compiles a subset of TypeScript directly to native binaries: it parses
+> TypeScript itself, lowers the program to LLVM IR text, and drives clang to
+> produce a standalone executable linked against a small C runtime. There is no
+> Node.js, V8 or TypeScript compiler inside the produced binary. It runs on
+> macOS, Linux and Windows (x64 and arm64), compiles itself, and ships prebuilt
+> archives per platform. A clang 16+ toolchain is required to link binaries;
+> `xbintsc emit` (LLVM IR only) needs nothing.
+
+## Start here
+
+- [AGENTS.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/AGENTS.md): entry point for an agent working in the repository — what xbintsc is, the repository map, the build gate and the rules
+- [doc/ai/README.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/README.md): task-oriented AI guide — the three facts that decide everything, and which page to read for your task
+- [README.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/README.md): the project's human overview
+
+## Using the compiler
+
+- [doc/ai/build-recipe.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/build-recipe.md): exact commands to run, build, inspect IR and configure a project, with the program shape that compiles
+- [doc/ai/cli.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/cli.md): every CLI flag and its parsing quirks, project config fields, environment variables, incremental-cache behaviour, diagnostic codes, programmatic API
+- [doc/ai/language-support.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/language-support.md): the supported TypeScript subset as tables — statements, expressions, classes, async, the erased type system, standard library gaps, modules, runtime deviations
+- [doc/ai/extensions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/extensions.md): Node built-in modules and the `--ext node` rule, the GUI extension, bundling third-party packages, C++/Rust native extensions via manifest
+- [doc/ai/troubleshooting.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/troubleshooting.md): the clang version requirement and every frequent error message with its cause and fix
+- [doc/requirements.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/requirements.md): per-platform toolchain prerequisites
+- [doc/xbintsc.config.schema.json](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/xbintsc.config.schema.json): JSON schema for `xbintsc.config.json`
+
+## Changing the compiler
+
+- [doc/ai/contributing.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/contributing.md): test suites, the self-hosting fixpoint invariant, the runtime ABI and value model, adding extensions or diagnostics, documentation duties
+- [doc/DESIGN.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/DESIGN.md): architecture and design rationale
+- [doc/implemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented.md): everything implemented, by compiler stage — the canonical reference
+- [doc/unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented.md): unsupported syntax, missing semantics and known deviations, with a quick-reference list
+- [doc/node-implemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/node-implemented.md): Node module coverage of the `node` extension
+- [doc/node-unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/node-unimplemented.md): what the `node` extension is still missing
+- [doc/gui.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui.md): the self-hosted GPU HTML/CSS renderer
+- [doc/gui-scripts.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui-scripts.md): the GUI scripting surface
+- [doc/icon.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/icon.md): application icons and project config packaging
+- [examples/extensions/README.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/examples/extensions/README.md): authoring C++ and Rust native extensions
+
+## Optional
+
+- [doc/zh-CN/](https://github.com/zy445566/xbintsc/tree/main/doc/zh-CN): Chinese translations of the canonical documents
+- [doc/ai/zh-CN/](https://github.com/zy445566/xbintsc/tree/main/doc/ai/zh-CN): Chinese translations of the AI guide
+- [doc/post/announce.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/post/announce.md): announcement / project write-up
+- [README.zh-CN.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/README.zh-CN.md): the project overview in Chinese

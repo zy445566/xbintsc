@@ -42,6 +42,9 @@ describe.skipIf(!guiAvailable)("gui extension — lifecycle", () => {
       let frames = 0;
       const tick = (t: number) => {
         frames = frames + 1;
+        // Per-frame progress, so a run cut short reports how many frames ran
+        // instead of only the ready-handler output.
+        console.log("tick=" + frames);
         win.document.getElementById("label").textContent = String(frames);
         if (frames < 3) win.requestAnimationFrame(tick);
         else {
@@ -59,6 +62,12 @@ describe.skipIf(!guiAvailable)("gui extension — lifecycle", () => {
       win.loadHTML("<div id='label'>0</div>");
       run();
       `,
+      // The program closes its own window after three frames, so this is only a
+      // hang guard. It must be loose: the first frame builds the shaders,
+      // pipelines and font atlas, which the software Vulkan driver the CI uses
+      // (lavapipe under Xvfb) can spend most of a second on — a tight budget
+      // expires before the second frame and the run ends with no `frames=` line.
+      { autocloseMs: 10_000 },
     );
     expect(value("id")).toBe("true");
     expect(value("frames")).toBe("3:true"); // callback receives a timestamp

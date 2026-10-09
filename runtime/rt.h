@@ -371,6 +371,16 @@ size_t xt_heap_allocations(void);
  */
 void xt_gc_add_root(xt_value *slot);
 void xt_gc_add_root_range(xt_value *base, size_t count);
+/**
+ * Register a provider that marks a subsystem's live set when the values are
+ * not reachable through value slots (the event loop's timers, a promise
+ * microtask queue, an extension that caches values in its own containers).
+ * Providers run during every collection and registration is idempotent.
+ */
+void xt_gc_register_root_provider(void (*provider)(void));
+/** Mark `value` (and everything reachable from it) as live. Root providers use
+ * this; the collector also marks explicitly registered slots and the C stack. */
+void xt_gc_mark_value(xt_value value);
 
 #ifdef __cplusplus
 }

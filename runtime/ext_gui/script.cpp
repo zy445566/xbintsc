@@ -15,8 +15,11 @@
 #include <unordered_map>
 #include <vector>
 
-/** Script id -> AOT-compiled function value. Lives for the whole process (the
- * runtime arena never reclaims, so storing `xt_value`s is safe). */
+/** Script id -> AOT-compiled function value. Lives for the whole process. The
+ * runtime collector is a mark-sweep over the heap, so these values are only
+ * safe while a root provider keeps them reachable — `xt_gui_script_gc_scan`
+ * below does that (without it a collection frees everything the script
+ * captured and the first frame after it crashes). */
 static std::unordered_map<std::string, xt_value> &script_registry() {
   static std::unordered_map<std::string, xt_value> registry;
   return registry;
@@ -31,7 +34,14 @@ extern "C" xt_value xt_register_script(int32_t argc, xt_value *argv) {
       script_registry()[std::string(id)] = fn;
     }
   }
+  /* Registration is idempotent; do it on first use so a program that never
+   * opens a window still keeps its scripts alive across a collection. */
+  xt_gc_register_root_provider(xt_gui_script_gc_scan);
   return XT_UNDEFINED;
+}
+
+void xt_gui_script_gc_scan(void) {
+  for (const auto &entry : script_registry()) xt_gc_mark_value(entry.second);
 }
 
 /** Collect `data-xt-id` markers from `<script>` elements, in document order. */

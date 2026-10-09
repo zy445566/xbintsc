@@ -87,6 +87,11 @@ struct XtGuiWindow {
   int struct_dirty = 0;
   /** Callbacks queued for the next frame, plus the id counter. */
   std::vector<XtGuiAnimationFrame> animation_frames;
+  /** The batch currently running: its callbacks have been swapped out of
+   * `animation_frames`, and a collection triggered by one of them must still
+   * see the rest. Kept on the record (not a local) so the GC root provider can
+   * mark it. Empty except while `xt_gui_run_animation_frames` runs. */
+  std::vector<XtGuiAnimationFrame> running_frames;
   int next_animation_frame_id = 1;
 };
 
@@ -112,6 +117,9 @@ void xt_gui_flush_dom(XtGuiWindow *win);
 /** Run every registered `<script data-xt-id>` body found in the document, in
  * document order, passing `(windowHandle, documentHandle)`. */
 void xt_gui_run_scripts(XtGuiWindow *win);
+/** GC root provider: mark every AOT-compiled `<script>` function in the
+ * process-wide registry. Registered with the collector by `xt_register_script`. */
+void xt_gui_script_gc_scan(void);
 /** Shared prototype carrying the window methods. */
 xt_value xt_gui_window_proto(void);
 /** Release GPU claim + destroy the window and mark the record closed. */

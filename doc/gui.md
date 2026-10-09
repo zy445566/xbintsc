@@ -690,15 +690,24 @@ used by default; Wayland is enabled too but not yet exercised.
 
 ## Known issues
 
-- **Intermittent crash at auto-close.** `XT_GUI_AUTOCLOSE_MS` ends a run with a
-  native access violation (`0xC0000005`) in roughly two runs out of five; a
-  clean exit looks identical otherwise. It only reproduces with a *running
-  animation-frame loop* (a static document closes fine) and it is **not** the
-  game's own code: no exception is reported, the crash usually lands inside the
-  first second regardless of the deadline, and raising `XT_GC_THRESHOLD` hides
-  it, so it looks like a GC/teardown race. Interactive runs (no auto-close) are
-  stable for minutes. `tests/e2e/gui-example.test.ts` treats the code as an
-  acceptable outcome for that reason, and the behavioural assertions live in
+- **Intermittent crash at auto-close.** `XT_GUI_AUTOCLOSE_MS` can end a run
+  with a native access violation in roughly two runs out of five; a clean exit
+  looks identical otherwise. Windows reports it as the NTSTATUS exit code
+  `0xC0000005`; on Linux/macOS the process dies with a signal — an access
+  violation is `SIGSEGV`, so `spawnSync` reports `status: null` plus a
+  `signal`. It only reproduces with a *running animation-frame loop* (a static
+  document closes fine) and it is **not** the game's own code: no exception is
+  reported, the crash usually lands inside the first second regardless of the
+  deadline, and raising `XT_GC_THRESHOLD` hides it, so it looks like a
+  GC/teardown race. Interactive runs (no auto-close) are stable for minutes.
+  A leading cause was that the engine cached `xt_value`s in C++ containers
+  the mark-sweep collector cannot see — the AOT `<script>` registry, element
+  handles, element listeners and the queued/currently-running
+  `requestAnimationFrame` callbacks. They are now marked by GC root providers
+  (`xt_gui_script_gc_scan` and `xt_gui_gc_scan_roots`), which removes that
+  class of use-after-free. `tests/e2e/gui-example.test.ts` still treats either
+  crash spelling as an acceptable outcome — the archive is built per platform
+  and the run is timing-sensitive — and the behavioural assertions live in
   `tests/e2e/gui-example-browser.test.ts` (no GPU, deterministic).
 - **`display: none -> flex` restyle.** A hidden element being shown by a
   *class change* on a flex container has also been observed to crash the same

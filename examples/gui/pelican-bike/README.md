@@ -164,8 +164,9 @@ flex margins are covered by `tests/e2e/gui-layout.test.ts`.
 - `tests/e2e/gui-example.test.ts` — compiles and runs the native program (the
   gui archive is required; on Windows opt in with `xbintsc_GUI_TESTS=1`). The
   engine's auto-close path has an outstanding intermittent crash, documented in
-  `doc/gui.md`, so this test accepts that exit code and asserts the report only
-  when it arrives.
+  `doc/gui.md`, so this test accepts that outcome — the Windows exit code, or
+  on Linux/macOS a crash signal reported as `status: null` — and asserts the
+  report only when it arrives.
 - `tests/e2e/gui-example-browser.test.ts` — extracts the inline script, runs it
   against a stub browser host, and drives frames through `window.__pelican`, so
   the browser branch cannot silently rot (no GPU, no build, deterministic).
@@ -173,7 +174,9 @@ flex margins are covered by `tests/e2e/gui-layout.test.ts`.
 ## Known issues
 
 - The engine's `XT_GUI_AUTOCLOSE_MS` shutdown crashes intermittently (native
-  access violation, ~2 runs in 5); playing normally is unaffected. Details and
-  the current theory are in `doc/gui.md`, "Known issues".
+  access violation — exit code `0xC0000005` on Windows, `SIGSEGV` on Linux,
+  ~2 runs in 5); playing normally is unaffected. The engine now roots the
+  values it caches in its own containers, which was a leading cause; details are
+  in `doc/gui.md`, "Known issues".
 - The game-over overlay is revealed with `opacity`, not `display`, because a
   `display: none -> flex` restyle has been seen to crash the same way.

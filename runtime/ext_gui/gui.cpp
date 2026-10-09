@@ -64,9 +64,36 @@ void xt_gui_apply_icon(SDL_Window *window) {
   SDL_DestroySurface(surface);
 }
 
+/* -- garbage collector roots ---------------------------------------------- */
+
+/**
+ * GC root provider: the engine caches `xt_value`s in C++ containers that the
+ * mark-sweep collector cannot see — per-window element handles, element
+ * listeners, the document handle and the queued/currently-running
+ * `requestAnimationFrame` callbacks. Rooting the window object alone does not
+ * reach these (they are not its properties), so without this provider a
+ * collection frees values the engine still uses and the next frame or DOM read
+ * crashes. The process-wide AOT `<script>` registry registers its own
+ * provider (`xt_gui_script_gc_scan`).
+ */
+static void xt_gui_gc_scan_roots(void) {
+  for (int i = 0; i < g_window_count; i++) {
+    const XtGuiWindow &win = g_windows[i];
+    xt_gc_mark_value(win.object);
+    xt_gc_mark_value(win.document_object);
+    for (const auto &entry : win.node_handles) xt_gc_mark_value(entry.second);
+    for (const auto &entry : win.node_listeners) {
+      for (const XtGuiNodeListener &listener : entry.second) xt_gc_mark_value(listener.fn);
+    }
+    for (const XtGuiAnimationFrame &frame : win.animation_frames) xt_gc_mark_value(frame.fn);
+    for (const XtGuiAnimationFrame &frame : win.running_frames) xt_gc_mark_value(frame.fn);
+  }
+}
+
 /* -- initialisation ------------------------------------------------------- */
 
 static int ensure_init(void) {  if (g_sdl_initialized) return 1;
+  xt_gc_register_root_provider(xt_gui_gc_scan_roots);
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     fprintf(stderr, "xt_gui: SDL_Init failed: %s\n", SDL_GetError());
     return 0;

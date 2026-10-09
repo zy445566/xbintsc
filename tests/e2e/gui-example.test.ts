@@ -27,8 +27,13 @@ import { guiAvailable } from "./gui-helpers.js";
 const exampleDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "examples", "gui", "pelican-bike");
 
 /** `0xC0000005`: the known intermittent access violation in the gui engine's
- * auto-close teardown (documented in `doc/gui.md`). */
+ * auto-close teardown (documented in `doc/gui.md`). Windows reports a crash as
+ * this NTSTATUS exit code; on POSIX the same fault terminates the process with
+ * a signal, so `spawnSync` reports `status: null` plus a `signal` name. */
 const ACCESS_VIOLATION = 3221225477;
+/** Signals a crash can surface as on Linux/macOS (an access violation is
+ * `SIGSEGV`, an abort `SIGABRT`). */
+const CRASH_SIGNALS = new Set(["SIGSEGV", "SIGBUS", "SIGABRT", "SIGILL", "SIGFPE"]);
 
 let workdir = "";
 
@@ -59,10 +64,15 @@ describe.skipIf(!guiAvailable)("gui example — pelican bike", () => {
       env: { ...process.env, XT_GUI_AUTOCLOSE_MS: "4000" },
     });
 
-    // A clean run, or the documented engine crash — nothing else.
+    // A clean run, or the documented engine crash — nothing else. Accept both
+    // spellings of that crash: the Windows exit code and a POSIX signal.
+    const crashed =
+      executed.status === ACCESS_VIOLATION ||
+      (executed.status === null && executed.signal !== null && CRASH_SIGNALS.has(executed.signal));
+    const outcome = executed.signal !== null ? `signal ${executed.signal}` : `exit ${executed.status}`;
     expect(
-      executed.status === 0 || executed.status === ACCESS_VIOLATION,
-      `unexpected exit ${executed.status}\nstderr:\n${executed.stderr}`,
+      executed.status === 0 || crashed,
+      `unexpected ${outcome}\nstderr:\n${executed.stderr}`,
     ).toBe(true);
 
     // The program started and its inline `<script>` was compiled and ran.

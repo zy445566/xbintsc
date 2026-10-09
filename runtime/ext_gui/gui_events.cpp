@@ -220,15 +220,18 @@ void handle_event(const SDL_Event *event) {
 
 void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms) {
   if (win == NULL || win->animation_frames.empty()) return;
-  /* Swap the queue out first: a callback that calls requestAnimationFrame
-   * again schedules for the *next* frame, not this one. */
-  std::vector<XtGuiAnimationFrame> frames;
+  /* Swap the queue into a member, not a local: the GC root provider marks
+   * `running_frames` too, so a collection triggered while one callback runs
+   * cannot free the rest of the batch. Re-queueing from a callback lands in
+   * `animation_frames` and runs on the *next* frame, not this one. */
+  std::vector<XtGuiAnimationFrame> &frames = win->running_frames;
   frames.swap(win->animation_frames);
   for (const XtGuiAnimationFrame &frame : frames) {
     if (!win->open) break;
     xt_value arg = xt_number(timestamp_ms);
     xt_call_with_this(frame.fn, win->object, 1, &arg);
   }
+  frames.clear();
 }
 
 void xt_gui_render_window(XtGuiWindow *win) {

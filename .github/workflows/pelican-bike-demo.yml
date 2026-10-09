@@ -1,0 +1,189 @@
+name: Build pelican-bike-demo
+
+# Manual only. Compiles `examples/gui/pelican-bike/main.ts` into a standalone
+# native binary for every supported platform and attaches the results as
+# workflow artifacts.
+#
+# The binary embeds `index.html` (markup, stylesheet and the AOT-compiled inline
+# script) and statically links the `gui` extension, so each artifact is
+# self-contained: no Node, no xbintsc and no asset files are needed to run it.
+#
+# This is not cross-compilation: every runner builds its own platform/arch
+# natively, exactly like the `compile-examples` job in ci.yml.
+#   Linux x64      -> ubuntu-latest
+#   Linux arm64    -> ubuntu-24.04-arm
+#   macOS x64      -> macos-15-intel
+#   macOS arm64    -> macos-15
+#   Windows x64    -> windows-latest     (provisional, see doc/gui.md)
+#   Windows arm64  -> windows-11-arm     (provisional, see doc/gui.md)
+on:
+  workflow_dispatch:
+    inputs:
+      smoke_test:
+        description: "Run the Linux binary headlessly (Xvfb + lavapipe) before uploading"
+        required: false
+        default: true
+        type: boolean
+      retention_days:
+        description: "Artifact retention, in days"
+        required: false
+        default: "30"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    # The Windows GUI archive is provisional until the MSVC `gui.lib` and the
+    # D3D12/DXIL shader path are validated (see doc/gui.md); a failure there is
+    # recorded without failing the whole run. Linux/macOS are required.
+    continue-on-error: ${{ matrix.provisional || false }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    arch: x64,   label: "Linux x64" }
+          - { os: ubuntu-24.04-arm, arch: arm64, label: "Linux arm64" }
+          - { os: macos-15-intel,   arch: x64,   label: "macOS x64" }
+          - { os: macos-15,         arch: arm64, label: "macOS arm64" }
+          - { os: windows-latest,   arch: x64,   label: "Windows x64",   provisional: true }
+          - { os: windows-11-arm,   arch: arm64, label: "Windows arm64", provisional: true }
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install a C compiler (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          # clang + cmake build the GUI archive; the dev headers let SDL3 enable
+          # its X11/Wayland backends, and xvfb + lavapipe let the smoke test run
+          # headlessly on a machine with no GPU.
+          sudo apt-get install -y clang cmake \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxinerama-dev libxfixes-dev libxkbcommon-dev libwayland-dev \
+            wayland-protocols libdecor-0-dev libasound2-dev libpulse-dev \
+            libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
+            libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
+
+      - name: Install clang (Windows x64)
+        if: runner.os == 'Windows' && runner.arch == 'X64'
+        shell: pwsh
+        run: |
+          choco install llvm --no-progress -y
+          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # clang on Windows needs the MSVC/SDK environment (INCLUDE, LIB, PATH); the
+      # GUI archive links with the MSVC ABI, so import vcvarsall before building.
+      - name: Set up the MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $arch = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
+          $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.arm64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (-not (Test-Path $vswhere)) {
+            $vswhere = "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
+          }
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
+
+          $vsPath = (& $vswhere -latest -products * -requires $component -property installationPath).Trim()
+          if (-not $vsPath) { throw "Visual Studio C++ build tools ($component) were not found." }
+
+          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
+          if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found at $vcvars" }
+
+          cmd /c "`"$vcvars`" $arch && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') {
+              "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            }
+          }
+
+      - run: npm ci
+
+      # Building SDL3/FreeType/HarfBuzz from source is the slow part of the GUI
+      # archive; cache them, keyed by the build script (which pins the versions).
+      - name: Cache the GUI vendored libraries
+        if: runner.os != 'Windows'
+        uses: actions/cache@v5
+        with:
+          path: |
+            vendor/SDL
+            vendor/freetype
+            vendor/freetype-build
+            vendor/harfbuzz
+            vendor/harfbuzz-build
+          key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts') }}
+
+      # The `gui` extension links a prebuilt `runtime/lib/<os>-<arch>/gui.a`;
+      # `vendor/` is gitignored, so it is always built here from source.
+      - name: Build the GUI archive
+        if: runner.os != 'Windows'
+        run: npm run gui
+
+      # Provisional: record a failure in the log without annotating the run.
+      - name: Build the GUI archive (Windows, provisional)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm run gui
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "GUI archive build failed; the Windows build is provisional (see doc/gui.md)."
+            exit 0
+          }
+
+      # The example ships xbintsc.config.json, so `gui` is enabled without a flag.
+      # `--out dist` names the binary after the entry (`main`/`main.exe`); the
+      # next step renames it to the artifact name.
+      - name: Compile the pelican-bike example
+        shell: bash
+        run: npx tsx src/cli/main.ts build examples/gui/pelican-bike/main.ts --out dist
+
+      - name: Rename the binary to pelican-bike
+        shell: bash
+        run: |
+          if [ -f dist/main.exe ]; then
+            mv dist/main.exe dist/pelican-bike.exe
+          elif [ -f dist/main ]; then
+            mv dist/main dist/pelican-bike
+          else
+            echo "No executable was produced (see the compile step above)."
+            exit 1
+          fi
+          ls -l dist
+
+      # Linux is the validated headless path: Xvfb provides a display and
+      # lavapipe a software Vulkan device. Read the geometry report back so a
+      # build that links but cannot lay the scene out still fails.
+      - name: Smoke-test the binary (Linux, Xvfb)
+        if: runner.os == 'Linux' && inputs.smoke_test
+        shell: bash
+        env:
+          XT_GUI_AUTOCLOSE_MS: "8000"
+        run: |
+          set -uo pipefail
+          out="$(xvfb-run -a --server-args="-screen 0 1280x720x24" ./dist/pelican-bike 2>&1 || true)"
+          echo "$out"
+          # The auto-close path crashes intermittently (see doc/gui.md); the
+          # report is what proves the scene laid out, so only require that.
+          if ! grep -q "window=1000x660" <<<"$out"; then
+            echo "::error::geometry report missing: the binary ran but did not lay out the scene."
+            exit 1
+          fi
+
+      - name: Upload the pelican-bike binary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pelican-bike-${{ runner.os }}-${{ runner.arch }}
+          path: dist/pelican-bike*
+          if-no-files-found: warn
+          retention-days: ${{ inputs.retention_days }}

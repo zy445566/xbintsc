@@ -67,6 +67,12 @@ void paintBox(const LayoutBox *box, DisplayList &out) {
   if (box == nullptr) return;
   const XtStyle *style = box->style;
 
+  /* A fully transparent box paints nothing — not itself, and not its subtree.
+   * `opacity` is otherwise unsupported: a shape carries its colour's alpha only,
+   * so a partly transparent box (an `opacity` transition mid-flight, say) is
+   * still painted opaque. */
+  if (style != nullptr && style->opacity <= 0.0f) return;
+
   if (style != nullptr && box->display != Display::None) {
     if (box->is_text) {
       addTextRuns(box, *style, out);

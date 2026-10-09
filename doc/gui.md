@@ -306,6 +306,14 @@ with absolute (viewport-relative) geometry:
   `left` and `right` are set (then it fills the space between them), and
   percentages resolve against the containing block. There is no `z-index`
   stacking yet: painting stays in document order.
+  Note the consequence of that shrink-to-fit rule: an absolutely positioned box
+  with `width: auto` and no explicit size gets **no** available width for its own
+  inline content (its preferred width comes from its text or its non-absolute
+  children only), so inline runs inside it are laid out at zero available width
+  and each one wraps onto its own line. Give such a box an explicit `width`, or
+  place its children with `left`/`width` (as
+  `examples/gui/pelican-bike` does for its sprite runs), instead of relying on
+  line flow inside it.
 
 Not yet implemented: margin collapsing, multi-line flex wrapping, `z-index`
 stacking, `overflow` clipping and floats.
@@ -322,6 +330,13 @@ emits a backend-agnostic `DisplayList` with two parallel lists: **rectangles**
 (each carrying its text, colour and resolved `FontSpec`). Keeping them separate
 lets the renderer draw all rectangles, then all text on top, with one draw call
 per list. `DisplayList::dump()` feeds `paintList()`/`paintCount()`.
+
+`opacity` is honoured only at its extremes: a box whose computed `opacity` is
+`0` (and its whole subtree) paints nothing, and anything above `0` paints fully
+opaque. A shape carries its colour's alpha only, so there is no compositing of a
+partly transparent box — the `opacity` transitions the CSS parser accepts are
+therefore not visible either. Hiding and revealing a layer with `opacity: 0` on
+the hidden state is what `examples/gui/pelican-bike`'s game-over overlay does.
 
 `runtime/ext_gui/renderer.{h,cpp}` turns that list into two batched vertex
 buffers per window (one for shapes, one for glyph quads) drawn through two

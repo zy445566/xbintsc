@@ -287,21 +287,19 @@
     }
 
     /* -------------------------------------------------------------- sprites */
-    /* The pixel raster emits one 1px-tall row per scanline: coloured runs are
-       `.pixel` boxes with a palette class, and a run of transparent cells is a
-       `.gap` that only advances x. */
+    /* The raster emits one 1px-tall row per scanline; a coloured run inside it
+       is one `.pixel` bar with an explicit `left` and `width`, so a scanline's
+       runs never depend on the host's inline layout. */
     .pixel {
+      position: absolute;
+      top: 0px;
       height: 1px;
-    }
-
-    .gap {
-      height: 1px;
-      width: 0px;
     }
 
     .row {
       position: absolute;
       left: 0px;
+      width: 52px;
       height: 1px;
     }
 
@@ -477,13 +475,15 @@
      * layout engine relayout", batched once per frame.
      * ========================================================================== */
 
-    /* `window.on` (and `driver`/`isOpen`/`close`) only exist in the gui engine;
-       the browser reaches the same events through `addEventListener`. */
-    const inGui = typeof window.on === "function";
+    /* The engine's window handle (and `driver`/`isOpen`/`close`) only exists in
+       the gui host; a browser reaches the same events through
+       `addEventListener`. `window["on"]` rather than `window.on` because the
+       engine's parser rejects a property named after a keyword in dot form. */
+    const inGui = typeof window["on"] === "function";
 
     const dom = inGui
       ? {
-          on: (type, handler) => { window.on(type, handler); },
+          on: (type, handler) => { window["on"](type, handler); },
           tick: (fn) => window.requestAnimationFrame(fn),
           open: () => window.isOpen(),
           closeWindow: () => { window.close(); }
@@ -494,6 +494,17 @@
           open: () => true,
           closeWindow: () => {}
         };
+
+    /* The two hosts name keys differently: the engine reports what
+       `SDL_GetKeyName` says ("Space", "Up", "Right"), a browser reports
+       `KeyboardEvent.key` (" ", "ArrowUp", "ArrowRight") with `code` as the
+       physical spelling both agree on. Normalising here is what makes one key
+       handler correct in both. */
+    const canJumpKey = (e) => e.key === "Space" || e.key === " " || e.code === "Space" ||
+      e.key === "Up" || e.key === "ArrowUp" || e.code === "ArrowUp";
+    const isRightKey = (e) => e.key === "Right" || e.key === "ArrowRight" || e.code === "ArrowRight";
+    const isLeftKey = (e) => e.key === "Left" || e.key === "ArrowLeft" || e.code === "ArrowLeft";
+    const isKey = (e, letter, code) => e.key === letter || e.key === letter.toLowerCase() || e.code === code;
 
     /* ==========================================================================
      * Pixel artwork.
@@ -641,60 +652,39 @@
             }
           }
         },
-        /* Emit the grid as one absolutely positioned row per scanline, with
-           merged runs and a margin for the transparent gaps. */
+        /* The runs of one scanline, each placed at its own offset instead of
+           being left to flow: the host lays an `auto`-width box's content out at
+           zero available width, which wraps every run onto its own line, and a
+           browser cannot be asked to do better here without giving the row an
+           explicit width. A pixel is a 1px bar, so `left` + `width` says exactly
+           where it goes in both. */
+        rowHTML: (y, top) => {
+          let body = "";
+          let x = 0;
+          while (x < width) {
+            const key = cells[y * width + x];
+            let end = x;
+            while (end < width && cells[y * width + end] === key) end = end + 1;
+            const run = end - x;
+            if (key !== "") {
+              body = body + "<div class=\"pixel " + CLASS_OF[key] + "\" style=\"left:" + x +
+                "px;width:" + run + "px\"></div>";
+            }
+            x = end;
+          }
+          return body === "" ? "" : "<div class=\"row\" style=\"top:" + top + "px\">" + body + "</div>";
+        },
+        /* Emit the grid as one absolutely positioned row per scanline. */
         html: () => {
           let out = "";
-          for (let y = 0; y < height; y++) {
-            let body = "";
-            let gap = 0;
-            let x = 0;
-            while (x < width) {
-              const key = cells[y * width + x];
-              let end = x;
-              while (end < width && cells[y * width + end] === key) end = end + 1;
-              const run = end - x;
-              if (key === "") {
-                gap = gap + run;
-              } else {
-                body = body + (gap > 0
-                  ? "<div class=\"gap\" style=\"width:" + gap + "px\"></div>"
-                  : "") + "<div class=\"pixel " + CLASS_OF[key] + "\" style=\"width:" + run + "px\"></div>";
-                gap = 0;
-              }
-              x = end;
-            }
-            if (body !== "") out = out + "<div class=\"row\" style=\"top:" + y + "px\">" + body + "</div>";
-          }
+          for (let y = 0; y < height; y++) out = out + raster.rowHTML(y, y);
           return out;
         },
         /* The same grid, but only the cells inside `top..top+height`. Used for
            the animated layer, whose rows are positioned inside a small box. */
         htmlBand: (top, bandHeight) => {
           let out = "";
-          for (let y = top; y < top + bandHeight && y < height; y++) {
-            let body = "";
-            let gap = 0;
-            let x = 0;
-            while (x < width) {
-              const key = cells[y * width + x];
-              let end = x;
-              while (end < width && cells[y * width + end] === key) end = end + 1;
-              const run = end - x;
-              if (key === "") {
-                gap = gap + run;
-              } else {
-                body = body + (gap > 0
-                  ? "<div class=\"gap\" style=\"width:" + gap + "px\"></div>"
-                  : "") + "<div class=\"pixel " + CLASS_OF[key] + "\" style=\"width:" + run + "px\"></div>";
-                gap = 0;
-              }
-              x = end;
-            }
-            if (body !== "") {
-              out = out + "<div class=\"row\" style=\"top:" + (y - top) + "px\">" + body + "</div>";
-            }
-          }
+          for (let y = top; y < top + bandHeight && y < height; y++) out = out + raster.rowHTML(y, y - top);
           return out;
         }
       };
@@ -889,7 +879,6 @@
     const THING_ART = [coneHTML(), barrierHTML(), rockHTML(), pylonHTML()];
     const THING_H = [28, 36, 22, 12];
     const THING_W = [22, 26, 24, 18];
-
     /* ------------------------------------------------------------- elements */
 
     const byId = (id) => document.getElementById(id);
@@ -926,10 +915,18 @@
     const ROLL = 26;
     const BRAKE = 340;
     const DASH_PERIOD = 86;
+    /** Downwards acceleration while airborne, in px/s². */
+    const GRAVITY = 1500;
 
     /* The sprite canvas is also the collision box, so one size drives both. */
     const SPRITE_W = CANVAS_W;
     const SPRITE_H = CANVAS_H;
+
+    /* The part of the sprite that hits an obstacle: the wheels and frame, from
+       the canvas centre down to the ground row. The bird rides above it, so a
+       jump clears a cone instead of clipping it with the pouch. */
+    const HIT_TOP = 26;
+    const HIT_H = CANVAS_H - HIT_TOP;
 
     const state = {
       x: 0,
@@ -946,6 +943,10 @@
       keyLeft: false,
       last: 0,
       next: 420,
+      /* How many obstacles have spawned, and which one the autopilot has
+         already jumped for, so it jumps once per obstacle. */
+      spawns: 0,
+      jumpedFor: -1,
       ground: 0,
       /* Measured at startup and on a browser resize (`measure`). */
       sceneW: 1000,
@@ -981,6 +982,10 @@
 
     /* --------------------------------------------------------------- render */
 
+    /** The row the bike stands on: `.pelican`/`.shadow` sit this far above the
+     * world's bottom edge, which is the road surface. */
+    const REST_BOTTOM = 210;
+
     const renderRider = () => {
       const rolling = state.speed > 60;
       /* The wheels turn with the road speed, and the wings beat on the upstroke
@@ -993,7 +998,11 @@
         riderStatic.innerHTML = bikeStaticHTML(wingUp);
       }
       riderDynamic.innerHTML = bikeAnimatedHTML(phase, state.airborne);
-      setLeft(shadow, state.bikeLeft - 24 + Math.round(state.y / 10));
+      /* `state.y` is 0 on the road and negative while airborne, so the bike is
+         lifted by its `bottom` inset — this is what makes a jump visible (and
+         what lets the bird clear an obstacle, since collision reads this box).
+         Only the shadow stays down, and it narrows as it is left behind. */
+      pogo.style.setProperty("bottom", Math.round(REST_BOTTOM - state.y) + "px");
       shadow.style.setProperty("width", Math.round(150 - state.y * 0.22) + "px");
     };
 
@@ -1052,15 +1061,28 @@
       return null;
     };
 
+    /* Obstacles spawn off the right edge and ride towards the bike; `SPAWN_X` is
+       also the `state.next` countdown to the next one. */
+    const SPAWN_X = 1460;
+
     const spawnThing = () => {
       const item = acquireThing();
       if (item === null) return;
       item.kind = Math.floor(Math.random() * THING_ART.length);
-      item.x = 1460;
+      item.x = SPAWN_X;
       item.live = true;
       item.el.innerHTML = THING_ART[item.kind];
+      /* The sprite's rows are `position: absolute`, so they place no size on
+         their container; the engine lays a box out from its in-flow content
+         only, exactly as a browser's block box does. Giving the container the
+         sprite's own size is therefore what makes its box real — it is the
+         collision box the loop measures, and the box the rows are clipped to
+         when a neighbouring layer paints over them. */
+      item.el.style.setProperty("width", THING_W[item.kind] + "px");
+      item.el.style.setProperty("height", THING_H[item.kind] + "px");
       item.el.style.setProperty("display", "block");
-      setLeft(item.el, 1460);
+      setLeft(item.el, SPAWN_X);
+      state.spawns = state.spawns + 1;
     };
 
     const releaseThing = (item) => {
@@ -1094,18 +1116,34 @@
       overlay.classList.remove("show");
     };
 
+    /* The jump arc is quoted as a flight time, so its height follows gravity: the
+       bike rises `GRAVITY * t² / 8` — about 270px for this flight, which leaves
+       the wheels well clear of the tallest obstacle (a 36px barrier) and holds
+       them there long enough for the obstacle to pass underneath. The scene is
+       620px tall, so the arc still leaves the bird below the HUD. */
+    const JUMP_AIRTIME = 1.2;
+
     const jump = () => {
       if (state.over || state.airborne) return;
       state.airborne = true;
-      state.vy = -420;
+      state.vy = -GRAVITY * JUMP_AIRTIME / 2;
     };
 
     const update = (dt) => {
       state.tick = state.tick + dt;
 
       if (state.auto && !state.over && !state.airborne) {
-        /* A simple autopilot, so the demo rides by itself. */
-        if (state.next < 300 && Math.random() < 0.4) jump();
+        /* A simple autopilot, so the demo rides by itself. It has to be *above*
+           the obstacle when the obstacle arrives, not merely off the ground: the
+           box that collides starts `HIT_TOP` below the sprite's top, so jumping
+           when the obstacle is level with the bike lands the wheels on top of it.
+           A flight lasts `JUMP_AIRTIME` and the obstacle covers about 380px of
+           road in that time, so the jump starts while it is still ~500px away —
+           once per obstacle, tracked by the spawn counter that produced it. */
+        if (state.next < 560 && state.jumpedFor !== state.spawns) {
+          state.jumpedFor = state.spawns;
+          jump();
+        }
       }
 
       let target = 320;
@@ -1124,7 +1162,7 @@
       if (state.speed > SPEED_MAX) state.speed = SPEED_MAX;
 
       if (state.airborne) {
-        state.vy = state.vy + 1500 * dt;
+        state.vy = state.vy + GRAVITY * dt;
         state.y = state.y + state.vy * dt;
         if (state.y >= 0) {
           state.y = 0;
@@ -1154,11 +1192,23 @@
 
       /* Collision: the bike's own pixel box against each obstacle's box, both
          measured in viewport coordinates, so the whole render path is real. */
-      const player = rectOf(rider);
-      if (player === null) return;
+      /* Collision: the bike's contact patch against each obstacle's box, both in
+         viewport coordinates, so the whole render path is real. The rider's own
+         52x46 box is deliberately not used: it reaches down past the wheels and
+         up over the bird's head, so it would clip a 28px cone even at the top of
+         a jump. The hit box is the part that physically hits a road obstacle —
+         the wheels and frame, from the sprite's centre down to its last row. */
+      const wheelBox = rectOf(rider);
+      if (wheelBox === null) return;
+      const player = {
+        left: wheelBox.left,
+        top: wheelBox.top + HIT_TOP,
+        right: wheelBox.right,
+        bottom: wheelBox.top + HIT_TOP + HIT_H
+      };
       state.playerBox =
         Math.round(player.left) + "," + Math.round(player.top) + " " +
-        Math.round(player.right - player.left) + "x" + Math.round(player.bottom - player.top);
+        Math.round(player.right - player.left) + "x" + (HIT_H);
       if (!state.over) {
         for (let i = 0; i < things.length; i++) {
           const item = things[i];
@@ -1166,6 +1216,10 @@
           const box = rectOf(item.el);
           if (overlaps(player, box)) {
             state.lastHit = "thing" + (i + 1) + " @" + Math.round(box.left);
+            window.__hitLog = "player=" + Math.round(player.left) + "," + Math.round(player.top) +
+              ".." + Math.round(player.bottom) + " box=" + Math.round(box.left) + "," +
+              Math.round(box.top) + ".." + Math.round(box.bottom) +
+              " riderTop=" + Math.round(wheelBox.top) + " airborne=" + state.airborne;
             lost();
             break;
           }
@@ -1196,24 +1250,24 @@
 
     dom.on("keydown", (e) => {
       state.auto = false;
-      if (e.key === "Space" || e.key === "Up") {
+      if (canJumpKey(e)) {
         jump();
-      } else if (e.key === "Right") {
+      } else if (isRightKey(e)) {
         state.keyRight = true;
-      } else if (e.key === "Left") {
+      } else if (isLeftKey(e)) {
         state.keyLeft = true;
-      } else if (e.key === "P") {
+      } else if (isKey(e, "P", "KeyP")) {
         state.auto = !state.auto;
-      } else if (e.key === "R") {
+      } else if (isKey(e, "R", "KeyR")) {
         restart();
-      } else if (e.key === "Escape") {
+      } else if (e.key === "Escape" || e.code === "Escape") {
         dom.closeWindow();
       }
     });
 
     dom.on("keyup", (e) => {
-      if (e.key === "Right") state.keyRight = false;
-      if (e.key === "Left") state.keyLeft = false;
+      if (isRightKey(e)) state.keyRight = false;
+      if (isLeftKey(e)) state.keyLeft = false;
     });
 
     /* -------------------------------------------------------------- start up */

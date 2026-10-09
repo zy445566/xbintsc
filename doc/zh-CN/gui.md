@@ -268,6 +268,11 @@ run();
   这样的祖先时则相对视口）。`auto` 的 inset 在该轴上保留静态位置；宽度 `auto`
   时使用 shrink-to-fit，除非 `left` 与 `right` 同时给出（此时填满两者之间的空间）；
   百分比相对包含块解析。目前还没有 `z-index` 层叠，绘制仍按文档顺序进行。
+  注意该 shrink-to-fit 规则的后果：一个 `width: auto` 且没有显式尺寸的绝对定位
+  盒子，其内部行内内容得到的**可用宽度为 0**（它的首选宽度只来自文本与
+  非绝对定位的子元素），因此其中的行内 run 会各自换到独立的一行。请为此类盒子
+  给出显式 `width`，或用 `left`/`width` 摆放其子元素（`examples/gui/pelican-bike`
+  的精灵 run 就是这样做的），而不要依赖其内部的行流。
 
 尚未实现：外边距折叠、多行 flex 换行、`z-index` 层叠、`overflow` 裁剪与浮动。
 
@@ -282,6 +287,11 @@ run();
 `border-radius`）与**文本 run**（每个携带其文本、颜色与已解析的 `FontSpec`）。
 把它们分开可以让渲染器先绘制所有矩形，再在其上绘制所有文本，每个列表一次
 绘制调用。`DisplayList::dump()` 为 `paintList()`/`paintCount()` 提供数据。
+
+`opacity` 只在两端生效：计算值为 `0` 的盒子（及其整棵子树）不绘制任何内容，
+大于 `0` 的一律按完全不透明绘制。图形只携带其颜色自身的 alpha，因此没有部分
+透明盒子的合成——CSS 解析器接受的 `opacity` 过渡因此也看不到效果。把隐藏态写成
+`opacity: 0` 来隐藏/显示一层，正是 `examples/gui/pelican-bike` 游戏结束遮罩的做法。
 
 `runtime/ext_gui/renderer.{h,cpp}` 把该列表转换为每个窗口两个批处理顶点缓冲
 （一个用于图形，一个用于字形四边形），通过两条 SDL_GPU 图形管线绘制：

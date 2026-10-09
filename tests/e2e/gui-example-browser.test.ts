@@ -27,13 +27,35 @@ function inlineScript(): string {
 }
 
 /** A DOM element stub with the properties and methods the game touches. */
-function element(id: string, rect: { x: number; y: number; width: number; height: number }) {
-  const element: Record<string, unknown> = {
+interface ElementStub {
+  id: string;
+  textContent: string;
+  innerHTML: string;
+  childElementCount: number;
+  /** Writes are recorded so a test can see what the game put on the element. */
+  style: {
+    setProperty(name: string, value: string): void;
+    getPropertyValue(name: string): string;
+  };
+  classList: { add(): void; remove(): void; toggle(): boolean; contains(): boolean };
+  getBoundingClientRect(): { x: number; y: number; width: number; height: number };
+  querySelector(): null;
+  addEventListener(): void;
+  setAttribute(): void;
+  getAttribute(): null;
+}
+
+function element(id: string, rect: { x: number; y: number; width: number; height: number }): ElementStub {
+  const styles = new Map<string, string>();
+  return {
     id,
     textContent: "",
     innerHTML: "",
     childElementCount: 0,
-    style: { setProperty: () => {} },
+    style: {
+      setProperty: (name: string, value: string) => void styles.set(name, value),
+      getPropertyValue: (name: string) => styles.get(name) ?? "",
+    },
     classList: { add: () => {}, remove: () => {}, toggle: () => false, contains: () => false },
     getBoundingClientRect: () => ({ ...rect }),
     querySelector: () => null,
@@ -41,7 +63,6 @@ function element(id: string, rect: { x: number; y: number; width: number; height
     setAttribute: () => {},
     getAttribute: () => null,
   };
-  return element;
 }
 
 interface RunResult {
@@ -58,6 +79,10 @@ interface RunResult {
   scheduled: number;
   /** Console lines the script produced. */
   logs: string[];
+  /** Deliver a key event to the game's own `window` listener. */
+  press(type: "keydown" | "keyup", key: string, code: string): void;
+  /** The bike's current `bottom` inset, as the game last wrote it. */
+  bottom(): string;
 }
 
 function runBrowserBranch(framesToDrive: number): RunResult {
@@ -121,7 +146,20 @@ function runBrowserBranch(framesToDrive: number): RunResult {
   expect(listeners.keydown, "the game listens for keys").toBeTruthy();
   expect(listeners.keyup, "the game listens for key releases").toBeTruthy();
 
-  return { hooks, scheduled, logs };
+  /** Deliver one key event the way a browser does, to whatever the game
+   * registered on `window`. `key` is the browser spelling (" " for the
+   * spacebar, "ArrowUp" for the up arrow), not the engine's. */
+  const press = (type: "keydown" | "keyup", key: string, code: string) => {
+    for (const handler of listeners[type] ?? []) {
+      handler({ key, code, type, preventDefault: () => {}, stopPropagation: () => {} });
+    }
+  };
+
+  /** What the game last wrote to `#pogo`'s `bottom`, which it lifts when the
+   * bird is airborne. */
+  const bottom = () => elements.pogo?.style.getPropertyValue("bottom") ?? "";
+
+  return { hooks, scheduled, logs, press, bottom };
 }
 
 describe("gui example — pelican bike in a browser", () => {
@@ -147,6 +185,37 @@ describe("gui example — pelican bike in a browser", () => {
     expect(String(after.player)).toBe("420,416");
   });
 
+  it("jumps from a real Space key event, the way a browser spells it", () => {
+    const { hooks, press, bottom } = runBrowserBranch(30);
+
+    // The autopilot jumps on its own; turn it off so only the key can move us.
+    hooks.setAuto(false);
+    hooks.step(0.016);
+    const grounded = bottom();
+
+    // A browser delivers `key: " "` (and `code: "Space"`), never the engine's
+    // `key: "Space"`. Matching only the engine spelling is what broke this.
+    press("keydown", " ", "Space");
+    press("keyup", " ", "Space");
+    hooks.step(0.016);
+
+    // `renderRider` lifts the bike by its `bottom` inset once it is airborne.
+    expect(bottom(), `bottom stayed ${grounded} — the key never reached jump()`).not.toBe(grounded);
+  });
+
+  it("jumps from the browser's ArrowUp as well", () => {
+    const { hooks, press, bottom } = runBrowserBranch(30);
+    hooks.setAuto(false);
+    hooks.step(0.016);
+    const grounded = bottom();
+
+    press("keydown", "ArrowUp", "ArrowUp");
+    press("keyup", "ArrowUp", "ArrowUp");
+    hooks.step(0.016);
+
+    expect(bottom()).not.toBe(grounded);
+  });
+
   it("does not name any engine-only window API outside its shim", () => {
     const script = inlineScript();
     // `window.on` / `isOpen` / `close` / `driver` may only appear in the shim
@@ -154,6 +223,7 @@ describe("gui example — pelican bike in a browser", () => {
     const shimEnd = script.indexOf("const dom =");
     const afterShim = script.slice(script.indexOf("};", shimEnd));
     expect(afterShim).not.toContain("window.on(");
+    expect(afterShim).not.toContain('window["on"]');
     expect(afterShim).not.toContain("window.isOpen");
     expect(afterShim).not.toContain("window.close(");
     expect(afterShim).not.toContain("window.driver");

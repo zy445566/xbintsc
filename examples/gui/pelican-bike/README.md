@@ -18,13 +18,13 @@ xbintsc.config.json entry + `gui` extension, so no flags are needed
 ```
 
 The host-specific parts are the few things the engine exposes that a browser
-does not (`window.on`, `isOpen`, `close`) and vice versa (`addEventListener`).
+does not (`window["on"]`, `isOpen`, `close`) and vice versa (`addEventListener`).
 `index.html` detects the host once and routes them through its `dom` layer:
 
 ```ts
-const inGui = typeof window.on === "function";
+const inGui = typeof window["on"] === "function";
 const dom = inGui
-  ? { on: (t, fn) => { window.on(t, fn); }, tick: (fn) => window.requestAnimationFrame(fn), … }
+  ? { on: (t, fn) => { window["on"](t, fn); }, tick: (fn) => window.requestAnimationFrame(fn), … }
   : { on: (t, fn) => { window.addEventListener(t, fn); }, tick: (fn) => requestAnimationFrame(fn), … };
 ```
 
@@ -33,7 +33,8 @@ Everything else — `document.getElementById`, `getBoundingClientRect`,
 same in both, which is why the game itself has no `if (inGui)` branches. The
 script also avoids `(window as any)` (the engine's parser rejects `as`, and there
 is no need for it: `window["__pelican"] = hooks` works in a browser and compiles
-natively).
+natively). Keyboard *input* is the one place where the two hosts genuinely
+disagree and the game has to reconcile them; see "Layout notes" below.
 
 In the browser the game publishes its hooks on `window.__pelican`, so the console
 can drive it:
@@ -96,12 +97,12 @@ title=鹈鹕骑自行车
 scene=x=0 y=40 1000x620
 sky=x=0 y=40 1000x210
 road=x=0 y=372 1000x84
-pelican=x=420 y=416 24x34
-rider=x=420 y=416 24x34
-shadow=x=400 y=447 150x3
-hud=0004 4 27 ▮▮▯▯▯▯▯ 4
+pelican=x=420 y=404 52x46
+rider=x=420 y=404 52x46
+shadow=x=396 y=447 150x3
+hud=0004 4 28 ▮▮▯▯▯▯▯ 4
 ground=450
-player-box=420,416 24x34
+player-box=420,404 52x46
 last-hit=-
 handle-identity=stable
 paint-shapes=72
@@ -125,6 +126,12 @@ the game plays identically at any frame rate.
 | `R` | restart after a crash |
 | `Esc` | quit the native window (`F5`/tab close in a browser) |
 
+Every key works in both hosts: the native engine reports `Space`/`Up`/`Right`/
+`Left`, a browser reports ` `/`ArrowUp`/`ArrowRight`/`ArrowLeft`, and the game
+matches either spelling (see "Layout notes"). A jump only clears an obstacle if
+it starts early enough for the bike to be *above* it when it arrives, so jump as
+the obstacle comes into range, not when it is almost on you.
+
 ## How it is put together
 
 - **One positioned scene.** `.scene` is `position: absolute` inside the viewport;
@@ -137,7 +144,10 @@ the game plays identically at any frame rate.
   and emitted as merged horizontal runs of 1px boxes: real wheels with spokes and
   tyres, a frame of diagonal tubes, a handlebar with a bell, and a pelican with a
   head, wing, pouch and pedalling legs. No `<canvas>`, no images, no SVG (the
-  engine has none — see `doc/gui.md`).
+  engine has none — see `doc/gui.md`). Each run is placed with its own
+  `left`/`width` rather than by line flow: an absolutely positioned box with
+  `width: auto` gives its inline content no available width in the engine, so a
+  row of runs would otherwise wrap one run per line. See "Layout notes" below.
 - **Two layers, so a frame stays cheap.** The static half (frame, bird, saddle)
   is built once; only the animated half (wheels, cranks, legs) is rebuilt each
   frame. Rebuilding the whole 350-box sprite per frame made the engine's relayout
@@ -146,10 +156,22 @@ the game plays identically at any frame rate.
 - **The loop drives the DOM.** `requestAnimationFrame` steps the simulation; each
   frame sets a handful of `left`/`bottom`/`margin-left` values and the host
   restyles, relayouts and repaints once, batching all mutations.
-- **Collision is measured, not guessed.** Every frame the bike's own box and each
-  obstacle's box are read back with `getBoundingClientRect()` (viewport
-  coordinates), and the road line is derived from the bike's box at startup, so
-  tuning the CSS keeps the physics consistent.
+- **Collision is measured, not guessed.** Every frame the bike's *contact patch*
+  — the sprite's lower `HIT_H` pixels, from its centre down to the ground row —
+  is measured against each obstacle's box, both in viewport coordinates, and the
+  road line is derived from the rider's box at startup, so tuning the CSS keeps
+  the physics consistent. The bird rides above that patch, which is what lets a
+  jump clear an obstacle instead of clipping it with the pouch. An obstacle's
+  rows are absolutely positioned, so they give their container no size; the
+  container is therefore given the sprite's own `width`/`height` when it spawns,
+  which is what makes its measured box — and so the collision — real, in the
+  engine and in a browser alike (`getBoundingClientRect()` reports the border
+  box, not the ink).
+- **The jump is a real arc.** `JUMP_AIRTIME` (1.2s) and `GRAVITY` (1500px/s²)
+  set the launch speed, so the bike rises ~270px — well clear of the tallest
+  obstacle — and `state.y` drives the pelican's `bottom` inset, so the bird
+  visibly leaves the road. The autopilot jumps once per obstacle, `JUMP_AIRTIME`
+  early, which is the window measured to clear every obstacle type.
 - **HUD.** Distance, score, a speed bar and the best run are DOM text nodes
   updated from the same loop.
 
@@ -158,6 +180,36 @@ with `top`/`right`/`bottom`/`left`, shrink-to-fit and fill-available widths,
 margins inside flex layout, and collapsing the source whitespace between block
 boxes — are implemented in `runtime/ext_gui/layout_*.cpp`; the first two and the
 flex margins are covered by `tests/e2e/gui-layout.test.ts`.
+
+### Layout notes
+
+Two of the engine's rules shape this document, and both are ordinary CSS once
+you look closely — but they are easy to trip over when the game must be correct
+in the engine *and* in a browser:
+
+- **A box's size comes from its in-flow content.** The sprite rows are
+  `position: absolute`, so an obstacle's container has no size of its own unless
+  it is given one; `getBoundingClientRect()` reports that border box (0×0), not
+  the ink of its overflowing rows. Hence `spawnThing` sets `width`/`height` from
+  the sprite's own dimensions before the collision loop ever measures it.
+- **An `auto`-width absolute box has no available width for line flow.** Its
+  preferred width comes from its text and its non-absolute children only, and
+  its inline content is then laid out at zero available width, so each run wraps
+  onto its own line. That is why a sprite run carries an explicit `left` and
+  `width` instead of relying on `display` order inside the row.
+- **`opacity` is only honoured at its extremes**, so the game-over overlay is
+  invisible while it has no `show` class and fully opaque once it has one — the
+  intended fade-in is not visible in the engine (see `doc/gui.md`, "Implemented
+  paint").
+- **The two hosts spell keys differently.** The engine names a key the way
+  `SDL_GetKeyName` does (`"Space"`, `"Up"`, `"Right"`); a browser reports
+  `KeyboardEvent.key`, which is `" "` for the spacebar and `"ArrowUp"` /
+  `"ArrowRight"` for the arrows. Comparing against one spelling silently works in
+  one host and does nothing in the other, so `canJumpKey`/`isRightKey`/`isLeftKey`
+  accept both, falling back to `KeyboardEvent.code` (`"Space"`, `"ArrowUp"`),
+  which is the one spelling both agree on. The browser branch is covered by
+  `tests/e2e/gui-example-browser.test.ts`, which delivers real key events rather
+  than calling `jump()` directly.
 
 ## Tests
 

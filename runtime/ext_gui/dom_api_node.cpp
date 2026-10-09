@@ -177,7 +177,10 @@ METHOD(node_replace_child) {
   xtgui::Node *newChild = resolve_node(xt_arg(argc, argv, 0), nullptr);
   xtgui::Node *oldChild = resolve_node(xt_arg(argc, argv, 1), nullptr);
   if (newChild == nullptr || oldChild == nullptr) return XT_UNDEFINED;
-  return xt_gui_node_handle(win, win->document->replaceChild(node, newChild, oldChild));
+  /* `replaceChild` frees the node it replaces, so its slot may not survive. */
+  xtgui::Node *replaced = win->document->replaceChild(node, newChild, oldChild);
+  if (replaced != oldChild) xt_gui_node_handle_forget(win, oldChild);
+  return xt_gui_node_handle(win, replaced);
 }
 
 METHOD(node_remove) {

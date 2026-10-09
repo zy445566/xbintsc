@@ -244,6 +244,10 @@ void xt_gui_render_window(XtGuiWindow *win) {
   /* Animation-frame callbacks run before layout, so any DOM mutation they make
    * is picked up by this same frame. */
   xt_gui_run_animation_frames(win, now);
+  /* A callback may have closed the window (directly or through the
+   * auto-close guard): `xt_gui_quit_window` released the document and the GPU
+   * geometry, so there is nothing left to lay out or paint. */
+  if (!win->open) return;
   if (win->document != nullptr && win->document->advance(delta)) win->geometry.dirty = 1;
 
   /* A DOM mutation from a handler invalidates the tree: restyle/relayout

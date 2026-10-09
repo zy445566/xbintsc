@@ -1,0 +1,10 @@
+{
+  "$schema": "../../../doc/xbintsc.config.schema.json",
+  "entry": "main.ts",
+  "outDir": "build",
+  "extensions": ["gui"],
+  "app": {
+    "name": "PelicanBike",
+    "bundleId": "com.example.pelicanbike"
+  }
+}

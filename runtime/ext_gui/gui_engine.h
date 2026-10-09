@@ -24,6 +24,9 @@ xt_value xt_gui_run(int32_t argc, xt_value *argv);
 xt_value xt_gui_quit(int32_t argc, xt_value *argv);
 /** `__registerScript(id, fn)`: record an AOT-compiled `<script>` body. */
 xt_value xt_register_script(int32_t argc, xt_value *argv);
+/** Which SDL_GPU backend the device is using (`"vulkan"`, `"direct3d12"`,
+ * `"metal"`, …), or `""` before the device exists. */
+const char *xt_gui_driver(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
@@ -93,6 +96,10 @@ XtGuiWindow *xt_gui_window_from_this(xt_value thisValue);
 xt_value xt_gui_document_handle(XtGuiWindow *win);
 /** Node handle for `node` (created and cached on first use). */
 xt_value xt_gui_node_handle(XtGuiWindow *win, const xtgui::Node *node);
+/** Forget a node's slot and handle because it is about to be destroyed (a
+ * removal that frees it, or `innerHTML = …` dropping the old children). Without
+ * this the node table would keep a dangling pointer. */
+void xt_gui_node_handle_forget(XtGuiWindow *win, const xtgui::Node *node);
 /** Drop every cached handle/listener and bump the document generation. */
 void xt_gui_handles_reset(XtGuiWindow *win);
 /** Deliver `type` to element listeners along the propagation path. */

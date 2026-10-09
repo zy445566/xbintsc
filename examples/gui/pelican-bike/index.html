@@ -1,0 +1,1300 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>鹈鹕骑自行车</title>
+  <style>
+    /* ---------------------------------------------------------------- page */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      font-size: 14px;
+      color: #e8f1ff;
+    }
+
+    body {
+      background-color: #0d141f;
+    }
+
+    /* ----------------------------------------------------------------- HUD */
+    .hud {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      right: 0px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 0 16px;
+      background-color: #101b2c;
+      border-color: #22405f;
+      border-width: 1px;
+    }
+
+    .title {
+      font-size: 18px;
+      color: #8fd3ff;
+      font-weight: bold;
+    }
+
+    .spacer {
+      flex-grow: 1;
+    }
+
+    .label {
+      color: #7d90a8;
+    }
+
+    .value {
+      color: #ffd166;
+      font-weight: bold;
+    }
+
+    .bar {
+      color: #4fe08a;
+      font-weight: bold;
+    }
+
+    .best {
+      color: #ff8fb1;
+      font-weight: bold;
+    }
+
+    /* --------------------------------------------------------------- scene */
+    /* The scene is the positioning context: every layer is absolutely placed
+         inside it, so the scene — not a stack of negative margins — owns the
+         layout, and the game only ever moves things with left/top/bottom. */
+    .scene {
+      position: absolute;
+      top: 40px;
+      left: 0px;
+      right: 0px;
+      height: 620px;
+      overflow: hidden;
+      background-color: #87cdf3;
+    }
+
+    /* Sky: stacked colour bands give a cheap vertical gradient. */
+    .sky {
+      position: absolute;
+      left: 0px;
+      right: 0px;
+      top: 0px;
+      height: 210px;
+      overflow: hidden;
+    }
+
+    .sky .band {
+      height: 42px;
+    }
+
+    .band-1 {
+      background-color: #4aa8e8;
+    }
+
+    .band-2 {
+      background-color: #67bcef;
+    }
+
+    .band-3 {
+      background-color: #87cdf3;
+    }
+
+    .band-4 {
+      background-color: #a7ddf7;
+    }
+
+    .band-5 {
+      background-color: #c9ebfb;
+    }
+
+    .cloudrow {
+      position: absolute;
+      left: 0px;
+      right: 0px;
+      top: 26px;
+      height: 76px;
+      overflow: hidden;
+    }
+
+    .cloud {
+      background-color: #ffffff;
+      border-radius: 20px;
+      height: 20px;
+      width: 96px;
+    }
+
+    .puff {
+      background-color: #ffffff;
+      border-radius: 22px;
+    }
+
+    .puff-a {
+      height: 26px;
+      width: 40px;
+      margin-top: -26px;
+      margin-left: 14px;
+    }
+
+    .puff-b {
+      height: 20px;
+      width: 30px;
+      margin-top: -34px;
+    }
+
+    .sun {
+      position: absolute;
+      top: 18px;
+      left: 90px;
+      border-radius: 40px;
+      background-color: #ffe9a3;
+      height: 54px;
+      width: 54px;
+      border-color: #ffd166;
+      border-width: 4px;
+    }
+
+    /* Far away hills (slow parallax). */
+    .far {
+      position: absolute;
+      left: 0px;
+      right: 0px;
+      top: 112px;
+      height: 150px;
+      overflow: hidden;
+    }
+
+    .far .hill {
+      background-color: #6fbf9b;
+      border-radius: 90px;
+      height: 78px;
+      width: 200px;
+    }
+
+    .far .hill-b {
+      background-color: #83cca6;
+      height: 96px;
+      width: 240px;
+    }
+
+    /* Nearer hills with trees (faster parallax). */
+    .near {
+      position: absolute;
+      left: 0px;
+      right: 0px;
+      top: 220px;
+      height: 110px;
+      overflow: hidden;
+    }
+
+    .near .hill {
+      background-color: #4f9d7c;
+      border-radius: 70px;
+      height: 62px;
+      width: 190px;
+    }
+
+    .near .hill-b {
+      background-color: #5aab89;
+      height: 72px;
+      width: 230px;
+    }
+
+    .tree {
+      background-color: #2f7a5b;
+      border-radius: 12px;
+      height: 14px;
+      width: 4px;
+    }
+
+    .canopy {
+      background-color: #3e8f68;
+      border-radius: 16px;
+      height: 22px;
+      width: 26px;
+      margin-top: -22px;
+    }
+
+    /* Verge, then the road the bike rides on. */
+    .verge {
+      position: absolute;
+      left: 0px;
+      right: 0px;
+      top: 306px;
+      height: 26px;
+      background-color: #7fbf63;
+    }
+
+    .road {
+      position: absolute;
+      left: 0px;
+      right: 0px;
+      top: 332px;
+      height: 84px;
+      background-color: #4a5058;
+      border-color: #333941;
+      border-width: 1px;
+      overflow: hidden;
+    }
+
+    .dash {
+      position: absolute;
+      top: 36px;
+      background-color: #f2f4f0;
+      height: 4px;
+      width: 34px;
+      border-radius: 2px;
+    }
+
+    /* The world: the bike, its shadow and the obstacles all live here, so
+         "standing on the road" is one `bottom` value for everything. It spans
+         the whole scene, which makes `bottom: 0` the road surface. */
+    .world {
+      position: absolute;
+      top: 0px;
+      left: 0px;
+      right: 0px;
+      height: 620px;
+    }
+
+    /* `.pelican` and `.shadow` carry only their vertical placement: their `left`
+       comes from `measure()`, so the bike stays proportional in any host. */
+    .pelican {
+      position: absolute;
+      bottom: 210px;
+    }
+
+    .shadow {
+      position: absolute;
+      bottom: 210px;
+      background-color: #2f353d;
+      border-radius: 8px;
+      height: 3px;
+      width: 150px;
+    }
+
+    .thing {
+      position: absolute;
+      display: block;
+      bottom: 210px;
+      left: 1400px;
+    }
+
+    /* -------------------------------------------------------------- sprites */
+    /* The pixel raster emits one 1px-tall row per scanline: coloured runs are
+       `.pixel` boxes with a palette class, and a run of transparent cells is a
+       `.gap` that only advances x. */
+    .pixel {
+      height: 1px;
+    }
+
+    .gap {
+      height: 1px;
+      width: 0px;
+    }
+
+    .row {
+      position: absolute;
+      left: 0px;
+      height: 1px;
+    }
+
+    /* The two halves of the rider sprite: the static layer is built once, the
+       dynamic layer (wheels, cranks, legs) is rebuilt each frame. */
+    .layer {
+      position: absolute;
+      left: 0px;
+      top: 0px;
+      width: 52px;
+    }
+
+    .c-w { background-color: #f4f8fc; }
+    .c-W { background-color: #c9d6e2; }
+    .c-g { background-color: #cfd8e3; }
+    .c-G { background-color: #9aa8b8; }
+    .c-o { background-color: #ff9f1c; }
+    .c-O { background-color: #d97a00; }
+    .c-y { background-color: #ffd166; }
+    .c-b { background-color: #26313f; }
+    .c-K { background-color: #3d4a5a; }
+    .c-p { background-color: #b9c4d0; }
+    .c-r { background-color: #e63946; }
+    .c-R { background-color: #a8232e; }
+    .c-m { background-color: #8b939c; }
+    .c-M { background-color: #6d757e; }
+    /* ------------------------------------------------------------- overlay */
+    /* The overlay is laid out from the start and revealed by opacity. The
+       engine crashes on a `display: none -> flex` restyle (see the README's
+       known-issues note), and keeping it in the tree is also the cheapest
+       thing to do in a browser. */
+    .overlay {
+      opacity: 0;
+      position: absolute;
+      left: 30%;
+      right: 30%;
+      top: 300px;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 20px 0;
+      background-color: #101b2c;
+      border-color: #22405f;
+      border-width: 2px;
+      border-radius: 12px;
+      transition: opacity 200ms ease;
+    }
+
+    .overlay.show {
+      opacity: 1;
+    }
+
+    .overlay-title {
+      font-size: 30px;
+      color: #ff8fb1;
+      font-weight: bold;
+    }
+
+    .overlay-sub {
+      color: #9fb4cc;
+    }
+
+    .keys {
+      color: #ffd166;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="scene" id="scene">
+    <!-- back to front: sky, clouds, hills, verge, road, world, overlay -->
+    <div class="sky" id="sky">
+      <div class="band band-1"></div>
+      <div class="band band-2"></div>
+      <div class="band band-3"></div>
+      <div class="band band-4"></div>
+      <div class="band band-5"></div>
+    </div>
+
+    <div class="cloudrow" id="cloudrow">
+      <div class="cloud" id="cloud1">
+        <div class="puff puff-a"></div>
+        <div class="puff puff-b"></div>
+      </div>
+      <div class="cloud" id="cloud2">
+        <div class="puff puff-a"></div>
+        <div class="puff puff-b"></div>
+      </div>
+      <div class="cloud" id="cloud3">
+        <div class="puff puff-a"></div>
+        <div class="puff puff-b"></div>
+      </div>
+    </div>
+    <div class="sun" id="sun"></div>
+
+    <div class="far" id="far">
+      <div class="hill" id="hill1"></div>
+      <div class="hill hill-b" id="hill2"></div>
+      <div class="hill" id="hill3"></div>
+    </div>
+
+    <div class="near" id="near">
+      <div class="tree" id="tree1">
+        <div class="canopy"></div>
+      </div>
+      <div class="tree" id="tree2">
+        <div class="canopy"></div>
+      </div>
+      <div class="tree" id="tree3">
+        <div class="canopy"></div>
+      </div>
+      <div class="hill" id="hill4"></div>
+      <div class="hill hill-b" id="hill5"></div>
+      <div class="hill" id="hill6"></div>
+    </div>
+
+    <div class="verge" id="verge"></div>
+
+    <div class="road" id="road">
+      <div class="dash" id="dash1"></div>
+      <div class="dash" id="dash2"></div>
+      <div class="dash" id="dash3"></div>
+    </div>
+
+    <div class="world" id="world">
+      <div class="shadow" id="shadow"></div>
+      <div class="pelican" id="pogo">
+        <div id="rider" style="width: 52px; height: 46px; background-color: transparent"><div class="layer" id="rider-static"></div><div class="layer" id="rider-dynamic" style="top: 16px; height: 30px"></div></div>
+      </div>      <div class="thing" id="thing1" style="display: none"></div>
+      <div class="thing" id="thing2" style="display: none"></div>
+      <div class="thing" id="thing3" style="display: none"></div>
+      <div class="thing" id="thing4" style="display: none"></div>
+      <div class="thing" id="thing5" style="display: none"></div>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <div class="overlay-title" id="over-title">撞上障碍啦！</div>
+      <div class="overlay-sub" id="over-sub">按 R 重新上路</div>
+      <div class="keys">空格 跳跃 · → 加速 · ← 刹车 · R 重开 · P 自动 · Esc 退出</div>
+    </div>
+  </div>
+
+  <div class="hud" id="hud">
+    <span class="title">鹈鹕骑自行车</span>
+    <span class="spacer" id="spacer"></span>
+    <span class="label">距离</span><span class="value" id="dist">0000</span>
+    <span class="label">得分</span><span class="value" id="score">0</span>
+    <span class="label">速度</span><span class="bar" id="speedbar">▮▮▮▯▯▯▯</span><span class="value" id="speed">7</span>
+    <span class="label">最佳</span><span class="best" id="best">0</span>
+  </div>
+
+  <script lang="ts">
+    /* ==========================================================================
+     * Pelican Bike — the game loop.
+     *
+     * The same document runs in two hosts:
+     *
+     *   - the xbintsc `gui` extension, where this body is compiled ahead of time
+     *     to native code (no JS engine, no eval) and called with `window` and
+     *     `document` as ordinary parameters; and
+     *   - a browser, where it is ordinary JavaScript.
+     *
+     * Everything host-specific goes through the tiny `dom` layer below: it
+     * detects which host it is and gives the rest of the game one interface
+     * (`dom.on`, `dom.tick`, `dom.open`, `dom.closeWindow`, `dom.width/height`),
+     * so the game itself only ever touches `document` and the elements it
+     * returns. Open this file directly in a browser, or build it with xbintsc.
+     *
+     * The scene is a positioned box; every layer and every sprite lives inside
+     * it as `position: absolute`. A sprite is a box of coloured pixels built
+     * from merged horizontal runs, and movement is "set an inset and let the
+     * layout engine relayout", batched once per frame.
+     * ========================================================================== */
+
+    /* `window.on` (and `driver`/`isOpen`/`close`) only exist in the gui engine;
+       the browser reaches the same events through `addEventListener`. */
+    const inGui = typeof window.on === "function";
+
+    const dom = inGui
+      ? {
+          on: (type, handler) => { window.on(type, handler); },
+          tick: (fn) => window.requestAnimationFrame(fn),
+          open: () => window.isOpen(),
+          closeWindow: () => { window.close(); }
+        }
+      : {
+          on: (type, handler) => { window.addEventListener(type, handler); },
+          tick: (fn) => window.requestAnimationFrame(fn),
+          open: () => true,
+          closeWindow: () => {}
+        };
+
+    /* ==========================================================================
+     * Pixel artwork.
+     *
+     * Everything is drawn onto a small pixel grid with a few primitives (plot,
+     * line, ring, disc, rect, blit) and emitted as merged horizontal runs of 1px
+     * boxes — so the bike gets real wheels with spokes, a frame made of diagonal
+     * tubes and a pelican with a head, a pouch and pedalling legs, instead of a
+     * handful of rectangles.
+     *
+     * One grid cell = one CSS pixel; all sizes below are canvas pixels.
+     * ========================================================================== */
+
+    const PAL = {
+      w: "#f4f8fc",  /* pelican body (lit) */
+      W: "#c9d6e2",  /* pelican body (shade) */
+      g: "#cfd8e3",  /* wing */
+      G: "#9aa8b8",  /* wing shade */
+      o: "#ff9f1c",  /* beak / pouch */
+      O: "#d97a00",  /* beak shade */
+      y: "#ffd166",  /* pouch highlight */
+      k: "#26313f",  /* eye / tyre / frame */
+      K: "#3d4a5a",  /* frame highlight */
+      p: "#b9c4d0",  /* rim */
+      r: "#e63946",  /* saddle / stripe */
+      R: "#a8232e",  /* stripe shade */
+      m: "#8b939c",  /* rock */
+      M: "#6d757e",  /* rock shade */
+      b: "#2f353d"   /* dark base */
+    };
+
+    const CLASS_OF = {
+      w: "c-w", W: "c-W", g: "c-g", G: "c-G", o: "c-o", O: "c-O", y: "c-y",
+      k: "c-b", K: "c-K", p: "c-p", r: "c-r", R: "c-R", m: "c-m", M: "c-M",
+      b: "c-b"
+    };
+
+    /* Canvas size: the wheels sit on GROUND_Y, the pelican on the saddle. */
+    const CANVAS_W = 52;
+    const CANVAS_H = 46;
+    const GROUND_Y = 44;
+    const WHEEL_R = 10;
+    const HUB_L = 14;
+    const HUB_R = 38;
+    const HUB_Y = GROUND_Y - WHEEL_R;
+    const BRACKET_X = 26;   /* bottom bracket / crank centre */
+    const BRACKET_Y = 32;
+    const SEAT_X = 17;
+    const SEAT_Y = 22;
+    const HANDLE_X = 40;
+    const HANDLE_Y = 15;
+
+    /* A tiny raster over a fixed grid of palette keys. */
+    const newRaster = (width, height) => {
+      const cells = [];
+      for (let i = 0; i < width * height; i++) cells.push("");
+
+      const set = (x, y, key) => {
+        const px = Math.round(x);
+        const py = Math.round(y);
+        if (px < 0 || py < 0 || px >= width || py >= height) return;
+        cells[py * width + px] = key;
+      };
+
+      /* Square brush centred on a cell. */
+      const brush = (x, y, key, thickness) => {
+        const half = Math.floor(thickness / 2);
+        for (let by = -half; by < thickness - half; by++) {
+          for (let bx = -half; bx < thickness - half; bx++) set(x + bx, y + by, key);
+        }
+      };
+
+      const raster = {
+        w: width,
+        h: height,
+        plot: set,
+        rect: (x, y, rw, rh, key) => {
+          for (let ry = 0; ry < rh; ry++) {
+            for (let rx = 0; rx < rw; rx++) set(x + rx, y + ry, key);
+          }
+        },
+        /* Bresenham line with a square brush of `thickness` pixels. */
+        line: (x0, y0, x1, y1, key, thickness) => {
+          const t = thickness === undefined ? 1 : thickness;
+          let cx = Math.round(x0);
+          let cy = Math.round(y0);
+          const ex = Math.round(x1);
+          const ey = Math.round(y1);
+          const dx = Math.abs(ex - cx);
+          const dy = -Math.abs(ey - cy);
+          const sx = cx < ex ? 1 : -1;
+          const sy = cy < ey ? 1 : -1;
+          let err = dx + dy;
+          for (;;) {
+            brush(cx, cy, key, t);
+            if (cx === ex && cy === ey) break;
+            const e2 = 2 * err;
+            if (e2 >= dy) { err += dy; cx += sx; }
+            if (e2 <= dx) { err += dx; cy += sy; }
+          }
+        },
+        /* 1px circle outline (midpoint circle). */
+        ring: (cx, cy, radius, key) => {
+          let x = radius;
+          let y = 0;
+          let err = 1 - radius;
+          const plot8 = (px, py) => {
+            set(cx + px, cy + py, key);
+            set(cx - px, cy + py, key);
+            set(cx + px, cy - py, key);
+            set(cx - px, cy - py, key);
+            set(cx + py, cy + px, key);
+            set(cx - py, cy + px, key);
+            set(cx + py, cy - px, key);
+            set(cx - py, cy - px, key);
+          };
+          while (x >= y) {
+            plot8(x, y);
+            y = y + 1;
+            if (err < 0) {
+              err += 2 * y + 1;
+            } else {
+              x = x - 1;
+              err += 2 * (y - x) + 1;
+            }
+          }
+        },
+        disc: (cx, cy, radius, key) => {
+          for (let dy = -radius; dy <= radius; dy++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+              if (dx * dx + dy * dy <= radius * radius + radius) set(cx + dx, cy + dy, key);
+            }
+          }
+        },
+        /* Stamp a character map at `scale` pixels per cell; `.` is skipped. */
+        blit: (rows, x, y, scale) => {
+          for (let ry = 0; ry < rows.length; ry++) {
+            const row = rows[ry];
+            for (let rx = 0; rx < row.length; rx++) {
+              const key = row[rx];
+              if (key === ".") continue;
+              for (let sy = 0; sy < scale; sy++) {
+                for (let sx = 0; sx < scale; sx++) set(x + rx * scale + sx, y + ry * scale + sy, key);
+              }
+            }
+          }
+        },
+        /* Emit the grid as one absolutely positioned row per scanline, with
+           merged runs and a margin for the transparent gaps. */
+        html: () => {
+          let out = "";
+          for (let y = 0; y < height; y++) {
+            let body = "";
+            let gap = 0;
+            let x = 0;
+            while (x < width) {
+              const key = cells[y * width + x];
+              let end = x;
+              while (end < width && cells[y * width + end] === key) end = end + 1;
+              const run = end - x;
+              if (key === "") {
+                gap = gap + run;
+              } else {
+                body = body + (gap > 0
+                  ? "<div class=\"gap\" style=\"width:" + gap + "px\"></div>"
+                  : "") + "<div class=\"pixel " + CLASS_OF[key] + "\" style=\"width:" + run + "px\"></div>";
+                gap = 0;
+              }
+              x = end;
+            }
+            if (body !== "") out = out + "<div class=\"row\" style=\"top:" + y + "px\">" + body + "</div>";
+          }
+          return out;
+        },
+        /* The same grid, but only the cells inside `top..top+height`. Used for
+           the animated layer, whose rows are positioned inside a small box. */
+        htmlBand: (top, bandHeight) => {
+          let out = "";
+          for (let y = top; y < top + bandHeight && y < height; y++) {
+            let body = "";
+            let gap = 0;
+            let x = 0;
+            while (x < width) {
+              const key = cells[y * width + x];
+              let end = x;
+              while (end < width && cells[y * width + end] === key) end = end + 1;
+              const run = end - x;
+              if (key === "") {
+                gap = gap + run;
+              } else {
+                body = body + (gap > 0
+                  ? "<div class=\"gap\" style=\"width:" + gap + "px\"></div>"
+                  : "") + "<div class=\"pixel " + CLASS_OF[key] + "\" style=\"width:" + run + "px\"></div>";
+                gap = 0;
+              }
+              x = end;
+            }
+            if (body !== "") {
+              out = out + "<div class=\"row\" style=\"top:" + (y - top) + "px\">" + body + "</div>";
+            }
+          }
+          return out;
+        }
+      };
+      return raster;
+    };
+
+    /* -- the pelican ---------------------------------------------------------
+       A 21x15 character map stamped at 2x: body (w), shade (W), wing (g/G),
+       beak and pouch (o/O/y), eye (k). The bird faces left, the way the world
+       scrolls past it. */
+    const PELICAN = [
+      "..........wwww.......",
+      ".........wwwwww......",
+      "........wwwkwww......",
+      "........wwwwwww......",
+      "......wwwwwwww.......",
+      ".....wwwwwwww........",
+      "..wwwwwwwwwww........",
+      ".wwwwwwwwwwww........",
+      "wwwwwwwwwwwww........",
+      "wgggggwwwwwww........",
+      "wgggggwwwwwwww.......",
+      "wgggggwwwwwwww.......",
+      ".wwWWwwwwwwwwwww.....",
+      "..wwWWwwwwwwwwwww....",
+      "...wwwwwwwwwwwwww...."
+    ];
+
+    /* Beak + pouch, stamped to the left of the head. */
+    const BEAK = [
+      "....oooooo....",
+      "..ooyyyyyoooo.",
+      ".oooyyyyyyooo.",
+      ".oOoooooooooo.",
+      "..ooOOOOooo..."
+    ];
+
+    /* Wing feathers: folded mid-body, or swept back on the upstroke. */
+    const WING_DOWN = ["..gggggg.", ".gggggggg", "ggggggggg", "ggggggggg", ".ggggggg."];
+    const WING_UP = ["...ggggg.", "..ggggggg", ".gggggggg", "ggggggggg", "ggggggg.."];
+
+    const drawPelican = (r, x, y, scale, wingUp) => {
+      r.blit(PELICAN, x, y, scale);
+      r.blit(wingUp ? WING_UP : WING_DOWN, x + 1 * scale, y + (wingUp ? 4 : 8) * scale, scale);
+      r.blit(BEAK, x - 5 * scale, y + 2 * scale, scale);
+    };
+
+    /* -- the bike ------------------------------------------------------------ */
+
+    const WHEEL_SPOKES = 6;
+
+    const drawWheel = (r, hubX, hubY, phase, rimKey) => {
+      r.ring(hubX, hubY, WHEEL_R, "k");
+      r.ring(hubX, hubY, WHEEL_R - 1, rimKey);
+      r.disc(hubX, hubY, 1, "k");
+      for (let i = 0; i < WHEEL_SPOKES; i++) {
+        const angle = phase * Math.PI / 2 + (i * 2 * Math.PI) / WHEEL_SPOKES;
+        r.line(hubX, hubY, hubX + Math.cos(angle) * (WHEEL_R - 2),
+          hubY + Math.sin(angle) * (WHEEL_R - 2), "p", 1);
+      }
+    };
+
+    /* One leg: hip -> knee -> foot, the foot standing on a pedal. */
+    const drawLeg = (r, hipX, hipY, footX, footY, kneeOut) => {
+      const kneeX = (hipX + footX) / 2 + kneeOut;
+      const kneeY = (hipY + footY) / 2 + 2;
+      r.line(hipX, hipY, kneeX, kneeY, "b", 2);
+      r.line(kneeX, kneeY, footX, footY, "b", 2);
+      r.rect(footX - 2, footY - 1, 5, 2, "b");
+    };
+
+    /* The bike is drawn in two layers so the per-frame work stays small:
+     *
+     *   - the **static** layer (frame, pelican, saddle, handlebar) is built once
+     *     with `bikeStaticHTML()` and never touched again;
+     *   - the **animated** layer (wheels, cranks, legs) covers the band from
+     *     `BIKE_BAND_TOP` down and is what each frame rebuilds.
+     *
+     * Emitting ~350 boxes per frame instead made the engine's relayout dominate
+     * and dropped the game to single-digit fps. */
+    const BIKE_BAND_TOP = 16;
+    const BIKE_BAND_H = CANVAS_H - BIKE_BAND_TOP;
+
+    const bikeStaticHTML = (wingUp) => {
+      const r = newRaster(CANVAS_W, CANVAS_H);
+
+      /* Saddle and seat post. */
+      r.rect(SEAT_X - 5, SEAT_Y - 2, 11, 3, "k");
+      r.rect(SEAT_X - 4, SEAT_Y + 1, 3, 2, "b");
+      r.line(SEAT_X, SEAT_Y + 1, BRACKET_X, BRACKET_Y, "K", 2);
+
+      /* The bird rides above the band. */
+      drawPelican(r, 8, 1, 2, wingUp);
+
+      /* Frame: chainstay, seat stay, down tube, top tube, fork. */
+      r.line(BRACKET_X, BRACKET_Y, HUB_L, HUB_Y, "k", 2);
+      r.line(SEAT_X, SEAT_Y + 1, HUB_L, HUB_Y, "k", 2);
+      r.line(BRACKET_X, BRACKET_Y, HANDLE_X, HANDLE_Y + 2, "k", 2);
+      r.line(SEAT_X, SEAT_Y + 1, HANDLE_X, HANDLE_Y + 2, "k", 2);
+      r.line(HANDLE_X, HANDLE_Y + 2, HUB_R, HUB_Y, "k", 2);
+      /* Handlebar: stem, bar and grip, with a bell. */
+      r.line(HANDLE_X, HANDLE_Y + 2, HANDLE_X + 1, HANDLE_Y - 2, "k", 2);
+      r.line(HANDLE_X + 1, HANDLE_Y - 2, HANDLE_X + 7, HANDLE_Y - 3, "k", 2);
+      r.line(HANDLE_X + 7, HANDLE_Y - 3, HANDLE_X + 10, HANDLE_Y - 1, "k", 2);
+      r.disc(HANDLE_X + 8, HANDLE_Y - 6, 2, "y");
+      /* Chain loop to the rear hub. */
+      r.line(BRACKET_X, BRACKET_Y + 3, HUB_L, HUB_Y + 3, "K", 1);
+      r.line(BRACKET_X, BRACKET_Y - 3, HUB_L, HUB_Y - 3, "K", 1);
+
+      return r.html();
+    };
+
+    const bikeAnimatedHTML = (phase, airborne) => {
+      const r = newRaster(CANVAS_W, CANVAS_H);
+
+      drawWheel(r, HUB_L, HUB_Y, phase, "p");
+      drawWheel(r, HUB_R, HUB_Y, phase + 0.5, "p");
+
+      /* Pedals: the crank turns with the wheels, and the legs follow. */
+      const crank = airborne ? 0 : (phase * Math.PI) / 2;
+      const pedalR = 6;
+      const footLX = BRACKET_X + Math.cos(crank + Math.PI) * pedalR;
+      const footLY = BRACKET_Y + Math.sin(crank + Math.PI) * pedalR;
+      const footRX = BRACKET_X + Math.cos(crank) * pedalR;
+      const footRY = BRACKET_Y + Math.sin(crank) * pedalR;
+      if (airborne) {
+        drawLeg(r, 22, 29, 21, 33, -1);
+        drawLeg(r, 28, 29, 29, 33, 1);
+      } else {
+        drawLeg(r, 22, 29, footLX, footLY, -1);
+        drawLeg(r, 28, 29, footRX, footRY, 1);
+      }
+      r.line(BRACKET_X, BRACKET_Y, footLX, footLY, "k", 1);
+      r.line(BRACKET_X, BRACKET_Y, footRX, footRY, "k", 1);
+      r.disc(BRACKET_X, BRACKET_Y, 2, "k");
+      r.rect(footLX - 2, footLY, 4, 1, "K");
+      r.rect(footRX - 2, footRY, 4, 1, "K");
+
+      return r.htmlBand(BIKE_BAND_TOP, BIKE_BAND_H);
+    };
+
+    /* -- obstacles -----------------------------------------------------------
+       Drawn with the same raster, so a cone gets a graduated width and retro
+       reflective stripes instead of being a bare triangle. */
+    const coneHTML = () => {
+      const r = newRaster(22, 28);
+      for (let y = 0; y < 24; y++) {
+        const half = 1 + (y * 8) / 24;
+        const key = y >= 9 && y <= 13 ? "w" : y >= 18 ? "O" : "o";
+        r.line(11 - half, y + 1, 11 + half, y + 1, key, 1);
+      }
+      r.rect(1, 24, 20, 4, "b");
+      r.rect(2, 25, 18, 1, "k");
+      return r.html();
+    };
+
+    const barrierHTML = () => {
+      const r = newRaster(26, 36);
+      for (let y = 4; y < 24; y++) {
+        for (let x = 1; x < 25; x++) r.plot(x, y, (x + y) % 10 < 5 ? "r" : "w");
+      }
+      r.rect(1, 4, 24, 2, "R");
+      r.rect(1, 22, 24, 2, "R");
+      r.rect(3, 24, 3, 12, "b");
+      r.rect(20, 24, 3, 12, "b");
+      r.rect(1, 0, 24, 4, "w");
+      r.rect(2, 27, 22, 2, "K");
+      return r.html();
+    };
+
+    const rockHTML = () => {
+      const r = newRaster(24, 22);
+      for (let y = 0; y < 18; y++) {
+        const half = 4 + Math.sin((y / 18) * Math.PI) * 7;
+        const key = y < 5 ? "m" : y > 13 ? "b" : "M";
+        r.line(12 - half, y + 3, 12 + half, y + 3, key, 1);
+      }
+      r.line(6, 9, 12, 5, "m", 2);
+      r.rect(2, 19, 20, 3, "b");
+      return r.html();
+    };
+
+    const pylonHTML = () => {
+      const r = newRaster(18, 12);
+      r.rect(3, 2, 12, 8, "o");
+      r.rect(3, 4, 12, 3, "w");
+      r.rect(5, 0, 8, 2, "o");
+      r.rect(1, 9, 16, 3, "b");
+      return r.html();
+    };
+
+    const THING_ART = [coneHTML(), barrierHTML(), rockHTML(), pylonHTML()];
+    const THING_H = [28, 36, 22, 12];
+    const THING_W = [22, 26, 24, 18];
+
+    /* ------------------------------------------------------------- elements */
+
+    const byId = (id) => document.getElementById(id);
+
+    const scene = byId("scene");
+    const world = byId("world");
+    const rider = byId("rider");
+    const riderStatic = byId("rider-static");
+    const riderDynamic = byId("rider-dynamic");
+    const pogo = byId("pogo");
+    const shadow = byId("shadow");
+    const overlay = byId("overlay");
+    const overSub = byId("over-sub");
+    const elDist = byId("dist");
+    const elScore = byId("score");
+    const elSpeed = byId("speed");
+    const elBar = byId("speedbar");
+    const elBest = byId("best");
+
+    const clouds = [byId("cloud1"), byId("cloud2"), byId("cloud3")];
+    const hills = [byId("hill1"), byId("hill2"), byId("hill3"), byId("hill4"), byId("hill5"), byId("hill6")];
+    const trees = [byId("tree1"), byId("tree2"), byId("tree3")];
+    const dashes = [byId("dash1"), byId("dash2"), byId("dash3")];
+    const things = [
+      { el: byId("thing1"), kind: 0, x: 0, live: false },
+      { el: byId("thing2"), kind: 0, x: 0, live: false },
+      { el: byId("thing3"), kind: 0, x: 0, live: false },
+      { el: byId("thing4"), kind: 0, x: 0, live: false },
+      { el: byId("thing5"), kind: 0, x: 0, live: false }
+    ];
+
+    const SPEED_MAX = 540;
+    const SPRINT = 190;
+    const ROLL = 26;
+    const BRAKE = 340;
+    const DASH_PERIOD = 86;
+
+    /* The sprite canvas is also the collision box, so one size drives both. */
+    const SPRITE_W = CANVAS_W;
+    const SPRITE_H = CANVAS_H;
+
+    const state = {
+      x: 0,
+      speed: 40,
+      y: 0,
+      vy: 0,
+      airborne: false,
+      distance: 0,
+      best: 0,
+      tick: 0,
+      over: false,
+      auto: true,
+      keyRight: false,
+      keyLeft: false,
+      last: 0,
+      next: 420,
+      ground: 0,
+      /* Measured at startup and on a browser resize (`measure`). */
+      sceneW: 1000,
+      sceneH: 620,
+      bikeLeft: 420,
+      wingUp: true,
+      playerBox: "-",
+      lastHit: "-"
+    };
+
+    const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+
+    const pad = (value, size) => {
+      let text = String(Math.floor(value));
+      while (text.length < size) text = "0" + text;
+      return text;
+    };
+
+    /* A closed window no longer lays out or answers geometry queries, and a
+       frame can still be in flight when it goes away, so every read is guarded:
+       the engine returns `undefined` rather than raising. */
+    const rectOf = (el) => {
+      const r = el.getBoundingClientRect();
+      if (r === undefined || r === null) return null;
+      return { left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height };
+    };
+
+    const overlaps = (a, b) =>
+      a !== null && b !== null && a.left < b.right && a.right > b.left && a.top < b.bottom &&
+      a.bottom > b.top;
+
+    const setLeft = (el, value) => el.style.setProperty("left", Math.round(value) + "px");
+
+    /* --------------------------------------------------------------- render */
+
+    const renderRider = () => {
+      const rolling = state.speed > 60;
+      /* The wheels turn with the road speed, and the wings beat on the upstroke
+         every other half turn, which reads as effortful pedalling. */
+      const phase = rolling ? Math.floor(state.tick * (2 + state.speed / 90)) % 4 : 0;
+      const wingUp = rolling && Math.floor(state.tick * 0.45) % 2 === 1;
+      if (wingUp !== state.wingUp) {
+        /* Only the bird moves between the two wing poses. */
+        state.wingUp = wingUp;
+        riderStatic.innerHTML = bikeStaticHTML(wingUp);
+      }
+      riderDynamic.innerHTML = bikeAnimatedHTML(phase, state.airborne);
+      setLeft(shadow, state.bikeLeft - 24 + Math.round(state.y / 10));
+      shadow.style.setProperty("width", Math.round(150 - state.y * 0.22) + "px");
+    };
+
+    const renderThings = () => {
+      for (let i = 0; i < things.length; i++) {
+        const item = things[i];
+        if (!item.live) continue;
+        setLeft(item.el, item.x);
+      }
+    };
+
+    const renderScenery = () => {
+      const scroll = state.x;
+      for (let i = 0; i < clouds.length; i++) {
+        const wrapped = (scroll * 0.18 + i * 235) % 705;
+        setLeft(clouds[i], 40 + wrapped);
+      }
+      for (let i = 0; i < hills.length; i++) {
+        const wrapped = (scroll * (i < 3 ? 0.28 : 0.5) + i * 190) % 940;
+        setLeft(hills[i], 20 + wrapped);
+      }
+      for (let i = 0; i < trees.length; i++) {
+        const wrapped = (scroll * 0.45 + i * 340) % 1020;
+        setLeft(trees[i], 10 + wrapped);
+      }
+      for (let i = 0; i < dashes.length; i++) {
+        setLeft(dashes[i], -Math.round(state.x % DASH_PERIOD) + i * DASH_PERIOD);
+      }
+    };
+
+    const renderHud = () => {
+      elDist.textContent = pad(state.distance, 4);
+      elScore.textContent = String(Math.floor(state.distance));
+      elSpeed.textContent = String(Math.round(state.speed / 6));
+      elBest.textContent = String(Math.floor(state.best));
+      let filled = Math.round((state.speed / SPEED_MAX) * 7);
+      if (filled < 1) filled = 1;
+      let bar = "";
+      for (let i = 0; i < 7; i++) bar = bar + (i < filled ? "▮" : "▯");
+      elBar.textContent = bar;
+    };
+
+    const render = () => {
+      renderRider();
+      renderThings();
+      renderScenery();
+      renderHud();
+    };
+
+    /* -------------------------------------------------------------- objects */
+
+    const acquireThing = () => {
+      for (let i = 0; i < things.length; i++) {
+        if (!things[i].live) return things[i];
+      }
+      return null;
+    };
+
+    const spawnThing = () => {
+      const item = acquireThing();
+      if (item === null) return;
+      item.kind = Math.floor(Math.random() * THING_ART.length);
+      item.x = 1460;
+      item.live = true;
+      item.el.innerHTML = THING_ART[item.kind];
+      item.el.style.setProperty("display", "block");
+      setLeft(item.el, 1460);
+    };
+
+    const releaseThing = (item) => {
+      item.live = false;
+      item.el.style.setProperty("display", "none");
+      setLeft(item.el, 1500);
+    };
+
+    /* --------------------------------------------------------------- update */
+
+    const lost = () => {
+      if (state.over) return;
+      state.over = true;
+      state.auto = false;
+      overlay.classList.add("show");
+      overSub.textContent =
+        "距离 " + pad(state.distance, 4) + " m · 得分 " + Math.floor(state.distance) + " · 按 R 重新上路";
+    };
+
+    const restart = () => {
+      state.speed = 40;
+      state.y = 0;
+      state.vy = 0;
+      state.airborne = false;
+      state.distance = 0;
+      state.over = false;
+      state.next = 420;
+      for (let i = 0; i < things.length; i++) {
+        if (things[i].live) releaseThing(things[i]);
+      }
+      overlay.classList.remove("show");
+    };
+
+    const jump = () => {
+      if (state.over || state.airborne) return;
+      state.airborne = true;
+      state.vy = -420;
+    };
+
+    const update = (dt) => {
+      state.tick = state.tick + dt;
+
+      if (state.auto && !state.over && !state.airborne) {
+        /* A simple autopilot, so the demo rides by itself. */
+        if (state.next < 300 && Math.random() < 0.4) jump();
+      }
+
+      let target = 320;
+      if (state.keyRight) target = target + SPRINT;
+      if (state.keyLeft) target = target - 150;
+      if (state.auto && !state.over) target = 250;
+
+      if (state.over) {
+        state.speed = state.speed - 300 * dt;
+      } else {
+        if (state.speed < target) state.speed = state.speed + (ROLL + (target - state.speed) * 1.7) * dt;
+        else state.speed = state.speed - ROLL * dt;
+        if (state.keyLeft) state.speed = state.speed - BRAKE * dt;
+      }
+      if (state.speed < 0) state.speed = 0;
+      if (state.speed > SPEED_MAX) state.speed = SPEED_MAX;
+
+      if (state.airborne) {
+        state.vy = state.vy + 1500 * dt;
+        state.y = state.y + state.vy * dt;
+        if (state.y >= 0) {
+          state.y = 0;
+          state.vy = 0;
+          state.airborne = false;
+        }
+      }
+
+      /* The world scrolls under the bike. */
+      const dx = state.speed * dt;
+      state.x = state.x + dx;
+      if (!state.over) state.distance = state.distance + dx / 12;
+
+      state.next = state.next - dx;
+      if (state.next <= 0) {
+        spawnThing();
+        const gap = rand(260, 540) * (700 / (state.speed + 200));
+        state.next = gap < 175 ? 175 : gap;
+      }
+
+      for (let i = 0; i < things.length; i++) {
+        const item = things[i];
+        if (!item.live) continue;
+        item.x = item.x - dx;
+        if (item.x < -90) releaseThing(item);
+      }
+
+      /* Collision: the bike's own pixel box against each obstacle's box, both
+         measured in viewport coordinates, so the whole render path is real. */
+      const player = rectOf(rider);
+      if (player === null) return;
+      state.playerBox =
+        Math.round(player.left) + "," + Math.round(player.top) + " " +
+        Math.round(player.right - player.left) + "x" + Math.round(player.bottom - player.top);
+      if (!state.over) {
+        for (let i = 0; i < things.length; i++) {
+          const item = things[i];
+          if (!item.live) continue;
+          const box = rectOf(item.el);
+          if (overlaps(player, box)) {
+            state.lastHit = "thing" + (i + 1) + " @" + Math.round(box.left);
+            lost();
+            break;
+          }
+        }
+      }
+
+      if (state.distance > state.best) state.best = state.distance;
+    };
+
+    /* ----------------------------------------------------------------- loop */
+
+    let autoLoop = true;
+
+    const loop = (time) => {
+      /* A queued frame can outlive the engine's window; stop before touching
+         anything. (In a browser `dom.open()` is always true.) */
+      if (!dom.open()) return;
+      let dt = state.last > 0 ? (time - state.last) / 1000 : 0.016;
+      state.last = time;
+      if (dt > 0.05) dt = 0.05;
+      if (dt < 0) dt = 0;
+      update(dt);
+      render();
+      if (autoLoop) dom.tick(loop);
+    };
+
+    /* ---------------------------------------------------------------- input */
+
+    dom.on("keydown", (e) => {
+      state.auto = false;
+      if (e.key === "Space" || e.key === "Up") {
+        jump();
+      } else if (e.key === "Right") {
+        state.keyRight = true;
+      } else if (e.key === "Left") {
+        state.keyLeft = true;
+      } else if (e.key === "P") {
+        state.auto = !state.auto;
+      } else if (e.key === "R") {
+        restart();
+      } else if (e.key === "Escape") {
+        dom.closeWindow();
+      }
+    });
+
+    dom.on("keyup", (e) => {
+      if (e.key === "Right") state.keyRight = false;
+      if (e.key === "Left") state.keyLeft = false;
+    });
+
+    /* -------------------------------------------------------------- start up */
+
+    /* The bike's box defines the road line; everything else is placed from it.
+       A browser may still be settling its viewport here, so a resize can
+       re-measure (the host reports that; see below). */
+    const measure = () => {
+      const home = rectOf(rider);
+      if (home !== null && home.bottom > 0) state.ground = home.bottom;
+      const bounds = rectOf(scene);
+      if (bounds === null || bounds.right - bounds.left <= 0) return;
+      state.sceneW = bounds.right - bounds.left;
+      state.sceneH = bounds.bottom - bounds.top;
+      state.bikeLeft = Math.round(state.sceneW * 0.42);
+      setLeft(pogo, state.bikeLeft);
+      setLeft(shadow, state.bikeLeft - 20);
+    };
+    /* Build the static half of the sprite once; each frame only rebuilds the
+       animated layer below it. */
+    riderStatic.innerHTML = bikeStaticHTML(true);
+    measure();
+    overlay.classList.remove("show");
+
+    /* Hosts differ in how they report a resize: the gui engine keeps a fixed
+       logical viewport, a browser restyles when its window changes. */
+    if (!inGui) {
+      dom.on("resize", () => {
+        measure();
+      });
+    }
+
+    /* Hooks for the host program and for tests: step the simulation without the
+       frame loop, inspect the layout, or hand control back to autoplay. In the
+       `gui` extension they live on the window handle; in a browser the game
+       publishes them on `window` so the console can drive it. */
+    const hooks = {
+      step: (dt) => {
+        update(dt);
+        render();
+      },
+      jump: jump,
+      restart: restart,
+      measure: measure,
+      setAutoLoop: (on) => {
+        autoLoop = on;
+        if (on) dom.tick(loop);
+      },
+      setAuto: (on) => {
+        state.auto = on;
+      },
+      setSpeed: (value) => {
+        state.speed = value;
+      },
+      spawn: spawnThing,
+      info: () => {
+        const first = things[0];
+        return {
+          host: inGui ? "gui" : "browser",
+          title: document.querySelector(".title") === null ||
+            document.querySelector(".title") === undefined
+            ? ""
+            : document.querySelector(".title").textContent,
+          player: Math.round(rectOf(rider).left) + "," + Math.round(rectOf(rider).top),
+          playerBox: state.playerBox,
+          ground: Math.round(state.ground),
+          obstacles: first.live ? "thing1 kind=" + first.kind + " x=" + Math.round(first.x) : "none",
+          hud: elDist.textContent + " " + elScore.textContent + " " + elSpeed.textContent +
+            " " + elBar.textContent + " " + elBest.textContent,
+          identity: document.querySelector(".pelican") === pogo ? "stable" : "lost",
+          hit: state.lastHit,
+          over: state.over ? "yes" : "no"
+        };
+      }
+    };
+
+    /* Published under a name a host or a browser console can reach:
+       `win.__pelican` from the gui engine, `window.__pelican` in a browser. */
+    window["__pelican"] = hooks;
+
+    dom.tick(loop);
+  </script>
+</body>
+</html>

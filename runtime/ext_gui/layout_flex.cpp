@@ -19,9 +19,12 @@ float Layouter::layoutFlex(LayoutBox *container, float contentWidth, float defin
                  containerStyle.flex_direction == FlexDirection::ColumnReverse;
   float gap = px(containerStyle.gap, contentWidth, containerStyle.font_size, 0.0f);
 
+  /* An absolutely positioned child is out of flow: it takes no part in the flex
+   * algorithm and is placed against the container's padding box instead. */
   std::vector<LayoutBox *> items;
   for (const std::unique_ptr<LayoutBox> &child : container->children) {
-    if (child->display != Display::None) items.push_back(child.get());
+    if (child->display == Display::None || isAbsoluteChild(child.get())) continue;
+    items.push_back(child.get());
   }
   if (items.empty()) return 0;
   size_t count = items.size();
@@ -71,6 +74,7 @@ float Layouter::layoutFlex(LayoutBox *container, float contentWidth, float defin
     for (size_t i = 0; i < count; i++) {
       float contentW = mainSizes[i] - horizontalEdges(items[i]);
       if (contentW < 0) contentW = 0;
+      setContainingBlock(items[i], containingBlockAncestor(items[i]));
       layoutBlock(items[i], container->content_x, container->content_y, contentWidth,
                   definiteHeight, contentW);
       cross[i] = verticalEdges(items[i]) + items[i]->height;
@@ -98,8 +102,8 @@ float Layouter::layoutFlex(LayoutBox *container, float contentWidth, float defin
     for (size_t k = 0; k < count; k++) {
       size_t i = reverse ? (count - 1 - k) : k;
       float crossOffset = crossOffsetFor(containerStyle.align_items, crossSize, cross[i]);
-      float dx = cursor - items[i]->x;
-      float dy = container->content_y + crossOffset - items[i]->y;
+      float dx = cursor + items[i]->margin_left - items[i]->x;
+      float dy = container->content_y + crossOffset + items[i]->margin_top - items[i]->y;
       translate(items[i], dx, dy);
       cursor += mainSizes[i] + between;
     }
@@ -111,6 +115,7 @@ float Layouter::layoutFlex(LayoutBox *container, float contentWidth, float defin
   std::vector<float> outer(count, 0.0f);
   float sumBase = 0;
   for (size_t i = 0; i < count; i++) {
+    setContainingBlock(items[i], containingBlockAncestor(items[i]));
     layoutBlock(items[i], container->content_x, container->content_y, contentWidth, definiteHeight);
     outer[i] = verticalEdges(items[i]) + items[i]->height;
     sumBase += outer[i];
@@ -142,8 +147,11 @@ float Layouter::layoutFlex(LayoutBox *container, float contentWidth, float defin
   float cursor = container->content_y + offset;
   for (size_t k = 0; k < count; k++) {
     size_t i = reverse ? (count - 1 - k) : k;
-    float dx = container->content_x - items[i]->x;
-    float dy = cursor - items[i]->y;
+    float dx = container->content_x + items[i]->margin_left - items[i]->x;
+    /* Margins keep the item's outer box on the main axis, exactly like block
+     * flow — a negative `margin-top` pulls the item up instead of being
+     * silently dropped. */
+    float dy = cursor + items[i]->margin_top - items[i]->y;
     translate(items[i], dx, dy);
     cursor += mainSizes[i] + between;
   }

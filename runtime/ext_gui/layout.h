@@ -59,6 +59,10 @@ struct LayoutBox {
   float content_x = 0, content_y = 0, content_width = 0, content_height = 0;
   float baseline = 0;
 
+  /* The padding box of the nearest positioned ancestor (the viewport when there
+   * is none): the containing block `position: absolute` resolves against. */
+  float cb_x = 0, cb_y = 0, cb_width = 0, cb_height = 0;
+
   LayoutBox *parent = nullptr;
   std::vector<std::unique_ptr<LayoutBox>> children;
 };

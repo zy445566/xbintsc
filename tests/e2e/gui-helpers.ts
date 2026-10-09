@@ -5,8 +5,8 @@
  * the prebuilt `runtime/lib/<os>-<arch>/gui.a` and runs them. Programs close
  * themselves through the `XT_GUI_AUTOCLOSE_MS` hook, so the tests never block on
  * a real window. The suites are skipped when the GUI archive has not been built
- * (run `npm run gui` first) and on Windows, where the archive is not produced
- * yet.
+ * (run `npm run gui` first) and on Windows by default, where the archive is not
+ * validated in CI yet — `xbintsc_GUI_TESTS=1` opts in there.
  *
  * `XT_GUI_AUTOCLOSE_MS` is a *hang guard*, not a test budget: it is the wall
  * clock the frame loop is allowed to run before it gives up and exits. A program
@@ -31,8 +31,17 @@ import { findRuntimeDir, platformSlug } from "../../src/driver/paths.js";
 
 const archivePath = join(findRuntimeDir(), "lib", platformSlug(), "gui.a");
 
-/** True when the GUI archive exists and we are not on Windows. */
-export const guiAvailable = existsSync(archivePath) && process.platform !== "win32";
+/**
+ * True when the GUI archive exists and the suite may run.
+ *
+ * Windows is skipped by default: the archive (`gui.lib`) is produced by
+ * `scripts/build-gui.ts`, but CI has not validated the GUI there. Set
+ * `xbintsc_GUI_TESTS=1` to opt in on a Windows developer machine that has one —
+ * the suites open a real window, so they need a working GPU/display.
+ */
+export const guiAvailable =
+  (existsSync(archivePath) || existsSync(join(findRuntimeDir(), "lib", platformSlug(), "gui.lib"))) &&
+  (process.platform !== "win32" || process.env.xbintsc_GUI_TESTS === "1");
 
 export interface GuiRunResult {
   stdout: string;
@@ -63,6 +72,13 @@ const DEFAULT_AUTOCLOSE_MS = 400;
 export interface GuiHarness {
   /** Absolute path of the 4x4 test PNG written during `setup()`. */
   readonly logoPath: string;
+  /**
+   * The same path, safe to embed in HTML/CSS. On Windows an absolute path
+   * contains backslashes, which an HTML attribute (or a CSS `url()`) would eat,
+   * so it is written with `/` separators and percent-encoded on the way in —
+   * the engine decodes it again (`xt_image_load`).
+   */
+  imageSrc(absolutePath: string): string;
   setup(): void;
   cleanup(): void;
   /** Compile a program and run it with the auto-close hook, returning stdout. */
@@ -72,6 +88,15 @@ export interface GuiHarness {
 /** A 4x4 PNG: left half red, right half blue (base64-encoded inline). */
 const LOGO_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFElEQVR42mP4z8DwH4Sh1H8G0gUALFAf4eNWqTEAAAAASUVORK5CYII=";
+
+/**
+ * Make an absolute path embeddable in an HTML attribute or CSS `url()`: use `/`
+ * separators (valid on Windows too) and percent-encode the rest, which is how
+ * the engine's image loader expects a local path to arrive.
+ */
+function toImageSrc(absolutePath: string): string {
+  return encodeURI(absolutePath.split("\\").join("/"));
+}
 
 export function createGuiHarness(): GuiHarness {
   let workdir = "";
@@ -117,6 +142,7 @@ export function createGuiHarness(): GuiHarness {
     get logoPath() {
       return logoPath;
     },
+    imageSrc: toImageSrc,
     setup() {
       workdir = mkdtempSync(join(tmpdir(), "xbintsc-gui-"));
       logoPath = join(workdir, "logo.png");

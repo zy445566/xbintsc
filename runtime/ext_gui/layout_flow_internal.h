@@ -62,6 +62,17 @@ inline bool isAuto(const Length &length) {
   return length.unit == Unit::Auto || length.unit == Unit::Invalid || length.unit == Unit::None;
 }
 
+/** True for a text node that holds nothing but HTML source whitespace. HTML
+ * collapses those away between block-level boxes, which is what keeps a
+ * document's indentation from becoming part of the page (the browser model). */
+inline bool isCollapsibleText(const LayoutBox *box) {
+  if (!box->is_text) return false;
+  for (char c : box->text) {
+    if (c != ' ' && c != '\t' && c != '\n' && c != '\r') return false;
+  }
+  return true;
+}
+
 /* Per-character advance as a fraction of the font size is no longer needed
  * here: text metrics come from the shaping stack (see `text.h`). */
 
@@ -117,13 +128,41 @@ struct Layouter {
 
   void resolveEdges(LayoutBox *box, float containingWidth) const;
 
-  /** Lay out `box` at (x, y) and return its outer height (margins included). */
+  /** Lay out `box` at (x, y) and return its outer height (margins included).
+   * `inFlow` is false for an absolutely positioned child: it is still laid out,
+   * but the caller ignores the returned height (it is out of flow). */
   float layoutBlock(LayoutBox *box, float x, float y, float availableWidth, float availableHeight,
-                    float forcedContentWidth = -1, float forcedContentHeight = -1) const;
+                    float forcedContentWidth = -1, float forcedContentHeight = -1,
+                    bool inFlow = true) const;
 
   /** Lay out the children of `block`; returns the used content height. */
   float layoutChildren(LayoutBox *block, float contentWidth, float availableHeight,
                        float definiteHeight) const;
+
+  /** Lay out the absolutely positioned children of `block`. Called once the
+   * block has its final size, because those children resolve `bottom`/`right`
+   * against its padding box. */
+  void layoutAbsoluteChildren(LayoutBox *block, float contentWidth, float availableHeight) const;
+
+  /** True when `box` establishes a containing block for absolute descendants. */
+  static bool establishesContainingBlock(const LayoutBox *box);
+
+  /** True for an out-of-flow child (`position: absolute` or `fixed`). */
+  static bool isAbsoluteChild(const LayoutBox *box);
+
+  /** Nearest ancestor (or `box` itself) that is a containing block, else null. */
+  const LayoutBox *containingBlockAncestor(const LayoutBox *box) const;
+
+  /** Re-publish the containing block of `box`'s children once `box` has its own
+   * final size (an absolute child resolves `bottom`/`right` against it). */
+  void publishContainingBlock(LayoutBox *box) const;
+
+  /** Publish `box`'s padding box as the containing block for absolute
+   * descendants of the nearest positioned ancestor (null means the viewport). */
+  void setContainingBlock(LayoutBox *box, const LayoutBox *ancestor) const;
+
+  /** Resolve the static/relative/absolute offsets of an already laid-out box. */
+  void applyPosition(LayoutBox *box) const;
 
   void flattenInline(LayoutBox *box, float contentWidth, std::vector<InlineItem> &out) const;
 

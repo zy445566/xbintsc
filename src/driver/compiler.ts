@@ -23,6 +23,7 @@ import { findRuntimeLibrary } from "./runtime-lib.js";
 import { resolveToolchain } from "./toolchain-provider.js";
 import { ensureIconObject, readIcon, EMPTY_ICON, IconError, type IconInfo } from "./icon.js";
 import { ensureWindowsIconResource, resolveResourceCompiler } from "./win-icon.js";
+import { ensureWindowsEntryObject } from "./win-entry.js";
 import { bundlePathFor, packageMacApp } from "./mac-bundle.js";
 import type { AppConfig } from "./config.js";
 import {
@@ -295,6 +296,18 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     toolchain.env,
   );
 
+  /* On Windows a GUI program links as a **Windows-subsystem** executable, so
+   * launching it does not flash a console window. That subsystem's C runtime
+   * wants `WinMain`, so a tiny shim object bridges it to the runtime's `main`.
+   * `app.console: true` keeps the console subsystem instead (useful while
+   * debugging, because stdout and stderr only exist there). Other platforms
+   * have no equivalent. */
+  const windowsSubsystem = process.platform === "win32" && registry.has("gui") && app.console !== true;
+  const consoleSubsystem = windowsSubsystem ? ["-Wl,/SUBSYSTEM:WINDOWS"] : [];
+  const entryObject = windowsSubsystem
+    ? ensureWindowsEntryObject(runner, clang, cacheDir, toolchain.env)
+    : undefined;
+
   const iconObjects: string[] = [];
   // The GUI extension references the icon symbols unconditionally, so a GUI
   // program gets an (empty) icon object even with no icon configured.
@@ -320,12 +333,24 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   link(runner, {
     clang,
-    objectPaths: [objectPath, ...runtimeObjects, ...extensionObjects, ...nativeObjects, ...iconObjects],
+    objectPaths: [
+      objectPath,
+      ...runtimeObjects,
+      ...extensionObjects,
+      ...nativeObjects,
+      ...(entryObject !== undefined ? [entryObject] : []),
+      ...iconObjects,
+    ],
     outputPath,
     linkerFlags: [
       ...toolchain.linkerArgs,
       ...(process.platform === "win32" ? ["-lws2_32"] : ["-lm"]),
       ...registry.linkerFlags(),
+      /* A GUI program is a Windows-subsystem executable: no console window is
+       * created when it is launched. Console output (stdout/stderr) is lost in
+       * that subsystem, so a program that wants to report things opts back in
+       * with `app.console: true`. */
+      ...consoleSubsystem,
     ],
     optimize,
     env: toolchain.env,

@@ -24,6 +24,13 @@ export interface AppConfig {
   /** macOS only: produce a `<name>.app` bundle. */
   readonly bundle?: boolean;
   readonly bundleId?: string;
+  /**
+   * Windows only: link as a console-subsystem executable instead of the default
+   * Windows subsystem. A GUI program defaults to the Windows subsystem so that
+   * launching it does not open a console window — which also means stdout and
+   * stderr go nowhere, so set this while debugging a GUI program.
+   */
+  readonly console?: boolean;
 }
 
 /** The on-disk schema of `xbintsc.config.json`. Every field is optional. */

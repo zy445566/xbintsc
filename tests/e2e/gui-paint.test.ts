@@ -124,4 +124,48 @@ describe.skipIf(!guiAvailable)("gui extension — paint", () => {
     expect(list).toContain('size=20.0');
     expect(list).toContain('color=#0000ffff "Hi"');
   });
+
+  it("does not paint an `opacity: 0` box or its subtree", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "opacity",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; background-color: #123456; }
+        #box { width: 30px; height: 10px; background: #ff0000; }
+        #panel { width: 40px; height: 20px; background: #00ff00; opacity: 0; }
+        #label { color: #ffff00; }
+      </style></head><body>
+        <div id="box"></div>
+        <div id="panel"><div id="label">hidden</div></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "opacity", width: 400, height: 300 });
+      win.on("ready", () => {
+        // A hidden box is still laid out — it just is not painted.
+        const panel = win.getBoundingClientRect("#panel");
+        console.log("panel-rect=" + panel.x + "," + panel.y + "," + panel.width + "," + panel.height);
+        console.log("paint-count=" + win.paintCount());
+        console.log("paint-list-start");
+        console.log(win.paintList());
+        console.log("paint-list-end");
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("paint-list-start"), stdout.indexOf("paint-list-end"));
+
+    // Layout is unaffected: the 40x20 box still occupies its place.
+    expect(value("panel-rect")).toBe("0,10,40,20");
+    // body background + #box background only: #panel and its text paint nothing.
+    expect(value("paint-count")).toBe("2");
+    expect(list).not.toContain("#00ff00ff");
+    expect(list).not.toContain("hidden");
+    // Anything above 0 is painted in full (there is no partial compositing yet).
+    expect(list).toContain("#ff0000ff");
+  });
 });

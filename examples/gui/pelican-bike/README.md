@@ -18,13 +18,13 @@ xbintsc.config.json entry + `gui` extension, so no flags are needed
 ```
 
 The host-specific parts are the few things the engine exposes that a browser
-does not (`window.on`, `isOpen`, `close`) and vice versa (`addEventListener`).
+does not (`window["on"]`, `isOpen`, `close`) and vice versa (`addEventListener`).
 `index.html` detects the host once and routes them through its `dom` layer:
 
 ```ts
-const inGui = typeof window.on === "function";
+const inGui = typeof window["on"] === "function";
 const dom = inGui
-  ? { on: (t, fn) => { window.on(t, fn); }, tick: (fn) => window.requestAnimationFrame(fn), … }
+  ? { on: (t, fn) => { window["on"](t, fn); }, tick: (fn) => window.requestAnimationFrame(fn), … }
   : { on: (t, fn) => { window.addEventListener(t, fn); }, tick: (fn) => requestAnimationFrame(fn), … };
 ```
 
@@ -33,7 +33,8 @@ Everything else — `document.getElementById`, `getBoundingClientRect`,
 same in both, which is why the game itself has no `if (inGui)` branches. The
 script also avoids `(window as any)` (the engine's parser rejects `as`, and there
 is no need for it: `window["__pelican"] = hooks` works in a browser and compiles
-natively).
+natively). Keyboard *input* is the one place where the two hosts genuinely
+disagree and the game has to reconcile them; see "Layout notes" below.
 
 In the browser the game publishes its hooks on `window.__pelican`, so the console
 can drive it:
@@ -125,6 +126,12 @@ the game plays identically at any frame rate.
 | `R` | restart after a crash |
 | `Esc` | quit the native window (`F5`/tab close in a browser) |
 
+Every key works in both hosts: the native engine reports `Space`/`Up`/`Right`/
+`Left`, a browser reports ` `/`ArrowUp`/`ArrowRight`/`ArrowLeft`, and the game
+matches either spelling (see "Layout notes"). A jump only clears an obstacle if
+it starts early enough for the bike to be *above* it when it arrives, so jump as
+the obstacle comes into range, not when it is almost on you.
+
 ## How it is put together
 
 - **One positioned scene.** `.scene` is `position: absolute` inside the viewport;
@@ -194,6 +201,15 @@ in the engine *and* in a browser:
   invisible while it has no `show` class and fully opaque once it has one — the
   intended fade-in is not visible in the engine (see `doc/gui.md`, "Implemented
   paint").
+- **The two hosts spell keys differently.** The engine names a key the way
+  `SDL_GetKeyName` does (`"Space"`, `"Up"`, `"Right"`); a browser reports
+  `KeyboardEvent.key`, which is `" "` for the spacebar and `"ArrowUp"` /
+  `"ArrowRight"` for the arrows. Comparing against one spelling silently works in
+  one host and does nothing in the other, so `canJumpKey`/`isRightKey`/`isLeftKey`
+  accept both, falling back to `KeyboardEvent.code` (`"Space"`, `"ArrowUp"`),
+  which is the one spelling both agree on. The browser branch is covered by
+  `tests/e2e/gui-example-browser.test.ts`, which delivers real key events rather
+  than calling `jump()` directly.
 
 ## Tests
 

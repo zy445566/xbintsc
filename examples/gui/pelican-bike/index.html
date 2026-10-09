@@ -475,13 +475,15 @@
      * layout engine relayout", batched once per frame.
      * ========================================================================== */
 
-    /* `window.on` (and `driver`/`isOpen`/`close`) only exist in the gui engine;
-       the browser reaches the same events through `addEventListener`. */
-    const inGui = typeof window.on === "function";
+    /* The engine's window handle (and `driver`/`isOpen`/`close`) only exists in
+       the gui host; a browser reaches the same events through
+       `addEventListener`. `window["on"]` rather than `window.on` because the
+       engine's parser rejects a property named after a keyword in dot form. */
+    const inGui = typeof window["on"] === "function";
 
     const dom = inGui
       ? {
-          on: (type, handler) => { window.on(type, handler); },
+          on: (type, handler) => { window["on"](type, handler); },
           tick: (fn) => window.requestAnimationFrame(fn),
           open: () => window.isOpen(),
           closeWindow: () => { window.close(); }
@@ -492,6 +494,17 @@
           open: () => true,
           closeWindow: () => {}
         };
+
+    /* The two hosts name keys differently: the engine reports what
+       `SDL_GetKeyName` says ("Space", "Up", "Right"), a browser reports
+       `KeyboardEvent.key` (" ", "ArrowUp", "ArrowRight") with `code` as the
+       physical spelling both agree on. Normalising here is what makes one key
+       handler correct in both. */
+    const canJumpKey = (e) => e.key === "Space" || e.key === " " || e.code === "Space" ||
+      e.key === "Up" || e.key === "ArrowUp" || e.code === "ArrowUp";
+    const isRightKey = (e) => e.key === "Right" || e.key === "ArrowRight" || e.code === "ArrowRight";
+    const isLeftKey = (e) => e.key === "Left" || e.key === "ArrowLeft" || e.code === "ArrowLeft";
+    const isKey = (e, letter, code) => e.key === letter || e.key === letter.toLowerCase() || e.code === code;
 
     /* ==========================================================================
      * Pixel artwork.
@@ -1237,24 +1250,24 @@
 
     dom.on("keydown", (e) => {
       state.auto = false;
-      if (e.key === "Space" || e.key === "Up") {
+      if (canJumpKey(e)) {
         jump();
-      } else if (e.key === "Right") {
+      } else if (isRightKey(e)) {
         state.keyRight = true;
-      } else if (e.key === "Left") {
+      } else if (isLeftKey(e)) {
         state.keyLeft = true;
-      } else if (e.key === "P") {
+      } else if (isKey(e, "P", "KeyP")) {
         state.auto = !state.auto;
-      } else if (e.key === "R") {
+      } else if (isKey(e, "R", "KeyR")) {
         restart();
-      } else if (e.key === "Escape") {
+      } else if (e.key === "Escape" || e.code === "Escape") {
         dom.closeWindow();
       }
     });
 
     dom.on("keyup", (e) => {
-      if (e.key === "Right") state.keyRight = false;
-      if (e.key === "Left") state.keyLeft = false;
+      if (isRightKey(e)) state.keyRight = false;
+      if (isLeftKey(e)) state.keyLeft = false;
     });
 
     /* -------------------------------------------------------------- start up */

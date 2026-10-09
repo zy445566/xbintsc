@@ -13,6 +13,7 @@ describe.skipIf(!guiAvailable)("gui extension — paint", () => {
   afterAll(() => harness.cleanup());
 
   it("sizes and paints images (intrinsic and explicit)", () => {
+    const src = harness.imageSrc(harness.logoPath);
     const { stdout } = harness.compileAndRun(
       "image",
       `
@@ -23,8 +24,8 @@ describe.skipIf(!guiAvailable)("gui extension — paint", () => {
         body { margin: 0; }
         #logo { width: 40px; height: 40px; }
       </style></head><body>
-        <img id="logo" src="${harness.logoPath}">
-        <img id="natural" src="${harness.logoPath}">
+        <img id="logo" src="${src}">
+        <img id="natural" src="${src}">
       </body></html>
       \`;
 
@@ -44,8 +45,8 @@ describe.skipIf(!guiAvailable)("gui extension — paint", () => {
     // Explicit CSS size wins; without one the intrinsic 4x4 size is used.
     expect(stdout).toContain("logo=40x40");
     expect(stdout).toContain("natural=4x4");
-    expect(stdout).toContain(`image x=0.0 y=0.0 w=40.0 h=40.0 src=${harness.logoPath}`);
-    expect(stdout).toContain(`image x=0.0 y=40.0 w=4.0 h=4.0 src=${harness.logoPath}`);
+    expect(stdout).toContain(`image x=0.0 y=0.0 w=40.0 h=40.0 src=${src}`);
+    expect(stdout).toContain(`image x=0.0 y=40.0 w=4.0 h=4.0 src=${src}`);
   });
 
   it("builds a display list of backgrounds and borders", () => {

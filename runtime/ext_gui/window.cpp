@@ -283,6 +283,17 @@ static xt_value win_is_open(xt_value self, xt_value env, int32_t argc, xt_value 
   return (win != NULL && win->open) ? XT_TRUE : XT_FALSE;
 }
 
+/** `/driver`: which SDL_GPU backend the device is running (`"vulkan"`,
+ * `"direct3d12"`, `"metal"`, …). The engine asks SDL for the best available
+ * one, so this is how a program (or a test) confirms the path in use. */
+static xt_value win_driver(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)self;
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return xt_string_from_cstr(xt_gui_driver());
+}
+
 /** `requestAnimationFrame(fn)` -> id. The callback runs once on the next frame
  * with the frame timestamp (ms) as its only argument. */
 static xt_value win_request_animation_frame(xt_value self, xt_value env, int32_t argc,
@@ -455,6 +466,7 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "fontMetrics", (void *)win_font_metrics);
   define_method(proto, "close", (void *)win_close);
   define_method(proto, "isOpen", (void *)win_is_open);
+  define_method(proto, "driver", (void *)win_driver);
   define_method(proto, "requestAnimationFrame", (void *)win_request_animation_frame);
   define_method(proto, "cancelAnimationFrame", (void *)win_cancel_animation_frame);
   define_method(proto, "on", (void *)win_on);

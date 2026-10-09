@@ -66,8 +66,7 @@ void xt_gui_apply_icon(SDL_Window *window) {
 
 /* -- initialisation ------------------------------------------------------- */
 
-static int ensure_init(void) {
-  if (g_sdl_initialized) return 1;
+static int ensure_init(void) {  if (g_sdl_initialized) return 1;
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     fprintf(stderr, "xt_gui: SDL_Init failed: %s\n", SDL_GetError());
     return 0;
@@ -101,6 +100,12 @@ static XtGuiWindow *window_by_object(xt_value object) {
 }  // namespace guidev
 
 using namespace guidev;
+
+const char *xt_gui_driver(void) {
+  if (g_device == NULL) return "";
+  const char *driver = SDL_GetGPUDeviceDriver(g_device);
+  return driver != NULL ? driver : "";
+}
 
 XtGuiWindow *xt_gui_window_from_this(xt_value thisValue) {
   return window_by_object(thisValue);
@@ -206,6 +211,14 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   xt_object_set(object, xt_string_from_cstr("__xt_gui_index"), xt_number((double)index));
   xt_object_set(object, xt_string_from_cstr("__xt_gui_html"), xt_string_from_cstr(""));
   xt_object_set(object, xt_string_from_cstr("__xt_gui_events"), xt_object_new());
+  /* The engine owns a graph of values on the window's behalf — element
+   * handles (`node_handles`), their event listeners and the queued animation
+   * frame closures. Most of them are referenced from TypeScript too, but not
+   * all: a handle the script queried once and dropped (or one only reachable
+   * through an ancestor element) would otherwise be collected while the engine
+   * still uses it, which is a use-after-free. Rooting the window object makes
+   * everything hanging off it reachable. */
+  xt_gc_add_root(&record->object);
 
   return object;
 }

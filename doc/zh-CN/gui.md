@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M10** —— 功能（M1–M10）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内与 Flexbox）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制，CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。本文档记录了一个跨平台 GUI 扩展的锁定决策、架构、里程碑计划与当前进度；该扩展使用自有的 GPU 加速引擎渲染 HTML/CSS UI。
+状态：**M11** —— 功能（M1–M11）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制，CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。本文档记录了一个跨平台 GUI 扩展的锁定决策、架构、里程碑计划与当前进度；该扩展使用自有的 GPU 加速引擎渲染 HTML/CSS UI。
 
 ## 目标
 
@@ -88,7 +88,15 @@ run();                                 // 驱动主循环，直到所有窗口�
 ```
 
 窗口句柄上已实现的方法：`setTitle` / `setSize` / `loadHTML` /
-`getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`。触发的事件：
+`getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`，以及
+`driver()`——它报告当前使用的 SDL_GPU 后端（`"vulkan"`、`"direct3d12"`、
+`"metal"` 等，由 SDL 挑选设备支持的最佳后端）。
+
+在 Windows 上，GUI 程序会被链接为 **Windows 子系统**可执行文件，因此启动时不会闪出控制台
+窗口；这也意味着从资源管理器启动时 stdout/stderr 无处可去，调试时可在
+`xbintsc.config.json` 里设置 `app.console: true` 保留控制台子系统。
+
+触发的事件：
 `ready`（首个呈现帧之后）、`load`、`close`，以及输入事件
 `mousemove`、`mousedown`、`mouseup`、`click`、`wheel`、`keydown`、`keyup`。
 
@@ -252,10 +260,16 @@ run();
   技术栈测量（见 *已实现的文本*）。
 - **Flexbox** —— 单行 `row`/`column`（以及 `-reverse` 变体），支持 `gap`、
   `flex-basis`/`flex-grow`/`flex-shrink`、`justify-content` 与 `align-items`
-  （当交叉轴尺寸确定时包括 `stretch`）。
+  （当交叉轴尺寸确定时包括 `stretch`）。flex 项的外边距参与其外框尺寸，因此
+  负的 `margin-top` 会把该项上移，而不是被忽略。
+- **定位** —— `position: relative` 会按 `top`/`right`/`bottom`/`left` 偏移该盒子
+  及其子树，但不改变它在流中占用的空间；`position: absolute`（以及针对视口解析
+  的 `fixed`）使其脱离文档流，并相对最近的已定位祖先的 padding box 定位（没有
+  这样的祖先时则相对视口）。`auto` 的 inset 在该轴上保留静态位置；宽度 `auto`
+  时使用 shrink-to-fit，除非 `left` 与 `right` 同时给出（此时填满两者之间的空间）；
+  百分比相对包含块解析。目前还没有 `z-index` 层叠，绘制仍按文档顺序进行。
 
-尚未实现：外边距折叠、多行 flex 换行、`position` 偏移
-（`relative`/`absolute`/`fixed`）、`overflow` 裁剪与浮动。
+尚未实现：外边距折叠、多行 flex 换行、`z-index` 层叠、`overflow` 裁剪与浮动。
 
 **Document**（`runtime/ext_gui/document.{h,cpp}`）：持有 DOM 树，把 `<style>`
 文本汇总为一份样式表，为某个视口计算样式与布局，并提供
@@ -441,6 +455,19 @@ xbintsc run examples/gui/hello.ts --ext gui
 设置 `XT_GUI_AUTOCLOSE_MS=<n>` 可在 `n` 毫秒后关闭所有窗口，e2e 测试
 （`tests/e2e/gui-*.test.ts`）用它来无头运行。
 
+这里有两个示例：`hello.ts`（HTML/CSS + 响应式计数器）与
+[`pelican-bike/`](../examples/gui/pelican-bike)（一个可玩的 2D 游戏，使用分层
+定位、CSS 像素精灵、`requestAnimationFrame` 与键盘输入）——操作方式与它输出的
+几何报告见该目录的 README。
+
+这些测试套件在 Windows 上默认跳过（该平台会构建归档，但 CI 未验证运行）。
+如果本机有 `gui.lib` 与可用的 GPU，可用 `xbintsc_GUI_TESTS=1` 选择启用：
+
+```bat
+set xbintsc_GUI_TESTS=1
+npx vitest run tests/e2e/gui-layout.test.ts tests/e2e/gui-example.test.ts
+```
+
 在无头 Linux 机器上，安装 SDL3 构建头文件，并在 Xvfb 与软件 Vulkan 驱动下
 运行：
 
@@ -525,6 +552,15 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
       （`gui.cpp`、`window.cpp`、`gui_engine.h`）。
     - `Element.offsetWidth` / `offsetHeight`（取整后的边框盒，会冲刷待处理
       的变更）与 `Element.contains(other)`（`dom_api.cpp`）。
+11. **M11 — CSS 定位** ✅
+    - `position: relative` / `absolute` / `fixed` 与 `top`/`right`/`bottom`/
+      `left`，相对最近的已定位祖先解析（没有时相对视口）；`auto` inset 保留
+      静态位置；脱离文档流的 `width: auto` 使用 shrink-to-fit，两个水平 inset
+      都给出时则填满可用宽度（`layout_flow.cpp`、`layout.h`）。
+    - flex 算法现在会计入项的外边距，负外边距参与布局而不再被丢弃
+      （`layout_flex.cpp`）。
+    - `examples/gui/pelican-bike` 基于它实现，e2e 覆盖见
+      `tests/e2e/gui-layout.test.ts`。
 
 ## 进度日志
 
@@ -573,6 +609,28 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
   （回调在每帧布局之前以帧时间戳运行），以及元素句柄上的
   `offsetWidth`/`offsetHeight`/`contains`；e2e 覆盖在
   `tests/e2e/gui-*.test.ts` 中。
+- **M11** ✅ `position: relative`/`absolute`/`fixed` 与 `top`/`right`/`bottom`/
+  `left`。布局为每个盒子保留包含块（最近的已定位祖先的 padding box，且只在
+  该祖先拥有最终尺寸后才发布，因此 `bottom`/`right` 精确）；绝对定位的盒子
+  在正常流内容之后布局，因此不影响它们；实现了 shrink-to-fit / 填满可用宽度
+  两种规则；flex 项现在会计入外边距。e2e 覆盖在
+  `tests/e2e/gui-layout.test.ts`；`examples/gui/pelican-bike` 基于它实现。
+
+## 已知问题
+
+- **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生
+  访问违例（`0xC0000005`）退出，其余运行与正常退出无异。该问题只在**动画帧循环运行中**复现
+  （静态文档可以正常关闭），且**不是示例游戏自身**的代码：没有任何异常信息，崩溃多发生在
+  启动后一秒内、与截止时间无关，而提高 `XT_GC_THRESHOLD` 可以掩盖它，因此看起来是
+  GC/析构竞态。交互式运行（不设自动关闭）可稳定运行数分钟。`tests/e2e/gui-example.test.ts`
+  因此把该退出码视为可接受结果，行为断言放在不依赖 GPU 的
+  `tests/e2e/gui-example-browser.test.ts` 中。
+- **`display: none -> flex` 的重排。** 通过类名切换让隐藏元素显示在 flex 容器上时，也曾观察
+  到同样的崩溃；`examples/gui/pelican-bike` 改用 `opacity` 显示游戏结束遮罩。
+- **SVG：** 引擎不支持也不计划支持 SVG 元素。HTML 解析器只认识元素与属性，布局只认识盒子，
+  绘制只认识矩形/文本/图像；`<svg>` 子树需要另一套几何与绘制路径。SVG *文件* 也只能走图像
+  加载器（`<img src="logo.svg">`），而这需要 SVG 光栅化器（`stb_image` 不解码 SVG）。因此
+  矢量美术要么以位图（PNG）形式提供，要么像 `examples/gui/pelican-bike` 那样用盒子绘制。
 
 ## 待决问题
 

@@ -96,6 +96,12 @@ void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *
   root_->node = root;
   root_->style = &root_style_;
   root_->display = Display::Block;
+  /* The initial containing block: absolute boxes with no positioned ancestor
+   * resolve their insets against the viewport. */
+  root_->cb_x = 0;
+  root_->cb_y = 0;
+  root_->cb_width = viewportWidth;
+  root_->cb_height = viewportHeight;
   if (root != nullptr) {
     if (root->type == NodeType::Document) {
       for (const std::unique_ptr<Node> &child : root->children) {

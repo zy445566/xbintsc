@@ -1,7 +1,8 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M10** — features (M1–M10) are complete: HTML parsing, CSS selector
-matching, the cascade, computed styles and layout (block, inline and Flexbox) are
+Status: **M11** — features (M1–M11) are complete: HTML parsing, CSS selector
+matching, the cascade, computed styles and layout (block, inline, Flexbox and
+CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
 and shaped text runs and renders them through SDL_GPU. Input events are hit
 tested and delivered to native TS handlers, `:hover`/`:focus` are matched
@@ -11,6 +12,8 @@ DOM: element handles with stable identity, mutation (`appendChild`, `textContent
 `classList`, `style`, …) and element-level events with capture/bubbling.
 **M9** compiles `<script>` bodies ahead of time (inline and `<script src>`) — see
 `doc/gui-scripts.md`. **M10** adds `requestAnimationFrame` plus a few DOM helpers.
+**M11** adds `position: relative`/`absolute`/`fixed` with their offsets, which is
+what `examples/gui/pelican-bike` — a playable 2D game — is built on.
 This document records the locked decisions, the architecture, the milestone plan
 and the current progress of a cross-platform GUI extension that renders an
 HTML/CSS UI with its own GPU-accelerated engine.
@@ -111,9 +114,16 @@ run();                                 // drives the main loop until all windows
 ```
 
 Methods implemented on a window handle: `setTitle` / `setSize` / `loadHTML` /
-`getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`. Events emitted:
+`getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`, plus `driver()`,
+which reports the SDL_GPU backend in use (`"vulkan"`, `"direct3d12"`, `"metal"`,
+… — SDL picks the best one the device supports). Events emitted:
 `ready` (after the first presented frame), `load`, `close`, and the input events
 `mousemove`, `mousedown`, `mouseup`, `click`, `wheel`, `keydown`, `keyup`.
+
+On Windows a GUI program is linked as a **Windows-subsystem** executable, so
+launching it does not flash a console window. That also means stdout/stderr go
+nowhere when it is started from Explorer; set `app.console: true` in
+`xbintsc.config.json` to keep the console subsystem (useful while debugging).
 
 Input handlers receive a single payload object (lifecycle handlers receive none):
 
@@ -284,10 +294,21 @@ with absolute (viewport-relative) geometry:
   measured with the HarfBuzz/FreeType stack (see *Implemented text*).
 - **Flexbox** — single-line `row`/`column` (and the `-reverse` variants) with
   `gap`, `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and
-  `align-items` (including `stretch` when the cross size is definite).
+  `align-items` (including `stretch` when the cross size is definite). Item
+  margins are part of the item's outer size on both axes, so a negative
+  `margin-top` pulls an item up instead of being ignored.
+- **Positioning** — `position: relative` offsets a box (and its subtree) by
+  `top`/`right`/`bottom`/`left` without changing the space it reserved;
+  `position: absolute` (and `fixed`, which resolves against the viewport) takes
+  the box out of flow and places it against the padding box of the nearest
+  positioned ancestor — the viewport when there is none. An `auto` inset keeps
+  the static position on that axis, an `auto` width is shrink-to-fit unless both
+  `left` and `right` are set (then it fills the space between them), and
+  percentages resolve against the containing block. There is no `z-index`
+  stacking yet: painting stays in document order.
 
-Not yet implemented: margin collapsing, multi-line flex wrapping, `position`
-offsets (`relative`/`absolute`/`fixed`), `overflow` clipping and floats.
+Not yet implemented: margin collapsing, multi-line flex wrapping, `z-index`
+stacking, `overflow` clipping and floats.
 
 **Document** (`runtime/ext_gui/document.{h,cpp}`): owns the DOM tree, gathers
 `<style>` text into one stylesheet, computes styles and layout for a viewport and
@@ -406,6 +427,12 @@ Still to do for animation: `@keyframes` animations and `cubic-bezier(...)`.
   `XT_GUI_FONT` (and `XT_GUI_FONT_MONO`), and cached per `(family class, size)`.
   Only regular upright faces are used for now; weight/italic selection is a
   later refinement.
+- The default candidates prefer a **CJK-capable** face (Microsoft YaHei on
+  Windows, PingFang on macOS, Noto Sans CJK/WenQuanYi on Linux) before the
+  Latin-only ones, because a run is shaped with a *single* face: without this,
+  Chinese/Japanese/Korean text renders as blank or `.notdef` boxes. Set
+  `XT_GUI_FONT` to a Latin-only face to get its Latin design instead (at the
+  cost of CJK coverage).
 - `xt_text_measure_width` shapes the run with HarfBuzz (so kerning and
   ligatures are honoured), `xt_text_metrics` returns FreeType's ascent /
   descent / normal line height. When no font file can be found the module falls
@@ -487,8 +514,22 @@ npm run gui          # build runtime/lib/<os>-<arch>/gui.a (fetches SDL3 once)
 xbintsc run examples/gui/hello.ts --ext gui
 ```
 
+Two examples live here: `hello.ts` (HTML/CSS + a reactive counter) and
+[`pelican-bike/`](../examples/gui/pelican-bike), a playable 2D game that uses
+positioned layers, CSS sprites, `requestAnimationFrame` and keyboard input — see
+its README for controls and the geometry report it prints.
+
 Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
 which the e2e test (`tests/e2e/gui-*.test.ts`) uses to run headlessly.
+
+Those suites are skipped on Windows by default (the archive is built there but
+the run is not validated in CI). With a `gui.lib` and a working GPU, opt in with
+`xbintsc_GUI_TESTS=1`:
+
+```bat
+set xbintsc_GUI_TESTS=1
+npx vitest run tests/e2e/gui-layout.test.ts tests/e2e/gui-example.test.ts
+```
 
 On a headless Linux box, install the SDL3 build headers and run under Xvfb with a
 software Vulkan driver:
@@ -579,6 +620,16 @@ used by default; Wayland is enabled too but not yet exercised.
       DOM (`gui.cpp`, `window.cpp`, `gui_engine.h`).
     - `Element.offsetWidth` / `offsetHeight` (rounded border box, flushes pending
       mutations) and `Element.contains(other)` (`dom_api.cpp`).
+11. **M11 — CSS positioning** ✅
+    - `position: relative` / `absolute` / `fixed` with `top`/`right`/`bottom`/
+      `left`, resolved against the nearest positioned ancestor (the viewport when
+      there is none), `auto` insets keeping the static position, shrink-to-fit
+      for an out-of-flow `width: auto` and fill-available when both horizontal
+      insets are set (`layout_flow.cpp`, `layout.h`).
+    - Item margins are honoured in the flex algorithm, so a negative margin
+      participates in the layout instead of being dropped (`layout_flex.cpp`).
+    - Drives `examples/gui/pelican-bike` and e2e coverage in
+      `tests/e2e/gui-layout.test.ts`.
 
 ## Progress log
 
@@ -629,11 +680,42 @@ used by default; Wayland is enabled too but not yet exercised.
   (callbacks run with the frame timestamp before layout each frame) plus
   `offsetWidth`/`offsetHeight`/`contains` on element handles; e2e coverage in
   `tests/e2e/gui-*.test.ts`.
+- **M11** ✅ `position: relative`/`absolute`/`fixed` with `top`/`right`/`bottom`/
+  `left`. Layout keeps a containing block per box (the nearest positioned
+  ancestor's padding box, published only once that ancestor has its final size,
+  so `bottom`/`right` are exact), absolute boxes are laid out after in-flow
+  content so they never affect it, shrink-to-fit/fill-available width rules are
+  applied, and flex items now account for their margins. e2e coverage in
+  `tests/e2e/gui-layout.test.ts`; `examples/gui/pelican-bike` is built on it.
+
+## Known issues
+
+- **Intermittent crash at auto-close.** `XT_GUI_AUTOCLOSE_MS` ends a run with a
+  native access violation (`0xC0000005`) in roughly two runs out of five; a
+  clean exit looks identical otherwise. It only reproduces with a *running
+  animation-frame loop* (a static document closes fine) and it is **not** the
+  game's own code: no exception is reported, the crash usually lands inside the
+  first second regardless of the deadline, and raising `XT_GC_THRESHOLD` hides
+  it, so it looks like a GC/teardown race. Interactive runs (no auto-close) are
+  stable for minutes. `tests/e2e/gui-example.test.ts` treats the code as an
+  acceptable outcome for that reason, and the behavioural assertions live in
+  `tests/e2e/gui-example-browser.test.ts` (no GPU, deterministic).
+- **`display: none -> flex` restyle.** A hidden element being shown by a
+  *class change* on a flex container has also been observed to crash the same
+  way; `examples/gui/pelican-bike` reveals its game-over overlay with `opacity`
+  instead.
 
 ## Open questions
 
 - Whether Linux ships X11, Wayland, or both in the first cut. (Decision:
   X11 first, Wayland later.)
+- **SVG:** there is no SVG support and none is planned. The HTML parser knows
+  elements and attributes, the layout engine knows boxes, and paint knows
+  rectangles/text/images, so `<svg>` trees would need a whole second
+  geometry+paint path. An SVG *file* works only through the image loader
+  (`<img src="logo.svg">`), which needs an SVG rasteriser (`stb_image` does not
+  decode SVG); vector art therefore has to arrive as a raster (PNG) or be drawn
+  from boxes, as `examples/gui/pelican-bike` does.
 - Windows: an MSVC-compatible `gui.lib` (COFF objects + `ar -M`/`llvm-ar`) is
   produced by `scripts/build-gui.ts`, but it has not been validated in CI yet,
   so the Windows step is provisional (the job stays green) and `package` skips

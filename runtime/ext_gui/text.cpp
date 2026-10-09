@@ -46,10 +46,21 @@ namespace {
 const char *const kSansCandidates[] = {
     /* Explicit override wins (also checked per family class below). */
     nullptr,
+    /* Fonts with CJK coverage come first: the default face is a single face, so
+     * it has to be able to render Chinese/Japanese/Korean text as well as
+     * Latin (see "Implemented text" in doc/gui.md). */
+    "C:\\Windows\\Fonts\\msyh.ttc",      /* Microsoft YaHei (Win 8.1+) */
+    "C:\\Windows\\Fonts\\msyh.ttf",      /* Microsoft YaHei (Win 7) */
+    "C:\\Windows\\Fonts\\Deng.ttf",      /* DengXian */
+    "C:\\Windows\\Fonts\\simsun.ttc",    /* SimSun */
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
     "/System/Library/Fonts/Helvetica.ttc",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/System/Library/Fonts/Supplemental/Verdana.ttf",
     "/Library/Fonts/Arial.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     "/usr/share/fonts/TTF/DejaVuSans.ttf",
@@ -60,10 +71,13 @@ const char *const kSansCandidates[] = {
 
 const char *const kMonoCandidates[] = {
     nullptr,
+    "C:\\Windows\\Fonts\\msyh.ttc",      /* CJK-capable fallback (see above) */
+    "/System/Library/Fonts/PingFang.ttc",
     "/System/Library/Fonts/Menlo.ttc",
     "/System/Library/Fonts/Supplemental/Courier New.ttf",
     "/System/Library/Fonts/Courier.ttc",
     "/Library/Fonts/Courier New.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
     "/usr/share/fonts/TTF/DejaVuSansMono.ttf",

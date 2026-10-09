@@ -48,6 +48,7 @@ void Layouter::flattenInline(LayoutBox *box, float contentWidth,
   if (box->display == Display::InlineBlock) {
     float available = contentWidth;
     float intrinsic = preferredContentWidth(box, available);
+    setContainingBlock(box, containingBlockAncestor(box));
     layoutBlock(box, 0, 0, available, -1, intrinsic);
     InlineItem item;
     item.box = box;
@@ -163,9 +164,16 @@ float Layouter::layoutInlineRun(LayoutBox *container, const std::vector<LayoutBo
     }
     for (InlineItem *item : current) {
       if (item->atomic) {
-        float dx = x + item->box->margin_left - item->box->x;
-        float dy = cursorY + item->box->margin_top - item->box->y;
-        translate(item->box, dx, dy);
+        /* An out-of-flow item was already placed against its containing block by
+         * `layoutBlock`, so it must not be moved back onto the line. */
+        if (!isAbsoluteChild(item->box)) {
+          float dx = x + item->box->margin_left - item->box->x;
+          float dy = cursorY + item->box->margin_top - item->box->y;
+          translate(item->box, dx, dy);
+          /* `position: relative` on an inline-block shifts it after line
+           * placement, so the line box keeps the space it reserved. */
+          applyPosition(item->box);
+        }
       } else {
         item->box->fragments.push_back({x, cursorY, item->width, height, item->text});
       }

@@ -136,6 +136,25 @@ xt_value xt_gui_node_handle(XtGuiWindow *win, const xtgui::Node *node) {
   return handle;
 }
 
+void xt_gui_node_handle_forget(XtGuiWindow *win, const xtgui::Node *node) {
+  if (win == nullptr || node == nullptr) return;
+  /* The node is about to be destroyed (a removal, or `innerHTML = …` dropping
+   * the old children). Drop its slot as well as its handle: the slot is what
+   * `resolve_node` reads, and leaving a freed pointer there is a
+   * use-after-free the next time any handle is resolved. Existing handles keep
+   * resolving to "stale" and no-op, which is the documented tombstone
+   * behaviour. */
+  auto index = win->node_index.find(node);
+  if (index != win->node_index.end()) {
+    int slot = index->second;
+    if (slot >= 0 && slot < (int)win->node_order.size()) {
+      win->node_order[(size_t)slot] = nullptr;
+    }
+    win->node_index.erase(index);
+  }
+  win->node_handles.erase(node);
+}
+
 xt_value xt_gui_document_handle(XtGuiWindow *win) {
   if (win == nullptr) return XT_UNDEFINED;
   if (!XT_IS_OBJECT(win->document_object)) {

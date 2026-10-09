@@ -60,6 +60,10 @@
         "bundleId": {
           "type": "string",
           "description": "macOS CFBundleIdentifier, e.g. com.example.demo."
+        },
+        "console": {
+          "type": "boolean",
+          "description": "Windows only: keep the console subsystem (a console window) instead of the default Windows subsystem, so stdout/stderr are visible while debugging a GUI program."
         }
       }
     }

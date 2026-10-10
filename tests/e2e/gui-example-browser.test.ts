@@ -105,11 +105,14 @@ function runBrowserBranch(framesToDrive: number): RunResult {
     createElement: (tag: string) => element(tag, { x: 0, y: 0, width: 0, height: 0 }),
   };
 
-  // The browser `window`: no `on`/`isOpen`/`close`, which is what makes the
-  // script pick its browser branch.
+  // The browser `window`, spelled the way the game expects: the same
+  // `addEventListener`/`requestAnimationFrame`/`closed`/`close` surface the
+  // engine now provides, so the script needs no host branch to pick.
   const windowStub: Record<string, unknown> = {
     innerWidth: 1200,
     innerHeight: 800,
+    closed: false,
+    close: () => {},
     addEventListener: (type: string, handler: (event: unknown) => void) => {
       (listeners[type] ??= []).push(handler);
     },
@@ -166,13 +169,12 @@ describe("gui example — pelican bike in a browser", () => {
   it("runs the inline script against a browser-like host", () => {
     const { hooks, scheduled, logs } = runBrowserBranch(120);
 
-    // It picked the browser branch and started a frame loop there.
+    // It started a frame loop in this host.
     expect(scheduled).toBeGreaterThan(50);
     expect(logs.join("\n")).not.toContain("Uncaught");
 
     // The game logic advanced (the autopilot reports a distance > 0).
     const info = hooks.info();
-    expect(info.host).toBe("browser");
     expect(info.ground).toBe(450);
     expect(String(info.hud)).toMatch(/\d{4} \d+ \d+ [▮▯]{7} \d+/);
 
@@ -181,7 +183,6 @@ describe("gui example — pelican bike in a browser", () => {
     hooks.jump();
     hooks.step(0.016);
     const after = hooks.info();
-    expect(after.host).toBe("browser");
     expect(String(after.player)).toBe("420,416");
   });
 
@@ -216,17 +217,20 @@ describe("gui example — pelican bike in a browser", () => {
     expect(bottom()).not.toBe(grounded);
   });
 
-  it("does not name any engine-only window API outside its shim", () => {
+  it("uses only Web window APIs, never the engine-only spellings", () => {
     const script = inlineScript();
-    // `window.on` / `isOpen` / `close` / `driver` may only appear in the shim
-    // block (the `inGui` selection), never later in the game.
-    const shimEnd = script.indexOf("const dom =");
-    const afterShim = script.slice(script.indexOf("};", shimEnd));
-    expect(afterShim).not.toContain("window.on(");
-    expect(afterShim).not.toContain('window["on"]');
-    expect(afterShim).not.toContain("window.isOpen");
-    expect(afterShim).not.toContain("window.close(");
-    expect(afterShim).not.toContain("window.driver");
+    // The engine now offers the browser names, so the game can avoid every
+    // engine-only API and the `inGui` branch that used to select between them.
+    expect(script).not.toContain("window.on(");
+    expect(script).not.toContain('window["on"]');
+    expect(script).not.toContain("window.isOpen");
+    expect(script).not.toContain("window.off(");
+    expect(script).not.toContain("window.driver");
+    expect(script).not.toContain("inGui");
+    // It does use the browser API, which is what makes one script correct in
+    // both hosts.
+    expect(script).toContain("window.addEventListener");
+    expect(script).toContain("window.closed");
     // And nothing may cast through `any`, which the engine's parser rejects.
     expect(script).not.toContain("as any");
   });

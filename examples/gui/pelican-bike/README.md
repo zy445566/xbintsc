@@ -17,24 +17,28 @@ main.ts             the native driver: opens the window, loads the document,
 xbintsc.config.json entry + `gui` extension, so no flags are needed
 ```
 
-The host-specific parts are the few things the engine exposes that a browser
-does not (`window["on"]`, `isOpen`, `close`) and vice versa (`addEventListener`).
-`index.html` detects the host once and routes them through its `dom` layer:
+The engine's window implements the Web APIs the game uses:
+`window.addEventListener`, `window.requestAnimationFrame`, `window.close()` and
+`window.closed`. `index.html` therefore has no host detection at all — a few
+lines of `dom` plumbing name those APIs once and the rest of the game is plain
+Web code:
 
 ```ts
-const inGui = typeof window["on"] === "function";
-const dom = inGui
-  ? { on: (t, fn) => { window["on"](t, fn); }, tick: (fn) => window.requestAnimationFrame(fn), … }
-  : { on: (t, fn) => { window.addEventListener(t, fn); }, tick: (fn) => requestAnimationFrame(fn), … };
+const dom = {
+  on: (t, fn) => { window.addEventListener(t, fn); },
+  tick: (fn) => window.requestAnimationFrame(fn),
+  open: () => !window.closed,
+  closeWindow: () => { window.close(); }
+};
 ```
 
-Everything else — `document.getElementById`, `getBoundingClientRect`,
+Everything — `document.getElementById`, `getBoundingClientRect`,
 `style.setProperty`, `textContent`, `innerHTML`, `requestAnimationFrame` — is the
-same in both, which is why the game itself has no `if (inGui)` branches. The
-script also avoids `(window as any)` (the engine's parser rejects `as`, and there
-is no need for it: `window["__pelican"] = hooks` works in a browser and compiles
-natively). Keyboard *input* is the one place where the two hosts genuinely
-disagree and the game has to reconcile them; see "Layout notes" below.
+same in both. The script also avoids `(window as any)` (the engine's parser
+rejects `as`, and there is no need for it: `window["__pelican"] = hooks` works in
+a browser and compiles natively). Keyboard *input* is the one place where the two
+hosts genuinely disagree — over the *spelling* of a key, not the API — and the
+game reconciles the two; see "Layout notes" below.
 
 In the browser the game publishes its hooks on `window.__pelican`, so the console
 can drive it:
@@ -55,7 +59,7 @@ Just open `index.html`. Click the page once so it has keyboard focus, then:
 | `←` | brake |
 | `P` | toggle autoplay (on by default — any key takes over) |
 | `R` | restart after a crash |
-| `Esc` | nothing (a browser tab cannot close itself) |
+| `Esc` | attempt to close (browsers only allow this for a script-opened tab) |
 
 The scene is a fixed 1000×620 box, exactly as in the native window.
 
@@ -124,7 +128,7 @@ the game plays identically at any frame rate.
 | `←` | brake |
 | `P` | toggle autoplay (the pelican rides itself by default) |
 | `R` | restart after a crash |
-| `Esc` | quit the native window (`F5`/tab close in a browser) |
+| `Esc` | quit: closes the native window; a browser tab may ignore `window.close()` |
 
 Every key works in both hosts: the native engine reports `Space`/`Up`/`Right`/
 `Left`, a browser reports ` `/`ArrowUp`/`ArrowRight`/`ArrowLeft`, and the game

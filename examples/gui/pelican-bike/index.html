@@ -463,11 +463,11 @@
      *     `document` as ordinary parameters; and
      *   - a browser, where it is ordinary JavaScript.
      *
-     * Everything host-specific goes through the tiny `dom` layer below: it
-     * detects which host it is and gives the rest of the game one interface
-     * (`dom.on`, `dom.tick`, `dom.open`, `dom.closeWindow`, `dom.width/height`),
-     * so the game itself only ever touches `document` and the elements it
-     * returns. Open this file directly in a browser, or build it with xbintsc.
+     * The native window implements the Web APIs this document uses —
+     * `window.addEventListener`, `window.requestAnimationFrame`,
+     * `window.close()` and `window.closed` — so the code below is plain Web
+     * code with no host detection. Open this file directly in a browser, or
+     * build it with xbintsc.
      *
      * The scene is a positioned box; every layer and every sprite lives inside
      * it as `position: absolute`. A sprite is a box of coloured pixels built
@@ -475,25 +475,14 @@
      * layout engine relayout", batched once per frame.
      * ========================================================================== */
 
-    /* The engine's window handle (and `driver`/`isOpen`/`close`) only exists in
-       the gui host; a browser reaches the same events through
-       `addEventListener`. `window["on"]` rather than `window.on` because the
-       engine's parser rejects a property named after a keyword in dot form. */
-    const inGui = typeof window["on"] === "function";
-
-    const dom = inGui
-      ? {
-          on: (type, handler) => { window["on"](type, handler); },
-          tick: (fn) => window.requestAnimationFrame(fn),
-          open: () => window.isOpen(),
-          closeWindow: () => { window.close(); }
-        }
-      : {
-          on: (type, handler) => { window.addEventListener(type, handler); },
-          tick: (fn) => window.requestAnimationFrame(fn),
-          open: () => true,
-          closeWindow: () => {}
-        };
+    /* The tiny `dom` layer names the Web APIs the game leans on, so the game
+       body below reads as DOM work instead of host plumbing. */
+    const dom = {
+      on: (type, handler) => { window.addEventListener(type, handler); },
+      tick: (fn) => window.requestAnimationFrame(fn),
+      open: () => !window.closed,
+      closeWindow: () => { window.close(); }
+    };
 
     /* The two hosts name keys differently: the engine reports what
        `SDL_GetKeyName` says ("Space", "Up", "Right"), a browser reports
@@ -1292,13 +1281,11 @@
     measure();
     overlay.classList.remove("show");
 
-    /* Hosts differ in how they report a resize: the gui engine keeps a fixed
-       logical viewport, a browser restyles when its window changes. */
-    if (!inGui) {
-      dom.on("resize", () => {
-        measure();
-      });
-    }
+    /* Both hosts report a resize now: a browser when its window changes, the
+       engine when the SDL window is resized, so the road line is re-measured. */
+    dom.on("resize", () => {
+      measure();
+    });
 
     /* Hooks for the host program and for tests: step the simulation without the
        frame loop, inspect the layout, or hand control back to autoplay. In the
@@ -1326,7 +1313,6 @@
       info: () => {
         const first = things[0];
         return {
-          host: inGui ? "gui" : "browser",
           title: document.querySelector(".title") === null ||
             document.querySelector(".title") === undefined
             ? ""

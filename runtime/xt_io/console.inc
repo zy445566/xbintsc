@@ -38,6 +38,11 @@ xt_value xt_console_assert(int32_t argc, xt_value *argv) {
 static char *xt_console_labels[XT_CONSOLE_MAX_LABELS];
 static long xt_console_counts[XT_CONSOLE_MAX_LABELS];
 static clock_t xt_console_timers[XT_CONSOLE_MAX_LABELS];
+/* A running timer is tracked by its own flag: clock() legitimately returns 0
+   (notably on Windows, where its resolution is one millisecond and a process
+   started less than a millisecond ago reports 0), so the timestamp itself
+   cannot serve as the "no timer running" sentinel. */
+static unsigned char xt_console_timer_active[XT_CONSOLE_MAX_LABELS];
 static int xt_console_label_count = 0;
 static int xt_console_depth = 0;
 
@@ -51,6 +56,7 @@ static int xt_console_find_label(const char *label) {
   memcpy(xt_console_labels[index], label, strlen(label) + 1);
   xt_console_counts[index] = 0;
   xt_console_timers[index] = 0;
+  xt_console_timer_active[index] = 0;
   return index;
 }
 
@@ -96,14 +102,17 @@ xt_value xt_console_table(int32_t argc, xt_value *argv) {
 xt_value xt_console_time(int32_t argc, xt_value *argv) {
   const char *label = xt_console_label(argc, argv);
   int index = xt_console_find_label(label ? label : "default");
-  if (index >= 0) xt_console_timers[index] = clock();
+  if (index >= 0) {
+    xt_console_timers[index] = clock();
+    xt_console_timer_active[index] = 1;
+  }
   return XT_UNDEFINED;
 }
 
 xt_value xt_console_time_log(int32_t argc, xt_value *argv) {
   const char *label = xt_console_label(argc, argv);
   int index = xt_console_find_label(label ? label : "default");
-  if (index >= 0 && xt_console_timers[index] != 0) {
+  if (index >= 0 && xt_console_timer_active[index]) {
     double ms = (double)(clock() - xt_console_timers[index]) * 1000.0 / CLOCKS_PER_SEC;
     printf("%s: %.3fms\n", xt_console_labels[index], ms);
   }
@@ -114,6 +123,9 @@ xt_value xt_console_time_end(int32_t argc, xt_value *argv) {
   xt_console_time_log(argc, argv);
   const char *label = xt_console_label(argc, argv);
   int index = xt_console_find_label(label ? label : "default");
-  if (index >= 0) xt_console_timers[index] = 0;
+  if (index >= 0) {
+    xt_console_timers[index] = 0;
+    xt_console_timer_active[index] = 0;
+  }
   return XT_UNDEFINED;
 }

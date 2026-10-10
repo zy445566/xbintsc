@@ -56,7 +56,9 @@ jobs:
           - macos-15             # macOS arm64
           - windows-latest       # Windows x64
           - windows-11-arm       # Windows arm64
-        node: ["22","26"]
+        # A pull request only exercises Node.js 22: the full 22 + 26 sweep runs
+        # on push to main/master and on dispatch.
+        node: ${{ github.event_name == 'pull_request' && fromJSON('["22"]') || fromJSON('["22","26"]') }}
     steps:
       - uses: actions/checkout@v7
 
@@ -341,7 +343,6 @@ jobs:
 
   self-host:
     name: Self-host (${{ matrix.os }})
-    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

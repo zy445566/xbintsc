@@ -67,7 +67,11 @@ reclaimed by a non-moving mark-sweep collector: roots are explicit value slots
 (module globals, prototype caches), runtime root providers (the event loop,
 the promise microtask queue) and a conservative scan of the active C stack.
 Collection is armed automatically once the live heap crosses a threshold
-(`XT_GC_THRESHOLD`) and can also run on demand.
+(`XT_GC_THRESHOLD` pins it) and can also run on demand. After every collection the
+threshold becomes twice the surviving heap (floor 1 MiB), so a program with a
+small live set collects often and keeps a small resident set;
+`XT_GC_TRACE=1` prints one line per collection (heap and live-allocation counts,
+the next trigger and the live set by object kind) to stderr.
 
 ## Usage
 

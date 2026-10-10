@@ -461,6 +461,40 @@ static xt_value win_send_event(xt_value self, xt_value env, int32_t argc, xt_val
   return XT_TRUE;
 }
 
+/** Diagnostic/test hook: engine counters as one object. `heapBytes` and
+ * `heapAllocations` are the live runtime heap, `treeNodes`/`detachedNodes` the
+ * DOM tree and the detached pool, and `handles`/`listeners` the element-handle
+ * tables. `detachedNodes` should stay flat in a steady state: a climbing value
+ * means the program keeps removing nodes faster than it releases them. */
+static xt_value win_stats(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  xt_value object = xt_object_new();
+  xt_object_set(object, xt_string_from_cstr("heapBytes"), xt_number((double)xt_heap_bytes()));
+  xt_object_set(object, xt_string_from_cstr("heapAllocations"),
+                xt_number((double)xt_heap_allocations()));
+  double tree_nodes = 0;
+  double detached_roots = 0;
+  double detached_nodes = 0;
+  if (win != nullptr && win->document != nullptr) {
+    tree_nodes = (double)win->document->treeNodeCount();
+    detached_roots = (double)win->document->detachedRootCount();
+    detached_nodes = (double)win->document->detachedNodeCount();
+  }
+  xt_object_set(object, xt_string_from_cstr("treeNodes"), xt_number(tree_nodes));
+  xt_object_set(object, xt_string_from_cstr("detachedRoots"), xt_number(detached_roots));
+  xt_object_set(object, xt_string_from_cstr("detachedNodes"), xt_number(detached_nodes));
+  xt_object_set(object, xt_string_from_cstr("handles"),
+                xt_number(win != nullptr ? (double)win->node_handles.size() : 0));
+  xt_object_set(object, xt_string_from_cstr("handleSlots"),
+                xt_number(win != nullptr ? (double)win->node_order.size() : 0));
+  xt_object_set(object, xt_string_from_cstr("listeners"),
+                xt_number(win != nullptr ? (double)win->node_listeners.size() : 0));
+  return object;
+}
+
 /* -- prototype ------------------------------------------------------------ */
 
 static void define_method(xt_value proto, const char *name, void *fn) {
@@ -505,6 +539,7 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "removeEventListener", (void *)win_remove_event_listener);
   define_method(proto, "hitTest", (void *)win_hit_test);
   define_method(proto, "sendEvent", (void *)win_send_event);
+  define_method(proto, "stats", (void *)win_stats);
   g_window_proto = proto;
   return proto;
 }

@@ -75,6 +75,18 @@ class XtDocument {
   Node *replaceChild(Node *parent, Node *newChild, Node *oldChild);
   /** Release a node from the document entirely (still owned, detached). */
   void detach(Node *node);
+  /** Free a detached node and its subtree. The caller must already have
+   * forgotten every handle in that subtree (see `domapi::discard_subtree`), so
+   * no slot is left pointing at freed memory. Nodes still attached to the tree
+   * are ignored: use `removeChild`/`detach` for those. */
+  void discard(Node *node);
+
+  /** Nodes in the document tree (diagnostics). */
+  size_t treeNodeCount() const;
+  /** Nodes held by the detached pool, subtrees included (diagnostics). */
+  size_t detachedNodeCount() const;
+  /** Top-level entries in the detached pool (diagnostics). */
+  size_t detachedRootCount() const { return detached_.size(); }
 
   /** Mark the document as needing a restyle/relayout before the next paint. */
   void invalidate() { dirty_ = true; }

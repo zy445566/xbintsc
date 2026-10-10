@@ -351,4 +351,31 @@ void XtDocument::detach(Node *node) {
   invalidate();
 }
 
+void XtDocument::discard(Node *node) {
+  if (node == nullptr || node == root_.get()) return;
+  auto it = detached_.find(node);
+  if (it == detached_.end()) return;
+  /* Children are owned by their parent, never by the pool (takeNode erases the
+   * pool entry when a node is attached), so dropping the root drops it all. */
+  detached_.erase(it);
+}
+
+namespace {
+
+size_t countSubtree(const Node *node) {
+  size_t total = 1;
+  for (const std::unique_ptr<Node> &child : node->children) total += countSubtree(child.get());
+  return total;
+}
+
+}  // namespace
+
+size_t XtDocument::treeNodeCount() const { return root_ == nullptr ? 0 : countSubtree(root_.get()); }
+
+size_t XtDocument::detachedNodeCount() const {
+  size_t total = 0;
+  for (const auto &entry : detached_) total += countSubtree(entry.second.get());
+  return total;
+}
+
 }  // namespace xtgui

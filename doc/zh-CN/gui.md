@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M11** —— 功能（M1–M11）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制，CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。本文档记录了一个跨平台 GUI 扩展的锁定决策、架构、里程碑计划与当前进度；该扩展使用自有的 GPU 加速引擎渲染 HTML/CSS UI。
+状态：**M12** —— 功能（M1–M11）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制，CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见"节点生命周期"与"内存与 GC"。本文档记录了一个跨平台 GUI 扩展的锁定决策、架构、里程碑计划与当前进度；该扩展使用自有的 GPU 加速引擎渲染 HTML/CSS UI。
 
 ## 目标
 
@@ -161,7 +161,14 @@ win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
 win.hitTest(x, y)                      // 最深的元素描述符，或 ""
 win.sendEvent(type, options?)          // 合成输入（测试用）
 win.advance(ms)                        // 推进 CSS transition 时钟（测试用）
+win.stats()                            // 引擎/运行时计数器（内存排查用）
 ```
+
+`win.stats()` 返回 `{ heapBytes, heapAllocations, treeNodes, detachedRoots,`
+`detachedNodes, handles, handleSlots, listeners }`：运行时存活堆、DOM 树规模、
+分离节点池（detached pool）以及元素句柄表。稳定状态下它们都应保持常量——若
+`detachedNodes` 或 `handles` 持续上升，说明程序移除节点的速度快于释放速度
+（见下文"节点生命周期"）。
 
 它们被 `tests/e2e/gui-*.test.ts` 用来断言解析、选择器匹配、特异性、继承、
 `!important` 与布局几何。它们在之后仍可用于调试。
@@ -197,6 +204,26 @@ console.log(box.contains(inner));                 // 后代判断
 捕获与冒泡阶段、`stopPropagation`、`once`，并向上冒泡到 `document`/`window`。
 旧式 `win.on(type, fn)` 负载保留其**字符串** `e.target`（`div#id.class`）；
 元素 `Event.target` 是一个句柄，其描述符与同一字符串匹配。
+
+#### 节点生命周期
+
+一次变更会决定它移除的节点是否仍可到达，引擎只释放那些确实不可到达的节点：
+
+| 变更 | 被移除的节点 |
+| --- | --- |
+| `innerHTML = …`、`inner = …`、`textContent = …`、`replaceChild` | **被释放**——脚本再也无法引用它们 |
+| `removeChild`、`remove` | **保留**在文档的分离节点池中——DOM 语义要求被移除的节点继续存活且可用，以便重新插入 |
+
+被释放的节点会同时释放其 C++ 子树与句柄，因此 `win.stats()` 的计数器
+（`detachedNodes`、`handles`、`handleSlots`）会回到先前的数值。这正是常见游戏
+写法——每帧用 `innerHTML` 重写精灵——能保持常量内存的原因；在此之前，每个被
+替换的子树都会永久留在池中，每帧写入十个节点的循环会以每秒数 MB 的速度泄漏。
+
+引擎唯一无法察觉的情况是：脚本创建了一个节点，随后从未插入就丢弃它。
+`document.createElement("div")` 会把节点放进池中，**并且**让它的句柄保持可达，
+因为标记-清扫收集器没有弱引用，引擎无法知道脚本已经丢弃了该句柄。因此，
+只创建、不插入的循环会让池持续增长。请复用元素，或用 `innerHTML` 构建内容
+（它会释放被替换的节点），而不要每帧新建元素。
 
 ### AOT 脚本（M9）
 
@@ -574,6 +601,17 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
       （`layout_flex.cpp`）。
     - `examples/gui/pelican-bike` 基于它实现，e2e 覆盖见
       `tests/e2e/gui-layout.test.ts`。
+12. **M12 — 节点生命周期 + 内存** ✅
+    - 明确区分变更释放与保留的内容：`innerHTML`/`inner`/`textContent`/
+      `replaceChild` 会释放被丢弃的子树（`XtDocument::discard`、
+      `domapi::discard_subtree`），而 `removeChild`/`remove` 保留 DOM 语义
+      （`document.*`、`dom_api_*.cpp`）。
+    - 句柄槽位带"每槽代次"地复用，过期句柄保持惰性失效，同时句柄表不再随
+      变更次数增长（`dom_api.cpp`、`gui_engine.h`）。
+    - 收集器触发阈值改为跟随存活集而非只升不降，避免泄漏或存活集尖峰演变成
+      内存失控（`runtime/xt_alloc.c`）。`XT_GC_TRACE=1` 会报告每次回收。
+    - `win.stats()` 暴露引擎计数器；e2e 覆盖见
+      `tests/e2e/gui-retention.test.ts`（见"内存与 GC"）。
 
 ## 进度日志
 
@@ -628,6 +666,45 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
   在正常流内容之后布局，因此不影响它们；实现了 shrink-to-fit / 填满可用宽度
   两种规则；flex 项现在会计入外边距。e2e 覆盖在
   `tests/e2e/gui-layout.test.ts`；`examples/gui/pelican-bike` 基于它实现。
+- **M12** ✅ DOM 节点生命周期与内存。`innerHTML`/`textContent`/`replaceChild`
+  现在会释放它们丢弃的子树，而不是把它们永久留在分离节点池里；`removeChild`
+  保留其文档化的 DOM 语义；句柄槽位会带"每槽代次"地复用，使过期句柄保持惰性
+  失效；收集器的触发阈值改为跟随存活集，而不再只升不降。`win.stats()` 暴露
+  引擎计数器，`tests/e2e/gui-retention.test.ts` 对其做断言；每帧重写精灵的游戏
+  循环现在内存恒定（见"内存与 GC"）。
+
+## 内存与 GC
+
+GUI 程序的大部分内存不在运行时堆里：DOM 树、分离节点池、元素句柄表、布局盒树
+与显示列表都是 C++，标记-清扫收集器看不到它们。`stats()`（见"诊断"）报告其中
+可能增长的部分：
+
+| 计数器 | 稳定状态下的期望值 |
+| --- | --- |
+| `treeNodes` | 常量——即编写的文档 |
+| `detachedRoots`、`detachedNodes` | 0；若脚本自己移除了节点并仍持有，则为常量 |
+| `handles`、`handleSlots` | 常量——每个脚本仍引用的元素一个 |
+| `listeners` | 常量——每个注册了监听器的元素一个 |
+| `heapBytes`、`heapAllocations` | 在收集器阈值附近呈锯齿波动 |
+
+其余都是每帧用完即释放的临时数据（盒、显示列表、顶点暂存）。若某个计数器随帧数
+持续上升，那就是最该先查的泄漏特征；`tests/e2e/gui-retention.test.ts` 断言常见
+变更模式不会改变这些计数。
+
+读这些数字时有两处引擎细节需要注意：
+
+- **谁会释放节点。** `innerHTML`/`inner`/`textContent`/`replaceChild` 会释放它们
+  丢弃的子树；`removeChild`/`remove` 会保留（见"节点生命周期"）。因此用
+  `innerHTML` 每帧重建精灵的游戏内存恒定。
+- **什么仍会累积。** 用 `createElement` 创建却从未插入的节点会留在池中：收集器
+  没有弱引用，引擎无法知道脚本已丢弃其句柄。脚本移除后又不再引用的节点同理。
+  两者都以*存活句柄*数量为界，但每帧创建元素却不插入的程序会让池随帧数增长。
+
+`heapBytes` 背后的收集器是 `runtime/xt_alloc.c` 中的非移动标记-清扫。它的触发
+阈值跟随存活集：每次回收后阈值变为存活堆的 2 倍（下限 1 MiB），因此存活集小
+就意味着回收频繁而轻量、常驻内存有界。用 `XT_GC_THRESHOLD=<bytes>` 可以固定
+阈值；`XT_GC_TRACE=1` 会为每次回收向 stderr 打印一行（回收前后的堆与存活分配数、
+下一次触发阈值，以及按对象类型统计的存活集）——DOM 泄漏正是这样被定位到节点池的。
 
 ## 已知问题
 
@@ -635,7 +712,15 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
   访问违例（`0xC0000005`）退出，其余运行与正常退出无异。该问题只在**动画帧循环运行中**复现
   （静态文档可以正常关闭），且**不是示例游戏自身**的代码：没有任何异常信息，崩溃多发生在
   启动后一秒内、与截止时间无关，而提高 `XT_GC_THRESHOLD` 可以掩盖它，因此看起来是
-  GC/析构竞态。交互式运行（不设自动关闭）可稳定运行数分钟。`tests/e2e/gui-example.test.ts`
+  GC/析构竞态。交互式运行（不设自动关闭）可稳定运行数分钟。此前的一个已知成因是引擎在标记-清扫
+  收集器看不见的 C++ 容器里缓存 `xt_value`（AOT `<script>` 注册表、元素句柄、元素监听器、
+  排队/正在运行的 `requestAnimationFrame` 回调），现在它们由 GC 根提供者标记
+  （`xt_gui_script_gc_scan` 与 `xt_gui_gc_scan_roots`），该类 use-after-free 已消除。
+  在 M12 的节点生命周期改动之后它已完全无法复现：对
+  `examples/gui/pelican-bike` 做了 44 次自动关闭运行（截止 800 ms–4 s，分别使用默认、
+  1 MiB 与 64 MiB 的收集阈值，而旧记录称约五次两次崩溃），全部正常退出，指向与内存问题
+  相同的根因——分离节点池与句柄表随帧数增长，同时收集器阈值只升不降。此处仍保留该条目，
+  因为该归档按平台构建且故障与时机相关。`tests/e2e/gui-example.test.ts`
   因此把该退出码视为可接受结果，行为断言放在不依赖 GPU 的
   `tests/e2e/gui-example-browser.test.ts` 中。
 - **`display: none -> flex` 的重排。** 通过类名切换让隐藏元素显示在 flex 容器上时，也曾观察

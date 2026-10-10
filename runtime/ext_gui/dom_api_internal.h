@@ -49,6 +49,12 @@ std::string class_name_of(const xtgui::Node *node);
 void set_class_name(XtGuiWindow *win, xtgui::Node *node, const std::string &value);
 void remove_listener(XtGuiWindow *win, xtgui::Node *node, const std::string &type, xt_value fn,
                      bool capture);
+/** Forget the handles of `node` and its descendants, then free the subtree from
+ * the document's detached pool. Use this only for nodes the script can no longer
+ * reach (the children `innerHTML = …` replaces, the node `replaceChild` drops):
+ * an existing handle then resolves to "stale" and no-ops, exactly like a handle
+ * to a node the document already removed and released. */
+void discard_subtree(XtGuiWindow *win, xtgui::Node *node);
 
 /* -- method definitions (uniform `(self, env, argc, argv)` ABI) ----------- */
 

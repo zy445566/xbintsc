@@ -64,7 +64,13 @@ xtgui::Node *resolve_node(xt_value self, XtGuiWindow **winOut) {
   if (!XT_IS_NUMBER(index)) return nullptr;
   int slot = (int)xt_to_number(index);
   if (slot < 0 || slot >= (int)win->node_order.size()) return nullptr;
-  return win->node_order[(size_t)slot];
+  /* A recycled slot must not answer for the handle that used to own it. */
+  xt_value generation = xt_object_get_cstr(self, "__xt_gui_slot_gen");
+  if (!XT_IS_NUMBER(generation) ||
+      (int)xt_to_number(generation) != win->node_order[(size_t)slot].generation) {
+    return nullptr;
+  }
+  return const_cast<xtgui::Node *>(win->node_order[(size_t)slot].node);
 }
 
 void mark_dirty(XtGuiWindow *win) {
@@ -123,15 +129,26 @@ xt_value xt_gui_node_handle(XtGuiWindow *win, const xtgui::Node *node) {
   auto found = win->node_index.find(node);
   if (found != win->node_index.end()) {
     slot = found->second;
+  } else if (!win->free_node_slots.empty()) {
+    /* Reuse a forgotten slot instead of growing the table forever. The
+     * generation bump below makes the handle that used to own it inert. */
+    slot = win->free_node_slots.back();
+    win->free_node_slots.pop_back();
+    win->node_order[(size_t)slot].node = node;
+    win->node_index[node] = slot;
   } else {
     slot = (int)win->node_order.size();
-    win->node_order.push_back(const_cast<xtgui::Node *>(node));
+    XtGuiNodeSlot entry;
+    entry.node = node;
+    win->node_order.push_back(entry);
     win->node_index[node] = slot;
   }
   xt_value handle = xt_object_new_with_proto(domapi::node_proto());
   xt_object_set(handle, xt_string_from_cstr("__xt_gui_win"), win->object);
   xt_object_set(handle, xt_string_from_cstr("__xt_gui_gen"), xt_number(win->doc_generation));
   xt_object_set(handle, xt_string_from_cstr("__xt_gui_node"), xt_number((double)slot));
+  xt_object_set(handle, xt_string_from_cstr("__xt_gui_slot_gen"),
+                xt_number((double)win->node_order[(size_t)slot].generation));
   win->node_handles[node] = handle;
   return handle;
 }
@@ -143,16 +160,34 @@ void xt_gui_node_handle_forget(XtGuiWindow *win, const xtgui::Node *node) {
    * `resolve_node` reads, and leaving a freed pointer there is a
    * use-after-free the next time any handle is resolved. Existing handles keep
    * resolving to "stale" and no-op, which is the documented tombstone
-   * behaviour. */
+   * behaviour — the generation bump makes the recycled slot unavailable to
+   * them. */
   auto index = win->node_index.find(node);
   if (index != win->node_index.end()) {
     int slot = index->second;
     if (slot >= 0 && slot < (int)win->node_order.size()) {
-      win->node_order[(size_t)slot] = nullptr;
+      win->node_order[(size_t)slot].node = nullptr;
+      win->node_order[(size_t)slot].generation++;
+      win->free_node_slots.push_back(slot);
     }
     win->node_index.erase(index);
   }
   win->node_handles.erase(node);
+}
+
+/** Forget the handles of `node` and every descendant. Runs before the subtree
+ * is freed, so the walk still reads live children. */
+static void forget_subtree_handles(XtGuiWindow *win, const xtgui::Node *node) {
+  xt_gui_node_handle_forget(win, node);
+  for (const std::unique_ptr<xtgui::Node> &child : node->children) {
+    forget_subtree_handles(win, child.get());
+  }
+}
+
+void domapi::discard_subtree(XtGuiWindow *win, xtgui::Node *node) {
+  if (win == nullptr || node == nullptr || win->document == nullptr) return;
+  forget_subtree_handles(win, node);
+  win->document->discard(node);
 }
 
 xt_value xt_gui_document_handle(XtGuiWindow *win) {
@@ -172,6 +207,7 @@ void xt_gui_handles_reset(XtGuiWindow *win) {
   if (win == nullptr) return;
   win->doc_generation += 1.0;
   win->node_order.clear();
+  win->free_node_slots.clear();
   win->node_index.clear();
   win->node_handles.clear();
   win->node_listeners.clear();

@@ -47,6 +47,19 @@ static int g_gc_threshold_pinned = 0;
 static size_t g_gc_threshold = (size_t)16 << 20; /* 16 MiB */
 #define XT_GC_MIN_THRESHOLD ((size_t)1 << 20)
 
+/* `XT_GC_TRACE=1` prints one line per collection (live bytes, allocation count
+ * and the next trigger) to stderr, for diagnosing heap growth. */
+static int g_gc_trace = -1;
+static size_t g_gc_collections = 0;
+
+static int xt_gc_trace_enabled(void) {
+  if (g_gc_trace < 0) {
+    const char *env = getenv("XT_GC_TRACE");
+    g_gc_trace = (env != NULL && env[0] != '\0' && env[0] != '0') ? 1 : 0;
+  }
+  return g_gc_trace;
+}
+
 /* ------------------------------------------------------------------------- */
 /* Roots                                                                     */
 /* ------------------------------------------------------------------------- */
@@ -441,6 +454,9 @@ void xt_gc_collect(void) {
   if (g_gc_running) return;
   if (!g_gc_initialised) xt_gc_init();
   g_gc_running = 1;
+  const int trace = xt_gc_trace_enabled();
+  const size_t heap_before = g_heap_bytes;
+  const size_t allocations_before = g_heap_allocations;
 
   xt_gc_table_build();
   xt_gc_mark_roots();
@@ -451,11 +467,22 @@ void xt_gc_collect(void) {
 
   xt_header **link = &g_heap_head;
   xt_header *header = g_heap_head;
+  size_t live_by_kind[16];
+  size_t bytes_by_kind[16];
+  for (int i = 0; i < 16; i++) {
+    live_by_kind[i] = 0;
+    bytes_by_kind[i] = 0;
+  }
   while (header) {
     xt_header *next = header->gc_next;
     if (header->flags & XT_GC_MARK) {
       header->flags &= (uint8_t)~XT_GC_MARK;
       link = &header->gc_next;
+      if (trace) {
+        size_t kind = header->kind < 16 ? header->kind : 0;
+        live_by_kind[kind]++;
+        bytes_by_kind[kind] += header->size;
+      }
     } else {
       *link = next;
       g_heap_bytes -= header->size;
@@ -469,7 +496,33 @@ void xt_gc_collect(void) {
   g_gc_running = 0;
 
   if (!g_gc_threshold_pinned) {
-    if (g_gc_threshold < g_heap_bytes * 2) g_gc_threshold = g_heap_bytes * 2;
-    if (g_gc_threshold < XT_GC_MIN_THRESHOLD) g_gc_threshold = XT_GC_MIN_THRESHOLD;
+    /* Follow the live set: twice the surviving heap is the headroom a
+     * mark-sweep wants between collections, and the floor keeps a tiny heap
+     * from collecting on nearly every allocation.
+     *
+     * The threshold must *shrink* again, not just ratchet upwards. A doubling
+     * threshold with a monotonic floor turns any transient growth of the live
+     * set into exponentially rarer collections: each sweep only reclaims the
+     * newly dead part of a larger heap, so the heap (and with it the resident
+     * set) grows without bound. A GUI program that keeps a few extra nodes
+     * alive for one frame is enough to start that spiral. */
+    size_t next = g_heap_bytes * 2;
+    if (next < XT_GC_MIN_THRESHOLD) next = XT_GC_MIN_THRESHOLD;
+    g_gc_threshold = next;
+  }
+
+  g_gc_collections++;
+  if (trace) {
+    fprintf(stderr,
+            "xt_gc: #%zu heap %zu -> %zu bytes, allocations %zu -> %zu, next trigger %zu\n",
+            g_gc_collections, heap_before, g_heap_bytes, allocations_before, g_heap_allocations,
+            g_gc_threshold);
+    fprintf(stderr, "xt_gc:   live kinds");
+    for (int i = 1; i < 16; i++) {
+      if (live_by_kind[i] != 0) {
+        fprintf(stderr, " %d:%zu/%zuB", i, live_by_kind[i], bytes_by_kind[i]);
+      }
+    }
+    fprintf(stderr, "\n");
   }
 }

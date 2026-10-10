@@ -25,13 +25,6 @@ static void collect_text(const xtgui::Node *node, std::string &out) {
   for (const std::unique_ptr<xtgui::Node> &child : node->children) collect_text(child.get(), out);
 }
 
-/** Forget the handles of `node` and every descendant: they are about to be
- * freed, and a slot left behind would dangle. */
-static void forget_subtree(XtGuiWindow *win, const xtgui::Node *node) {
-  xt_gui_node_handle_forget(win, node);
-  for (const std::unique_ptr<xtgui::Node> &child : node->children) forget_subtree(win, child.get());
-}
-
 #define METHOD(name) xt_value name(xt_value self, xt_value env, int32_t argc, xt_value *argv)
 
 METHOD(node_tag_name_get) {
@@ -112,7 +105,10 @@ METHOD(node_text_content_set) {
   std::vector<xtgui::Node *> existing;
   for (const std::unique_ptr<xtgui::Node> &child : node->children) existing.push_back(child.get());
   for (xtgui::Node *child : existing) win->document->removeChild(node, child);
-  for (xtgui::Node *child : existing) forget_subtree(win, child);
+  /* The replaced children are unreachable now: `removeChild` only parks them in
+   * the detached pool, and this setter is what drops them. Forgetting their
+   * handles without releasing them would leak a node per write. */
+  for (xtgui::Node *child : existing) discard_subtree(win, child);
   if (!text.empty()) node->addText(text);
   mark_dirty(win);
   return XT_UNDEFINED;
@@ -140,10 +136,12 @@ METHOD(node_inner_html_set) {
   std::vector<xtgui::Node *> existing;
   for (const std::unique_ptr<xtgui::Node> &child : node->children) existing.push_back(child.get());
   for (xtgui::Node *child : existing) win->document->removeChild(node, child);
-  /* The old children are dropped here (only `removeChild` keeps a detached node
-   * alive), so forget them *and everything below them* before they are freed:
-   * a leftover slot would be a dangling pointer for the next handle lookup. */
-  for (xtgui::Node *child : existing) forget_subtree(win, child);
+  /* The old children are dropped here: `removeChild` only parks them in the
+   * detached pool (so a script that detached a node itself can re-append it),
+   * and replacing them wholesale is what releases them. Forgetting their
+   * handles without releasing the nodes would leak one subtree per assignment —
+   * a per-frame `innerHTML` write in a game loop then grows without bound. */
+  for (xtgui::Node *child : existing) discard_subtree(win, child);
   std::unique_ptr<xtgui::Node> fragment = xtgui::xt_html_parse(html);
   for (std::unique_ptr<xtgui::Node> &child : fragment->children) node->append(std::move(child));
   mark_dirty(win);

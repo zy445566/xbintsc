@@ -247,7 +247,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 
 | Item | Status |
 | --- | --- |
-| GC (garbage collection) | ✓ non-moving mark-sweep in `xt_alloc.c`, armed by a live-heap threshold (`XT_GC_THRESHOLD`) or `xt_gc_collect()`; explicit roots + root providers + conservative active-stack scan. No compaction, weak references or background collection |
+| GC (garbage collection) | ✓ non-moving mark-sweep in `xt_alloc.c`, armed by a live-heap threshold (`XT_GC_THRESHOLD` pins it) or `xt_gc_collect()`; after each collection the threshold becomes twice the surviving heap (floor 1 MiB), so the resident set follows the live set instead of only growing. `XT_GC_TRACE=1` prints one line per collection to stderr. Explicit roots + root providers + conservative active-stack scan. No compaction, weak references or background collection — without weak references an extension must keep a strong reference to every value it caches (the GUI's element handles do) |
 | Self-hosting | ✓ the compiler compiles itself: `xbintsc build src/cli/main.ts` produces a working binary, and the emitted IR is stable from generation 1 onward. The runtime is still C |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
 | Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` implemented; String.normalize / structuredClone missing |

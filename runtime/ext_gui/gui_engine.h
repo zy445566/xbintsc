@@ -55,6 +55,15 @@ struct XtGuiAnimationFrame {
   xt_value fn;
 };
 
+/** One row of the window's node table: the node a handle addresses, plus the
+ * generation that row was issued for. A slot is recycled after its node is
+ * forgotten, and the generation is what keeps an old handle from resolving
+ * through the recycled slot to an unrelated node. */
+struct XtGuiNodeSlot {
+  const xtgui::Node *node = nullptr;
+  int generation = 0;
+};
+
 /* One live window. `object` is the JavaScript-visible handle; the record is
  * addressed from it through the hidden `__xt_gui_index` property. */
 struct XtGuiWindow {
@@ -78,7 +87,9 @@ struct XtGuiWindow {
   /** Bumped on every `loadHTML`; stale handles no-op. */
   double doc_generation = 1.0;
   /** Node -> table index / cached handle, so identity is stable. */
-  std::vector<xtgui::Node *> node_order;
+  std::vector<XtGuiNodeSlot> node_order;
+  /** Slots whose node was forgotten and which a later handle may reuse. */
+  std::vector<int> free_node_slots;
   std::unordered_map<const xtgui::Node *, int> node_index;
   std::unordered_map<const xtgui::Node *, xt_value> node_handles;
   /** Element-level listeners, keyed by node. */

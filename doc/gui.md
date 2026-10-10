@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M11** — features (M1–M11) are complete: HTML parsing, CSS selector
+Status: **M12** — features (M1–M11) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -13,7 +13,9 @@ DOM: element handles with stable identity, mutation (`appendChild`, `textContent
 **M9** compiles `<script>` bodies ahead of time (inline and `<script src>`) — see
 `doc/gui-scripts.md`. **M10** adds `requestAnimationFrame` plus a few DOM helpers.
 **M11** adds `position: relative`/`absolute`/`fixed` with their offsets, which is
-what `examples/gui/pelican-bike` — a playable 2D game — is built on.
+what `examples/gui/pelican-bike` — a playable 2D game — is built on. **M12** makes
+DOM node lifetime explicit (what a mutation releases, what it keeps) and gives the
+engine bounded memory: see "Node lifetime" and "Memory & GC".
 This document records the locked decisions, the architecture, the milestone plan
 and the current progress of a cross-platform GUI extension that renders an
 HTML/CSS UI with its own GPU-accelerated engine.
@@ -191,7 +193,15 @@ win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
 win.hitTest(x, y)                      // deepest element descriptor, or ""
 win.sendEvent(type, options?)          // synthesise input (testing)
 win.advance(ms)                        // step the CSS transition clock (testing)
+win.stats()                            // engine/runtime counters (memory debugging)
 ```
+
+`win.stats()` returns `{ heapBytes, heapAllocations, treeNodes, detachedRoots,`
+`detachedNodes, handles, handleSlots, listeners }`: the live runtime heap, the
+size of the DOM tree, the detached-node pool, and the element-handle tables. In a
+steady state every one of them is constant — a climbing `detachedNodes` or
+`handles` means the program removes nodes faster than it releases them (see
+"Node lifetime" below).
 
 They are used by `tests/e2e/gui-*.test.ts` to assert parsing, selector matching,
 specificity, inheritance, `!important` and layout geometry. They will stay useful
@@ -229,6 +239,31 @@ Element events support capture and bubble phases, `stopPropagation`, `once`, and
 bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps its
 **string** `e.target` (`div#id.class`); the element `Event.target` is a handle
 whose descriptor matches the same string.
+
+#### Node lifetime
+
+A mutation decides whether the nodes it removes can still be reached, and the
+engine releases exactly those it cannot:
+
+| Mutation | Removed nodes |
+| --- | --- |
+| `innerHTML = …`, `inner = …`, `textContent = …`, `replaceChild` | **released** — the script has no way to refer to them again |
+| `removeChild`, `remove` | **kept** in the document's detached pool — the DOM keeps a removed node alive and usable, so it can be re-attached |
+
+Released nodes free their C++ subtree as well as their handle, so the counters
+from `win.stats()` (`detachedNodes`, `handles`, `handleSlots`) return to their
+previous values. That is what makes the usual game pattern — rewriting a sprite
+with `innerHTML` every frame — run in constant memory; before, every replaced
+subtree stayed pooled forever and a loop writing ten nodes per frame leaked
+several megabytes per second.
+
+The one case the engine cannot see is a node the script creates and then drops
+without ever attaching it: `document.createElement("div")` parks the node in the
+pool *and* keeps its handle reachable, because the mark-sweep collector has no
+weak references, so the engine cannot tell that the script threw the handle
+away. A loop that creates elements without attaching them therefore grows the
+pool. Reuse the elements (or build the content with `innerHTML`, which releases
+what it replaces) instead of creating fresh ones per frame.
 
 ### AOT scripts (M9)
 
@@ -650,6 +685,19 @@ used by default; Wayland is enabled too but not yet exercised.
       participates in the layout instead of being dropped (`layout_flex.cpp`).
     - Drives `examples/gui/pelican-bike` and e2e coverage in
       `tests/e2e/gui-layout.test.ts`.
+12. **M12 — node lifetime + memory** ✅
+    - What a mutation releases and what it keeps is now explicit: the
+      `innerHTML`/`inner`/`textContent`/`replaceChild` paths free the subtrees
+      they drop (`XtDocument::discard`, `domapi::discard_subtree`), while
+      `removeChild`/`remove` keep DOM semantics (`document.*`, `dom_api_*.cpp`).
+    - Handle slots are recycled with a per-slot generation, so a stale handle
+      stays inert while the table stops growing with churn (`dom_api.cpp`,
+      `gui_engine.h`).
+    - The collector's trigger follows the live set instead of only ratcheting up,
+      so a leaking or spiking program cannot spiral (`runtime/xt_alloc.c`).
+      `XT_GC_TRACE=1` reports every collection.
+    - `win.stats()` exposes the engine counters; e2e coverage in
+      `tests/e2e/gui-retention.test.ts` (see "Memory & GC").
 
 ## Progress log
 
@@ -707,6 +755,55 @@ used by default; Wayland is enabled too but not yet exercised.
   content so they never affect it, shrink-to-fit/fill-available width rules are
   applied, and flex items now account for their margins. e2e coverage in
   `tests/e2e/gui-layout.test.ts`; `examples/gui/pelican-bike` is built on it.
+- **M12** ✅ DOM node lifetime and memory. `innerHTML`/`textContent`/
+  `replaceChild` now release the subtrees they drop instead of parking them in
+  the detached pool forever, `removeChild` keeps its documented DOM semantics,
+  handle slots are recycled with a per-slot generation so stale handles stay
+  inert, and the collector's trigger follows the live set instead of only
+  ratcheting upwards. `win.stats()` exposes the engine counters and
+  `tests/e2e/gui-retention.test.ts` pins them; a game loop rewriting its sprite
+  every frame now runs in constant memory (see "Memory & GC").
+
+## Memory & GC
+
+The engine owns most of a GUI program's memory outside the runtime heap: the DOM
+tree, the detached-node pool, the element-handle tables, the layout box tree and
+the display list are C++, so the mark-sweep collector cannot see them. `stats()`
+(see "Diagnostics") reports the parts that can grow:
+
+| Counter | Expected in a steady state |
+| --- | --- |
+| `treeNodes` | constant — the authored document |
+| `detachedRoots`, `detachedNodes` | 0, or constant for nodes the script removed itself and still holds |
+| `handles`, `handleSlots` | constant — one per element the script still refers to |
+| `listeners` | constant — one entry per element with listeners |
+| `heapBytes`, `heapAllocations` | sawtooth around the collector's threshold |
+
+Everything else is per-frame scratch (boxes, display list, vertex staging) that is
+freed before the next frame. A counter that climbs with the frame count is the
+leak signature to look for first; `tests/e2e/gui-retention.test.ts` asserts that
+the usual mutation patterns leave all of them unchanged.
+
+Two engine details matter when reading those numbers:
+
+- **What releases nodes.** `innerHTML`/`inner`/`textContent`/`replaceChild`
+  release the subtrees they drop; `removeChild`/`remove` keep them (see "Node
+  lifetime"). A game that rebuilds a sprite with `innerHTML` therefore runs in
+  constant memory.
+- **What can still accumulate.** A node created with `createElement` and never
+  attached stays in the pool, because the collector has no weak references and
+  the engine cannot tell that the script dropped its handle. The same applies to
+  a node removed and then forgotten by the script. Both are bounded by the number
+  of *live* handles, but a program that creates elements per frame without
+  attaching them grows the pool with the frame count.
+
+The collector behind `heapBytes` is a non-moving mark-sweep (`runtime/xt_alloc.c`).
+Its trigger follows the live set: after every collection the threshold becomes
+twice the surviving heap (floor 1 MiB), so a small live set means small, frequent
+collections and a bounded resident set. `XT_GC_THRESHOLD=<bytes>` pins the
+threshold instead, and `XT_GC_TRACE=1` prints one line per collection (heap and
+live-allocation counts before and after, the next trigger, and the live set by
+object kind) to stderr — that is how the DOM leak was traced to the node pool.
 
 ## Known issues
 
@@ -725,9 +822,15 @@ used by default; Wayland is enabled too but not yet exercised.
   handles, element listeners and the queued/currently-running
   `requestAnimationFrame` callbacks. They are now marked by GC root providers
   (`xt_gui_script_gc_scan` and `xt_gui_gc_scan_roots`), which removes that
-  class of use-after-free. `tests/e2e/gui-example.test.ts` still treats either
-  crash spelling as an acceptable outcome — the archive is built per platform
-  and the run is timing-sensitive — and the behavioural assertions live in
+  class of use-after-free. Since the M12 node-lifetime work it has not
+  reproduced at all: 44 auto-close runs of `examples/gui/pelican-bike` (deadlines
+  800 ms–4 s, with the default, a 1 MiB and a 64 MiB collector threshold, where
+  the old report said roughly two in five) all exited cleanly, which points at
+  the same root cause — a detached-node pool and handle table that grew with the
+  frame count while the collector's threshold ratcheted up. It stays listed
+  because the archive is built per platform and the failure is timing-sensitive;
+  `tests/e2e/gui-example.test.ts` still treats either crash spelling as an
+  acceptable outcome, and the behavioural assertions live in
   `tests/e2e/gui-example-browser.test.ts` (no GPU, deterministic).
 - **`display: none -> flex` restyle.** A hidden element being shown by a
   *class change* on a flex container has also been observed to crash the same

@@ -116,9 +116,14 @@ run();                                 // drives the main loop until all windows
 Methods implemented on a window handle: `setTitle` / `setSize` / `loadHTML` /
 `getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`, plus `driver()`,
 which reports the SDL_GPU backend in use (`"vulkan"`, `"direct3d12"`, `"metal"`,
-… — SDL picks the best one the device supports). Events emitted:
-`ready` (after the first presented frame), `load`, `close`, and the input events
-`mousemove`, `mousedown`, `mouseup`, `click`, `wheel`, `keydown`, `keyup`.
+… — SDL picks the best one the device supports). The Web spellings are available
+too: `addEventListener` / `removeEventListener` are aliases of `on` / `off` (their
+`options` argument is accepted and ignored) and the `closed` getter mirrors
+`isOpen()`, so a document written against the browser API runs unchanged.
+Events emitted:
+`ready` (after the first presented frame), `load`, `close`, `resize` and the
+input events `mousemove`, `mousedown`, `mouseup`, `click`, `wheel`, `keydown`,
+`keyup`.
 
 On Windows a GUI program is linked as a **Windows-subsystem** executable, so
 launching it does not flash a console window. That also means stdout/stderr go

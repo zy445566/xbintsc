@@ -64,4 +64,40 @@ describe.skipIf(!guiAvailable)("gui extension — events", () => {
     expect(stdout).toContain("event=wheel:1,2");
     expect(stdout).toContain("event=key:a:false");
   });
+
+  it("exposes the Web window spellings (addEventListener/removeEventListener/closed)", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "web-window",
+      [
+        'import { createWindow, run } from "gui";',
+        "",
+        'const win = createWindow({ title: "web", width: 200, height: 150 });',
+        "const log = [];",
+        'const onClick = (e) => log.push("click:" + e.target);',
+        'const onKey = (e) => log.push("key:" + e.key);',
+        'win.addEventListener("click", onClick);',
+        'win.addEventListener("keydown", onKey);',
+        'win.removeEventListener("click", onClick);',
+        "",
+        'win.addEventListener("close", () => console.log("closed-in-handler=" + win.closed));',
+        'win.addEventListener("ready", () => {',
+        '  console.log("closed-before=" + win.closed);',
+        '  win.sendEvent("click", { x: 1, y: 1, button: 0 });',
+        '  win.sendEvent("keydown", { key: "a", code: "KeyA" });',
+        '  for (const line of log) console.log("web-event=" + line);',
+        "  win.close();",
+        "});",
+        'win.loadHTML("<div id=\'box\'>x</div>");',
+        "run();",
+        'console.log("closed-after=" + win.closed);',
+      ].join("\n"),
+    );
+    // `closed` is the Web spelling of `isOpen()`.
+    expect(value("closed-before")).toBe("false");
+    expect(value("closed-after")).toBe("true");
+    expect(stdout).toContain("closed-in-handler=true");
+    // `removeEventListener` dropped the click listener; the key listener stayed.
+    expect(stdout).not.toContain("web-event=click:");
+    expect(stdout).toContain("web-event=key:a");
+  });
 });

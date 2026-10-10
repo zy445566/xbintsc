@@ -90,14 +90,17 @@ run();                                 // 驱动主循环，直到所有窗口�
 窗口句柄上已实现的方法：`setTitle` / `setSize` / `loadHTML` /
 `getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`，以及
 `driver()`——它报告当前使用的 SDL_GPU 后端（`"vulkan"`、`"direct3d12"`、
-`"metal"` 等，由 SDL 挑选设备支持的最佳后端）。
+`"metal"` 等，由 SDL 挑选设备支持的最佳后端）。同时也提供 Web 写法：
+`addEventListener` / `removeEventListener` 是 `on` / `off` 的别名（其
+`options` 参数会被接受并忽略），`closed` getter 对应 `isOpen()`，因此按浏览器
+API 编写的文档可以原样运行。
 
 在 Windows 上，GUI 程序会被链接为 **Windows 子系统**可执行文件，因此启动时不会闪出控制台
 窗口；这也意味着从资源管理器启动时 stdout/stderr 无处可去，调试时可在
 `xbintsc.config.json` 里设置 `app.console: true` 保留控制台子系统。
 
 触发的事件：
-`ready`（首个呈现帧之后）、`load`、`close`，以及输入事件
+`ready`（首个呈现帧之后）、`load`、`close`、`resize`，以及输入事件
 `mousemove`、`mousedown`、`mouseup`、`click`、`wheel`、`keydown`、`keyup`。
 
 输入处理器接收单个负载对象（生命周期处理器不接收任何参数）：

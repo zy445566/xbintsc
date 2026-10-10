@@ -283,6 +283,17 @@ static xt_value win_is_open(xt_value self, xt_value env, int32_t argc, xt_value 
   return (win != NULL && win->open) ? XT_TRUE : XT_FALSE;
 }
 
+/** Web 'window.closed': true once the window has been closed. The browser
+ * spelling of 'isOpen()', so a document can stop its frame loop with
+ * 'if (window.closed) return;' in every host. */
+static xt_value win_closed_get(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  return (win != NULL && win->open) ? XT_FALSE : XT_TRUE;
+}
+
 /** `/driver`: which SDL_GPU backend the device is running (`"vulkan"`,
  * `"direct3d12"`, `"metal"`, …). The engine asks SDL for the best available
  * one, so this is how a program (or a test) confirms the path in use. */
@@ -364,6 +375,22 @@ static xt_value win_off(xt_value self, xt_value env, int32_t argc, xt_value *arg
     }
   }
   return self;
+}
+
+/** Web spelling of 'on': 'window.addEventListener(type, fn, options?)'. The
+ * optional 'options' argument ('capture'/'once') is accepted and ignored —
+ * window-level delivery has no capture phase — so a document written against
+ * the browser API compiles and behaves the same here. */
+static xt_value win_add_event_listener(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  win_on(self, env, argc, argv);
+  return XT_UNDEFINED;
+}
+
+/** Web spelling of 'off': 'window.removeEventListener(type, fn, options?)'. */
+static xt_value win_remove_event_listener(xt_value self, xt_value env, int32_t argc,
+                                          xt_value *argv) {
+  win_off(self, env, argc, argv);
+  return XT_UNDEFINED;
 }
 
 /* -- input diagnostics ---------------------------------------------------- */
@@ -466,11 +493,16 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "fontMetrics", (void *)win_font_metrics);
   define_method(proto, "close", (void *)win_close);
   define_method(proto, "isOpen", (void *)win_is_open);
+  define_getter(proto, "closed", (void *)win_closed_get);
   define_method(proto, "driver", (void *)win_driver);
   define_method(proto, "requestAnimationFrame", (void *)win_request_animation_frame);
   define_method(proto, "cancelAnimationFrame", (void *)win_cancel_animation_frame);
   define_method(proto, "on", (void *)win_on);
   define_method(proto, "off", (void *)win_off);
+  /* Web spellings, so a document written against the browser API runs
+   * unchanged under the engine. */
+  define_method(proto, "addEventListener", (void *)win_add_event_listener);
+  define_method(proto, "removeEventListener", (void *)win_remove_event_listener);
   define_method(proto, "hitTest", (void *)win_hit_test);
   define_method(proto, "sendEvent", (void *)win_send_event);
   g_window_proto = proto;

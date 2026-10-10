@@ -165,6 +165,9 @@ void handle_event(const SDL_Event *event) {
     win->height = event->window.data2;
     if (win->document != NULL) win->document->restyle((float)win->width, (float)win->height);
     win->geometry.dirty = 1;
+    /* Web 'resize', so a document can re-measure on a window change in every
+     * host (a browser already fires one). */
+    xt_gui_emit(win, "resize");
     return;
   }
 

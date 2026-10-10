@@ -19,9 +19,9 @@
 
 当然有兴趣下载鹈鹕骑车小游戏编译结果，也编译了多个不同平台windows/mac/ubutun26+的版本。
 
-编译结果地址：[https://github.com/zy445566/xbintsc/releases/tag/v0.3.65](https://github.com/zy445566/xbintsc/releases/tag/v0.3.65)
+编译结果地址：[https://github.com/zy445566/xbintsc/releases/tag/v0.3.69](https://github.com/zy445566/xbintsc/releases/tag/v0.3.69)
 
-选择pelican-bike-demo-v0.3.65-multi-platform.zip下载，解压后选择自己的平台就能运行。
+选择pelican-bike-demo-v0.3.69-multi-platform.zip下载，解压后选择自己的平台就能运行。
 
 由于该游戏目前没有做签名，所以可能会有系统的安全性拦截。
 macOS 打开后需要：打开“系统设置” → “隐私与安全性”，向下滚动到“安全性”，选择“仍要打开”运行。

@@ -29,12 +29,15 @@ struct FontSpec {
 /** Opaque loaded face (defined in text.cpp). */
 struct Font;
 
-/** A positioned, shaped glyph (pixels). */
+/** A positioned, shaped glyph (pixels). `font` is the face the glyph id
+ * belongs to — the primary face or, for a codepoint it does not cover, a
+ * fallback face — so the rasteriser can load the right face. */
 struct ShapedGlyph {
   uint32_t glyph = 0;
   float x_advance = 0;
   float x_offset = 0;
   float y_offset = 0;
+  Font *font = nullptr;
 };
 
 /** An 8-bit grayscale glyph bitmap, as produced by FreeType. */
@@ -51,8 +54,14 @@ struct GlyphImage {
 Font *xt_text_resolve(const FontSpec &spec);
 
 /** Shape `utf8` with `font`, appending glyphs to `out`; returns the total
- * advance width in pixels. `out` is not cleared. */
+ * advance width in pixels. `out` is not cleared. Codepoints `font` does not
+ * cover are shaped with the first fallback face that has them, and each
+ * glyph's `font` says which face it belongs to. */
 float xt_text_shape_run(const std::string &utf8, Font *font, std::vector<ShapedGlyph> &out);
+
+/** The same face as `font` at a different pixel size (used to rasterise glyphs
+ * at the display's scale factor), or null when it cannot be loaded. */
+Font *xt_text_scale(Font *font, float pixel_size);
 
 /** Rasterise `glyph` from `font` into a grayscale bitmap. Returns false when
  * the glyph has no outline (e.g. a space) or cannot be rendered. */

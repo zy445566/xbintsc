@@ -299,18 +299,19 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     if (run.text.empty() || run.color.a <= 0.0f) continue;
     xtgui::Font *logical = xtgui::xt_text_resolve(run.font);
     if (logical == nullptr) continue;
-    xtgui::FontSpec raster_spec = run.font;
-    raster_spec.pixel_size = run.font.pixel_size * scale;
-    xtgui::Font *raster = xtgui::xt_text_resolve(raster_spec);
-    if (raster == nullptr) raster = logical;
 
     std::vector<xtgui::ShapedGlyph> glyphs;
     xtgui::xt_text_shape_run(run.text, logical, glyphs);
     float pen_x = run.x;
     for (const xtgui::ShapedGlyph &glyph : glyphs) {
       if (glyph.glyph != 0) {
+        xtgui::Font *face = glyph.font != nullptr ? glyph.font : logical;
+        if (scale != 1.0f) {
+          xtgui::Font *scaled = xtgui::xt_text_scale(face, run.font.pixel_size * scale);
+          if (scaled != nullptr) face = scaled;
+        }
         GlyphEntry entry;
-        if (ensureGlyph(device, raster, glyph.glyph, entry)) {
+        if (ensureGlyph(device, face, glyph.glyph, entry)) {
           float quad_x = pen_x + glyph.x_offset + (float)entry.left / scale;
           float quad_y = run.baseline + glyph.y_offset - (float)entry.top / scale;
           float quad_w = (float)entry.width / scale;

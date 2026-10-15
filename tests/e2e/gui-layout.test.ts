@@ -266,4 +266,36 @@ describe.skipIf(!guiAvailable)("gui extension — layout", () => {
     expect(value("empty")).toBe("0");
     expect(value("wide")).toBe("true");
   });
+
+  it("falls back to another face for a codepoint the primary lacks", () => {
+    const { value } = harness.compileAndRun(
+      "fallback",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "fallback", width: 200, height: 100 });
+      win.on("ready", () => {
+        console.log("filled=" + win.measureText("\u25AE", 16));
+        console.log("empty=" + win.measureText("\u25AF", 16));
+        console.log("mixed=" + win.measureText("\u25AE\u25AF", 16));
+        win.close();
+      });
+      win.loadHTML("<html><body></body></html>");
+      run();
+      `,
+    );
+
+    // U+25AE (▮) and U+25AF (▯) are different glyphs. A single face that lacks
+    // both maps them to the same `.notdef` glyph, so both get the same advance;
+    // with the fallback chain each keeps its own glyph, so the widths differ
+    // and the pair adds up. This is the regression behind the pelican-bike
+    // speed bar rendering as an empty strip.
+    const filled = Number(value("filled"));
+    const empty = Number(value("empty"));
+    const mixed = Number(value("mixed"));
+    expect(filled).toBeGreaterThan(0);
+    expect(empty).toBeGreaterThan(0);
+    expect(filled).not.toBe(empty);
+    expect(mixed).toBeCloseTo(filled + empty, 3);
+  });
 });

@@ -483,11 +483,21 @@ Still to do for animation: `@keyframes` animations and `cubic-bezier(...)`.
   Only regular upright faces are used for now; weight/italic selection is a
   later refinement.
 - The default candidates prefer a **CJK-capable** face (Microsoft YaHei on
-  Windows, PingFang on macOS, Noto Sans CJK/WenQuanYi on Linux) before the
-  Latin-only ones, because a run is shaped with a *single* face: without this,
-  Chinese/Japanese/Korean text renders as blank or `.notdef` boxes. Set
-  `XT_GUI_FONT` to a Latin-only face to get its Latin design instead (at the
-  cost of CJK coverage).
+  Windows, PingFang/STHeiti on macOS, Noto Sans CJK/WenQuanYi on Linux) before
+  the Latin-only ones. Setting `XT_GUI_FONT` to a Latin-only face gives its
+  Latin design instead (at the cost of CJK coverage).
+- **Codepoints the primary face lacks fall back to another face.** The engine
+  keeps a small fallback chain — the platform's symbol face (Segoe UI Symbol,
+  Apple Symbols, Noto Sans Symbols, DejaVu Sans) first, then the other family
+  class — and resolves each codepoint to the first face in it that has the
+  glyph. The run is shaped in segments, one per face, so a mixed run (Latin
+  plus an arrow, box-drawing or geometric shape, or Latin inside CJK) draws
+  every glyph instead of dropping the missing ones as `.notdef`. This is what
+  makes a character such as `▮`/`▯` (U+25AE/U+25AF, used by the pelican-bike
+  speed bar) visible even when the CJK primary has no geometric shapes. Each
+  shaped glyph carries its face (`ShapedGlyph::font`) so the renderer rasterises
+  it from the right atlas entry; `xt_text_scale` maps a face to the display's
+  scale factor.
 - `xt_text_measure_width` shapes the run with HarfBuzz (so kerning and
   ligatures are honoured), `xt_text_metrics` returns FreeType's ascent /
   descent / normal line height. When no font file can be found the module falls

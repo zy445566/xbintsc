@@ -38,6 +38,7 @@ const char *xt_gui_driver(void);
 #include <unordered_map>
 #include <vector>
 
+#include "canvas.h"
 #include "document.h"
 #include "media.h"
 #include "renderer.h"
@@ -115,6 +116,10 @@ struct XtGuiWindow {
    * map doubles as the set of elements whose media is loaded; `gui_media.cpp`
    * reconciles it with the live DOM every frame. */
   std::unordered_map<const xtgui::Node *, XtGuiMediaEntry> media_players;
+  /** One `Canvas2D` per `<canvas>` element, keyed by the element node. Created
+   * lazily by `getContext("2d")` (or by `xt_gui_canvas_sync` for a live canvas),
+   * released when the node is forgotten or the document reloads. */
+  std::unordered_map<const xtgui::Node *, std::unique_ptr<xtgui::Canvas2D>> canvases;
   /** The batch currently running: its callbacks have been swapped out of
    * `animation_frames`, and a collection triggered by one of them must still
    * see the rest. Kept on the record (not a local) so the GC root provider can
@@ -186,6 +191,19 @@ void xt_gui_media_sync(XtGuiWindow *win);
 void xt_gui_media_tick(XtGuiWindow *win, double now_ms);
 /** Release all decoders and their GPU textures (window close / `loadHTML`). */
 void xt_gui_media_shutdown(XtGuiWindow *win);
+
+/** The 2D context of a `<canvas>` element, creating it (at the element's
+ * `width`/`height` attributes, 300x150 by default) on first use. */
+xtgui::Canvas2D *xt_gui_canvas_get(XtGuiWindow *win, const xtgui::Node *node);
+/** The existing 2D context of `node`, or null (no side effects). */
+xtgui::Canvas2D *xt_gui_canvas_find(XtGuiWindow *win, const xtgui::Node *node);
+/** Drop a node's canvas (called when its handle is forgotten). */
+void xt_gui_canvas_forget(XtGuiWindow *win, const xtgui::Node *node);
+/** Publish live canvases to the document (sizes + render ids) so layout and
+ * paint see them; creates a context for a canvas that has none yet. */
+void xt_gui_canvas_sync(XtGuiWindow *win);
+/** Release every canvas of `win` (window close / `loadHTML`). */
+void xt_gui_canvas_shutdown(XtGuiWindow *win);
 
 #endif /* __cplusplus */
 

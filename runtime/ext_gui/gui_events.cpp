@@ -259,6 +259,9 @@ void xt_gui_render_window(XtGuiWindow *win) {
    * DOM media events. */
   xt_gui_media_sync(win);
   xt_gui_media_tick(win, now);
+  /* Publish canvas bitmaps to the document (and create contexts for a canvas
+   * that has none) before this frame's layout. */
+  xt_gui_canvas_sync(win);
   if (win->document != nullptr && win->document->advance(delta)) win->geometry.dirty = 1;
 
   /* A DOM mutation from a handler invalidates the tree: restyle/relayout
@@ -281,6 +284,8 @@ void xt_gui_render_window(XtGuiWindow *win) {
   /* Upload any new video frame before the render command buffer is recorded,
    * so the draw samples the frame that just arrived. */
   xt_gui_media_upload_frames(g_device);
+  /* Canvases are CPU-drawn: push any new bitmap without a relayout. */
+  xt_gui_canvas_upload_frames(g_device);
   SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(g_device);
   if (cmd == NULL) return;
   SDL_GPUTexture *swapchain = NULL;

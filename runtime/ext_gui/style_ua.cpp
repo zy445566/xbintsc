@@ -44,6 +44,8 @@ void xt_style_apply_user_agent(const Node *node, XtStyle *style) {
    * layout), while `<audio>` and its `<source>`/`<track>` children have no
    * rendered box of their own. */
   if (tag == "video") style->display = Display::InlineBlock;
+  /* `<canvas>` is also a replaced inline-block (300x150 default in layout). */
+  if (tag == "canvas") style->display = Display::InlineBlock;
   if (tag == "audio" || tag == "source" || tag == "track") style->display = Display::None;
   if (tag == "body") style->margin.set({8.0f, Unit::Px});
   if (tag == "p") style->margin.top = style->margin.bottom = {16.0f, Unit::Px};

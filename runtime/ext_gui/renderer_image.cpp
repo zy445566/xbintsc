@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "canvas.h"
 #include "image.h"
 #include "media.h"
 
@@ -27,6 +28,10 @@ struct MediaTexture {
 };
 
 static std::unordered_map<uint64_t, MediaTexture> g_media_textures;
+
+/** One live `<canvas>` texture, keyed by the canvas id from `canvas.h`. It is
+ * re-uploaded in place whenever the canvas bumps its `generation`. */
+static std::unordered_map<uint64_t, MediaTexture> g_canvas_textures;
 
 /** Upload RGBA8 `pixels` into `texture` through a staging buffer, submitting
  * its own command buffer. Because command buffers run in submission order and
@@ -102,6 +107,41 @@ static SDL_GPUTexture *ensureMediaTexture(SDL_GPUDevice *device, uint64_t media_
     if (uploadPixels(device, entry.texture, entry.width, entry.height, image->pixels.data(),
                      (uint32_t)image->pixels.size())) {
       entry.generation = player->frame_generation();
+    }
+  }
+  return entry.texture;
+}
+
+/** Ensure the texture for `canvas_id` exists and holds the canvas's newest
+ * pixels. Returns `nullptr` for an unknown or empty canvas. */
+static SDL_GPUTexture *ensureCanvasTexture(SDL_GPUDevice *device, uint64_t canvas_id) {
+  xtgui::Canvas2D *canvas = xtgui::xt_canvas_by_id(canvas_id);
+  if (canvas == nullptr) return nullptr;
+  const xtgui::Image &image = canvas->image();
+  if (image.width <= 0 || image.height <= 0) return nullptr;
+  MediaTexture &entry = g_canvas_textures[canvas_id];
+  if (entry.texture == nullptr || entry.width != image.width || entry.height != image.height) {
+    if (entry.texture != nullptr) SDL_ReleaseGPUTexture(device, entry.texture);
+    SDL_GPUTextureCreateInfo info;
+    memset(&info, 0, sizeof(info));
+    info.type = SDL_GPU_TEXTURETYPE_2D;
+    info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    info.width = (Uint32)image.width;
+    info.height = (Uint32)image.height;
+    info.layer_count_or_depth = 1;
+    info.num_levels = 1;
+    info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    entry.texture = SDL_CreateGPUTexture(device, &info);
+    entry.width = image.width;
+    entry.height = image.height;
+    entry.generation = ~0ull;
+    if (entry.texture == nullptr) return nullptr;
+  }
+  if (entry.generation != canvas->generation()) {
+    if (uploadPixels(device, entry.texture, entry.width, entry.height, image.pixels.data(),
+                     (uint32_t)image.pixels.size())) {
+      entry.generation = canvas->generation();
     }
   }
   return entry.texture;
@@ -257,7 +297,9 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   for (const xtgui::PaintImage &image : list.images) {
     if (image.width <= 0.0f || image.height <= 0.0f) continue;
     SDL_GPUTexture *texture = nullptr;
-    if (image.media_id != 0) {
+    if (image.canvas_id != 0) {
+      texture = ensureCanvasTexture(device, image.canvas_id);
+    } else if (image.media_id != 0) {
       texture = ensureMediaTexture(device, image.media_id);
     } else {
       /* Draw-time device pixels: an SVG is rasterised at this size so it stays
@@ -310,6 +352,10 @@ void xt_gui_image_textures_destroy(SDL_GPUDevice *device) {
     if (entry.second.texture != nullptr) SDL_ReleaseGPUTexture(device, entry.second.texture);
   }
   g_media_textures.clear();
+  for (auto &entry : g_canvas_textures) {
+    if (entry.second.texture != nullptr) SDL_ReleaseGPUTexture(device, entry.second.texture);
+  }
+  g_canvas_textures.clear();
 }
 
 void xt_gui_media_upload_frames(SDL_GPUDevice *device) {
@@ -323,4 +369,17 @@ void xt_gui_media_texture_release(SDL_GPUDevice *device, uint64_t media_id) {
   if (it == g_media_textures.end()) return;
   if (it->second.texture != nullptr) SDL_ReleaseGPUTexture(device, it->second.texture);
   g_media_textures.erase(it);
+}
+
+void xt_gui_canvas_upload_frames(SDL_GPUDevice *device) {
+  using namespace xtgui::renderer_detail;
+  for (auto &entry : g_canvas_textures) ensureCanvasTexture(device, entry.first);
+}
+
+void xt_gui_canvas_texture_release(SDL_GPUDevice *device, uint64_t canvas_id) {
+  using namespace xtgui::renderer_detail;
+  auto it = g_canvas_textures.find(canvas_id);
+  if (it == g_canvas_textures.end()) return;
+  if (it->second.texture != nullptr) SDL_ReleaseGPUTexture(device, it->second.texture);
+  g_canvas_textures.erase(it);
 }

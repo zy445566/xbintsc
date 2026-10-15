@@ -54,6 +54,7 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
      * the decoders that belonged to the old tree. */
     xt_gui_handles_reset(win);
     xt_gui_media_shutdown(win);
+    xt_gui_canvas_shutdown(win);
     win->document = std::make_unique<xtgui::XtDocument>();
     float width = 0;
     float height = 0;

@@ -27,12 +27,14 @@ extern xt_value g_document_proto;
 extern xt_value g_event_proto;
 extern xt_value g_class_list_proto;
 extern xt_value g_style_proto;
+extern xt_value g_canvas_proto;
 
 xt_value node_proto();
 xt_value document_proto();
 xt_value event_proto();
 xt_value class_list_proto();
 xt_value style_proto();
+xt_value canvas_proto();
 
 /* -- cross-unit helpers --------------------------------------------------- */
 
@@ -145,6 +147,54 @@ METHOD(node_video_height_get);
 METHOD(node_ready_state_get);
 METHOD(node_media_src_get);
 METHOD(node_media_src_set);
+
+/* canvas (`<canvas>` element + 2D context) */
+METHOD(node_get_context);
+METHOD(node_width_get);
+METHOD(node_width_set);
+METHOD(node_height_get);
+METHOD(node_height_set);
+METHOD(canvas_get_canvas);
+METHOD(canvas_fill_style_get);
+METHOD(canvas_fill_style_set);
+METHOD(canvas_stroke_style_get);
+METHOD(canvas_stroke_style_set);
+METHOD(canvas_line_width_get);
+METHOD(canvas_line_width_set);
+METHOD(canvas_global_alpha_get);
+METHOD(canvas_global_alpha_set);
+METHOD(canvas_font_get);
+METHOD(canvas_font_set);
+METHOD(canvas_text_align_get);
+METHOD(canvas_text_align_set);
+METHOD(canvas_text_baseline_get);
+METHOD(canvas_text_baseline_set);
+METHOD(canvas_save);
+METHOD(canvas_restore);
+METHOD(canvas_translate);
+METHOD(canvas_rotate);
+METHOD(canvas_scale);
+METHOD(canvas_transform);
+METHOD(canvas_set_transform);
+METHOD(canvas_reset_transform);
+METHOD(canvas_begin_path);
+METHOD(canvas_close_path);
+METHOD(canvas_move_to);
+METHOD(canvas_line_to);
+METHOD(canvas_rect);
+METHOD(canvas_arc);
+METHOD(canvas_quadratic_curve_to);
+METHOD(canvas_bezier_curve_to);
+METHOD(canvas_fill);
+METHOD(canvas_stroke);
+METHOD(canvas_clear_rect);
+METHOD(canvas_fill_rect);
+METHOD(canvas_stroke_rect);
+METHOD(canvas_measure_text);
+METHOD(canvas_fill_text);
+METHOD(canvas_stroke_text);
+METHOD(canvas_draw_image);
+METHOD(canvas_get_image_data);
 
 /* classList methods */
 METHOD(class_list_add);

@@ -2,10 +2,12 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M13** —— 功能（M1–M12）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
+状态：**M14** —— 功能（M1–M13）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
 `<video>`/`<audio>`——一个 vendored 的最小 FFmpeg 在主线程解码，视频帧走图像
 纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露 `play`/`pause`/`currentTime`/…
-与媒体事件。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
+与媒体事件。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
+填充、路径、文本与 `drawImage`），并经图像纹理路径上传——参见
+[Canvas](./gui/canvas.md)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
 
 ## 目录
 
@@ -14,6 +16,7 @@
 - [布局](./gui/layout.md) —— 块级、行内、Flexbox 与定位
 - [绘制](./gui/rendering.md) —— 显示列表、GPU 管线与文本
 - [媒体](./gui/media.md) —— 图像、SVG、视频与音频
+- [Canvas](./gui/canvas.md) —— `<canvas>` 与 2D 上下文
 - [输入](./gui/input.md) —— 命中测试、事件与 `:hover`/`:focus`
 - [动画](./gui/animation.md) —— `requestAnimationFrame` 与 CSS transition
 - [运行时集成](./gui/runtime.md) —— 事件循环、原生桥接与内存
@@ -187,6 +190,13 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
       （`dom_api_media.cpp`、`dom_api_proto.cpp`）。由 TS + CSS 控制；没有
       内置控件。示例见 `examples/gui/media.*`，e2e 见
       `tests/e2e/gui-media.test.ts`。
+14. **M14 — `<canvas>` 2D** ✅
+    - `<canvas>` 是一个替换元素（`xtgui::Canvas2D`、`layout.*`），
+      `getContext("2d")` 句柄与绘制 API 位于 `dom_api_canvas.cpp`，自研的抗锯齿
+      软件光栅器位于 `canvas_raster.cpp`，按窗口的生命周期位于 `gui_canvas.cpp`。
+      位图经图像路径上传为 GPU 纹理（`renderer_image.cpp`），显示列表携带
+      `canvas_id`（`paint.*`）。参见 [Canvas](./gui/canvas.md)；e2e 见
+      `tests/e2e/gui-canvas.test.ts`。
 
 ## 进度日志
 
@@ -255,4 +265,12 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
   `dom_api_media.cpp` 在元素句柄上暴露 `play`/`pause`/`load` 与媒体属性。
   `examples/gui/media.*` 演示 TS + CSS 控件的模式，
   `tests/e2e/gui-media.test.ts` 对其做断言。
+- **M14** ✅ `<canvas>` 支持。新的替换元素（`layout.*`）从 `width`/`height`
+  属性获得固有尺寸（默认 `300x150`），`xtgui::Canvas2D`（`canvas.{h,cpp}`）
+  持有 RGBA8 位图与绘制状态，`canvas_raster.cpp` 是自研的抗锯齿软件光栅器
+  （4 条子扫描线 + 水平解析覆盖率、非零环绕），`getContext("2d")` 句柄及其 API
+  在 `dom_api_canvas.cpp` 绑定，`gui_canvas.cpp` 持有按窗口的生命周期。位图经
+  图像纹理路径上传（`renderer_image.cpp`），显示列表携带 `canvas_id`
+  （`paint.*`）。参见 [Canvas](./gui/canvas.md)；e2e 见
+  `tests/e2e/gui-canvas.test.ts`。
 

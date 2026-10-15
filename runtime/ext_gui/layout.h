@@ -34,6 +34,15 @@ struct MediaSize {
 };
 using MediaSizeMap = std::unordered_map<const Node *, MediaSize>;
 
+/** Intrinsic size and render id of one `<canvas>` element, resolved by the
+ * engine and keyed by node. `width`/`height` are the bitmap's pixel size. */
+struct CanvasInfo {
+  float width = 0;
+  float height = 0;
+  uint64_t id = 0;
+};
+using CanvasInfoMap = std::unordered_map<const Node *, CanvasInfo>;
+
 /** A positioned text fragment (a wrapped text box can span several lines).
  * `text` holds the run this fragment covers (a word or a run of spaces). */
 struct TextFragment {
@@ -64,6 +73,11 @@ struct LayoutBox {
   bool is_media = false;
   uint64_t media_id = 0;
 
+  /* `<canvas>`: a replaced element whose pixels are a script-owned `Canvas2D`
+   * (`canvas_id`). `is_image`-style intrinsic sizing applies. */
+  bool is_canvas = false;
+  uint64_t canvas_id = 0;
+
   Display display = Display::Inline;
 
   /* Resolved (px) box edges. */
@@ -87,7 +101,8 @@ struct LayoutBox {
 class LayoutTree {
  public:
   void compute(const Node *root, const std::unordered_map<const Node *, XtStyle> &styles,
-               float viewportWidth, float viewportHeight, const MediaSizeMap *media = nullptr);
+               float viewportWidth, float viewportHeight, const MediaSizeMap *media = nullptr,
+               const CanvasInfoMap *canvases = nullptr);
   void clear() {
     root_.reset();
     index_.clear();

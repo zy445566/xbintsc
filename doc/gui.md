@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M13** — features (M1–M12) are complete: HTML parsing, CSS selector
+Status: **M14** — features (M1–M13) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -22,6 +22,9 @@ engine bounded memory: see [Node lifetime](./gui/dom.md#node-lifetime) and
 `<video>`/`<audio>` — a vendored minimal FFmpeg decodes them on the main thread,
 video frames go through the image texture path and audio to an SDL stream, with
 the DOM media API exposing `play`/`pause`/`currentTime`/… and media events.
+**M14** adds `<canvas>` with a self-written 2D software rasteriser (anti-aliased
+fills, paths, text and `drawImage`) uploaded through the image texture path —
+see [Canvas](./gui/canvas.md).
 This overview records the locked decisions, the architecture, the milestone plan
 and the current progress; the engine itself is documented by function in the
 pages above.
@@ -33,6 +36,7 @@ pages above.
 - [Layout](./gui/layout.md) — block, inline, Flexbox and positioning
 - [Rendering](./gui/rendering.md) — display list, GPU pipelines and text
 - [Media](./gui/media.md) — images, SVG, video and audio
+- [Canvas](./gui/canvas.md) — `<canvas>` and the 2D context
 - [Input](./gui/input.md) — hit testing, events and `:hover`/`:focus`
 - [Animation](./gui/animation.md) — `requestAnimationFrame` and CSS transitions
 - [Runtime integration](./gui/runtime.md) — event loop, native bridge and memory
@@ -228,6 +232,14 @@ engine were Rust.
       (`dom_api_media.cpp`, `dom_api_proto.cpp`). Controlled from TS + CSS;
       there are no built-in controls. Example in `examples/gui/media.*`, e2e in
       `tests/e2e/gui-media.test.ts`.
+14. **M14 — `<canvas>` 2D** ✅
+    - `<canvas>` is a replaced element (`xtgui::Canvas2D`, `layout.*`), the
+      `getContext("2d")` handle and drawing API live in `dom_api_canvas.cpp`,
+      the self-written anti-aliased software rasteriser in `canvas_raster.cpp`,
+      and the per-window lifetime in `gui_canvas.cpp`. The bitmap uploads to a
+      GPU texture through the image path (`renderer_image.cpp`) and the display
+      list carries a `canvas_id` (`paint.*`). See [Canvas](./gui/canvas.md);
+      e2e in `tests/e2e/gui-canvas.test.ts`.
 
 ## Progress log
 
@@ -303,4 +315,14 @@ engine were Rust.
   path, and `dom_api_media.cpp` exposes `play`/`pause`/`load` plus the media
   properties on element handles. `examples/gui/media.*` demonstrates the
   TS-plus-CSS-controls pattern and `tests/e2e/gui-media.test.ts` pins it.
+- **M14** ✅ `<canvas>` support. A new replaced element (`layout.*`) carries an
+  intrinsic size from its `width`/`height` attributes (default `300x150`),
+  `xtgui::Canvas2D` (`canvas.{h,cpp}`) owns the RGBA8 bitmap and drawing state,
+  `canvas_raster.cpp` is a self-written anti-aliased software rasteriser
+  (4 sub-scanlines + analytic horizontal coverage, non-zero winding), the
+  `getContext("2d")` handle and its API are bound in `dom_api_canvas.cpp`, and
+  `gui_canvas.cpp` owns the per-window lifetime. The bitmap uploads through the
+  image texture path (`renderer_image.cpp`) and the display list carries a
+  `canvas_id` (`paint.*`). See [Canvas](./gui/canvas.md); e2e in
+  `tests/e2e/gui-canvas.test.ts`.
 

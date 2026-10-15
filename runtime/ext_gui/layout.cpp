@@ -25,7 +25,8 @@ namespace {
 
 std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
                                         const std::unordered_map<const Node *, XtStyle> &styles,
-                                        const XtStyle *inherited, const MediaSizeMap *media) {
+                                        const XtStyle *inherited, const MediaSizeMap *media,
+                                        const CanvasInfoMap *canvases) {
   if (node->isText()) {
     auto box = std::make_unique<LayoutBox>();
     box->node = node;
@@ -73,9 +74,35 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
         }
       }
     }
+  } else if (node->isElement() && node->isTag("canvas")) {
+    /* A replaced inline-block whose pixels are a script-owned bitmap. The
+     * intrinsic size is the HTML 300x150 default, overridden by the
+     * `width`/`height` attributes (or a script assignment to `canvas.width`),
+     * published by the window as `CanvasInfo`. */
+    box->is_canvas = true;
+    box->intrinsic_width = 300;
+    box->intrinsic_height = 150;
+    float parsed = 0.0f;
+    const std::string *attr_width = node->attr("width");
+    const std::string *attr_height = node->attr("height");
+    if (attr_width != nullptr && xt_css_parse_number(*attr_width, &parsed) && parsed > 0.0f)
+      box->intrinsic_width = parsed;
+    if (attr_height != nullptr && xt_css_parse_number(*attr_height, &parsed) && parsed > 0.0f)
+      box->intrinsic_height = parsed;
+    if (canvases != nullptr) {
+      auto found = canvases->find(node);
+      if (found != canvases->end()) {
+        box->canvas_id = found->second.id;
+        if (found->second.width > 0 && found->second.height > 0) {
+          box->intrinsic_width = found->second.width;
+          box->intrinsic_height = found->second.height;
+        }
+      }
+    }
   }
   for (const std::unique_ptr<Node> &child : node->children) {
-    std::unique_ptr<LayoutBox> childBox = buildBoxTree(child.get(), styles, style, media);
+    std::unique_ptr<LayoutBox> childBox =
+        buildBoxTree(child.get(), styles, style, media, canvases);
     if (childBox != nullptr) {
       childBox->parent = box.get();
       box->children.push_back(std::move(childBox));
@@ -104,7 +131,8 @@ std::string dumpBox(const LayoutBox *box, int depth) {
 }  // namespace
 
 void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *, XtStyle> &styles,
-                         float viewportWidth, float viewportHeight, const MediaSizeMap *media) {
+                         float viewportWidth, float viewportHeight, const MediaSizeMap *media,
+                         const CanvasInfoMap *canvases) {
   root_.reset();
   index_.clear();
   root_style_ = xt_style_initial();
@@ -123,14 +151,15 @@ void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *
   if (root != nullptr) {
     if (root->type == NodeType::Document) {
       for (const std::unique_ptr<Node> &child : root->children) {
-        std::unique_ptr<LayoutBox> box = buildBoxTree(child.get(), styles, &root_style_, media);
+        std::unique_ptr<LayoutBox> box =
+            buildBoxTree(child.get(), styles, &root_style_, media, canvases);
         if (box != nullptr) {
           box->parent = root_.get();
           root_->children.push_back(std::move(box));
         }
       }
     } else {
-      std::unique_ptr<LayoutBox> box = buildBoxTree(root, styles, &root_style_, media);
+      std::unique_ptr<LayoutBox> box = buildBoxTree(root, styles, &root_style_, media, canvases);
       if (box != nullptr) {
         box->parent = root_.get();
         root_->children.push_back(std::move(box));

@@ -72,5 +72,11 @@ void xt_gui_image_textures_destroy(SDL_GPUDevice *device);
 void xt_gui_media_upload_frames(SDL_GPUDevice *device);
 /** Release one media texture (when a `<video>` is removed or navigated away). */
 void xt_gui_media_texture_release(SDL_GPUDevice *device, uint64_t media_id);
+/** Re-upload the current bitmap of every live `<canvas>` texture. Called once
+ * per frame, before the render command buffer, so a canvas animated from
+ * `requestAnimationFrame` reaches the screen without a relayout. */
+void xt_gui_canvas_upload_frames(SDL_GPUDevice *device);
+/** Release one canvas texture (when the canvas is dropped). */
+void xt_gui_canvas_texture_release(SDL_GPUDevice *device, uint64_t canvas_id);
 
 #endif /* XT_GUI_RENDERER_H */

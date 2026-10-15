@@ -59,6 +59,10 @@ xt_value node_proto() {
   define_getter(proto, "videoHeight", (void *)node_video_height_get);
   define_getter(proto, "readyState", (void *)node_ready_state_get);
   define_getter(proto, "src", (void *)node_media_src_get);
+  /* `<canvas>` element properties (`width`/`height` also address the attribute
+   * on other elements). */
+  define_getter(proto, "width", (void *)node_width_get);
+  define_getter(proto, "height", (void *)node_height_get);
   /* Setters. */
   define_setter(proto, "id", (void *)node_id_set);
   define_setter(proto, "className", (void *)node_class_name_set);
@@ -71,6 +75,8 @@ xt_value node_proto() {
   define_setter(proto, "loop", (void *)node_loop_set);
   define_setter(proto, "autoplay", (void *)node_autoplay_set);
   define_setter(proto, "src", (void *)node_media_src_set);
+  define_setter(proto, "width", (void *)node_width_set);
+  define_setter(proto, "height", (void *)node_height_set);
   /* Methods. */
   define_method(proto, "getAttribute", (void *)node_get_attribute);
   define_method(proto, "setAttribute", (void *)node_set_attribute);
@@ -96,6 +102,7 @@ xt_value node_proto() {
   define_method(proto, "play", (void *)node_play);
   define_method(proto, "pause", (void *)node_pause);
   define_method(proto, "load", (void *)node_load);
+  define_method(proto, "getContext", (void *)node_get_context);
   g_node_proto = proto;
   return proto;
 }
@@ -151,6 +158,57 @@ xt_value style_proto() {
   define_method(proto, "getPropertyValue", (void *)style_get_property_value);
   define_method(proto, "removeProperty", (void *)style_remove_property);
   g_style_proto = proto;
+  return proto;
+}
+
+xt_value canvas_proto() {
+  xt_gc_add_root(&g_canvas_proto);
+  if (XT_IS_OBJECT(g_canvas_proto)) return g_canvas_proto;
+  xt_value proto = xt_object_new();
+  /* Properties. */
+  define_getter(proto, "canvas", (void *)canvas_get_canvas);
+  define_getter(proto, "fillStyle", (void *)canvas_fill_style_get);
+  define_setter(proto, "fillStyle", (void *)canvas_fill_style_set);
+  define_getter(proto, "strokeStyle", (void *)canvas_stroke_style_get);
+  define_setter(proto, "strokeStyle", (void *)canvas_stroke_style_set);
+  define_getter(proto, "lineWidth", (void *)canvas_line_width_get);
+  define_setter(proto, "lineWidth", (void *)canvas_line_width_set);
+  define_getter(proto, "globalAlpha", (void *)canvas_global_alpha_get);
+  define_setter(proto, "globalAlpha", (void *)canvas_global_alpha_set);
+  define_getter(proto, "font", (void *)canvas_font_get);
+  define_setter(proto, "font", (void *)canvas_font_set);
+  define_getter(proto, "textAlign", (void *)canvas_text_align_get);
+  define_setter(proto, "textAlign", (void *)canvas_text_align_set);
+  define_getter(proto, "textBaseline", (void *)canvas_text_baseline_get);
+  define_setter(proto, "textBaseline", (void *)canvas_text_baseline_set);
+  /* Methods. */
+  define_method(proto, "save", (void *)canvas_save);
+  define_method(proto, "restore", (void *)canvas_restore);
+  define_method(proto, "translate", (void *)canvas_translate);
+  define_method(proto, "rotate", (void *)canvas_rotate);
+  define_method(proto, "scale", (void *)canvas_scale);
+  define_method(proto, "transform", (void *)canvas_transform);
+  define_method(proto, "setTransform", (void *)canvas_set_transform);
+  define_method(proto, "resetTransform", (void *)canvas_reset_transform);
+  define_method(proto, "beginPath", (void *)canvas_begin_path);
+  define_method(proto, "closePath", (void *)canvas_close_path);
+  define_method(proto, "moveTo", (void *)canvas_move_to);
+  define_method(proto, "lineTo", (void *)canvas_line_to);
+  define_method(proto, "rect", (void *)canvas_rect);
+  define_method(proto, "arc", (void *)canvas_arc);
+  define_method(proto, "quadraticCurveTo", (void *)canvas_quadratic_curve_to);
+  define_method(proto, "bezierCurveTo", (void *)canvas_bezier_curve_to);
+  define_method(proto, "fill", (void *)canvas_fill);
+  define_method(proto, "stroke", (void *)canvas_stroke);
+  define_method(proto, "clearRect", (void *)canvas_clear_rect);
+  define_method(proto, "fillRect", (void *)canvas_fill_rect);
+  define_method(proto, "strokeRect", (void *)canvas_stroke_rect);
+  define_method(proto, "measureText", (void *)canvas_measure_text);
+  define_method(proto, "fillText", (void *)canvas_fill_text);
+  define_method(proto, "strokeText", (void *)canvas_stroke_text);
+  define_method(proto, "drawImage", (void *)canvas_draw_image);
+  define_method(proto, "getImageData", (void *)canvas_get_image_data);
+  g_canvas_proto = proto;
   return proto;
 }
 

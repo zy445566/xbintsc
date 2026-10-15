@@ -32,6 +32,7 @@ xt_value g_document_proto = XT_UNDEFINED;
 xt_value g_event_proto = XT_UNDEFINED;
 xt_value g_class_list_proto = XT_UNDEFINED;
 xt_value g_style_proto = XT_UNDEFINED;
+xt_value g_canvas_proto = XT_UNDEFINED;
 
 /* -- small helpers -------------------------------------------------------- */
 
@@ -173,6 +174,8 @@ void xt_gui_node_handle_forget(XtGuiWindow *win, const xtgui::Node *node) {
     win->node_index.erase(index);
   }
   win->node_handles.erase(node);
+  /* A destroyed canvas node must not keep its bitmap or GPU texture alive. */
+  xt_gui_canvas_forget(win, node);
 }
 
 /** Forget the handles of `node` and every descendant. Runs before the subtree

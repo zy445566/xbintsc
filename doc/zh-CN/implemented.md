@@ -358,6 +358,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 值模型 | 64 位 NaN-boxing、统一函数 ABI（含 `this`）、闭包环境、对象原型链 |
 | 运行时 | 字符串 / 对象 / 数组 / 类型化数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 集合 / symbol / 生成器 / `fetch` / `console` |
 | 扩展 | 扩展注册表、`core`（print）、`node`（fs / path / os / process / buffer / stream / net / dgram / http，按说明符导入） |
+| GUI（`gui` 扩展） | 自托管 HTML/CSS 渲染器窗口（SDL3 + SDL_GPU）：DOM/CSS/布局、`<img>`/SVG、`<video>`/`<audio>`、`<canvas>` 2D、事件、transition |
 | 工具链 | clang 编译 IR/C、链接、增量缓存 |
 | 项目配置 | `xbintsc.config.json`（`entry` / `outDir` / `optimize` / `extensions` / `app`），支持查找与 CLI 优先级 |
 | 应用图标 | 编译期内嵌（PNG/ICO/ICNS），Windows PE 资源、macOS `.app` bundle、`gui` 运行时窗口/Dock 图标 |

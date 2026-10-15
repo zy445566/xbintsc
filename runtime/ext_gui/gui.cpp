@@ -144,6 +144,7 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   xt_gui_emit(win, "close");
   win->animation_frames.clear();
   xt_gui_media_shutdown(win);
+  xt_gui_canvas_shutdown(win);
   xt_gui_handles_reset(win);
   win->document_object = XT_UNDEFINED;
   win->document.reset();

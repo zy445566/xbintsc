@@ -46,8 +46,8 @@ struct PaintText {
 
 /** An image to draw, scaled into the given rectangle (viewport-relative).
  * A non-zero `media_id` names a live `<video>` frame owned by the media
- * subsystem; `src` is then empty and the renderer binds the decoder's texture
- * for that id. */
+ * subsystem; a non-zero `canvas_id` names a live `<canvas>` bitmap owned by the
+ * DOM; `src` is then empty and the renderer binds that subsystem's texture. */
 struct PaintImage {
   float x = 0;
   float y = 0;
@@ -55,6 +55,7 @@ struct PaintImage {
   float height = 0;
   std::string src;
   uint64_t media_id = 0;
+  uint64_t canvas_id = 0;
 };
 
 struct DisplayList {

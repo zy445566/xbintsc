@@ -73,13 +73,17 @@ media API (`play`/`pause`/`currentTime`/`volume`/…) plus the
 `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` events let a
 program drive playback. There are no built-in controls — draw your own chrome
 with elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM
-are decoded on the main thread. If that archive is missing for
+are decoded on the main thread. `<canvas>` is supported too: `getContext("2d")`
+returns a context whose fills, paths, text and `drawImage` are rasterised by a
+self-written CPU rasteriser, and element handles expose `canvas` drawing plus
+`width`/`height`. If that archive is missing for
 your platform, the build fails with an actionable message; design and roadmap
 live in [../gui.md](../gui.md) (overview; the engine is documented by function
 under [`doc/gui/`](../gui/)), and the scripting surface in
 [../gui-scripts.md](../gui-scripts.md). Media playback is the one part that
 Windows does not get: the Windows `gui.a` is built without FFmpeg and media
-slots are inert.
+slots are inert. See [../gui/canvas.md](../gui/canvas.md) for the canvas API and
+its limits.
 
 ## Third-party npm packages
 

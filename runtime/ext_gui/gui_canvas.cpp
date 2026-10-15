@@ -1,0 +1,95 @@
+/*
+ * xbintsc GUI engine — `<canvas>` lifetime.
+ *
+ * A canvas bitmap is owned by the window, keyed by its DOM element (the same
+ * shape as the `<video>` decoder table). This unit reconciles that table with
+ * the live document, publishes each canvas's pixel size to the document so
+ * layout can give the element its intrinsic box, and releases the matching GPU
+ * texture when a canvas goes away.
+ */
+
+#include <memory>
+#include <vector>
+
+#include "canvas.h"
+#include "document.h"
+#include "gui_engine.h"
+#include "gui_internal.h"
+
+namespace {
+
+bool isCanvasElement(const xtgui::Node *node) {
+  return node != nullptr && node->isElement() && node->isTag("canvas");
+}
+
+/** Canvas children are fallback content, so a canvas element ends the walk. */
+void collectCanvases(const xtgui::Node *node, std::vector<const xtgui::Node *> *out) {
+  if (node == nullptr) return;
+  if (isCanvasElement(node)) {
+    out->push_back(node);
+    return;
+  }
+  for (const std::unique_ptr<xtgui::Node> &child : node->children) {
+    collectCanvases(child.get(), out);
+  }
+}
+
+int canvasAttributeSize(const xtgui::Node *node, const char *name, int fallback) {
+  const std::string *attr = node->attr(name);
+  if (attr == nullptr) return fallback;
+  float value = 0.0f;
+  if (!xtgui::xt_css_parse_number(*attr, &value) || value <= 0.0f) return fallback;
+  return (int)(value + 0.5f);
+}
+
+void releaseCanvasTexture(xtgui::Canvas2D *canvas) {
+  if (canvas != nullptr && guidev::g_device != nullptr) {
+    xt_gui_canvas_texture_release(guidev::g_device, canvas->id());
+  }
+}
+
+}  // namespace
+
+xtgui::Canvas2D *xt_gui_canvas_find(XtGuiWindow *win, const xtgui::Node *node) {
+  if (win == nullptr || node == nullptr) return nullptr;
+  auto found = win->canvases.find(node);
+  return found == win->canvases.end() ? nullptr : found->second.get();
+}
+
+xtgui::Canvas2D *xt_gui_canvas_get(XtGuiWindow *win, const xtgui::Node *node) {
+  if (win == nullptr || !isCanvasElement(node)) return nullptr;
+  auto found = win->canvases.find(node);
+  if (found != win->canvases.end()) return found->second.get();
+  int width = canvasAttributeSize(node, "width", 300);
+  int height = canvasAttributeSize(node, "height", 150);
+  auto canvas = std::make_unique<xtgui::Canvas2D>(width, height);
+  xtgui::Canvas2D *raw = canvas.get();
+  win->canvases[node] = std::move(canvas);
+  return raw;
+}
+
+void xt_gui_canvas_forget(XtGuiWindow *win, const xtgui::Node *node) {
+  if (win == nullptr || node == nullptr) return;
+  auto found = win->canvases.find(node);
+  if (found == win->canvases.end()) return;
+  releaseCanvasTexture(found->second.get());
+  win->canvases.erase(found);
+}
+
+void xt_gui_canvas_sync(XtGuiWindow *win) {
+  if (win == nullptr || win->document == nullptr) return;
+  std::vector<const xtgui::Node *> nodes;
+  collectCanvases(win->document->root(), &nodes);
+  for (const xtgui::Node *node : nodes) {
+    xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
+    if (canvas == nullptr) continue;
+    win->document->setCanvasInfo(node, (float)canvas->width(), (float)canvas->height(),
+                                 canvas->id());
+  }
+}
+
+void xt_gui_canvas_shutdown(XtGuiWindow *win) {
+  if (win == nullptr) return;
+  for (auto &entry : win->canvases) releaseCanvasTexture(entry.second.get());
+  win->canvases.clear();
+}

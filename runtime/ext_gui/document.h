@@ -95,6 +95,12 @@ class XtDocument {
     dirty_ = false;
     return was;
   }
+
+  /* -- media (`<video>`) metadata --------------------------------------- */
+  /** Record (or update) the decoded size and decoder id of one `<video>` node.
+   * Returns true when the stored value changed, so the caller can invalidate a
+   * layout that was computed with the old value. */
+  bool setMediaSize(const Node *node, float width, float height, uint64_t id);
   /** Serialized DOM, for diagnostics. */
   std::string toDebugString() const;
 
@@ -110,6 +116,7 @@ class XtDocument {
   StyleSheet sheet_;
   std::unordered_map<const Node *, XtStyle> styles_;   // target (cascade)
   std::unordered_map<const Node *, XtStyle> display_;  // after transitions
+  MediaSizeMap mediaSizes_;                            // `<video>` intrinsic sizes
   std::vector<ActiveTransition> transitions_;
   double clock_ms_ = 0.0;
   LayoutTree layout_;

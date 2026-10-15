@@ -2,7 +2,10 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M12** —— 功能（M1–M11）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见"节点生命周期"与"内存与 GC"。本文档记录了一个跨平台 GUI 扩展的锁定决策、架构、里程碑计划与当前进度；该扩展使用自有的 GPU 加速引擎渲染 HTML/CSS UI。
+状态：**M13** —— 功能（M1–M12）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见"节点生命周期"与"内存与 GC"。**M13** 真正播放
+`<video>`/`<audio>`——一个 vendored 的最小 FFmpeg 在主线程解码，视频帧走图像
+纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露 `play`/`pause`/`currentTime`/…
+与媒体事件。本文档记录了一个跨平台 GUI 扩展的锁定决策、架构、里程碑计划与当前进度；该扩展使用自有的 GPU 加速引擎渲染 HTML/CSS UI。
 
 ## 目标
 
@@ -63,9 +66,11 @@
 | 文本整形 | **HarfBuzz** | 正确处理复杂文种的整形 |
 | 字形光栅化 | **FreeType** | 字形轮廓 → GPU 图集 / SDF |
 | 图像 | 位图用 **stb_image**（vendored 头文件），SVG 用 **NanoSVG**（vendored 头文件） | 起步阶段用单头文件；SVG 文件按需光栅化 |
+| 视频 + 音频 | **FFmpeg**（静态 vendored，最小化构建） | 解码常用容器/编码；不依赖 WebView 或平台媒体框架 |
 
-固定版本：SDL3 `release-3.2.10`、FreeType `2.13.3`、HarfBuzz `10.1.0`
-（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` 覆盖）。
+固定版本：SDL3 `release-3.2.10`、FreeType `2.13.3`、HarfBuzz `10.1.0`、
+FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
+`FFMPEG_VERSION` 覆盖）。
 
 如果否决 SDL3，备选是 **GLFW + OpenGL 3.3**（更简单，但 OpenGL 在 macOS 上
 已弃用，且不提供现代 GPU 抽象）。如果引擎用 Rust 编写，则用 **wgpu-native**。
@@ -394,6 +399,46 @@ PNG/JPEG/BMP/GIF/TGA 解码为 RGBA8，并带有解码缓存与仅头文件的�
 图像仍需完成：CSS `background-image: url(...)`、`data:` URI、`object-fit`、
 九宫格边框与内联 `<svg>` 元素（仅支持 SVG *文件*，参见“待决问题”）。
 
+### 已实现的视频与音频（M13）
+
+`runtime/ext_gui/media.{h,cpp}` 封装一个静态 vendored 的 **FFmpeg** 构建，
+`runtime/ext_gui/gui_media.cpp` 把 DOM 树接到它上面。`<video>` 与 `<audio>`
+真正解码并播放；路径中没有 WebView，也没有平台媒体框架。
+
+- **解码。** `avformat_open_input` 打开 `src`（是路径——接受 `file://`，但与
+  图像不同，媒体路径*不做*百分号解码），为每种媒体选取最佳流，软件解码器
+  产出 `yuv/rgb` 帧，`sws_scale` 按编码尺寸转换为 RGBA8。支持的容器/编码即
+  `scripts/build-gui.ts` 的最小 FFmpeg 配置：MP4/MOV/MKV/AVI/FLV/MPEG-TS/M4V/
+  ASF，MP3/OGG/WAV/FLAC/AAC；视频 H.264、HEVC、VP8、VP9、AV1、MPEG-4、MJPEG；
+  音频 AAC、MP3、Opus、Vorbis、FLAC、ALAC、AC3/E-AC3、WMAv2 及原始 PCM 格式。
+- **视频。** `<video>` 与 `<img>` 一样是替换元素（UA 默认 `300x150`，解码
+  尺寸通过 `setMediaSize` 覆盖）。绘制产出与图像相同的 `PaintImage`；渲染器把
+  每个新解码帧上传到 RGBA 纹理（`ensureMediaTexture`）并绘制带纹理四边形，
+  因此由 GPU 缩放到 CSS 盒，而非 CPU 缩放。播放计时基于墙钟
+  （`SDL_GetTicks`），不是帧间隔。
+- **音频。** 没有音频回调：解码器随主线程 tick 被推送，PCM 以 push 模式
+  （`NULL` 回调）通过 `SDL_OpenAudioDeviceStream` 排队，在前方缓冲约 0.25 秒，
+  格式为 48 kHz 立体声 `SDL_AUDIO_F32`。`volume` 映射到
+  `SDL_SetAudioStreamGain`；音频是尽力而为，无设备时（无头 CI）跳过。
+- **线程。** 引擎是单线程且非线程感知，因此所有解码都在主线程的
+  `xt_gui_media_tick` 内完成——没有解码线程，也没有跨线程 GC 暴露。
+- **DOM API。** 元素句柄直接暴露媒体接口（见
+  `runtime/ext_gui/dom_api_media.cpp` 与 `dom_api_proto.cpp` 中的原型）：
+  `play()` / `pause()` / `load()`，以及 `paused` / `ended` / `duration` /
+  `currentTime` / `volume` / `muted` / `loop` / `autoplay` / `videoWidth` /
+  `videoHeight` / `readyState` / `src` 属性。媒体元素还会触发
+  `loadedmetadata`、`play`、`pause`、`ended`、`timeupdate`（每 250 毫秒）与
+  `error`，因此常见的 `addEventListener` 写法可用。
+- **没有内置控件。** `<video controls>` 刻意*不*实现：元素始终渲染原始帧，
+  程序用普通元素和 CSS 绘制自己的控件（进度条、按钮）。模式见
+  `examples/gui/media.html`（`examples/gui/media.ts`）。
+- **生命周期。** 播放器按窗口持有（`XtGuiMediaEntry`，以节点为键）。
+  `xt_gui_media_sync` 清除节点已不存在的条目、在 `src` 变化时重开、并在首次
+  使用时打开；`xt_gui_media_shutdown` 在窗口关闭/退出/`loadHTML` 时运行。
+
+媒体仍需完成：`<video controls>`、音视频时钟漂移校正、硬件解码、流式协议
+（仅启用 `file`）、字幕、`playbackRate` 与逐帧 `requestVideoFrameCallback`。
+
 ### 已实现的 transition（M6b）
 
 `XtDocument` 在*目标*计算样式（当前 `:hover`/`:focus` 状态下的层叠结果）与
@@ -489,7 +534,10 @@ GUI 引擎既可以通过 `xt_loop_set_main` 注册自己的循环，也可以�
   默认 `release-3.2.10`），构建静态 SDL3，获取并构建静态 FreeType
   （`FREETYPE_VERSION`）与 HarfBuzz（`HARFBUZZ_VERSION`），编译引擎，并把
   所有内容合并到 `runtime/lib/<os>-<arch>/gui.a`（Windows 上 MSVC ABI 则为
-  `gui.lib`），与 `core.a` 采用相同约定，静态打包三者。合并使用 macOS 上的
+  `gui.lib`），与 `core.a` 采用相同约定，静态打包三者。它还会获取、配置并构建
+  一个最小化的静态 **FFmpeg**（`FFMPEG_VERSION`，默认 `7.1`），只启用媒体元素
+  所需的 demuxer/parser/decoder，并把那些归档合并进 `gui.a`，同时为引擎定义
+  `XT_GUI_WITH_FFMPEG`。合并使用 macOS 上的
   `libtool` 与其他平台上的 `ar -M`（GNU/LLVM）；CMake 归档会在构建根目录或
   `Release/` 下按任一生成器风格被发现。
 - `src/extensions/gui/index.ts` 通过 `nativeObjects()` 暴露该归档（经由
@@ -516,7 +564,11 @@ xbintsc run examples/gui/hello.ts --ext gui
 这里有两个示例：`hello.ts`（HTML/CSS + 响应式计数器）与
 [`pelican-bike/`](../examples/gui/pelican-bike)（一个可玩的 2D 游戏，使用分层
 定位、CSS 像素精灵、`requestAnimationFrame` 与键盘输入）——操作方式与它输出的
-几何报告见该目录的 README。
+
+`examples/gui/media.ts`（配合 `media.html`）演示 `<video>`/`<audio>`：它在
+`<video>` 上叠一个 CSS 进度条，并用 `play()`/`pause()`/`currentTime`/
+`volume` 驱动播放。媒体 `src` 相对于进程工作目录解析，因此从仓库根目录运行：
+`xbintsc run examples/gui/media.ts --ext gui`。几何报告见该目录的 README。
 
 这些测试套件在 Windows 上默认跳过（该平台会构建归档，但 CI 未验证运行）。
 如果本机有 `gui.lib` 与可用的 GPU，可用 `xbintsc_GUI_TESTS=1` 选择启用：
@@ -631,6 +683,14 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
       内存失控（`runtime/xt_alloc.c`）。`XT_GC_TRACE=1` 会报告每次回收。
     - `win.stats()` 暴露引擎计数器；e2e 覆盖见
       `tests/e2e/gui-retention.test.ts`（见"内存与 GC"）。
+13. **M13 — 视频与音频** ✅
+    - `<video>` / `<audio>` 通过静态 vendored 的最小 FFmpeg 解码
+      （`media.*`、`gui_media.cpp`），帧沿用现有图像管线上传到 GPU 纹理，
+      音频在主线程推送进 SDL 流，并在元素句柄上暴露 DOM 媒体 API 与
+      `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件
+      （`dom_api_media.cpp`、`dom_api_proto.cpp`）。由 TS + CSS 控制；没有
+      内置控件。示例见 `examples/gui/media.*`，e2e 见
+      `tests/e2e/gui-media.test.ts`。
 
 ## 进度日志
 
@@ -692,6 +752,13 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
   失效；收集器的触发阈值改为跟随存活集，而不再只升不降。`win.stats()` 暴露
   引擎计数器，`tests/e2e/gui-retention.test.ts` 对其做断言；每帧重写精灵的游戏
   循环现在内存恒定（见"内存与 GC"）。
+- **M13** ✅ `<video>` / `<audio>` 支持。一个最小化的静态 FFmpeg 被 vendored
+  并合并进 `gui.a`（`scripts/build-gui.ts`），`media.*` 在主线程把视频解码为
+  RGBA 帧、把音频解码为 48 kHz 立体声 PCM，`gui_media.cpp` 持有播放器并在每帧
+  推进媒体时钟与事件，`renderer_image.cpp` 把每个新视频帧沿图像纹理路径上传，
+  `dom_api_media.cpp` 在元素句柄上暴露 `play`/`pause`/`load` 与媒体属性。
+  `examples/gui/media.*` 演示 TS + CSS 控件的模式，
+  `tests/e2e/gui-media.test.ts` 对其做断言。
 
 ## 内存与 GC
 
@@ -765,6 +832,11 @@ GUI 程序的大部分内存不在运行时堆里：DOM 树、分离节点池、
   （COFF 对象 + `ar -M`/`llvm-ar`），但尚未在 CI 中验证，因此 Windows 步骤
   为试验性（job 保持绿色），`package` 会跳过它。它还需要一个带 D3D12/DXIL
   后端的 SDL3 构建（DXIL 需要 `dxc`）。
+- **Windows 上的媒体：** 媒体解码器（FFmpeg）只构建并合并进 POSIX 的
+  `gui.a`；Windows 的 `gui.lib` 不含它们，因此那里的 `<video>`/`<audio>` 为空
+  操作（失败会触发 `error`）。启用它需要 MSVC 兼容的 FFmpeg 构建，推迟到
+  Windows GUI 路径本身验证之后。`<video controls>` 同样推迟——预期模式是 TS +
+  CSS 叠层，如 `examples/gui/media.ts`。
 - **D3D12 着色器：** SPIR-V（Vulkan）与 DXIL（Direct3D 12）二进制块均已构建并
   内嵌，非 Metal 路径不再跳过几何绘制。但在 **SDL 3.2.10** 上 DXIL 仍不可用：
   其 D3D12 后端会拒绝任何着色器中声明了 uniform buffer 的图形管线，而引擎正是

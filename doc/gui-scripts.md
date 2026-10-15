@@ -241,6 +241,9 @@ frees, so cycles are harmless).
 - mutation: `appendChild` / `insertBefore` / `removeChild` / `replaceChild` /
   `remove` / `cloneNode(deep?)`.
 - geometry/focus: `getBoundingClientRect`, `focus`, `blur`, `click`.
+- media (`<video>` / `<audio>`): `play()` / `pause()` / `load()` and the
+  `src`, `paused`, `ended`, `duration`, `currentTime`, `volume`, `muted`,
+  `loop`, `autoplay`, `videoWidth`, `videoHeight`, `readyState` properties.
 - events: `addEventListener(type, fn, optionsOrCapture?)`,
   `removeEventListener`, `dispatchEvent`.
 

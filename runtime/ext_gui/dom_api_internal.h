@@ -123,6 +123,29 @@ METHOD(event_prevent_default);
 METHOD(event_stop_propagation);
 METHOD(event_stop_immediate_propagation);
 
+/* media (`<video>`/`<audio>`) */
+METHOD(node_play);
+METHOD(node_pause);
+METHOD(node_load);
+METHOD(node_paused_get);
+METHOD(node_ended_get);
+METHOD(node_current_time_get);
+METHOD(node_current_time_set);
+METHOD(node_duration_get);
+METHOD(node_volume_get);
+METHOD(node_volume_set);
+METHOD(node_muted_get);
+METHOD(node_muted_set);
+METHOD(node_loop_get);
+METHOD(node_loop_set);
+METHOD(node_autoplay_get);
+METHOD(node_autoplay_set);
+METHOD(node_video_width_get);
+METHOD(node_video_height_get);
+METHOD(node_ready_state_get);
+METHOD(node_media_src_get);
+METHOD(node_media_src_set);
+
 /* classList methods */
 METHOD(class_list_add);
 METHOD(class_list_remove);

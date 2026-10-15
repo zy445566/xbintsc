@@ -226,6 +226,9 @@ b.addEventListener("click", () => { n = double(n) + 1; b.textContent = String(n)
 - 变更：`appendChild` / `insertBefore` / `removeChild` / `replaceChild` /
   `remove` / `cloneNode(deep?)`。
 - 几何/焦点：`getBoundingClientRect`、`focus`、`blur`、`click`。
+- 媒体（`<video>` / `<audio>`）：`play()` / `pause()` / `load()` 与
+  `src`、`paused`、`ended`、`duration`、`currentTime`、`volume`、`muted`、
+  `loop`、`autoplay`、`videoWidth`、`videoHeight`、`readyState` 属性。
 - 事件：`addEventListener(type, fn, optionsOrCapture?)`、
   `removeEventListener`、`dispatchEvent`。
 

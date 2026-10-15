@@ -13,6 +13,7 @@
 #ifndef XT_GUI_PAINT_H
 #define XT_GUI_PAINT_H
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -43,13 +44,17 @@ struct PaintText {
   FontSpec font;
 };
 
-/** An image to draw, scaled into the given rectangle (viewport-relative). */
+/** An image to draw, scaled into the given rectangle (viewport-relative).
+ * A non-zero `media_id` names a live `<video>` frame owned by the media
+ * subsystem; `src` is then empty and the renderer binds the decoder's texture
+ * for that id. */
 struct PaintImage {
   float x = 0;
   float y = 0;
   float width = 0;
   float height = 0;
   std::string src;
+  uint64_t media_id = 0;
 };
 
 struct DisplayList {

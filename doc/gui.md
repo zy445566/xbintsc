@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M12** — features (M1–M11) are complete: HTML parsing, CSS selector
+Status: **M13** — features (M1–M12) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -17,7 +17,10 @@ DOM: element handles with stable identity, mutation (`appendChild`, `textContent
 **M11** adds `position: relative`/`absolute`/`fixed` with their offsets, which is
 what `examples/gui/pelican-bike` — a playable 2D game — is built on. **M12** makes
 DOM node lifetime explicit (what a mutation releases, what it keeps) and gives the
-engine bounded memory: see "Node lifetime" and "Memory & GC".
+engine bounded memory: see "Node lifetime" and "Memory & GC". **M13** plays real
+`<video>`/`<audio>` — a vendored minimal FFmpeg decodes them on the main thread,
+video frames go through the image texture path and audio to an SDL stream, with
+the DOM media API exposing `play`/`pause`/`currentTime`/… and media events.
 This document records the locked decisions, the architecture, the milestone plan
 and the current progress of a cross-platform GUI extension that renders an
 HTML/CSS UI with its own GPU-accelerated engine.
@@ -91,9 +94,11 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | Text shaping | **HarfBuzz** | correct complex-script shaping |
 | Glyph raster | **FreeType** | glyph outlines → GPU atlas / SDF |
 | Images | **stb_image** (vendored header) for bitmaps, **NanoSVG** (vendored headers) for SVG | single headers to start; SVG files rasterise on demand |
+| Video + audio | **FFmpeg** (statically vendored, minimal build) | decodes the common container/codec set; no WebView or platform media framework |
 
-Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`
-(overridable with `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION`).
+Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`,
+FFmpeg `7.1` (overridable with `SDL3_TAG` / `FREETYPE_VERSION` /
+`HARFBUZZ_VERSION` / `FFMPEG_VERSION`).
 
 Alternative if SDL3 is rejected: **GLFW + OpenGL 3.3** (simpler, but OpenGL is
 deprecated on macOS and gives no modern GPU abstraction). **wgpu-native** if the
@@ -464,6 +469,57 @@ Still to do for images: CSS `background-image: url(...)`, `data:` URIs,
 `object-fit`, 9-slice borders and inline `<svg>` elements (only SVG *files* are
 supported; see "Open questions").
 
+### Implemented video & audio (M13)
+
+`runtime/ext_gui/media.{h,cpp}` wraps a statically vendored **FFmpeg** build and
+`runtime/ext_gui/gui_media.cpp` connects the DOM tree to it. `<video>` and
+`<audio>` really decode and play; there is no WebView and no platform media
+framework in the path.
+
+- **Decoding.** `avformat_open_input` opens the `src` (a path — `file://` is
+  accepted, but media paths are *not* percent-decoded, unlike images), the
+  best stream is selected for each kind, and a software decoder yields
+  `yuv/rgb` frames which `sws_scale` converts to RGBA8 at the coded size. The
+  supported containers/codecs are the minimal FFmpeg configuration from
+  `scripts/build-gui.ts`: MP4/MOV/MKV/AVI/FLV/MPEG-TS/M4V/ASF, MP3/OGG/WAV/FLAC/
+  AAC; H.264, HEVC, VP8, VP9, AV1, MPEG-4, MJPEG video; AAC, MP3, Opus, Vorbis,
+  FLAC, ALAC, AC3/E-AC3, WMAv2 and the raw PCM formats audio.
+- **Video.** `<video>` is a replaced element like `<img>` (UA default
+  `300x150`, overridden by the decoded size via `setMediaSize`). Paint emits the
+  same `PaintImage` as an image; the renderer uploads each new decoded frame to
+  an RGBA texture (`ensureMediaTexture`) and draws a textured quad, so the GPU
+  scales it to the CSS box instead of the CPU resizing. Playback timing is the
+  wall clock (`SDL_GetTicks`), not the frame delta.
+- **Audio.** There is no audio callback: the decoder is pushed on the main
+  thread as it is ticked and the PCM is queued with
+  `SDL_OpenAudioDeviceStream` in push mode (`NULL` callback), buffering about
+  0.25 s ahead at 48 kHz stereo `SDL_AUDIO_F32`. `volume` maps to
+  `SDL_SetAudioStreamGain`; audio is best-effort and is skipped when no device
+  is available (headless CI).
+- **Threading.** The engine is single-threaded and not thread-aware, so all
+  decoding happens on the main thread inside `xt_gui_media_tick` — no decode
+  thread, no cross-thread GC exposure.
+- **DOM API.** Element handles expose the media surface directly (see
+  `runtime/ext_gui/dom_api_media.cpp` and the prototype in
+  `dom_api_proto.cpp`): `play()` / `pause()` / `load()`, and the
+  `paused` / `ended` / `duration` / `currentTime` / `volume` / `muted` / `loop`
+  / `autoplay` / `videoWidth` / `videoHeight` / `readyState` / `src`
+  properties. Media elements also emit `loadedmetadata`, `play`, `pause`,
+  `ended`, `timeupdate` (every 250 ms) and `error`, so the usual
+  `addEventListener` pattern works.
+- **No built-in controls.** `<video controls>` is deliberately *not*
+  implemented: the element always renders the raw frame, and the program draws
+  its own chrome (a progress bar, buttons) with ordinary elements and CSS. See
+  `examples/gui/media.html` (`examples/gui/media.ts`) for the pattern.
+- **Lifecycle.** Players are owned per window (`XtGuiMediaEntry`, keyed by
+  node). `xt_gui_media_sync` drops entries whose node is gone, reopens on a
+  `src` change, and opens on first use; `xt_gui_media_shutdown` runs on window
+  close/quit/`loadHTML`.
+
+Still to do for media: `<video controls>`, separate audio/video clock drift
+correction, hardware decode, streaming protocols (only `file` is enabled),
+subtitles, `playbackRate` and per-frame `requestVideoFrameCallback`.
+
 ### Implemented transitions (M6b)
 
 `XtDocument` runs CSS transitions between the *target* computed styles (the
@@ -574,9 +630,12 @@ This keeps network I/O, timers and `await` working inside a GUI program.
   FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), compiles the
   engine and merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
   `gui.lib` with the MSVC ABI on Windows), same convention as `core.a`,
-  statically bundling all three. The merge uses `libtool` on macOS and
-  `ar -M` (GNU/LLVM) elsewhere; CMake archives are discovered under the build
-  root or `Release/` for either generator style.
+  statically bundling all three. It also fetches, configures and builds a
+  minimal static **FFmpeg** (`FFMPEG_VERSION`, default `7.1`) with only the
+  demuxers/parsers/decoders the media elements need and merges those archives
+  into `gui.a`, defining `XT_GUI_WITH_FFMPEG` for the engine. The merge uses
+  `libtool` on macOS and `ar -M` (GNU/LLVM) elsewhere; CMake archives are
+  discovered under the build root or `Release/` for either generator style.
 - `src/extensions/gui/index.ts` exposes the archive through `nativeObjects()`
   (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the OS frameworks
   through `linkerFlags()`.
@@ -599,6 +658,12 @@ Two examples live here: `hello.ts` (HTML/CSS + a reactive counter) and
 [`pelican-bike/`](../examples/gui/pelican-bike), a playable 2D game that uses
 positioned layers, CSS sprites, `requestAnimationFrame` and keyboard input — see
 its README for controls and the geometry report it prints.
+
+`media.ts` (with `media.html`) demonstrates `<video>`/`<audio>`: it overlays a
+CSS progress bar on the video and drives playback with `play()` / `pause()` /
+`currentTime` / `volume`. Media `src` paths resolve relative to the process
+working directory, so run it from the repository root:
+`xbintsc run examples/gui/media.ts --ext gui`.
 
 Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
 which the e2e test (`tests/e2e/gui-*.test.ts`) uses to run headlessly.
@@ -726,6 +791,15 @@ used by default; Wayland is enabled too but not yet exercised.
       `XT_GC_TRACE=1` reports every collection.
     - `win.stats()` exposes the engine counters; e2e coverage in
       `tests/e2e/gui-retention.test.ts` (see "Memory & GC").
+13. **M13 — video & audio** ✅
+    - `<video>` / `<audio>` decode through a statically vendored minimal FFmpeg
+      (`media.*`, `gui_media.cpp`), frames upload to GPU textures through the
+      existing image pipeline, audio is pushed to an SDL stream on the main
+      thread, and the DOM media API plus `loadedmetadata`/`play`/`pause`/
+      `ended`/`timeupdate`/`error` events are exposed on element handles
+      (`dom_api_media.cpp`, `dom_api_proto.cpp`). Controlled from TS + CSS;
+      there are no built-in controls. Example in `examples/gui/media.*`, e2e in
+      `tests/e2e/gui-media.test.ts`.
 
 ## Progress log
 
@@ -793,6 +867,14 @@ used by default; Wayland is enabled too but not yet exercised.
   ratcheting upwards. `win.stats()` exposes the engine counters and
   `tests/e2e/gui-retention.test.ts` pins them; a game loop rewriting its sprite
   every frame now runs in constant memory (see "Memory & GC").
+- **M13** ✅ `<video>` / `<audio>` support. A minimal static FFmpeg is vendored
+  and merged into `gui.a` (`scripts/build-gui.ts`), `media.*` decodes video to
+  RGBA frames and audio to 48 kHz stereo PCM on the main thread, `gui_media.cpp`
+  owns the players and pumps the media clock and events each frame,
+  `renderer_image.cpp` uploads each new video frame through the image texture
+  path, and `dom_api_media.cpp` exposes `play`/`pause`/`load` plus the media
+  properties on element handles. `examples/gui/media.*` demonstrates the
+  TS-plus-CSS-controls pattern and `tests/e2e/gui-media.test.ts` pins it.
 
 ## Memory & GC
 
@@ -892,6 +974,12 @@ object kind) to stderr — that is how the DOM leak was traced to the node pool.
   so the Windows step is provisional (the job stays green) and `package` skips
   it. It also needs an SDL3 build with the D3D12/DXIL backend (DXIL requires
   `dxc`).
+- **Media on Windows:** the media decoders (FFmpeg) are only built and merged
+  into the POSIX `gui.a`; the Windows `gui.lib` is produced without them, so
+  `<video>`/`<audio>` are inert there (failures fire `error`). Enabling it needs
+  an MSVC-compatible FFmpeg build and is deferred until the Windows GUI path
+  itself is validated. `<video controls>` is likewise deferred — the intended
+  pattern is TS + a CSS overlay, as in `examples/gui/media.ts`.
 - **D3D12 shaders:** the SPIR-V (Vulkan) and DXIL (Direct3D 12) blobs are built
   and embedded, so the non-Metal path no longer skips geometry. DXIL remains
   unusable on **SDL 3.2.10**: its D3D12 backend rejects any graphics pipeline

@@ -143,6 +143,7 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   win->open = 0;
   xt_gui_emit(win, "close");
   win->animation_frames.clear();
+  xt_gui_media_shutdown(win);
   xt_gui_handles_reset(win);
   win->document_object = XT_UNDEFINED;
   win->document.reset();
@@ -227,6 +228,7 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   record->image_geometry = XtGuiGeometry();
   record->last_frame_ms = 0.0;
   record->animation_frames.clear();
+  record->media_players.clear();
   record->next_animation_frame_id = 1;
   record->background[0] = 0.08f;
   record->background[1] = 0.09f;

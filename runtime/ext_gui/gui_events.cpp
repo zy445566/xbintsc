@@ -254,6 +254,11 @@ void xt_gui_render_window(XtGuiWindow *win) {
    * auto-close guard): `xt_gui_quit_window` released the document and the GPU
    * geometry, so there is nothing left to lay out or paint. */
   if (!win->open) return;
+  /* Reconcile decoders with the live DOM first, so this frame's layout sees the
+   * current sources and intrinsic sizes, then advance playback and fire the
+   * DOM media events. */
+  xt_gui_media_sync(win);
+  xt_gui_media_tick(win, now);
   if (win->document != nullptr && win->document->advance(delta)) win->geometry.dirty = 1;
 
   /* A DOM mutation from a handler invalidates the tree: restyle/relayout
@@ -273,6 +278,9 @@ void xt_gui_render_window(XtGuiWindow *win) {
     win->geometry.dirty = 0;
   }
 
+  /* Upload any new video frame before the render command buffer is recorded,
+   * so the draw samples the frame that just arrived. */
+  xt_gui_media_upload_frames(g_device);
   SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(g_device);
   if (cmd == NULL) return;
   SDL_GPUTexture *swapchain = NULL;

@@ -39,6 +39,7 @@ const char *xt_gui_driver(void);
 #include <vector>
 
 #include "document.h"
+#include "media.h"
 #include "renderer.h"
 
 /** One element-level event listener registered through `addEventListener`. */
@@ -62,6 +63,18 @@ struct XtGuiAnimationFrame {
 struct XtGuiNodeSlot {
   const xtgui::Node *node = nullptr;
   int generation = 0;
+};
+
+/** One media element's decoder slot. A failed open (bad `src`, or a build
+ * without a decoder) is remembered so the engine does not retry it every
+ * frame and fire `error` repeatedly. */
+struct XtGuiMediaEntry {
+  std::unique_ptr<xtgui::MediaPlayer> player;
+  std::string src;
+  bool failed = false;
+  /** Decoder generation already handed to the image upload, so a new video
+   * frame can mark the geometry dirty exactly once. */
+  uint64_t rendered_generation = 0;
 };
 
 /* One live window. `object` is the JavaScript-visible handle; the record is
@@ -98,6 +111,10 @@ struct XtGuiWindow {
   int struct_dirty = 0;
   /** Callbacks queued for the next frame, plus the id counter. */
   std::vector<XtGuiAnimationFrame> animation_frames;
+  /** One decoder per `<video>`/`<audio>` element, keyed by the element node. The
+   * map doubles as the set of elements whose media is loaded; `gui_media.cpp`
+   * reconciles it with the live DOM every frame. */
+  std::unordered_map<const xtgui::Node *, XtGuiMediaEntry> media_players;
   /** The batch currently running: its callbacks have been swapped out of
    * `animation_frames`, and a collection triggered by one of them must still
    * see the rest. Kept on the record (not a local) so the GC root provider can
@@ -155,6 +172,20 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y);
 /** Synthesise a key event (`keydown`/`keyup`). */
 void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code);
+
+/** The decoder for one media element, opening it (and its `src`) on first use.
+ * Returns `nullptr` for a non-media element or an unreadable source. */
+xtgui::MediaPlayer *xt_gui_media_player(XtGuiWindow *win, const xtgui::Node *node);
+/** Close and drop the decoder for one element (e.g. its `src` changed). */
+void xt_gui_media_forget(XtGuiWindow *win, const xtgui::Node *node);
+/** Reconcile the player table with the live DOM: open new `<video>`/`<audio>`
+ * sources, drop players whose element is gone, and record decoded sizes so the
+ * next layout gives a `<video>` its intrinsic box. */
+void xt_gui_media_sync(XtGuiWindow *win);
+/** Advance every decoder and dispatch the resulting DOM events. */
+void xt_gui_media_tick(XtGuiWindow *win, double now_ms);
+/** Release all decoders and their GPU textures (window close / `loadHTML`). */
+void xt_gui_media_shutdown(XtGuiWindow *win);
 
 #endif /* __cplusplus */
 

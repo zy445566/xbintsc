@@ -10,11 +10,102 @@
 #include <cstring>
 
 #include "image.h"
+#include "media.h"
 
 #include "renderer_shaders.h"
 
 namespace xtgui {
 namespace renderer_detail {
+
+/** One live `<video>` texture. The texture is created once per pixel size and
+ * re-uploaded in place whenever the decoder advances (`generation`). */
+struct MediaTexture {
+  SDL_GPUTexture *texture = nullptr;
+  int width = 0;
+  int height = 0;
+  uint64_t generation = ~0ull;
+};
+
+static std::unordered_map<uint64_t, MediaTexture> g_media_textures;
+
+/** Upload RGBA8 `pixels` into `texture` through a staging buffer, submitting
+ * its own command buffer. Because command buffers run in submission order and
+ * this one is submitted before the frame that samples the texture, re-uploading
+ * a texture that the previous frame drew is safe. */
+static bool uploadPixels(SDL_GPUDevice *device, SDL_GPUTexture *texture, int width, int height,
+                         const void *pixels, uint32_t bytes) {
+  if (bytes == 0) return false;
+  SDL_GPUTransferBufferCreateInfo transfer_info;
+  memset(&transfer_info, 0, sizeof(transfer_info));
+  transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+  transfer_info.size = bytes;
+  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
+  if (transfer == nullptr) return false;
+  void *mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
+  std::memcpy(mapped, pixels, bytes);
+  SDL_UnmapGPUTransferBuffer(device, transfer);
+
+  SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device);
+  if (cmd == nullptr) {
+    SDL_ReleaseGPUTransferBuffer(device, transfer);
+    return false;
+  }
+  SDL_GPUTextureTransferInfo source;
+  memset(&source, 0, sizeof(source));
+  source.transfer_buffer = transfer;
+  source.offset = 0;
+  source.pixels_per_row = (Uint32)width;
+  source.rows_per_layer = (Uint32)height;
+  SDL_GPUTextureRegion destination;
+  memset(&destination, 0, sizeof(destination));
+  destination.texture = texture;
+  destination.mip_level = 0;
+  destination.layer = 0;
+  destination.w = (Uint32)width;
+  destination.h = (Uint32)height;
+  destination.d = 1;
+  SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
+  SDL_UploadToGPUTexture(copy, &source, &destination, false);
+  SDL_EndGPUCopyPass(copy);
+  SDL_SubmitGPUCommandBuffer(cmd);
+  SDL_ReleaseGPUTransferBuffer(device, transfer);
+  return true;
+}
+
+/** Ensure the texture for `media_id` exists and holds the decoder's newest
+ * frame. Returns `nullptr` before the first frame is decoded. */
+static SDL_GPUTexture *ensureMediaTexture(SDL_GPUDevice *device, uint64_t media_id) {
+  xtgui::MediaPlayer *player = xtgui::xt_media_by_id(media_id);
+  if (player == nullptr) return nullptr;
+  const xtgui::Image *image = player->frame();
+  MediaTexture &entry = g_media_textures[media_id];
+  if (image == nullptr || image->width <= 0 || image->height <= 0) return entry.texture;
+  if (entry.texture == nullptr || entry.width != image->width || entry.height != image->height) {
+    if (entry.texture != nullptr) SDL_ReleaseGPUTexture(device, entry.texture);
+    SDL_GPUTextureCreateInfo info;
+    memset(&info, 0, sizeof(info));
+    info.type = SDL_GPU_TEXTURETYPE_2D;
+    info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    info.width = (Uint32)image->width;
+    info.height = (Uint32)image->height;
+    info.layer_count_or_depth = 1;
+    info.num_levels = 1;
+    info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    entry.texture = SDL_CreateGPUTexture(device, &info);
+    entry.width = image->width;
+    entry.height = image->height;
+    entry.generation = ~0ull;
+    if (entry.texture == nullptr) return nullptr;
+  }
+  if (entry.generation != player->frame_generation()) {
+    if (uploadPixels(device, entry.texture, entry.width, entry.height, image->pixels.data(),
+                     (uint32_t)image->pixels.size())) {
+      entry.generation = player->frame_generation();
+    }
+  }
+  return entry.texture;
+}
 
 SDL_GPUGraphicsPipeline *createImagePipeline(SDL_GPUDevice *device, SDL_Window *reference) {
   const ShaderSource image_vs = selectShader(device, ShaderProgram::Image, false);
@@ -133,49 +224,11 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
   }
 
   uint32_t bytes = (uint32_t)(image->pixels.size());
-  SDL_GPUTransferBufferCreateInfo transfer_info;
-  memset(&transfer_info, 0, sizeof(transfer_info));
-  transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  transfer_info.size = bytes;
-  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
-  if (transfer == nullptr) {
+  if (!uploadPixels(device, texture, image->width, image->height, image->pixels.data(), bytes)) {
     SDL_ReleaseGPUTexture(device, texture);
     g_image_textures.emplace(key, nullptr);
     return nullptr;
   }
-  void *mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
-  std::memcpy(mapped, image->pixels.data(), bytes);
-  SDL_UnmapGPUTransferBuffer(device, transfer);
-
-  SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device);
-  if (cmd == nullptr) {
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
-    SDL_ReleaseGPUTexture(device, texture);
-    g_image_textures.emplace(key, nullptr);
-    return nullptr;
-  }
-  SDL_GPUTextureTransferInfo source;
-  memset(&source, 0, sizeof(source));
-  source.transfer_buffer = transfer;
-  source.offset = 0;
-  source.pixels_per_row = (Uint32)image->width;
-  source.rows_per_layer = (Uint32)image->height;
-  SDL_GPUTextureRegion destination;
-  memset(&destination, 0, sizeof(destination));
-  destination.texture = texture;
-  destination.mip_level = 0;
-  destination.layer = 0;
-  destination.x = 0;
-  destination.y = 0;
-  destination.z = 0;
-  destination.w = (Uint32)image->width;
-  destination.h = (Uint32)image->height;
-  destination.d = 1;
-  SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
-  SDL_UploadToGPUTexture(copy, &source, &destination, false);
-  SDL_EndGPUCopyPass(copy);
-  SDL_SubmitGPUCommandBuffer(cmd);
-  SDL_ReleaseGPUTransferBuffer(device, transfer);
 
   g_image_textures.emplace(key, texture);
   return texture;
@@ -203,13 +256,18 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   full.v1 = 1.0f;
   for (const xtgui::PaintImage &image : list.images) {
     if (image.width <= 0.0f || image.height <= 0.0f) continue;
-    /* Draw-time device pixels: an SVG is rasterised at this size so it stays
-     * crisp on HiDPI and when scaled. */
-    int pixel_width = (int)(image.width * scale + 0.5f);
-    int pixel_height = (int)(image.height * scale + 0.5f);
-    if (pixel_width < 1) pixel_width = 1;
-    if (pixel_height < 1) pixel_height = 1;
-    SDL_GPUTexture *texture = ensureImageTexture(device, image.src, pixel_width, pixel_height);
+    SDL_GPUTexture *texture = nullptr;
+    if (image.media_id != 0) {
+      texture = ensureMediaTexture(device, image.media_id);
+    } else {
+      /* Draw-time device pixels: an SVG is rasterised at this size so it stays
+       * crisp on HiDPI and when scaled. */
+      int pixel_width = (int)(image.width * scale + 0.5f);
+      int pixel_height = (int)(image.height * scale + 0.5f);
+      if (pixel_width < 1) pixel_width = 1;
+      if (pixel_height < 1) pixel_height = 1;
+      texture = ensureImageTexture(device, image.src, pixel_width, pixel_height);
+    }
     if (texture == nullptr) continue;
     uint32_t first = (uint32_t)verts.size();
     pushGlyph(verts, image.x, image.y, image.width, image.height, full, white);
@@ -248,4 +306,21 @@ void xt_gui_image_textures_destroy(SDL_GPUDevice *device) {
   }
   g_image_textures.clear();
   g_image_batches.clear();
+  for (auto &entry : g_media_textures) {
+    if (entry.second.texture != nullptr) SDL_ReleaseGPUTexture(device, entry.second.texture);
+  }
+  g_media_textures.clear();
+}
+
+void xt_gui_media_upload_frames(SDL_GPUDevice *device) {
+  using namespace xtgui::renderer_detail;
+  for (auto &entry : g_media_textures) ensureMediaTexture(device, entry.first);
+}
+
+void xt_gui_media_texture_release(SDL_GPUDevice *device, uint64_t media_id) {
+  using namespace xtgui::renderer_detail;
+  auto it = g_media_textures.find(media_id);
+  if (it == g_media_textures.end()) return;
+  if (it->second.texture != nullptr) SDL_ReleaseGPUTexture(device, it->second.texture);
+  g_media_textures.erase(it);
 }

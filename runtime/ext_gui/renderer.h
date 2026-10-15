@@ -66,5 +66,11 @@ void xt_gui_image_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGui
                        float viewport_width, float viewport_height);
 /** Release the image texture cache (after SDL_WaitForGPUIdle). */
 void xt_gui_image_textures_destroy(SDL_GPUDevice *device);
+/** Re-upload the current decoded frame of every live `<video>` texture. Called
+ * once per frame, before the render command buffer, so the texture sampled by
+ * the draw already holds that frame. */
+void xt_gui_media_upload_frames(SDL_GPUDevice *device);
+/** Release one media texture (when a `<video>` is removed or navigated away). */
+void xt_gui_media_texture_release(SDL_GPUDevice *device, uint64_t media_id);
 
 #endif /* XT_GUI_RENDERER_H */

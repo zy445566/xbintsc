@@ -13,6 +13,8 @@
  *   1. fetch the pinned SDL3 source into `vendor/SDL` (gitignored),
  *   2. build `libSDL3.a` with CMake,
  *   2b. fetch + build static FreeType and HarfBuzz for text,
+ *   2c. fetch + build a minimal static FFmpeg for `<video>`/`<audio>`
+ *       (skipped on Windows, where media support is compiled out),
  *   3. compile the engine translation units,
  *   4. merge everything into `gui.a` (libtool on macOS, `ar -M` elsewhere;
  *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
@@ -31,6 +33,7 @@
  */
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,6 +49,9 @@ const freetypeSrc = join(vendorDir, "freetype");
 const freetypeBuild = join(vendorDir, "freetype-build");
 const harfbuzzSrc = join(vendorDir, "harfbuzz");
 const harfbuzzBuild = join(vendorDir, "harfbuzz-build");
+const ffmpegSrc = join(vendorDir, "ffmpeg");
+const ffmpegBuild = join(vendorDir, "ffmpeg-build");
+const ffmpegInstall = join(ffmpegBuild, "dist");
 const objDir = join(root, "build", "gui-obj");
 const outDir = join(runtimeDir, "lib", platformSlug());
 
@@ -82,8 +88,24 @@ const cmakeGeneratorArgs: readonly string[] = isWindows
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
 const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
 const HARFBUZZ_VERSION = process.env.HARFBUZZ_VERSION || "10.1.0";
+const FFMPEG_VERSION = process.env.FFMPEG_VERSION || "7.1";
 const FREETYPE_URL = `https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.xz`;
 const HARFBUZZ_URL = `https://github.com/harfbuzz/harfbuzz/releases/download/${HARFBUZZ_VERSION}/harfbuzz-${HARFBUZZ_VERSION}.tar.xz`;
+const FFMPEG_URL = `https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz`;
+
+/* A deliberately minimal FFmpeg: containers and decoders for the common web
+ * media formats, file access only, no network, no encoder, no filter graph.
+ * Disabling everything first keeps the static libraries small and the build
+ * short. `--disable-x86asm` drops the nasm/yasm build dependency (the C
+ * fallbacks are plenty for playback). This configuration is LGPL-only, so the
+ * resulting `gui.a` stays redistributable under the engine's terms. */
+const FFMPEG_COMPONENTS: readonly string[] = [
+  "--enable-protocol=file",
+  "--enable-demuxer=mov,matroska,avi,flv,mpegts,mp3,ogg,wav,flac,aac,m4v,asf,mpeg,mpegvideo,h264,hevc,vc1",
+  "--enable-decoder=h264,hevc,vp8,vp9,av1,aac,aac_latm,mp3,mp3float,opus,vorbis,flac,alac,pcm_s16le,pcm_s24le,pcm_s32le,pcm_u8,pcm_f32le,pcm_alaw,pcm_mulaw,ac3,eac3,wmav2,mjpeg",
+  "--enable-parser=h264,hevc,vp8,vp9,av1,aac,aac_latm,mpegaudio,opus,vorbis,mpeg4video,mjpeg,flac",
+  "--enable-bsf=h264_mp4toannexb,hevc_mp4toannexb,aac_adtstoasc,vp9_superframe,vp9_superframe_split,extract_extradata",
+];
 
 function fail(message: string): never {
   console.error(`xbintsc: ${message}`);
@@ -93,13 +115,14 @@ function fail(message: string): never {
 function run(
   command: string,
   args: readonly string[],
-  options: { input?: string; quietStderr?: boolean } = {},
+  options: { input?: string; quietStderr?: boolean; cwd?: string } = {},
 ): SpawnSyncReturns<string> {
   const quiet = options.quietStderr === true;
   const result = spawnSync(command, args, {
     stdio: options.input !== undefined ? ["pipe", "inherit", "inherit"] : quiet ? ["ignore", "inherit", "pipe"] : "inherit",
     encoding: "utf8",
     input: options.input,
+    cwd: options.cwd,
   });
   if (result.status !== 0) {
     if (quiet && result.stderr) process.stderr.write(result.stderr);
@@ -140,6 +163,12 @@ function findCxx(): string {
   const cxx = firstAvailable([process.env.xbintsc_CXX, "clang++", "c++", "g++"]);
   if (!cxx) fail("no C++ compiler found; install clang++ or set xbintsc_CXX");
   return cxx;
+}
+
+function findCc(): string {
+  const cc = firstAvailable([process.env.xbintsc_CC, process.env.CC, "clang", "cc", "gcc"]);
+  if (!cc) fail("no C compiler found; install clang or set xbintsc_CC");
+  return cc;
 }
 
 function findArchiver(): string {
@@ -187,6 +216,16 @@ function harfbuzzArchive(): string | undefined {
   return builtLibrary(harfbuzzBuild, ["libharfbuzz.a", "harfbuzz.lib"], /^harfbuzz[-\d.]*\.lib$/);
 }
 
+/* FFmpeg's release tarball has no CMake build, so it uses its own configure +
+ * make. It also installs its headers under a prefix (rather than in the source
+ * tree) because the *source* root contains a file literally named `version`
+ * that would shadow the C++ standard header for any `.cpp` that includes it. */
+const FFMPEG_LIBRARY_NAMES = ["libavformat.a", "libavcodec.a", "libswscale.a", "libswresample.a", "libavutil.a"];
+function ffmpegStaticLibraries(): string[] | undefined {
+  const libraries = FFMPEG_LIBRARY_NAMES.map((name) => join(ffmpegInstall, "lib", name));
+  return libraries.every((library) => existsSync(library)) ? libraries : undefined;
+}
+
 /* -- 1. SDL3 source ------------------------------------------------------- */
 
 if (!existsSync(join(sdlSrc, "CMakeLists.txt"))) {
@@ -221,10 +260,12 @@ if (!existingSdlArchive) {
 
 /** Download a release tarball into `vendor/` and extract it under `name`.
  * Release tarballs are used (not git clones) because they ship generated
- * sources, so no ragel/autotools step is needed. */
-function ensureTarballSource(name: string, url: string, extractedName: string): string {
+ * sources, so no ragel/autotools step is needed. `marker` is a file that only
+ * exists once the tarball has been extracted (CMake projects ship
+ * `CMakeLists.txt`; FFmpeg ships `configure`). */
+function ensureTarballSource(name: string, url: string, extractedName: string, marker = "CMakeLists.txt"): string {
   const destination = join(vendorDir, name);
-  if (existsSync(join(destination, "CMakeLists.txt"))) return destination;
+  if (existsSync(join(destination, marker))) return destination;
   const tarball = join(vendorDir, `${name}.tar.xz`);
   console.log(`xbintsc: fetching ${name} from ${url}`);
   mkdirSync(vendorDir, { recursive: true });
@@ -284,6 +325,43 @@ if (!existsSync(harfbuzzArchive() ?? "")) {
   console.log(`xbintsc: reusing existing ${harfbuzzArchive()}`);
 }
 
+/* -- 2c. FFmpeg (media decoding) ------------------------------------------ */
+
+/* Windows builds have no `configure`/`make`, so media support is compiled out
+ * there; the element still works and reports an `error` event. */
+let ffmpegLibraries: string[] | undefined;
+if (isWindows) {
+  console.log("xbintsc: skipping FFmpeg on Windows; <video>/<audio> will report an error");
+} else {
+  ensureTarballSource("ffmpeg", FFMPEG_URL, `ffmpeg-${FFMPEG_VERSION}`, "configure");
+  ffmpegLibraries = ffmpegStaticLibraries();
+  if (!ffmpegLibraries) {
+    const cc = findCc();
+    const ccxx = findCxx();
+    console.log(`xbintsc: building minimal static FFmpeg ${FFMPEG_VERSION} with ${cc}`);
+    mkdirSync(ffmpegBuild, { recursive: true });
+    run(join(ffmpegSrc, "configure"), [
+      `--prefix=${ffmpegInstall}`,
+      "--enable-static", "--disable-shared",
+      "--disable-programs", "--disable-doc",
+      "--disable-htmlpages", "--disable-manpages", "--disable-podpages", "--disable-txtpages",
+      "--disable-avdevice", "--disable-avfilter", "--disable-postproc",
+      "--disable-everything",
+      "--enable-avformat", "--enable-avcodec", "--enable-avutil", "--enable-swscale", "--enable-swresample",
+      "--disable-network", "--disable-autodetect", "--disable-x86asm", "--disable-debug", "--enable-pic",
+      `--cc=${cc}`,
+      `--cxx=${ccxx}`,
+      ...FFMPEG_COMPONENTS,
+    ], { cwd: ffmpegBuild });
+    run("make", ["-j", String(availableParallelism())], { cwd: ffmpegBuild });
+    run("make", ["install"], { cwd: ffmpegBuild });
+    ffmpegLibraries = ffmpegStaticLibraries();
+  } else {
+    console.log(`xbintsc: reusing existing ${ffmpegInstall}/lib`);
+  }
+  if (!ffmpegLibraries) fail("FFmpeg build did not produce the expected static libraries");
+}
+
 /* -- 3. engine objects ---------------------------------------------------- */
 
 const cxx = findCxx();
@@ -295,12 +373,14 @@ const includeFlags = [
   "-I", join(freetypeBuild, "include"),
   "-I", join(harfbuzzSrc, "src"),
 ];
+if (ffmpegLibraries) includeFlags.push("-I", join(ffmpegInstall, "include"));
 const sources = readdirSync(engineDir)
   .filter((entry) => entry.endsWith(".cpp"))
   .sort();
 
 const objects: string[] = [];
 const cxxFlags = ["-std=c++17", "-O2", "-Wall", "-Wextra", ...includeFlags];
+if (ffmpegLibraries) cxxFlags.push("-DXT_GUI_WITH_FFMPEG=1");
 /* The engine is C++ and the MSVC C++ runtime must match the static C CRT that
  * clang links by default, so let every engine object record `libcpmt` as a
  * default library. The extension itself only contributes the DLL import library
@@ -324,7 +404,7 @@ const harfbuzz = harfbuzzArchive();
 if (!sdl || !freetype || !harfbuzz) {
   fail("one of the SDL3/FreeType/HarfBuzz archives was not found after building");
 }
-const libraries = [sdl, freetype, harfbuzz];
+const libraries = [sdl, freetype, harfbuzz, ...(ffmpegLibraries ?? [])];
 
 mkdirSync(outDir, { recursive: true });
 rmSync(output, { force: true });

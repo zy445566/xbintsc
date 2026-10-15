@@ -1,0 +1,34 @@
+<html>
+  <head>
+    <style>
+      body { margin: 0; background-color: #0d0f16; color: #e6e8ee; font-size: 14px; }
+      .stage { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+      #title { font-size: 18px; font-weight: bold; }
+      /* The video has no built-in controls, so the progress bar is a plain
+         element the script sizes. */
+      .player { position: relative; width: 480px; background: #000; border-radius: 8px; overflow: hidden; }
+      #video { display: block; width: 480px; }
+      #bar { position: absolute; left: 0; bottom: 0; height: 4px; width: 0%; background: #2b6cff; }
+      .row { display: flex; align-items: center; gap: 8px; }
+      button { font-size: 14px; padding: 3px 12px; }
+      #time { color: #9aa3b2; }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div id="title">xbintsc &lt;video&gt; / &lt;audio&gt;</div>
+      <div class="player">
+        <video id="video" src="examples/resources/movie.mp4" autoplay muted loop></video>
+        <div id="bar"></div>
+      </div>
+      <div class="row">
+        <button id="toggle">Pause</button>
+        <button id="back">-5s</button>
+        <button id="fwd">+5s</button>
+        <button id="mute">Sound: off</button>
+        <span id="time">0 / 0</span>
+      </div>
+      <audio id="audio" src="examples/resources/sounds.mp3" loop></audio>
+    </div>
+  </body>
+</html>

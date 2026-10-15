@@ -67,10 +67,18 @@ import { createWindow, run } from "gui";
 
 It is a self-contained GPU-accelerated renderer (own HTML parser, CSS cascade,
 layout and compositor) — not a system WebView. It ships as a per-platform
-prebuilt `gui.a`/`gui.lib` because it is C++. If that archive is missing for
+prebuilt `gui.a`/`gui.lib` because it is C++. `<img>`, `<video>` and `<audio>`
+really decode: a minimal static FFmpeg is bundled into the archive, and the DOM
+media API (`play`/`pause`/`currentTime`/`volume`/…) plus the
+`loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` events let a
+program drive playback. There are no built-in controls — draw your own chrome
+with elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM
+are decoded on the main thread. If that archive is missing for
 your platform, the build fails with an actionable message; design and roadmap
 live in [../gui.md](../gui.md), and the scripting surface in
-[../gui-scripts.md](../gui-scripts.md).
+[../gui-scripts.md](../gui-scripts.md). Media playback is the one part that
+Windows does not get: the Windows `gui.a` is built without FFmpeg and media
+slots are inert.
 
 ## Third-party npm packages
 

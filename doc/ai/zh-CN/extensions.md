@@ -64,9 +64,14 @@ import { createWindow, run } from "gui";
 ```
 
 它是自带渲染引擎的 GPU 加速实现（自己的 HTML 解析器、CSS 级联、布局与合成器），不是
-系统 WebView。因为主体是 C++，它以各平台预编译的 `gui.a`/`gui.lib` 形式分发。如果该
+系统 WebView。`<img>`、`<video>`、`<audio>` 都是真正解码：归档内打入一个最小化的
+静态 FFmpeg，DOM 媒体 API（`play`/`pause`/`currentTime`/`volume`/…）与
+`loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件可让程序驱动播放。
+没有内置控件——用元素和 CSS 自绘控件（见 `examples/gui/media.ts`）；视频帧与音频 PCM
+都在主线程解码。因为主体是 C++，它以各平台预编译的 `gui.a`/`gui.lib` 形式分发。如果该
 平台的归档不存在，构建会以明确的提示失败；设计与路线图见 [../../zh-CN/gui.md](../../zh-CN/gui.md)，
-脚本接口见 [../../zh-CN/gui-scripts.md](../../zh-CN/gui-scripts.md)。
+脚本接口见 [../../zh-CN/gui-scripts.md](../../zh-CN/gui-scripts.md)。媒体播放是
+Windows 唯一不支持的：Windows 的 `gui.a` 不构建 FFmpeg，媒体槽位为空操作。
 
 ## 第三方 npm 包
 

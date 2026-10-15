@@ -50,8 +50,10 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win != nullptr) {
     win->html = html;
-    /* Fresh document: invalidate every previously handed-out handle. */
+    /* Fresh document: invalidate every previously handed-out handle, and drop
+     * the decoders that belonged to the old tree. */
     xt_gui_handles_reset(win);
+    xt_gui_media_shutdown(win);
     win->document = std::make_unique<xtgui::XtDocument>();
     float width = 0;
     float height = 0;

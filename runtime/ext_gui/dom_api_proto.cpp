@@ -46,12 +46,31 @@ xt_value node_proto() {
   define_getter(proto, "style", (void *)node_style_get);
   define_getter(proto, "offsetWidth", (void *)node_offset_width_get);
   define_getter(proto, "offsetHeight", (void *)node_offset_height_get);
+  /* Media element properties (`<video>`/`<audio>`; harmless on any element). */
+  define_getter(proto, "paused", (void *)node_paused_get);
+  define_getter(proto, "ended", (void *)node_ended_get);
+  define_getter(proto, "duration", (void *)node_duration_get);
+  define_getter(proto, "currentTime", (void *)node_current_time_get);
+  define_getter(proto, "volume", (void *)node_volume_get);
+  define_getter(proto, "muted", (void *)node_muted_get);
+  define_getter(proto, "loop", (void *)node_loop_get);
+  define_getter(proto, "autoplay", (void *)node_autoplay_get);
+  define_getter(proto, "videoWidth", (void *)node_video_width_get);
+  define_getter(proto, "videoHeight", (void *)node_video_height_get);
+  define_getter(proto, "readyState", (void *)node_ready_state_get);
+  define_getter(proto, "src", (void *)node_media_src_get);
   /* Setters. */
   define_setter(proto, "id", (void *)node_id_set);
   define_setter(proto, "className", (void *)node_class_name_set);
   define_setter(proto, "textContent", (void *)node_text_content_set);
   define_setter(proto, "innerText", (void *)node_text_content_set);
   define_setter(proto, "innerHTML", (void *)node_inner_html_set);
+  define_setter(proto, "currentTime", (void *)node_current_time_set);
+  define_setter(proto, "volume", (void *)node_volume_set);
+  define_setter(proto, "muted", (void *)node_muted_set);
+  define_setter(proto, "loop", (void *)node_loop_set);
+  define_setter(proto, "autoplay", (void *)node_autoplay_set);
+  define_setter(proto, "src", (void *)node_media_src_set);
   /* Methods. */
   define_method(proto, "getAttribute", (void *)node_get_attribute);
   define_method(proto, "setAttribute", (void *)node_set_attribute);
@@ -74,6 +93,9 @@ xt_value node_proto() {
   define_method(proto, "addEventListener", (void *)node_add_event_listener);
   define_method(proto, "removeEventListener", (void *)node_remove_event_listener);
   define_method(proto, "dispatchEvent", (void *)node_dispatch_event);
+  define_method(proto, "play", (void *)node_play);
+  define_method(proto, "pause", (void *)node_pause);
+  define_method(proto, "load", (void *)node_load);
   g_node_proto = proto;
   return proto;
 }

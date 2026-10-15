@@ -31,6 +31,7 @@ void XtDocument::load(const std::string &html, float viewportWidth, float viewpo
   styles_.clear();
   display_.clear();
   transitions_.clear();
+  mediaSizes_.clear();
   clock_ms_ = 0.0;
   std::string css;
   collectStyleText(root_.get(), &css);
@@ -195,7 +196,7 @@ void XtDocument::updateDisplay() {
       i++;
     }
   }
-  layout_.compute(root_.get(), display_, viewportWidth_, viewportHeight_);
+  layout_.compute(root_.get(), display_, viewportWidth_, viewportHeight_, &mediaSizes_);
 }
 
 bool XtDocument::advance(double delta_ms) {
@@ -227,6 +228,16 @@ const XtStyle *XtDocument::styleOf(const Node *node) const {
 }
 
 const LayoutBox *XtDocument::boxOf(const Node *node) const { return layout_.find(node); }
+
+bool XtDocument::setMediaSize(const Node *node, float width, float height, uint64_t id) {
+  MediaSize &entry = mediaSizes_[node];
+  if (entry.width == width && entry.height == height && entry.id == id) return false;
+  entry.width = width;
+  entry.height = height;
+  entry.id = id;
+  dirty_ = true;
+  return true;
+}
 
 std::vector<const Node *> XtDocument::querySelectorAll(const std::string &selectorText) const {
   std::vector<const Node *> matches;

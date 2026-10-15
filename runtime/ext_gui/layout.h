@@ -13,6 +13,7 @@
 #ifndef XT_GUI_LAYOUT_H
 #define XT_GUI_LAYOUT_H
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -22,6 +23,16 @@
 #include "style.h"
 
 namespace xtgui {
+
+/** Intrinsic size and decoder id of one `<video>` element, resolved by the
+ * engine and keyed by node. `width`/`height` are the decoded pixel size, or
+ * the 300x150 default before metadata is available. */
+struct MediaSize {
+  float width = 0;
+  float height = 0;
+  uint64_t id = 0;
+};
+using MediaSizeMap = std::unordered_map<const Node *, MediaSize>;
 
 /** A positioned text fragment (a wrapped text box can span several lines).
  * `text` holds the run this fragment covers (a word or a run of spaces). */
@@ -47,6 +58,12 @@ struct LayoutBox {
   float intrinsic_width = 0;
   float intrinsic_height = 0;
 
+  /* `<video>`: a replaced element whose pixels come from a live decoder
+   * (`media_id`) instead of a file. `is_image` is set too so the
+   * replaced-element sizing in `layout_flow.cpp` applies unchanged. */
+  bool is_media = false;
+  uint64_t media_id = 0;
+
   Display display = Display::Inline;
 
   /* Resolved (px) box edges. */
@@ -70,7 +87,7 @@ struct LayoutBox {
 class LayoutTree {
  public:
   void compute(const Node *root, const std::unordered_map<const Node *, XtStyle> &styles,
-               float viewportWidth, float viewportHeight);
+               float viewportWidth, float viewportHeight, const MediaSizeMap *media = nullptr);
   void clear() {
     root_.reset();
     index_.clear();

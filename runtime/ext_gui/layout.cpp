@@ -25,7 +25,7 @@ namespace {
 
 std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
                                         const std::unordered_map<const Node *, XtStyle> &styles,
-                                        const XtStyle *inherited) {
+                                        const XtStyle *inherited, const MediaSizeMap *media) {
   if (node->isText()) {
     auto box = std::make_unique<LayoutBox>();
     box->node = node;
@@ -55,9 +55,27 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
         box->intrinsic_height = (float)height;
       }
     }
+  } else if (node->isElement() && node->isTag("video")) {
+    /* Default the video box to the HTML 300x150 until the decoder reports the
+     * real pixel size (fetched as soon as the element is associated with a
+     * player, before the next layout pass). */
+    box->is_image = true;
+    box->is_media = true;
+    box->intrinsic_width = 300;
+    box->intrinsic_height = 150;
+    if (media != nullptr) {
+      auto found = media->find(node);
+      if (found != media->end()) {
+        box->media_id = found->second.id;
+        if (found->second.width > 0 && found->second.height > 0) {
+          box->intrinsic_width = found->second.width;
+          box->intrinsic_height = found->second.height;
+        }
+      }
+    }
   }
   for (const std::unique_ptr<Node> &child : node->children) {
-    std::unique_ptr<LayoutBox> childBox = buildBoxTree(child.get(), styles, style);
+    std::unique_ptr<LayoutBox> childBox = buildBoxTree(child.get(), styles, style, media);
     if (childBox != nullptr) {
       childBox->parent = box.get();
       box->children.push_back(std::move(childBox));
@@ -86,7 +104,7 @@ std::string dumpBox(const LayoutBox *box, int depth) {
 }  // namespace
 
 void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *, XtStyle> &styles,
-                         float viewportWidth, float viewportHeight) {
+                         float viewportWidth, float viewportHeight, const MediaSizeMap *media) {
   root_.reset();
   index_.clear();
   root_style_ = xt_style_initial();
@@ -105,14 +123,14 @@ void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *
   if (root != nullptr) {
     if (root->type == NodeType::Document) {
       for (const std::unique_ptr<Node> &child : root->children) {
-        std::unique_ptr<LayoutBox> box = buildBoxTree(child.get(), styles, &root_style_);
+        std::unique_ptr<LayoutBox> box = buildBoxTree(child.get(), styles, &root_style_, media);
         if (box != nullptr) {
           box->parent = root_.get();
           root_->children.push_back(std::move(box));
         }
       }
     } else {
-      std::unique_ptr<LayoutBox> box = buildBoxTree(root, styles, &root_style_);
+      std::unique_ptr<LayoutBox> box = buildBoxTree(root, styles, &root_style_, media);
       if (box != nullptr) {
         box->parent = root_.get();
         root_->children.push_back(std::move(box));

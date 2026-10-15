@@ -295,7 +295,9 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   if (scale <= 0.0f) scale = 1.0f;
 
   std::vector<TextVertex> verts;
-  for (const xtgui::PaintText &run : list.texts) {
+  geometry->op_counts.assign(list.texts.size(), 0);
+  for (size_t index = 0; index < list.texts.size(); index++) {
+    const xtgui::PaintText &run = list.texts[index];
     if (run.text.empty() || run.color.a <= 0.0f) continue;
     xtgui::Font *logical = xtgui::xt_text_resolve(run.font);
     if (logical == nullptr) continue;
@@ -303,6 +305,7 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     std::vector<xtgui::ShapedGlyph> glyphs;
     xtgui::xt_text_shape_run(run.text, logical, glyphs);
     float pen_x = run.x;
+    uint32_t before = (uint32_t)verts.size();
     for (const xtgui::ShapedGlyph &glyph : glyphs) {
       if (glyph.glyph != 0) {
         xtgui::Font *face = glyph.font != nullptr ? glyph.font : logical;
@@ -321,27 +324,8 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
       }
       pen_x += glyph.x_advance;
     }
+    geometry->op_counts[index] = (uint32_t)verts.size() - before;
   }
   uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex));
   flushAtlas(device);
-}
-
-void xt_gui_text_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGuiGeometry *geometry,
-                      float viewport_width, float viewport_height) {
-  using namespace xtgui::renderer_detail;
-  if (!g_text_ok || geometry->buffer == nullptr || geometry->vertex_count == 0) return;
-  if (g_atlas_texture == nullptr) return;
-  if (viewport_width <= 0.0f || viewport_height <= 0.0f) return;
-  SDL_BindGPUGraphicsPipeline(pass, g_text_pipeline);
-  SDL_GPUBufferBinding binding;
-  binding.buffer = geometry->buffer;
-  binding.offset = 0;
-  SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-  SDL_GPUTextureSamplerBinding atlas_binding;
-  atlas_binding.texture = g_atlas_texture;
-  atlas_binding.sampler = g_sampler;
-  SDL_BindGPUFragmentSamplers(pass, 0, &atlas_binding, 1);
-  float viewport[2] = {viewport_width, viewport_height};
-  SDL_PushGPUVertexUniformData(cmd, 0, viewport, sizeof(viewport));
-  SDL_DrawGPUPrimitives(pass, geometry->vertex_count, 1, 0, 0);
 }

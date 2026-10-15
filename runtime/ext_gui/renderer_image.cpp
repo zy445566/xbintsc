@@ -280,7 +280,8 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
 void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
                          const xtgui::DisplayList &list, float scale) {
   using namespace xtgui::renderer_detail;
-  g_image_batches.clear();
+  geometry->op_counts.assign(list.images.size(), 0);
+  geometry->op_textures.assign(list.images.size(), nullptr);
   if (g_image_pipeline == nullptr) {
     geometry->vertex_count = 0;
     return;
@@ -294,7 +295,8 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   full.v0 = 0.0f;
   full.u1 = 1.0f;
   full.v1 = 1.0f;
-  for (const xtgui::PaintImage &image : list.images) {
+  for (size_t index = 0; index < list.images.size(); index++) {
+    const xtgui::PaintImage &image = list.images[index];
     if (image.width <= 0.0f || image.height <= 0.0f) continue;
     SDL_GPUTexture *texture = nullptr;
     if (image.canvas_id != 0) {
@@ -311,34 +313,11 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
       texture = ensureImageTexture(device, image.src, pixel_width, pixel_height);
     }
     if (texture == nullptr) continue;
-    uint32_t first = (uint32_t)verts.size();
     pushGlyph(verts, image.x, image.y, image.width, image.height, full, white);
-    g_image_batches.push_back(ImageBatch{texture, first, 6});
+    geometry->op_counts[index] = 6;
+    geometry->op_textures[index] = texture;
   }
   uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex));
-}
-
-void xt_gui_image_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGuiGeometry *geometry,
-                       float viewport_width, float viewport_height) {
-  using namespace xtgui::renderer_detail;
-  if (g_image_pipeline == nullptr || g_sampler == nullptr) return;
-  if (geometry->buffer == nullptr || geometry->vertex_count == 0 || g_image_batches.empty()) return;
-  if (viewport_width <= 0.0f || viewport_height <= 0.0f) return;
-  SDL_BindGPUGraphicsPipeline(pass, g_image_pipeline);
-  SDL_GPUBufferBinding binding;
-  binding.buffer = geometry->buffer;
-  binding.offset = 0;
-  SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-  float viewport[2] = {viewport_width, viewport_height};
-  SDL_PushGPUVertexUniformData(cmd, 0, viewport, sizeof(viewport));
-  for (const ImageBatch &batch : g_image_batches) {
-    if (batch.texture == nullptr) continue;
-    SDL_GPUTextureSamplerBinding texture_binding;
-    texture_binding.texture = batch.texture;
-    texture_binding.sampler = g_sampler;
-    SDL_BindGPUFragmentSamplers(pass, 0, &texture_binding, 1);
-    SDL_DrawGPUPrimitives(pass, batch.count, 1, batch.first, 0);
-  }
 }
 
 void xt_gui_image_textures_destroy(SDL_GPUDevice *device) {
@@ -347,7 +326,6 @@ void xt_gui_image_textures_destroy(SDL_GPUDevice *device) {
     if (entry.second != nullptr) SDL_ReleaseGPUTexture(device, entry.second);
   }
   g_image_textures.clear();
-  g_image_batches.clear();
   for (auto &entry : g_media_textures) {
     if (entry.second.texture != nullptr) SDL_ReleaseGPUTexture(device, entry.second.texture);
   }

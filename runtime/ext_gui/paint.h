@@ -6,10 +6,10 @@
  * the same list into triangles (rectangles) and glyph quads (text), and
  * diagnostics/tests can inspect it without a GPU.
  *
- * Rectangles and text are kept in separate lists: backgrounds/borders are drawn
- * first, then all text on top. That matches almost every static UI and lets the
- * renderer use one draw call per list instead of switching pipelines per shape.
- */
+ * Rectangles, text and images share one painter-order `ops` list, so a
+ * `z-index`ed child can paint over a sibling's background and an `overflow`
+ * clip applies to every shape in the subtree. Coordinates are viewport-
+ * relative. */
 #ifndef XT_GUI_PAINT_H
 #define XT_GUI_PAINT_H
 
@@ -58,18 +58,42 @@ struct PaintImage {
   uint64_t canvas_id = 0;
 };
 
+/** The clip rectangle in effect for a painted shape (viewport-relative logical
+ * pixels). `width <= 0` means "no clip". */
+struct PaintClip {
+  bool active = false;
+  float x = 0;
+  float y = 0;
+  float width = 0;
+  float height = 0;
+};
+
+enum class PaintKind { Rect, Text, Image };
+
+/** One entry in painter order: which kind of shape, its index in the matching
+ * payload vector, and the clip in effect. */
+struct PaintOp {
+  PaintKind kind = PaintKind::Rect;
+  uint32_t index = 0;
+  PaintClip clip;
+};
+
 struct DisplayList {
   std::vector<PaintRect> rects;
   std::vector<PaintText> texts;
   std::vector<PaintImage> images;
+  /** Shapes in painter order (backgrounds/borders first, then children, then
+   * stacked siblings), each with the clip rectangle that bounds it. */
+  std::vector<PaintOp> ops;
 
   void clear() {
     rects.clear();
     texts.clear();
     images.clear();
+    ops.clear();
   }
   bool empty() const { return rects.empty() && texts.empty() && images.empty(); }
-  /** Human-readable dump, one shape per line (for diagnostics/tests). */
+  /** Human-readable dump, one shape per line, in painter order (diagnostics/tests). */
   std::string dump() const;
 };
 

@@ -7,18 +7,22 @@
 ## 绘制与显示列表（M4a/M4b）
 
 `runtime/ext_gui/paint.{h,cpp}` 按画家顺序遍历布局树，生成一个与后端无关的
-`DisplayList`，其中有两个并列的列表：**矩形**（背景与四条实心边框，带
-`border-radius`）与**文本 run**（每个携带其文本、颜色与已解析的 `FontSpec`）。
-把它们分开可以让渲染器先绘制所有矩形，再在其上绘制所有文本，每个列表一次
-绘制调用。`DisplayList::dump()` 为 `paintList()`/`paintCount()` 提供数据。
+`DisplayList`：一个按画家顺序排列的 `ops` 列表，包含**矩形**（背景与四条实心
+边框，带 `border-radius`）、**文本 run**（每个携带其文本、颜色与已解析的
+`FontSpec`）与**图像**，背后由并列的负载数组支撑。每个 op 还携带当前生效的裁剪
+矩形（最近的 `overflow: hidden` 祖先的 padding box），因此 `overflow` 裁剪与
+`z-index` 顺序都能保留到渲染器。`DisplayList::dump()` 为
+`paintList()`/`paintCount()` 提供数据。
 
 `opacity` 只在两端生效：计算值为 `0` 的盒子（及其整棵子树）不绘制任何内容，
 大于 `0` 的一律按完全不透明绘制。图形只携带其颜色自身的 alpha，因此没有部分
 透明盒子的合成——CSS 解析器接受的 `opacity` 过渡因此也看不到效果。把隐藏态写成
 `opacity: 0` 来隐藏/显示一层，正是 `examples/gui/pelican-bike` 游戏结束遮罩的做法。
 
-`runtime/ext_gui/renderer.{h,cpp}` 把该列表转换为每个窗口两个批处理顶点缓冲
-（一个用于图形，一个用于字形四边形），通过两条 SDL_GPU 图形管线绘制：
+`runtime/ext_gui/renderer.{h,cpp}` 把该列表转换为每个窗口的批处理顶点缓冲
+（图形、字形四边形与图像），并把管线、裁剪与纹理都相同的连续 op 合并为
+**绘制 run**。每个 run 用各自的 GPU scissor 矩形（按设备像素缩放）绘制，因此
+画家顺序与 `overflow` 裁剪按 op 生效，并通过 SDL_GPU 图形管线完成：
 
 - 共享管线会依据设备支持的着色器格式延迟创建。SDL_GPU 的三个后端各自只接受一种
   二进制格式，且都不会在运行时编译 GLSL/HLSL，因此引擎三种都随包提供，由

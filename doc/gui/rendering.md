@@ -6,11 +6,13 @@
 ## Paint and display list (M4a/M4b)
 
 `runtime/ext_gui/paint.{h,cpp}` walks the layout tree in painter's order and
-emits a backend-agnostic `DisplayList` with two parallel lists: **rectangles**
-(backgrounds and four solid border edges, with `border-radius`) and **text runs**
-(each carrying its text, colour and resolved `FontSpec`). Keeping them separate
-lets the renderer draw all rectangles, then all text on top, with one draw call
-per list. `DisplayList::dump()` feeds `paintList()`/`paintCount()`.
+emits a backend-agnostic `DisplayList`: a painter-order `ops` list of
+**rectangles** (backgrounds and four solid border edges, with `border-radius`),
+**text runs** (each carrying its text, colour and resolved `FontSpec`) and
+**images**, backed by parallel payload arrays. Each op also carries the active
+clip rectangle (the padding box of the nearest `overflow: hidden` ancestor), so
+`overflow` clipping and `z-index` ordering survive into the renderer.
+`DisplayList::dump()` feeds `paintList()`/`paintCount()`.
 
 `opacity` is honoured only at its extremes: a box whose computed `opacity` is
 `0` (and its whole subtree) paints nothing, and anything above `0` paints fully
@@ -19,9 +21,11 @@ partly transparent box — the `opacity` transitions the CSS parser accepts are
 therefore not visible either. Hiding and revealing a layer with `opacity: 0` on
 the hidden state is what `examples/gui/pelican-bike`'s game-over overlay does.
 
-`runtime/ext_gui/renderer.{h,cpp}` turns that list into two batched vertex
-buffers per window (one for shapes, one for glyph quads) drawn through two
-SDL_GPU graphics pipelines:
+`runtime/ext_gui/renderer.{h,cpp}` turns that list into batched vertex buffers
+per window (shapes, glyph quads and images) and merges consecutive ops that
+share a pipeline, clip and texture into **draw runs**. Each run is drawn with
+its own GPU scissor rectangle (scaled to device pixels), so painter order and
+`overflow` clipping are applied per op through the SDL_GPU graphics pipelines:
 
 - The shared pipelines are created lazily from the device's supported shader
   format. Each of SDL_GPU's three backends consumes a different binary and none

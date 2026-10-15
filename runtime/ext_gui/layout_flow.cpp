@@ -201,7 +201,7 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
   if (contentWidth < 0) contentWidth = 0;
 
   box->x = x + box->margin_left;
-  box->y = y + box->margin_top;
+  box->y = y;
   box->content_x = box->x + box->border_left + box->padding_left;
   box->content_y = box->y + box->border_top + box->padding_top;
   box->content_width = contentWidth;
@@ -239,9 +239,10 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
   publishContainingBlock(box);
   layoutAbsoluteChildren(box, contentWidth, availableHeight);
   applyPosition(box);
-  /* An absolutely positioned box consumes no space in its parent's flow. */
-  if (!inFlow) return 0;
-  return box->margin_top + box->height + box->margin_bottom;
+  /* The caller owns the vertical margins: it collapses them and advances the
+   * flow itself, so the border-box height is what comes back. */
+  (void)inFlow;
+  return box->height;
 }
 
 bool Layouter::isAbsoluteChild(const LayoutBox *box) {
@@ -266,11 +267,17 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
 
   float y = block->content_y;
   float startY = y;
+  /* The bottom margin of the last in-flow block, waiting to collapse with the
+   * next block's top margin. */
+  float pending = 0.0f;
+  bool hasBlock = false;
   std::vector<LayoutBox *> inlineRun;
+  FloatContext floats;
   auto flush = [&]() {
     if (inlineRun.empty()) return;
     /* Source whitespace between block boxes collapses away (HTML's model), so a
-     * run that carries no visible content produces no line at all. */
+     * run that carries no visible content produces no line at all — and,
+     * crucially, does not break margin adjacency with the next block. */
     bool visible = false;
     for (LayoutBox *box : inlineRun) {
       if (!isCollapsibleText(box)) {
@@ -278,8 +285,20 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
         break;
       }
     }
-    if (visible) y += layoutInlineRun(block, inlineRun, contentWidth, y);
+    if (!visible) {
+      /* Source whitespace only: no line, and it does not break margin
+       * adjacency with the next block. */
+      inlineRun.clear();
+      return;
+    }
+    /* Inline content breaks adjacency: apply the pending margin here instead of
+     * letting it collapse into the next block. */
+    y += pending;
+    pending = 0.0f;
+    floats.prune(y);
+    y += layoutInlineRun(block, inlineRun, contentWidth, y, &floats);
     inlineRun.clear();
+    hasBlock = true;
   };
   for (const std::unique_ptr<LayoutBox> &child : block->children) {
     Display display = child->display;
@@ -289,16 +308,73 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
        * its own size. */
       continue;
     }
+    const XtStyle *childStyle = child->style;
+    if (childStyle != nullptr && childStyle->float_side != FloatSide::None) {
+      /* A float interrupts the inline run (content before it is placed first,
+       * then the float affects the lines that follow), and takes no flow space
+       * of its own. */
+      flush();
+      resolveEdges(child.get(), contentWidth);
+      float edges = horizontalEdges(child.get());
+      float available = contentWidth - edges;
+      if (available < 0) available = 0;
+      float outerWidth;
+      if (!isAuto(childStyle->width)) {
+        outerWidth = px(childStyle->width, contentWidth, childStyle->font_size, 0.0f) + edges;
+      } else {
+        outerWidth = preferredContentWidth(child.get(), contentWidth);
+        if (outerWidth > available) outerWidth = available;
+        outerWidth += edges;
+      }
+      float contentW = outerWidth - edges;
+      if (contentW < 0) contentW = 0;
+      float floatX = childStyle->float_side == FloatSide::Left
+                         ? block->content_x
+                         : block->content_x + contentWidth - outerWidth;
+      setContainingBlock(child.get(), containingBlockAncestor(block));
+      float height =
+          layoutBlock(child.get(), floatX, y, contentWidth, availableHeight, contentW);
+      ActiveFloat entry;
+      entry.left = childStyle->float_side == FloatSide::Left;
+      entry.x = child->x;
+      entry.width = child->width + child->margin_left + child->margin_right;
+      entry.top = y;
+      entry.height = height + child->margin_top + child->margin_bottom;
+      floats.floats.push_back(entry);
+      continue;
+    }
     if (display == Display::Block || display == Display::ListItem || display == Display::Flex ||
         child->style == nullptr) {
       flush();
+      resolveEdges(child.get(), contentWidth);
+      /* Adjacent vertical margins collapse: the gap is the collapsed value of
+       * the waiting bottom margin and this child's top margin. */
+      float top = child->margin_top;
+      float gap = hasBlock ? collapseMargins(pending, top) : top;
+      float desired = y + gap;
+      if (childStyle != nullptr && childStyle->clear != Clear::None) {
+        bool clearLeft = childStyle->clear == Clear::Left || childStyle->clear == Clear::Both;
+        bool clearRight = childStyle->clear == Clear::Right || childStyle->clear == Clear::Both;
+        float clearY = floats.clearY(clearLeft, clearRight, y) + top;
+        if (desired < clearY) desired = clearY;
+      }
+      y = desired;
       setContainingBlock(child.get(), containingBlockAncestor(block));
       y += layoutBlock(child.get(), block->content_x, y, contentWidth, availableHeight);
+      pending = child->margin_bottom;
+      hasBlock = true;
     } else {
       inlineRun.push_back(child.get());
     }
   }
   flush();
+  /* The last bottom margin is part of the content box: it escapes only if the
+   * parent has no bottom padding/border (handled by the parent's caller). */
+  y += pending;
+  /* Grow to contain the floats: a block with only floated children would
+   * otherwise collapse to zero height. */
+  float floatBottom = floats.maxBottom();
+  if (floatBottom > y) y = floatBottom;
   return y - startY;
 }
 

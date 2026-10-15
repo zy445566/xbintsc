@@ -347,6 +347,23 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     if (parseEnum(value, names, 4, &index)) style->flex_direction = (FlexDirection)index;
     return;
   }
+  if (property == "flex-wrap") {
+    static const char *const names[] = {"nowrap", "wrap", "wrap-reverse"};
+    int index = 0;
+    if (parseEnum(value, names, 3, &index)) style->flex_wrap = (FlexWrap)index;
+    return;
+  }
+  if (property == "flex-flow") {
+    /* `flex-flow: <direction> || <wrap>` in either order. */
+    for (const std::string &token : xt_css_split_whitespace(value)) {
+      static const char *const dirs[] = {"row", "row-reverse", "column", "column-reverse"};
+      static const char *const wraps[] = {"nowrap", "wrap", "wrap-reverse"};
+      int index = 0;
+      if (parseEnum(token, dirs, 4, &index)) style->flex_direction = (FlexDirection)index;
+      else if (parseEnum(token, wraps, 3, &index)) style->flex_wrap = (FlexWrap)index;
+    }
+    return;
+  }
   if (property == "justify-content") {
     static const char *const names[] = {"flex-start", "flex-end", "center", "space-between",
                                         "space-around", "space-evenly"};
@@ -360,10 +377,20 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     if (parseEnum(value, names, 5, &index)) style->align_items = (AlignItems)index;
     return;
   }
-  if (property == "gap" || property == "row-gap" || property == "column-gap") {
-    assignLength(&style->gap, value);
+  if (property == "align-content") {
+    static const char *const names[] = {"stretch", "flex-start", "flex-end", "center",
+                                        "space-between", "space-around"};
+    int index = 0;
+    if (parseEnum(value, names, 6, &index)) style->align_content = (AlignContent)index;
     return;
   }
+  if (property == "gap") {
+    assignLength(&style->gap, value);
+    style->row_gap = style->column_gap = style->gap;
+    return;
+  }
+  if (property == "row-gap") { assignLength(&style->row_gap, value); return; }
+  if (property == "column-gap") { assignLength(&style->column_gap, value); return; }
   if (property == "flex-grow") {
     float number = 0;
     if (xt_css_parse_number(value, &number)) style->flex_grow = number;
@@ -431,6 +458,18 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
       style->z_index = (int)number;
       style->has_z_index = true;
     }
+    return;
+  }
+  if (property == "float") {
+    static const char *const names[] = {"none", "left", "right"};
+    int index = 0;
+    if (parseEnum(value, names, 3, &index)) style->float_side = (FloatSide)index;
+    return;
+  }
+  if (property == "clear") {
+    static const char *const names[] = {"none", "left", "right", "both"};
+    int index = 0;
+    if (parseEnum(value, names, 4, &index)) style->clear = (Clear)index;
     return;
   }
   if (property == "transition") {

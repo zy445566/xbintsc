@@ -61,9 +61,14 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   static const char *const displayNames[] = {"none", "block", "inline", "inline-block", "flex", "list-item"};
   static const char *const positionNames[] = {"static", "relative", "absolute", "fixed"};
   static const char *const flexNames[] = {"row", "row-reverse", "column", "column-reverse"};
+  static const char *const wrapNames[] = {"nowrap", "wrap", "wrap-reverse"};
   static const char *const justifyNames[] = {"flex-start", "flex-end", "center", "space-between",
                                              "space-around", "space-evenly"};
   static const char *const alignNames[] = {"stretch", "flex-start", "flex-end", "center", "baseline"};
+  static const char *const alignContentNames[] = {"stretch", "flex-start", "flex-end", "center",
+                                                  "space-between", "space-around"};
+  static const char *const floatNames[] = {"none", "left", "right"};
+  static const char *const clearNames[] = {"none", "left", "right", "both"};
   static const char *const alignTextNames[] = {"start", "center", "end", "justify"};
 
   if (property == "display") return displayNames[(int)style.display];
@@ -98,9 +103,15 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   }
   if (property == "text-align") return alignTextNames[(int)style.text_align];
   if (property == "flex-direction") return flexNames[(int)style.flex_direction];
+  if (property == "flex-wrap") return wrapNames[(int)style.flex_wrap];
   if (property == "justify-content") return justifyNames[(int)style.justify_content];
   if (property == "align-items") return alignNames[(int)style.align_items];
+  if (property == "align-content") return alignContentNames[(int)style.align_content];
   if (property == "gap") return formatLength(style.gap);
+  if (property == "row-gap") return formatLength(style.row_gap);
+  if (property == "column-gap") return formatLength(style.column_gap);
+  if (property == "float") return floatNames[(int)style.float_side];
+  if (property == "clear") return clearNames[(int)style.clear];
   if (property == "flex-grow") return formatNumber(style.flex_grow);
   if (property == "flex-shrink") return formatNumber(style.flex_shrink);
   if (property == "flex-basis") return formatLength(style.flex_basis);

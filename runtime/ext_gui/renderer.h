@@ -22,10 +22,27 @@
 
 #include <SDL3/SDL.h>
 #include <cstdint>
+#include <vector>
 
 namespace xtgui {
 struct DisplayList;
 }
+
+/** One draw call in painter order: a contiguous range of vertices in one of the
+ * three pipelines, with the clip rectangle (logical pixels) that bounds it. A
+ * `clip_width <= 0` means the whole viewport. For image runs, `texture` is the
+ * bound texture. */
+struct XtGuiDrawRun {
+  enum Pipeline { Shape = 0, Text = 1, Image = 2 };
+  int pipeline = Shape;
+  uint32_t first = 0;
+  uint32_t count = 0;
+  float clip_x = 0;
+  float clip_y = 0;
+  float clip_width = 0;
+  float clip_height = 0;
+  SDL_GPUTexture *texture = nullptr;
+};
 
 /** Per-window GPU geometry (vertex buffer + draw range). */
 struct XtGuiGeometry {
@@ -33,6 +50,15 @@ struct XtGuiGeometry {
   uint32_t capacity_bytes = 0;
   uint32_t vertex_count = 0;
   bool dirty = true;
+  /** Vertex count contributed by each shape of this pipeline's kind, aligned
+   * with the display list's payload vector (used to build the run list). */
+  std::vector<uint32_t> op_counts;
+  /** Texture for each image op, aligned with `DisplayList::images` (image
+   * geometry only). */
+  std::vector<SDL_GPUTexture *> op_textures;
+  /** Painter-order draw runs, built from the display list by
+   * `xt_gui_build_runs` and consumed by `xt_gui_renderer_draw`. */
+  std::vector<XtGuiDrawRun> runs;
 };
 
 /** Create the shared pipelines if needed. Returns false when the backend has no
@@ -47,25 +73,25 @@ void xt_gui_geometry_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
                             const xtgui::DisplayList &list);
 /** Draw `geometry` inside an active render pass. */
 void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
-                          XtGuiGeometry *geometry, float viewport_width, float viewport_height);
+                          XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
+                          float viewport_width, float viewport_height, float pixel_density);
 /** Shape `list.texts`, ensure their glyphs are in the atlas, and upload the
  * text geometry. `scale` is the device pixel density (1.0 = logical pixels). */
 void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
                         const xtgui::DisplayList &list, float scale);
-/** Draw the text geometry (glyph atlas bound) inside an active render pass. */
-void xt_gui_text_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGuiGeometry *geometry,
-                      float viewport_width, float viewport_height);
 /** Decode/upload `list.images` and build the image quad geometry (one batch per
  * texture). Textures are cached by source path and pixel size. `scale` is the
  * device pixel density (1.0 = logical pixels) used to pick the rasterisation
  * size of a vector source (SVG); raster sources decode at their intrinsic size. */
 void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
                          const xtgui::DisplayList &list, float scale);
-/** Draw the image geometry (binds each batch's texture) inside a render pass. */
-void xt_gui_image_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGuiGeometry *geometry,
-                       float viewport_width, float viewport_height);
 /** Release the image texture cache (after SDL_WaitForGPUIdle). */
 void xt_gui_image_textures_destroy(SDL_GPUDevice *device);
+/** Build the painter-order run list from the display list, using the per-op
+ * vertex counts and textures recorded by the three upload functions. Stores the
+ * result in `shapes->runs`. */
+void xt_gui_build_runs(XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
+                       const xtgui::DisplayList &list);
 /** Re-upload the current decoded frame of every live `<video>` texture. Called
  * once per frame, before the render command buffer, so the texture sampled by
  * the draw already holds that frame. */

@@ -28,7 +28,6 @@ SDL_GPUGraphicsPipeline *g_image_pipeline = nullptr;
 SDL_GPUSampler *g_sampler = nullptr;
 int g_renderer_failed = 0;
 bool g_text_ok = false;
-std::vector<ImageBatch> g_image_batches;
 std::unordered_map<std::string, SDL_GPUTexture *> g_image_textures;
 SDL_GPUTexture *g_atlas_texture = nullptr;
 std::vector<unsigned char> g_atlas_mirror;
@@ -246,7 +245,6 @@ void xt_gui_renderer_destroy(SDL_GPUDevice *device) {
     if (entry.second != nullptr) SDL_ReleaseGPUTexture(device, entry.second);
   }
   g_image_textures.clear();
-  g_image_batches.clear();
   if (g_atlas_texture != nullptr) {
     SDL_ReleaseGPUTexture(device, g_atlas_texture);
     g_atlas_texture = nullptr;
@@ -277,21 +275,126 @@ void xt_gui_geometry_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   using namespace xtgui::renderer_detail;
   std::vector<Vertex> verts;
   verts.reserve(list.rects.size() * 6);
+  geometry->op_counts.assign(list.rects.size(), 6);
   for (const xtgui::PaintRect &rect : list.rects) pushRect(verts, rect);
   uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(Vertex));
 }
 
+void xt_gui_build_runs(XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
+                       const xtgui::DisplayList &list) {
+  shapes->runs.clear();
+  uint32_t cursor[3] = {0, 0, 0};
+  for (const xtgui::PaintOp &op : list.ops) {
+    int pipeline = (int)op.kind;
+    XtGuiGeometry *geometry = pipeline == 0 ? shapes : (pipeline == 1 ? texts : images);
+    if (op.index >= geometry->op_counts.size()) continue;
+    uint32_t count = geometry->op_counts[op.index];
+    uint32_t first = cursor[pipeline];
+    cursor[pipeline] += count;
+    if (count == 0) continue;
+    SDL_GPUTexture *texture = nullptr;
+    if (pipeline == 2 && op.index < images->op_textures.size()) texture = images->op_textures[op.index];
+    float cx = op.clip.active ? op.clip.x : 0.0f;
+    float cy = op.clip.active ? op.clip.y : 0.0f;
+    float cw = op.clip.active ? op.clip.width : 0.0f;
+    float ch = op.clip.active ? op.clip.height : 0.0f;
+    if (!shapes->runs.empty()) {
+      XtGuiDrawRun &last = shapes->runs.back();
+      if (last.pipeline == pipeline && last.first + last.count == first && last.clip_x == cx &&
+          last.clip_y == cy && last.clip_width == cw && last.clip_height == ch &&
+          last.texture == texture) {
+        last.count += count;
+        continue;
+      }
+    }
+    XtGuiDrawRun run;
+    run.pipeline = pipeline;
+    run.first = first;
+    run.count = count;
+    run.clip_x = cx;
+    run.clip_y = cy;
+    run.clip_width = cw;
+    run.clip_height = ch;
+    run.texture = texture;
+    shapes->runs.push_back(run);
+  }
+}
+
 void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
-                          XtGuiGeometry *geometry, float viewport_width, float viewport_height) {
+                          XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
+                          float viewport_width, float viewport_height, float pixel_density) {
   using namespace xtgui::renderer_detail;
-  if (g_pipeline == nullptr || geometry->buffer == nullptr || geometry->vertex_count == 0) return;
   if (viewport_width <= 0.0f || viewport_height <= 0.0f) return;
-  SDL_BindGPUGraphicsPipeline(pass, g_pipeline);
-  SDL_GPUBufferBinding binding;
-  binding.buffer = geometry->buffer;
-  binding.offset = 0;
-  SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+  if (pixel_density <= 0.0f) pixel_density = 1.0f;
   float viewport[2] = {viewport_width, viewport_height};
   SDL_PushGPUVertexUniformData(cmd, 0, viewport, sizeof(viewport));
-  SDL_DrawGPUPrimitives(pass, geometry->vertex_count, 1, 0, 0);
+
+  int target_width = (int)(viewport_width * pixel_density + 0.5f);
+  int target_height = (int)(viewport_height * pixel_density + 0.5f);
+  for (const XtGuiDrawRun &run : shapes->runs) {
+    SDL_Rect scissor;
+    scissor.x = 0;
+    scissor.y = 0;
+    scissor.w = target_width;
+    scissor.h = target_height;
+    if (run.clip_width > 0.0f && run.clip_height > 0.0f) {
+      int x0 = (int)(run.clip_x * pixel_density);
+      int y0 = (int)(run.clip_y * pixel_density);
+      int x1 = (int)((run.clip_x + run.clip_width) * pixel_density + 0.5f);
+      int y1 = (int)((run.clip_y + run.clip_height) * pixel_density + 0.5f);
+      if (x0 < 0) x0 = 0;
+      if (y0 < 0) y0 = 0;
+      if (x1 > target_width) x1 = target_width;
+      if (y1 > target_height) y1 = target_height;
+      scissor.x = x0;
+      scissor.y = y0;
+      scissor.w = x1 > x0 ? x1 - x0 : 0;
+      scissor.h = y1 > y0 ? y1 - y0 : 0;
+    }
+    SDL_SetGPUScissor(pass, &scissor);
+
+    if (run.pipeline == XtGuiDrawRun::Shape) {
+      if (g_pipeline == nullptr || shapes->buffer == nullptr) continue;
+      SDL_BindGPUGraphicsPipeline(pass, g_pipeline);
+      SDL_GPUBufferBinding binding;
+      binding.buffer = shapes->buffer;
+      binding.offset = 0;
+      SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+      SDL_DrawGPUPrimitives(pass, run.count, 1, run.first, 0);
+    } else if (run.pipeline == XtGuiDrawRun::Text) {
+      if (!g_text_ok || g_atlas_texture == nullptr || texts->buffer == nullptr) continue;
+      SDL_BindGPUGraphicsPipeline(pass, g_text_pipeline);
+      SDL_GPUBufferBinding binding;
+      binding.buffer = texts->buffer;
+      binding.offset = 0;
+      SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+      SDL_GPUTextureSamplerBinding atlas_binding;
+      atlas_binding.texture = g_atlas_texture;
+      atlas_binding.sampler = g_sampler;
+      SDL_BindGPUFragmentSamplers(pass, 0, &atlas_binding, 1);
+      SDL_DrawGPUPrimitives(pass, run.count, 1, run.first, 0);
+    } else {
+      if (g_image_pipeline == nullptr || g_sampler == nullptr || images->buffer == nullptr ||
+          run.texture == nullptr)
+        continue;
+      SDL_BindGPUGraphicsPipeline(pass, g_image_pipeline);
+      SDL_GPUBufferBinding binding;
+      binding.buffer = images->buffer;
+      binding.offset = 0;
+      SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+      SDL_GPUTextureSamplerBinding texture_binding;
+      texture_binding.texture = run.texture;
+      texture_binding.sampler = g_sampler;
+      SDL_BindGPUFragmentSamplers(pass, 0, &texture_binding, 1);
+      SDL_DrawGPUPrimitives(pass, run.count, 1, run.first, 0);
+    }
+  }
+
+  /* Restore the full-target scissor so the next frame starts clean. */
+  SDL_Rect full;
+  full.x = 0;
+  full.y = 0;
+  full.w = target_width;
+  full.h = target_height;
+  SDL_SetGPUScissor(pass, &full);
 }

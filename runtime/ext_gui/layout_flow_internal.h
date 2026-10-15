@@ -25,6 +25,14 @@ namespace layout_flow_detail {
 
 constexpr float kHuge = 1e18f;
 
+/** Collapse two adjoining vertical margins (CSS margin collapsing): the larger
+ * positive margin wins, a negative margin is subtracted. */
+inline float collapseMargins(float a, float b) {
+  float positive = std::max(0.0f, std::max(a, b));
+  float negative = std::min(0.0f, std::min(a, b));
+  return positive + negative;
+}
+
 struct InlineItem {
   LayoutBox *box = nullptr;
   const XtStyle *style = nullptr;
@@ -35,6 +43,63 @@ struct InlineItem {
   bool is_space = false;
   bool atomic = false;      // inline-block
   bool force_break = false; // explicit newline (white-space: pre)
+};
+
+/** One float taking part in the current block's formatting context. Floats are
+ * out of flow: they do not advance the block cursor, but inline lines shrink to
+ * the gap they leave. */
+struct ActiveFloat {
+  bool left = true;
+  float x = 0;
+  float width = 0;
+  float top = 0;
+  float height = 0;
+  float bottom() const { return top + height; }
+};
+
+/** The floats in effect while laying out a block's inline content. */
+struct FloatContext {
+  std::vector<ActiveFloat> floats;
+  void prune(float y) {
+    for (auto it = floats.begin(); it != floats.end();) {
+      if (it->bottom() <= y) it = floats.erase(it);
+      else ++it;
+    }
+  }
+  float leftEdge(float x, float y, float bottom) const {
+    for (const ActiveFloat &f : floats) {
+      if (!f.left || f.bottom() <= y || f.top >= bottom) continue;
+      if (f.x + f.width > x) x = f.x + f.width;
+    }
+    return x;
+  }
+  float rightEdge(float x, float y, float bottom) const {
+    for (const ActiveFloat &f : floats) {
+      if (f.left || f.bottom() <= y || f.top >= bottom) continue;
+      if (f.x < x) x = f.x;
+    }
+    return x;
+  }
+  float maxBottom() const {
+    float bottom = 0;
+    for (const ActiveFloat &f : floats)
+      if (f.bottom() > bottom) bottom = f.bottom();
+    return bottom;
+  }
+  bool clears(bool left, bool right, float y) const {
+    for (const ActiveFloat &f : floats) {
+      if (f.bottom() <= y) continue;
+      if ((left && f.left) || (right && !f.left)) return true;
+    }
+    return false;
+  }
+  float clearY(bool left, bool right, float y) const {
+    for (const ActiveFloat &f : floats) {
+      if (f.bottom() <= y) continue;
+      if ((left && f.left) || (right && !f.left)) y = std::max(y, f.bottom());
+    }
+    return y;
+  }
 };
 
 inline float toPx(const Length &length, float base, float em, float root, float vw, float vh,
@@ -128,9 +193,10 @@ struct Layouter {
 
   void resolveEdges(LayoutBox *box, float containingWidth) const;
 
-  /** Lay out `box` at (x, y) and return its outer height (margins included).
-   * `inFlow` is false for an absolutely positioned child: it is still laid out,
-   * but the caller ignores the returned height (it is out of flow). */
+  /** Lay out `box` at (x, y) and return its border-box height. The caller owns
+   * the vertical margins (it collapses them and advances the flow). `inFlow` is
+   * false for an absolutely positioned child: it is still laid out, but the
+   * caller ignores the returned height (it is out of flow). */
   float layoutBlock(LayoutBox *box, float x, float y, float availableWidth, float availableHeight,
                     float forcedContentWidth = -1, float forcedContentHeight = -1,
                     bool inFlow = true) const;
@@ -168,11 +234,24 @@ struct Layouter {
 
   void computeInlineGeometry(LayoutBox *box) const;
 
-  /** Lay out an inline formatting context; returns its consumed height. */
+  /** Lay out an inline formatting context; returns its consumed height. When
+   * `floats` is non-null, each line shrinks to the gap left by the floats that
+   * overlap it. */
   float layoutInlineRun(LayoutBox *container, const std::vector<LayoutBox *> &run,
-                        float contentWidth, float y) const;
+                        float contentWidth, float y, const FloatContext *floats = nullptr) const;
 
   float layoutFlex(LayoutBox *container, float contentWidth, float definiteHeight) const;
+
+  /** Flex row main-axis layout, wrapping items into lines when `flex-wrap`
+   * allows it. Returns the used cross size. */
+  float layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox *> &items,
+                      float contentWidth, float definiteHeight, float mainGap,
+                      float crossGap) const;
+
+  /** Flex column main-axis layout (wrapping needs a definite height). */
+  float layoutFlexColumn(LayoutBox *container, const std::vector<LayoutBox *> &items,
+                         float contentWidth, float definiteHeight, float mainGap,
+                         float crossGap) const;
 
   static float sumOf(const std::vector<float> &values);
 

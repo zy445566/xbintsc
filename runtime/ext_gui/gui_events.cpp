@@ -278,6 +278,7 @@ void xt_gui_render_window(XtGuiWindow *win) {
     float text_scale = density > 0.0f ? density : 1.0f;
     xt_gui_text_upload(g_device, &win->text_geometry, list, text_scale);
     xt_gui_image_upload(g_device, &win->image_geometry, list, text_scale);
+    xt_gui_build_runs(&win->geometry, &win->text_geometry, &win->image_geometry, list);
     win->geometry.dirty = 0;
   }
 
@@ -303,9 +304,10 @@ void xt_gui_render_window(XtGuiWindow *win) {
     target.store_op = SDL_GPU_STOREOP_STORE;
     SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
     if (can_paint) {
-      xt_gui_renderer_draw(cmd, pass, &win->geometry, viewport_width, viewport_height);
-      xt_gui_text_draw(cmd, pass, &win->text_geometry, viewport_width, viewport_height);
-      xt_gui_image_draw(cmd, pass, &win->image_geometry, viewport_width, viewport_height);
+      float density = SDL_GetWindowPixelDensity(win->window);
+      if (density <= 0.0f) density = 1.0f;
+      xt_gui_renderer_draw(cmd, pass, &win->geometry, &win->text_geometry, &win->image_geometry,
+                           viewport_width, viewport_height, density);
     }
     SDL_EndGPURenderPass(pass);
     firstFrame = !win->ready;

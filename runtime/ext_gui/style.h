@@ -22,8 +22,12 @@ namespace xtgui {
 enum class Display { None, Block, Inline, InlineBlock, Flex, ListItem };
 enum class Position { Static, Relative, Absolute, Fixed };
 enum class FlexDirection { Row, RowReverse, Column, ColumnReverse };
+enum class FlexWrap { NoWrap, Wrap, WrapReverse };
 enum class JustifyContent { FlexStart, FlexEnd, Center, SpaceBetween, SpaceAround, SpaceEvenly };
 enum class AlignItems { Stretch, FlexStart, FlexEnd, Center, Baseline };
+enum class AlignContent { Stretch, FlexStart, FlexEnd, Center, SpaceBetween, SpaceAround };
+enum class FloatSide { None, Left, Right };
+enum class Clear { None, Left, Right, Both };
 enum class TextAlign { Start, Center, End, Justify };
 enum class WhiteSpace { Normal, NoWrap, Pre, PreWrap, PreLine };
 enum class Overflow { Visible, Hidden, Scroll, Auto };
@@ -84,9 +88,13 @@ struct XtStyle {
   WhiteSpace white_space = WhiteSpace::Normal;  // inherited
 
   FlexDirection flex_direction = FlexDirection::Row;
+  FlexWrap flex_wrap = FlexWrap::NoWrap;
   JustifyContent justify_content = JustifyContent::FlexStart;
   AlignItems align_items = AlignItems::Stretch;
+  AlignContent align_content = AlignContent::Stretch;
   Length gap;
+  Length row_gap;
+  Length column_gap;
   float flex_grow = 0.0f;
   float flex_shrink = 1.0f;
   Length flex_basis;
@@ -95,6 +103,9 @@ struct XtStyle {
   Overflow overflow = Overflow::Visible;
   int z_index = 0;
   bool has_z_index = false;
+
+  FloatSide float_side = FloatSide::None;
+  Clear clear = Clear::None;
 
   /** `transition` specs; not inherited. Applied by `XtDocument`. */
   std::vector<TransitionSpec> transitions;

@@ -35,19 +35,12 @@ struct TextVertex {
 };
 
 /* Image quads are batched by texture; textures are cached by source path. */
-struct ImageBatch {
-  SDL_GPUTexture *texture = nullptr;
-  uint32_t first = 0;
-  uint32_t count = 0;
-};
-
 extern SDL_GPUGraphicsPipeline *g_pipeline;
 extern SDL_GPUGraphicsPipeline *g_text_pipeline;
 extern SDL_GPUGraphicsPipeline *g_image_pipeline;
 extern SDL_GPUSampler *g_sampler;
 extern int g_renderer_failed;
 extern bool g_text_ok;
-extern std::vector<ImageBatch> g_image_batches;
 extern std::unordered_map<std::string, SDL_GPUTexture *> g_image_textures;
 
 /* -- glyph atlas ---------------------------------------------------------- */

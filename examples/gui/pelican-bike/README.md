@@ -148,7 +148,7 @@ the obstacle comes into range, not when it is almost on you.
   and emitted as merged horizontal runs of 1px boxes: real wheels with spokes and
   tyres, a frame of diagonal tubes, a handlebar with a bell, and a pelican with a
   head, wing, pouch and pedalling legs. No `<canvas>`, no images, no SVG (the
-  engine has none — see `doc/gui.md`). Each run is placed with its own
+  engine has none — see `doc/gui/known-issues.md`). Each run is placed with its own
   `left`/`width` rather than by line flow: an absolutely positioned box with
   `width: auto` gives its inline content no available width in the engine, so a
   row of runs would otherwise wrap one run per line. See "Layout notes" below.
@@ -203,8 +203,7 @@ in the engine *and* in a browser:
   `width` instead of relying on `display` order inside the row.
 - **`opacity` is only honoured at its extremes**, so the game-over overlay is
   invisible while it has no `show` class and fully opaque once it has one — the
-  intended fade-in is not visible in the engine (see `doc/gui.md`, "Implemented
-  paint").
+  intended fade-in is not visible in the engine (see `doc/gui/rendering.md`).
 - **The two hosts spell keys differently.** The engine names a key the way
   `SDL_GetKeyName` does (`"Space"`, `"Up"`, `"Right"`); a browser reports
   `KeyboardEvent.key`, which is `" "` for the spacebar and `"ArrowUp"` /
@@ -220,9 +219,9 @@ in the engine *and* in a browser:
 - `tests/e2e/gui-example.test.ts` — compiles and runs the native program (the
   gui archive is required; on Windows opt in with `xbintsc_GUI_TESTS=1`). The
   engine's auto-close path has an outstanding intermittent crash, documented in
-  `doc/gui.md`, so this test accepts that outcome — the Windows exit code, or
-  on Linux/macOS a crash signal reported as `status: null` — and asserts the
-  report only when it arrives.
+  `doc/gui/known-issues.md`, so this test accepts that outcome — the Windows exit
+  code, or on Linux/macOS a crash signal reported as `status: null` — and asserts
+  the report only when it arrives.
 - `tests/e2e/gui-example-browser.test.ts` — extracts the inline script, runs it
   against a stub browser host, and drives frames through `window.__pelican`, so
   the browser branch cannot silently rot (no GPU, no build, deterministic).
@@ -233,6 +232,6 @@ in the engine *and* in a browser:
   access violation — exit code `0xC0000005` on Windows, `SIGSEGV` on Linux,
   ~2 runs in 5); playing normally is unaffected. The engine now roots the
   values it caches in its own containers, which was a leading cause; details are
-  in `doc/gui.md`, "Known issues".
+  in `doc/gui/known-issues.md`.
 - The game-over overlay is revealed with `opacity`, not `display`, because a
   `display: none -> flex` restyle has been seen to crash the same way.

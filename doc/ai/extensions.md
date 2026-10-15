@@ -75,7 +75,8 @@ program drive playback. There are no built-in controls — draw your own chrome
 with elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM
 are decoded on the main thread. If that archive is missing for
 your platform, the build fails with an actionable message; design and roadmap
-live in [../gui.md](../gui.md), and the scripting surface in
+live in [../gui.md](../gui.md) (overview; the engine is documented by function
+under [`doc/gui/`](../gui/)), and the scripting surface in
 [../gui-scripts.md](../gui-scripts.md). Media playback is the one part that
 Windows does not get: the Windows `gui.a` is built without FFmpeg and media
 slots are inert.

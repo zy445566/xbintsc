@@ -345,9 +345,10 @@ legacy `target` field over the handle.
 
 ## Docs to update
 
-- `doc/gui.md` — Non-goals ("Executing page `<script>`" → "Executing *runtime*
-  page scripts; compile-time scripts are AOT-compiled"), locked decision #1,
-  TS-facing API, milestones, progress log.
+- `doc/gui.md` (overview) and `doc/gui/dom.md` — Non-goals ("Executing page
+  `<script>`" → "Executing *runtime* page scripts; compile-time scripts are
+  AOT-compiled"), locked decision #1, the AOT script section, milestones and
+  the progress log. The TS-facing API is in `doc/gui/api.md`.
 - `doc/implemented.md` / `doc/unimplemented.md` — move the new DOM/script
   capabilities across.
 - `README.md` — mention the DOM API + AOT scripts.

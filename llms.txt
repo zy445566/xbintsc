@@ -35,7 +35,17 @@
 - [doc/unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented.md): unsupported syntax, missing semantics and known deviations, with a quick-reference list
 - [doc/node-implemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/node-implemented.md): Node module coverage of the `node` extension
 - [doc/node-unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/node-unimplemented.md): what the `node` extension is still missing
-- [doc/gui.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui.md): the self-hosted GPU HTML/CSS renderer
+- [doc/gui.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui.md): the self-hosted GPU HTML/CSS renderer — overview, architecture and roadmap
+  - [doc/gui/api.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/api.md): the TypeScript window API, events and diagnostics hooks
+  - [doc/gui/dom.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/dom.md): HTML/CSS parsing, the cascade, the interactive DOM and AOT scripts
+  - [doc/gui/layout.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/layout.md): block, inline, Flexbox and CSS positioning
+  - [doc/gui/rendering.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/rendering.md): the display list, SDL_GPU pipelines and the text stack
+  - [doc/gui/media.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/media.md): images, SVG, video and audio
+  - [doc/gui/input.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/input.md): hit testing, events and `:hover`/`:focus`
+  - [doc/gui/animation.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/animation.md): `requestAnimationFrame` and CSS transitions
+  - [doc/gui/runtime.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/runtime.md): event loop integration, the native bridge and memory
+  - [doc/gui/build.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/build.md): building `gui.a` and running the examples
+  - [doc/gui/known-issues.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/known-issues.md): known issues and open questions
 - [doc/gui-scripts.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui-scripts.md): the GUI scripting surface
 - [doc/icon.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/icon.md): application icons and project config packaging
 - [examples/extensions/README.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/examples/extensions/README.md): authoring C++ and Rust native extensions

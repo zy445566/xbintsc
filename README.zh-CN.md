@@ -225,9 +225,10 @@ xbintsc run app.ts --ext gui
 加一个响应式计数器）与 [`examples/gui/pelican-bike`](./examples/gui/pelican-bike)
 ——一个可玩的 2D 游戏，它的同一份文档在浏览器里也能直接打开。
 
-平台与完整说明：[doc/zh-CN/gui.md](./doc/zh-CN/gui.md) 介绍引擎架构、已实现的
-HTML/CSS 子集、打包方式与各平台注意事项。Linux 与 macOS 已在 CI 中构建并实际运行，
-其发布包内含引擎（`gui.a`）；Windows 的 `gui.lib`（D3D12）由同一脚本产出，但仍是
+平台与完整说明：[doc/zh-CN/gui.md](./doc/zh-CN/gui.md) 是引擎总览（架构与
+路线图）；按功能拆分的文档位于 [doc/zh-CN/gui/](./doc/zh-CN/gui) —— API、
+DOM/CSS、布局、绘制、媒体、输入、动画、运行时、构建与已知问题。Linux 与 macOS 已在 CI 中构建
+并实际运行，其发布包内含引擎（`gui.a`）；Windows 的 `gui.lib`（D3D12）由同一脚本产出，但仍是
 暂定状态，尚未随发布包提供。
 
 ## 增量编译

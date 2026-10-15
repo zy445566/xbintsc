@@ -6,7 +6,7 @@
  * The example's own `main.ts` is compiled here (with the game document next to
  * it) and run briefly. The game is interactive and never closes its own window,
  * so the engine's auto-close guard ends the run — and that shutdown path has an
- * intermittent native crash (see `doc/gui.md`, "Known issues"), so the
+ * intermittent native crash (see `doc/gui/known-issues.md`), so the
  * deterministic assertions live in `gui-example-browser.test.ts` (which runs the
  * very same inline script against a stub host) while this test covers the
  * native side: it compiles, it links against the gui archive, and it runs.
@@ -27,7 +27,7 @@ import { guiAvailable } from "./gui-helpers.js";
 const exampleDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "examples", "gui", "pelican-bike");
 
 /** `0xC0000005`: the known intermittent access violation in the gui engine's
- * auto-close teardown (documented in `doc/gui.md`). Windows reports a crash as
+ * auto-close teardown (documented in `doc/gui/known-issues.md`). Windows reports a crash as
  * this NTSTATUS exit code; on POSIX the same fault terminates the process with
  * a signal, so `spawnSync` reports `status: null` plus a `signal` name. */
 const ACCESS_VIOLATION = 3221225477;

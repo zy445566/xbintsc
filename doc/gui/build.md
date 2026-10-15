@@ -1,0 +1,76 @@
+# Packaging and build
+
+> Part of the [GUI extension](../gui.md); the engine overview, locked
+> decisions and roadmap live there.
+
+- Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`
+  (gitignored; fetched on demand).
+- `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
+  default `release-3.2.10`), builds a static SDL3, fetches and builds static
+  FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), compiles the
+  engine and merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
+  `gui.lib` with the MSVC ABI on Windows), same convention as `core.a`,
+  statically bundling all three. It also fetches, configures and builds a
+  minimal static **FFmpeg** (`FFMPEG_VERSION`, default `7.1`) with only the
+  demuxers/parsers/decoders the media elements need and merges those archives
+  into `gui.a`, defining `XT_GUI_WITH_FFMPEG` for the engine. The merge uses
+  `libtool` on macOS and `ar -M` (GNU/LLVM) elsewhere; CMake archives are
+  discovered under the build root or `Release/` for either generator style.
+- `src/extensions/gui/index.ts` exposes the archive through `nativeObjects()`
+  (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the OS frameworks
+  through `linkerFlags()`.
+- CI builds `gui.a` before assembling the release archive so it ships inside
+  `runtime/lib/<slug>/` (the release tarball copies the whole `runtime/` tree).
+  The archive is built and the example is run on Linux (under Xvfb, with the
+  lavapipe software Vulkan driver) and macOS; Windows is provisional.
+- The existing cache fingerprint already hashes `nativeObjects()` contents, so
+  rebuilding `gui.a` invalidates cached binaries automatically.
+
+## Running the example
+
+```sh
+npm run runtime      # rebuild core.a after a runtime change
+npm run gui          # build runtime/lib/<os>-<arch>/gui.a (fetches SDL3 once)
+xbintsc run examples/gui/hello.ts --ext gui
+```
+
+Two examples live here: `hello.ts` (HTML/CSS + a reactive counter) and
+[`pelican-bike/`](../../examples/gui/pelican-bike), a playable 2D game that uses
+positioned layers, CSS sprites, `requestAnimationFrame` and keyboard input — see
+its README for controls and the geometry report it prints.
+
+`media.ts` (with `media.html`) demonstrates `<video>`/`<audio>`: it overlays a
+CSS progress bar on the video and drives playback with `play()` / `pause()` /
+`currentTime` / `volume`. Media `src` paths resolve relative to the process
+working directory, so run it from the repository root:
+`xbintsc run examples/gui/media.ts --ext gui`.
+
+Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
+which the e2e test (`tests/e2e/gui-*.test.ts`) uses to run headlessly.
+
+Those suites are skipped on Windows by default (the archive is built there but
+the run is not validated in CI). With a `gui.lib` and a working GPU, opt in with
+`xbintsc_GUI_TESTS=1`:
+
+```bat
+set xbintsc_GUI_TESTS=1
+npx vitest run tests/e2e/gui-layout.test.ts tests/e2e/gui-example.test.ts
+```
+
+On a headless Linux box, install the SDL3 build headers and run under Xvfb with a
+software Vulkan driver:
+
+```sh
+sudo apt-get install -y clang cmake libx11-dev libxext-dev libxrandr-dev \
+  libxcursor-dev libxi-dev libxinerama-dev libxfixes-dev libxkbcommon-dev \
+  libwayland-dev wayland-protocols libdecor-0-dev libasound2-dev libpulse-dev \
+  libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
+  libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
+npm run runtime && npm run gui
+xvfb-run -a --server-args="-screen 0 1280x720x24" \
+  npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
+```
+
+Those are the packages the CI `compile-examples` job installs. The X11 backend is
+used by default; Wayland is enabled too but not yet exercised.
+

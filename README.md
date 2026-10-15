@@ -277,10 +277,11 @@ Two examples live in the repository: [`examples/gui/hello.ts`](./examples/gui/he
 [`examples/gui/pelican-bike`](./examples/gui/pelican-bike), a playable 2D game
 whose document also opens unchanged in a browser.
 
-Platforms and full details: [doc/gui.md](./doc/gui.md) covers the engine
-architecture, the implemented HTML/CSS subset, packaging and the platform notes.
-Linux and macOS are built and exercised in CI and their release
-archives ship the engine (`gui.a`); the Windows archive (`gui.lib`, D3D12) is
+Platforms and full details: [doc/gui.md](./doc/gui.md) is the engine overview
+(architecture and roadmap); the per-function documents live under
+[doc/gui/](./doc/gui) — API, DOM/CSS, layout, rendering, media, input, animation,
+runtime, build and known issues. Linux and macOS are built and exercised in CI
+and their release archives ship the engine (`gui.a`); the Windows archive (`gui.lib`, D3D12) is
 produced by the same script but is still provisional and is not shipped in the
 release yet.
 

@@ -326,7 +326,8 @@ Event 的 `target` 是句柄，其描述符（`toString`）与同一 `div#id.cla
 
 ## 需要更新的文档
 
-- `gui.md` —— 非目标（“执行页面 `<script>`” → “执行*运行时*页面脚本；
-  编译期脚本为 AOT 编译”）、锁定决策 #1、面向 TS 的 API、里程碑、进度日志。
+- `gui.md`（总览）与 `gui/dom.md` —— 非目标（“执行页面 `<script>`” → “执行
+  *运行时*页面脚本；编译期脚本为 AOT 编译”）、锁定决策 #1、AOT 脚本章节、
+  里程碑与进度日志；面向 TS 的 API 见 `gui/api.md`。
 - `implemented.md` / `unimplemented.md` —— 把新的 DOM/脚本能力相应迁移。
 - `README.md` —— 提及 DOM API + AOT 脚本。

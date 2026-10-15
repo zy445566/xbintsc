@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M12** —— 功能（M1–M11）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制，CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见"节点生命周期"与"内存与 GC"。本文档记录了一个跨平台 GUI 扩展的锁定决策、架构、里程碑计划与当前进度；该扩展使用自有的 GPU 加速引擎渲染 HTML/CSS UI。
+状态：**M12** —— 功能（M1–M11）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见"节点生命周期"与"内存与 GC"。本文档记录了一个跨平台 GUI 扩展的锁定决策、架构、里程碑计划与当前进度；该扩展使用自有的 GPU 加速引擎渲染 HTML/CSS UI。
 
 ## 目标
 
@@ -49,7 +49,7 @@
                 ▼
         窗口 + 输入（SDL3）── 多窗口
         文本（HarfBuzz + FreeType）── 字形图集 / SDF
-        图像（stb_image）
+        图像（stb_image；SVG 经 NanoSVG）
 ```
 
 引擎从不与编译器通信。编译器只看到一个带有 `nativeObjects()`、`linkerFlags()` 和 `modules()` 的 `Extension`。
@@ -62,7 +62,7 @@
 | GPU | **SDL_GPU**（SDL3） | 一条覆盖 Metal / Vulkan / D3D12 的渲染路径；避免三套后端 |
 | 文本整形 | **HarfBuzz** | 正确处理复杂文种的整形 |
 | 字形光栅化 | **FreeType** | 字形轮廓 → GPU 图集 / SDF |
-| 图像 | **stb_image**（vendored 头文件） | 起步阶段用单头文件 |
+| 图像 | 位图用 **stb_image**（vendored 头文件），SVG 用 **NanoSVG**（vendored 头文件） | 起步阶段用单头文件；SVG 文件按需光栅化 |
 
 固定版本：SDL3 `release-3.2.10`、FreeType `2.13.3`、HarfBuzz `10.1.0`
 （可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` 覆盖）。
@@ -374,16 +374,25 @@ M4 仍需完成：渐变。
 `runtime/ext_gui/image.{h,cpp}` 封装 vendored **stb_image** 头文件，把
 PNG/JPEG/BMP/GIF/TGA 解码为 RGBA8，并带有解码缓存与仅头文件的尺寸缓存
 （`stbi_info`）。路径接受 `file://` 前缀与百分号编码。
+`runtime/ext_gui/svg.{h,cpp}` 在其上增加 SVG：它封装 vendored **NanoSVG**
+库（解析 + 抗锯齿扫描线光栅化），按扩展名或内容识别 SVG，并产出与既有管线
+相同的 RGBA8 `Image`。`stb_image` 无法解码 SVG，这正是
+`<img src="logo.svg">` 能工作的原因。
 
 - `<img>` 是一个替换元素（`display: inline-block`）：设置了 CSS 尺寸时布局
   采用该尺寸，否则采用固有像素尺寸；当只约束一个轴时保持宽高比。构建盒树时
-  从文件头（无需完整解码）读取固有尺寸。
-- 绘制时为每个 `<img>` 生成一个 `PaintImage`；渲染器把每个唯一 `src` 解码/
-  上传到 RGBA 纹理（按路径缓存）并绘制带纹理的四边形，把共享同一纹理的连续
-  四边形批处理。
+  从文件头（无需完整解码）读取固有尺寸；对 SVG 则来自解析后的 `width`/`height`
+  或 `viewBox`（两者都缺失时回退到 300x150）。
+- 绘制时为每个 `<img>` 生成一个 `PaintImage`；渲染器把每个唯一 `src` 上传到
+  RGBA 纹理并绘制带纹理的四边形，把共享同一纹理的连续四边形批处理。
+  **位图**按固有分辨率解码并按路径缓存；**矢量图**（SVG）按设备像素下的绘制
+  尺寸（逻辑尺寸 × 窗口像素密度）光栅化并保持 viewBox 宽高比，再按该尺寸缓存，
+  因此缩放或 HiDPI 得到的是清晰渲染而非放大的位图。
+- 解析结果按路径缓存；解析与光栅化器状态在 `xt_svg_shutdown`
+  （`xt_image_shutdown`）中释放。
 
-图像仍需完成：CSS `background-image: url(...)`、`data:` URI、`object-fit`
-与九宫格边框。
+图像仍需完成：CSS `background-image: url(...)`、`data:` URI、`object-fit`、
+九宫格边框与内联 `<svg>` 元素（仅支持 SVG *文件*，参见“待决问题”）。
 
 ### 已实现的 transition（M6b）
 
@@ -563,8 +572,9 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
      （`css.*`、`style.*`、`document.*`、`gui.cpp`），以及
      `hitTest`/`sendEvent` 测试钩子。
 6. **M6 — 图像，然后是 CSS transition/动画**
-   - **M6a — 图像** ✅ stb_image 解码、`<img>` 替换元素布局、按文件 GPU 纹理
-     与带纹理四边形（`image.*`、`paint.*`、`renderer.*`）。
+   - **M6a — 图像** ✅ stb_image 解码（位图）与 NanoSVG 光栅化（SVG 文件，按
+     绘制像素尺寸）、`<img>` 替换元素布局、按文件 GPU 纹理与带纹理四边形
+     （`image.*`、`svg.*`、`paint.*`、`renderer.*`）。
    - **M6b — transition/动画** ✅ `transition` 简写 + 长写、对
      `background-color`/`color`/`border-color`/`border-radius` 的动画、重定向
      与 `win.advance(ms)`。`@keyframes` 仍待完成。
@@ -644,7 +654,8 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
   `hitTest`/`sendEvent` 测试钩子、e2e 覆盖。
 - **M6a** ✅ 图像解码（`image.*`、vendored stb_image）、布局中的 `<img>`
   固有尺寸、显示列表中的 `PaintImage`、按文件 RGBA 纹理与 `renderer.*` 中的
-  图像管线、e2e 覆盖。
+  图像管线、e2e 覆盖。SVG 文件同样可解码（`svg.*`、vendored NanoSVG）：矢量源
+  按绘制设备像素尺寸光栅化并按该尺寸缓存，因此缩放与 HiDPI 保持清晰。
 - **M6b** ✅ CSS transition（在 `style.*` 中解析、在 `document.*` 中维护动画
   时钟与 transition 状态、`advance`/`advance(ms)` 钩子、e2e 覆盖）。
 - **M7** ✅ 在 CI 中于 Linux 与 macOS 上构建 `gui.a`（必需），并在 Linux 的
@@ -708,6 +719,10 @@ GUI 程序的大部分内存不在运行时堆里：DOM 树、分离节点池、
 - **什么仍会累积。** 用 `createElement` 创建却从未插入的节点会留在池中：收集器
   没有弱引用，引擎无法知道脚本已丢弃其句柄。脚本移除后又不再引用的节点同理。
   两者都以*存活句柄*数量为界，但每帧创建元素却不插入的程序会让池随帧数增长。
+- **矢量图像按像素尺寸缓存。** 位图 `<img>` 只解码一次并按路径缓存，而 SVG 会按
+  绘制设备尺寸光栅化，因此解码像素缓存与 GPU 纹理缓存会为每个不同尺寸保留一项。
+  对静态布局（常见情况）是常量，对少量尺寸也很小；但每帧把同一 SVG 重排到新整数
+  尺寸的程序会不断累积条目——此时宜改为动画位图，或让矢量图保持固定尺寸。
 
 `heapBytes` 背后的收集器是 `runtime/xt_alloc.c` 中的非移动标记-清扫。它的触发
 阈值跟随存活集：每次回收后阈值变为存活堆的 2 倍（下限 1 MiB），因此存活集小
@@ -734,10 +749,13 @@ GUI 程序的大部分内存不在运行时堆里：DOM 树、分离节点池、
   `tests/e2e/gui-example-browser.test.ts` 中。
 - **`display: none -> flex` 的重排。** 通过类名切换让隐藏元素显示在 flex 容器上时，也曾观察
   到同样的崩溃；`examples/gui/pelican-bike` 改用 `opacity` 显示游戏结束遮罩。
-- **SVG：** 引擎不支持也不计划支持 SVG 元素。HTML 解析器只认识元素与属性，布局只认识盒子，
-  绘制只认识矩形/文本/图像；`<svg>` 子树需要另一套几何与绘制路径。SVG *文件* 也只能走图像
-  加载器（`<img src="logo.svg">`），而这需要 SVG 光栅化器（`stb_image` 不解码 SVG）。因此
-  矢量美术要么以位图（PNG）形式提供，要么像 `examples/gui/pelican-bike` 那样用盒子绘制。
+- **SVG：** 支持 SVG *文件*，经图像加载器处理（`<img src="logo.svg">`）：
+  `runtime/ext_gui/svg.cpp` 封装 vendored **NanoSVG** 解析/光栅化器，
+  `image.{h,cpp}` 把 SVG 视为矢量图像并按绘制像素尺寸光栅化。文档中的内联
+  `<svg>` **子树**仍不支持：HTML 解析器只认识元素与属性，布局只认识盒子，
+  绘制只认识矩形/文本/图像；`<svg>` 子树需要另一套几何与绘制路径。因此矢量
+  美术要么以 SVG/PNG 文件形式提供，要么像 `examples/gui/pelican-bike` 那样用
+  盒子绘制。
 
 ## 待决问题
 

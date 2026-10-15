@@ -13,7 +13,10 @@
 #include "stb_image.h"
 
 #include <cctype>
+#include <string>
 #include <unordered_map>
+
+#include "svg.h"
 
 namespace xtgui {
 namespace {
@@ -63,31 +66,44 @@ std::string normalizePath(const std::string &input) {
 
 }  // namespace
 
-const Image *xt_image_load(const std::string &raw_path) {
+const Image *xt_image_load(const std::string &raw_path, int target_width, int target_height) {
   std::string path = normalizePath(raw_path);
+  bool svg = xt_svg_is_svg(path);
+  /* Raster formats always decode at their intrinsic resolution, so their cache
+   * key is the path. SVG is rasterised at the drawn pixel size, which is part
+   * of its identity. */
+  std::string key = path;
+  if (svg && (target_width > 0 || target_height > 0)) {
+    key += "#" + std::to_string(target_width) + "x" + std::to_string(target_height);
+  }
   auto &cache = imageCache();
-  auto found = cache.find(path);
+  auto found = cache.find(key);
   if (found != cache.end()) {
     return found->second.width > 0 ? &found->second : nullptr;
   }
 
   Image image;
-  int width = 0;
-  int height = 0;
-  int channels = 0;
-  unsigned char *data = stbi_load(path.c_str(), &width, &height, &channels, 4);
-  if (data != nullptr) {
-    image.width = width;
-    image.height = height;
-    image.pixels.assign(data, data + (size_t)width * (size_t)height * 4);
-    stbi_image_free(data);
+  if (svg) {
+    xt_svg_render(path, target_width, target_height, &image);
+  } else {
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    unsigned char *data = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (data != nullptr) {
+      image.width = width;
+      image.height = height;
+      image.pixels.assign(data, data + (size_t)width * (size_t)height * 4);
+      stbi_image_free(data);
+    }
   }
-  auto inserted = cache.emplace(path, std::move(image));
+  auto inserted = cache.emplace(key, std::move(image));
   return inserted.first->second.width > 0 ? &inserted.first->second : nullptr;
 }
 
 bool xt_image_size(const std::string &raw_path, int *width, int *height) {
   std::string path = normalizePath(raw_path);
+  if (xt_svg_is_svg(path)) return xt_svg_size(path, width, height);
   auto &cache = sizeCache();
   auto found = cache.find(path);
   if (found == cache.end()) {
@@ -117,9 +133,12 @@ bool xt_image_decode(const unsigned char *data, size_t size, Image *out) {
   return true;
 }
 
+bool xt_image_is_vector(const std::string &path) { return xt_svg_is_svg(normalizePath(path)); }
+
 void xt_image_shutdown() {
   imageCache().clear();
   sizeCache().clear();
+  xt_svg_shutdown();
 }
 
 }  // namespace xtgui

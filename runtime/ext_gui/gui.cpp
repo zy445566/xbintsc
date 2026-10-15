@@ -300,6 +300,9 @@ extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
     SDL_Quit();
     g_sdl_initialized = 0;
   }
+  /* Drop the decoded-image caches (including parsed SVG documents) now that
+   * the GPU textures that referenced them are gone. */
+  xtgui::xt_image_shutdown();
   g_window_count = 0;
   return XT_UNDEFINED;
 }

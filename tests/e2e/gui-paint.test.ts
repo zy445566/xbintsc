@@ -49,6 +49,53 @@ describe.skipIf(!guiAvailable)("gui extension — paint", () => {
     expect(stdout).toContain(`image x=0.0 y=40.0 w=4.0 h=4.0 src=${src}`);
   });
 
+  it("sizes and paints an SVG (intrinsic and explicit)", () => {
+    // An SVG is a vector source: the image loader detects it and rasterises it
+    // at the drawn size instead of failing like `stb_image` alone would.
+    const src = harness.writeAsset(
+      "logo.svg",
+      `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="6" viewBox="0 0 8 6">` +
+        `<rect width="8" height="6" fill="#ff0000"/>` +
+        `<circle cx="4" cy="3" r="2" fill="#0000ff"/></svg>`,
+    );
+    const { stdout, stderr } = harness.compileAndRun(
+      "svg",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #scaled { width: 64px; height: 48px; }
+      </style></head><body>
+        <img id="natural" src="${src}">
+        <img id="scaled" src="${src}">
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "svg", width: 400, height: 300 });
+      win.on("ready", () => {
+        const natural = win.getBoundingClientRect("#natural");
+        console.log("natural=" + natural.width + "x" + natural.height);
+        const scaled = win.getBoundingClientRect("#scaled");
+        console.log("scaled=" + scaled.width + "x" + scaled.height);
+        console.log(win.paintList().trim());
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    // Intrinsic size comes from the SVG's width/height; the explicit CSS size
+    // wins for the second image.
+    expect(stdout).toContain("natural=8x6");
+    expect(stdout).toContain("scaled=64x48");
+    expect(stdout).toContain(`image x=0.0 y=0.0 w=8.0 h=6.0 src=${src}`);
+    expect(stdout).toContain(`image x=0.0 y=6.0 w=64.0 h=48.0 src=${src}`);
+    // The SVG must actually rasterise, not just lay out.
+    expect(stderr).not.toContain("could not decode image");
+  });
+
   it("builds a display list of backgrounds and borders", () => {
     const { value, stdout } = harness.compileAndRun(
       "paint",

@@ -104,7 +104,12 @@ SDL_GPUSampler *createSampler(SDL_GPUDevice *device);
 /* -- images --------------------------------------------------------------- */
 
 SDL_GPUGraphicsPipeline *createImagePipeline(SDL_GPUDevice *device, SDL_Window *reference);
-SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src);
+/** Decode `src` (cached) and upload it as an RGBA texture. `pixel_width` /
+ * `pixel_height` are the drawn size in device pixels; vector sources (SVG) are
+ * rasterised at that size, raster sources ignore it. The texture cache is keyed
+ * by the resulting pixel size, so an SVG drawn at two sizes gets two textures. */
+SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src, int pixel_width,
+                                   int pixel_height);
 
 }  // namespace renderer_detail
 }  // namespace xtgui

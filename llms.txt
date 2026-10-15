@@ -3,7 +3,10 @@
 > xbintsc compiles a subset of TypeScript directly to native binaries: it parses
 > TypeScript itself, lowers the program to LLVM IR text, and drives clang to
 > produce a standalone executable linked against a small C runtime. There is no
-> Node.js, V8 or TypeScript compiler inside the produced binary. It runs on
+> Node.js, V8 or TypeScript compiler inside the produced binary. An optional
+> `gui` extension links a self-hosted, GPU-accelerated HTML/CSS renderer, so the
+> same TypeScript can also build a native desktop application whose UI is
+> HTML/CSS (no system WebView, no runtime JS engine). It runs on
 > macOS, Linux and Windows (x64 and arm64), compiles itself, and ships prebuilt
 > archives per platform. A clang 16+ toolchain is required to link binaries;
 > `xbintsc emit` (LLVM IR only) needs nothing.

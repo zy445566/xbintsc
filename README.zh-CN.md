@@ -11,7 +11,7 @@
 1. **增量编译** —— 构建以内容寻址，没有变化时直接跳过。
 2. **模块划分清晰** —— 词法、语法、绑定、代码生成、驱动、扩展各自独立目录，并有各自的测试。
 3. **测试充分** —— 每个模块单元测试，外加真正编译并运行二进制的端到端测试。
-4. **可插拔扩展** —— Node `fs`、Bun API 等是可选的编译模块，而非核心代码。
+4. **可插拔扩展** —— Node `fs`、`gui` HTML/CSS 渲染器 等是可选的编译模块，而非核心代码。
 5. **自举（self-hosting）** —— 编译器可编译自身：`src/cli/main.ts` 能构建为原生 `xbintsc` 二进制，其产出的 LLVM IR 跨代达到不动点。CI 会为各平台构建这些二进制，Release 则附上这些产物。
 6. **多平台** —— 在 x64 与 arm64（Apple Silicon / AArch64）上支持 macOS、Linux 与 Windows，并由 GitHub Actions 在各自架构的原生 runner 上验证。
 
@@ -183,6 +183,53 @@ const { ir } = compileString("console.log(1 + 1);");
 const result = build("program.ts", { emit: "exe", outDir: "build" });
 ```
 
+## GUI 应用（HTML/CSS）
+
+xbintsc 也能构建 **界面用 HTML/CSS 编写的原生桌面应用**。可选的 `gui` 扩展会把一个
+自研的、GPU 加速的 HTML/CSS 渲染器（自有 HTML 解析器、CSS 层叠、布局与 SDL_GPU
+合成器，不使用系统 WebView，也不内嵌浏览器）链接进可执行文件，并作为可 `import`
+的模块暴露出来：
+
+```ts
+// app.ts
+import { createWindow, run } from "gui";
+// .html 资产加载器会把文档里的脚本提前编译（见下文）
+import page from "./page.html";
+
+const win = createWindow({ title: "Demo", width: 900, height: 600 });
+win.on("click", (e: any) => console.log(e.x, e.y, e.target));
+win.loadHTML(page);
+run();                          // 主循环，直到所有窗口关闭
+```
+
+```bash
+# 源码检出：先构建一次引擎归档（会获取并构建 SDL3、FreeType 与 HarfBuzz），
+# 然后运行仓库自带示例
+npm run gui
+npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
+
+# 预编译的 Linux/macOS 发布包已经内含该引擎：
+xbintsc run app.ts --ext gui
+```
+
+文档里的 `<script>` 脚本会被 xbintsc **提前编译（AOT）**进二进制——内联脚本
+（裸 `<script>` 本身就按 TypeScript 处理）与外部 `<script src="./app.ts">` 文件
+都是如此——因此运行时依然没有 JavaScript 引擎。元素句柄、DOM 变更、事件与脚本接口
+见 [doc/zh-CN/gui-scripts.md](./doc/zh-CN/gui-scripts.md)。
+
+在项目里把扩展写进 `xbintsc.config.json`（`"extensions": ["gui"]`）即可省去
+`--ext gui`，与 `node` 完全一样。设置 `XT_GUI_AUTOCLOSE_MS=<ms>` 可在指定毫秒后
+自动关闭所有窗口，端到端测试正是用它无头运行示例。
+
+仓库里有两个示例：[`examples/gui/hello.ts`](./examples/gui/hello.ts)（HTML/CSS 窗口
+加一个响应式计数器）与 [`examples/gui/pelican-bike`](./examples/gui/pelican-bike)
+——一个可玩的 2D 游戏，它的同一份文档在浏览器里也能直接打开。
+
+平台与完整说明：[doc/zh-CN/gui.md](./doc/zh-CN/gui.md) 介绍引擎架构、已实现的
+HTML/CSS 子集、打包方式与各平台注意事项。Linux 与 macOS 已在 CI 中构建并实际运行，
+其发布包内含引擎（`gui.a`）；Windows 的 `gui.lib`（D3D12）由同一脚本产出，但仍是
+暂定状态，尚未随发布包提供。
+
 ## 增量编译
 
 驱动以入口源码哈希、编译器版本、编译选项、平台与启用的扩展集合作为每次构建的
@@ -191,7 +238,9 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 
 ## 扩展
 
-扩展是一个普通对象（`src/extensions/registry.ts`）。`node` 扩展本身按每个 Node
+扩展是一个普通对象（`src/extensions/registry.ts`）。内置扩展有两个：`gui`，
+它贡献的是一个 GPU HTML/CSS 渲染器（见下文「GUI 应用（HTML/CSS）」一节与
+[doc/zh-CN/gui.md](./doc/zh-CN/gui.md)）；以及 `node`，它本身按每个 Node
 模块拆分目录，每个模块把它对外导出的绑定与实现它们的 C 源配对：
 
 ```

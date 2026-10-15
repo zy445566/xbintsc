@@ -56,9 +56,11 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
 void xt_gui_text_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGuiGeometry *geometry,
                       float viewport_width, float viewport_height);
 /** Decode/upload `list.images` and build the image quad geometry (one batch per
- * texture). Textures are cached by source path. */
+ * texture). Textures are cached by source path and pixel size. `scale` is the
+ * device pixel density (1.0 = logical pixels) used to pick the rasterisation
+ * size of a vector source (SVG); raster sources decode at their intrinsic size. */
 void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
-                         const xtgui::DisplayList &list);
+                         const xtgui::DisplayList &list, float scale);
 /** Draw the image geometry (binds each batch's texture) inside a render pass. */
 void xt_gui_image_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass, XtGuiGeometry *geometry,
                        float viewport_width, float viewport_height);

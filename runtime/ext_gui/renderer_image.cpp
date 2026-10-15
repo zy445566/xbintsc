@@ -96,15 +96,22 @@ SDL_GPUGraphicsPipeline *createImagePipeline(SDL_GPUDevice *device, SDL_Window *
   return pipeline;
 }
 
-/** Decode `src` (cached) and upload it as an RGBA texture (cached by path). */
-SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src) {
-  auto found = g_image_textures.find(src);
+/** Decode `src` (cached) and upload it as an RGBA texture. Vector sources are
+ * rasterised at the drawn pixel size and cached by that size; bitmaps decode at
+ * their intrinsic size and are cached by path. */
+SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src, int pixel_width,
+                                   int pixel_height) {
+  bool vector_source = xtgui::xt_image_is_vector(src);
+  std::string key =
+      vector_source ? src + "@" + std::to_string(pixel_width) + "x" + std::to_string(pixel_height)
+                    : src;
+  auto found = g_image_textures.find(key);
   if (found != g_image_textures.end()) return found->second;
 
-  const xtgui::Image *image = xtgui::xt_image_load(src);
+  const xtgui::Image *image = xtgui::xt_image_load(src, pixel_width, pixel_height);
   if (image == nullptr || image->width <= 0 || image->height <= 0) {
     fprintf(stderr, "xt_gui: could not decode image '%s'\n", src.c_str());
-    g_image_textures.emplace(src, nullptr);
+    g_image_textures.emplace(key, nullptr);
     return nullptr;
   }
 
@@ -121,7 +128,7 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
   SDL_GPUTexture *texture = SDL_CreateGPUTexture(device, &info);
   if (texture == nullptr) {
     fprintf(stderr, "xt_gui: image texture creation failed: %s\n", SDL_GetError());
-    g_image_textures.emplace(src, nullptr);
+    g_image_textures.emplace(key, nullptr);
     return nullptr;
   }
 
@@ -133,7 +140,7 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
   SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
   if (transfer == nullptr) {
     SDL_ReleaseGPUTexture(device, texture);
-    g_image_textures.emplace(src, nullptr);
+    g_image_textures.emplace(key, nullptr);
     return nullptr;
   }
   void *mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
@@ -144,7 +151,7 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
   if (cmd == nullptr) {
     SDL_ReleaseGPUTransferBuffer(device, transfer);
     SDL_ReleaseGPUTexture(device, texture);
-    g_image_textures.emplace(src, nullptr);
+    g_image_textures.emplace(key, nullptr);
     return nullptr;
   }
   SDL_GPUTextureTransferInfo source;
@@ -170,7 +177,7 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
   SDL_SubmitGPUCommandBuffer(cmd);
   SDL_ReleaseGPUTransferBuffer(device, transfer);
 
-  g_image_textures.emplace(src, texture);
+  g_image_textures.emplace(key, texture);
   return texture;
 }
 
@@ -178,13 +185,14 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
 }  // namespace xtgui
 
 void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
-                         const xtgui::DisplayList &list) {
+                         const xtgui::DisplayList &list, float scale) {
   using namespace xtgui::renderer_detail;
   g_image_batches.clear();
   if (g_image_pipeline == nullptr) {
     geometry->vertex_count = 0;
     return;
   }
+  if (scale <= 0.0f) scale = 1.0f;
   std::vector<TextVertex> verts;
   verts.reserve(list.images.size() * 6);
   xtgui::Color white{1.0f, 1.0f, 1.0f, 1.0f};
@@ -195,7 +203,13 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   full.v1 = 1.0f;
   for (const xtgui::PaintImage &image : list.images) {
     if (image.width <= 0.0f || image.height <= 0.0f) continue;
-    SDL_GPUTexture *texture = ensureImageTexture(device, image.src);
+    /* Draw-time device pixels: an SVG is rasterised at this size so it stays
+     * crisp on HiDPI and when scaled. */
+    int pixel_width = (int)(image.width * scale + 0.5f);
+    int pixel_height = (int)(image.height * scale + 0.5f);
+    if (pixel_width < 1) pixel_width = 1;
+    if (pixel_height < 1) pixel_height = 1;
+    SDL_GPUTexture *texture = ensureImageTexture(device, image.src, pixel_width, pixel_height);
     if (texture == nullptr) continue;
     uint32_t first = (uint32_t)verts.size();
     pushGlyph(verts, image.x, image.y, image.width, image.height, full, white);

@@ -79,6 +79,9 @@ export interface GuiHarness {
    * the engine decodes it again (`xt_image_load`).
    */
   imageSrc(absolutePath: string): string;
+  /** Write `contents` into the work directory and return an embeddable source
+   * for it (e.g. an SVG fixture for the image tests). */
+  writeAsset(name: string, contents: string): string;
   setup(): void;
   cleanup(): void;
   /** Compile a program and run it with the auto-close hook, returning stdout. */
@@ -143,6 +146,11 @@ export function createGuiHarness(): GuiHarness {
       return logoPath;
     },
     imageSrc: toImageSrc,
+    writeAsset(name: string, contents: string): string {
+      const path = join(workdir, name);
+      writeFileSync(path, contents);
+      return toImageSrc(path);
+    },
     setup() {
       workdir = mkdtempSync(join(tmpdir(), "xbintsc-gui-"));
       logoPath = join(workdir, "logo.png");

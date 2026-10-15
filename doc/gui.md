@@ -7,7 +7,9 @@ in place, and the engine *paints*: it builds a display list of rectangles, image
 and shaped text runs and renders them through SDL_GPU. Input events are hit
 tested and delivered to native TS handlers, `:hover`/`:focus` are matched
 dynamically, `<img>` is sized from its intrinsic dimensions and drawn from a
-texture, and CSS transitions animate paint properties. **M8** adds an interactive
+texture — PNG/JPEG/… bitmaps and SVG files alike, the latter rasterised at the
+drawn size so vector art stays crisp — and CSS transitions animate paint
+properties. **M8** adds an interactive
 DOM: element handles with stable identity, mutation (`appendChild`, `textContent`,
 `classList`, `style`, …) and element-level events with capture/bubbling.
 **M9** compiles `<script>` bodies ahead of time (inline and `<script src>`) — see
@@ -74,7 +76,7 @@ HTML/CSS UI with its own GPU-accelerated engine.
                 ▼
         windowing + input (SDL3) ── multiple windows
         text (HarfBuzz + FreeType) ── glyph atlas / SDF
-        images (stb_image)
+        images (stb_image; SVG via NanoSVG)
 ```
 
 The engine never talks to the compiler. The compiler only sees an `Extension`
@@ -88,7 +90,7 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | GPU | **SDL_GPU** (SDL3) | one render path over Metal / Vulkan / D3D12; avoids three backends |
 | Text shaping | **HarfBuzz** | correct complex-script shaping |
 | Glyph raster | **FreeType** | glyph outlines → GPU atlas / SDF |
-| Images | **stb_image** (vendored header) | single header to start |
+| Images | **stb_image** (vendored header) for bitmaps, **NanoSVG** (vendored headers) for SVG | single headers to start; SVG files rasterise on demand |
 
 Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`
 (overridable with `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION`).
@@ -436,17 +438,31 @@ Still to do for full input: text selection, drag, IME and clipboard.
 `runtime/ext_gui/image.{h,cpp}` wraps the vendored **stb_image** header
 decoding PNG/JPEG/BMP/GIF/TGA to RGBA8, with a decode cache and a header-only
 size cache (`stbi_info`). Paths accept a `file://` prefix and percent-encoding.
+`runtime/ext_gui/svg.{h,cpp}` adds SVG on top: it wraps the vendored **NanoSVG**
+library (parse + anti-aliased scanline rasteriser), detects an SVG by extension
+or by its contents, and produces the same RGBA8 `Image` the pipeline already
+consumes. `stb_image` cannot decode SVG, so this is what makes
+`<img src="logo.svg">` work.
 
 - `<img>` is a replaced element (`display: inline-block`): layout gives it the
   CSS size when set, otherwise the intrinsic pixel size, and preserves the
   aspect ratio when only one axis is constrained. The intrinsic size is read
-  from the file header (no full decode) while building the box tree.
-- Paint emits one `PaintImage` per `<img>`; the renderer decodes/uploads each
-  unique `src` to an RGBA texture (cached by path) and draws textured quads,
-  batching consecutive quads that share a texture.
+  from the file header (no full decode) while building the box tree, and for an
+  SVG it comes from the parsed `width`/`height` or the `viewBox` (falling back
+  to 300x150 when neither is present).
+- Paint emits one `PaintImage` per `<img>`; the renderer uploads each unique
+  `src` to an RGBA texture and draws textured quads, batching consecutive quads
+  that share a texture. A **bitmap** decodes at its intrinsic resolution and is
+  cached by path; a **vector** (SVG) is rasterised for the drawn size in device
+  pixels (logical size × the window's pixel density), preserving the viewBox
+  aspect ratio, and cached by that size, so scaling or a HiDPI display produces
+  a crisp render instead of a magnified bitmap.
+- The parse is cached per path; the parse and rasteriser state are released in
+  `xt_svg_shutdown` (`xt_image_shutdown`).
 
 Still to do for images: CSS `background-image: url(...)`, `data:` URIs,
-`object-fit` and 9-slice borders.
+`object-fit`, 9-slice borders and inline `<svg>` elements (only SVG *files* are
+supported; see "Open questions").
 
 ### Implemented transitions (M6b)
 
@@ -643,8 +659,10 @@ used by default; Wayland is enabled too but not yet exercised.
      restyle (`css.*`, `style.*`, `document.*`, `gui.cpp`), plus the
      `hitTest`/`sendEvent` test hooks.
 6. **M6 — images, then CSS transitions/animations**
-   - **M6a — images** ✅ stb_image decode, `<img>` replaced-element layout,
-     per-file GPU textures and textured quads (`image.*`, `paint.*`, `renderer.*`).
+   - **M6a — images** ✅ stb_image decode (bitmaps) and NanoSVG rasterisation
+     (SVG files, at the drawn pixel size), `<img>` replaced-element layout,
+     per-file GPU textures and textured quads (`image.*`, `svg.*`, `paint.*`,
+     `renderer.*`).
    - **M6b — transitions/animations** ✅ `transition` shorthand + longhands,
      animated `background-color`/`color`/`border-color`/`border-radius`, retargeting
      and `win.advance(ms)`. `@keyframes` remain.
@@ -732,7 +750,9 @@ used by default; Wayland is enabled too but not yet exercised.
   `hitTest`/`sendEvent` test hooks, e2e coverage.
 - **M6a** ✅ image decoding (`image.*`, vendored stb_image), `<img>` intrinsic
   sizing in layout, `PaintImage` in the display list, per-file RGBA textures and
-  an image pipeline in `renderer.*`, e2e coverage.
+  an image pipeline in `renderer.*`, e2e coverage. SVG files are decoded too
+  (`svg.*`, vendored NanoSVG): a vector source is rasterised at the drawn device
+  pixel size and cached by that size, so scaling and HiDPI stay crisp.
 - **M6b** ✅ CSS transitions (parsing in `style.*`, an animation clock and
   transition state in `document.*`, `advance`/`advance(ms)` hooks, e2e coverage).
 - **M7** ✅ builds `gui.a` in CI on Linux and macOS (required) and runs the
@@ -806,6 +826,13 @@ Two engine details matter when reading those numbers:
   a node removed and then forgotten by the script. Both are bounded by the number
   of *live* handles, but a program that creates elements per frame without
   attaching them grows the pool with the frame count.
+- **Vector images are cached by pixel size.** A bitmap `<img>` decodes once and
+  is cached by path, but an SVG is rasterised at the drawn device size, so the
+  decoded-pixel and GPU-texture caches hold one entry per distinct size. That is
+  constant for a static layout (the usual case) and small for a handful of
+  sizes, but a program that reflows one SVG to a new integer size every frame
+  accumulates entries; prefer animating a bitmap, or keep the vector to a fixed
+  size.
 
 The collector behind `heapBytes` is a non-moving mark-sweep (`runtime/xt_alloc.c`).
 Its trigger follows the live set: after every collection the threshold becomes
@@ -851,13 +878,15 @@ object kind) to stderr — that is how the DOM leak was traced to the node pool.
 
 - Whether Linux ships X11, Wayland, or both in the first cut. (Decision:
   X11 first, Wayland later.)
-- **SVG:** there is no SVG support and none is planned. The HTML parser knows
-  elements and attributes, the layout engine knows boxes, and paint knows
-  rectangles/text/images, so `<svg>` trees would need a whole second
-  geometry+paint path. An SVG *file* works only through the image loader
-  (`<img src="logo.svg">`), which needs an SVG rasteriser (`stb_image` does not
-  decode SVG); vector art therefore has to arrive as a raster (PNG) or be drawn
-  from boxes, as `examples/gui/pelican-bike` does.
+- **SVG:** SVG *files* are supported through the image loader
+  (`<img src="logo.svg">`): `runtime/ext_gui/svg.cpp` wraps the vendored
+  **NanoSVG** parser/rasteriser and `image.{h,cpp}` treats an SVG as a vector
+  image, rasterised at the drawn pixel size. Inline `<svg>` **trees** in a
+  document are still not supported: the HTML parser knows elements and
+  attributes, the layout engine knows boxes, and paint knows
+  rectangles/text/images, so `<svg>` subtrees would need a whole second
+  geometry+paint path. Vector art therefore has to arrive as an SVG/PNG file or
+  be drawn from boxes, as `examples/gui/pelican-bike` does.
 - Windows: an MSVC-compatible `gui.lib` (COFF objects + `ar -M`/`llvm-ar`) is
   produced by `scripts/build-gui.ts`, but it has not been validated in CI yet,
   so the Windows step is provisional (the job stays green) and `package` skips

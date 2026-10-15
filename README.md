@@ -12,7 +12,7 @@ The design goals are:
 1. **Incremental compilation** — builds are content-addressed and skipped when nothing changed.
 2. **Well-factored modules** — lexer, parser, binder, codegen, driver, extensions each live in their own directory with their own tests.
 3. **Extensive tests** — per-module unit tests plus end-to-end tests that compile and run real binaries.
-4. **Pluggable extensions** — Node `fs`, Bun APIs, … are optional compile modules, not core code.
+4. **Pluggable extensions** — Node `fs`, the `gui` HTML/CSS renderer , … are optional compile modules, not core code.
 5. **Self-hosting** — the compiler compiles itself: `src/cli/main.ts` builds into a native `xbintsc` binary whose emitted LLVM IR is a fixpoint across generations. CI builds these binaries for every platform and a release attaches them.
 6. **Multi-platform** — macOS, Linux and Windows on x64 and arm64 (Apple Silicon / AArch64), validated by GitHub Actions on native runners.
 
@@ -231,6 +231,59 @@ const { ir } = compileString("console.log(1 + 1);");
 const result = build("program.ts", { emit: "exe", outDir: "build" });
 ```
 
+## GUI applications (HTML/CSS)
+
+xbintsc can also build **native desktop applications whose UI is HTML/CSS**. The
+optional `gui` extension links a self-hosted, GPU-accelerated HTML/CSS renderer
+(its own HTML parser, CSS cascade, layout and SDL_GPU compositor — no system
+WebView, no bundled browser) into the executable and exposes it as an importable
+module:
+
+```ts
+// app.ts
+import { createWindow, run } from "gui";
+// The .html asset loader AOT-compiles the document's scripts (see below)
+import page from "./page.html";
+
+const win = createWindow({ title: "Demo", width: 900, height: 600 });
+win.on("click", (e: any) => console.log(e.x, e.y, e.target));
+win.loadHTML(page);
+run();                          // main loop, until every window closes
+```
+
+```bash
+# Source checkout: build the engine archive once (fetches and builds SDL3,
+# FreeType and HarfBuzz), then run the bundled example
+npm run gui
+npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
+
+# A prebuilt Linux/macOS release archive already ships the engine:
+xbintsc run app.ts --ext gui
+```
+
+A document's `<script>` bodies are **AOT-compiled** by xbintsc into the binary —
+inline scripts (a bare `<script>` is already treated as TypeScript) and external
+`<script src="./app.ts">` files alike — so there is still no JavaScript engine at
+runtime. Element handles, DOM mutation, events and the rest of the scripting
+surface are documented in [doc/gui-scripts.md](./doc/gui-scripts.md).
+
+In a project, list the extension in `xbintsc.config.json`
+(`"extensions": ["gui"]`) and the flag becomes unnecessary, exactly as for
+`node`. `XT_GUI_AUTOCLOSE_MS=<ms>` closes all windows after a delay, which is how
+the end-to-end tests run the examples headlessly.
+
+Two examples live in the repository: [`examples/gui/hello.ts`](./examples/gui/hello.ts)
+(an HTML/CSS window plus a reactive counter) and
+[`examples/gui/pelican-bike`](./examples/gui/pelican-bike), a playable 2D game
+whose document also opens unchanged in a browser.
+
+Platforms and full details: [doc/gui.md](./doc/gui.md) covers the engine
+architecture, the implemented HTML/CSS subset, packaging and the platform notes.
+Linux and macOS are built and exercised in CI and their release
+archives ship the engine (`gui.a`); the Windows archive (`gui.lib`, D3D12) is
+produced by the same script but is still provisional and is not shipped in the
+release yet.
+
 ## Incremental compilation
 
 The driver keys each build on the entry source hash, compiler version, options,
@@ -240,9 +293,10 @@ sources are compiled once and cached on the same principle.
 
 ## Extensions
 
-An extension is a plain object (`src/extensions/registry.ts`). The `node`
-extension is itself split into one folder per Node module, each pairing its
-exports with the C sources that implement them:
+An extension is a plain object (`src/extensions/registry.ts`). Two are bundled:
+[`gui`](#gui-applications-htmlcss), a GPU HTML/CSS renderer
+(see [doc/gui.md](./doc/gui.md)), and `node`, itself split into one folder per
+Node module, each pairing its exports with the C sources that implement them:
 
 ```
 src/extensions/node/       runtime/ext_node/

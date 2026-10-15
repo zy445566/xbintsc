@@ -4,6 +4,15 @@
  * HarfBuzz does shaping (ligatures/kerning/complex scripts), FreeType owns the
  * glyph outlines and the vertical metrics. We create one HarfBuzz font per
  * (file, pixel size) and scale it so that advances come back in 26.6 pixels.
+ *
+ * A run is shaped with a *single* face, but that face rarely covers every
+ * codepoint in it — a CJK face such as Microsoft YaHei / PingFang / Noto Sans
+ * CJK has no geometric shapes (U+25AE ▮, U+25AF ▯, …), and a Latin face has no
+ * CJK. Each codepoint therefore resolves to the first face in a small fallback
+ * chain that has it, the run is shaped in segments (one per face), and each
+ * shaped glyph carries the face it came from so the rasteriser draws it from
+ * the right atlas entry. Without this a missing glyph came back as `.notdef`
+ * (glyph 0) and the renderer silently dropped it.
  */
 
 #include "text.h"
@@ -22,6 +31,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace xtgui {
 
@@ -30,6 +40,8 @@ namespace xtgui {
 struct Font {
   FT_Face ft_face = nullptr;
   hb_font_t *hb_font = nullptr;
+  std::string path;
+  bool monospace = false;
   float pixel_size = 16.0f;
   float ascent = 0;
   float descent = 0;
@@ -85,13 +97,33 @@ const char *const kMonoCandidates[] = {
     "C:\\Windows\\Fonts\\cour.ttf",
 };
 
+/* Faces tried after the primary one for codepoints it does not cover. Symbol
+ * faces come first (they carry the geometric shapes, arrows, box drawing and
+ * dingbats the CJK/Latin primary often lacks), then the other family class so
+ * a monospace run still gets CJK and a sans run still gets monospace-only
+ * codepoints. The primary and duplicates are dropped when the chain is built. */
+const char *const kSymbolCandidates[] = {
+    nullptr,
+    "C:\\Windows\\Fonts\\seguisym.ttf",  /* Segoe UI Symbol */
+    "C:\\Windows\\Fonts\\arialuni.ttf",  /* Arial Unicode MS */
+    "/System/Library/Fonts/Apple Symbols.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf",
+    "/usr/share/fonts/truetype/ancient-scripts/Symbola_hint.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+};
+
 struct Engine {
   bool initialized = false;
   FT_Library ft = nullptr;
   bool ft_ok = false;
   std::string sans_path;
   std::string mono_path;
+  std::vector<std::string> sans_fallbacks;
+  std::vector<std::string> mono_fallbacks;
   std::unordered_map<std::string, std::unique_ptr<Font>> cache;  // key -> face (may be null)
+  std::unordered_map<std::string, std::vector<Font *>> fallbacks;  // class+size -> faces
   std::unordered_map<std::string, hb_face_t *> hb_faces;         // path -> face
 };
 
@@ -182,6 +214,25 @@ const char *firstExisting(const char *const *candidates, size_t count) {
   return nullptr;
 }
 
+void addFallbackPath(std::vector<std::string> &paths, const char *path) {
+  if (path == nullptr || !fileExists(path)) return;
+  for (const std::string &entry : paths) {
+    if (entry == path) return;
+  }
+  paths.push_back(path);
+}
+
+/* The chain for a primary face: every existing symbol face, then the other
+ * family class (CJK coverage for a monospace primary and vice versa). The
+ * primary itself is skipped because it is tried first, per codepoint. */
+void buildFallbackChain(std::vector<std::string> &paths, const std::string &primary,
+                        const std::string &otherClass) {
+  for (const char *candidate : kSymbolCandidates) {
+    if (candidate != nullptr && primary != candidate) addFallbackPath(paths, candidate);
+  }
+  if (!otherClass.empty() && otherClass != primary) addFallbackPath(paths, otherClass.c_str());
+}
+
 void ensureInitialized() {
   Engine &e = engine();
   if (e.initialized) return;
@@ -214,6 +265,9 @@ void ensureInitialized() {
   }
   /* No dedicated monospace face: reuse the sans face so metrics stay real. */
   if (e.mono_path.empty()) e.mono_path = e.sans_path;
+
+  buildFallbackChain(e.sans_fallbacks, e.sans_path, e.mono_path);
+  buildFallbackChain(e.mono_fallbacks, e.mono_path, e.sans_path);
 }
 
 hb_face_t *hbFaceForPath(const std::string &path) {
@@ -230,7 +284,7 @@ hb_face_t *hbFaceForPath(const std::string &path) {
   return face;
 }
 
-std::unique_ptr<Font> createFont(const std::string &path, float pixel_size) {
+std::unique_ptr<Font> createFont(const std::string &path, float pixel_size, bool monospace) {
   Engine &e = engine();
   if (!e.ft_ok || path.empty()) return nullptr;
 
@@ -240,6 +294,8 @@ std::unique_ptr<Font> createFont(const std::string &path, float pixel_size) {
 
   auto font = std::make_unique<Font>();
   font->ft_face = face;
+  font->path = path;
+  font->monospace = monospace;
   font->pixel_size = pixel_size;
 
   FT_Size_Metrics metrics = face->size->metrics;
@@ -259,6 +315,99 @@ std::unique_ptr<Font> createFont(const std::string &path, float pixel_size) {
   return font;
 }
 
+/* Resolve one face by path, keyed by path+class+size so the primary resolved
+ * through a `FontSpec` and the same face resolved as a fallback share one
+ * `Font` (and one glyph-atlas key). */
+Font *resolveFacePath(const std::string &path, float pixel_size, bool monospace) {
+  Engine &e = engine();
+  if (!e.ft_ok || path.empty()) return nullptr;
+  char key[512];
+  std::snprintf(key, sizeof(key), "p|%c|%.2f|%s", monospace ? 'm' : 's', (double)pixel_size,
+                path.c_str());
+  auto it = e.cache.find(key);
+  if (it != e.cache.end()) return it->second.get();
+  std::unique_ptr<Font> font = createFont(path, pixel_size, monospace);
+  Font *raw = font.get();
+  e.cache.emplace(key, std::move(font));
+  return raw;
+}
+
+/* The resolved fallback faces for a primary, in order, cached per class+size. */
+const std::vector<Font *> &fallbackFaces(Font *font) {
+  static const std::vector<Font *> kEmpty;
+  if (font == nullptr) return kEmpty;
+  Engine &e = engine();
+  char key[80];
+  std::snprintf(key, sizeof(key), "f|%c|%.2f", font->monospace ? 'm' : 's',
+                (double)font->pixel_size);
+  auto it = e.fallbacks.find(key);
+  if (it != e.fallbacks.end()) return it->second;
+
+  const std::vector<std::string> &paths =
+      font->monospace ? e.mono_fallbacks : e.sans_fallbacks;
+  std::vector<Font *> faces;
+  for (const std::string &path : paths) {
+    Font *face = resolveFacePath(path, font->pixel_size, font->monospace);
+    if (face != nullptr) faces.push_back(face);
+  }
+  return e.fallbacks.emplace(key, std::move(faces)).first->second;
+}
+
+/* The face that draws `code_point`: the primary when it has the glyph, else the
+ * first fallback that does, else the primary (so `.notdef` is still skipped). */
+Font *faceForCodePoint(Font *primary, uint32_t code_point) {
+  if (primary != nullptr && FT_Get_Char_Index(primary->ft_face, code_point) != 0) return primary;
+  for (Font *fallback : fallbackFaces(primary)) {
+    if (FT_Get_Char_Index(fallback->ft_face, code_point) != 0) return fallback;
+  }
+  return primary;
+}
+
+/* Shape one face's segment of a run and append its glyphs. */
+float shapeSegment(const std::string &segment, Font *font, std::vector<ShapedGlyph> &out) {
+  if (font == nullptr || segment.empty()) return 0;
+  float total = 0;
+  if (font->hb_font == nullptr) {
+    /* HarfBuzz unavailable: fall back to FreeType's per-codepoint advances. */
+    size_t index = 0;
+    while (index < segment.size()) {
+      uint32_t code_point = decodeUtf8(segment, index);
+      FT_UInt glyph = FT_Get_Char_Index(font->ft_face, code_point);
+      float advance = 0;
+      if (FT_Load_Glyph(font->ft_face, glyph, FT_LOAD_DEFAULT) == 0) {
+        advance = font->ft_face->glyph->advance.x / 64.0f;
+      }
+      ShapedGlyph shaped;
+      shaped.glyph = glyph;
+      shaped.x_advance = advance;
+      shaped.font = font;
+      total += advance;
+      out.push_back(shaped);
+    }
+    return total;
+  }
+
+  hb_buffer_t *buffer = hb_buffer_create();
+  hb_buffer_add_utf8(buffer, segment.c_str(), (int)segment.size(), 0, -1);
+  hb_buffer_guess_segment_properties(buffer);
+  hb_shape(font->hb_font, buffer, nullptr, 0);
+  unsigned count = hb_buffer_get_length(buffer);
+  hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buffer, nullptr);
+  hb_glyph_position_t *positions = hb_buffer_get_glyph_positions(buffer, nullptr);
+  for (unsigned i = 0; i < count; i++) {
+    ShapedGlyph shaped;
+    shaped.glyph = infos[i].codepoint;
+    shaped.x_advance = positions[i].x_advance / 64.0f;
+    shaped.x_offset = positions[i].x_offset / 64.0f;
+    shaped.y_offset = positions[i].y_offset / 64.0f;
+    shaped.font = font;
+    total += shaped.x_advance;
+    out.push_back(shaped);
+  }
+  hb_buffer_destroy(buffer);
+  return total;
+}
+
 }  // namespace
 
 Font *xt_text_resolve(const FontSpec &spec) {
@@ -269,16 +418,12 @@ Font *xt_text_resolve(const FontSpec &spec) {
   bool mono = isMonospaceFamily(spec.family);
   const std::string &path = mono ? e.mono_path : e.sans_path;
   if (path.empty()) return nullptr;
+  return resolveFacePath(path, spec.pixel_size, mono);
+}
 
-  char key[80];
-  std::snprintf(key, sizeof(key), "%c|%.2f", mono ? 'm' : 's', (double)spec.pixel_size);
-  auto it = e.cache.find(key);
-  if (it != e.cache.end()) return it->second.get();
-
-  std::unique_ptr<Font> font = createFont(path, spec.pixel_size);
-  Font *raw = font.get();
-  e.cache.emplace(key, std::move(font));
-  return raw;
+Font *xt_text_scale(Font *font, float pixel_size) {
+  if (font == nullptr) return nullptr;
+  return resolveFacePath(font->path, pixel_size, font->monospace);
 }
 
 float xt_text_measure_width(const std::string &utf8, const FontSpec &spec) {
@@ -291,42 +436,25 @@ float xt_text_measure_width(const std::string &utf8, const FontSpec &spec) {
 float xt_text_shape_run(const std::string &utf8, Font *font, std::vector<ShapedGlyph> &out) {
   if (font == nullptr) return 0;
   float total = 0;
-  if (font->hb_font == nullptr) {
-    /* HarfBuzz unavailable: fall back to FreeType's per-codepoint advances. */
-    size_t index = 0;
-    while (index < utf8.size()) {
-      uint32_t code_point = decodeUtf8(utf8, index);
-      FT_UInt glyph = FT_Get_Char_Index(font->ft_face, code_point);
-      float advance = 0;
-      if (FT_Load_Glyph(font->ft_face, glyph, FT_LOAD_DEFAULT) == 0) {
-        advance = font->ft_face->glyph->advance.x / 64.0f;
-      }
-      ShapedGlyph shaped;
-      shaped.glyph = glyph;
-      shaped.x_advance = advance;
-      total += advance;
-      out.push_back(shaped);
+  size_t index = 0;
+  size_t segment_start = 0;
+  Font *segment_font = nullptr;
+  while (index < utf8.size()) {
+    size_t char_start = index;
+    uint32_t code_point = decodeUtf8(utf8, index);
+    Font *chosen = faceForCodePoint(font, code_point);
+    if (segment_font == nullptr) {
+      segment_font = chosen;
+      segment_start = char_start;
+    } else if (chosen != segment_font) {
+      total += shapeSegment(utf8.substr(segment_start, char_start - segment_start), segment_font, out);
+      segment_font = chosen;
+      segment_start = char_start;
     }
-    return total;
   }
-
-  hb_buffer_t *buffer = hb_buffer_create();
-  hb_buffer_add_utf8(buffer, utf8.c_str(), (int)utf8.size(), 0, -1);
-  hb_buffer_guess_segment_properties(buffer);
-  hb_shape(font->hb_font, buffer, nullptr, 0);
-  unsigned count = hb_buffer_get_length(buffer);
-  hb_glyph_info_t *infos = hb_buffer_get_glyph_infos(buffer, nullptr);
-  hb_glyph_position_t *positions = hb_buffer_get_glyph_positions(buffer, nullptr);
-  for (unsigned i = 0; i < count; i++) {
-    ShapedGlyph shaped;
-    shaped.glyph = infos[i].codepoint;
-    shaped.x_advance = positions[i].x_advance / 64.0f;
-    shaped.x_offset = positions[i].x_offset / 64.0f;
-    shaped.y_offset = positions[i].y_offset / 64.0f;
-    total += shaped.x_advance;
-    out.push_back(shaped);
+  if (segment_font != nullptr) {
+    total += shapeSegment(utf8.substr(segment_start), segment_font, out);
   }
-  hb_buffer_destroy(buffer);
   return total;
 }
 
@@ -374,6 +502,7 @@ bool xt_text_ready() {
 
 void xt_text_shutdown() {
   Engine &e = engine();
+  e.fallbacks.clear();
   e.cache.clear();
   for (auto &entry : e.hb_faces) {
     if (entry.second != nullptr) hb_face_destroy(entry.second);
@@ -387,6 +516,8 @@ void xt_text_shutdown() {
   e.initialized = false;
   e.sans_path.clear();
   e.mono_path.clear();
+  e.sans_fallbacks.clear();
+  e.mono_fallbacks.clear();
 }
 
 }  // namespace xtgui

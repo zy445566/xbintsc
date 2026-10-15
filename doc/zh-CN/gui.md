@@ -416,6 +416,15 @@ transition 的属性时，会记录一个正在运行的 transition，并在每�
   DejaVu/Liberation、Windows 上的 Segoe UI/Arial），可用 `XT_GUI_FONT`
   （以及 `XT_GUI_FONT_MONO`）覆盖，并按 `(字体类别, 字号)` 缓存。目前只使用
   常规直立字面；字重/斜体选择是后续细化。
+- **主字面缺少的码点会回退到其他字面。** 引擎维护一条小的回退链——先平台的
+  符号字体（Segoe UI Symbol、Apple Symbols、Noto Sans Symbols、DejaVu Sans），
+  再是另一字体类别——并为每个码点解析出回退链中第一个拥有该字形的字面。
+  run 以每个字面一段的方式整形，因此混合 run（拉丁文加箭头、制表符或几何图形，
+  或 CJK 中的拉丁文）会绘制每个字形，而不是把缺失的字形当作 `.notdef` 丢弃。
+  这正是让诸如 `▮`/`▯`（U+25AE/U+25AF，鹈鹕自行车速度条所用）这样的字符在
+  CJK 主字面没有几何图形时仍能显示的原因。每个整形后的字形携带自己的字面
+  （`ShapedGlyph::font`），渲染器据此从正确的图集条目光栅化；`xt_text_scale`
+  把字面映射到显示的缩放系数。
 - `xt_text_measure_width` 用 HarfBuzz 对 run 整形（因此字距调整与连字会生效），
   `xt_text_metrics` 返回 FreeType 的 ascent / descent / 正常行高。当找不到
   字体文件时，模块回退到确定性的逐字节近似，因此布局仍可工作。

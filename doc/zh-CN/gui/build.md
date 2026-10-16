@@ -25,6 +25,15 @@
   试验性。
 - 现有的缓存指纹已经会对 `nativeObjects()` 的内容做哈希，因此重建 `gui.a`
   会自动使缓存二进制失效。
+- CMake 构建树位于其源码**旁边**（`vendor/sdl-build`、`vendor/freetype-build`、
+  `vendor/harfbuzz-build`），绝不放在源码内部：`CMakeCache.txt` 记录的是配置它
+  的那台机器，而 SDL 的视频后端是 `option()`，因此先运行的那次配置会一直生效。
+  所以一个同时携带 `build/` 的 `vendor/SDL` 缓存树，会把某台机器的
+  `SDL_X11`/`SDL_WAYLAND` 选择带进另一台机器的配置——即使头文件已安装，SDL 也会
+  以 "SDL could not find X11 or Wayland development libraries" 中止。CI 缓存按
+  OS/arch 区分键值，且不包含构建树；`npm run gui` 还会在 Debian/Ubuntu 上提前
+  检查 X11/Wayland 头文件，并按名称报告缺失的开发包（当头文件位于该检查未知的
+  前缀下时，可设置 `xbintsc_SKIP_HEADER_CHECK=1`）。
 
 ## 运行示例
 

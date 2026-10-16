@@ -225,6 +225,11 @@ jobs:
       # Building SDL3/FreeType/HarfBuzz from source is the slow part of the GUI
       # archive; cache them, keyed by the build script (which pins the versions).
       # actions/cache v5+ runs on node24 (v4 still targets the deprecated node20).
+      # The SDL3 *build* tree is deliberately absent: a CMake build tree records
+      # the machine it was configured on, so a cached one restored here carries
+      # that machine's compiler path and its `SDL_X11`/`SDL_WAYLAND` choices into
+      # a configure that must make its own. `scripts/build-gui.ts` keeps it at
+      # `vendor/sdl-build`, outside every cached path.
       - name: Cache the GUI vendored libraries
         if: runner.os != 'Windows'
         uses: actions/cache@v5

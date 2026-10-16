@@ -25,6 +25,18 @@
   lavapipe software Vulkan driver) and macOS; Windows is provisional.
 - The existing cache fingerprint already hashes `nativeObjects()` contents, so
   rebuilding `gui.a` invalidates cached binaries automatically.
+- CMake build trees live *next to* their sources (`vendor/sdl-build`,
+  `vendor/freetype-build`, `vendor/harfbuzz-build`), never inside them: a
+  `CMakeCache.txt` records the machine it was configured on, and SDL's video
+  backends are `option()`s, so the first configure to run wins. A cached
+  `vendor/SDL` tree that also carried `build/` therefore restored one machine's
+  `SDL_X11`/`SDL_WAYLAND` choices into another's configure — SDL then aborts
+  with "SDL could not find X11 or Wayland development libraries" even though the
+  headers are installed. The CI cache is keyed per OS/arch and omits the build
+  trees; `npm run gui` also checks the X11/Wayland headers up front on
+  Debian/Ubuntu and reports the missing development packages by name (set
+  `xbintsc_SKIP_HEADER_CHECK=1` when they live under a prefix that check does
+  not know).
 
 ## Running the example
 

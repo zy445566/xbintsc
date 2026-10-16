@@ -44,7 +44,16 @@ const runtimeDir = join(root, "runtime");
 const engineDir = join(runtimeDir, "ext_gui");
 const vendorDir = join(root, "vendor");
 const sdlSrc = join(vendorDir, "SDL");
-const sdlBuild = join(sdlSrc, "build");
+/* SDL's build tree is a *sibling* of its source, like FreeType's and HarfBuzz's,
+ * never inside it: the CI cache keyed on a vendored library ships the whole
+ * `vendor/SDL` tree, and a CMake build tree is not relocatable across machines
+ * or platforms. `CMakeCache.txt` records the host's compiler and probes, and
+ * SDL's video options are `option()`s — the first configure to run wins, so a
+ * cached `SDL_X11=OFF` (e.g. from a Windows configure, where the option's
+ * default is OFF) survives into a Linux configure and SDL then aborts with
+ * "SDL could not find X11 or Wayland development libraries". Keeping the build
+ * tree out of the cached source path makes each machine configure its own. */
+const sdlBuild = join(vendorDir, "sdl-build");
 const freetypeSrc = join(vendorDir, "freetype");
 const freetypeBuild = join(vendorDir, "freetype-build");
 const harfbuzzSrc = join(vendorDir, "harfbuzz");
@@ -177,6 +186,37 @@ function findArchiver(): string {
   return ar;
 }
 
+/** Directories a CMake `find_path` would search, relative to the filesystem
+ * root, used to check that a development package is installed. */
+const HEADER_PREFIXES = ["/usr/include", "/usr/local/include", "/opt/homebrew/include"];
+
+/** True on Debian and its derivatives, where the message below can name the
+ * packages to install. Anywhere else the headers may well live under a prefix
+ * this check does not know (`/usr/pkg`, `/nix/store`, …), so it stays quiet
+ * instead of failing a build that would have worked. */
+function isDebianLike(): boolean {
+  return existsSync("/etc/debian_version");
+}
+
+/** Fail with the package names to install when a header SDL needs is missing,
+ * rather than letting SDL configure itself without a window backend and then
+ * abort with a summary that does not say which package is missing. */
+function requireHeaders(feature: string, headers: readonly string[], packages: string): void {
+  if (isWindows || !isDebianLike()) return;
+  const missing = headers.filter(
+    (header) => !HEADER_PREFIXES.some((prefix) => existsSync(join(prefix, header))),
+  );
+  if (missing.length === 0) return;
+  const hint =
+    process.env.xbintsc_SKIP_HEADER_CHECK === "1"
+      ? ""
+      : " (set xbintsc_SKIP_HEADER_CHECK=1 if they are installed under a prefix this check does not know)";
+  fail(
+    `${feature} needs ${missing.join(", ")}, which is not installed; ` +
+      `install its development package first (Debian/Ubuntu: ${packages})${hint}`,
+  );
+}
+
 /** First of `candidates` that exists on disk (CMake generators place static
  * libraries either at the build root or under `Release/`). */
 function firstExisting(candidates: readonly string[]): string | undefined {
@@ -238,6 +278,28 @@ if (!existsSync(join(sdlSrc, "CMakeLists.txt"))) {
 
 const existingSdlArchive = sdlArchive();
 if (!existingSdlArchive) {
+  /* Older trees configured SDL inside its source (`vendor/SDL/build`) and a
+   * cache from one of those would be reused by the next configure — the exact
+   * failure `sdlBuild` above exists to prevent. */
+  const legacyBuild = join(sdlSrc, "build");
+  if (existsSync(join(legacyBuild, "CMakeCache.txt"))) {
+    console.log("xbintsc: discarding the legacy in-source SDL build tree");
+    rmSync(legacyBuild, { recursive: true, force: true });
+  }
+
+  /* SDL enables a window backend from the headers it finds, and aborts when it
+   * finds neither X11 nor Wayland, so say which package is missing instead of
+   * relaying its summary. */
+  requireHeaders(
+    "SDL3's X11 video driver",
+    /* `Xlib.h` comes from libx11-dev; `Xext.h` is the header SDL gates HAVE_X11
+     * on as well, and it comes from libxext-dev. */
+    ["X11/Xlib.h", "X11/extensions/Xext.h"],
+    "libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxinerama-dev libxfixes-dev",
+  );
+  requireHeaders("SDL3's Wayland video driver", ["wayland-client-core.h"],
+    "libwayland-dev libxkbcommon-dev libdecor-0-dev");
+
   const cmake = findCmake();
   console.log(`xbintsc: building static SDL3 with ${cmake}`);
   const configureArgs = [

@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      /* A dark "gallery" page: the artwork is the only bright thing on it. */
+      body {
+        margin: 0;
+        padding: 24px 20px;
+        background-color: #101a26;
+        color: #8fa6bd;
+        font-size: 14px;
+        font-family: sans-serif;
+        text-align: center;
+      }
+      #frame {
+        display: inline-block;
+        padding: 10px;
+        background-color: #16212e;
+        border: 1px solid #24344a;
+        border-radius: 10px;
+      }
+      /* The SVG is drawn at its intrinsic 720x520. It is a vector source, so
+         the engine rasterises it at exactly this size and it stays sharp. */
+      #art {
+        width: 720px;
+        height: 520px;
+      }
+      #caption {
+        margin-top: 14px;
+        letter-spacing: 1px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="frame">
+      <!-- A path *relative to this document* (the artwork is copied next to
+           this file when the example is built): the form an editor, a browser
+           and a static host all resolve correctly. The native engine is the odd
+           one out — it resolves `src` against the process working directory and
+           knows nothing about the document's location (no base URL, and
+           `import.meta` has no value here) — so `main.ts` rewrites this
+           attribute to an absolute path before `loadHTML`. -->
+      <img id="art" src="pelican-bike.svg" alt="鹈鹕骑自行车">
+    </div>
+    <div id="caption">鹈鹕骑自行车 · Pelican on a Bicycle — SVG</div>
+  </body>
+</html>

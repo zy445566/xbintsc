@@ -221,8 +221,7 @@ xbintsc run app.ts --ext gui
 `--ext gui`，与 `node` 完全一样。设置 `XT_GUI_AUTOCLOSE_MS=<ms>` 可在指定毫秒后
 自动关闭所有窗口，端到端测试正是用它无头运行示例。
 
-仓库里有两个示例：[`examples/gui/hello.ts`](./examples/gui/hello.ts)（HTML/CSS 窗口
-加一个响应式计数器）与 [`examples/gui/pelican-bike`](./examples/gui/pelican-bike)
+仓库里的示例是 [`examples/gui/pelican-bike`](./examples/gui/pelican-bike)
 ——一个可玩的 2D 游戏，它的同一份文档在浏览器里也能直接打开。
 
 平台与完整说明：[doc/zh-CN/gui.md](./doc/zh-CN/gui.md) 是引擎总览（架构与

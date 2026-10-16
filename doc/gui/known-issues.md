@@ -48,11 +48,23 @@
   rectangles/text/images, so `<svg>` subtrees would need a whole second
   geometry+paint path. Vector art therefore has to arrive as an SVG/PNG file or
   be drawn from boxes, as `examples/gui/pelican-bike` does.
+- **Windows: the C++ runtime must not be named on the link line.** `gui.lib` is
+  built with the *static* CRT (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`) and
+  every engine object records `libcpmt` as a dependent library, which is also
+  clang's Windows default and what the xbintsc runtime objects use
+  (`scripts/build-gui.ts`). Asking for the DLL runtime as well — the gui
+  extension used to pass `-lmsvcprt` — makes the two copies of the same symbols
+  collide: `LNK2038: mismatch detected for 'RuntimeLibrary'` plus a wall of
+  `LNK2005: already defined`, surfaced as `clang: linker command failed with exit
+  code 1169`. `src/extensions/gui/index.ts` now lists only the OS libraries
+  (`user32`, `gdi32`, `d3d12`, …). A Windows link is also the only place the
+  MSVC environment matters, so build from an x64 Native Tools prompt.
 - Windows: an MSVC-compatible `gui.lib` (COFF objects + `ar -M`/`llvm-ar`) is
-  produced by `scripts/build-gui.ts`, but it has not been validated in CI yet,
-  so the Windows step is provisional (the job stays green) and `package` skips
-  it. It also needs an SDL3 build with the D3D12/DXIL backend (DXIL requires
-  `dxc`).
+  produced by `scripts/build-gui.ts` but is not validated in CI, so the Windows
+  step is provisional (the job stays green) and `package` skips it. Building and
+  running `examples/gui/pelican-svg` and `examples/gui/pelican-bike` on a
+  developer machine works. It also needs an SDL3 build with the D3D12/DXIL
+  backend (DXIL requires `dxc`).
 - **Media on Windows:** the media decoders (FFmpeg) are only built and merged
   into the POSIX `gui.a`; the Windows `gui.lib` is produced without them, so
   `<video>`/`<audio>` are inert there (failures fire `error`). Enabling it needs

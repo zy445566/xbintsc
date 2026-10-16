@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../doc/xbintsc.config.schema.json",
+  "entry": "main.ts",
+  "outDir": "build",
+  "extensions": ["gui", "node"],
+  "app": {
+    "name": "PelicanSvg",
+    "bundleId": "com.example.pelicansvg",
+    "console": true
+  }
+}

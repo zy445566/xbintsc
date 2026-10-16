@@ -46,6 +46,11 @@ Parsing details that occasionally surprise:
   `run`, or is a positional for the other commands.
 - `-o` consumes the next argument unconditionally; the other value flags leave
   the value unset when the next argument starts with `-`.
+- `-o`/`output` may name a directory that does not exist yet: the driver creates
+  the parent directories of the output path. (`--out` likewise creates its
+  directory.) Without that, an explicit path such as `-o dist/app.exe` where
+  `dist/` was missing used to fail inside the linker, since clang — not xbintsc —
+  is what writes the executable.
 
 ## Project config
 

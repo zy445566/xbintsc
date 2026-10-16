@@ -35,10 +35,20 @@
 
 - Linux 首发是只发布 X11、Wayland，还是两者都发布。（决定：先 X11，
   Wayland 随后。）
+- **Windows：链接命令行里不能点名 C++ 运行时。** `gui.lib` 用*静态* CRT 构建
+  （`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`），引擎每个目标文件都把 `libcpmt`
+  记为默认依赖库；这既是 clang 在 Windows 上的默认，也是 xbintsc 运行时对象所用
+  的运行时（见 `scripts/build-gui.ts`）。如果再额外要求 DLL 版运行时——gui 扩展
+  过去会传 `-lmsvcprt`——同一批符号的两份定义就会冲突：`LNK2038: mismatch detected
+  for 'RuntimeLibrary'`，外加满屏 `LNK2005: already defined`，最终表现为
+  `clang: linker command failed with exit code 1169`。现在
+  `src/extensions/gui/index.ts` 只列系统库（`user32`、`gdi32`、`d3d12` 等）。
+  Windows 链接也是唯一需要 MSVC 环境的环节，请在 x64 Native Tools 命令行里构建。
 - Windows：`scripts/build-gui.ts` 会生成 MSVC 兼容的 `gui.lib`
   （COFF 对象 + `ar -M`/`llvm-ar`），但尚未在 CI 中验证，因此 Windows 步骤
-  为试验性（job 保持绿色），`package` 会跳过它。它还需要一个带 D3D12/DXIL
-  后端的 SDL3 构建（DXIL 需要 `dxc`）。
+  为试验性（job 保持绿色），`package` 会跳过它；在开发者机器上构建并运行
+  `examples/gui/pelican-svg` 与 `examples/gui/pelican-bike` 是可以的。它还需要
+  一个带 D3D12/DXIL 后端的 SDL3 构建（DXIL 需要 `dxc`）。
 - **Windows 上的媒体：** 媒体解码器（FFmpeg）只构建并合并进 POSIX 的
   `gui.a`；Windows 的 `gui.lib` 不含它们，因此那里的 `<video>`/`<audio>` 为空
   操作（失败会触发 `error`）。启用它需要 MSVC 兼容的 FFmpeg 构建，推迟到

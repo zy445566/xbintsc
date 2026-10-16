@@ -98,8 +98,16 @@ export const guiExtension: Extension = {
         "-luser32", "-lgdi32", "-lshell32",
         "-lole32", "-loleaut32", "-luuid", "-ladvapi32",
         "-lwinmm", "-limm32", "-lversion", "-lsetupapi",
-        /* The engine is C++; link the MSVC C++ runtime. */
-        "-lmsvcprt",
+        /* The engine is C++, but `msvcprt` (the DLL C++ runtime) must not be
+         * named here: `gui.lib` is built with `CMAKE_MSVC_RUNTIME_LIBRARY=
+         * MultiThreaded` and every engine object records `libcpmt` (the static
+         * C++ runtime) as a dependent library — see `scripts/build-gui.ts`.
+         * The two runtimes define the same symbols, so requesting the DLL one
+         * as well fails the link with `LNK2038: mismatch detected for
+         * 'RuntimeLibrary'` plus a wall of `LNK2005: already defined` errors
+         * (surfacing as `clang: linker command failed with exit code 1169`).
+         * clang links the static `libcpmt` by default, which is the CRT the
+         * archive and the xbintsc runtime objects were both built against. */
       ];
     }
     return ["-lX11", "-lwayland-client", "-lEGL", "-lGL", "-ldl", "-lpthread", "-lstdc++"];

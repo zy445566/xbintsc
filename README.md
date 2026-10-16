@@ -272,9 +272,7 @@ In a project, list the extension in `xbintsc.config.json`
 `node`. `XT_GUI_AUTOCLOSE_MS=<ms>` closes all windows after a delay, which is how
 the end-to-end tests run the examples headlessly.
 
-Two examples live in the repository: [`examples/gui/hello.ts`](./examples/gui/hello.ts)
-(an HTML/CSS window plus a reactive counter) and
-[`examples/gui/pelican-bike`](./examples/gui/pelican-bike), a playable 2D game
+[`examples/gui/pelican-bike`](./examples/gui/pelican-bike) is a playable 2D game
 whose document also opens unchanged in a browser.
 
 Platforms and full details: [doc/gui.md](./doc/gui.md) is the engine overview

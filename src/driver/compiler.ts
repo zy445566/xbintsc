@@ -8,7 +8,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { DiagnosticBag, DiagnosticCode, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { sourceTextBytes } from "../diagnostics/source-text.js";
@@ -261,6 +261,11 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   }
 
   mkdirSync(outDir, { recursive: true });
+  /* An explicit `-o path/to/app.exe` (or `output` in the config) may name a
+   * directory that does not exist yet: the IR and object files land in `outDir`,
+   * but clang writes the *executable* to `outputPath`, and a missing parent
+   * directory there makes the link fail with `LNK1104: cannot open file`. */
+  mkdirSync(dirname(outputPath), { recursive: true });
   const irPath = resolve(outDir, basename(absoluteEntry, extname(absoluteEntry)) + ".ll");
   writeFileSync(irPath, ir);
 

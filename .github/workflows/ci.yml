@@ -176,17 +176,10 @@ jobs:
 
       - name: Install a C compiler (Linux)
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          # clang + cmake build the GUI archive; the dev headers let SDL3 enable
-          # its X11/Wayland backends, and xvfb + lavapipe let the example run
-          # headlessly.
-          sudo apt-get install -y clang cmake \
-            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
-            libxinerama-dev libxfixes-dev libxkbcommon-dev libwayland-dev \
-            wayland-protocols libdecor-0-dev libasound2-dev libpulse-dev \
-            libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
-            libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
+        # The GUI archive needs the X11/Wayland headers to see a window backend,
+        # so every Linux job that builds it installs the same set from one place
+        # (scripts/install-gui-deps.sh) rather than repeating the list per job.
+        run: sudo sh scripts/install-gui-deps.sh
 
       - name: Install clang (Windows x64)
         if: runner.os == 'Windows' && runner.arch == 'X64'
@@ -481,6 +474,13 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+
+      # This job builds the GUI archive too, so it needs the same X11/Wayland
+      # toolchain the compile-examples job installs. Omitting it is what made
+      # SDL3 configure itself without a window backend and abort here.
+      - name: Install a C compiler (Linux)
+        if: runner.os == 'Linux'
+        run: sudo sh scripts/install-gui-deps.sh
 
       - run: npm ci
 

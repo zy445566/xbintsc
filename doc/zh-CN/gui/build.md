@@ -67,16 +67,18 @@ npx vitest run tests/e2e/gui-layout.test.ts tests/e2e/gui-example.test.ts
 运行：
 
 ```sh
-sudo apt-get install -y clang cmake libx11-dev libxext-dev libxrandr-dev \
-  libxcursor-dev libxi-dev libxinerama-dev libxfixes-dev libxkbcommon-dev \
-  libwayland-dev wayland-protocols libdecor-0-dev libasound2-dev libpulse-dev \
-  libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
-  libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
+sudo sh scripts/install-gui-deps.sh   # clang、cmake、X11/Wayland 头文件、Vulkan、Xvfb
 npm run runtime && npm run gui
 xvfb-run -a --server-args="-screen 0 1280x720x24" \
   npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 ```
 
-这些就是 CI 的 `compile-examples` job 安装的包。默认使用 X11 后端；Wayland
-也已启用，但尚未实际演练。
+包清单集中在 `scripts/install-gui-deps.sh`（`apt-get install -y clang cmake
+libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxinerama-dev
+libxfixes-dev libxkbcommon-dev libwayland-dev wayland-protocols libdecor-0-dev
+libasound2-dev libpulse-dev libdbus-1-dev libudev-dev libdrm-dev libgbm-dev
+libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb`），
+这样每个构建 `gui.a` 的 Linux job 都安装同一套依赖：默认使用 X11 后端，
+Wayland 也已启用但尚未实际演练。任何构建该归档的地方都要先装它——没有这些
+头文件，SDL3 找不到窗口后端。
 

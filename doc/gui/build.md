@@ -73,16 +73,19 @@ On a headless Linux box, install the SDL3 build headers and run under Xvfb with 
 software Vulkan driver:
 
 ```sh
-sudo apt-get install -y clang cmake libx11-dev libxext-dev libxrandr-dev \
-  libxcursor-dev libxi-dev libxinerama-dev libxfixes-dev libxkbcommon-dev \
-  libwayland-dev wayland-protocols libdecor-0-dev libasound2-dev libpulse-dev \
-  libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
-  libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
+sudo sh scripts/install-gui-deps.sh   # clang, cmake, X11/Wayland headers, Vulkan, Xvfb
 npm run runtime && npm run gui
 xvfb-run -a --server-args="-screen 0 1280x720x24" \
   npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 ```
 
-Those are the packages the CI `compile-examples` job installs. The X11 backend is
-used by default; Wayland is enabled too but not yet exercised.
+`scripts/install-gui-deps.sh` holds the package list (`apt-get install -y clang
+cmake libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev
+libxinerama-dev libxfixes-dev libxkbcommon-dev libwayland-dev wayland-protocols
+libdecor-0-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev libdrm-dev
+libgbm-dev libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers
+xvfb`) so that every Linux job which builds `gui.a` installs the same set: the
+X11 backend is used by default, Wayland is enabled too but not yet exercised.
+Install it before `npm run gui` anywhere the archive is built — SDL3 cannot
+find a window backend without those headers.
 

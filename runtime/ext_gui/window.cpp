@@ -147,11 +147,13 @@ static xt_value win_get_bounding_rect(xt_value self, xt_value env, int32_t argc,
   if (node == nullptr) return XT_UNDEFINED;
   const xtgui::LayoutBox *box = win->document->boxOf(node);
   if (box == nullptr) return XT_UNDEFINED;
+  /* Like the DOM: the rectangle of the *transformed* border box. */
+  xtgui::LayoutRect rect = xtgui::xt_layout_transformed_bounds(box);
   xt_value object = xt_object_new();
-  xt_object_set(object, xt_string_from_cstr("x"), xt_number(box->x));
-  xt_object_set(object, xt_string_from_cstr("y"), xt_number(box->y));
-  xt_object_set(object, xt_string_from_cstr("width"), xt_number(box->width));
-  xt_object_set(object, xt_string_from_cstr("height"), xt_number(box->height));
+  xt_object_set(object, xt_string_from_cstr("x"), xt_number(rect.x));
+  xt_object_set(object, xt_string_from_cstr("y"), xt_number(rect.y));
+  xt_object_set(object, xt_string_from_cstr("width"), xt_number(rect.width));
+  xt_object_set(object, xt_string_from_cstr("height"), xt_number(rect.height));
   return object;
 }
 

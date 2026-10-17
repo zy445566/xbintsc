@@ -17,16 +17,17 @@
 namespace xtgui {
 namespace renderer_detail {
 
-void pushGlyph(std::vector<TextVertex> &verts, float x, float y, float width, float height,
-               const GlyphEntry &entry, const xtgui::Color &color) {
-  const float corners_x[4] = {x, x + width, x + width, x};
-  const float corners_y[4] = {y, y, y + height, y + height};
-  const float u[4] = {entry.u0, entry.u1, entry.u1, entry.u0};
-  const float v[4] = {entry.v0, entry.v0, entry.v1, entry.v1};
+/** Bounds for the atlas raster of a transformed glyph: below 1 the text is
+ * already shrinking, above 4 the atlas cost outweighs the sharpness. */
+constexpr float kMinGlyphScale = 0.5f;
+constexpr float kMaxGlyphScale = 4.0f;
+
+void pushQuad(std::vector<TextVertex> &verts, const float corners_x[4], const float corners_y[4],
+              const float u[4], const float v[4], const xtgui::Color &color,
+              const xtgui::Matrix2D &transform) {
   TextVertex corners[4];
   for (int i = 0; i < 4; i++) {
-    corners[i].x = corners_x[i];
-    corners[i].y = corners_y[i];
+    transform.apply(corners_x[i], corners_y[i], &corners[i].x, &corners[i].y);
     corners[i].u = u[i];
     corners[i].v = v[i];
     corners[i].r = color.r;
@@ -36,6 +37,16 @@ void pushGlyph(std::vector<TextVertex> &verts, float x, float y, float width, fl
   }
   static const int order[6] = {0, 1, 2, 0, 2, 3};
   for (int i = 0; i < 6; i++) verts.push_back(corners[order[i]]);
+}
+
+void pushGlyph(std::vector<TextVertex> &verts, float x, float y, float width, float height,
+               const GlyphEntry &entry, const xtgui::Color &color,
+               const xtgui::Matrix2D &transform) {
+  const float corners_x[4] = {x, x + width, x + width, x};
+  const float corners_y[4] = {y, y, y + height, y + height};
+  const float u[4] = {entry.u0, entry.u1, entry.u1, entry.u0};
+  const float v[4] = {entry.v0, entry.v0, entry.v1, entry.v1};
+  pushQuad(verts, corners_x, corners_y, u, v, color, transform);
 }
 
 bool ensureAtlasTexture(SDL_GPUDevice *device) {
@@ -302,6 +313,15 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     xtgui::Font *logical = xtgui::xt_text_resolve(run.font);
     if (logical == nullptr) continue;
 
+    /* A scaling `transform` magnifies the glyph quads on the GPU, so the atlas
+       has to hold a raster of that size or the text looks like a scaled bitmap:
+       rasterise at the device scale times the transform's magnification, and
+       clamp it — the atlas is finite, and a 40x transform would evict every
+       other glyph (a magnified bitmap is the right trade at that point). */
+    float glyph_scale = scale * run.transform.magnification();
+    if (glyph_scale < kMinGlyphScale) glyph_scale = kMinGlyphScale;
+    if (glyph_scale > kMaxGlyphScale) glyph_scale = kMaxGlyphScale;
+
     std::vector<xtgui::ShapedGlyph> glyphs;
     xtgui::xt_text_shape_run(run.text, logical, glyphs);
     float pen_x = run.x;
@@ -309,17 +329,19 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     for (const xtgui::ShapedGlyph &glyph : glyphs) {
       if (glyph.glyph != 0) {
         xtgui::Font *face = glyph.font != nullptr ? glyph.font : logical;
-        if (scale != 1.0f) {
-          xtgui::Font *scaled = xtgui::xt_text_scale(face, run.font.pixel_size * scale);
+        if (glyph_scale != 1.0f) {
+          xtgui::Font *scaled = xtgui::xt_text_scale(face, run.font.pixel_size * glyph_scale);
           if (scaled != nullptr) face = scaled;
         }
         GlyphEntry entry;
         if (ensureGlyph(device, face, glyph.glyph, entry)) {
-          float quad_x = pen_x + glyph.x_offset + (float)entry.left / scale;
-          float quad_y = run.baseline + glyph.y_offset - (float)entry.top / scale;
-          float quad_w = (float)entry.width / scale;
-          float quad_h = (float)entry.height / scale;
-          pushGlyph(verts, quad_x, quad_y, quad_w, quad_h, entry, run.color);
+          /* Entry metrics are in raster pixels; divide them back into logical
+             units — the transform (not the atlas) does the final scaling. */
+          float quad_x = pen_x + glyph.x_offset + (float)entry.left / glyph_scale;
+          float quad_y = run.baseline + glyph.y_offset - (float)entry.top / glyph_scale;
+          float quad_w = (float)entry.width / glyph_scale;
+          float quad_h = (float)entry.height / glyph_scale;
+          pushGlyph(verts, quad_x, quad_y, quad_w, quad_h, entry, run.color, run.transform);
         }
       }
       pen_x += glyph.x_advance;

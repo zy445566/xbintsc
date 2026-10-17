@@ -59,7 +59,7 @@ win.on("keydown", (e) => console.log(e.key, e.code, e.ctrl, e.shift, e.alt, e.me
 ```ts
 win.computedStyle(selector, property)  // e.g. ("#main", "width") -> "60%"
 win.queryCount(selector)               // 匹配元素的数量
-win.getBoundingClientRect(selector)    // { x, y, width, height }（边框盒）
+win.getBoundingClientRect(selector)    // { x, y, width, height }（边框盒，含变换）
 win.documentTree()                     // 序列化的 DOM（调试用）
 win.layoutTree()                       // 序列化的布局盒（调试用）
 win.paintCount()                       // 显示列表中图形的数量

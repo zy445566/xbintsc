@@ -16,6 +16,7 @@
 
 #include "css.h"
 #include "dom.h"
+#include "transform.h"
 
 namespace xtgui {
 
@@ -107,6 +108,12 @@ struct XtStyle {
   FloatSide float_side = FloatSide::None;
   Clear clear = Clear::None;
 
+  /** `transform` (not inherited) and `transform-origin` (defaults to the centre
+   * of the border box). Layout resolves the list into one matrix per box. */
+  std::vector<TransformOp> transform;
+  Length transform_origin_x{50.0f, Unit::Percent};
+  Length transform_origin_y{50.0f, Unit::Percent};
+
   /** `transition` specs; not inherited. Applied by `XtDocument`. */
   std::vector<TransitionSpec> transitions;
 };
@@ -122,6 +129,9 @@ void xt_style_compute(const Node *root, const StyleSheet &sheet,
 
 /** Format a computed property for diagnostics/tests (`computedStyle(sel, prop)`). */
 std::string xt_style_property_to_string(const XtStyle &style, const std::string &property);
+
+/** Format a length the way `computedStyle` does (`4px`, `50%`, `1.5`). */
+std::string xt_style_length_to_string(const Length &length);
 
 }  // namespace xtgui
 

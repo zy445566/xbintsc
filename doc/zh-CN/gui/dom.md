@@ -20,7 +20,12 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 有状态的 `:hover` 与 `:focus`（见[输入](./input.md)）。值：长度
 （`px`、`%`、`em`、`rem`、`vw`、`vh`、`pt`、`pc`、`in`、`cm`、`mm`、`q`）、
 颜色（十六进制、`rgb()`/`rgba()`、一个命名子集）、数字、关键字与简写
-（`margin`/`padding`/`border`/`flex`）。
+（`margin`/`padding`/`border`/`flex`）。`transform`
+（`translate`/`translate3d`/`translateX`/`translateY`、
+`scale`/`scale3d`/`scaleX`/`scaleY`、`rotate`/`rotateZ`、`matrix`；`3d`
+拼写的 `z` 参数会被丢弃）与 `transform-origin`
+会被解析进计算样式：前者是操作列表，后者是两个（未解析的）原点长度；不支持的
+函数会让整条声明失效（见[布局](./layout.md#变换m15)）。
 
 **层叠与计算样式**（`runtime/ext_gui/style.{h,cpp}`）：一份小的内置 UA
 样式表，作者规则按 `(!important, 特异性, 源码顺序)` 排序，然后是内联

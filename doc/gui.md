@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M14** — features (M1–M13) are complete: HTML parsing, CSS selector
+Status: **M15** — features (M1–M14) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -24,7 +24,13 @@ video frames go through the image texture path and audio to an SDL stream, with
 the DOM media API exposing `play`/`pause`/`currentTime`/… and media events.
 **M14** adds `<canvas>` with a self-written 2D software rasteriser (anti-aliased
 fills, paths, text and `drawImage`) uploaded through the image texture path —
-see [Canvas](./gui/canvas.md).
+see [Canvas](./gui/canvas.md). **M15** adds CSS `transform` /
+`transform-origin`: a composited `Matrix2D` per layout box that the display list
+carries into the renderer, so boxes (and the text, images and children inside
+them) can be translated, scaled and rotated without reflowing anything — and
+`transition: transform`, so those poses animate. See
+[Layout](./gui/layout.md#transforms-m15) and
+[Animation](./gui/animation.md#css-transforms-m15).
 This overview records the locked decisions, the architecture, the milestone plan
 and the current progress; the engine itself is documented by function in the
 pages above.
@@ -38,7 +44,7 @@ pages above.
 - [Media](./gui/media.md) — images, SVG, video and audio
 - [Canvas](./gui/canvas.md) — `<canvas>` and the 2D context
 - [Input](./gui/input.md) — hit testing, events and `:hover`/`:focus`
-- [Animation](./gui/animation.md) — `requestAnimationFrame` and CSS transitions
+- [Animation](./gui/animation.md) — `requestAnimationFrame`, CSS transitions and transforms
 - [Runtime integration](./gui/runtime.md) — event loop, native bridge and memory
 - [Packaging and build](./gui/build.md) — building `gui.a` and running examples
 - [Known issues and open questions](./gui/known-issues.md)
@@ -240,6 +246,16 @@ engine were Rust.
       GPU texture through the image path (`renderer_image.cpp`) and the display
       list carries a `canvas_id` (`paint.*`). See [Canvas](./gui/canvas.md);
       e2e in `tests/e2e/gui-canvas.test.ts`.
+15. **M15 — CSS `transform`** ✅
+    - `transform`/`transform-origin` parse into a `TransformOp` list
+      (`transform.{h,cpp}`, `style.*`), transition like any other paint
+      property (`document.*`), and are composed into a per-box `world` matrix
+      (plus its inverse) after layout (`layout.*`). Paint carries the matrix on
+      every op and the renderer maps quad corners through it, so the shaders are
+      untouched. Hit testing and `getBoundingClientRect` follow. See
+      [Layout](./gui/layout.md#transforms-m15) and
+      [Animation](./gui/animation.md#css-transforms-m15); e2e in
+      `tests/e2e/gui-transform.test.ts` and `tests/e2e/gui-example-svg.test.ts`.
 
 ## Progress log
 
@@ -325,4 +341,17 @@ engine were Rust.
   image texture path (`renderer_image.cpp`) and the display list carries a
   `canvas_id` (`paint.*`). See [Canvas](./gui/canvas.md); e2e in
   `tests/e2e/gui-canvas.test.ts`.
+- **M15** ✅ CSS `transform` / `transform-origin`. A new translation unit
+  (`transform.{h,cpp}`) parses `translate`/`translateX`/`translateY`/`scale`/
+  `scaleX`/`scaleY`/`rotate`/`matrix` (plus `translate3d`/`scale3d`, whose `z`
+  argument is dropped) into a `Matrix2D` list, reports them back through
+  `computedStyle`, and interpolates them for transitions (a shape or unit change
+  snaps). Layout composes a `world` matrix and its inverse per box after the
+  normal pass (`applyTransforms`), resolving `transform-origin` against the
+  border box — so layout geometry, and therefore flow, never changes. Paint
+  attaches the matrix to every shape/text/image op and the renderer maps quad
+  corners through it (no shader or uniform change), hit testing maps the point
+  through the inverse, and `getBoundingClientRect` returns the transformed AABB.
+  `examples/gui/pelican-svg` animates its artwork with it; e2e in
+  `tests/e2e/gui-transform.test.ts` and `tests/e2e/gui-example-svg.test.ts`.
 

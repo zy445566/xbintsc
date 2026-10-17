@@ -22,6 +22,18 @@ std::string formatColor(const Color &color) {
   return buffer;
 }
 
+/** ` transform=matrix(...)` for a non-identity matrix, so the dump (and the
+ * tests that read it) can see where a box was transformed to. */
+std::string transformSuffix(const Matrix2D &matrix) {
+  if (matrix.identity()) return "";
+  char buffer[192];
+  std::snprintf(buffer, sizeof(buffer),
+                " transform=matrix(%.4g,%.4g,%.4g,%.4g,%.4g,%.4g)", (double)matrix.a,
+                (double)matrix.b, (double)matrix.c, (double)matrix.d, (double)matrix.e,
+                (double)matrix.f);
+  return buffer;
+}
+
 FontSpec specOf(const XtStyle &style) {
   FontSpec spec;
   spec.family = style.font_family;
@@ -32,7 +44,7 @@ FontSpec specOf(const XtStyle &style) {
 }
 
 void addRect(DisplayList &out, float x, float y, float width, float height, float radius,
-             const Color &color, const PaintClip &clip) {
+             const Color &color, const PaintClip &clip, const Matrix2D &transform) {
   if (width <= 0.0f || height <= 0.0f || color.a <= 0.0f) return;
   PaintRect rect;
   rect.x = x;
@@ -41,6 +53,7 @@ void addRect(DisplayList &out, float x, float y, float width, float height, floa
   rect.height = height;
   rect.radius = radius;
   rect.color = color;
+  rect.transform = transform;
   out.rects.push_back(rect);
   out.ops.push_back(PaintOp{PaintKind::Rect, (uint32_t)(out.rects.size() - 1), clip});
 }
@@ -62,6 +75,7 @@ void addTextRuns(const LayoutBox *box, const XtStyle &style, DisplayList &out,
     run.color = style.color;
     run.text = fragment.text;
     run.font = spec;
+    run.transform = box->world;
     out.texts.push_back(std::move(run));
     out.ops.push_back(PaintOp{PaintKind::Text, (uint32_t)(out.texts.size() - 1), clip});
   }
@@ -75,7 +89,8 @@ void addImage(const PaintImage &image, DisplayList &out, const PaintClip &clip) 
 void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip);
 
 /** The clip a box imposes on its content: its padding box, intersected with the
- * clip already in effect. Only `overflow: hidden/scroll/auto` clips. */
+ * clip already in effect. Only `overflow: hidden/scroll/auto` clips. A
+ * transformed box clips to the bounding box of its transformed padding box. */
 PaintClip clipForChildren(const LayoutBox *box, const PaintClip &parent) {
   if (box->style == nullptr || box->style->overflow == Overflow::Visible) return parent;
   float x = box->x + box->border_left;
@@ -84,6 +99,13 @@ PaintClip clipForChildren(const LayoutBox *box, const PaintClip &parent) {
   float height = box->height - box->border_top - box->border_bottom;
   if (width < 0) width = 0;
   if (height < 0) height = 0;
+  if (box->has_transform) {
+    LayoutRect bounds = xt_layout_transform_rect(box->world, x, y, width, height);
+    x = bounds.x;
+    y = bounds.y;
+    width = bounds.width;
+    height = bounds.height;
+  }
   if (!parent.active) return PaintClip{true, x, y, width, height};
   float x0 = std::max(x, parent.x);
   float y0 = std::max(y, parent.y);
@@ -124,10 +146,12 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
       addTextRuns(box, *style, out, clip);
     } else {
       /* Background first, then the border ring, then replaced content. Children
-       * are clipped by this box's padding box when it establishes one. */
+       * are clipped by this box's padding box when it establishes one. Every
+       * shape carries the box's `transform` matrix for the renderer. */
+      const Matrix2D &matrix = box->world;
       if (style->has_background) {
         addRect(out, box->x, box->y, box->width, box->height, style->border_radius,
-                style->background, clip);
+                style->background, clip, matrix);
       }
       if (style->border_style != BorderStyle::None && style->has_border_color) {
         const Color bc = style->border_color;
@@ -136,11 +160,12 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         float bottom = box->border_bottom;
         float left = box->border_left;
         float inner_height = box->height - top - bottom;
-        addRect(out, box->x, box->y, box->width, top, 0.0f, bc, clip);
-        addRect(out, box->x, box->y + box->height - bottom, box->width, bottom, 0.0f, bc, clip);
-        addRect(out, box->x, box->y + top, left, inner_height, 0.0f, bc, clip);
+        addRect(out, box->x, box->y, box->width, top, 0.0f, bc, clip, matrix);
+        addRect(out, box->x, box->y + box->height - bottom, box->width, bottom, 0.0f, bc, clip,
+                matrix);
+        addRect(out, box->x, box->y + top, left, inner_height, 0.0f, bc, clip, matrix);
         addRect(out, box->x + box->width - right, box->y + top, right, inner_height, 0.0f, bc,
-                clip);
+                clip, matrix);
       }
       if (box->is_canvas && box->canvas_id != 0 && box->content_width > 0.0f &&
           box->content_height > 0.0f) {
@@ -150,6 +175,7 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         image.width = box->content_width;
         image.height = box->content_height;
         image.canvas_id = box->canvas_id;
+        image.transform = matrix;
         addImage(image, out, clip);
       } else if (box->is_media && box->media_id != 0 && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
@@ -159,6 +185,7 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         image.width = box->content_width;
         image.height = box->content_height;
         image.media_id = box->media_id;
+        image.transform = matrix;
         addImage(image, out, clip);
       } else if (box->is_image && !box->image_src.empty() && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
@@ -168,6 +195,7 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         image.width = box->content_width;
         image.height = box->content_height;
         image.src = box->image_src;
+        image.transform = matrix;
         addImage(image, out, clip);
       }
     }
@@ -185,7 +213,7 @@ void xt_paint_build(const LayoutBox *root, DisplayList &out) {
 
 std::string DisplayList::dump() const {
   std::string text;
-  char buffer[224];
+  char buffer[288];
   for (const PaintOp &op : ops) {
     std::string prefix;
     if (op.clip.active) {
@@ -193,34 +221,39 @@ std::string DisplayList::dump() const {
                     op.clip.width, op.clip.height);
       prefix = buffer;
     }
+    std::string suffix;
     if (op.kind == PaintKind::Rect) {
+      suffix = transformSuffix(rects[op.index].transform);
       const PaintRect &rect = rects[op.index];
       std::snprintf(buffer, sizeof(buffer),
-                    "rect x=%.1f y=%.1f w=%.1f h=%.1f r=%.1f color=%s\n", rect.x, rect.y,
+                    "rect x=%.1f y=%.1f w=%.1f h=%.1f r=%.1f color=%s", rect.x, rect.y,
                     rect.width, rect.height, rect.radius, formatColor(rect.color).c_str());
       text += prefix + buffer;
     } else if (op.kind == PaintKind::Text) {
+      suffix = transformSuffix(texts[op.index].transform);
       const PaintText &run = texts[op.index];
       std::snprintf(buffer, sizeof(buffer),
-                    "text x=%.1f baseline=%.1f size=%.1f color=%s \"%s\"\n", run.x, run.baseline,
+                    "text x=%.1f baseline=%.1f size=%.1f color=%s \"%s\"", run.x, run.baseline,
                     run.font.pixel_size, formatColor(run.color).c_str(), run.text.c_str());
       text += prefix + buffer;
     } else {
       const PaintImage &image = images[op.index];
+      suffix = transformSuffix(image.transform);
       if (image.media_id != 0) {
-        std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f media=%llu\n",
+        std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f media=%llu",
                       image.x, image.y, image.width, image.height,
                       (unsigned long long)image.media_id);
       } else if (image.canvas_id != 0) {
-        std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f canvas=%llu\n",
+        std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f canvas=%llu",
                       image.x, image.y, image.width, image.height,
                       (unsigned long long)image.canvas_id);
       } else {
-        std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f src=%s\n",
-                      image.x, image.y, image.width, image.height, image.src.c_str());
+        std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f src=%s", image.x,
+                      image.y, image.width, image.height, image.src.c_str());
       }
       text += prefix + buffer;
     }
+    text += suffix + "\n";
   }
   return text;
 }

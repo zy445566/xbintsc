@@ -54,6 +54,21 @@ its own GPU scissor rectangle (scaled to device pixels), so painter order and
 - Geometry is uploaded only when the document or viewport changes
   (`geometry.dirty`), so steady-state frames are bind-and-draw.
 
+Each op also carries the `Matrix2D` of the box it came from
+(`runtime/ext_gui/transform.h`, `PaintRect::transform` and friends). It is
+applied while the vertex buffer is built, not in the shader: `pushRect` maps its
+four corners through the matrix (the distance-field `local`/half-extent/radius
+fields stay in the *box* frame, so a rounded corner stays round after a
+rotation), and `pushQuad`/`pushGlyph` map the glyph or image quad the same way.
+That kept the MSL/SPIR-V/DXIL shaders and the pipelines untouched — a transform
+costs a few multiplies per vertex and nothing per pixel. A clip rectangle of a
+transformed box is the bounding box of the transformed padding box, because the
+GPU scissor is axis aligned. Text is the one case that needs more than
+multiplying corners: a scaling transform would magnify an atlas raster, so the
+atlas is asked for glyphs at the device scale **times the matrix's
+magnification** (clamped to 0.5–4x, since the atlas is finite) and the quad is
+divided back into logical units, exactly the way HiDPI scaling already worked.
+
 The window background (`setBackground`) is the render-pass clear colour.
 
 Still to do in M4: gradients.

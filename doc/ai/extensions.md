@@ -76,7 +76,11 @@ with elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM
 are decoded on the main thread. `<canvas>` is supported too: `getContext("2d")`
 returns a context whose fills, paths, text and `drawImage` are rasterised by a
 self-written CPU rasteriser, and element handles expose `canvas` drawing plus
-`width`/`height`. If that archive is missing for
+`width`/`height`. CSS `transform`/`transform-origin` work as paint-time
+effects, so a box (and the text, images and children in it) can be translated,
+scaled and rotated without reflowing anything — animate it per frame from
+`requestAnimationFrame` or with `transition: transform` (see
+`examples/gui/pelican-svg`). If that archive is missing for
 your platform, the build fails with an actionable message; design and roadmap
 live in [../gui.md](../gui.md) (overview; the engine is documented by function
 under [`doc/gui/`](../gui/)), and the scripting surface in

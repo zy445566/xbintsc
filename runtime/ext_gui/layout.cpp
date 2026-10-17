@@ -19,9 +19,14 @@
 #include <cstring>
 
 #include "image.h"
+#include "style_internal.h"
 
 namespace xtgui {
 namespace {
+
+/** Compose `transform`/`transform-origin` down the tree (defined below). */
+void applyTransforms(LayoutBox *box, const Matrix2D &parent_world, bool parent_transformed,
+                     float viewportWidth, float viewportHeight);
 
 std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
                                         const std::unordered_map<const Node *, XtStyle> &styles,
@@ -167,6 +172,7 @@ void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *
     }
   }
   xt_layout_run(root_.get(), styles, viewportWidth, viewportHeight);
+  applyTransforms(root_.get(), Matrix2D(), false, viewportWidth, viewportHeight);
 
   std::vector<const LayoutBox *> stack;
   stack.push_back(root_.get());
@@ -191,7 +197,11 @@ const LayoutBox *hitTestBox(const LayoutBox *box, float x, float y) {
   for (auto it = box->children.rbegin(); it != box->children.rend(); ++it) {
     if (const LayoutBox *hit = hitTestBox(it->get(), x, y)) return hit;
   }
-  if (x >= box->x && x < box->x + box->width && y >= box->y && y < box->y + box->height) {
+  float local_x = x;
+  float local_y = y;
+  if (box->has_transform) box->inverse.apply(x, y, &local_x, &local_y);
+  if (local_x >= box->x && local_x < box->x + box->width && local_y >= box->y &&
+      local_y < box->y + box->height) {
     return box;
   }
   return nullptr;
@@ -205,6 +215,73 @@ const LayoutBox *LayoutTree::hitTest(float x, float y) const {
 
 std::string LayoutTree::dump() const {
   return root_ == nullptr ? std::string() : dumpBox(root_.get(), 0);
+}
+
+/* -- transforms ----------------------------------------------------------- */
+
+namespace {
+
+/** The transform a single box applies to its own geometry, relative to its
+ * `transform-origin`. Text boxes inherit their parent's style pointer, so only
+ * element boxes may contribute one (otherwise the style would be applied
+ * twice). */
+Matrix2D boxLocalTransform(const LayoutBox *box, float viewportWidth, float viewportHeight) {
+  Matrix2D local;
+  if (box->style == nullptr || box->style->transform.empty()) return local;
+  if (box->node == nullptr || !box->node->isElement()) return local;
+  const XtStyle &style = *box->style;
+  Matrix2D body = xt_transform_matrix(style.transform, box->width, box->height, style.font_size,
+                                      viewportWidth, viewportHeight);
+  float origin_x = box->x + xt_style_resolve_absolute(style.transform_origin_x, box->width,
+                                                      style.font_size, 16.0f, viewportWidth,
+                                                      viewportHeight);
+  float origin_y = box->y + xt_style_resolve_absolute(style.transform_origin_y, box->height,
+                                                      style.font_size, 16.0f, viewportWidth,
+                                                      viewportHeight);
+  return Matrix2D::translate(origin_x, origin_y)
+      .multiply(body)
+      .multiply(Matrix2D::translate(-origin_x, -origin_y));
+}
+
+void applyTransforms(LayoutBox *box, const Matrix2D &parent_world, bool parent_transformed,
+                     float viewportWidth, float viewportHeight) {
+  Matrix2D local = boxLocalTransform(box, viewportWidth, viewportHeight);
+  box->world = parent_world.multiply(local);
+  box->has_transform = parent_transformed || !local.identity();
+  if (!box->world.invert(&box->inverse)) box->inverse = Matrix2D();
+  for (std::unique_ptr<LayoutBox> &child : box->children) {
+    applyTransforms(child.get(), box->world, box->has_transform, viewportWidth, viewportHeight);
+  }
+}
+
+}  // namespace
+
+LayoutRect xt_layout_transform_rect(const Matrix2D &matrix, float x, float y, float width,
+                                    float height) {
+  LayoutRect out{x, y, width, height};
+  if (matrix.identity()) return out;
+  const float corners_x[4] = {x, x + width, x + width, x};
+  const float corners_y[4] = {y, y, y + height, y + height};
+  float min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+  for (int i = 0; i < 4; i++) {
+    float corner_x = 0;
+    float corner_y = 0;
+    matrix.apply(corners_x[i], corners_y[i], &corner_x, &corner_y);
+    if (i == 0 || corner_x < min_x) min_x = corner_x;
+    if (i == 0 || corner_x > max_x) max_x = corner_x;
+    if (i == 0 || corner_y < min_y) min_y = corner_y;
+    if (i == 0 || corner_y > max_y) max_y = corner_y;
+  }
+  out.x = min_x;
+  out.y = min_y;
+  out.width = max_x - min_x;
+  out.height = max_y - min_y;
+  return out;
+}
+
+LayoutRect xt_layout_transformed_bounds(const LayoutBox *box) {
+  if (box == nullptr) return LayoutRect();
+  return xt_layout_transform_rect(box->world, box->x, box->y, box->width, box->height);
 }
 
 }  // namespace xtgui

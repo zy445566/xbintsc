@@ -60,7 +60,7 @@ exposes read-only hooks:
 ```ts
 win.computedStyle(selector, property)  // e.g. ("#main", "width") -> "60%"
 win.queryCount(selector)               // number of matching elements
-win.getBoundingClientRect(selector)    // { x, y, width, height } (border box)
+win.getBoundingClientRect(selector)    // { x, y, width, height } (border box, transformed)
 win.documentTree()                     // serialized DOM (debugging)
 win.layoutTree()                       // serialized layout boxes (debugging)
 win.paintCount()                       // number of shapes in the display list

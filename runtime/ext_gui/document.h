@@ -20,15 +20,18 @@
 
 namespace xtgui {
 
-/** A running CSS transition (only paint-affecting properties are supported). */
+/** A running CSS transition (paint-affecting properties, plus `transform`). */
 struct ActiveTransition {
   const Node *node = nullptr;
   std::string property;
   bool is_color = false;
+  bool is_transform = false;
   float from_color[4] = {0, 0, 0, 0};
   float to_color[4] = {0, 0, 0, 0};
   float from_number = 0;
   float to_number = 0;
+  std::vector<TransformOp> from_transform;
+  std::vector<TransformOp> to_transform;
   float start_ms = 0;     // when interpolation begins (after `delay`)
   float duration_ms = 0;
   float delay_ms = 0;

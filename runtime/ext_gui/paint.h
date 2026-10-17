@@ -20,6 +20,7 @@
 #include "css.h"
 #include "layout.h"
 #include "text.h"
+#include "transform.h"
 
 namespace xtgui {
 
@@ -31,6 +32,8 @@ struct PaintRect {
   float height = 0;
   float radius = 0;
   Color color;
+  /** `transform` of the box this shape belongs to (layout -> device space). */
+  Matrix2D transform;
 };
 
 /** A run of text to draw at `x`/`baseline` (viewport-relative). */
@@ -42,6 +45,7 @@ struct PaintText {
   Color color;
   std::string text;
   FontSpec font;
+  Matrix2D transform;
 };
 
 /** An image to draw, scaled into the given rectangle (viewport-relative).
@@ -56,10 +60,12 @@ struct PaintImage {
   std::string src;
   uint64_t media_id = 0;
   uint64_t canvas_id = 0;
+  Matrix2D transform;
 };
 
-/** The clip rectangle in effect for a painted shape (viewport-relative logical
- * pixels). `width <= 0` means "no clip". */
+/** The clip rectangle in effect for a painted shape (device-space logical
+ * pixels — a transformed subtree contributes the bounding box of its clip).
+ * `width <= 0` means "no clip". */
 struct PaintClip {
   bool active = false;
   float x = 0;

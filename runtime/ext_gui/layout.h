@@ -53,6 +53,11 @@ struct TextFragment {
   std::string text;
 };
 
+/** A viewport-relative rectangle (`getBoundingClientRect` result). */
+struct LayoutRect {
+  float x = 0, y = 0, width = 0, height = 0;
+};
+
 struct LayoutBox {
   const Node *node = nullptr;
   const XtStyle *style = nullptr;
@@ -94,6 +99,13 @@ struct LayoutBox {
    * is none): the containing block `position: absolute` resolves against. */
   float cb_x = 0, cb_y = 0, cb_width = 0, cb_height = 0;
 
+  /* `transform`/`transform-origin` composed down the tree: `world` maps this
+   * box's layout coordinates to device space, `inverse` does the opposite (hit
+   * testing). `has_transform` is true for a box inside a transformed subtree. */
+  Matrix2D world;
+  Matrix2D inverse;
+  bool has_transform = false;
+
   LayoutBox *parent = nullptr;
   std::vector<std::unique_ptr<LayoutBox>> children;
 };
@@ -123,6 +135,15 @@ class LayoutTree {
 
 /** Text width under `style` (shaped with the HarfBuzz/FreeType stack). */
 float xt_layout_text_width(const std::string &text, const XtStyle &style);
+
+/** The box's border box in device space: its layout rectangle pushed through
+ * `box->world` and reduced to an axis-aligned bounding box. */
+LayoutRect xt_layout_transformed_bounds(const LayoutBox *box);
+
+/** Push an arbitrary layout rectangle through `matrix` and return its
+ * axis-aligned bounding box. */
+LayoutRect xt_layout_transform_rect(const Matrix2D &matrix, float x, float y, float width,
+                                    float height);
 
 }  // namespace xtgui
 

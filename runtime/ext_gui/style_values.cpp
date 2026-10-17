@@ -441,6 +441,49 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     return;
   }
 
+  if (property == "transform") {
+    std::vector<TransformOp> ops;
+    if (xt_transform_parse(value, &ops)) style->transform = ops;
+    return;
+  }
+  if (property == "transform-origin") {
+    /* One or two values plus an optional z offset (ignored: the engine is 2D).
+     * The keywords carry an axis, so `top` alone means `center top` and
+     * `top center` is the same as `center top`. */
+    std::vector<std::string> parts = xt_css_split_whitespace(value);
+    Length values[2] = {Length{50.0f, Unit::Percent}, Length{50.0f, Unit::Percent}};
+    bool vertical[2] = {false, false};
+    size_t used = 0;
+    for (const std::string &part : parts) {
+      if (used >= 2) break;
+      std::string keyword = xt_css_lower(part);
+      Length length = xt_css_parse_length(keyword);
+      if (length.unit == Unit::Invalid || length.unit == Unit::Auto || length.unit == Unit::None) {
+        if (keyword == "left" || keyword == "top") length = {0.0f, Unit::Percent};
+        else if (keyword == "center") length = {50.0f, Unit::Percent};
+        else if (keyword == "right" || keyword == "bottom") length = {100.0f, Unit::Percent};
+        else return;
+        vertical[used] = keyword == "top" || keyword == "bottom";
+      }
+      values[used++] = length;
+    }
+    if (used == 0) return;
+    Length x = values[0];
+    Length y = used > 1 ? values[1] : Length{50.0f, Unit::Percent};
+    if (used > 1) {
+      if (vertical[0] && !vertical[1]) {
+        x = values[1];
+        y = values[0];
+      }
+    } else if (vertical[0]) {
+      /* `top`/`bottom` on their own keep x centred. */
+      x = Length{50.0f, Unit::Percent};
+      y = values[0];
+    }
+    style->transform_origin_x = x;
+    style->transform_origin_y = y;
+    return;
+  }
   if (property == "opacity") {
     float number = 0;
     if (xt_css_parse_number(value, &number)) style->opacity = number < 0 ? 0 : (number > 1 ? 1 : number);

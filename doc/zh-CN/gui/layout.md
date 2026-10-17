@@ -54,6 +54,37 @@
 `z-index` 层叠上下文，以及 `float` 对块级子元素的影响（只有行内内容会绕排，
 块必须 `clear`）。
 
+## 变换（M15）
+
+`transform` 与 `transform-origin` 是**绘制期**效果：上面的盒模型完全不变
+（不重排、不重算几何），`xt_layout_run` 之后的一次额外遍历会给每个
+`LayoutBox` 一个 `Matrix2D world`（整条祖先链的变换）及其 `inverse`：
+
+- **只有元素盒参与。** 文本盒与其父元素共享同一个 `style` 指针，若两者都参与
+  就会把元素的列表应用两次；该遍历只合成元素自身的列表与祖先的。
+- **`transform-origin` 在这里解析**，而不是在层叠阶段：计算样式保留两个
+  （可能是 `%` 的）`Length`（默认 `50% 50%`），布局按*边框盒*解析它们，应用
+  `T(origin) · M · T(-origin)`。这就是
+  `computedStyle(el, "transform-origin")` 仍报告 `50% 92%` 的原因。关键字与
+  CSS 一样带方向：单独写 `top` 等于 `center top`，两个关键字可以任意顺序
+  （`bottom right` 等于 `right bottom`）。
+- **长度按盒子解析**：`translate()` 里的 `%` 是边框盒宽/高的比例，`em`/`rem`
+  按根字号（16px），`vw`/`vh` 按视口。
+- **合成顺序**遵循 CSS：列表从右往左应用，所以
+  `rotate(90deg) translate(10px)` 把盒子往屏幕**下方**移动，而不是往右。
+
+下游消费者都跟着矩阵走：
+
+| 消费者 | 行为 |
+| --- | --- |
+| 绘制 | 每个 op 携带矩阵（见[绘制](./rendering.md#绘制与显示列表m4am4b)）；被裁剪的子树按它的内边距盒经矩阵变换后的包围盒裁剪 |
+| 命中测试 | `hitTestBox` 先把点经每个盒的逆矩阵映射，再做包含判断，所以旋转或缩放的元素在它**被画出来**的位置可点击 |
+| `getBoundingClientRect` | **变换后**边框盒的轴对齐包围盒（`xt_layout_transformed_bounds`） |
+| 布局几何 | 不变——`layoutTree()` 与 `offsetWidth`/`offsetHeight` 仍报告未变换的盒子 |
+
+不支持的变换函数（`skew`、`perspective` 等）会让整条声明失效，因此一个盒子
+要么被正确变换、要么完全不变换，而不是只应用了一部分。
+
 **Document**（`runtime/ext_gui/document.{h,cpp}`）：持有 DOM 树，把 `<style>`
 文本汇总为一份样式表，为某个视口计算样式与布局，并提供
 `querySelector`/`querySelectorAll`/`styleOf`/`boxOf`。

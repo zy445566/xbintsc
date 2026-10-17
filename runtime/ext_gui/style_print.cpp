@@ -118,7 +118,13 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "border-radius") return formatNumber(style.border_radius) + "px";
   if (property == "opacity") return formatNumber(style.opacity);
   if (property == "z-index") return style.has_z_index ? formatNumber((float)style.z_index) : "auto";
+  if (property == "transform") return xt_transform_to_string(style.transform);
+  if (property == "transform-origin") {
+    return formatLength(style.transform_origin_x) + " " + formatLength(style.transform_origin_y);
+  }
   return "";
 }
+
+std::string xt_style_length_to_string(const Length &length) { return formatLength(length); }
 
 }  // namespace xtgui

@@ -66,6 +66,42 @@ flex items from non-whitespace text, full `z-index` stacking contexts, and
 `float` affecting block children (only inline content wraps; a block must
 `clear`).
 
+## Transforms (M15)
+
+`transform` and `transform-origin` are a **paint-time** effect: the box model
+above is untouched (nothing reflows, no geometry is recomputed), and a second
+pass after `xt_layout_run` gives every `LayoutBox` a `Matrix2D world` — the
+transform of the whole ancestor chain — plus its `inverse`:
+
+- **Only element boxes contribute.** A text box shares its parent element's
+  `style` pointer, so letting both contribute would apply the element's list
+  twice; the pass composes an element's own list, its ancestors', and nothing
+  else.
+- **`transform-origin` is resolved here**, not in the cascade: the computed style
+  keeps the two (possibly `%`) `Length`s (default `50% 50%`) and layout resolves
+  them against the *border box*, applying `T(origin) · M · T(-origin)`. That is
+  why `computedStyle(el, "transform-origin")` still reports `50% 92%`. The
+  keywords are positional as in CSS: `top` alone is `center top`, and the
+  keyword pair may be given in either order (`bottom right` = `right bottom`).
+- **Lengths resolve against the box**: `%` in `translate()` is a share of the
+  border box's width/height, `em`/`rem` against the root font size (16px), and
+  `vw`/`vh` against the viewport.
+- **Composition order** follows CSS: the list applies right to left, so
+  `rotate(90deg) translate(10px)` moves the box *down* the screen, not right.
+
+Everything downstream follows the matrices:
+
+| Consumer | Behaviour |
+| --- | --- |
+| Paint | each op carries the matrix (see [Rendering](./rendering.md#paint-and-display-list-m4am4b)); a clipped subtree clips to the bounding box of its padding box through the matrix |
+| Hit testing | `hitTestBox` maps the point through each box's inverse before the containment test, so a rotated or scaled element is clickable where it is *drawn* |
+| `getBoundingClientRect` | the axis-aligned bounding box of the **transformed** border box (`xt_layout_transformed_bounds`) |
+| Layout geometry | unchanged — `layoutTree()` and `offsetWidth`/`offsetHeight` keep reporting the untransformed box |
+
+Unsupported transform functions (`skew`, `perspective`, …) invalidate the whole
+declaration, so a box is either correctly transformed or not transformed at all
+rather than partially applied.
+
 **Document** (`runtime/ext_gui/document.{h,cpp}`): owns the DOM tree, gathers
 `<style>` text into one stylesheet, computes styles and layout for a viewport and
 offers `querySelector`/`querySelectorAll`/`styleOf`/`boxOf`.

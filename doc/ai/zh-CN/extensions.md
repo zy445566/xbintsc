@@ -69,7 +69,11 @@ import { createWindow, run } from "gui";
 `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件可让程序驱动播放。
 没有内置控件——用元素和 CSS 自绘控件（见 `examples/gui/media.ts`）；视频帧与音频 PCM
 都在主线程解码。也支持 `<canvas>`：`getContext("2d")` 返回的上下文，其填充、路径、
-文本与 `drawImage` 由自研 CPU 光栅器处理，元素句柄还暴露 `width`/`height`。因为主体是 C++，它以各平台预编译的 `gui.a`/`gui.lib` 形式分发。如果该
+文本与 `drawImage` 由自研 CPU 光栅器处理，元素句柄还暴露 `width`/`height`。CSS
+`transform`/`transform-origin` 作为绘制期效果可用，因此一个盒子（以及其中的文本、
+图像与子元素）可以被平移、缩放与旋转而不触发任何重排——可以用
+`requestAnimationFrame` 逐帧驱动，或写成 `transition: transform`（见
+`examples/gui/pelican-svg`）。因为主体是 C++，它以各平台预编译的 `gui.a`/`gui.lib` 形式分发。如果该
 平台的归档不存在，构建会以明确的提示失败；设计与路线图见 [../../zh-CN/gui.md](../../zh-CN/gui.md)（总览；引擎按功能拆分在 [`doc/zh-CN/gui/`](../../zh-CN/gui/) 下），
 脚本接口见 [../../zh-CN/gui-scripts.md](../../zh-CN/gui-scripts.md)。媒体播放是
 Windows 唯一不支持的：Windows 的 `gui.a` 不构建 FFmpeg，媒体槽位为空操作。Canvas API

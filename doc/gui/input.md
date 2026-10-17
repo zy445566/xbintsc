@@ -6,7 +6,10 @@
 
 `LayoutTree::hitTest` returns the deepest box containing a point (probing later
 siblings first so the topmost element wins), and `xt_dom_describe` turns the
-element into the `div#id.class` descriptor carried by event payloads.
+element into the `div#id.class` descriptor carried by event payloads. A
+transformed box maps the point through its inverse matrix first, so a rotated,
+scaled or translated element is hit exactly where it is drawn — and `:hover`
+follows the artwork, not the box flow left behind.
 
 - SDL pointer/wheel/key events are routed to the owning window, hit tested, and
 delivered to the handlers registered with `on`. `mousedown` also moves focus.

@@ -119,7 +119,8 @@ void applyNumber(XtStyle *style, const std::string &property, float value) {
 
 void XtDocument::startTransitions() {
   if (display_.empty()) return;  // first style computation: nothing to animate from
-  static const char *const kProperties[] = {"background-color", "color", "border-color", "border-radius"};
+  static const char *const kProperties[] = {"background-color", "color", "border-color",
+                                           "border-radius", "transform"};
   for (auto &entry : styles_) {
     const Node *node = entry.first;
     const XtStyle &target = entry.second;
@@ -138,7 +139,18 @@ void XtDocument::startTransitions() {
         running.duration_ms = spec.duration * 1000.0f;
         running.delay_ms = spec.delay * 1000.0f;
         running.start_ms = (float)clock_ms_ + running.delay_ms;
-        if (isNumberProperty(property)) {
+        if (std::string(property) == "transform") {
+          if (xt_transform_equal(current.transform, target.transform)) continue;
+          std::vector<TransformOp> probe;
+          /* Lists of a different shape (or with clashing units) cannot be
+           * mixed; such a change snaps instead of animating. */
+          if (!xt_transform_interpolate(current.transform, target.transform, 0.5f, &probe)) {
+            continue;
+          }
+          running.is_transform = true;
+          running.from_transform = current.transform;
+          running.to_transform = target.transform;
+        } else if (isNumberProperty(property)) {
           float from = numberOf(current, property);
           float to = numberOf(target, property);
           if (from == to) continue;
@@ -184,7 +196,13 @@ void XtDocument::updateDisplay() {
     if (progress > 1.0f) progress = 1.0f;
     float eased = easeProgress(progress, transition.timing);
     XtStyle &style = node_it->second;
-    if (transition.is_color) {
+    if (transition.is_transform) {
+      std::vector<TransformOp> mixed;
+      if (xt_transform_interpolate(transition.from_transform, transition.to_transform, eased,
+                                   &mixed)) {
+        style.transform = mixed;
+      }
+    } else if (transition.is_color) {
       float rgba[4];
       for (int c = 0; c < 4; c++) rgba[c] = mix(transition.from_color[c], transition.to_color[c], eased);
       applyColor(&style, transition.property, rgba);

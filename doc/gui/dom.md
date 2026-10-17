@@ -20,7 +20,12 @@ pseudo-classes `:first-child`, `:last-child`, `:only-child`, `:empty`,
 stateful `:hover` and `:focus` (see [Input](./input.md)). Values:
 lengths (`px`, `%`, `em`, `rem`, `vw`, `vh`, `pt`, `pc`, `in`, `cm`, `mm`, `q`),
 colors (hex, `rgb()`/`rgba()`, a named subset), numbers, keywords and shorthands
-(`margin`/`padding`/`border`/`flex`).
+(`margin`/`padding`/`border`/`flex`). `transform` (`translate`/`translate3d`/
+`translateX`/`translateY`, `scale`/`scale3d`/`scaleX`/`scaleY`, `rotate`/
+`rotateZ`, `matrix`; the `3d` spellings' `z` argument is dropped) and
+`transform-origin` are parsed into the computed style as a list of operations
+plus two (unresolved) origin lengths; an unsupported function invalidates the
+whole declaration ([Layout](./layout.md#transforms-m15)).
 
 **Cascade & computed style** (`runtime/ext_gui/style.{h,cpp}`): a small built-in
 UA stylesheet, author rules sorted by `(!important, specificity, source order)`,

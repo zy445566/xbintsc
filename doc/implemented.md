@@ -366,7 +366,7 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 | Value model | 64-bit NaN-boxing, uniform function ABI (including `this`), closure environments, object prototype chains |
 | Runtime | Strings / objects / arrays / typed arrays / closures / arithmetic / comparison / catchable exceptions / Promise / collections / symbols / generators / `fetch` / `console` |
 | Extensions | Extension registry, `core` (print), `node` (fs / path / os / process / buffer / stream / net / dgram / http imported by specifier) |
-| GUI (`gui` extension) | Self-hosted HTML/CSS renderer window (SDL3 + SDL_GPU): DOM/CSS/layout, `<img>`/SVG, `<video>`/`<audio>`, `<canvas>` 2D, events, transitions |
+| GUI (`gui` extension) | Self-hosted HTML/CSS renderer window (SDL3 + SDL_GPU): DOM/CSS/layout, CSS `transform`/`transform-origin`, `<img>`/SVG, `<video>`/`<audio>`, `<canvas>` 2D, events, transitions (including `transform`) |
 | Toolchain | clang compiles IR/C, linking, incremental cache |
 | Project config | `xbintsc.config.json` (`entry` / `outDir` / `optimize` / `extensions` / `app`), discovery + CLI precedence |
 | Application icon | compile-time embed (PNG/ICO/ICNS), PE resource on Windows, `.app` bundle on macOS, runtime window/Dock icon via `gui` |

@@ -5,30 +5,54 @@
       /* A dark "gallery" page: the artwork is the only bright thing on it. */
       body {
         margin: 0;
-        padding: 24px 20px;
+        /* 29 + 742 (card) + 29 = 800: the card is centred by construction. */
+        padding: 24px 29px;
         background-color: #101a26;
         color: #8fa6bd;
         font-size: 14px;
         font-family: sans-serif;
         text-align: center;
       }
+      /* Hovering the card warms its border. It is a CSS transition, so `:hover`
+         glides instead of snapping. */
       #frame {
-        display: inline-block;
+        /* A block with an explicit width: 720 artwork + 2x10 padding + 2x1
+           border = 742, which is exactly the body's content width. */
+        width: 720px;
         padding: 10px;
         background-color: #16212e;
         border: 1px solid #24344a;
         border-radius: 10px;
+        transition: transform 260ms ease-out, border-color 260ms ease-out;
       }
+      #frame:hover { border-color: #3d5a80; }
       /* The SVG is drawn at its intrinsic 720x520. It is a vector source, so
          the engine rasterises it at exactly this size and it stays sharp. */
       #art {
+        display: block;
         width: 720px;
         height: 520px;
+        /* Pivot near the bottom edge, where the bicycle touches the road, so
+           the sway reads as the pelican leaning rather than spinning. */
+        transform-origin: 50% 92%;
       }
       #caption {
         margin-top: 14px;
         letter-spacing: 1px;
+        color: #8fa6bd;
+        /* A *transitioned* transform, the counterpart to the per-frame pose
+           `main.ts` writes on the artwork: hovering the caption lifts it off the
+           page and fades it in. The pivot is its bottom edge, so the lift reads
+           as a small hop. */
+        transform-origin: 50% 100%;
+        transition: transform 260ms ease-out, color 260ms ease-out;
       }
+      #caption:hover {
+        transform: translateY(-2px) scale(1.03);
+        color: #dbe7f4;
+      }
+      /* `main.ts` toggles this class on <body> when the artwork is clicked. */
+      .paused #caption { color: #5d7186; }
     </style>
   </head>
   <body>

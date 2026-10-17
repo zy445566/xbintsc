@@ -313,7 +313,8 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
       texture = ensureImageTexture(device, image.src, pixel_width, pixel_height);
     }
     if (texture == nullptr) continue;
-    pushGlyph(verts, image.x, image.y, image.width, image.height, full, white);
+    pushGlyph(verts, image.x, image.y, image.width, image.height, full, white,
+              image.transform);
     geometry->op_counts[index] = 6;
     geometry->op_textures[index] = texture;
   }

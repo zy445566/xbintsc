@@ -1,10 +1,11 @@
 # 鹈鹕骑自行车（SVG）— Pelican Bike as vector art
 
-一只骑自行车的鹈鹕，画成 **SVG 矢量图**，由 `gui` 扩展在原生窗口里显示。
+一只骑自行车的鹈鹕，画成 **SVG 矢量图**，由 `gui` 扩展在原生窗口里显示，并用
+**CSS `transform`** 做动画（呼吸、摇摆；鼠标移到说明文字上它会跳一下，点击画面暂停）。
 
 ```
 examples/resources/pelican-bike.svg   矢量原图（720×520，44 条 path，15 个渐变 stop）
-examples/gui/pelican-svg/main.ts      程序本体：开窗、加载文档、打印校验报告
+examples/gui/pelican-svg/main.ts      程序本体：开窗、加载文档、逐帧动画、打印校验报告
 examples/gui/pelican-svg/index.html   文档：CSS 画廊外框 + <img src="pelican-bike.svg">
 examples/gui/pelican-svg/xbintsc.config.json  入口 + 扩展（gui、node），所以不需要任何命令行开关
 <输出目录>/pelican-bike.svg           构建后拷过来的副本，和 exe 放在一起
@@ -54,6 +55,46 @@ copy examples\resources\pelican-bike.svg build\pelican-svg\pelican-bike.svg
 `painted-image` 那一行直接来自显示列表，是“这张 SVG 真的解码并画出来了”的证据——路径写错时 CSS 仍然
 会给出 720×520 的盒子，但显示列表里不会有这张图。
 
+## 动画：CSS transform
+
+画面不是一张静态图。`index.html` 里 `#art` 带 `transform-origin: 50% 92%`（支点
+在车轮挨着地面的高度，所以摇摆看起来像鹈鹕在侧倾，而不是在转圈），`main.ts` 在
+`requestAnimationFrame` 里每帧重写它的 `style.transform`：
+
+```ts
+const pose = (time: number): string => {
+  const s = time / 1000;
+  const bob = Math.sin(s * 2.4) * 5;          // 上下 ±5px
+  const sway = Math.sin(s * 1.15) * 1.1;      // 摇摆 ±1.1°
+  const breath = 1 + Math.sin(s * 2.4 + 1.1) * 0.014;
+  return "translateY(" + bob.toFixed(2) + "px) rotate(" + sway.toFixed(2) + "deg) scale(" + breath.toFixed(3) + ")";
+};
+art.style.setProperty("transform", pose(time));
+```
+
+另一处动作用的是 CSS **transition** 而不是逐帧改写（把鼠标移到下面的说明文字上）：
+
+```css
+#caption {
+  transform-origin: 50% 100%;
+  transition: transform 260ms ease-out, color 260ms ease-out;
+}
+#caption:hover { transform: translateY(-2px) scale(1.03); color: #dbe7f4; }
+#frame:hover { border-color: #3d5a80; }        /* 画框边框也走 transition */
+.paused #caption { color: #5d7186; }           /* 点击画面暂停时会加上 body.paused */
+```
+
+`transform` 是**绘制期**效果：布局几何完全不参与（不重排），引擎在布局之后给每个
+盒子合成一个 2D 矩阵，绘制时把每个矩形/文本/图像的四个角乘上这个矩阵。所以
+`translateY(-4px)` 的抬升、`rotate()` 的旋转都不会影响兄弟节点和文档高度——这正是
+网页里 `transform` 的语义。报告里的两行正好是这条链路的证据：
+
+```
+art-box=x=40 y=35 720x520            ← 布局盒（没变，仍是 CSS 说的 720x520）
+art-moved-box=x=37 y=32 731x533      ← getBoundingClientRect()：变换后的包围盒
+art-matrix=matrix(1.006,0.01334,-0.01334,1.006,4.486,-3.372)   ← 显示列表里的矩阵
+```
+
 ## 构建与运行
 
 需要 clang ≥ 16，并且 **Windows 上要有 MSVC/SDK 环境**（clang 要能找到系统头文件和库）：
@@ -94,25 +135,32 @@ xbintsc run examples/gui/pelican-svg/main.ts
 ## 一次真实运行的输出
 
 ```
-window=760x600 (gui extension, SDL_GPU)
+window=800x640 (gui extension, SDL_GPU)
 gpu=vulkan
-art-box=x=20 y=35 720x520
+art-box=x=40 y=35 720x520
 paint-shapes=6
 painted-images=1
-painted-image=image x=20.0 y=35.0 w=720.0 h=520.0 src=D:/.../examples/resources/pelican-bike.svg
+painted-image=image x=40.0 y=35.0 w=720.0 h=520.0 src=D:/.../examples/resources/pelican-bike.svg
 hit-test=img#art
+art-origin=50% 92%
 svg-file=D:/.../examples/resources/pelican-bike.svg
 svg-declares=720x520
 svg-bytes=9959
 svg-has-viewbox=true
 svg-paths=44
 svg-stops=15
-frames=1
+art-pose@1=translateY(5px) rotate(0.76deg) scale(1.006, 1.006)
+art-moved-box=x=37 y=32 731x533
+art-matrix=matrix(1.006,0.01334,-0.01334,1.006,4.486,-3.372)
+art-pose@2=translateY(5px) rotate(0.76deg) scale(1.006, 1.006)
 gui closed
 gui exited
 ```
 
-（`D:/...` 是仓库根的真实绝对路径；显示列表里出现绝对路径，就是 `main.ts` 改写过 `src` 的痕迹。）
+（`D:/...` 是仓库根的真实绝对路径；显示列表里出现绝对路径，就是 `main.ts` 改写过 `src` 的痕迹。
+`art-pose@…`/`art-moved-box`/`art-matrix` 里的数字与真实时间有关（来自
+`requestAnimationFrame` 的时间戳），所以 e2e 测试只匹配它们的**形状**，不比对具体数值；
+`art-box` 与 `hit-test`/`svg-*` 才是确定性的断言点。）
 
 `gpu=` 是 `win.driver()`：SDL_GPU 会在设备支持的 Vulkan / Direct3D 12 / Metal 里挑一个，引擎为每种
 后端都带了对应的着色器格式。
@@ -122,11 +170,15 @@ gui exited
 - **渐变坐标要写百分号。** 引擎里的 NanoSVG 把 `gradientUnits` 默认成 `objectBoundingBox`，而**不带单位
   的数字按百分比解释**：`y2="1"` 是 1%，不是整幅高度，于是整块区域只剩下一条细细的渐变色带，其余是纯色。
   写 `y1="0%" y2="100%"` 之后，浏览器和引擎的表现才一致。这也是 `pelican-bike.svg` 里所有渐变都用百分号的原因。
-- **引擎不做 CSS transform。** 所以这幅图是完全静态的矢量画；动画版（车轮、曲柄、蹬腿）请见
-  `examples/gui/pelican-bike`，那个示例是用 CSS 盒子和像素精灵画出来的，不依赖 SVG。
+- **`transform` 是绘制期的，所以它不能把图片“解码得更大”。** SVG 按**绘制尺寸**光栅化，
+  而 `scale(1.014)` 之后引擎仍复用那张位图纹理再缩放顶点（引擎不会因为矩阵变化而重新光栅化，
+  因为那会每帧重做一次矢量渲染）；因此呼吸幅度刻意很小，放大很多倍时矢量图会显得软。想放大多倍请看
+  `examples/gui/pelican-bike` 那种用 CSS 盒子画的版本，它是纯几何绘制、任意缩放都清晰。
 
 ## 相关文档
 
 - [doc/gui/media.md](../../../doc/gui/media.md) — 图片与 SVG 的加载、内在尺寸、矢量按绘制尺寸缓存
+- [doc/gui/layout.md](../../../doc/gui/layout.md#变换m15) — `transform`/`transform-origin` 的合成、命中测试与包围盒
+- [doc/gui/animation.md](../../../doc/gui/animation.md#css-transformm15) — 逐帧姿态与 `transition: transform`
 - [doc/gui/known-issues.md](../../../doc/gui/known-issues.md) — 内联 `<svg>` 为何不支持
 - [doc/ai/extensions.md](../../../doc/ai/extensions.md) — `gui` / `node` 扩展

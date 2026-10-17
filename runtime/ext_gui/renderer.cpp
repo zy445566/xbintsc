@@ -50,8 +50,10 @@ void pushRect(std::vector<Vertex> &verts, const xtgui::PaintRect &rect) {
   const float local_y[4] = {-hh, -hh, hh, hh};
   Vertex corners[4];
   for (int i = 0; i < 4; i++) {
-    corners[i].x = cx + local_x[i];
-    corners[i].y = cy + local_y[i];
+    /* `local` keeps the distance-field coordinates in the box's own frame, so
+     * a rotated/scaled shape still gets a rounded rectangle (the radius scales
+     * with the matrix instead of staying circular). */
+    rect.transform.apply(cx + local_x[i], cy + local_y[i], &corners[i].x, &corners[i].y);
     corners[i].lx = local_x[i];
     corners[i].ly = local_y[i];
     corners[i].hx = hw;

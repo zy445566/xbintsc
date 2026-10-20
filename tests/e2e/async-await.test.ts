@@ -75,6 +75,24 @@ main();`;
     expect(runProgram(source)).toBe("peak 2 results 8,1");
   });
 
+  it("finishes independent async functions in delay order with long timers", () => {
+    /* The timers are far enough apart (50ms vs 200ms) that even a platform
+     * with ~15ms timer granularity cannot merge them into one reactor turn, so
+     * completion order is observable and deterministic. */
+    const source = `${prelude}
+const order: string[] = [];
+async function task(name: string, ms: number): Promise<void> {
+  await sleep(ms);
+  order.push(name);
+}
+async function main(): Promise<void> {
+  await Promise.all([task("slow", 200), task("fast", 50)]);
+  console.log(order.join(","));
+}
+main();`;
+    expect(runProgram(source)).toBe("fast,slow");
+  });
+
   it("rejects when an awaited timer promise rejects and is catchable", () => {
     const source = `${prelude}
 function fail(ms: number): Promise<number> {

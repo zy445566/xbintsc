@@ -37,7 +37,12 @@
 #if defined(_WIN32)
 #include <fcntl.h>
 #include <io.h>
+#include <process.h>
 #include <winsock2.h>
+#include <windows.h>
+#else
+#include <signal.h>
+#include <unistd.h>
 #endif
 
 #include "xt_io/exception.inc"

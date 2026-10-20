@@ -233,7 +233,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Function `arity` / argument count | No argument count validation; `fn.length` reports the declared arity but calls are never checked against it |
 | `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously. Timers and sockets run on the event loop only after the program body, so a promise settled from a timer callback cannot be awaited |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
-| `Error.stack` | Not captured |
+| `Error.stack` | Function-level frames only: each frame is `at name (file:line)` with the function's declaration line (updated to the construction line for the innermost frame); no column numbers and no frames for generator bodies (they switch stacks) |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see section 4) |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`, resolved from the executable path |
 

@@ -255,7 +255,7 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
     this.runFinallysBeforeExit(0);
     if (this.current.terminated) return;
     this.popTryFramesTo(0);
-    this.terminate(`ret i64 ${value}`);
+    this.emitFunctionReturn(value);
   },
 
   /** Emit `xt_try_leave` for every active frame above `depth` (innermost first). */

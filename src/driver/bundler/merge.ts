@@ -244,6 +244,8 @@ export function bundleModules(
     statements: merged,
     fileName: first.path,
     origins,
+    moduleTexts: new Map(records.map((record) => [record.path, record.text])),
+    modulePrefixes: records.map((record) => record.prefix),
     text: records.map((record) => record.text).join("\n"),
     start: 0,
     end: 0,

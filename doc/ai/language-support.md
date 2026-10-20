@@ -103,7 +103,7 @@ URI functions.
 | Missing or different | Status |
 | --- | --- |
 | `String.prototype.normalize`, `structuredClone` | 🚫 |
-| `Error.stack` capture | 🚫 (not captured) |
+| `Error.stack` capture | ⚠️ function-level frames (name/file/line), no columns; generator bodies are omitted |
 | `Object.getPrototypeOf({})` | ⚠️ returns `undefined`, not `Object.prototype` |
 | Global RegExp `lastIndex` | ⚠️ `test`/`exec` ignore it for `/g` and `/y` |
 | Sparse array holes, array out-of-bounds | ⚠️ holes are not tracked distinctly; out-of-bounds reads give `undefined` |

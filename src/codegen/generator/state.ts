@@ -50,6 +50,16 @@ export interface FunctionState {
   thisPtr?: string;
   /** Set when the function contains a `try`, forcing locals to live in memory. */
   usesTry: boolean;
+  /**
+   * True when the function pushes/pops a shadow-stack frame. Generator bodies
+   * are excluded: they switch stacks and can be suspended, so a global shadow
+   * stack would attribute their frames to the wrong caller.
+   */
+  trackFrames: boolean;
+  /** `!DISubprogram` for this function when DWARF emission is enabled. */
+  debugSubprogram?: string;
+  /** Current `!DILocation` attached to every emitted instruction. */
+  debugLocation?: string;
 }
 
 export interface CodegenResult {
@@ -74,6 +84,13 @@ export interface CodegenOptions {
    * defaults to the running process; it is overridable for tests.
    */
   readonly target?: { readonly platform: string; readonly arch: string };
+  /**
+   * Emit LLVM debug metadata (`!DICompileUnit`, `!DISubprogram`,
+   * `!DILocation`) so `clang -g` produces DWARF/CodeView for the generated
+   * program. Off by default: the metadata is large and only useful when
+   * debugging; `xbintsc build --debug` turns it on.
+   */
+  readonly debug?: boolean;
 }
 
 export const RUNTIME_DECLARATIONS: readonly string[] = [
@@ -300,6 +317,9 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i8* @xt_try_enter()",
   "declare i64 @xt_try_exception(i8*)",
   "declare void @xt_try_leave(i8*)",
+  "declare void @xt_stack_push(i8*, i8*, i32)",
+  "declare void @xt_stack_pop()",
+  "declare void @xt_stack_set_line(i32)",
   "declare void @xt_console_log(i32, i64*)",
   "declare void @xt_console_info(i32, i64*)",
   "declare void @xt_console_warn(i32, i64*)",

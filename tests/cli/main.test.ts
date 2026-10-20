@@ -216,6 +216,25 @@ describe("cli", () => {
     expect(text).not.toContain("main.ts:1:");
   });
 
+  it("emits DWARF metadata with `emit --debug`", () => {
+    const entry = writeProgram("function add(a: number, b: number) { return a + b; }\nadd(1, 2);");
+    const { io, out } = capture();
+    expect(run(["emit", entry, "--debug"], io)).toBe(0);
+    const text = out.join("");
+    expect(text).toContain("!DICompileUnit");
+    expect(text).toContain("!DISubprogram");
+    expect(text).toContain("!DILocation");
+  });
+
+  it.skipIf(!hasClang())("builds a runnable binary with --debug", () => {
+    const entry = writeProgram("console.log(6 * 7);");
+    withWorkingDirectory((directory) => {
+      const outDir = join(directory, "out");
+      const { io } = capture();
+      expect(run(["build", entry, "--debug", "--out", outDir], io)).toBe(0);
+    });
+  });
+
   it("reports per-phase timings with --time", () => {
     const entry = writeProgram();
     withWorkingDirectory((directory) => {

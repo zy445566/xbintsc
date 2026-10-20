@@ -292,6 +292,9 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
 
   emitNew(node: NewExpression): string {
     const callee = node.expression;
+    // A `new` expression is where the innermost frame's line should point for
+    // `Error.stack`; harmless for every other constructor.
+    this.emit(`  call void @xt_stack_set_line(i32 ${this.lineOf(node)})`);
     if (callee.kind === SyntaxKind.Identifier) {
       const identifier = callee as Identifier;
       const symbol = this.binding.symbolOfIdentifier.get(identifier);

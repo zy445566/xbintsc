@@ -29,9 +29,16 @@ function isParameterProperty(parameter: Parameter): boolean {
   );
 }
 
+/** A readable, IR-symbol-safe suffix for a function name. */
+function symbolSuffix(name: string): string {
+  if (name.length === 0 || name.startsWith("<")) return "";
+  return name.replace(/[^A-Za-z0-9_]/g, "_").replace(/^_+/, "").slice(0, 32);
+}
+
 export interface ModuleMethods {
   run(this: Generator): string;
   emitFunction(this: Generator, fn: FunctionInfo): void;
+  emitFunctionReturn(this: Generator, value: string): void;
   emitMain(this: Generator): void;
   functionName(this: Generator, fn: FunctionInfo): string;
   wrapAsync(this: Generator, value: string): string;
@@ -77,7 +84,17 @@ export const moduleMethods: ModuleMethods = {
     ];
     const runtimeDeclarations = new Set(RUNTIME_DECLARATIONS);
     const extraDeclarations = [...this.extraDeclarations].filter((line) => !runtimeDeclarations.has(line));
-    return [...header, ...RUNTIME_DECLARATIONS, ...extraDeclarations, "", ...this.globals, "", ...this.functions, ""].join("\n");
+    return [
+      ...header,
+      ...RUNTIME_DECLARATIONS,
+      ...extraDeclarations,
+      "",
+      ...this.globals,
+      "",
+      ...this.functions,
+      "",
+      ...this.debugMetadataLines(),
+    ].join("\n");
   },
 
   // -- module level --------------------------------------------------------
@@ -92,6 +109,7 @@ export const moduleMethods: ModuleMethods = {
       return;
     }
     const name = this.functionName(fn);
+    const debugSubprogram = this.debugSubprogramFor(fn);
     const state: FunctionState = {
       fn,
       buffer: [],
@@ -106,10 +124,14 @@ export const moduleMethods: ModuleMethods = {
       finallyStack: [],
       escapePointers: [],
       usesTry: false,
+      trackFrames: !fn.isGenerator,
+      ...(debugSubprogram ? { debugSubprogram } : {}),
     };
     this.current = state;
+    if (debugSubprogram) this.setDebugLocation(fn.node);
 
-    const header = `define i64 @${name}(i64 %this, i64 %env, i32 %argc, i64* %argv) {`;
+    const debugSuffix = debugSubprogram ? ` !dbg ${debugSubprogram}` : "";
+    const header = `define i64 @${name}(i64 %this, i64 %env, i32 %argc, i64* %argv)${debugSuffix} {`;
     this.emit(`%saved.env = alloca i64`);
     this.emit(`store i64 %env, i64* %saved.env`);
     this.emit(`%saved.this = alloca i64`);
@@ -119,6 +141,23 @@ export const moduleMethods: ModuleMethods = {
     this.emit(`store i32 %argc, i32* %saved.argc`);
     this.emit(`%saved.argv = alloca i64*`);
     this.emit(`store i64* %argv, i64** %saved.argv`);
+
+    // Shadow-stack frame: `Error.stack` and fatal-signal dumps walk this.
+    if (state.trackFrames) {
+      const displayName = fn.isModule
+        ? "module"
+        : fn.isConstructor && fn.classInfo
+          ? `new ${this.displayNameOf(fn.classInfo.name)}`
+          : this.displayNameOf(fn.name.length > 0 ? fn.name : "anonymous");
+      const namePointer = this.internStatic(displayName);
+      /* Normalise separators like `source_filename`: the compiler may run under
+       * Node (`\`) or as a self-hosted binary (`/`), and the IR must stay
+       * byte-identical across the two. */
+      const filePointer = this.internStatic(this.fileNameOf(fn.node).split("\\").join("/"));
+      this.emit(
+        `  call void @xt_stack_push(i8* ${namePointer}, i8* ${filePointer}, i32 ${this.lineOf(fn.node)})`,
+      );
+    }
 
     // Parameters.
     const parameterNodes = (fn.node as { parameters?: Parameter[] }).parameters ?? [];
@@ -215,7 +254,7 @@ export const moduleMethods: ModuleMethods = {
       this.emitStatements(this.sourceFile.statements);
     } else if (fn.node.kind === SyntaxKind.ArrowFunction && (fn.node as ArrowFunction).body.kind !== SyntaxKind.Block) {
       const value = this.emitExpression((fn.node as ArrowFunction).body as Expression);
-      this.terminate(`ret i64 ${fn.isAsync ? this.wrapAsync(value) : value}`);
+      this.emitFunctionReturn(fn.isAsync ? this.wrapAsync(value) : value);
     } else {
       const body = (fn.node as { body: Block }).body;
       if (body) this.emitStatements(body.statements);
@@ -223,7 +262,7 @@ export const moduleMethods: ModuleMethods = {
 
     if (!this.current.terminated) {
       const fallback = fn.isAsync ? this.wrapAsync(i64(XT_UNDEFINED)) : i64(XT_UNDEFINED);
-      this.terminate(`ret i64 ${fallback}`);
+      this.emitFunctionReturn(fallback);
     }
 
     const escapes = state.usesTry
@@ -275,7 +314,17 @@ export const moduleMethods: ModuleMethods = {
   },
 
   functionName(fn: FunctionInfo): string {
-    return fn.isModule ? "xt_module" : `xt_fn_${fn.id}`;
+    if (fn.isModule) return "xt_module";
+    /* Keep the original name in the symbol so native debuggers, crash
+     * backtraces and `--emit ir` are readable (`xt_fn_3_sum`). */
+    const suffix = symbolSuffix(this.displayNameOf(fn.name));
+    return suffix.length > 0 ? `xt_fn_${fn.id}_${suffix}` : `xt_fn_${fn.id}`;
+  },
+
+  /** Emit the function's return, dropping its shadow-stack frame first. */
+  emitFunctionReturn(value: string): void {
+    if (this.current.trackFrames) this.emit("  call void @xt_stack_pop()");
+    this.terminate(`ret i64 ${value}`);
   },
 
   /** Wrap a returned value in a resolved promise (for `async` functions). */

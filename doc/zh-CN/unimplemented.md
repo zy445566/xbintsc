@@ -200,7 +200,7 @@
 | 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 报告声明的 arity，但调用不做校验 |
 | `async` / `await` | **同步微任务模型**：`await` 在已 settle 的 promise 上同步继续。定时器与套接字仅在程序主体执行完后由事件循环运行，因此无法等待由定时器回调 settle 的 promise |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
-| `Error.stack` | 未捕获 |
+| `Error.stack` | 仅函数级帧：每帧为 `at 名称 (文件:行)`，行号取自函数声明（最内层帧会更新为错误构造处）；没有列号，生成器函数体不产生帧（它们会切换栈） |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见第 4 节） |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`，由可执行文件路径解析 |
 

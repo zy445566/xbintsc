@@ -101,8 +101,9 @@ xt_value xt_get(xt_value target, xt_value key) {
     if (obj->header.kind == XT_OBJECT_KIND_ERROR && XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
       if (k->length == 5 && memcmp(k->data, "stack", 5) == 0) {
-        xt_value own = xt_object_get(target, key);
-        return own != XT_UNDEFINED ? own : xt_error_to_string(target);
+        xt_value captured = xt_error_stack(target);
+        if (captured != XT_UNDEFINED) return captured;
+        return xt_error_to_string(target);
       }
     }
     {

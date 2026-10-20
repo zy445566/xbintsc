@@ -344,6 +344,16 @@ void xt_throw(xt_value v);
 void *xt_try_enter(void);
 xt_value xt_try_exception(void *frame);
 void xt_try_leave(void *frame);
+/**
+ * JavaScript-level shadow stack. Generated code pushes `(name, file, line)` on
+ * function entry and pops before returning; `Error` construction walks it to
+ * build `.stack`, and a fatal native signal dumps it. The strings are static
+ * module data, so the runtime never owns them.
+ */
+void xt_stack_push(const char *name, const char *file, int32_t line);
+void xt_stack_pop(void);
+/** Set the innermost frame's line (called just before `new Error(...)`). */
+void xt_stack_set_line(int32_t line);
 void xt_console_log(int32_t argc, xt_value *argv);
 void xt_console_info(int32_t argc, xt_value *argv);
 void xt_console_warn(int32_t argc, xt_value *argv);

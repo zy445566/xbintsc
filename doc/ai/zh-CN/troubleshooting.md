@@ -113,6 +113,36 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
 `llvm-rc` 或 `windres`；`doctor` 会报告找到了哪个，只有在确实请求了图标时缺失才是
 致命错误。
 
+## 怎么看堆栈
+
+`Error.stack` 由 codegen 采集，而不是依赖 C 运行时的原生帧：每个非生成器函数
+在入口压入 `{名称, 文件, 行号}`，返回前弹出。帧形如
+
+```
+Error: boom
+    at inner (app.ts:12)
+    at module (app.ts:3)
+```
+
+行号取函数声明行；最内层帧会更新为 `new Error(...)` 所在行。没有列号；生成器
+函数体因为会切换栈而不记录。原生致命信号会先打印 `xbintsc: fatal signal …`，
+再打印同一组帧，所以即使没有调试器也能看出崩溃时正在运行哪些 JS 函数。
+
+## 用 gdb / lldb / WinDbg 调试
+
+`xbintsc build app.ts --debug` 会生成 LLVM 调试元数据，并把 `-g
+-fno-omit-frame-pointer` 传给 clang，因此目标文件带有 DWARF（Linux/macOS）或
+CodeView（Windows）行号表。函数符号保留源码名（如 `xt_fn_3_add`），每条语句都有
+对应的行位置：
+
+```bash
+xbintsc build app.ts --debug
+gdb ./build/app          # 或 lldb ./build/app，Windows 用 WinDbg 打开 .exe
+```
+
+调试版二进制更大，并且与普通构建分开缓存（debug 标志参与缓存键）。`Error.stack`
+不需要 `--debug` 也能工作。
+
 ## 看起来不对、其实正常的构建行为
 
 ### 构建打印了 `(cached)` 并什么都没做

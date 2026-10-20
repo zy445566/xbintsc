@@ -41,6 +41,9 @@ export const statementDispatchMethods: StatementDispatchMethods = {
   },
 
   emitStatement(statement: Statement): void {
+    /* Every instruction emitted while lowering this statement (including
+     * nested expressions) points at its source position when DWARF is on. */
+    this.setDebugLocation(statement);
     switch (statement.kind) {
       case SyntaxKind.ExpressionStatement:
         this.emitExpression((statement as { expression: Expression }).expression);

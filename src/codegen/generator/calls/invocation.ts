@@ -19,6 +19,7 @@ import {
   BUILTIN_METHODS,
   CONSOLE_METHODS,
   CTOR_FUNCTIONS,
+  ERROR_CONSTRUCTORS,
   GLOBAL_FUNCTIONS,
   MATH_FUNCTIONS,
   NAMESPACE_STATICS,
@@ -142,6 +143,10 @@ export const invocationCallMethods: InvocationCallMethods = {
       }
       const ctor = !symbol ? CTOR_FUNCTIONS[(callee as Identifier).text] : undefined;
       if (ctor) {
+        // `Error("x")` without `new`: point the innermost frame at the call.
+        if (ERROR_CONSTRUCTORS[(callee as Identifier).text]) {
+          this.emit(`  call void @xt_stack_set_line(i32 ${this.lineOf(node)})`);
+        }
         const args = this.emitArguments(node.arguments);
         const result = this.reg();
         this.emit(`  ${result} = call i64 @${ctor}(i32 ${args.argc}, i64* ${args.ptr})`);

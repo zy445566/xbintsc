@@ -97,6 +97,22 @@ describe("toolchain", () => {
     ]);
   });
 
+  it("passes -g and keeps frame pointers in debug builds", () => {
+    const { runner, calls } = recordingRunner();
+    compileIr(runner, { clang: "clang", irPath: "in.ll", objectPath: "out.o", optimize: "2", debug: true });
+    expect(calls[0]!.args).toEqual([
+      "-O2",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-g",
+      "-fno-omit-frame-pointer",
+      "-c",
+      "in.ll",
+      "-o",
+      "out.o",
+    ]);
+  });
+
   it("links objects with extra flags", () => {
     const { runner, calls } = recordingRunner();
     link(runner, { clang: "clang", objectPaths: ["a.o", "b.o"], outputPath: "prog", linkerFlags: ["-lm"], optimize: "1" });

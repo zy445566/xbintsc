@@ -36,6 +36,8 @@ unknown command prints an error plus the help text and exits 1.
     --app-id <id>     macOS bundle identifier (e.g. com.example.demo)
     --force           Ignore the incremental cache
     --verbose         Print progress information
+    --time            Print per-phase build timings
+    --debug           Emit debug info (DWARF/CodeView) and keep frame pointers
 ```
 
 Parsing details that occasionally surprise:

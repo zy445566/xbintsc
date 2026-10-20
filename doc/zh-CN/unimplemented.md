@@ -86,7 +86,7 @@
 | `AggregateError` 构造器 | ✓ `new AggregateError(errors, message)`；`Promise.any` 现以其作为 rejection |
 | 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | ✓ 数组、字符串、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象均可在 `for...of` / 展开中使用 |
 | 生成器（`function*`、`yield`、`yield*`、`next`/`throw`/`return`） | ✓ 基于有栈协程实现；支持 `for...of`、展开与委托。`return()` 直接结束，不执行 `finally` |
-| 定时器 | ✓ 核心事件循环提供 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`（返回数字 id，无 `Timeout` 对象；无 `setImmediate` / `queueMicrotask`） |
+| 定时器 | ✓ 核心事件循环提供 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`（返回数字 id，无 `Timeout` 对象；无 `setImmediate` / `queueMicrotask`）。定时器 settle 的 promise 可以被 await：async 函数体在 pending promise 上挂起，定时器触发时恢复 |
 | I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
 
 ### 3.4 类型化数组
@@ -138,7 +138,7 @@
 | 解构参数 / 解构绑定 | ✓ | ✓ 已实现 |
 | `arguments` 对象 | ✓（隐式） | ✓ 已实现（箭头函数取的是自身参数，而非外层函数的 `arguments`，与 JS 不同） |
 | `this` 绑定 / 方法调用语义 | ✓ | ✓ 已实现（`this` 作为函数首个 ABI 参数线程化；箭头函数词法继承） |
-| `async` / `await` / Promise | ✓ | ✓ 已实现（同步微任务模型） |
+| `async` / `await` / Promise | ✓ | ✓ 已实现：基于栈式协程的真实挂起；等待 pending promise 会暂停函数体并由事件循环恢复（剩余差异见偏差表） |
 | `new.target` | ✗ | 已解析，但以 `UnsupportedFeature` 明确拒绝（无 `new.target` 语义） |
 | 生成器 / 迭代器 / `yield` | ✓ 已实现 | `function*`、`yield`、`yield*`、`.next/.throw/.return`；异步生成器以 `UnsupportedFeature` 拒绝 |
 | 闭包 `arity` | — | `xt_closure_arity` 恒为 -1，未填充 |
@@ -199,9 +199,9 @@
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | 非移动标记-清扫回收器（在 `xt_alloc` 之后）：显式根、子系统根提供者与保守 C 栈扫描。单线程、stop-the-world；无移动/压缩与分代 |
 | 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 报告声明的 arity，但调用不做校验 |
-| `async` / `await` | **同步微任务模型**：`await` 在已 settle 的 promise 上同步继续。定时器与套接字仅在程序主体执行完后由事件循环运行，因此无法等待由定时器回调 settle 的 promise |
+| `async` / `await` | 已在栈式协程上真实挂起；但对**已 settle** 的值 `await` 会同步继续，而不是像规范要求那样排入微任务，因此与 pending `.then` 回调的交错顺序可能不同。顶层 `await` 会阻塞事件循环等待，而不是让出模块主体。`fs/promises` 仍在 settle 前同步完成 I/O；`fetch` 是阻塞的；不支持 `async` 生成器 |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
-| `Error.stack` | 仅函数级帧：每帧为 `at 名称 (文件:行)`，行号取自函数声明（最内层帧会更新为错误构造处）；没有列号，生成器函数体不产生帧（它们会切换栈） |
+| `Error.stack` | 仅函数级帧：每帧为 `at 名称 (文件:行)`，行号取自函数声明（最内层帧会更新为错误构造处）；没有列号，生成器 / `async` 函数体不产生帧（它们会切换栈） |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见第 4 节） |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`，由可执行文件路径解析 |
 
@@ -218,7 +218,7 @@
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
 | 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` 已实现；String.normalize / structuredClone 缺失 |
 | 多文件模块打包 | 部分：相对路径 `.ts` 打包、ESM `node_modules` 包、命名空间导入、裸说明符扩展模块导入已实现；循环依赖 / CommonJS / 实时绑定未实现 |
-| 真正的异步运行时 / 事件循环 | ✗（Promise 为同步微任务模型） |
+| 异步运行时 | ✓ `async`/`await` 在 `select(2)` reactor 上对 pending promise 挂起：定时器、TCP 套接字与 promise 回调都能恢复协程。仍缺：真正的异步 I/O 调度（`fs/promises` 会先阻塞完成 I/O 再 settle）、非阻塞 `fetch` 与 worker 线程（worker 是子进程） |
 | Windows 二进制产物验证 | 构建层已适配（`.exe` 后缀、链接参数分支），并在 CI 中验证 |
 | 精确的 ECMAScript 数值 / 字符串 / 比较语义 | 部分，见第 8 节 |
 
@@ -242,7 +242,7 @@
 
 未实现（类型系统）：类型检查、泛型实例化、断言语义、可选链类型窄化
 
-未实现（运行时）：真正的异步事件循环、UTF-16 length、
+未实现（运行时）：异步 I/O 调度、UTF-16 length、
                   全局正则 lastIndex
 
 未实现（工程）：类型检查器

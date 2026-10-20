@@ -447,6 +447,7 @@ xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env) {
   function->environment = NULL;
   function->prototype = XT_UNDEFINED;
   function->is_generator = 0;
+  function->is_async = 0;
   function->builtin_name = NULL;
   if (env_count > 0) {
     function->environment = (xt_value *)malloc(sizeof(xt_value) * (size_t)env_count);
@@ -468,6 +469,9 @@ xt_value xt_call_with_this(xt_value value, xt_value thisValue, int32_t argc, xt_
   /* Calling a generator function returns a suspended generator instead of
    * running the body. */
   if (function->is_generator) return xt_generator_new(value, thisValue, argc, argv);
+  /* An `async` function runs its body on a coroutine and returns a promise,
+   * which may already be settled or may resolve after an event-loop turn. */
+  if (function->is_async) return xt_async_call(value, thisValue, argc, argv);
   /* The closure value itself is threaded through as `env` so the callee can
    * read its captures with xt_closure_env(env, i). */
   return function->code(thisValue, value, argc, argv);
@@ -477,11 +481,6 @@ xt_value xt_this(void) { return XT_UNDEFINED; }
 
 xt_value xt_function_set_prototype(xt_value value, xt_value proto) {
   if (XT_IS_FUNCTION(value)) ((xt_function *)XT_GET_PTR(value))->prototype = proto;
-  return value;
-}
-
-xt_value xt_function_set_generator(xt_value value) {
-  if (XT_IS_FUNCTION(value)) ((xt_function *)XT_GET_PTR(value))->is_generator = 1;
   return value;
 }
 

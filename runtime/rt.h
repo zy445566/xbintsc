@@ -125,6 +125,10 @@ xt_value xt_instance_of(xt_value value, xt_value ctor);
 xt_value xt_instance_of_builtin(xt_value value, int32_t id);
 xt_value xt_function_set_prototype(xt_value fn, xt_value proto);
 xt_value xt_function_get_prototype(xt_value fn);
+/** Mark a closure as a generator so calling it creates a suspended generator. */
+xt_value xt_function_set_generator(xt_value fn);
+/** Mark a closure as an `async` function so calling it starts a coroutine. */
+xt_value xt_function_set_async(xt_value fn);
 
 /* -- conversions ---------------------------------------------------------- */
 int xt_truthy(xt_value v);

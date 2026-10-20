@@ -55,8 +55,10 @@ in [doc/ai/language-support.md](./doc/ai/language-support.md).
   supported.
 - **Strings are UTF-8 bytes.** `"é".length` is 1, `"😀".length` is 4 — not the
   ECMAScript UTF-16 counts.
-- **`async` is a synchronous microtask model,** not a real event loop. A promise
-  settled from a timer or socket callback cannot be awaited.
+- **`async`/`await` suspends on pending promises.** An `async` body runs on a
+  stackful coroutine, so a promise settled from a timer or socket callback can be
+  awaited. Awaiting an already-settled value continues synchronously, and
+  `fs/promises` still blocks before settling.
 - **No CommonJS.** `require()` is rejected; use ESM `import`. No live bindings.
 - **clang ≥ 16 is required.** clang 15 rejects the emitted IR (typed-pointer
   error `'@.str.0' defined with type '[6 x i8]*' but expected 'i8*'`). `xbintsc

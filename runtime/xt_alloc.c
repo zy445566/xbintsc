@@ -389,6 +389,9 @@ static void xt_gc_process(xt_header *header) {
     case XT_OBJECT_KIND_GENERATOR:
       xt_generator_gc_trace(header);
       return;
+    case XT_OBJECT_KIND_ASYNC:
+      xt_async_gc_trace(header);
+      return;
     default:
       /* Symbols, regexps, iterators and any future kind whose references live
        * inline: the payload scan covers them. */
@@ -431,6 +434,9 @@ static void xt_gc_release(xt_header *header) {
       break;
     case XT_OBJECT_KIND_GENERATOR:
       xt_generator_gc_release(header);
+      break;
+    case XT_OBJECT_KIND_ASYNC:
+      xt_async_gc_release(header);
       break;
     default:
       break;

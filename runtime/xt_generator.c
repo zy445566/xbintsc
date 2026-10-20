@@ -8,27 +8,16 @@
  * `finally` and nested loops work across suspension points without a state
  * machine transform.
  *
- * POSIX uses `ucontext` (`swapcontext`); Windows uses fibers. The generator's
- * exception stack is swapped alongside it so a `throw` inside the body still
- * targets the body's own `try` frames.
+ * The private stack and the context switch come from `xt_coroutine.c`, which
+ * `async` functions use as well. The generator's exception stack is swapped
+ * alongside it so a `throw` inside the body still targets the body's own
+ * `try` frames.
  */
-
-#define _XOPEN_SOURCE 700
 
 #include "rt_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-#if defined(__APPLE__)
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#endif
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <ucontext.h>
-#endif
 
 typedef struct xt_generator {
   xt_header header;
@@ -44,35 +33,13 @@ typedef struct xt_generator {
   int started;
   int done;
   int threw;
-  int booted;
-  /* Private stack bounds, registered as an active stack region while the
-   * generator runs and scanned conservatively while it is suspended. */
-  char *stack;
-  size_t stack_size;
-  int stack_pushed;
-  void *saved_try_top;
-#ifdef _WIN32
-  void *fiber;
-  void *caller_fiber;
-  /* `SwitchToFiber` keeps the resumer's callee-saved registers in an opaque
-   * fiber context (POSIX stores them in `caller`), so snapshot them for the
-   * collector before switching away. */
-  jmp_buf caller_regs;
-  int has_caller_regs;
-#else
-  ucontext_t ctx;
-  ucontext_t caller;
-#endif
+  /* Private stack, context switch and GC region bookkeeping live in
+   * xt_coroutine.c; `NULL` once the body has finished. */
+  xt_coroutine *coroutine;
 } xt_generator;
 
 /* The generator whose coroutine is running, if any. */
 static xt_generator *g_active_generator = NULL;
-/* Filled in just before a coroutine is first entered (POSIX has no portable
- * way to pass a pointer to `makecontext`). */
-static xt_generator *g_boot_generator = NULL;
-#ifdef _WIN32
-static void *g_main_fiber = NULL;
-#endif
 
 int xt_is_generator(xt_value value) {
   if (!XT_IS_OBJECT(value)) return 0;
@@ -91,38 +58,9 @@ static xt_value xt_generator_result_object(xt_value value, int done) {
   return result;
 }
 
-static void xt_generator_suspend(xt_generator *gen) {
-  gen->saved_try_top = xt_try_mark();
-#ifdef _WIN32
-  SwitchToFiber(gen->caller_fiber);
-#else
-  swapcontext(&gen->ctx, &gen->caller);
-#endif
-}
-
 /* Runs on the generator's private stack. */
-static void xt_generator_run(xt_generator *gen) {
-#ifdef _WIN32
-  /* The fiber stack is not observable from the outside; capture its bounds
-   * here (before the body allocates anything) so a collection during the body
-   * has a valid scan region. */
-  if (!gen->stack) {
-    MEMORY_BASIC_INFORMATION info;
-    uintptr_t here = (uintptr_t)&info;
-    if (VirtualQuery((LPCVOID)here, &info, sizeof(info))) {
-      /* Use the *committed* region containing the current frame: a Windows
-       * stack reserves more than it commits, and `AllocationBase + RegionSize`
-       * can fall in uncommitted memory. `BaseAddress + RegionSize` is the
-       * stack top. */
-      gen->stack = (char *)info.BaseAddress;
-      gen->stack_size = info.RegionSize;
-    }
-  }
-#endif
-  if (gen->stack && gen->stack_size && !gen->stack_pushed) {
-    xt_gc_push_stack((uintptr_t)gen->stack, (uintptr_t)gen->stack + gen->stack_size);
-    gen->stack_pushed = 1;
-  }
+static void xt_generator_run(void *arg) {
+  xt_generator *gen = (xt_generator *)arg;
   void *boundary = xt_try_enter();
   if (xt_try_setjmp(boundary) == 0) {
     xt_function *function = (xt_function *)XT_GET_PTR(gen->function);
@@ -133,90 +71,23 @@ static void xt_generator_run(xt_generator *gen) {
     gen->threw = 1;
   }
   gen->done = 1;
-  xt_generator_suspend(gen);
-}
-
-#ifndef _WIN32
-static void xt_generator_entry(void) {
-  xt_generator *gen = g_boot_generator;
-  g_boot_generator = NULL;
-  xt_generator_run(gen);
-}
-#else
-static void CALLBACK xt_generator_entry(void *param) {
-  xt_generator_run((xt_generator *)param);
-}
-#endif
-
-static void xt_generator_boot(xt_generator *gen) {
-#ifdef _WIN32
-  if (!g_main_fiber) g_main_fiber = ConvertThreadToFiber(NULL);
-  gen->fiber = CreateFiber(1 << 20, xt_generator_entry, gen);
-  if (!gen->fiber) abort();
-#else
-  size_t size = 1 << 20;
-  gen->stack = (char *)malloc(size);
-  if (!gen->stack) abort();
-  gen->stack_size = size;
-  if (getcontext(&gen->ctx) != 0) abort();
-  gen->ctx.uc_stack.ss_sp = gen->stack;
-  gen->ctx.uc_stack.ss_size = size;
-  gen->ctx.uc_link = NULL;
-  g_boot_generator = gen;
-  makecontext(&gen->ctx, xt_generator_entry, 0);
-#endif
-  gen->booted = 1;
+  xt_coroutine_leave(gen->coroutine);
 }
 
 /* Release the private stack once the coroutine has finished. The generator
  * object itself stays valid; later `.next()` calls just report `done`. */
 static void xt_generator_dispose(xt_generator *gen) {
-#ifdef _WIN32
-  if (gen->fiber) {
-    DeleteFiber(gen->fiber);
-    gen->fiber = NULL;
-  }
-  gen->caller_fiber = NULL;
-  /* `DeleteFiber` releases the stack: never scan it again. */
-  gen->stack = NULL;
-  gen->stack_size = 0;
-#else
-  if (gen->stack) {
-    free(gen->stack);
-    gen->stack = NULL;
-  }
-#endif
+  xt_coroutine_release(gen->coroutine);
+  gen->coroutine = NULL;
 }
 
+static void xt_generator_boot(xt_generator *gen);
+
 static void xt_generator_resume(xt_generator *gen) {
-  if (!gen->booted) xt_generator_boot(gen);
+  if (!gen->coroutine) xt_generator_boot(gen);
   xt_generator *previous = g_active_generator;
   g_active_generator = gen;
-  /* Record where the current (calling) stack suspends before switching away.
-   * On Windows the first push happens inside the fiber once its stack bounds
-   * are known, so the caller's region must be marked suspended here, on the
-   * caller's own stack. */
-  xt_gc_suspend((uintptr_t)&gen);
-  if (gen->stack && gen->stack_size && !gen->stack_pushed) {
-    xt_gc_push_stack((uintptr_t)gen->stack, (uintptr_t)gen->stack + gen->stack_size);
-    gen->stack_pushed = 1;
-  }
-  void *caller_try = xt_try_mark();
-  xt_try_restore(gen->saved_try_top);
-#ifdef _WIN32
-  _setjmp(gen->caller_regs);
-  gen->has_caller_regs = 1;
-  gen->caller_fiber = GetCurrentFiber();
-  SwitchToFiber(gen->fiber);
-#else
-  swapcontext(&gen->caller, &gen->ctx);
-#endif
-  gen->saved_try_top = xt_try_mark();
-  xt_try_restore(caller_try);
-  if (gen->stack_pushed) {
-    xt_gc_pop_stack();
-    gen->stack_pushed = 0;
-  }
+  xt_coroutine_enter(gen->coroutine);
   if (gen->done) xt_generator_dispose(gen);
   g_active_generator = previous;
 }
@@ -242,23 +113,18 @@ void xt_generator_gc_trace(xt_header *header) {
   if (gen->args && gen->argc > 0) {
     xt_gc_scan_region(gen->args, sizeof(xt_value) * (size_t)gen->argc);
   }
-  if (gen->stack && gen->stack_size) xt_gc_scan_region(gen->stack, gen->stack_size);
-#ifndef _WIN32
-  /* Registers saved by `swapcontext` at the last yield are not on the stack. */
-  xt_gc_scan_region(&gen->ctx, sizeof(gen->ctx));
-#else
-  if (gen->has_caller_regs) xt_gc_scan_region(&gen->caller_regs, sizeof(gen->caller_regs));
-#endif
+  xt_coroutine_gc_trace(gen->coroutine);
 }
 
 void xt_generator_gc_release(xt_header *header) {
   xt_generator *gen = (xt_generator *)header;
   free(gen->args);
-#ifdef _WIN32
-  if (gen->fiber) DeleteFiber(gen->fiber);
-#else
-  free(gen->stack);
-#endif
+  xt_coroutine_release(gen->coroutine);
+  gen->coroutine = NULL;
+}
+
+static void xt_generator_boot(xt_generator *gen) {
+  gen->coroutine = xt_coroutine_create(xt_generator_run, gen);
 }
 
 xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, xt_value *argv) {
@@ -267,9 +133,7 @@ xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, x
   gen->this_value = thisValue;
   gen->argc = argc;
   gen->args = NULL;
-  gen->stack = NULL;
-  gen->stack_size = 0;
-  gen->stack_pushed = 0;
+  gen->coroutine = NULL;
   gen->result = XT_UNDEFINED;
   gen->sent = XT_UNDEFINED;
   gen->iter_value = XT_UNDEFINED;
@@ -339,7 +203,7 @@ xt_value xt_yield(xt_value value) {
   xt_generator *gen = g_active_generator;
   if (!gen || gen->done) return XT_UNDEFINED;
   gen->result = value;
-  xt_generator_suspend(gen);
+  xt_coroutine_leave(gen->coroutine);
   if (gen->resume_kind == 1) {
     xt_throw(gen->sent);
     return XT_UNDEFINED;
@@ -348,7 +212,7 @@ xt_value xt_yield(xt_value value) {
     gen->done = 1;
     gen->threw = 0;
     gen->result = gen->sent;
-    xt_generator_suspend(gen);
+    xt_coroutine_leave(gen->coroutine);
     return XT_UNDEFINED;
   }
   return gen->sent;
@@ -395,4 +259,9 @@ int xt_generator_has_next(xt_value generator) {
 xt_value xt_generator_iter_value(xt_value generator) {
   xt_generator *gen = xt_as_generator(generator);
   return gen ? gen->iter_value : XT_UNDEFINED;
+}
+
+xt_value xt_function_set_generator(xt_value value) {
+  if (XT_IS_FUNCTION(value)) ((xt_function *)XT_GET_PTR(value))->is_generator = 1;
+  return value;
 }

@@ -115,7 +115,7 @@ None known at the expression level.
 | `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
 | Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | ✓ arrays, strings, `Map`, `Set`, generators and any object exposing `[Symbol.iterator]()` are iterable in `for...of` / spread |
 | Generators (`function*`, `yield`, `yield*`, `next`/`throw`/`return`) | ✓ implemented with stackful coroutines; `for...of`, spread and delegation supported. `return()` completes without running `finally` |
-| Timers | ✓ `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` on the core event loop (numeric ids, no `Timeout` object; no `setImmediate` / `queueMicrotask`) |
+| Timers | ✓ `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` on the core event loop (numeric ids, no `Timeout` object; no `setImmediate` / `queueMicrotask`). A promise settled from a timer can be awaited: the async body suspends on the pending promise and resumes when the timer fires |
 | I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
 
 ### 3.4 Typed arrays
@@ -170,7 +170,7 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 | Destructuring parameters / bindings | ✓ | ✓ implemented |
 | `arguments` object | ✓ (implicit) | ✓ implemented (arrow functions get their own parameters, not the outer function's `arguments`, unlike JS) |
 | `this` binding / method call semantics | ✓ | ✓ implemented (`this` is threaded as the first ABI parameter; arrow functions inherit lexically) |
-| `async` / `await` / Promise | ✓ | ✓ implemented (synchronous microtask model) |
+| `async` / `await` / Promise | ✓ | ✓ implemented with stackful-coroutine suspension: awaiting a pending promise pauses the body and the event loop resumes it (see the deviations table for the remaining differences) |
 | `new.target` | ✗ | parsed, then rejected with `UnsupportedFeature` (no `new.target` semantics) |
 | Generators / iterators / `yield` | ✓ implemented | `function*`, `yield`, `yield*`, `.next/.throw/.return`; `async` generators are rejected with `UnsupportedFeature` |
 | Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
@@ -232,9 +232,9 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Non-moving mark-sweep collector behind `xt_alloc`: explicit roots, subsystem root providers and a conservative C-stack scan. Single-threaded and stop-the-world; no moving/compaction or generational mode |
 | Function `arity` / argument count | No argument count validation; `fn.length` reports the declared arity but calls are never checked against it |
-| `async` / `await` | **Synchronous microtask model**: `await` on an already-settled promise continues synchronously. Timers and sockets run on the event loop only after the program body, so a promise settled from a timer callback cannot be awaited |
+| `async` / `await` | Real suspension on a stackful coroutine, but `await` on a value that is **already settled** continues synchronously instead of queueing a microtask as the specification requires, so interleaving with pending `.then` callbacks can differ. Top-level `await` blocks on the event loop rather than yielding the module body. `fs/promises` still performs the I/O synchronously before settling; `fetch` is blocking; `async` generators are unsupported |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
-| `Error.stack` | Function-level frames only: each frame is `at name (file:line)` with the function's declaration line (updated to the construction line for the innermost frame); no column numbers and no frames for generator bodies (they switch stacks) |
+| `Error.stack` | Function-level frames only: each frame is `at name (file:line)` with the function's declaration line (updated to the construction line for the innermost frame); no column numbers and no frames for generator / `async` bodies (they switch stacks) |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see section 4) |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`, resolved from the executable path |
 
@@ -254,7 +254,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Type checker | ✗ only diagnostic codes are defined; no checker |
 | Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` implemented; String.normalize / structuredClone missing |
 | Multi-file module bundling | partial: relative-path `.ts` bundling, ESM `node_modules` packages, namespace imports and bare-specifier extension module imports implemented; circular dependencies / CommonJS / live bindings not implemented |
-| A real async runtime / event loop | ✗ (Promise is a synchronous microtask model) |
+| Real async runtime | ✓ `async`/`await` suspends on pending promises on the `select(2)` reactor: timers, TCP sockets and promise callbacks resume the coroutine. Still missing: truly asynchronous I/O scheduling (`fs/promises` blocks before settling), a non-blocking `fetch` and worker threads (workers are child processes) |
 | Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), verified in CI |
 | Precise ECMAScript number / string / comparison semantics | partial, see section 8 |
 
@@ -281,7 +281,7 @@ Unimplemented (modules): circular dependencies, live bindings, dynamic
 Unimplemented (type system): type checking, generic instantiation, assertion
                              semantics, optional-chaining narrowing
 
-Unimplemented (runtime): a real async event loop, UTF-16 string length,
+Unimplemented (runtime): asynchronous I/O scheduling, UTF-16 string length,
                          global-regex lastIndex
 
 Unimplemented (engineering): type checker

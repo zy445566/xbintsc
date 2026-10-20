@@ -1,20 +1,18 @@
 /*
- * xbintsc runtime — promises and async support.
+ * xbintsc runtime — promises and the microtask queue.
  *
- * There is no event loop in the runtime, so promises use a microtask queue
- * that the compiler drains when the program body finishes (and that `await`
- * drains on demand). This gives synchronous-looking `async`/`await` semantics
- * for the common case where every awaited value is already settled.
+ * Promise reactions are queued as microtasks and run when the program body
+ * finishes, by the event loop between callbacks, and on demand. `await` lives
+ * in `xt_async.c`: an `async` function runs on a coroutine, so awaiting a
+ * promise that is still pending suspends it and registers a waiter here. When
+ * the promise settles, the waiter becomes a microtask that resumes the
+ * coroutine. Everything is single-threaded and non-blocking.
  */
 
 #include "rt_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-#define XT_PROMISE_PENDING 0
-#define XT_PROMISE_FULFILLED 1
-#define XT_PROMISE_REJECTED 2
 
 typedef struct xt_promise xt_promise;
 
@@ -23,6 +21,9 @@ typedef struct {
   xt_value on_fulfilled;
   xt_value on_rejected;
   xt_promise *result;
+  /* Non-NULL for an `async` coroutine waiting on this promise. Such a reaction
+   * has no handlers: running it resumes the coroutine instead. */
+  void *async;
 } xt_reaction;
 
 struct xt_promise {
@@ -87,6 +88,7 @@ static void xt_promise_gc_scan_roots(void) {
     xt_gc_mark_value(reaction->on_fulfilled);
     xt_gc_mark_value(reaction->on_rejected);
     xt_gc_mark_header((xt_header *)reaction->result);
+    if (reaction->async) xt_gc_mark_header((xt_header *)reaction->async);
   }
 }
 
@@ -107,6 +109,7 @@ void xt_promise_gc_trace(xt_header *header) {
     xt_gc_mark_value(reaction->on_fulfilled);
     xt_gc_mark_value(reaction->on_rejected);
     xt_gc_mark_header((xt_header *)reaction->result);
+    if (reaction->async) xt_gc_mark_header((xt_header *)reaction->async);
   }
 }
 
@@ -133,6 +136,7 @@ static void xt_promise_resolve_into(xt_promise *result, xt_value value) {
     reaction->on_fulfilled = XT_UNDEFINED;
     reaction->on_rejected = XT_UNDEFINED;
     reaction->result = result;
+    reaction->async = NULL;
     if (other->reaction_count >= other->reaction_capacity) {
       other->reaction_capacity = other->reaction_capacity == 0 ? 4 : other->reaction_capacity * 2;
       other->reactions = (xt_reaction **)realloc(other->reactions, sizeof(xt_reaction *) * other->reaction_capacity);
@@ -156,6 +160,16 @@ static xt_value xt_promise_run_reactions(void) {
   while (xt_microtask_head < xt_microtask_count) {
     xt_reaction *reaction = xt_microtasks[xt_microtask_head++];
     xt_promise *promise = reaction->promise;
+    if (reaction->async) {
+      /* A suspended `async` coroutine: resume it with the settled value. It
+       * runs until it completes or awaits another pending promise. */
+      void *async = reaction->async;
+      int rejected = promise->state == XT_PROMISE_REJECTED;
+      xt_value settled = promise->value;
+      free(reaction);
+      xt_async_wake(async, settled, rejected);
+      continue;
+    }
     xt_value handler = promise->state == XT_PROMISE_FULFILLED ? reaction->on_fulfilled : reaction->on_rejected;
     if (XT_IS_FUNCTION(handler)) {
       xt_value arg = promise->value;
@@ -181,16 +195,46 @@ void xt_drain_microtasks(void) {
   }
 }
 
-xt_value xt_await(xt_value value) {
+/* -- helpers used by the async coroutine runtime -------------------------- */
+
+xt_value xt_promise_create(void) { return xt_promise_value(xt_promise_new()); }
+
+void xt_promise_fulfill(xt_value promise, xt_value value) {
+  xt_promise *target = xt_as_promise(promise);
+  if (target) xt_promise_resolve_into(target, value);
+}
+
+void xt_promise_reject_value(xt_value promise, xt_value value) {
+  xt_promise *target = xt_as_promise(promise);
+  if (target) xt_promise_settle(target, XT_PROMISE_REJECTED, value);
+}
+
+int xt_promise_state_of(xt_value value) {
   xt_promise *promise = xt_as_promise(value);
-  if (!promise) return value;
-  int guard = 0;
-  while (promise->state == XT_PROMISE_PENDING && guard++ < 100000) xt_drain_microtasks();
-  if (promise->state == XT_PROMISE_REJECTED) {
-    xt_throw(promise->value);
-    return XT_UNDEFINED;
+  return promise ? promise->state : -1;
+}
+
+xt_value xt_promise_value_of(xt_value value) {
+  xt_promise *promise = xt_as_promise(value);
+  return promise ? promise->value : value;
+}
+
+void xt_promise_add_async_waiter(xt_value promiseValue, void *async) {
+  xt_promise *promise = xt_as_promise(promiseValue);
+  if (!promise || promise->state != XT_PROMISE_PENDING) return;
+  xt_reaction *reaction = (xt_reaction *)malloc(sizeof(xt_reaction));
+  if (!reaction) abort();
+  reaction->promise = promise;
+  reaction->on_fulfilled = XT_UNDEFINED;
+  reaction->on_rejected = XT_UNDEFINED;
+  reaction->result = NULL;
+  reaction->async = async;
+  if (promise->reaction_count >= promise->reaction_capacity) {
+    promise->reaction_capacity = promise->reaction_capacity == 0 ? 4 : promise->reaction_capacity * 2;
+    promise->reactions = (xt_reaction **)realloc(promise->reactions, sizeof(xt_reaction *) * promise->reaction_capacity);
+    if (!promise->reactions) abort();
   }
-  return promise->value;
+  promise->reactions[promise->reaction_count++] = reaction;
 }
 
 /* -- C-callable resolve / reject ------------------------------------------ */
@@ -316,6 +360,7 @@ xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt
     reaction->on_fulfilled = xt_arg_at(argc, argv, 0);
     reaction->on_rejected = xt_arg_at(argc, argv, 1);
     reaction->result = result;
+    reaction->async = NULL;
     if (promise->state == XT_PROMISE_PENDING) {
       if (promise->reaction_count >= promise->reaction_capacity) {
         promise->reaction_capacity = promise->reaction_capacity == 0 ? 4 : promise->reaction_capacity * 2;

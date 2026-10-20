@@ -28,7 +28,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `function`、箭头函数、默认参数/剩余参数 | ✅ | |
 | `namespace`/`module` 声明 | 🚫 | 解析 ✓，代码生成 ✗ |
 | `with`、`debugger` | 🚫 | 不支持 |
-| 顶层 `await` | 🚫 | 请包进 `async` 函数 |
+| 顶层 `await` | ⚠️ | 会在事件循环上阻塞直到 Promise settle（不会像 ES module 那样让出模块主体）；建议包进 `async` 函数 |
 
 ## 表达式与运算符
 
@@ -68,10 +68,11 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 | 特性 | 状态 | 说明 |
 | --- | --- | --- |
-| `async`/`await`、`Promise`、`Promise.all` | ⚠️ | **同步微任务模型**——`await` 一个已敲定的 Promise 会同步继续 |
-| `setTimeout` 与回调 | ⚠️ | 事件循环在**程序主体之后**才运行，因此定时器里敲定的 Promise 无法被 await |
-| 套接字/服务端（`http`、`net`、`dgram`） | ⚠️ | 同一模型：回调在程序主体之后的循环里执行 |
-| 真正的异步事件循环、worker 线程 | 🚫 | 未实现 |
+| `async`/`await`、`Promise`、`Promise.all` | ✅ | 真实挂起：async 函数体运行在栈式协程上，等待**未 settle** 的 Promise 时暂停，settle 后恢复。等待已 settle 的值仍同步继续 |
+| `setTimeout` 与回调 | ✅ | 定时器运行在核心事件循环上；`await new Promise(r => setTimeout(r, ms))` 可用 |
+| 套接字/服务端（`http`、`net`、`dgram`） | ✅ | 回调在事件循环上执行，可以 settle 你正在 await 的 Promise（测试含 `net`/`http` 示例） |
+| `fs/promises` | ⚠️ | 可以 await，但每次调用仍先同步完成 I/O 再 settle，I/O 期间不会让出 |
+| `async` 生成器、worker 线程 | 🚫 | `async function*` 被拒绝；worker 是子进程 |
 
 ## 类型：解析后擦除
 

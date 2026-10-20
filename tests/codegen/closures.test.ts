@@ -30,6 +30,15 @@ describe("closure lowering", () => {
     expect(ir).toContain("@xt_function_set_generator");
   });
 
+  it("marks async functions and calls them through the closure path", () => {
+    /* The runtime starts a coroutine for an async function, so a call must not
+     * be lowered to a direct LLVM call: it has to go through the closure value
+     * carrying the `is_async` flag. */
+    const ir = irOf("async function f() { return 1; }\nf();");
+    expect(ir).toContain("@xt_function_set_async");
+    expect(ir).toContain("@xt_closure_call");
+  });
+
   it("names named function expressions", () => {
     const ir = irOf("const h = function inner() { return 1; };");
     expect(ir).toContain("inner");

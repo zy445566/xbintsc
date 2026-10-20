@@ -80,5 +80,8 @@ export const closureCallMethods: ClosureCallMethods = {
     const nameValue = this.stringValue(name);
     this.emit(`  call i64 @xt_function_set_metadata(i64 ${closure}, i64 ${nameValue}, i32 ${arity})`);
     if (fn.isGenerator) this.emit(`  call i64 @xt_function_set_generator(i64 ${closure})`);
+    /* `async` functions run on a coroutine: the runtime must know at call time
+     * so it can return a promise and suspend at `await`. */
+    if (fn.isAsync) this.emit(`  call i64 @xt_function_set_async(i64 ${closure})`);
   },
 };

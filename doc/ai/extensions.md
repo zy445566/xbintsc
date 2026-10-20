@@ -54,8 +54,9 @@ Coverage per module (exact functions and options) is in
 [../node-unimplemented.md](../node-unimplemented.md).
 
 Remember the runtime model before building on `net`/`http`: the event loop runs
-**after** the program body, and `async`/`await` is a synchronous microtask
-model. See [language-support.md](./language-support.md).
+**after** the program body, but `async`/`await` now suspends on pending promises,
+so a promise settled from a socket callback can be awaited. See
+[language-support.md](./language-support.md).
 
 ### `gui` — HTML/CSS window
 

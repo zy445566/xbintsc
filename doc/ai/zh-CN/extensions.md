@@ -53,7 +53,8 @@ xbintsc run app.ts --ext node
 [../../zh-CN/node-unimplemented.md](../../zh-CN/node-unimplemented.md)。
 
 在 `net`/`http` 上搭东西之前，先记住运行时模型：事件循环在**程序主体之后**才运行，
-而 `async`/`await` 是同步微任务模型。见 [language-support.md](./language-support.md)。
+但 `async`/`await` 现在会在 pending Promise 上挂起，因此由套接字回调 settle 的 Promise
+可以被 await。见 [language-support.md](./language-support.md)。
 
 ### `gui` —— HTML/CSS 窗口
 

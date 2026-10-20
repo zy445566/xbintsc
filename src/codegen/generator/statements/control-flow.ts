@@ -250,8 +250,7 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
   },
 
   emitReturn(statement: ReturnStatement): void {
-    let value = statement.expression ? this.emitExpression(statement.expression) : i64(XT_UNDEFINED);
-    if (this.current.fn.isAsync) value = this.wrapAsync(value);
+    const value = statement.expression ? this.emitExpression(statement.expression) : i64(XT_UNDEFINED);
     this.runFinallysBeforeExit(0);
     if (this.current.terminated) return;
     this.popTryFramesTo(0);

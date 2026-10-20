@@ -55,6 +55,7 @@
 #define XT_OBJECT_KIND_ERROR 12
 #define XT_OBJECT_KIND_GENERATOR 13
 #define XT_OBJECT_KIND_ITERATOR 14
+#define XT_OBJECT_KIND_ASYNC 15
 
 /* Common header for every heap object. `flags` bit 0 is the collector's mark
  * bit; it is cleared on every surviving object at the end of a sweep. */
@@ -143,6 +144,9 @@ typedef struct {
   /* Set on generator function objects: calling the closure does not run the
    * body, it creates a suspended generator (see xt_generator.c). */
   uint8_t is_generator;
+  /* Set on `async` function objects: calling the closure starts a coroutine
+   * (see xt_async.c) and immediately returns the promise it resolves. */
+  uint8_t is_async;
   /* Non-NULL for the first-class value of a built-in constructor ("Array",
    * "Map", ...). It lets property access resolve the constructor's statics
    * (`const A = Array; A.isArray(x)`). Points at a static string. */
@@ -209,6 +213,19 @@ void xt_promise_gc_trace(xt_header *header);
 void xt_promise_gc_release(xt_header *header);
 void xt_generator_gc_trace(xt_header *header);
 void xt_generator_gc_release(xt_header *header);
+void xt_async_gc_trace(xt_header *header);
+void xt_async_gc_release(xt_header *header);
+
+/* Stackful coroutines (xt_coroutine.c). A coroutine owns a private C stack and
+ * switches to it with `ucontext`/fibers; `enter` runs until the body calls
+ * `leave`. Exception frames and GC stack regions are swapped alongside the C
+ * stack. Generators and async functions own one each. */
+typedef struct xt_coroutine xt_coroutine;
+xt_coroutine *xt_coroutine_create(void (*entry)(void *), void *arg);
+void xt_coroutine_enter(xt_coroutine *co);
+void xt_coroutine_leave(xt_coroutine *co);
+void xt_coroutine_gc_trace(xt_coroutine *co);
+void xt_coroutine_release(xt_coroutine *co);
 
 /* Value / string helpers shared across translation units (xt_values.c). */
 xt_string *xt_string_alloc(size_t length);
@@ -306,6 +323,26 @@ xt_value xt_yield(xt_value value);
 xt_value xt_yield_star(xt_value delegate);
 int xt_generator_has_next(xt_value generator);
 xt_value xt_generator_iter_value(xt_value generator);
+
+/* Async coroutines (xt_async.c). Calling an `async` function runs its body on
+ * a coroutine that suspends at a pending `await` and resumes when the awaited
+ * promise settles, so the event loop can make progress in between. */
+#define XT_PROMISE_PENDING 0
+#define XT_PROMISE_FULFILLED 1
+#define XT_PROMISE_REJECTED 2
+xt_value xt_async_call(xt_value function, xt_value thisValue, int32_t argc, xt_value *argv);
+/* Resume `async` with the settlement of the promise it awaited. Called by the
+ * microtask runner when the promise settles. */
+void xt_async_wake(void *async, xt_value value, int rejected);
+/* Create a pending promise / settle an existing one (used by xt_async.c). */
+xt_value xt_promise_create(void);
+void xt_promise_fulfill(xt_value promise, xt_value value);
+void xt_promise_reject_value(xt_value promise, xt_value value);
+/* `-1` when `value` is not a promise, otherwise PENDING / FULFILLED / REJECTED. */
+int xt_promise_state_of(xt_value value);
+xt_value xt_promise_value_of(xt_value value);
+/* Register a coroutine to resume when `promise` settles (it must be pending). */
+void xt_promise_add_async_waiter(xt_value promise, void *async);
 
 /* Exception-frame plumbing shared with the generator runtime. The struct is
  * public so a coroutine can `_setjmp` its own boundary directly (a `setjmp`

@@ -41,7 +41,6 @@ export interface ModuleMethods {
   emitFunctionReturn(this: Generator, value: string): void;
   emitMain(this: Generator): void;
   functionName(this: Generator, fn: FunctionInfo): string;
-  wrapAsync(this: Generator, value: string): string;
   classGlobal(this: Generator, classInfo: ClassInfo): string;
   emitClassReference(this: Generator, classInfo: ClassInfo): string;
   emitClassSetup(this: Generator, classInfo: ClassInfo): void;
@@ -124,7 +123,11 @@ export const moduleMethods: ModuleMethods = {
       finallyStack: [],
       escapePointers: [],
       usesTry: false,
-      trackFrames: !fn.isGenerator,
+      /* Generator and async bodies run on a private coroutine stack that can be
+       * suspended in the middle of a call. Their shadow frame would then sit on
+       * the shadow stack while the caller unwinds its own, so leave them out of
+       * `Error.stack` frames (nesting calls inside them are still recorded). */
+      trackFrames: !fn.isGenerator && !fn.isAsync,
       ...(debugSubprogram ? { debugSubprogram } : {}),
     };
     this.current = state;
@@ -254,15 +257,17 @@ export const moduleMethods: ModuleMethods = {
       this.emitStatements(this.sourceFile.statements);
     } else if (fn.node.kind === SyntaxKind.ArrowFunction && (fn.node as ArrowFunction).body.kind !== SyntaxKind.Block) {
       const value = this.emitExpression((fn.node as ArrowFunction).body as Expression);
-      this.emitFunctionReturn(fn.isAsync ? this.wrapAsync(value) : value);
+      this.emitFunctionReturn(value);
     } else {
       const body = (fn.node as { body: Block }).body;
       if (body) this.emitStatements(body.statements);
     }
 
     if (!this.current.terminated) {
-      const fallback = fn.isAsync ? this.wrapAsync(i64(XT_UNDEFINED)) : i64(XT_UNDEFINED);
-      this.emitFunctionReturn(fallback);
+      /* An `async` body returns its value plainly: the runtime's async
+       * coroutine settles the returned promise (and adopts a returned
+       * promise), so wrapping here would add a redundant promise. */
+      this.emitFunctionReturn(i64(XT_UNDEFINED));
     }
 
     const escapes = state.usesTry
@@ -325,13 +330,6 @@ export const moduleMethods: ModuleMethods = {
   emitFunctionReturn(value: string): void {
     if (this.current.trackFrames) this.emit("  call void @xt_stack_pop()");
     this.terminate(`ret i64 ${value}`);
-  },
-
-  /** Wrap a returned value in a resolved promise (for `async` functions). */
-  wrapAsync(value: string): string {
-    const result = this.reg();
-    this.emit(`  ${result} = call i64 @xt_promise_resolve(i64 ${value})`);
-    return result;
   },
 
   classGlobal(classInfo: ClassInfo): string {

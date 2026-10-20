@@ -428,7 +428,7 @@ Check your environment with `xbintsc doctor`.
 
 The compiler is strict about its language subset — types are erased rather than
 checked, Node modules need `--ext node`, third-party npm imports are unsupported,
-strings are UTF-8 bytes and `async` is a synchronous microtask model. An agent
+strings are UTF-8 bytes and `await` only suspends on a pending promise. An agent
 that assumes "TypeScript" means "what Node accepts" will write code that does
 not compile, so the documentation is layered for exactly that reader:
 

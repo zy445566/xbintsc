@@ -181,9 +181,10 @@ directly (`./build/app`) to see the program's own output.
 
 ### Program output appears in an unexpected order
 
-`async`/`await` is a synchronous microtask model and the event loop only runs
-after the program body. Timer and socket callbacks therefore fire late; see
-[language-support.md](./language-support.md).
+`async`/`await` suspends only on a **pending** promise; awaiting an already
+settled value continues synchronously instead of queueing a microtask the way
+Node does. The event loop starts after the program body, so timer and socket
+callbacks still fire after it; see [language-support.md](./language-support.md).
 
 ## Where to look in the code
 

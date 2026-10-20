@@ -166,8 +166,9 @@ gdb ./build/app          # 或 lldb ./build/app，Windows 用 WinDbg 打开 .exe
 
 ### 程序输出顺序出乎意料
 
-`async`/`await` 是同步微任务模型，且事件循环只在程序主体之后运行，所以定时器和套接字
-回调会晚触发；见 [language-support.md](./language-support.md)。
+`async`/`await` 只在 **pending** Promise 上挂起；等待已 settle 的值会同步继续，而 Node
+会排入微任务，因此顺序可能不同。事件循环仍在程序主体之后启动，定时器与套接字回调依然
+在主体之后触发；见 [language-support.md](./language-support.md)。
 
 ## 该去源码哪里看
 

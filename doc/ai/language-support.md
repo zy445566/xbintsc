@@ -31,7 +31,7 @@ Canonical detail (always current, much longer):
 | `return`, `throw` as expressions' operands | ✅ | |
 | `namespace` / `module` declaration | 🚫 | parse ✓, codegen ✗ |
 | `with`, `debugger` | 🚫 | not supported |
-| Top-level `await` | 🚫 | wrap it in an `async` function |
+| Top-level `await` | ⚠️ | works by blocking on the event loop until the promise settles (it does not yield the module body like an ES module); prefer wrapping it in an `async` function |
 
 ## Expressions and operators
 
@@ -71,10 +71,11 @@ Canonical detail (always current, much longer):
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| `async` / `await`, `Promise`, `Promise.all` | ⚠️ | **synchronous microtask model** — `await` on a settled promise continues synchronously |
-| `setTimeout` and callbacks | ⚠️ | the event loop runs **after** the program body, so a promise settled from a timer cannot be awaited |
-| Sockets / servers (`http`, `net`, `dgram`) | ⚠️ | same model: callbacks run on the event loop after the program body |
-| A real async event loop, worker threads | 🚫 | not implemented |
+| `async` / `await`, `Promise`, `Promise.all` | ✅ | real suspension: an `async` body runs on a stackful coroutine, and awaiting a **pending** promise pauses it until the promise settles. Awaiting an already-settled value still continues synchronously |
+| `setTimeout` and callbacks | ✅ | timers run on the core event loop; `await new Promise(r => setTimeout(r, ms))` works |
+| Sockets / servers (`http`, `net`, `dgram`) | ✅ | callbacks run on the event loop and can settle a promise you await (`net` / `http` examples included in the tests) |
+| `fs/promises` | ⚠️ | awaitable, but each call performs its I/O synchronously before settling, so it does not yield while the I/O runs |
+| `async` generators, worker threads | 🚫 | `async function*` is rejected; workers are child processes |
 
 ## Types: parsed, then erased
 

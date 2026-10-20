@@ -109,9 +109,10 @@ export const invocationCallMethods: InvocationCallMethods = {
       if (symbol && symbol.kind === SymbolKind.Function) {
         const declaration = symbol.declarations[0];
         const fn = declaration ? this.binding.functionOfNode.get(declaration) : undefined;
-        /* Generator functions are not called directly: the call must create a
-         * suspended generator, so fall through to the closure-call path. */
-        if (fn && !fn.isGenerator) {
+        /* Generator and `async` functions are not called directly: the call
+         * must create a suspended generator / start a coroutine, so fall
+         * through to the closure-call path. */
+        if (fn && !fn.isGenerator && !fn.isAsync) {
           const args = this.emitArguments(node.arguments);
           const result = this.reg();
           this.emit(

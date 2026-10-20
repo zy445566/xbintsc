@@ -203,6 +203,7 @@ CLI options:
     --force           Ignore the incremental cache
     --verbose         Print progress information
     --time            Print per-phase build timings
+    --debug           Emit debug info (DWARF/CodeView) and keep frame pointers
 ```
 
 ### Project config & application icon

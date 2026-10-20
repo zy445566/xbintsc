@@ -254,6 +254,7 @@ Options:
       --force           Ignore the incremental cache
       --verbose         Print progress information
       --time            Print per-phase build timings
+      --debug           Emit debug info (DWARF/CodeView) and keep frame pointers
       --no-hints        Do not append the "hint: … see <doc>" line to failures
 
 xbintsc compiles a subset of TypeScript to a native binary. Types are erased
@@ -426,7 +427,7 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     const extNames = listFlag(args.flags, "ext") ?? resolved.config.extensions ?? [];
     const nativeManifests = listFlag(args.flags, "ext-native") ?? resolved.config.extNative ?? [];
     const registry = buildRegistry(extNames, nativeManifests);
-    const { ir, diagnostics } = compileEntry(entry, registry);
+    const { ir, diagnostics } = compileEntry(entry, registry, { debug: Boolean(args.flags.get("debug")) });
     if (diagnostics.some((d) => d.category === "error")) {
       printDiagnostics(diagnostics, entry, io);
       return 1;
@@ -461,6 +462,7 @@ function dispatch(argv: readonly string[], io: CliIo): number {
       verbose: Boolean(args.flags.get("verbose")),
       extensions: registry,
       app: mergeAppConfig(args.flags, config),
+      debug: Boolean(args.flags.get("debug")),
     });
 
     if (result.diagnostics.some((d) => d.category === "error")) {

@@ -233,6 +233,8 @@ export interface CompileIrOptions {
   readonly objectPath: string;
   readonly optimize: string;
   readonly env?: Record<string, string>;
+  /** Emit debug info (`-g`) and keep frame pointers for crash backtraces. */
+  readonly debug?: boolean;
 }
 
 /**
@@ -244,9 +246,10 @@ const SECTION_FLAGS = ["-ffunction-sections", "-fdata-sections"];
 
 /** Compile an LLVM IR file to a native object file. */
 export function compileIr(runner: Runner, options: CompileIrOptions): void {
+  const debugFlags = options.debug ? ["-g", "-fno-omit-frame-pointer"] : [];
   const result = runner.run(
     options.clang,
-    [`-O${options.optimize}`, ...SECTION_FLAGS, "-c", options.irPath, "-o", options.objectPath],
+    [`-O${options.optimize}`, ...SECTION_FLAGS, ...debugFlags, "-c", options.irPath, "-o", options.objectPath],
     { env: options.env },
   );
   if (result.status !== 0) throw new ToolchainError(`${options.clang} ${options.irPath}`, result.status, result.stderr);

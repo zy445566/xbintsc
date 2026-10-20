@@ -84,7 +84,17 @@ export const moduleMethods: ModuleMethods = {
     ];
     const runtimeDeclarations = new Set(RUNTIME_DECLARATIONS);
     const extraDeclarations = [...this.extraDeclarations].filter((line) => !runtimeDeclarations.has(line));
-    return [...header, ...RUNTIME_DECLARATIONS, ...extraDeclarations, "", ...this.globals, "", ...this.functions, ""].join("\n");
+    return [
+      ...header,
+      ...RUNTIME_DECLARATIONS,
+      ...extraDeclarations,
+      "",
+      ...this.globals,
+      "",
+      ...this.functions,
+      "",
+      ...this.debugMetadataLines(),
+    ].join("\n");
   },
 
   // -- module level --------------------------------------------------------
@@ -99,6 +109,7 @@ export const moduleMethods: ModuleMethods = {
       return;
     }
     const name = this.functionName(fn);
+    const debugSubprogram = this.debugSubprogramFor(fn);
     const state: FunctionState = {
       fn,
       buffer: [],
@@ -114,10 +125,13 @@ export const moduleMethods: ModuleMethods = {
       escapePointers: [],
       usesTry: false,
       trackFrames: !fn.isGenerator,
+      ...(debugSubprogram ? { debugSubprogram } : {}),
     };
     this.current = state;
+    if (debugSubprogram) this.setDebugLocation(fn.node);
 
-    const header = `define i64 @${name}(i64 %this, i64 %env, i32 %argc, i64* %argv) {`;
+    const debugSuffix = debugSubprogram ? ` !dbg ${debugSubprogram}` : "";
+    const header = `define i64 @${name}(i64 %this, i64 %env, i32 %argc, i64* %argv)${debugSuffix} {`;
     this.emit(`%saved.env = alloca i64`);
     this.emit(`store i64 %env, i64* %saved.env`);
     this.emit(`%saved.this = alloca i64`);

@@ -8,8 +8,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { DiagnosticBag, DiagnosticCode, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { sourceTextBytes } from "../diagnostics/source-text.js";
@@ -19,6 +18,7 @@ import { SyntaxKind } from "../ast/nodes.js";
 import { bundleModules } from "./modules.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { BuildCache, hashParts } from "./cache.js";
+import { compilerFingerprint, registryFingerprint, runtimeFingerprint } from "./fingerprint.js";
 import { findRuntimeDir } from "./paths.js";
 import { findRuntimeLibrary } from "./runtime-lib.js";
 import { resolveToolchain } from "./toolchain-provider.js";
@@ -42,7 +42,7 @@ import {
  * `package.json`); a stale version would let an upgraded compiler reuse binaries
  * produced by the previous one.
  */
-export const COMPILER_VERSION = "0.3.85";
+export const COMPILER_VERSION = "0.3.86";
 
 export type EmitKind = "exe" | "obj" | "ir";
 
@@ -65,6 +65,8 @@ export interface BuildOptions {
   readonly icon?: string;
   /** Application metadata: name, icon and macOS bundle settings. */
   readonly app?: AppConfig;
+  /** Emit LLVM debug metadata so `-g` produces DWARF/CodeView (default false). */
+  readonly debug?: boolean;
 }
 
 /** One phase of a build, in milliseconds (reported by `--time`). */
@@ -91,7 +93,12 @@ export interface CompileStringResult {
 }
 
 /** Compile TypeScript source text to LLVM IR without touching the toolchain. */
-export function compileString(source: string, fileName = "input.ts", extensions?: ExtensionRegistry): CompileStringResult {
+export function compileString(
+  source: string,
+  fileName = "input.ts",
+  extensions?: ExtensionRegistry,
+  options: { readonly debug?: boolean } = {},
+): CompileStringResult {
   const file = new SourceFile(fileName, source);
   const diagnostics = new DiagnosticBag();
   const parser = new Parser(file, diagnostics);
@@ -101,6 +108,7 @@ export function compileString(source: string, fileName = "input.ts", extensions?
     builtins: registry.builtins(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
+    debug: options.debug === true,
   });
   return { ir, diagnostics: diagnostics.diagnostics };
 }
@@ -122,7 +130,11 @@ function externalModuleSpecifiers(registry: ExtensionRegistry): Set<string> {
  * Compile a file to LLVM IR, bundling every reachable relative module first so
  * that imports from other TypeScript sources resolve exactly like `build`.
  */
-export function compileEntry(entryPath: string, extensions?: ExtensionRegistry): CompileStringResult {
+export function compileEntry(
+  entryPath: string,
+  extensions?: ExtensionRegistry,
+  options: { readonly debug?: boolean } = {},
+): CompileStringResult {
   const absoluteEntry = resolve(entryPath);
   const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
   const file = new SourceFile(absoluteEntry, sourceText);
@@ -144,6 +156,7 @@ export function compileEntry(entryPath: string, extensions?: ExtensionRegistry):
     builtins: registry.builtins(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
+    debug: options.debug === true,
   });
   return { ir, diagnostics: diagnostics.diagnostics };
 }
@@ -252,6 +265,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     app.name ?? "",
     String(app.bundle ?? false),
     app.bundleId ?? "",
+    String(options.debug === true),
   ]);
 
   // A `.app` bundle is deterministic from the output path and name, so it can be
@@ -271,6 +285,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     builtins: registry.builtins(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
+    debug: options.debug === true,
   });
   timings.push({ phase: "codegen", ms: Date.now() - codegenStarted });
 
@@ -306,7 +321,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   mkdirSync(cacheDir, { recursive: true });
 
   const objectPath = emit === "obj" ? outputPath : resolve(outDir, baseName + ".o");
-  compileIr(runner, { clang, irPath, objectPath, optimize, env: toolchain.env });
+  compileIr(runner, { clang, irPath, objectPath, optimize, env: toolchain.env, debug: options.debug === true });
   timings.push({ phase: "clang", ms: Date.now() - clangStarted });
 
   if (emit === "obj") {
@@ -436,86 +451,6 @@ export const RUNTIME_SOURCES = [
   "xt_builtins.c",
   "xt_io.c",
 ] as const;
-
-/**
- * Fingerprint every runtime artifact that can change a linked executable: the
- * C sources, shared headers and `#include`d `.inc` fragments plus the shipped
- * prebuilt archives. It feeds the executable cache key, so a runtime change
- * invalidates a cached binary even when the entry source is untouched — the
- * per-object cache cannot express that, because the freshness check runs before
- * any compilation.
- */
-function runtimeFingerprint(runtimeDir: string): string {
-  if (!existsSync(runtimeDir)) return "";
-  const parts: string[] = [];
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-      } else if (/\.(c|h|inc)$/.test(entry.name)) {
-        parts.push(entry.name, readFileSync(full, "utf8"));
-      } else {
-        parts.push(entry.name, readFileSync(full).toString("base64"));
-      }
-    }
-  };
-  walk(runtimeDir);
-  return hashParts(parts);
-}
-
-/**
- * Content hash of the compiler's own TypeScript sources, when they are present.
- *
- * `COMPILER_VERSION` is bumped per release, but a developer editing codegen
- * between releases would otherwise reuse a binary produced by the previous
- * compiler for the same input. Hashing `src/` closes that hole in a source
- * checkout. A released archive ships only `bin/` and `runtime/`, so the marker
- * check fails there and the version alone keys the cache — which is correct,
- * because release automation keeps it in sync with package.json.
- */
-function compilerFingerprint(): string {
-  try {
-    // In a checkout this module is `<root>/src/driver/compiler.ts`.
-    const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-    if (!existsSync(join(sourceRoot, "codegen", "llvm.ts"))) return "";
-    if (!existsSync(join(sourceRoot, "driver", "compiler.ts"))) return "";
-    const parts: string[] = [];
-    const walk = (dir: string): void => {
-      for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-        const full = join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walk(full);
-        } else if (entry.name.endsWith(".ts")) {
-          parts.push(relative(sourceRoot, full).replace(/\\/g, "/"), readFileSync(full, "utf8"));
-        }
-      }
-    };
-    walk(sourceRoot);
-    return hashParts(parts);
-  } catch {
-    // A self-hosted or packaged compiler may not expose its sources.
-    return "";
-  }
-}
-
-/**
- * Fingerprint everything an extension contributes that can change the linked
- * executable but does not live under `runtime/`: its name, linker flags and the
- * contents of any pre-built C++/Rust objects. Keeps a cached binary fresh when
- * a native extension is rebuilt, or when `--ext-native` flags change.
- */
-function registryFingerprint(registry: ExtensionRegistry): string {
-  const parts: string[] = [];
-  for (const extension of registry.all()) {
-    parts.push(extension.name);
-    parts.push(...(extension.linkerFlags?.() ?? []));
-    for (const object of extension.nativeObjects?.() ?? []) {
-      parts.push(object, existsSync(object) ? readFileSync(object).toString("base64") : "");
-    }
-  }
-  return hashParts(parts);
-}
 
 /**
  * Compile the core runtime and every extension source, reusing cached object

@@ -140,6 +140,21 @@ not tracked because they switch stacks. A fatal native signal prints
 `xbintsc: fatal signal …` followed by the same frames, so a crash without a
 debugger still shows which JavaScript functions were running.
 
+## Debugging with gdb / lldb / WinDbg
+
+`xbintsc build app.ts --debug` emits LLVM debug metadata and passes `-g
+-fno-omit-frame-pointer` to clang, so the object carries DWARF (Linux/macOS) or
+CodeView (Windows) line tables. Function symbols keep their source names
+(`xt_fn_3_add`) and every statement has a line location:
+
+```bash
+xbintsc build app.ts --debug
+gdb ./build/app          # or: lldb ./build/app, or open the .exe in WinDbg
+```
+
+The binary is larger and is cached separately from a normal build (the debug
+flag is part of the cache key). `Error.stack` works without `--debug`.
+
 ## Build behaviour that looks wrong but is not
 
 ### The build printed `(cached)` and did nothing

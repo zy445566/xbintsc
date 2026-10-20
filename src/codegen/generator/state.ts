@@ -56,6 +56,10 @@ export interface FunctionState {
    * stack would attribute their frames to the wrong caller.
    */
   trackFrames: boolean;
+  /** `!DISubprogram` for this function when DWARF emission is enabled. */
+  debugSubprogram?: string;
+  /** Current `!DILocation` attached to every emitted instruction. */
+  debugLocation?: string;
 }
 
 export interface CodegenResult {
@@ -80,6 +84,13 @@ export interface CodegenOptions {
    * defaults to the running process; it is overridable for tests.
    */
   readonly target?: { readonly platform: string; readonly arch: string };
+  /**
+   * Emit LLVM debug metadata (`!DICompileUnit`, `!DISubprogram`,
+   * `!DILocation`) so `clang -g` produces DWARF/CodeView for the generated
+   * program. Off by default: the metadata is large and only useful when
+   * debugging; `xbintsc build --debug` turns it on.
+   */
+  readonly debug?: boolean;
 }
 
 export const RUNTIME_DECLARATIONS: readonly string[] = [

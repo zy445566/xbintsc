@@ -72,6 +72,17 @@ export class GeneratorContext {
    * while this is non-zero.
    */
   unsupportedCount = 0;
+  /** Emit DWARF debug metadata (`--debug`). */
+  readonly debug: boolean;
+  /** Numbered metadata definitions, emitted after the functions. */
+  metadataCounter = 0;
+  readonly metadata: string[] = [];
+  readonly debugFiles = new Map<string, string>();
+  readonly debugSubprograms = new Map<number, string>();
+  readonly debugLocations = new Map<string, string>();
+  debugUnit?: string;
+  debugFlags: string[] = [];
+  debugSubroutineType?: string;
   current!: FunctionState;
 
   constructor(sourceFile: SourceFileNode, diagnostics: DiagnosticBag, options: CodegenOptions = {}) {
@@ -82,6 +93,7 @@ export class GeneratorContext {
     this.modules = options.modules ?? {};
     this.moduleHints = options.moduleHints ?? {};
     this.target = options.target ?? { platform: process.platform, arch: process.arch };
+    this.debug = options.debug === true;
     this.resolveImports();
   }
 
@@ -243,11 +255,12 @@ export class GeneratorContext {
   // -- emission primitives -------------------------------------------------
 
   emit(line: string): void {
-    this.current.buffer.push(line);
+    const location = this.debug ? this.current.debugLocation : undefined;
+    this.current.buffer.push(location === undefined ? line : `${line}, !dbg ${location}`);
   }
 
   terminate(line: string): void {
-    this.current.buffer.push(`  ${line}`);
+    this.emit(`  ${line}`);
     this.current.terminated = true;
   }
 
@@ -466,8 +479,8 @@ export class GeneratorContext {
     return name;
   }
 
-  /** 1-based line of `node` in the module it came from (for stack frames). */
-  lineOf(node: Node): number {
+  /** 1-based line and column of `node` in the module it came from. */
+  positionOf(node: Node): { line: number; column: number } {
     const file = this.fileNameOf(node);
     const text = this.sourceFile.moduleTexts?.get(file) ?? this.sourceFile.text;
     let starts = this.lineStartsByFile.get(file);
@@ -486,7 +499,12 @@ export class GeneratorContext {
       if (starts[middle]! <= offset) low = middle;
       else high = middle - 1;
     }
-    return low + 1;
+    return { line: low + 1, column: offset - starts[low]! + 1 };
+  }
+
+  /** 1-based line of `node` in the module it came from (for stack frames). */
+  lineOf(node: Node): number {
+    return this.positionOf(node).line;
   }
 
   /** The source file a node belongs to. Bundling merges every module into one

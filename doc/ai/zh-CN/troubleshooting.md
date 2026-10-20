@@ -128,6 +128,21 @@ Error: boom
 函数体因为会切换栈而不记录。原生致命信号会先打印 `xbintsc: fatal signal …`，
 再打印同一组帧，所以即使没有调试器也能看出崩溃时正在运行哪些 JS 函数。
 
+## 用 gdb / lldb / WinDbg 调试
+
+`xbintsc build app.ts --debug` 会生成 LLVM 调试元数据，并把 `-g
+-fno-omit-frame-pointer` 传给 clang，因此目标文件带有 DWARF（Linux/macOS）或
+CodeView（Windows）行号表。函数符号保留源码名（如 `xt_fn_3_add`），每条语句都有
+对应的行位置：
+
+```bash
+xbintsc build app.ts --debug
+gdb ./build/app          # 或 lldb ./build/app，Windows 用 WinDbg 打开 .exe
+```
+
+调试版二进制更大，并且与普通构建分开缓存（debug 标志参与缓存键）。`Error.stack`
+不需要 `--debug` 也能工作。
+
 ## 看起来不对、其实正常的构建行为
 
 ### 构建打印了 `(cached)` 并什么都没做

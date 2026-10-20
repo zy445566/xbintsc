@@ -33,6 +33,8 @@
     --app-id <id>     macOS bundle 标识（如 com.example.demo）
     --force           忽略增量缓存
     --verbose         打印进度信息
+    --time            打印各构建阶段耗时
+    --debug           生成调试信息（DWARF/CodeView）并保留帧指针
 ```
 
 少数容易踩的解析细节：

@@ -15,6 +15,7 @@ import { statementMethods, type StatementMethods } from "./statements.js";
 import { expressionMethods, type ExpressionMethods } from "./expressions.js";
 import { callMethods, type CallMethods } from "./calls.js";
 import { numericMethods, type NumericMethods } from "./numeric.js";
+import { debugMethods, type DebugMethods } from "./debug.js";
 import type { CodegenOptions, CodegenResult } from "./state.js";
 
 export class Generator extends GeneratorContext {}
@@ -24,9 +25,18 @@ export interface Generator
     StatementMethods,
     ExpressionMethods,
     CallMethods,
-    NumericMethods {}
+    NumericMethods,
+    DebugMethods {}
 
-Object.assign(Generator.prototype, moduleMethods, statementMethods, expressionMethods, callMethods, numericMethods);
+Object.assign(
+  Generator.prototype,
+  moduleMethods,
+  statementMethods,
+  expressionMethods,
+  callMethods,
+  numericMethods,
+  debugMethods,
+);
 
 export type { CodegenOptions, CodegenResult } from "./state.js";
 

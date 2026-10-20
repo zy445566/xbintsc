@@ -31,6 +31,24 @@ describe("codegen", () => {
     expect(ir).toContain(numberLiteral(42));
   });
 
+  it("emits DWARF metadata only when debug is enabled", () => {
+    const source = "function add(a: number, b: number) {\n  return a + b;\n}\nadd(1, 2);";
+    const plain = compileToIr(source);
+    expect(plain.ir).not.toContain("!llvm.dbg.cu");
+    expect(plain.ir).not.toContain("!dbg");
+
+    const debug = compileToIr(source, undefined, undefined, { debug: true });
+    expect(debug.ir).toContain("!llvm.dbg.cu");
+    expect(debug.ir).toContain("!DICompileUnit");
+    expect(debug.ir).toContain("!DISubprogram");
+    expect(debug.ir).toContain("!DILocation");
+    expect(debug.ir).toContain('!llvm.module.flags');
+    expect(debug.ir).toMatch(/define i64 @xt_fn_\d+_add\(.*\) !dbg !\d+ \{/);
+    expect(debug.ir).toMatch(/store i64 .*!dbg !\d+/);
+    // Statements, not just functions, carry a location.
+    expect(debug.ir).toContain("!DILocation(line: 2,");
+  });
+
   it("emits shadow-stack frames with readable function symbols", () => {
     const { ir } = compileToIr("function add(a: number, b: number) { return a + b; }\nadd(1, 2);");
     expect(ir).toMatch(/@xt_fn_\d+_add/);

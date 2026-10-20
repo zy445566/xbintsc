@@ -46,7 +46,7 @@ static int xt_array_default_compare(xt_value a, xt_value b) {
   xt_string *sa = xt_as_string(xt_to_string(a));
   xt_string *sb = xt_as_string(xt_to_string(b));
   uint32_t n = sa->length < sb->length ? sa->length : sb->length;
-  int cmp = n ? memcmp(sa->data, sb->data, n) : 0;
+  int cmp = n ? memcmp(xt_string_bytes(sa), xt_string_bytes(sb), n) : 0;
   if (cmp != 0) return cmp < 0 ? -1 : 1;
   if (sa->length == sb->length) return 0;
   return sa->length < sb->length ? -1 : 1;

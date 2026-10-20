@@ -120,7 +120,7 @@ xt_value xt_json_parse(int32_t argc, xt_value *argv) {
   xt_value input = xt_to_string(xt_arg_at(argc, argv, 0));
   xt_string *s = xt_as_string(input);
   if (!s) return XT_UNDEFINED;
-  xt_json_cursor cursor = {s->data, s->length, 0};
+  xt_json_cursor cursor = {xt_string_bytes(s), s->length, 0};
   return xt_json_parse_value(&cursor);
 }
 
@@ -193,9 +193,10 @@ static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_va
   }
   if (XT_IS_STRING(value)) {
     xt_string *s = xt_as_string(value);
+    const char *bytes = xt_string_bytes(s);
     *out = xt_add(*out, xt_string_from_cstr("\""));
     for (uint32_t i = 0; i < s->length; i++) {
-      char ch = s->data[i];
+      char ch = bytes[i];
       if (ch == '"') *out = xt_add(*out, xt_string_from_cstr("\\\""));
       else if (ch == '\\') *out = xt_add(*out, xt_string_from_cstr("\\\\"));
       else if (ch == '\n') *out = xt_add(*out, xt_string_from_cstr("\\n"));

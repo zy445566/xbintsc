@@ -109,8 +109,11 @@ static int xt_regexp_run(xt_value regexpValue, xt_value input, int32_t start,
   if ((uint32_t)start > text->length) return 0;
   int flags = REG_EXTENDED;
   xt_string *f = xt_as_string(regexp->flags);
-  if (f) for (uint32_t i = 0; i < f->length; i++) if (f->data[i] == 'i') flags |= REG_ICASE;
-  char *translated = xt_regexp_translate_js(pattern->data, jsGroups, groupCount);
+  if (f) {
+    const char *flagBytes = xt_string_bytes(f);
+    for (uint32_t i = 0; i < f->length; i++) if (flagBytes[i] == 'i') flags |= REG_ICASE;
+  }
+  char *translated = xt_regexp_translate_js(xt_string_bytes(pattern), jsGroups, groupCount);
   if (!translated) return 0;
   regex_t compiled;
   if (regcomp(&compiled, translated, flags) != 0) {
@@ -118,7 +121,7 @@ static int xt_regexp_run(xt_value regexpValue, xt_value input, int32_t start,
     return 0;
   }
   free(translated);
-  int ok = regexec(&compiled, text->data + start, nmatch, matches, 0) == 0;
+  int ok = regexec(&compiled, xt_string_bytes(text) + start, nmatch, matches, 0) == 0;
   regfree(&compiled);
   if (!ok) return 0;
   for (size_t i = 0; i < nmatch; i++) {
@@ -142,7 +145,8 @@ static int xt_regexp_is_global(xt_value regexpValue) {
   xt_regexp *regexp = (xt_regexp *)XT_GET_PTR(regexpValue);
   xt_string *f = xt_as_string(regexp->flags);
   if (!f) return 0;
-  for (uint32_t i = 0; i < f->length; i++) if (f->data[i] == 'g') return 1;
+  const char *flags = xt_string_bytes(f);
+  for (uint32_t i = 0; i < f->length; i++) if (flags[i] == 'g') return 1;
   return 0;
 }
 
@@ -154,7 +158,7 @@ static int xt_regexp_js_group_count(xt_value regexpValue) {
   int count = (int)pattern->length + 1;
   int *groups = (int *)malloc(sizeof(int) * (size_t)count);
   int groupCount = 0;
-  char *translated = xt_regexp_translate_js(pattern->data, groups, &groupCount);
+  char *translated = xt_regexp_translate_js(xt_string_bytes(pattern), groups, &groupCount);
   free(translated);
   int total = 0;
   for (int i = 0; i < groupCount; i++) if (groups[i] > total) total = groups[i];
@@ -177,6 +181,7 @@ xt_value xt_regexp_exec(xt_value target, xt_value input) {
   if (!matches || !groups) { free(matches); free(groups); return XT_NULL; }
   xt_value textValue = xt_to_string(input);
   xt_string *text = xt_as_string(textValue);
+  const char *textBytes = xt_string_bytes(text);
   int groupCount = 0;
   if (!xt_regexp_run(target, input, 0, matches, cap, groups, &groupCount)) {
     free(matches);
@@ -186,13 +191,13 @@ xt_value xt_regexp_exec(xt_value target, xt_value input) {
   int jsTotal = 0;
   for (int i = 0; i < groupCount; i++) if (groups[i] > jsTotal) jsTotal = groups[i];
   xt_value out = xt_array_new(0, NULL);
-  xt_array_push(out, xt_string_new(text->data + matches[0].rm_so, (int64_t)(matches[0].rm_eo - matches[0].rm_so)));
+  xt_array_push(out, xt_string_new(textBytes + matches[0].rm_so, (int64_t)(matches[0].rm_eo - matches[0].rm_so)));
   for (int g = 1; g <= jsTotal; g++) {
     xt_value groupValue = XT_UNDEFINED;
     for (int i = 0; i < groupCount; i++) {
       if (groups[i] != g) continue;
       if (matches[i + 1].rm_so >= 0) {
-        groupValue = xt_string_new(text->data + matches[i + 1].rm_so, (int64_t)(matches[i + 1].rm_eo - matches[i + 1].rm_so));
+        groupValue = xt_string_new(textBytes + matches[i + 1].rm_so, (int64_t)(matches[i + 1].rm_eo - matches[i + 1].rm_so));
       }
       break;
     }
@@ -212,6 +217,7 @@ xt_value xt_regexp_match(xt_value input, xt_value regexp) {
   if (!xt_regexp_is_global(regexp)) return xt_regexp_exec(regexp, input);
   xt_value textValue = xt_to_string(input);
   xt_string *text = xt_as_string(textValue);
+  const char *textBytes = xt_string_bytes(text);
   xt_value results = xt_array_new(0, NULL);
   int32_t cursor = 0;
   int found = 0;
@@ -220,7 +226,7 @@ xt_value xt_regexp_match(xt_value input, xt_value regexp) {
     int32_t end = 0;
     if (!xt_regexp_find(regexp, input, cursor, &start, &end)) break;
     found = 1;
-    xt_array_push(results, xt_string_new(text->data + start, (int64_t)(end - start)));
+    xt_array_push(results, xt_string_new(textBytes + start, (int64_t)(end - start)));
     cursor = end > start ? end : end + 1;
   }
   return found ? results : XT_NULL;
@@ -241,10 +247,11 @@ static void xt_regexp_append(char **out, size_t *length, size_t *capacity, const
 static void xt_regexp_append_group(char **out, size_t *length, size_t *capacity,
                                    xt_string *text, regmatch_t *matches, int *groups,
                                    int groupCount, int group) {
+  const char *textBytes = xt_string_bytes(text);
   for (int i = 0; i < groupCount; i++) {
     if (groups[i] != group) continue;
     if (matches[i + 1].rm_so >= 0) {
-      xt_regexp_append(out, length, capacity, text->data + matches[i + 1].rm_so,
+      xt_regexp_append(out, length, capacity, textBytes + matches[i + 1].rm_so,
                        (size_t)(matches[i + 1].rm_eo - matches[i + 1].rm_so));
     }
     return;
@@ -255,32 +262,34 @@ static void xt_regexp_expand_replacement(char **out, size_t *length, size_t *cap
                                          xt_string *replacement, xt_string *text,
                                          regmatch_t *matches, int *groups, int groupCount,
                                          int jsTotal) {
+  const char *repl = xt_string_bytes(replacement);
+  const char *textBytes = xt_string_bytes(text);
   size_t start = (size_t)matches[0].rm_so;
   size_t end = (size_t)matches[0].rm_eo;
   for (size_t i = 0; i < replacement->length; i++) {
-    char c = replacement->data[i];
+    char c = repl[i];
     if (c != '$' || i + 1 >= replacement->length) {
       xt_regexp_append(out, length, capacity, &c, 1);
       continue;
     }
-    char next = replacement->data[i + 1];
+    char next = repl[i + 1];
     if (next == '$') {
       xt_regexp_append(out, length, capacity, "$", 1);
       i++;
     } else if (next == '&') {
-      xt_regexp_append(out, length, capacity, text->data + start, end - start);
+      xt_regexp_append(out, length, capacity, textBytes + start, end - start);
       i++;
     } else if (next == '`') {
-      xt_regexp_append(out, length, capacity, text->data, start);
+      xt_regexp_append(out, length, capacity, textBytes, start);
       i++;
     } else if (next == '\'') {
-      xt_regexp_append(out, length, capacity, text->data + end, text->length - end);
+      xt_regexp_append(out, length, capacity, textBytes + end, text->length - end);
       i++;
     } else if (next >= '0' && next <= '9') {
       int value = next - '0';
       int digits = 1;
-      if (i + 2 < replacement->length && replacement->data[i + 2] >= '0' && replacement->data[i + 2] <= '9') {
-        int two = value * 10 + (replacement->data[i + 2] - '0');
+      if (i + 2 < replacement->length && repl[i + 2] >= '0' && repl[i + 2] <= '9') {
+        int two = value * 10 + (repl[i + 2] - '0');
         if (two <= jsTotal) { value = two; digits = 2; }
       }
       if (value >= 1 && value <= jsTotal) {
@@ -299,6 +308,7 @@ static void xt_regexp_expand_replacement(char **out, size_t *length, size_t *cap
 xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replacementValue) {
   xt_string *text = xt_as_string(xt_to_string(value));
   if (!text) return value;
+  const char *textBytes = xt_string_bytes(text);
   int global = xt_regexp_is_global(regexpValue);
   int useFunction = XT_IS_FUNCTION(replacementValue);
   xt_string *replacement = NULL;
@@ -324,18 +334,18 @@ xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replac
     if (!xt_regexp_run(regexpValue, value, cursor, matches, cap, groups, &groupCount)) break;
     int32_t start = (int32_t)matches[0].rm_so;
     int32_t end = (int32_t)matches[0].rm_eo;
-    xt_regexp_append(&out, &length, &capacity, text->data + cursor, (size_t)(start - cursor));
+    xt_regexp_append(&out, &length, &capacity, textBytes + cursor, (size_t)(start - cursor));
     if (useFunction) {
       /* Accumulate in an `xt_array` so the earlier match/group strings stay
          reachable while later groups (and the callback itself) allocate. */
       xt_value argArray = xt_array_new(0, NULL);
-      xt_array_push(argArray, xt_string_new(text->data + start, (int64_t)(end - start)));
+      xt_array_push(argArray, xt_string_new(textBytes + start, (int64_t)(end - start)));
       for (int g = 1; g <= jsTotal; g++) {
         xt_value groupValue = XT_UNDEFINED;
         for (int i = 0; i < groupCount; i++) {
           if (groups[i] != g) continue;
           if (matches[i + 1].rm_so >= 0) {
-            groupValue = xt_string_new(text->data + matches[i + 1].rm_so, (int64_t)(matches[i + 1].rm_eo - matches[i + 1].rm_so));
+            groupValue = xt_string_new(textBytes + matches[i + 1].rm_so, (int64_t)(matches[i + 1].rm_eo - matches[i + 1].rm_so));
           }
           break;
         }
@@ -345,7 +355,7 @@ xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replac
       xt_array_push(argArray, xt_to_string(value));
       xt_value produced = xt_closure_call(replacementValue, jsTotal + 3, xt_as_array(argArray)->items);
       xt_string *producedText = xt_as_string(xt_to_string(produced));
-      if (producedText) xt_regexp_append(&out, &length, &capacity, producedText->data, producedText->length);
+      if (producedText) xt_regexp_append(&out, &length, &capacity, xt_string_bytes(producedText), producedText->length);
     } else {
       xt_regexp_expand_replacement(&out, &length, &capacity, replacement, text, matches, groups, groupCount, jsTotal);
     }
@@ -355,7 +365,7 @@ xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replac
     } else {
       /* Zero-width match: copy one byte so the scan always progresses. */
       if (cursor >= (int32_t)text->length) break;
-      xt_regexp_append(&out, &length, &capacity, text->data + cursor, 1);
+      xt_regexp_append(&out, &length, &capacity, textBytes + cursor, 1);
       cursor++;
     }
     if (!global) break;
@@ -367,7 +377,7 @@ xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replac
     return value;
   }
   size_t tail = text->length - (size_t)cursor;
-  xt_regexp_append(&out, &length, &capacity, text->data + cursor, tail);
+  xt_regexp_append(&out, &length, &capacity, textBytes + cursor, tail);
   xt_value result = xt_string_new(out, (int64_t)length);
   free(out);
   free(matches);
@@ -381,6 +391,7 @@ xt_value xt_regexp_split(xt_value value, xt_value regexpValue, xt_value limitVal
   xt_value result = xt_array_new(0, NULL);
   xt_string *text = xt_as_string(xt_to_string(value));
   if (!text) return result;
+  const char *textBytes = xt_string_bytes(text);
   int64_t limit = limitValue == XT_UNDEFINED ? 0x7fffffff : (int64_t)xt_to_int32(limitValue);
   if (limit <= 0) return result;
   xt_regexp *regexp = (xt_regexp *)XT_GET_PTR(regexpValue);
@@ -400,14 +411,14 @@ xt_value xt_regexp_split(xt_value value, xt_value regexpValue, xt_value limitVal
     int32_t end = (int32_t)matches[0].rm_eo;
     if (start != q) { q++; continue; }
     if (end == p) { q++; continue; }
-    xt_array_push(result, xt_string_new(text->data + p, (int64_t)(q - p)));
+    xt_array_push(result, xt_string_new(textBytes + p, (int64_t)(q - p)));
     if ((int64_t)xt_as_array(result)->length >= limit) { free(matches); free(groups); return result; }
     for (int g = 1; g <= jsTotal; g++) {
       xt_value groupValue = XT_UNDEFINED;
       for (int i = 0; i < groupCount; i++) {
         if (groups[i] != g) continue;
         if (matches[i + 1].rm_so >= 0) {
-          groupValue = xt_string_new(text->data + matches[i + 1].rm_so, (int64_t)(matches[i + 1].rm_eo - matches[i + 1].rm_so));
+          groupValue = xt_string_new(textBytes + matches[i + 1].rm_so, (int64_t)(matches[i + 1].rm_eo - matches[i + 1].rm_so));
         }
         break;
       }
@@ -418,7 +429,7 @@ xt_value xt_regexp_split(xt_value value, xt_value regexpValue, xt_value limitVal
     q = p;
   }
   if ((int64_t)xt_as_array(result)->length < limit) {
-    xt_array_push(result, xt_string_new(text->data + p, (int64_t)(len - p)));
+    xt_array_push(result, xt_string_new(textBytes + p, (int64_t)(len - p)));
   }
   free(matches);
   free(groups);
@@ -431,16 +442,20 @@ xt_value xt_regexp_get_property(xt_value target, xt_value key) {
   if (!XT_IS_STRING(key)) return XT_UNDEFINED;
   xt_string *k = xt_as_string(key);
   xt_string *f = xt_as_string(regexp->flags);
+  const char *keyBytes = xt_string_bytes(k);
   int flag = 0;
-  if (k->length == 6 && memcmp(k->data, "source", 6) == 0) return regexp->source;
-  if (k->length == 5 && memcmp(k->data, "flags", 5) == 0) return regexp->flags;
-  if (k->length == 9 && memcmp(k->data, "lastIndex", 9) == 0) return xt_number(0);
-  if (k->length == 6 && memcmp(k->data, "global", 6) == 0) flag = 'g';
-  else if (k->length == 10 && memcmp(k->data, "ignoreCase", 10) == 0) flag = 'i';
-  else if (k->length == 9 && memcmp(k->data, "multiline", 9) == 0) flag = 'm';
-  else if (k->length == 6 && memcmp(k->data, "sticky", 6) == 0) flag = 'y';
+  if (k->length == 6 && memcmp(keyBytes, "source", 6) == 0) return regexp->source;
+  if (k->length == 5 && memcmp(keyBytes, "flags", 5) == 0) return regexp->flags;
+  if (k->length == 9 && memcmp(keyBytes, "lastIndex", 9) == 0) return xt_number(0);
+  if (k->length == 6 && memcmp(keyBytes, "global", 6) == 0) flag = 'g';
+  else if (k->length == 10 && memcmp(keyBytes, "ignoreCase", 10) == 0) flag = 'i';
+  else if (k->length == 9 && memcmp(keyBytes, "multiline", 9) == 0) flag = 'm';
+  else if (k->length == 6 && memcmp(keyBytes, "sticky", 6) == 0) flag = 'y';
   if (flag) {
-    if (f) for (uint32_t i = 0; i < f->length; i++) if (f->data[i] == flag) return XT_TRUE;
+    if (f) {
+      const char *flags = xt_string_bytes(f);
+      for (uint32_t i = 0; i < f->length; i++) if (flags[i] == flag) return XT_TRUE;
+    }
     return XT_FALSE;
   }
   return XT_UNDEFINED;

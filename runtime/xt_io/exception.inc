@@ -300,12 +300,12 @@ void xt_throw(xt_value v) {
   if (stack != XT_UNDEFINED) {
     xt_string *text = xt_as_string(stack);
     if (text) {
-      fprintf(stderr, "Uncaught %s\n", text->data);
+      fprintf(stderr, "Uncaught %s\n", xt_string_bytes(text));
       exit(1);
     }
   }
   xt_value message = xt_to_string(v);
   xt_string *s = xt_as_string(message);
-  fprintf(stderr, "Uncaught %s\n", s->data);
+  fprintf(stderr, "Uncaught %s\n", xt_string_bytes(s));
   exit(1);
 }

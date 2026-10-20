@@ -331,7 +331,16 @@ static void xt_gc_process(xt_header *header) {
   const void *base = (const char *)header + sizeof(xt_header);
 
   switch (header->kind) {
-    case XT_OBJECT_KIND_STRING:
+    case XT_OBJECT_KIND_STRING: {
+      /* A flat string holds bytes only. A cons node is an immutable rope whose
+       * children must stay alive until `xt_string_bytes` materialises it. */
+      xt_string *string = (xt_string *)header;
+      if (string->flat == NULL) {
+        if (string->left) xt_gc_gray_push(&string->left->header);
+        if (string->right) xt_gc_gray_push(&string->right->header);
+      }
+      return;
+    }
     case XT_OBJECT_KIND_BIGINT:
     case XT_OBJECT_KIND_DATE:
       /* Numbers/bytes only: no references to follow. */
@@ -395,7 +404,7 @@ static void xt_gc_process(xt_header *header) {
 static void xt_gc_release(xt_header *header) {
   switch (header->kind) {
     case XT_OBJECT_KIND_STRING:
-      free(((xt_string *)header)->data);
+      free(((xt_string *)header)->flat);
       break;
     case XT_OBJECT_KIND_BIGINT:
       free(((xt_bigint *)header)->limbs);

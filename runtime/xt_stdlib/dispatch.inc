@@ -322,7 +322,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
       /* Bound functions report `name` as "bound <target>" and reduce `length`
        * by the number of pre-bound arguments, like the specification. */
       xt_function *targetFn = (xt_function *)XT_GET_PTR(target);
-      const char *base = targetFn->name ? targetFn->name->data : "";
+      const char *base = targetFn->name ? xt_string_bytes(targetFn->name) : "";
       char boundName[256];
       snprintf(boundName, sizeof(boundName), "bound %s", base);
       int32_t prebound = argc > 1 ? argc - 1 : 0;
@@ -336,7 +336,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     if (strcmp(method, "toString") == 0) {
       /* Source text is not retained; report a native-style representation. */
       xt_function *self = (xt_function *)XT_GET_PTR(target);
-      const char *selfName = self->name ? self->name->data : "";
+      const char *selfName = self->name ? xt_string_bytes(self->name) : "";
       char buffer[256];
       snprintf(buffer, sizeof(buffer), "function %s() { [native code] }", selfName);
       return xt_string_from_cstr(buffer);

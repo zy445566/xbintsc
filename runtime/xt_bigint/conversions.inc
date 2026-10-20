@@ -41,7 +41,7 @@ static xt_value bi_from_xt_value(xt_value value) {
   if (XT_IS_NUMBER(value)) return xt_bigint_from_double(xt_to_double(value));
   if (XT_IS_STRING(value)) {
     xt_string *s = xt_as_string(value);
-    return xt_bigint_from_string(s->data, s->length);
+    return xt_bigint_from_string(xt_string_bytes(s), s->length);
   }
   if (value == XT_TRUE) return xt_bigint_from_i64(1);
   if (value == XT_FALSE) return xt_bigint_from_i64(0);

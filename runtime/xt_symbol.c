@@ -98,7 +98,7 @@ xt_value xt_symbol_to_string(xt_value value) {
   char *buffer = (char *)malloc(8 + length);
   if (!buffer) abort();
   memcpy(buffer, "Symbol(", 7);
-  if (description) memcpy(buffer + 7, description->data, length);
+  if (description) memcpy(buffer + 7, xt_string_bytes(description), length);
   buffer[7 + length] = ')';
   xt_value result = xt_string_new(buffer, 8 + length);
   free(buffer);

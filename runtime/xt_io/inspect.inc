@@ -5,12 +5,12 @@
 static void xt_print_value(xt_value v, FILE *out) {
   if (XT_IS_STRING(v)) {
     xt_string *s = xt_as_string(v);
-    fwrite(s->data, 1, s->length, out);
+    fwrite(xt_string_bytes(s), 1, s->length, out);
     return;
   }
   xt_value text = xt_to_string(v);
   xt_string *s = xt_as_string(text);
-  fwrite(s->data, 1, s->length, out);
+  fwrite(xt_string_bytes(s), 1, s->length, out);
 }
 
 void xt_print(xt_value v) { xt_print_value(v, stdout); }
@@ -48,10 +48,11 @@ static void xt_inspect_pop(void) {
 
 static int xt_inspect_identifier_key(xt_string *key) {
   if (key->length == 0) return 0;
-  char c = key->data[0];
+  const char *bytes = xt_string_bytes(key);
+  char c = bytes[0];
   if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$')) return 0;
   for (uint32_t i = 1; i < key->length; i++) {
-    c = key->data[i];
+    c = bytes[i];
     if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$')) return 0;
   }
   return 1;
@@ -60,16 +61,17 @@ static int xt_inspect_identifier_key(xt_string *key) {
 /* Render a string the way `util.inspect` does inside a container: quoted,
  * preferring whichever quote character needs fewer escapes. */
 static void xt_inspect_string(xt_string *s, FILE *out) {
+  const char *bytes = xt_string_bytes(s);
   int hasSingle = 0;
   int hasDouble = 0;
   for (uint32_t i = 0; i < s->length; i++) {
-    if (s->data[i] == '\'') hasSingle = 1;
-    else if (s->data[i] == '"') hasDouble = 1;
+    if (bytes[i] == '\'') hasSingle = 1;
+    else if (bytes[i] == '"') hasDouble = 1;
   }
   char quote = (hasSingle && !hasDouble) ? '"' : '\'';
   fputc(quote, out);
   for (uint32_t i = 0; i < s->length; i++) {
-    unsigned char c = (unsigned char)s->data[i];
+    unsigned char c = (unsigned char)bytes[i];
     switch (c) {
       case '\\': fputs("\\\\", out); break;
       case '\n': fputs("\\n", out); break;
@@ -90,13 +92,13 @@ static void xt_inspect_string(xt_string *s, FILE *out) {
 static void xt_inspect(xt_value v, FILE *out, int nested) {
   if (xt_is_symbol(v)) {
     xt_string *text = xt_as_string(xt_symbol_to_string(v));
-    fwrite(text->data, 1, text->length, out);
+    fwrite(xt_string_bytes(text), 1, text->length, out);
     return;
   }
   if (XT_IS_BIGINT(v)) {
     xt_value text = xt_bigint_to_decimal(v);
     xt_string *s = xt_as_string(text);
-    fwrite(s->data, 1, s->length, out);
+    fwrite(xt_string_bytes(s), 1, s->length, out);
     fputc('n', out);
     return;
   }
@@ -130,10 +132,10 @@ static void xt_inspect(xt_value v, FILE *out, int nested) {
         xt_value key = extra->properties[i].key;
         if (xt_is_symbol(key)) {
           xt_string *text = xt_as_string(xt_symbol_to_string(key));
-          fwrite(text->data, 1, text->length, out);
+          fwrite(xt_string_bytes(text), 1, text->length, out);
         } else {
           xt_string *keyString = xt_as_string(key);
-          fwrite(keyString->data, 1, keyString->length, out);
+          fwrite(xt_string_bytes(keyString), 1, keyString->length, out);
         }
         fputs(": ", out);
         xt_inspect(extra->properties[i].value, out, 1);
@@ -170,10 +172,10 @@ static void xt_inspect(xt_value v, FILE *out, int nested) {
         written++;
         if (isSymbol) {
           xt_string *text = xt_as_string(xt_symbol_to_string(key));
-          fwrite(text->data, 1, text->length, out);
+          fwrite(xt_string_bytes(text), 1, text->length, out);
         } else {
           xt_string *keyString = xt_as_string(key);
-          if (xt_inspect_identifier_key(keyString)) fwrite(keyString->data, 1, keyString->length, out);
+          if (xt_inspect_identifier_key(keyString)) fwrite(xt_string_bytes(keyString), 1, keyString->length, out);
           else xt_inspect_string(keyString, out);
         }
         fputs(": ", out);

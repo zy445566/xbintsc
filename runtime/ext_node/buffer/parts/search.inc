@@ -19,7 +19,7 @@ static const unsigned char *xt_buffer_search_needle(xt_value value, const char *
   xt_value text = xt_to_string(value);
   xt_string *string = xt_as_string(text);
   size_t decoded = 0;
-  unsigned char *bytes = xt_node_decode(string->data, string->length, encoding, &decoded);
+  unsigned char *bytes = xt_node_decode(xt_string_bytes(string), string->length, encoding, &decoded);
   *length = decoded;
   return bytes;
 }

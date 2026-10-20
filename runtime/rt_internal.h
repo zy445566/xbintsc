@@ -125,6 +125,10 @@ typedef struct {
   /* Named (non-index) properties such as `raw` on template strings or
    * `index`/`input` on RegExp match results, stored in an `xt_object`. */
   xt_value extra;
+  /* The array's [[Prototype]] (`Array.prototype` for ordinary arrays). Arrays
+   * are a distinct allocation kind, so this field is what lets
+   * `Object.getPrototypeOf([])` and `x instanceof <Array alias>` work. */
+  xt_value prototype;
 } xt_array;
 
 typedef struct {
@@ -139,6 +143,10 @@ typedef struct {
   /* Set on generator function objects: calling the closure does not run the
    * body, it creates a suspended generator (see xt_generator.c). */
   uint8_t is_generator;
+  /* Non-NULL for the first-class value of a built-in constructor ("Array",
+   * "Map", ...). It lets property access resolve the constructor's statics
+   * (`const A = Array; A.isArray(x)`). Points at a static string. */
+  const char *builtin_name;
 } xt_function;
 
 /* Allocation and garbage collection (xt_alloc.c).

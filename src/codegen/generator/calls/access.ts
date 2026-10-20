@@ -13,7 +13,7 @@ import {
   type PropertyAccessExpression,
 } from "../../../ast/nodes.js";
 import { i64, numberLiteral, XT_TRUE, XT_UNDEFINED } from "../../values.js";
-import { MATH_CONSTANTS, NAMESPACE_PROPERTIES, NUMBER_CONSTANTS, TYPED_ARRAYS } from "../tables.js";
+import { MATH_CONSTANTS, NAMESPACE_PROPERTIES, NUMBER_CONSTANTS, SYMBOL_WELL_KNOWN, TYPED_ARRAYS } from "../tables.js";
 import type { Generator } from "../generator.js";
 
 export interface AccessCallMethods {
@@ -85,7 +85,12 @@ export const accessCallMethods: AccessCallMethods = {
       !this.binding.symbolOfIdentifier.get(node.expression as Identifier)
     ) {
       const getter = NAMESPACE_PROPERTIES[(node.expression as Identifier).text];
-      if (getter) {
+      /* `Symbol.iterator` & friends are well-known symbol values, but
+       * `Symbol.prototype` / `.name` / `.length` are ordinary properties of
+       * the first-class constructor value. */
+      const symbolGetter =
+        (node.expression as Identifier).text === "Symbol" && SYMBOL_WELL_KNOWN.has(node.name.text);
+      if (getter && (getter !== "xt_symbol_get" || symbolGetter)) {
         const key = this.stringValue(node.name.text);
         const result = this.reg();
         this.emit(`  ${result} = call i64 @${getter}(i64 ${key})`);

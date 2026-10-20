@@ -15,18 +15,42 @@ void xt_array_reserve(xt_array *array, uint32_t needed) {
   array->capacity = capacity;
 }
 
-xt_value xt_array_new(int32_t count, xt_value *items) {
+/* Array.prototype: every ordinary array inherits from it. The prototype itself
+ * is an array, like ECMAScript, so `Array.isArray(Array.prototype)` holds. It
+ * is created with the ordinary object prototype as its own [[Prototype]], which
+ * terminates the array-specific link. */
+static xt_value xt_array_proto_root = XT_UNDEFINED;
+static int xt_array_proto_ready = 0;
+
+static xt_value xt_array_new_with_proto(int32_t count, xt_value *items, xt_value proto) {
   xt_array *array = (xt_array *)xt_alloc(sizeof(xt_array), XT_OBJECT_KIND_ARRAY);
   array->length = 0;
   array->capacity = 0;
   array->items = NULL;
   array->extra = XT_UNDEFINED;
+  array->prototype = proto;
   if (count > 0) {
     xt_array_reserve(array, (uint32_t)count);
     for (int32_t i = 0; i < count; i++) array->items[i] = items[i];
     array->length = (uint32_t)count;
   }
   return XT_FROM_PTR(XT_TAG_ARRAY, array);
+}
+
+xt_value xt_array_prototype(void) {
+  if (xt_array_proto_ready) return xt_array_proto_root;
+  xt_array_proto_ready = 1;
+  xt_array_proto_root = xt_array_new_with_proto(0, NULL, xt_object_prototype());
+  xt_gc_add_root(&xt_array_proto_root);
+  xt_value constructor = xt_builtin_constructor(xt_string_from_cstr("Array"));
+  if (constructor != XT_UNDEFINED) {
+    xt_set(xt_array_proto_root, xt_string_from_cstr("constructor"), constructor);
+  }
+  return xt_array_proto_root;
+}
+
+xt_value xt_array_new(int32_t count, xt_value *items) {
+  return xt_array_new_with_proto(count, items, xt_array_prototype());
 }
 
 /* Named properties of an array live in a lazily-created side object. Returns

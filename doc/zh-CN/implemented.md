@@ -190,7 +190,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 
 - `thisValue` 作为首个 ABI 参数线程化（异常安全、支持嵌套）；箭头函数从环境额外槽位词法继承 `this`。
 - 闭包通过 `env` 线程化捕获变量（引用传递，box 包装），直接调用与闭包调用共用同一代码路径。
-- `xt_object` 带原型字段，属性查找沿原型链；`xt_function` 带 `prototype` 与属性包（静态成员）。
+- `xt_object` 带原型字段，属性查找沿原型链；`xt_function` 带 `prototype` 与属性包（静态成员）。`xt_array` 也带 `[[Prototype]]`（Array.prototype）。`Object.prototype` 是普通对象的原型根，提供 `hasOwnProperty` / `toString` / `valueOf` / `isPrototypeOf` / `propertyIsEnumerable` / `__proto__`；`Object.getPrototypeOf({}) === Object.prototype`。
 
 ---
 
@@ -211,6 +211,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - 数组字面量（含展开 `[...]`）、对象字面量（含简写 / 方法 / 对象展开 `{...obj}`）
   - 类型化数组（`Uint8Array`、`Int8Array`、`Uint8ClampedArray`、`Uint16Array`、`Int16Array`、`Uint32Array`、`Int32Array`、`Float32Array`、`Float64Array`）：构造（`new X(n)` / `new X(可迭代)` / `X.from` / `X.of`）、`length` / `byteLength` / `byteOffset` / `BYTES_PER_ELEMENT`、按元素类型强制的读写（`ToIntN` / `ToUintN`、`Uint8ClampedArray` 舍入、`Float32` 单精度舍入）以及原型方法 `fill` / `set` / `slice` / `subarray` / `join` / `toString` / `indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` / `some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` / `at` / `keys` / `values` / `entries`。有意保留的差异见未实现文档（`subarray` 返回副本、迭代器方法返回数组、无 `ArrayBuffer`/`DataView`）。
   - 属性访问（含 `length` 特判、`Math` 常量）、元素访问、调用
+  - 一等公民内建构造器（`const A = Array`、`const M = Map`、`const E = TypeError`、类型化数组）：裸引用下降为 `xt_builtin_constructor`，得到带 `name` / `length`、`prototype` 与静态成员（`A.isArray`、`A.from`、`M.prototype` 等）的缓存函数。通过别名调用或 `new` 会分派到同一运行时构造器，`x instanceof A` 沿共享原型链判断。
   - 可选链 `?.` / `?.[]` / `?.()`：以空值判断短路到 `undefined`
   - `delete`、`in`、`instanceof`
   - `this`（保存到函数 `%saved.this`；箭头函数从环境槽读）、`super`（`super.x` / `super(...)`）、`new`、`await`
@@ -249,7 +250,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 函数与闭包：`arg`、`closure_new/call/env/arity`。
 - 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `_setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。codegen 还会维护一条影子调用栈（函数名、源文件、行号）：`Error.stack` 用它生成堆栈，原生崩溃时致命信号处理器也会打印同一组帧。`--debug` 还会生成 `!DICompileUnit` / `!DISubprogram` / `!DILocation` 元数据，并用 `-g -fno-omit-frame-pointer` 编译，因此 gdb/lldb/WinDbg 可以把指令映射回源码行。
 - 输出：`xt_print/xt_println/xt_console_log/info/warn/error`（Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`；`info`/`log` 到 stdout，`warn`/`error` 到 stderr），以及 `dir/trace/assert/count/countReset/group/groupEnd/table/time/timeEnd/timeLog`。
-- 对象 / 函数：`xt_object` 带原型链，`xt_function` 带属性包（静态成员与 `prototype`）；`xt_new`（实例化）、`xt_instance_of`（原型链）、`xt_object_freeze/is_frozen/from_entries`。
+- 对象 / 函数：`xt_object` 带原型链，`xt_function` 带属性包（静态成员与 `prototype`）；`xt_new`（实例化）、`xt_instance_of`（原型链）、`xt_object_freeze/is_frozen/from_entries`；`xt_constructors.c` 保存一等公民构造器缓存、构造器原型与静态值分派。
 - 标准库扩展（`xt_stdlib2.c`）：数组 / 字符串 / 数字 / 对象的扩展方法；`Object` / `Array` / `Number` / `String` 静态方法；`JSON.parse` / `JSON.stringify`；`Map` / `Set`；`Date`（`gmtime_r`）；`RegExp`（POSIX ERE `regcomp`/`regexec` 的 `test`/`exec`）。
 - Promise（`xt_promise.c`）：同步微任务队列（`xt_microtasks`）；`xt_promise_ctor/resolve/reject/static`、实例 `then/catch/finally`；`xt_await` 驱动队列直到 settle，rejection 触发 `xt_throw`；程序结束时 `xt_drain_microtasks` 清空队列。
 - Fetch（`xt_fetch.c`）：全局 `fetch(input, init)` 是阻塞式 HTTP/1.1 客户端，返回的 promise 已经 settle（运行时不带事件循环）。只接受 `http://` URL——由于未链接 TLS 后端，`https://` 会以 `TypeError` 拒绝——支持 `method`、`headers`（普通对象或 `Headers`）、`body` 与 `redirect`（`follow` / `manual` / `error`），最多跟随 20 次重定向，并在 301/302/303 时将 POST 改为 GET。解析出的 `Response` 形状对象暴露 `ok` / `status` / `statusText` / `url` / `headers` 以及 `text()` / `json()` / `arrayBuffer()` / `bytes()` / `clone()`；`Headers` 大小写不敏感，提供 `get` / `has` / `set` / `append` / `delete` / `keys` / `values` / `entries` / `forEach` / `getSetCookie`。非法 URL 与网络失败会以 `TypeError` 拒绝。
@@ -338,7 +339,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 实现位置：`tests/`（`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`）
 
 - 各模块单元测试；e2e 在存在 `clang` 时真正编译并运行二进制，否则自动跳过。
-- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、`Map`/`Set` 的 `for...of`、数组 `length` 赋值与可迭代展开、多文件 `import`/`export`、类型化数组（元素强制转换、`from`/`of`、迭代与原型方法）、对象 rest 解构与内建 `instanceof`，以及全局 `fetch`（HTTP GET/POST、请求头、重定向、JSON/文本/二进制响应体与 `TypeError` 拒绝）。
+- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、`Map`/`Set` 的 `for...of`、数组 `length` 赋值与可迭代展开、多文件 `import`/`export`、类型化数组（元素强制转换、`from`/`of`、迭代与原型方法）、对象 rest 解构与内建 `instanceof`，一等公民内建构造器与 `Object.prototype`（别名、静态成员、`getPrototypeOf`、`hasOwnProperty.call`），以及全局 `fetch`（HTTP GET/POST、请求头、重定向、JSON/文本/二进制响应体与 `TypeError` 拒绝）。
 
 ---
 

@@ -98,13 +98,14 @@ Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`
 `Symbol`, `Error` family, `BigInt`, `Array`/`String`/`Number`/`Object` methods,
 typed arrays, `String.prototype.match`/`split`/`replace` with capture groups,
 immutable array helpers (`toReversed`, `toSorted`, `toSpliced`, `with`), global
-URI functions.
+URI functions, first-class built-in constructors (`const A = Array; new A(...)`,
+`A.isArray`, `x instanceof A`) and `Object.prototype`
+(`Object.getPrototypeOf({}) === Object.prototype`).
 
 | Missing or different | Status |
 | --- | --- |
 | `String.prototype.normalize`, `structuredClone` | 🚫 |
 | `Error.stack` capture | ⚠️ function-level frames (name/file/line), no columns; generator bodies are omitted |
-| `Object.getPrototypeOf({})` | ⚠️ returns `undefined`, not `Object.prototype` |
 | Global RegExp `lastIndex` | ⚠️ `test`/`exec` ignore it for `/g` and `/y` |
 | Sparse array holes, array out-of-bounds | ⚠️ holes are not tracked distinctly; out-of-bounds reads give `undefined` |
 

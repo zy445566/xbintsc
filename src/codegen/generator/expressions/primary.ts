@@ -28,7 +28,7 @@ import {
 import { SymbolKind, type SymbolInfo } from "../../../binder/binder.js";
 import { DiagnosticCode } from "../../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_FALSE, XT_NULL, XT_TRUE, XT_UNDEFINED } from "../../values.js";
-import { BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS, ERROR_CONSTRUCTORS } from "../tables.js";
+import { BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS, ERROR_CONSTRUCTORS, FIRST_CLASS_CONSTRUCTORS } from "../tables.js";
 import type { Generator } from "../generator.js";
 
 export interface PrimaryExpressionMethods {
@@ -218,6 +218,11 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return rest;
       }
       default: {
+        if (FIRST_CLASS_CONSTRUCTORS.has(identifier.text)) {
+          // `const A = Array`, `arr.filter(Boolean)`, `new (Map)()`: the
+          // constructor is an ordinary function value backed by the runtime.
+          return this.runtimeCall("xt_builtin_constructor", [this.stringValue(identifier.text)]);
+        }
         const builtinValue = BUILTIN_FUNCTION_VALUES[identifier.text];
         if (builtinValue) {
           // A global like `Boolean` used as a value (`arr.filter(Boolean)`):

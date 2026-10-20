@@ -253,6 +253,23 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   ...TYPED_ARRAY_STATICS,
 };
 
+/** The well-known symbols exposed as properties of the `Symbol` namespace. */
+export const SYMBOL_WELL_KNOWN = new Set<string>([
+  "asyncIterator",
+  "hasInstance",
+  "isConcatSpreadable",
+  "iterator",
+  "match",
+  "matchAll",
+  "replace",
+  "search",
+  "species",
+  "split",
+  "toPrimitive",
+  "toStringTag",
+  "unscopables",
+]);
+
 /** Namespace identifiers whose property access maps to a runtime getter. */
 export const NAMESPACE_PROPERTIES: Record<string, string> = {
   process: "xt_process_get",
@@ -262,7 +279,7 @@ export const NAMESPACE_PROPERTIES: Record<string, string> = {
 
 /** Global constructors called as `new X(...)` (all have signature `(i32, i64*)`). */
 export const CTOR_FUNCTIONS: Record<string, string> = {
-  Array: "xt_array_new",
+  Array: "xt_array_ctor",
   Map: "xt_map_ctor",
   Set: "xt_set_ctor",
   Date: "xt_date_ctor",
@@ -280,6 +297,30 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   ...ERROR_CONSTRUCTORS,
   ...TYPED_ARRAY_CTORS,
 };
+
+/**
+ * Built-in constructors that are also ordinary first-class values. The codegen
+ * lowers a bare reference (`const A = Array`) to `xt_builtin_constructor`, which
+ * returns a cached function with `name`/`length`, a `prototype` and the
+ * constructor's statics (`A.isArray`, `A.from`, ...).
+ */
+export const FIRST_CLASS_CONSTRUCTORS = new Set<string>([
+  "Array",
+  "Object",
+  "Function",
+  "Map",
+  "Set",
+  "Date",
+  "RegExp",
+  "Promise",
+  ...Object.keys(TYPED_ARRAYS),
+  ...Object.keys(ERROR_CONSTRUCTORS),
+  "Number",
+  "String",
+  "Boolean",
+  "BigInt",
+  "Symbol",
+]);
 
 export const BUILTIN_METHODS = new Set<string>([
   "push", "pop", "shift", "unshift", "join", "slice", "indexOf", "includes", "map", "forEach", "filter",

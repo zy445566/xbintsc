@@ -1,6 +1,11 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Vite's dependency discovery crawls the checkout (vendor/, examples/,
+  // node_modules/) before the first test and can hang under some Node
+  // versions. The suites only import the compiler's sources and Node
+  // built-ins, so let Vite resolve them directly instead.
+  optimizeDeps: { noDiscovery: true },
   test: {
     include: ["tests/**/*.test.ts"],
     environment: "node",

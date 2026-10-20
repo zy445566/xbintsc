@@ -2,6 +2,20 @@
 /* Generic member access                                                     */
 /* ------------------------------------------------------------------------- */
 
+/* Inherited lookup for values whose representation is not an `xt_object`
+ * property table (Map/Set/Date/RegExp/Promise/Symbol). `__proto__` returns the
+ * prototype itself instead of invoking Object.prototype's getter with the
+ * wrong receiver. */
+static xt_value xt_get_inherited(xt_value target, xt_value key) {
+  xt_value proto = xt_object_get_prototype(target);
+  if (proto == XT_UNDEFINED || proto == XT_NULL || proto == target) return XT_UNDEFINED;
+  if (XT_IS_STRING(key)) {
+    xt_string *k = xt_as_string(key);
+    if (k->length == 9 && memcmp(xt_string_bytes(k), "__proto__", 9) == 0) return proto;
+  }
+  return xt_get(proto, key);
+}
+
 /*
  * Reading a property of `null` / `undefined` is a TypeError in JavaScript.
  * Short-circuiting `?.` guards forbid reaching this point for a nullish
@@ -37,8 +51,16 @@ xt_value xt_get(xt_value target, xt_value key) {
           xt_value value = xt_object_get(extra, key);
           if (value != XT_UNDEFINED) return value;
         }
-        /* Fall back to first-class built-in methods (`arr.map`). */
-        return xt_method_value(target, key);
+        /* Fall back to first-class built-in methods (`arr.map`) and then to
+         * the array's [[Prototype]] (`arr.hasOwnProperty`). */
+        xt_value method = xt_method_value(target, key);
+        if (method != XT_UNDEFINED) return method;
+        xt_value proto = ((xt_array *)XT_GET_PTR(target))->prototype;
+        if (proto != XT_UNDEFINED && proto != XT_NULL) {
+          if (k->length == 9 && memcmp(xt_string_bytes(k), "__proto__", 9) == 0) return proto;
+          return xt_get(proto, key);
+        }
+        return XT_UNDEFINED;
       }
       return xt_array_get(target, key);
     }
@@ -49,7 +71,11 @@ xt_value xt_get(xt_value target, xt_value key) {
         xt_value value = xt_object_get(extra, key);
         if (value != XT_UNDEFINED) return value;
       }
-      return xt_method_value(target, key);
+      xt_value method = xt_method_value(target, key);
+      if (method != XT_UNDEFINED) return method;
+      xt_value proto = ((xt_array *)XT_GET_PTR(target))->prototype;
+      if (proto != XT_UNDEFINED && proto != XT_NULL) return xt_get(proto, key);
+      return XT_UNDEFINED;
     }
     return xt_array_get(target, key);
   }
@@ -69,6 +95,9 @@ xt_value xt_get(xt_value target, xt_value key) {
     {
       xt_value value = xt_object_get(target, key);
       if (value != XT_UNDEFINED) return value;
+      /* `const A = Array; A.isArray`, `const S = Symbol; S.iterator`, ... */
+      value = xt_builtin_static_value(target, key);
+      if (value != XT_UNDEFINED) return value;
       return xt_method_value(target, key);
     }
   }
@@ -83,7 +112,9 @@ xt_value xt_get(xt_value target, xt_value key) {
           return xt_symbol_description(target);
         }
       }
-      return xt_method_value(target, key);
+      xt_value method = xt_method_value(target, key);
+      if (method != XT_UNDEFINED) return method;
+      return xt_get_inherited(target, key);
     }
     if (obj->header.kind == XT_OBJECT_KIND_MAP || obj->header.kind == XT_OBJECT_KIND_SET) {
       if (XT_IS_STRING(key)) {
@@ -109,7 +140,12 @@ xt_value xt_get(xt_value target, xt_value key) {
     {
       xt_value value = xt_object_get(target, key);
       if (value != XT_UNDEFINED) return value;
-      return xt_method_value(target, key);
+      xt_value method = xt_method_value(target, key);
+      if (method != XT_UNDEFINED) return method;
+      if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+        return xt_get_inherited(target, key);
+      }
+      return XT_UNDEFINED;
     }
   }
   if (XT_IS_STRING(target)) {

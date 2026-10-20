@@ -64,7 +64,7 @@ xt_value xt_object_static(xt_value name, int32_t argc, xt_value *argv) {
   }
   if (strcmp(fn, "create") == 0) {
     xt_value proto = xt_arg_at(argc, argv, 0);
-    return xt_object_new_with_proto(proto == XT_NULL ? XT_UNDEFINED : proto);
+    return xt_object_new_with_proto(proto == XT_NULL ? XT_NULL : proto);
   }
   return XT_UNDEFINED;
 }

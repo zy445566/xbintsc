@@ -72,6 +72,7 @@
 - `JSON.parse` / `JSON.stringify`
 - `Date`、`RegExp`（POSIX ERE 子集，支持捕获组）、`Map`、`Set`、`Promise`、`BigInt`
 - `Array` 静态（`isArray/of/from`）、`Object` 静态、`Number` 静态、`String` 静态（`fromCharCode` / `fromCodePoint` / `raw`）
+- 一等公民内建构造器（`const A = Array`、`new A(...)`、`A.isArray`、`x instanceof A`）与 `Object.prototype`（`hasOwnProperty`、`toString`、`valueOf`、`isPrototypeOf`、`propertyIsEnumerable`、`__proto__`），且 `Object.getPrototypeOf({}) === Object.prototype`
 - `Error` 家族（`Error`、`TypeError`、`RangeError`、`SyntaxError`、`ReferenceError`、`EvalError`、`URIError`、`AggregateError`）：支持 `new`、`instanceof`、`extends`、`String(err)` / `err.toString()` 与 `.stack`
 
 ### 3.3 仍未实现
@@ -104,7 +105,7 @@
 | `keys` / `values` / `entries` | ~ 返回数组，而非迭代器对象 |
 | `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` 语义 | ✗ 无底层缓冲区类型；`.byteOffset` 恒为 0 |
 | `BigInt64Array` / `BigUint64Array` | ✗ 未实现 |
-| `instanceof` 内建构造器 | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` 家族 / 类型化数组都能按名字识别；但构造器本身仍不是一等公民值（`const A = Array` 仍会失败） |
+| `instanceof` 内建构造器 | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` 家族 / 类型化数组都能按名字识别，**也能通过一等公民构造器值判断**（`const A = Array; x instanceof A`）；构造器可保存、传参、取别名、调用与 `new` |
 | 基于 `Buffer` / `ArrayBuffer` 的类型化数组视图 | ✗ 构造器仅能从长度 / 数组样 / 类型化数组复制 |
 
 ---
@@ -144,6 +145,7 @@
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ 已实现（绑定闭包不跟踪部分参数的 `length`） |
 | `fn.name` / `fn.length` | ✓ | ✓ 已实现（从声明 / 赋值 / 属性键推断；绑定函数为 `"bound ..."` 并调整 arity） |
 | 内置方法一等公民（`typeof arr.map`、`const f = arr.push`、`obj.method?.()`） | ✓ | ✓ 作为**未绑定**方法值实现：读取 `arr.map` 得到函数，`arr.map?.(cb)` 与 `obj.method?.()` 会把接收者作为 `this` 绑定，脱离接收者调用（`const f = arr.map; f(cb)`）会像 JavaScript 一样抛错。方法的 `name`/`length` 也一并暴露 |
+| 内建构造器一等公民（`const A = Array`、`new A(...)`、`typeof Map`） | ✓ | ✓ 构造器是普通函数值，带 `name`/`length`、`prototype`、静态成员（`A.isArray`）与完整的 `instanceof` 协议 |
 | `fn.toString()` | ~ | 返回原生占位字符串（`function name() { [native code] }`），而非原始源码文本 |
 
 ---
@@ -190,7 +192,6 @@
 | 项 | 偏差 |
 | --- | --- |
 | 字符串 `length` | 按 UTF-8 字节计数，而非 UTF-16 码元（`"\u00e9".length` 报 1 而非 2；`"\u{1F600}".length` 报 4 而非 2；`codePointAt` 同样有偏差） |
-| `Object.getPrototypeOf({})` | 返回 `undefined`，而非 `Object.prototype` 对象 |
 | 全局正则 `lastIndex` | `/g`、`/y` 正则的 `test` / `exec` 不推进也不读取调用方设置的 `lastIndex` |
 | `String.normalize` / `structuredClone` | 未实现 |
 | 内置方法一等公民 | 以未绑定方法值实现（见第 5 节）；`fn.toString()` 返回占位字符串而非源码文本 |
@@ -242,7 +243,7 @@
 未实现（类型系统）：类型检查、泛型实例化、断言语义、可选链类型窄化
 
 未实现（运行时）：真正的异步事件循环、UTF-16 length、
-                  Object.prototype 身份、全局正则 lastIndex
+                  全局正则 lastIndex
 
 未实现（工程）：类型检查器
 ```

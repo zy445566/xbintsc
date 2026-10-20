@@ -446,6 +446,8 @@ xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env) {
   function->properties = NULL;
   function->environment = NULL;
   function->prototype = XT_UNDEFINED;
+  function->is_generator = 0;
+  function->builtin_name = NULL;
   if (env_count > 0) {
     function->environment = (xt_value *)malloc(sizeof(xt_value) * (size_t)env_count);
     for (int32_t i = 0; i < env_count; i++) function->environment[i] = env[i];
@@ -497,22 +499,22 @@ xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv) {
   xt_value proto = function->prototype;
   xt_value instance = xt_object_new_with_proto(XT_IS_OBJECT(proto) ? proto : XT_UNDEFINED);
   xt_value result = function->code(instance, ctor, argc, argv);
-  if (XT_IS_OBJECT(result) || XT_IS_ARRAY(result)) return result;
+  if (XT_IS_OBJECT(result) || XT_IS_ARRAY(result) || XT_IS_FUNCTION(result)) return result;
   return instance;
 }
 
 xt_value xt_instance_of(xt_value value, xt_value ctor) {
   if (!XT_IS_FUNCTION(ctor)) return XT_FALSE;
   xt_value proto = ((xt_function *)XT_GET_PTR(ctor))->prototype;
-  if (!XT_IS_OBJECT(proto)) return XT_FALSE;
-  if (!XT_IS_OBJECT(value)) return XT_FALSE;
-  xt_object *cur = (xt_object *)XT_GET_PTR(value);
-  xt_object *target = (xt_object *)XT_GET_PTR(proto);
-  cur = (xt_object *)XT_GET_PTR(XT_IS_OBJECT(cur->prototype) ? cur->prototype : XT_UNDEFINED);
-  while (cur) {
-    if (cur == target) return XT_TRUE;
-    if (!XT_IS_OBJECT(cur->prototype)) break;
-    cur = (xt_object *)XT_GET_PTR(cur->prototype);
+  if (XT_IS_OBJECT(proto) || XT_IS_ARRAY(proto) || XT_IS_FUNCTION(proto)) {
+    /* Walk the value's [[Prototype]] chain. `xt_object_get_prototype` knows the
+     * layout of every kind (arrays carry a prototype field; Map/Set/Date/... use
+     * their built-in prototype), so this is safe for containers too. */
+    xt_value cursor = xt_object_get_prototype(value);
+    while (cursor != XT_UNDEFINED && cursor != XT_NULL) {
+      if (cursor == proto) return XT_TRUE;
+      cursor = xt_object_get_prototype(cursor);
+    }
   }
   return XT_FALSE;
 }
@@ -520,10 +522,11 @@ xt_value xt_instance_of(xt_value value, xt_value ctor) {
 /*
  * `value instanceof Array` (and the rest of the built-in constructors).
  *
- * Built-in constructors are not first-class values: the codegen recognises the
- * name and asks this helper instead. Ids match `BUILTIN_INSTANCEOF` in
- * `src/codegen/generator/tables.ts`; 16..24 map onto the runtime's `XT_TA_*`
- * order (Uint8Array first).
+ * The codegen recognises the direct spelling and asks this helper instead of
+ * materialising the constructor value; an alias (`const A = Array`) goes
+ * through the ordinary prototype chain in `xt_instance_of`. Ids match
+ * `BUILTIN_INSTANCEOF` in `src/codegen/generator/tables.ts`; 16..24 map onto
+ * the runtime's `XT_TA_*` order (Uint8Array first).
  */
 enum {
   XT_INSTANCE_ARRAY = 0,

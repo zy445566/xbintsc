@@ -34,6 +34,10 @@ enum {
 };
 
 static const int xt_ta_bytes[XT_TA_KIND_COUNT] = {1, 1, 1, 2, 2, 4, 4, 4, 8};
+static const char *const xt_ta_names[XT_TA_KIND_COUNT] = {
+    "Uint8Array", "Int8Array", "Uint8ClampedArray", "Uint16Array", "Int16Array",
+    "Uint32Array", "Int32Array", "Float32Array", "Float64Array",
+};
 
 static xt_value xt_ta_protos[XT_TA_KIND_COUNT];
 

@@ -241,7 +241,7 @@ Location: `runtime/xt_alloc.c`, `runtime/xt_values.c`, `runtime/xt_containers.c`
 
 - Allocator: non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem root providers and a conservative C-stack scan).
 - Value construction: `xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`.
-- Strings: UTF-8 storage, concatenation, equality comparison, formatted number-to-string.
+- Strings: UTF-8 storage, lazy cons-node concatenation (bytes are flattened on first observation, so append loops stay linear), equality comparison, formatted number-to-string.
 - Type conversion: `xt_truthy`, `xt_to_number`, `xt_to_string`, `xt_typeof`.
 - Arithmetic: `add/sub/mul/div/mod/pow/neg/pos`.
 - Bitwise: `and/or/xor/not/shl/shr/ushr` (including `ToInt32` semantics).

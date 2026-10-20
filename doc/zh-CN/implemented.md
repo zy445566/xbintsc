@@ -233,7 +233,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 
 - 分配器：`xt_alloc` 背后的非移动标记-清扫回收器（显式根、子系统根提供者与保守 C 栈扫描）。
 - 值构造：`xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`。
-- 字符串：UTF-8 存储、拼接、相等比较、格式化数字转字符串。
+- 字符串：UTF-8 存储、惰性 cons 节点拼接（首次观察时才扁平化，因此循环追加保持线性复杂度）、相等比较、格式化数字转字符串。
 - 类型转换：`xt_truthy`、`xt_to_number`、`xt_to_string`、`xt_typeof`。
 - 算术：`add/sub/mul/div/mod/pow/neg/pos`。
 - 位运算：`and/or/xor/not/shl/shr/ushr`（含 `ToInt32` 语义）。

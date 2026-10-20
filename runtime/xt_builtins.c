@@ -102,10 +102,11 @@ xt_value xt_object_rest(xt_value source, int32_t argc, xt_value *argv) {
 
   if (XT_IS_STRING(source)) {
     xt_string *string = (xt_string *)XT_GET_PTR(source);
+    const char *bytes = xt_string_bytes(string);
     for (uint32_t i = 0; i < string->length; i++) {
       char buffer[16];
       snprintf(buffer, sizeof(buffer), "%u", i);
-      xt_object_rest_copy(result, xt_string_from_cstr(buffer), xt_string_new(string->data + i, 1), argc, argv);
+      xt_object_rest_copy(result, xt_string_from_cstr(buffer), xt_string_new(bytes + i, 1), argc, argv);
     }
     return result;
   }
@@ -131,7 +132,7 @@ xt_value xt_object_rest(xt_value source, int32_t argc, xt_value *argv) {
 
 xt_value xt_parse_int(int32_t argc, xt_value *argv) {
   xt_string *s = xt_as_string(xt_to_string(xt_arg_at(argc, argv, 0)));
-  const char *p = s->data;
+  const char *p = xt_string_bytes(s);
   /* JavaScript `parseInt` semantics: skip leading whitespace, accept an
      optional sign, pick the radix (auto-detecting a `0x` prefix), read the
      longest run of valid digits and accumulate into a double. Accumulating as
@@ -174,9 +175,10 @@ xt_value xt_parse_int(int32_t argc, xt_value *argv) {
 
 xt_value xt_parse_float(int32_t argc, xt_value *argv) {
   xt_string *s = xt_as_string(xt_to_string(xt_arg_at(argc, argv, 0)));
+  const char *bytes = xt_string_bytes(s);
   char *end = NULL;
-  double value = strtod(s->data, &end);
-  if (end == s->data) return xt_number(NAN);
+  double value = strtod(bytes, &end);
+  if (end == bytes) return xt_number(NAN);
   return xt_number(value);
 }
 
@@ -207,6 +209,7 @@ static int xt_uri_is_kept(const char *allowed, unsigned char c) {
 
 static xt_value xt_uri_encode(xt_value input, const char *allowed) {
   xt_string *s = xt_as_string(xt_to_string(input));
+  const char *bytes = xt_string_bytes(s);
   static const char hex[] = "0123456789ABCDEF";
   char *out = (char *)malloc((size_t)s->length * 3 + 1);
   if (!out) {
@@ -215,7 +218,7 @@ static xt_value xt_uri_encode(xt_value input, const char *allowed) {
   }
   size_t written = 0;
   for (uint32_t i = 0; i < s->length; i++) {
-    unsigned char c = (unsigned char)s->data[i];
+    unsigned char c = (unsigned char)bytes[i];
     if (xt_uri_is_kept(allowed, c)) {
       out[written++] = (char)c;
     } else {
@@ -240,6 +243,7 @@ static int xt_hex_value(int c) {
  * escapes for reserved characters are copied through unchanged. */
 static xt_value xt_uri_decode(xt_value input, int component) {
   xt_string *s = xt_as_string(xt_to_string(input));
+  const char *bytes = xt_string_bytes(s);
   char *out = (char *)malloc((size_t)s->length + 1);
   if (!out) {
     fprintf(stderr, "xbintsc: out of memory\n");
@@ -248,22 +252,22 @@ static xt_value xt_uri_decode(xt_value input, int component) {
   size_t written = 0;
   uint32_t i = 0;
   while (i < s->length) {
-    unsigned char c = (unsigned char)s->data[i];
+    unsigned char c = (unsigned char)bytes[i];
     if (c != '%') {
       out[written++] = (char)c;
       i++;
       continue;
     }
     if (i + 2 >= s->length) xt_throw_uri_error("URI malformed");
-    int h1 = xt_hex_value((unsigned char)s->data[i + 1]);
-    int h2 = xt_hex_value((unsigned char)s->data[i + 2]);
+    int h1 = xt_hex_value((unsigned char)bytes[i + 1]);
+    int h2 = xt_hex_value((unsigned char)bytes[i + 2]);
     if (h1 < 0 || h2 < 0) xt_throw_uri_error("URI malformed");
     unsigned char b = (unsigned char)((h1 << 4) | h2);
     if (b < 0x80) {
       if (!component && xt_uri_is_kept(";/?:@&=+$,#", b)) {
-        out[written++] = s->data[i];
-        out[written++] = s->data[i + 1];
-        out[written++] = s->data[i + 2];
+        out[written++] = bytes[i];
+        out[written++] = bytes[i + 1];
+        out[written++] = bytes[i + 2];
       } else {
         out[written++] = (char)b;
       }
@@ -280,9 +284,9 @@ static xt_value xt_uri_decode(xt_value input, int component) {
     for (int k = 1; k <= extra; k++) {
       uint32_t pos = i + (uint32_t)k * 3;
       if (pos + 2 >= s->length) xt_throw_uri_error("URI malformed");
-      if (s->data[pos] != '%') xt_throw_uri_error("URI malformed");
-      int c1 = xt_hex_value((unsigned char)s->data[pos + 1]);
-      int c2 = xt_hex_value((unsigned char)s->data[pos + 2]);
+      if (bytes[pos] != '%') xt_throw_uri_error("URI malformed");
+      int c1 = xt_hex_value((unsigned char)bytes[pos + 1]);
+      int c2 = xt_hex_value((unsigned char)bytes[pos + 2]);
       if (c1 < 0 || c2 < 0) xt_throw_uri_error("URI malformed");
       unsigned char cb = (unsigned char)((c1 << 4) | c2);
       if ((cb & 0xC0) != 0x80) xt_throw_uri_error("URI malformed");
@@ -389,7 +393,7 @@ xt_value xt_in(xt_value key, xt_value value) {
     if (xt_is_symbol(key)) return XT_FALSE;
     xt_string *s = xt_as_string(value);
     xt_string *k = xt_as_string(xt_to_string(key));
-    if (k->length == 6 && memcmp(k->data, "length", 6) == 0) return XT_TRUE;
+    if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
     int32_t index = xt_to_int32(key);
     return xt_bool(index >= 0 && (uint32_t)index < s->length);
   }

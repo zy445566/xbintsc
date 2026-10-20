@@ -24,8 +24,9 @@ double xt_to_number(xt_value v) {
   if (XT_IS_BIGINT(v)) return xt_bigint_to_double_value(v);
   if (XT_IS_STRING(v)) {
     xt_string *s = xt_as_string(v);
-    const char *begin = s->data;
-    const char *end = s->data + s->length;
+    const char *bytes = xt_string_bytes(s);
+    const char *begin = bytes;
+    const char *end = bytes + s->length;
     while (begin < end && isspace((unsigned char)*begin)) begin++;
     while (end > begin && isspace((unsigned char)end[-1])) end--;
     size_t length = (size_t)(end - begin);
@@ -83,7 +84,7 @@ xt_value xt_to_string(xt_value v) {
         out = (char *)realloc(out, capacity);
       }
       if (i > 0) out[length++] = ',';
-      memcpy(out + length, str->data, str->length);
+      memcpy(out + length, xt_string_bytes(str), str->length);
       length += str->length;
       out[length] = '\0';
     }

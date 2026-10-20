@@ -47,11 +47,11 @@ static xt_value xt_array_join(xt_value value, xt_value separator) {
   if (!out) abort();
   out[0] = '\0';
   for (uint32_t i = 0; i < array->length; i++) {
-    if (i > 0) xt_buffer_append(&out, &length, &capacity, sep->data, sep->length);
+    if (i > 0) xt_buffer_append(&out, &length, &capacity, xt_string_bytes(sep), sep->length);
     xt_value item = array->items[i];
     if (item == XT_UNDEFINED || item == XT_NULL) continue;
     xt_string *str = xt_as_string(xt_to_string(item));
-    xt_buffer_append(&out, &length, &capacity, str->data, str->length);
+    xt_buffer_append(&out, &length, &capacity, xt_string_bytes(str), str->length);
   }
   xt_value result = xt_string_new(out, length);
   free(out);

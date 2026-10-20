@@ -25,7 +25,7 @@ static xt_value xt_buffer_from(xt_value value, const char *encoding) {
   xt_value text = xt_to_string(value);
   xt_string *string = xt_as_string(text);
   size_t decoded = 0;
-  unsigned char *bytes = xt_node_decode(string->data, string->length, encoding, &decoded);
+  unsigned char *bytes = xt_node_decode(xt_string_bytes(string), string->length, encoding, &decoded);
   if (!bytes) return xt_buffer_new(0, NULL);
   xt_value result = xt_buffer_from_bytes(bytes, decoded);
   free(bytes);
@@ -49,7 +49,7 @@ static xt_value xt_buffer_alloc(uint32_t size, xt_value fill, const char *encodi
   xt_value text = xt_to_string(fill);
   xt_string *string = xt_as_string(text);
   size_t decoded = 0;
-  unsigned char *bytes = xt_node_decode(string->data, string->length, encoding, &decoded);
+  unsigned char *bytes = xt_node_decode(xt_string_bytes(string), string->length, encoding, &decoded);
   if (!bytes || decoded == 0) {
     free(bytes);
     return buffer;

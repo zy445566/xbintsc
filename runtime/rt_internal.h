@@ -21,8 +21,12 @@
  *    code free of write barriers and makes the first implementation small and
  *    predictable. Replacing it with a precise/conservative collector is an
  *    isolated change behind `xt_alloc` plus root registration.
- *  * Strings are UTF-8. JavaScript measures string length in UTF-16 code
- *    units; `xt_string_length` currently reports code points (see README).
+ *  * Strings are UTF-8. Concatenation is lazy: a `+` between two non-empty
+ *    strings builds an immutable cons node (`flat == NULL`) and the bytes are
+ *    materialised once, on first observation, by `xt_string_bytes`. This keeps
+ *    `s += x` in a loop linear instead of copying the accumulated prefix every
+ *    iteration. JavaScript measures string length in UTF-16 code units;
+ *    `xt_string_length` currently reports code points (see README).
  *  * Objects use a small linear property list. Fine for the language subset
  *    xbintsc targets today; swap for a hash map when the profile demands it.
  */
@@ -64,11 +68,19 @@ typedef struct xt_header {
 
 #define XT_GC_MARK 0x01u
 
-typedef struct {
+/* A string is either *flat* (`flat` points at `capacity` bytes, the last one
+ * NUL) or a *cons* node (`flat == NULL`, `left`/`right` name the operands).
+ * `length` is always the total byte length, so `.length`, comparisons and the
+ * GC never need to force a cons node. `xt_string_bytes` turns a cons node into
+ * a flat one in place; treat the result as immutable and never write through a
+ * pointer obtained from it. */
+typedef struct xt_string {
   xt_header header;
   uint32_t length;
   uint32_t capacity;
-  char *data;
+  char *flat;
+  struct xt_string *left;
+  struct xt_string *right;
 } xt_string;
 
 /* Sign-magnitude arbitrary-precision integer; see xt_bigint.c. */
@@ -195,6 +207,12 @@ xt_string *xt_string_alloc(size_t length);
 xt_string *xt_as_string(xt_value value);
 int32_t xt_string_length(xt_string *s);
 int xt_string_equals(xt_string *a, xt_string *b);
+/* Contiguous UTF-8 bytes of a string, flattening a cons node in place on first
+ * use. The result is NUL-terminated at `s->length`; never write through it. */
+const char *xt_string_bytes(xt_string *s);
+/* Mutable bytes of a string just created with `xt_string_alloc` (never a cons
+ * node). Used by the constructors that fill a buffer before publishing it. */
+char *xt_string_mutable(xt_string *s);
 int32_t xt_to_int32(xt_value v);
 
 /* ECMAScript number formatting (xt_values.c). */

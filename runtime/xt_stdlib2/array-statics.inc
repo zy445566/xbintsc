@@ -18,8 +18,9 @@ xt_value xt_array_static(xt_value name, int32_t argc, xt_value *argv) {
       }
     } else if (XT_IS_STRING(source)) {
       xt_string *s = xt_as_string(source);
+      const char *bytes = xt_string_bytes(s);
       for (uint32_t i = 0; i < s->length; i++) {
-        xt_value item = xt_string_new(s->data + i, 1);
+        xt_value item = xt_string_new(bytes + i, 1);
         if (XT_IS_FUNCTION(mapper)) { xt_value args[2] = {item, xt_number((double)i)}; item = xt_closure_call(mapper, 2, args); }
         xt_array_push(out, item);
       }

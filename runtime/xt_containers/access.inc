@@ -13,7 +13,7 @@ static void xt_throw_read_of_nullish(xt_value target, xt_value key) {
   char keybuf[128];
   xt_string *k = XT_IS_STRING(key) ? xt_as_string(key) : xt_as_string(xt_to_string(key));
   uint32_t n = k->length < sizeof(keybuf) - 1 ? k->length : (uint32_t)(sizeof(keybuf) - 1);
-  memcpy(keybuf, k->data, n);
+  memcpy(keybuf, xt_string_bytes(k), n);
   keybuf[n] = 0;
   char message[256];
   snprintf(message, sizeof(message),
@@ -27,7 +27,7 @@ xt_value xt_get(xt_value target, xt_value key) {
     /* `arr.length` must read the array's length, never an element. */
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
-      if (k->length == 6 && memcmp(k->data, "length", 6) == 0)
+      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0)
         return xt_number((double)((xt_array *)XT_GET_PTR(target))->length);
       /* Named (non-index) properties such as `raw`/`index`/`input`. */
       uint32_t ignored = 0;
@@ -57,11 +57,11 @@ xt_value xt_get(xt_value target, xt_value key) {
     /* Functions expose own `name` / `length` (arity) properties. */
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
-      if (k->length == 6 && memcmp(k->data, "length", 6) == 0) {
+      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) {
         int32_t arity = ((xt_function *)XT_GET_PTR(target))->arity;
         return xt_number(arity >= 0 ? (double)arity : 0.0);
       }
-      if (k->length == 4 && memcmp(k->data, "name", 4) == 0) {
+      if (k->length == 4 && memcmp(xt_string_bytes(k), "name", 4) == 0) {
         xt_string *name = ((xt_function *)XT_GET_PTR(target))->name;
         return name ? XT_FROM_PTR(XT_TAG_STRING, name) : xt_string_from_cstr("");
       }
@@ -79,7 +79,7 @@ xt_value xt_get(xt_value target, xt_value key) {
     if (obj->header.kind == XT_OBJECT_KIND_SYMBOL) {
       if (XT_IS_STRING(key)) {
         xt_string *k = xt_as_string(key);
-        if (k->length == 11 && memcmp(k->data, "description", 11) == 0) {
+        if (k->length == 11 && memcmp(xt_string_bytes(k), "description", 11) == 0) {
           return xt_symbol_description(target);
         }
       }
@@ -88,7 +88,7 @@ xt_value xt_get(xt_value target, xt_value key) {
     if (obj->header.kind == XT_OBJECT_KIND_MAP || obj->header.kind == XT_OBJECT_KIND_SET) {
       if (XT_IS_STRING(key)) {
         xt_string *k = xt_as_string(key);
-        if (k->length == 4 && memcmp(k->data, "size", 4) == 0) {
+        if (k->length == 4 && memcmp(xt_string_bytes(k), "size", 4) == 0) {
           int32_t size = obj->header.kind == XT_OBJECT_KIND_MAP ? xt_map_size(target) : xt_set_size(target);
           return xt_number((double)size);
         }
@@ -100,7 +100,7 @@ xt_value xt_get(xt_value target, xt_value key) {
     }
     if (obj->header.kind == XT_OBJECT_KIND_ERROR && XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
-      if (k->length == 5 && memcmp(k->data, "stack", 5) == 0) {
+      if (k->length == 5 && memcmp(xt_string_bytes(k), "stack", 5) == 0) {
         xt_value captured = xt_error_stack(target);
         if (captured != XT_UNDEFINED) return captured;
         return xt_error_to_string(target);
@@ -118,16 +118,16 @@ xt_value xt_get(xt_value target, xt_value key) {
     xt_string *s = xt_as_string(target);
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
-      if (k->length == 6 && memcmp(k->data, "length", 6) == 0) return xt_number((double)s->length);
+      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return xt_number((double)s->length);
       uint32_t index = 0;
       if (xt_key_is_array_index(k, &index) && index < s->length) {
-        return xt_string_new(s->data + index, 1);
+        return xt_string_new(xt_string_bytes(s) + index, 1);
       }
       return xt_method_value(target, key);
     }
     if (XT_IS_NUMBER(key)) {
       int32_t index = xt_to_int32(key);
-      if (index >= 0 && (uint32_t)index < s->length) return xt_string_new(s->data + index, 1);
+      if (index >= 0 && (uint32_t)index < s->length) return xt_string_new(xt_string_bytes(s) + index, 1);
     }
     return XT_UNDEFINED;
   }
@@ -143,7 +143,7 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
     /* Assigning `arr.length` truncates or extends the array. */
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
-      if (k->length == 6 && memcmp(k->data, "length", 6) == 0) {
+      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) {
         xt_array *array = (xt_array *)XT_GET_PTR(target);
         int32_t n = xt_to_int32(value);
         if (n < 0) n = 0;
@@ -170,9 +170,9 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
     if (typed >= 0) {
       if (XT_IS_STRING(key)) {
         xt_string *k = xt_as_string(key);
-        if ((k->length == 6 && memcmp(k->data, "length", 6) == 0) ||
-            (k->length == 10 && memcmp(k->data, "byteLength", 10) == 0) ||
-            (k->length == 10 && memcmp(k->data, "byteOffset", 10) == 0)) {
+        if ((k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) ||
+            (k->length == 10 && memcmp(xt_string_bytes(k), "byteLength", 10) == 0) ||
+            (k->length == 10 && memcmp(xt_string_bytes(k), "byteOffset", 10) == 0)) {
           xt_throw(xt_string_from_cstr("TypeError: Cannot assign to read only property"));
           return value;
         }

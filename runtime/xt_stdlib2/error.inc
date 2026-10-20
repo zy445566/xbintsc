@@ -55,7 +55,7 @@ xt_value xt_error_prototype(xt_value nameValue) {
 static void xt_error_capture_stack(xt_value error, const char *name, xt_value message) {
   if (!XT_IS_OBJECT(error)) return;
   xt_string *text = xt_as_string(xt_to_string(message));
-  xt_value stack = xt_stack_capture(name, text ? text->data : "");
+  xt_value stack = xt_stack_capture(name, text ? xt_string_bytes(text) : "");
   ((xt_object *)XT_GET_PTR(error))->error_stack = stack;
 }
 
@@ -120,10 +120,10 @@ xt_value xt_error_to_string(xt_value error) {
   if (ms->length == 0) return nameStr;
   size_t total = ns->length + 2 + ms->length;
   char *buffer = (char *)malloc(total + 1);
-  memcpy(buffer, ns->data, ns->length);
+  memcpy(buffer, xt_string_bytes(ns), ns->length);
   buffer[ns->length] = ':';
   buffer[ns->length + 1] = ' ';
-  memcpy(buffer + ns->length + 2, ms->data, ms->length);
+  memcpy(buffer + ns->length + 2, xt_string_bytes(ms), ms->length);
   buffer[total] = '\0';
   xt_value result = xt_string_new(buffer, total);
   free(buffer);

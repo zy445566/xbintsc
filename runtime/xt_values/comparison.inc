@@ -33,7 +33,7 @@ xt_value xt_lt(xt_value a, xt_value b) {
     xt_string *x = xt_as_string(a);
     xt_string *y = xt_as_string(b);
     size_t n = x->length < y->length ? x->length : y->length;
-    int cmp = memcmp(x->data, y->data, n);
+    int cmp = memcmp(xt_string_bytes(x), xt_string_bytes(y), n);
     if (cmp == 0) return xt_bool(x->length < y->length);
     return xt_bool(cmp < 0);
   }
@@ -48,7 +48,7 @@ xt_value xt_le(xt_value a, xt_value b) {
     xt_string *x = xt_as_string(a);
     xt_string *y = xt_as_string(b);
     size_t n = x->length < y->length ? x->length : y->length;
-    int cmp = memcmp(x->data, y->data, n);
+    int cmp = memcmp(xt_string_bytes(x), xt_string_bytes(y), n);
     if (cmp == 0) return xt_bool(x->length <= y->length);
     return xt_bool(cmp < 0);
   }

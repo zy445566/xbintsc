@@ -76,7 +76,7 @@ static unsigned char *xt_fs_value_bytes(xt_value value, size_t *outLength) {
     *outLength = 0;
     return NULL;
   }
-  if (length > 0) memcpy(bytes, string->data, length);
+  if (length > 0) memcpy(bytes, xt_string_bytes(string), length);
   *outLength = length;
   return bytes;
 }

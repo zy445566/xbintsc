@@ -93,7 +93,7 @@ static xt_value xt_buffer_method_write(xt_value thisValue, xt_value env, int32_t
   uint32_t offset = argc > 1 ? (uint32_t)xt_to_number(argv[1]) : 0;
   const char *encoding = argc > 3 ? xt_node_encoding(argv[3]) : NULL;
   size_t decoded = 0;
-  unsigned char *bytes = xt_node_decode(string->data, string->length, encoding, &decoded);
+  unsigned char *bytes = xt_node_decode(xt_string_bytes(string), string->length, encoding, &decoded);
   uint32_t available = xt_buffer_length(thisValue);
   uint32_t written = 0;
   for (size_t i = 0; i < decoded && offset + written < available; i++) {

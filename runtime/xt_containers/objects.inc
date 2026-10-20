@@ -54,10 +54,11 @@ static xt_property *xt_object_find(xt_object *obj, xt_value key) {
  */
 static int xt_key_is_array_index(xt_string *key, uint32_t *out) {
   if (key->length == 0 || key->length > 10) return 0;
-  if (key->data[0] == '0' && key->length != 1) return 0; /* "0" is canonical, "01" is not */
+  const char *bytes = xt_string_bytes(key);
+  if (bytes[0] == '0' && key->length != 1) return 0; /* "0" is canonical, "01" is not */
   uint64_t value = 0;
   for (uint32_t i = 0; i < key->length; i++) {
-    char ch = key->data[i];
+    char ch = bytes[i];
     if (ch < '0' || ch > '9') return 0;
     value = value * 10 + (uint64_t)(ch - '0');
   }
@@ -117,7 +118,7 @@ int xt_property_key_equals(xt_value a, xt_value b) {
 static int xt_key_is_prototype(xt_value key) {
   if (!XT_IS_STRING(key)) return 0;
   xt_string *k = xt_as_string(key);
-  return k && k->length == 9 && memcmp(k->data, "prototype", 9) == 0;
+  return k && k->length == 9 && memcmp(xt_string_bytes(k), "prototype", 9) == 0;
 }
 
 xt_value xt_object_get(xt_value value, xt_value key) {

@@ -43,6 +43,7 @@ xt_value xt_string_static(xt_value name, int32_t argc, xt_value *argv) {
   if (!fn) return XT_UNDEFINED;
   if (strcmp(fn, "fromCharCode") == 0 || strcmp(fn, "fromCodePoint") == 0) {
     xt_string *out = xt_string_alloc((size_t)argc * 4 + 1);
+    char *mutable = xt_string_mutable(out);
     size_t length = 0;
     for (int32_t i = 0; i < argc; i++) {
       unsigned code = (unsigned)xt_to_int32(argv[i]);
@@ -52,9 +53,10 @@ xt_value xt_string_static(xt_value name, int32_t argc, xt_value *argv) {
       else if (code < 0x800) { buffer[bytes++] = (char)(0xC0 | (code >> 6)); buffer[bytes++] = (char)(0x80 | (code & 0x3F)); }
       else if (code < 0x10000) { buffer[bytes++] = (char)(0xE0 | (code >> 12)); buffer[bytes++] = (char)(0x80 | ((code >> 6) & 0x3F)); buffer[bytes++] = (char)(0x80 | (code & 0x3F)); }
       else { buffer[bytes++] = (char)(0xF0 | (code >> 18)); buffer[bytes++] = (char)(0x80 | ((code >> 12) & 0x3F)); buffer[bytes++] = (char)(0x80 | ((code >> 6) & 0x3F)); buffer[bytes++] = (char)(0x80 | (code & 0x3F)); }
-      memcpy(out->data + length, buffer, (size_t)bytes);
+      memcpy(mutable + length, buffer, (size_t)bytes);
       length += (size_t)bytes;
     }
+    mutable[length] = '\0';
     out->length = (uint32_t)length;
     return XT_FROM_PTR(XT_TAG_STRING, out);
   }

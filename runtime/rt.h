@@ -92,7 +92,9 @@ xt_value xt_bool(int b);
 xt_value xt_number(double d);
 xt_value xt_string_new(const char *data, size_t len);
 xt_value xt_string_from_cstr(const char *data);
-/** Raw UTF-8 bytes of a string value (NULL for non-strings); not NUL-safe. */
+/** Raw UTF-8 bytes of a string value (NULL for non-strings); not NUL-safe.
+ * Materialises a lazily concatenated string, so the returned pointer is stable
+ * until the string is collected. */
 const char *xt_string_data(xt_value value);
 int32_t xt_string_length_value(xt_value value);
 

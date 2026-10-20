@@ -169,6 +169,32 @@ export function bundleModules(
 
   // Phase 4: concatenate statements, dropping imports and pure export wrappers.
   const merged: Statement[] = [];
+  /* Every node keeps the module it was parsed from, so a later codegen
+   * diagnostic can name the right file and line instead of pointing into the
+   * entry module (whose text happens to start at the same offsets). */
+  const origins = new Map<object, string>();
+  const trackOrigin = (record: ModuleRecord, root: Node): void => {
+    const visit = (node: Node): void => {
+      origins.set(node, record.path);
+      const fields = node as unknown as Record<string, unknown>;
+      for (const key of Object.keys(fields)) {
+        if (key === "kind" || key === "start" || key === "end" || key === "text" || key === "value" || key === "raw") {
+          continue;
+        }
+        const value = fields[key];
+        if (Array.isArray(value)) {
+          for (const child of value) if (isNode(child)) visit(child);
+        } else if (isNode(value)) {
+          visit(value);
+        }
+      }
+    };
+    visit(root);
+  };
+  const push = (record: ModuleRecord, statement: Statement): void => {
+    trackOrigin(record, statement);
+    merged.push(statement);
+  };
   const first = records[records.length - 1]!;
   for (const record of records) {
     for (const statement of record.sourceFile.statements) {
@@ -181,25 +207,25 @@ export function bundleModules(
           externalSpecifiers,
         );
         if (resolution.kind === "external") {
-          merged.push(statement);
+          push(record, statement);
         } else {
           const synthetic = namespaceStatements.get(statement);
-          if (synthetic) merged.push(synthetic);
+          if (synthetic) push(record, synthetic);
         }
         continue;
       }
       if (statement.kind === SyntaxKind.ExportDeclaration) {
         const declaration = statement as ExportDeclaration;
         const inner = (declaration as unknown as { declaration?: Statement }).declaration;
-        if (inner) merged.push(inner);
+        if (inner) push(record, inner);
         continue;
       }
       if (statement.kind === SyntaxKind.ExportAssignment) {
         const assignment = statement as ExportAssignment;
-        merged.push(exportAssignmentToStatement(record, assignment));
+        push(record, exportAssignmentToStatement(record, assignment));
         continue;
       }
-      merged.push(statement);
+      push(record, statement);
     }
   }
 
@@ -217,6 +243,7 @@ export function bundleModules(
     kind: SyntaxKind.SourceFile,
     statements: merged,
     fileName: first.path,
+    origins,
     text: records.map((record) => record.text).join("\n"),
     start: 0,
     end: 0,
@@ -246,6 +273,11 @@ function collectBindingIdentifiers(name: BindingName, out: string[]): void {
   for (const element of elements) {
     if (element) collectBindingIdentifiers(element.name, out);
   }
+}
+
+/** True for anything shaped like an AST node (constructed nodes carry no trivia). */
+function isNode(value: unknown): value is Node {
+  return !!value && typeof value === "object" && "kind" in (value as object);
 }
 
 /** Lower `import * as ns from "./mod"` to `const m0_ns = { ...exports }`. */

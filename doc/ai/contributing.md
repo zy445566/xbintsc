@@ -38,6 +38,7 @@ it. Release tags are created by `release.yml`, never by the hook.
 | `npm run test:watch` | vitest in watch mode |
 | `npm run coverage` | V8 coverage of the TypeScript compiler (`src/`) |
 | `npm run coverage:runtime` | LLVM coverage of the C runtime (`runtime/`) |
+| `npm run bench` | build and time the fixed benchmark suite (optionally vs Node) |
 
 Unit tests live one directory per module under `tests/` (`lexer`, `parser`,
 `binder`, `codegen`, `driver`, `extensions`, `cli`, `e2e`) and mirror the source
@@ -103,7 +104,12 @@ diff scratch/ref.ll scratch/gen2.ll
   in [../../src/codegen/values.ts](../../src/codegen/values.ts) and
   [../../runtime/rt.h](../../runtime/rt.h); change both together or not at all.
 - Awkward JS semantics (`+` coercion, relational comparison, property access,
-  inspection) are delegated to `@xt_*` runtime calls rather than inlined.
+  inspection) are delegated to `@xt_*` runtime calls. Numeric arithmetic and
+  comparison are the exception: codegen inlines the two-double fast path
+  (`src/codegen/generator/numeric.ts`) and calls the runtime for everything else.
+- String literals are interned: each distinct literal is materialised once in
+  `main`, stored in a GC-rooted global, and loaded at each use. Property names
+  therefore never allocate per access.
 - The GC is a non-moving mark-sweep collector: new heap objects go through
   `xt_alloc`, and a value must be reachable from an explicit root slot, a
   registered root provider (the event loop, the microtask queue) or the

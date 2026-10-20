@@ -8,7 +8,8 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { DiagnosticBag, DiagnosticCode, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
 import { sourceTextBytes } from "../diagnostics/source-text.js";
@@ -31,10 +32,17 @@ import {
   compileIr,
   link,
   realRunner,
+  RUNTIME_CFLAGS,
   type Runner,
 } from "./toolchain.js";
 
-export const COMPILER_VERSION = "0.1.0";
+/**
+ * The compiler's own version. It is part of the incremental cache key, so it
+ * must be bumped for every release (a test enforces that it matches
+ * `package.json`); a stale version would let an upgraded compiler reuse binaries
+ * produced by the previous one.
+ */
+export const COMPILER_VERSION = "0.3.81";
 
 export type EmitKind = "exe" | "obj" | "ir";
 
@@ -59,6 +67,12 @@ export interface BuildOptions {
   readonly app?: AppConfig;
 }
 
+/** One phase of a build, in milliseconds (reported by `--time`). */
+export interface PhaseTiming {
+  readonly phase: "frontend" | "codegen" | "runtime" | "clang" | "link";
+  readonly ms: number;
+}
+
 export interface BuildResult {
   readonly outputPath: string;
   readonly irPath?: string;
@@ -67,6 +81,8 @@ export interface BuildResult {
   readonly ir?: string;
   /** macOS `.app` bundle produced by `app.bundle` (darwin only). */
   readonly bundlePath?: string;
+  /** Per-phase timings, collected for `xbintsc build --time`. */
+  readonly timings?: readonly PhaseTiming[];
 }
 
 export interface CompileStringResult {
@@ -173,6 +189,8 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   const absoluteEntry = resolve(entryPath);
   const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
+  const buildStarted = Date.now();
+  const timings: PhaseTiming[] = [];
 
   const baseName = basename(absoluteEntry, extname(absoluteEntry));
   const outputPath =
@@ -203,6 +221,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
       cacheText = bundled.text;
     }
   }
+  timings.push({ phase: "frontend", ms: Date.now() - buildStarted });
 
   const app = options.app ?? {};
   const iconPath = options.icon ?? app.icon;
@@ -222,6 +241,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const runtimeDir = findRuntimeDir();
   const cacheKey = hashParts([
     COMPILER_VERSION,
+    compilerFingerprint(),
     cacheText,
     emit,
     optimize,
@@ -243,21 +263,23 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const cache = new BuildCache(cacheDir);
   const outputs = bundle ? [outputPath, bundle] : [outputPath];
   if (!options.force && !diagnostics.hasErrors && cache.isFresh(cacheKey, outputs)) {
-    return { outputPath, cached: true, diagnostics: [], ...(bundle ? { bundlePath: bundle } : {}) };
+    return { outputPath, cached: true, diagnostics: [], timings, ...(bundle ? { bundlePath: bundle } : {}) };
   }
 
+  const codegenStarted = Date.now();
   const { ir } = generate(sourceFile, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
   });
+  timings.push({ phase: "codegen", ms: Date.now() - codegenStarted });
 
   if (options.verbose) {
     process.stderr.write(`xbintsc: generated ${ir.length} bytes of LLVM IR\n`);
   }
 
   if (diagnostics.hasErrors) {
-    return { outputPath, cached: false, diagnostics: diagnostics.diagnostics, ir };
+    return { outputPath, cached: false, diagnostics: diagnostics.diagnostics, ir, timings };
   }
 
   mkdirSync(outDir, { recursive: true });
@@ -272,10 +294,11 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   if (emit === "ir") {
     cache.record(cacheKey, outputs);
     cache.save();
-    return { outputPath, irPath, cached: false, diagnostics: [], ir };
+    return { outputPath, irPath, cached: false, diagnostics: [], ir, timings };
   }
 
   // -- toolchain -----------------------------------------------------------
+  const clangStarted = Date.now();
   const toolchain = options.clang
     ? { clang: options.clang, linkerArgs: [] as string[], env: {} as Record<string, string> }
     : resolveToolchain(runner);
@@ -284,13 +307,15 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   const objectPath = emit === "obj" ? outputPath : resolve(outDir, baseName + ".o");
   compileIr(runner, { clang, irPath, objectPath, optimize, env: toolchain.env });
+  timings.push({ phase: "clang", ms: Date.now() - clangStarted });
 
   if (emit === "obj") {
     cache.record(cacheKey, outputs);
     cache.save();
-    return { outputPath, irPath, cached: false, diagnostics: [], ir };
+    return { outputPath, irPath, cached: false, diagnostics: [], ir, timings };
   }
 
+  const runtimeStarted = Date.now();
   const { runtimeObjects, extensionObjects, nativeObjects } = ensureRuntimeObjects(
     runner,
     clang,
@@ -300,6 +325,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     resolvePreferPrebuilt(options.preferPrebuilt),
     toolchain.env,
   );
+  timings.push({ phase: "runtime", ms: Date.now() - runtimeStarted });
 
   /* On Windows a GUI program links as a **Windows-subsystem** executable, so
    * launching it does not flash a console window. That subsystem's C runtime
@@ -336,6 +362,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     }
   }
 
+  const linkStarted = Date.now();
   link(runner, {
     clang,
     objectPaths: [
@@ -360,6 +387,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     optimize,
     env: toolchain.env,
   });
+  timings.push({ phase: "link", ms: Date.now() - linkStarted });
 
   const bundlePath =
     bundle !== undefined
@@ -375,7 +403,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   cache.record(cacheKey, outputs);
   cache.save();
-  return { outputPath, irPath, cached: false, diagnostics: [], ir, ...(bundlePath ? { bundlePath } : {}) };
+  return { outputPath, irPath, cached: false, diagnostics: [], ir, timings, ...(bundlePath ? { bundlePath } : {}) };
 }
 
 /** Default `CFBundleIdentifier` for a bundle when none is configured. */
@@ -437,6 +465,41 @@ function runtimeFingerprint(runtimeDir: string): string {
 }
 
 /**
+ * Content hash of the compiler's own TypeScript sources, when they are present.
+ *
+ * `COMPILER_VERSION` is bumped per release, but a developer editing codegen
+ * between releases would otherwise reuse a binary produced by the previous
+ * compiler for the same input. Hashing `src/` closes that hole in a source
+ * checkout. A released archive ships only `bin/` and `runtime/`, so the marker
+ * check fails there and the version alone keys the cache — which is correct,
+ * because release automation keeps it in sync with package.json.
+ */
+function compilerFingerprint(): string {
+  try {
+    // In a checkout this module is `<root>/src/driver/compiler.ts`.
+    const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+    if (!existsSync(join(sourceRoot, "codegen", "llvm.ts"))) return "";
+    if (!existsSync(join(sourceRoot, "driver", "compiler.ts"))) return "";
+    const parts: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.name.endsWith(".ts")) {
+          parts.push(relative(sourceRoot, full).replace(/\\/g, "/"), readFileSync(full, "utf8"));
+        }
+      }
+    };
+    walk(sourceRoot);
+    return hashParts(parts);
+  } catch {
+    // A self-hosted or packaged compiler may not expose its sources.
+    return "";
+  }
+}
+
+/**
  * Fingerprint everything an extension contributes that can change the linked
  * executable but does not live under `runtime/`: its name, linker flags and the
  * contents of any pre-built C++/Rust objects. Keeps a cached binary fresh when
@@ -487,7 +550,16 @@ function ensureRuntimeObjects(
 
   const compileOne = (sourcePath: string, tag: string): string => {
     const body = readFileSync(sourcePath, "utf8");
-    const key = hashParts(["runtime", COMPILER_VERSION, tag, headerStamp, body, clang, process.platform]);
+    const key = hashParts([
+      "runtime",
+      COMPILER_VERSION,
+      RUNTIME_CFLAGS.join(" "),
+      tag,
+      headerStamp,
+      body,
+      clang,
+      process.platform,
+    ]);
     const objectPath = join(cacheDir, `${tag}-${key}.o`);
     if (!existsSync(objectPath)) {
       compileC(runner, clang, sourcePath, objectPath, runtimeDir, env);

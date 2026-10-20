@@ -40,7 +40,8 @@
 
 > 标记模板已实现，含 raw 字符串与 `String.raw`。生成器（`function*`、`yield`、`yield*`）
 > 基于有栈协程实现，支持 `next`/`throw`/`return`、`for...of`、展开与委托；
-> `import.meta` 可解析，但无运行时取值；异步生成器尚未支持。
+> `import.meta` 提供 `url`、`dirname`、`filename`，由正在运行的可执行文件路径解析。
+> `async function*` 现在会以 `UnsupportedFeature` **明确拒绝**，不再静默产出同步生成器。
 
 ### 2.2 解析器不支持
 
@@ -50,7 +51,7 @@
 
 | 运算符 | 现状 | 说明 |
 | --- | --- | --- |
-| `new.target` | ✗ | 未实现 |
+| `new.target` | ✗ | 已解析，但以 `UnsupportedFeature` 明确拒绝（无 `new.target` 语义） |
 | `typeof` / `void` / `in` / `delete` / `instanceof` | ✓ | 映射到运行时辅助函数（`xt_typeof`、`xt_in`、`xt_delete`、`xt_instance_of`） |
 
 ---
@@ -103,7 +104,7 @@
 | `keys` / `values` / `entries` | ~ 返回数组，而非迭代器对象 |
 | `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` 语义 | ✗ 无底层缓冲区类型；`.byteOffset` 恒为 0 |
 | `BigInt64Array` / `BigUint64Array` | ✗ 未实现 |
-| `instanceof Uint8Array` | ✗ 全局构造器不是一等公民值，`x instanceof Uint8Array` 会报 `Cannot find name 'Uint8Array'` |
+| `instanceof` 内建构造器 | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` 家族 / 类型化数组都能按名字识别；但构造器本身仍不是一等公民值（`const A = Array` 仍会失败） |
 | 基于 `Buffer` / `ArrayBuffer` 的类型化数组视图 | ✗ 构造器仅能从长度 / 数组样 / 类型化数组复制 |
 
 ---
@@ -137,8 +138,8 @@
 | `arguments` 对象 | ✓（隐式） | ✓ 已实现（箭头函数取的是自身参数，而非外层函数的 `arguments`，与 JS 不同） |
 | `this` 绑定 / 方法调用语义 | ✓ | ✓ 已实现（`this` 作为函数首个 ABI 参数线程化；箭头函数词法继承） |
 | `async` / `await` / Promise | ✓ | ✓ 已实现（同步微任务模型） |
-| `new.target` | ✗ | 未实现 |
-| 生成器 / 迭代器 / `yield` | ✓ 已实现 | `function*`、`yield`、`yield*`、`.next/.throw/.return`；不支持异步生成器 |
+| `new.target` | ✗ | 已解析，但以 `UnsupportedFeature` 明确拒绝（无 `new.target` 语义） |
+| 生成器 / 迭代器 / `yield` | ✓ 已实现 | `function*`、`yield`、`yield*`、`.next/.throw/.return`；异步生成器以 `UnsupportedFeature` 拒绝 |
 | 闭包 `arity` | — | `xt_closure_arity` 恒为 -1，未填充 |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ 已实现（绑定闭包不跟踪部分参数的 `length`） |
 | `fn.name` / `fn.length` | ✓ | ✓ 已实现（从声明 / 赋值 / 属性键推断；绑定函数为 `"bound ..."` 并调整 arity） |
@@ -201,7 +202,7 @@
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
 | `Error.stack` | 未捕获 |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见第 4 节） |
-| `import.meta` | 可解析但无取值 |
+| `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`，由可执行文件路径解析 |
 
 > 数字格式化、宽松相等、`+` / 关系运算 `ToPrimitive`、整链可选链、`finally` 提前退出、对象键顺序等均已对齐 Node，并由差分测试覆盖，故不再列为偏差。
 
@@ -227,9 +228,9 @@
 ```
 未实现（语句）：namespace/module 声明
 
-未实现（表达式）：new.target、import.meta 取值
+未实现（表达式）：new.target（会给出明确的 UnsupportedFeature）
 
-未实现（函数）：`fn.toString()` 源码文本、异步生成器
+未实现（函数）：`fn.toString()` 源码文本、异步生成器（已明确拒绝）
 
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 

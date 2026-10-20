@@ -82,6 +82,27 @@ static char *read_temp(FILE *file) {
   return buffer;
 }
 
+/*
+ * MSVC's `_spawnvp` builds the child command line from argv without quoting
+ * argv[0]. When the executable path contains a space — the default install
+ * location is "C:\Program Files\…" — the child sees the path split into several
+ * arguments ("Files\Microsoft", "Visual", …). Quote argv[0] ourselves. Returns
+ * NULL when no quoting is needed (the caller keeps the original pointer).
+ */
+static char *quote_argv0(char **child_argv) {
+  const char *arg = child_argv[0];
+  if (arg == NULL || strchr(arg, ' ') == NULL) return NULL;
+  size_t length = strlen(arg);
+  char *quoted = (char *)malloc(length + 3);
+  if (!quoted) return NULL;
+  quoted[0] = '"';
+  memcpy(quoted + 1, arg, length);
+  quoted[length + 1] = '"';
+  quoted[length + 2] = 0;
+  child_argv[0] = quoted;
+  return quoted;
+}
+
 xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   const char *command = argc > 0 ? xt_string_data(xt_to_string(argv[0])) : NULL;
   if (!command) command = "";
@@ -91,6 +112,7 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   int count = 0;
   char **child_argv = (char **)build_argv(command, args, &count);
   if (!child_argv) return make_result(-1, "", "out of memory");
+  char *quoted_command = quote_argv0(child_argv);
 
   char previous[4096];
   int had_cwd = cwd && _getcwd(previous, sizeof(previous)) != NULL;
@@ -99,6 +121,7 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
     if (cwd) _chdir(cwd);
     intptr_t inherit_rc = _spawnvp(_P_WAIT, command, (const char *const *)child_argv);
     if (had_cwd) _chdir(previous);
+    free(quoted_command);
     free(child_argv);
     return make_result(inherit_rc < 0 ? -1 : (double)inherit_rc, "", "");
   }
@@ -106,6 +129,7 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   FILE *out_file = tmpfile();
   FILE *err_file = tmpfile();
   if (!out_file || !err_file) {
+    free(quoted_command);
     free(child_argv);
     if (out_file) fclose(out_file);
     if (err_file) fclose(err_file);
@@ -136,6 +160,7 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   char *err = read_temp(err_file);
   fclose(out_file);
   fclose(err_file);
+  free(quoted_command);
   free(child_argv);
 
   xt_value result = make_result(rc < 0 ? -1 : (double)rc, out, err);

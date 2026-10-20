@@ -50,8 +50,9 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 ```
 
 `env` 通过 box 以引用方式线程化捕获变量，因此直接调用与闭包调用共用同一条
-代码路径。不易内联的 JavaScript 语义（`+` 隐式转换、关系比较、属性访问、打印）
-委托给 `@xt_*` 运行时调用。
+代码路径。不易内联的 JavaScript 语义（`+` 隐式转换、属性访问、打印）委托给
+`@xt_*` 运行时调用。数值算术与比较是例外：两个操作数都是 double 时，codegen
+直接内联硬件运算，只有需要隐式转换的情况才回退到运行时。
 
 ### 运行时
 
@@ -172,6 +173,7 @@ CLI 选项：
     --ext-native <m>  从 JSON manifest 注册 C++/Rust 扩展
     --force           忽略增量缓存
     --verbose         打印进度信息
+    --time            打印各构建阶段耗时
 ```
 
 ### 编程接口

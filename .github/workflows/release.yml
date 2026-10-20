@@ -80,6 +80,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # COMPILER_VERSION is what `xbintsc version` reports and what keys the
+      # incremental cache; package.json names the archives. A version bump must
+      # update both, or an upgraded compiler can reuse the previous build.
+      - name: Check the compiler version
+        run: npm run check:version
+
       # A human-pushed version commit already triggers CI, but this fallback keeps
       # the release self-sufficient when no run id is supplied: ci.yml does not
       # run on tags, so dispatch it on the release tag and pin it to exactly this

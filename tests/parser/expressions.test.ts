@@ -51,3 +51,11 @@ describe("assignment validation", () => {
     expect(diagnostics.some((d) => d.code === DiagnosticCode.InvalidAssignmentTarget)).toBe(true);
   });
 });
+
+describe("unsupported syntax", () => {
+  it("reports new.target as an unsupported feature, not a syntax error", () => {
+    const { diagnostics } = parse("function F() { return new.target; }");
+    expect(diagnostics.map((d) => d.code)).toContain(DiagnosticCode.UnsupportedFeature);
+    expect(diagnostics.map((d) => d.code)).not.toContain(DiagnosticCode.UnexpectedToken);
+  });
+});

@@ -18,11 +18,11 @@ import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
-import { build, compileEntry, COMPILER_VERSION, type EmitKind } from "../driver/compiler.js";
+import { build, compileEntry, COMPILER_VERSION, type EmitKind, type PhaseTiming } from "../driver/compiler.js";
 import { findRuntimeDir, platformSlug } from "../driver/paths.js";
 import { runtimeLibDir } from "../driver/runtime-lib.js";
-import { resolveToolchain } from "../driver/toolchain-provider.js";
-import { realRunner, ToolchainError } from "../driver/toolchain.js";
+import { resolveToolchain, type ResolvedToolchain } from "../driver/toolchain-provider.js";
+import { MINIMUM_CLANG_MAJOR, probeClang, realRunner, ToolchainError } from "../driver/toolchain.js";
 import {
   DOC_CLI,
   DOC_TROUBLESHOOTING,
@@ -154,21 +154,37 @@ function buildRegistry(extNames: readonly string[], nativeManifests: readonly st
 }
 
 function printDiagnostics(diagnostics: readonly Diagnostic[], fileName: string, io: CliIo): void {
-  let source: SourceFile | undefined;
-  try {
-    source = new SourceFile(fileName, readFileSync(fileName, "utf8"));
-  } catch {
-    source = undefined;
-  }
+  /* A diagnostic can come from any module in a bundled program, so load (and
+   * cache) the source of the file it names instead of always using the entry:
+   * reusing the entry's text is what used to print another file's line with a
+   * caret under unrelated code. */
+  const sources = new Map<string, SourceFile | undefined>();
+  const sourceFor = (name: string): SourceFile | undefined => {
+    if (!sources.has(name)) {
+      try {
+        sources.set(name, new SourceFile(name, readFileSync(name, "utf8")));
+      } catch {
+        sources.set(name, undefined);
+      }
+    }
+    return sources.get(name);
+  };
   for (const diagnostic of diagnostics) {
     // Driver-level diagnostics (icon, config, …) have no source location.
     if (diagnostic.fileName === undefined && diagnostic.start === undefined) {
       io.stderr(`error TS${diagnostic.code}: ${diagnostic.message}\n`);
       continue;
     }
+    const source = sourceFor(diagnostic.fileName ?? fileName);
     io.stderr(formatDiagnostic(diagnostic, source) + "\n");
   }
   for (const hint of documentationHints(diagnostics)) emitHint(io, hint);
+}
+
+/** Print the phases collected by `--time`. */
+function printTimings(timings: readonly PhaseTiming[], io: CliIo): void {
+  const text = timings.map((timing) => `${timing.phase} ${timing.ms}ms`).join(", ");
+  io.stdout(`xbintsc: timing (${text})\n`);
 }
 
 /** Print one `hint:` line unless the caller asked for plain output. */
@@ -237,6 +253,7 @@ Options:
       --app-id <id>     macOS bundle identifier (e.g. com.example.demo)
       --force           Ignore the incremental cache
       --verbose         Print progress information
+      --time            Print per-phase build timings
       --no-hints        Do not append the "hint: … see <doc>" line to failures
 
 xbintsc compiles a subset of TypeScript to a native binary. Types are erased
@@ -247,26 +264,47 @@ Docs: doc/ai/README.md (task guide) - doc/ai/language-support.md (subset) -
 doc/ai/troubleshooting.md (failures) - llms.txt (index of every document)
 `;
 
-function firstLine(text: string): string {
-  const index = text.indexOf("\n");
-  return (index === -1 ? text : text.slice(0, index)).trim();
-}
-
-/** Report the resolved toolchain and runtime locations. */
+/**
+ * Report the resolved toolchain and runtime locations.
+ *
+ * Returns non-zero when the resolved compiler cannot build anything (missing,
+ * or older than {@link MINIMUM_CLANG_MAJOR}), so CI and scripts can use it as a
+ * preflight instead of discovering the problem halfway through a build.
+ */
 function doctor(io: CliIo): number {
   io.stdout(`xbintsc ${COMPILER_VERSION}\n`);
   io.stdout(`platform   : ${platformSlug()}\n`);
 
+  let toolchain: ResolvedToolchain | undefined;
+  let usable = false;
   try {
-    const toolchain = resolveToolchain();
-    const version = realRunner.run(toolchain.clang, ["--version"], { env: toolchain.env }).stdout;
+    toolchain = resolveToolchain();
+    const probe = probeClang(realRunner, toolchain.clang, toolchain.env);
     io.stdout(`toolchain  : ${toolchain.clang} (${toolchain.source})\n`);
-    io.stdout(`compiler   : ${firstLine(version) || "unknown"}\n`);
-  } catch {
-    io.stdout("toolchain  : not found\n");
-    io.stdout("  install one of: Xcode Command Line Tools (`xcode-select --install`) on macOS,\n");
-    io.stdout("  clang+lld (apt/dnf/pacman) on Linux, or LLVM + Visual Studio C++ build tools on Windows,\n");
-    io.stdout("  then re-run; or set xbintsc_CLANG to a clang binary. See doc/requirements.md.\n");
+    io.stdout(`compiler   : ${probe.summary || "unknown"}\n`);
+    const version = toolchain.version ?? probe.version;
+    if (!version) {
+      // An explicit wrapper need not print a clang-style version; let it run.
+      usable = true;
+      io.stdout(`status     : version unknown (requires clang >= ${MINIMUM_CLANG_MAJOR})\n`);
+    } else if (version.major >= MINIMUM_CLANG_MAJOR) {
+      usable = true;
+      io.stdout(`status     : ok (requires clang >= ${MINIMUM_CLANG_MAJOR})\n`);
+    } else {
+      io.stdout(
+        `status     : too old: clang ${version.major}.${version.minor}.${version.patch} ` +
+          `(requires >= ${MINIMUM_CLANG_MAJOR})\n`,
+      );
+      io.stdout("  set xbintsc_CLANG to a newer clang; on Windows Visual Studio ships one under\n");
+      io.stdout("  <VS install>\\VC\\Tools\\Llvm\\x64\\bin\\clang.exe. See doc/requirements.md.\n");
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    io.stdout("toolchain  : not usable\n");
+    for (const line of message.split("\n")) {
+      if (line.trim().length > 0) io.stdout(`  ${line.trim()}\n`);
+    }
+    io.stdout("  See doc/requirements.md for the per-platform install steps, or set xbintsc_CLANG.\n");
   }
 
   try {
@@ -282,13 +320,13 @@ function doctor(io: CliIo): number {
   }
 
   try {
-    const toolchain = resolveToolchain();
+    if (!toolchain) throw new Error("no toolchain");
     const resource = resolveResourceCompiler(realRunner, toolchain.clang);
     io.stdout(`icon res   : ${resource ? `${resource.tool} (${resource.kind})` : "none (.exe icon disabled)"}\n`);
   } catch {
     io.stdout("icon res   : unknown\n");
   }
-  return 0;
+  return usable ? 0 : 1;
 }
 
 type ConfigResolution =
@@ -429,6 +467,8 @@ function dispatch(argv: readonly string[], io: CliIo): number {
       printDiagnostics(result.diagnostics, entry, io);
       return 1;
     }
+
+    if (args.flags.has("time") && result.timings) printTimings(result.timings, io);
 
     if (command === "build") {
       const bundle = result.bundlePath ? ` (bundle: ${result.bundlePath})` : "";

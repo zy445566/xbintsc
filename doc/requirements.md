@@ -20,10 +20,19 @@ build/app.ll:382:37: error: '@.str.0' defined with type '[6 x i8]*' but expected
 ```
 
 Typed pointers were removed in LLVM 16 ([release notes](https://github.com/llvm/llvm-project/blob/release/15.x/llvm/docs/ReleaseNotes.rst#changes-to-the-llvm-ir)),
-so check `clang --version` before anything else, and point xbintsc at a newer
-build with `xbintsc_CLANG` when the system clang is older. `xbintsc doctor`
-reports the resolved toolchain and its version. Working around the limitation by
-compiling the IR elsewhere is not supported.
+so xbintsc now **checks the version before it compiles anything**:
+
+- `xbintsc build` / `run` stop immediately with an actionable error when the
+  resolved driver is older than 16, instead of emitting IR that cannot compile.
+- `xbintsc doctor` prints `status : ok` or `status : too old` and exits non-zero
+  when the toolchain cannot build binaries, so scripts and CI can preflight it.
+- The search prefers a clang >= 16: on Windows the LLVM bundled with Visual
+  Studio (`<VS install>\VC\Tools\Llvm\x64\bin\clang.exe`) is found even when an
+  older `clang` comes first on `PATH`. Set `xbintsc_CLANG` to override the
+  choice; an explicit older binary is rejected with a "too old" error rather
+  than silently ignored.
+
+Working around the limitation by compiling the IR elsewhere is not supported.
 
 ## Summary
 

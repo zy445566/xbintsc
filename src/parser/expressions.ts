@@ -299,7 +299,26 @@ export const expressionMethods: ExpressionMethods = {
   },
 
   parseNewExpression(this: Parser): NewExpression {
-    const start = this.parseExpected(TokenKind.NewKeyword).start;
+    const newToken = this.parseExpected(TokenKind.NewKeyword);
+    const start = newToken.start;
+    /* `new.target` is not part of the supported subset. Parsing it as a member
+     * access produced "Unexpected token '.'" pointing at the dot; report what
+     * is actually unsupported instead. */
+    if (this.at(TokenKind.Dot) && this.atAhead(1, TokenKind.Identifier) && this.lookAhead(1).text === "target") {
+      this.nextToken(); // .
+      const target = this.nextToken(); // target
+      this.error(DiagnosticCode.UnsupportedFeature, "xbintsc does not yet support new.target", {
+        ...newToken,
+        end: target.end,
+      });
+      const placeholder: Expression = {
+        kind: SyntaxKind.Identifier,
+        text: "undefined",
+        start: target.start,
+        end: target.end,
+      };
+      return { kind: SyntaxKind.NewExpression, expression: placeholder, typeArguments: [], arguments: [], start, end: target.end };
+    }
     const callee = this.parseMemberOnlyExpression();
     const typeArguments = this.at(TokenKind.LessThan) ? this.parseTypeArguments() : [];
     const args = this.at(TokenKind.OpenParen) ? this.parseArguments() : [];

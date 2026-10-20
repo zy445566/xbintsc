@@ -4,6 +4,9 @@ import {
   compileIr,
   findClang,
   link,
+  MINIMUM_CLANG_MAJOR,
+  parseClangVersion,
+  probeClang,
   ToolchainError,
   type CommandResult,
   type Runner,
@@ -26,6 +29,42 @@ function recordingRunner(status = 0): { runner: Runner; calls: Recorded[] } {
 }
 
 describe("toolchain", () => {
+  it("parses clang version strings from the common spellings", () => {
+    expect(parseClangVersion("clang version 19.1.5 (https://github.com/llvm/llvm-project.git)")).toEqual({
+      major: 19,
+      minor: 1,
+      patch: 5,
+    });
+    expect(parseClangVersion("Apple clang version 15.0.0 (clang-1500.3.9.4)")).toEqual({
+      major: 15,
+      minor: 0,
+      patch: 0,
+    });
+    expect(parseClangVersion("Ubuntu clang version 18.1.3 (1ubuntu1)")).toEqual({
+      major: 18,
+      minor: 1,
+      patch: 3,
+    });
+    expect(parseClangVersion("cc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0")).toBeUndefined();
+    expect(parseClangVersion("")).toBeUndefined();
+  });
+
+  it("requires clang 16 or newer", () => {
+    expect(MINIMUM_CLANG_MAJOR).toBe(16);
+  });
+
+  it("reports the version and first line of a probe", () => {
+    const runner: Runner = {
+      run: () => ({ status: 0, stdout: "clang version 19.1.5\nTarget: x86_64", stderr: "" }),
+    };
+    expect(probeClang(runner, "clang")).toEqual({
+      command: "clang",
+      responds: true,
+      version: { major: 19, minor: 1, patch: 5 },
+      summary: "clang version 19.1.5",
+    });
+  });
+
   it("honours xbintsc_CLANG when locating a compiler", () => {
     const { runner, calls } = recordingRunner();
     const previous = process.env.xbintsc_CLANG;
@@ -47,13 +86,23 @@ describe("toolchain", () => {
   it("compiles IR with the requested optimization level", () => {
     const { runner, calls } = recordingRunner();
     compileIr(runner, { clang: "clang", irPath: "in.ll", objectPath: "out.o", optimize: "2" });
-    expect(calls[0]!.args).toEqual(["-O2", "-c", "in.ll", "-o", "out.o"]);
+    expect(calls[0]!.args).toEqual([
+      "-O2",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-c",
+      "in.ll",
+      "-o",
+      "out.o",
+    ]);
   });
 
   it("links objects with extra flags", () => {
     const { runner, calls } = recordingRunner();
     link(runner, { clang: "clang", objectPaths: ["a.o", "b.o"], outputPath: "prog", linkerFlags: ["-lm"], optimize: "1" });
-    expect(calls[0]!.args).toEqual(["-O1", "a.o", "b.o", "-o", "prog", "-lm"]);
+    const deadStrip =
+      process.platform === "win32" ? [] : [process.platform === "darwin" ? "-Wl,-dead_strip" : "-Wl,--gc-sections"];
+    expect(calls[0]!.args).toEqual(["-O1", "a.o", "b.o", "-o", "prog", ...deadStrip, "-lm"]);
   });
 
   it("compiles C sources with an include directory", () => {
@@ -64,6 +113,8 @@ describe("toolchain", () => {
       "-Wall",
       "-Wextra",
       "-D_CRT_SECURE_NO_WARNINGS",
+      "-ffunction-sections",
+      "-fdata-sections",
       "-c",
       "runtime.c",
       "-o",

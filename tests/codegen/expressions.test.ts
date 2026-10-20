@@ -152,9 +152,9 @@ describe("codegen assignment", () => {
     expect(ir).toContain("@xt_get");
   });
 
-  it("reports object rest destructuring as unsupported", () => {
-    const diagnostics = errorsOf("let o: any;\n({ ...o } = { a: 1 });");
-    expect(diagnostics.some((d) => d.code === DiagnosticCode.UnsupportedFeature)).toBe(true);
+  it("supports object rest in assignment targets", () => {
+    const ir = irOf("let o: any;\n({ ...o } = { a: 1 });");
+    expect(ir).toContain("@xt_object_rest");
   });
 });
 
@@ -171,5 +171,18 @@ describe("codegen unary operators", () => {
     const ir = irOf("let x = 1;\nx++;\n++x;\nx--;\n--x;");
     expect(ir).toContain("@xt_add");
     expect(ir).toContain("@xt_sub");
+  });
+});
+
+describe("unsupported semantics", () => {
+  it("rejects async generator functions", () => {
+    const errors = errorsOf("async function* g() { yield 1; }");
+    expect(errors.map((e) => e.code)).toContain(DiagnosticCode.UnsupportedFeature);
+  });
+
+  it("does not cascade an internal error after an unsupported construct", () => {
+    const errors = errorsOf("namespace N { export const x = 1; }\nconsole.log(1);");
+    expect(errors.some((e) => e.code === DiagnosticCode.UnsupportedFeature)).toBe(true);
+    expect(errors.some((e) => e.message.includes("Internal"))).toBe(false);
   });
 });

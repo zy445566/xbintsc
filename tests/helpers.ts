@@ -8,7 +8,8 @@ import { Parser } from "../src/parser/parser.js";
 import { bind, type BindResult } from "../src/binder/binder.js";
 import { generate } from "../src/codegen/llvm.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../src/extensions/registry.js";
-import { realRunner } from "../src/driver/toolchain.js";
+import { MINIMUM_CLANG_MAJOR } from "../src/driver/toolchain.js";
+import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 import type { Token } from "../src/lexer/token.js";
 
 export function lex(text: string): { tokens: Token[]; diagnostics: readonly Diagnostic[] } {
@@ -51,6 +52,29 @@ export function compileToIr(
   return { ir, binding, diagnostics: diagnostics.diagnostics };
 }
 
+let cachedClangSupport: boolean | undefined;
+
+/**
+ * True when a *supported* clang is available. The end-to-end suites really
+ * compile and link native binaries, and the emitted IR needs clang >= 16, so a
+ * missing or too-old toolchain skips them instead of failing every case with an
+ * opaque-pointer error. `resolveToolchain` applies the same selection (and
+ * version gate) the driver uses, so the tests and the compiler agree.
+ */
 export function hasClang(): boolean {
-  return realRunner.run(process.env.xbintsc_CLANG ?? "clang", ["--version"]).status === 0;
+  if (cachedClangSupport === undefined) {
+    try {
+      const version = resolveToolchain().version;
+      cachedClangSupport = version === undefined || version.major >= MINIMUM_CLANG_MAJOR;
+    } catch {
+      cachedClangSupport = false;
+    }
+    if (!cachedClangSupport) {
+      console.warn(
+        `xbintsc: skipping end-to-end tests — clang ${MINIMUM_CLANG_MAJOR}+ was not found ` +
+          "(see doc/requirements.md, or set xbintsc_CLANG)",
+      );
+    }
+  }
+  return cachedClangSupport;
 }

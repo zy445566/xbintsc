@@ -68,8 +68,9 @@ None — generators are implemented.
 > Tagged templates are implemented, including raw strings and `String.raw`.
 > Generators (`function*`, `yield`, `yield*`) are implemented with stackful
 > coroutines, including `next`/`throw`/`return`, `for...of`, spread and
-> delegation. `import.meta` is parsed but has no runtime value; `async`
-> generators are not yet supported.
+> delegation. `import.meta` exposes `url`, `dirname` and `filename`, resolved
+> from the running executable's path. `async function*` is **rejected with
+> `UnsupportedFeature`** instead of silently producing a synchronous generator.
 
 ### 2.2 Not supported by the parser
 
@@ -79,7 +80,7 @@ None known at the expression level.
 
 | Operator | Status | Notes |
 | --- | --- | --- |
-| `new.target` | ✗ | not implemented |
+| `new.target` | ✗ | parsed, then rejected with `UnsupportedFeature` (no `new.target` semantics) |
 | `typeof` / `void` / `in` / `delete` / `instanceof` | ✓ | mapped to runtime helpers (`xt_typeof`, `xt_in`, `xt_delete`, `xt_instance_of`) |
 
 ---
@@ -132,7 +133,7 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 | `keys` / `values` / `entries` | ~ return arrays, not iterator objects |
 | `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` semantics | ✗ no backing buffer type; `.byteOffset` is always 0 |
 | `BigInt64Array` / `BigUint64Array` | ✗ not implemented |
-| `instanceof Uint8Array` | ✗ global constructors are not first-class values, so `x instanceof Uint8Array` fails with `Cannot find name 'Uint8Array'` |
+| `instanceof` built-in constructors | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` family / typed arrays are recognised by name; the constructors are still not first-class values (`const A = Array` fails) |
 | Typed-array views over a `Buffer` / `ArrayBuffer` | ✗ constructors copy from a length / array-like / typed array only |
 
 ---
@@ -169,8 +170,8 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 | `arguments` object | ✓ (implicit) | ✓ implemented (arrow functions get their own parameters, not the outer function's `arguments`, unlike JS) |
 | `this` binding / method call semantics | ✓ | ✓ implemented (`this` is threaded as the first ABI parameter; arrow functions inherit lexically) |
 | `async` / `await` / Promise | ✓ | ✓ implemented (synchronous microtask model) |
-| `new.target` | ✗ | not implemented |
-| Generators / iterators / `yield` | ✓ implemented | `function*`, `yield`, `yield*`, `.next/.throw/.return`; `async` generators not supported |
+| `new.target` | ✗ | parsed, then rejected with `UnsupportedFeature` (no `new.target` semantics) |
+| Generators / iterators / `yield` | ✓ implemented | `function*`, `yield`, `yield*`, `.next/.throw/.return`; `async` generators are rejected with `UnsupportedFeature` |
 | Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ implemented (the bound closure does not track partial-argument `length`) |
 | `fn.name` / `fn.length` | ✓ | ✓ implemented (inferred from the declaration / assignment / property key; bound functions use `"bound ..."` and adjusted arity) |
@@ -234,7 +235,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
 | `Error.stack` | Not captured |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see section 4) |
-| `import.meta` | Parsed but has no value |
+| `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`, resolved from the executable path |
 
 > Number formatting, loose equality, `+` / relational `ToPrimitive`, whole-chain
 > optional chaining, `finally` on early exit and object-key ordering have all
@@ -263,9 +264,9 @@ These features **compile and run**, but the result does not fully match ECMAScri
 ```
 Unimplemented (statements): namespace/module declarations
 
-Unimplemented (expressions): new.target, import.meta value
+Unimplemented (expressions): new.target (clear UnsupportedFeature)
 
-Unimplemented (functions): `fn.toString()` source text, async generators
+Unimplemented (functions): `fn.toString()` source text, async generators (rejected)
 
 Unimplemented (classes/OO): abstract/implements, access control,
                             parent/child #x collision

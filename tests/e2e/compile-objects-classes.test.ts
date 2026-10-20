@@ -391,4 +391,55 @@ describeE2E("end-to-end objects, functions and classes", (harness) => {
         "1,2,3\n10,11,12\n5,6",
     );
   });
+
+  it("supports object rest destructuring in bindings, parameters and assignments", () => {
+    const source = `
+      const source = { a: 1, b: 2, c: 3 };
+      const { a, ...rest } = source;
+      console.log(a, JSON.stringify(rest));
+      const { b: renamed, ...others } = source;
+      console.log(renamed, JSON.stringify(others));
+      const { missing = 42, ...tail } = source;
+      console.log(missing, JSON.stringify(tail));
+      function pick({ b, ...rest }: { b: number }) { return JSON.stringify(rest); }
+      console.log(pick(source));
+      const nested = { outer: { x: 1, y: 2 } };
+      const { outer: { x, ...inner } } = nested;
+      console.log(x, JSON.stringify(inner));
+      const key = Symbol("tag");
+      const withSymbol = { [key]: 7, keep: 1 };
+      const { keep, ...symbols } = withSymbol;
+      console.log(keep, symbols[key]);
+      const array = [10, 20, 30];
+      const { ...arrayRest } = array;
+      console.log(JSON.stringify(arrayRest));
+      const getter = { get value() { return 5; }, other: 6 };
+      const { value, ...restWithGetter } = getter;
+      console.log(value, JSON.stringify(restWithGetter));
+      let assigned: any = {};
+      ({ b: assigned.b, ...assigned.rest } = source);
+      console.log(assigned.b, JSON.stringify(assigned.rest));
+    `;
+    harness.expectSameOutputAsNode(source, { name: "object_rest" });
+  });
+
+  it("supports instanceof against built-in constructors", () => {
+    const source = `
+      console.log([] instanceof Array, {} instanceof Object, [] instanceof Object, (() => {}) instanceof Function);
+      console.log(new Map() instanceof Map, new Set() instanceof Set, new Date() instanceof Date, /x/ instanceof RegExp);
+      console.log(Promise.resolve(1) instanceof Promise);
+      console.log(new TypeError("x") instanceof TypeError, new TypeError("x") instanceof Error, new Error("x") instanceof TypeError);
+      console.log(new Uint8Array(4) instanceof Uint8Array, new Uint8Array(4) instanceof Int8Array);
+      class C {}
+      console.log(new C() instanceof C, new C() instanceof Object);
+    `;
+    expect(runProgram(source)).toBe(
+      "true true true true\n" +
+        "true true true true\n" +
+        "true\n" +
+        "true true false\n" +
+        "true false\n" +
+        "true true",
+    );
+  });
 });

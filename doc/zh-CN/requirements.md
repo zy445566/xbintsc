@@ -19,9 +19,18 @@ build/app.ll:382:37: error: '@.str.0' defined with type '[6 x i8]*' but expected
 ```
 
 有类型指针在 LLVM 16 中被移除（[发布说明](https://github.com/llvm/llvm-project/blob/release/15.x/llvm/docs/ReleaseNotes.rst#changes-to-the-llvm-ir)），
-所以请先确认 `clang --version`；系统 clang 较旧时用 `xbintsc_CLANG` 指向新版。
-`xbintsc doctor` 会报告解析到的工具链及其版本。把 IR 拿到别处编译来绕过该限制
-是不受支持的。
+所以 xbintsc 现在**在编译任何东西之前先检查版本**：
+
+- `xbintsc build` / `run` 一旦发现解析到的驱动低于 16 就立即停止，并给出可操作的错误，
+  而不是生成无法编译的 IR。
+- `xbintsc doctor` 会打印 `status : ok` 或 `status : too old`，在工具链无法构建二进制时
+  以非零码退出，脚本和 CI 可以把它当作预检。
+- 搜索时会优先选择 16+ 的 clang：Windows 上即使 `PATH` 里靠前的是旧 clang，
+  也能找到 Visual Studio 自带的 LLVM
+  （`<VS 安装目录>\VC\Tools\Llvm\x64\bin\clang.exe`）。可以用 `xbintsc_CLANG` 覆盖；
+  显式指定的旧版本会得到 "too old" 错误，而不是被静默忽略。
+
+把 IR 拿到别处编译来绕过该限制是不受支持的。
 
 ## 总览
 

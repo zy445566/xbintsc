@@ -58,9 +58,7 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
         this.unsupported(node, `assignment operator '${operator}'`);
         return i64(XT_UNDEFINED);
       }
-      const result = this.reg();
-      this.emit(`  ${result} = call i64 @${runtime}(i64 ${current}, i64 ${right})`);
-      value = result;
+      value = this.emitBinaryOperation(current, right, binaryOperator, runtime);
     }
     this.emitAssignmentTarget(target, value);
     return value;
@@ -120,7 +118,7 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
               ? `Cannot assign to '${symbol.name}' because it is an import.`
               : `Cannot assign to '${symbol.name}' because it is a constant.`,
             identifier,
-            this.sourceFile.fileName,
+            this.fileNameOf(identifier),
           );
           return;
         }
@@ -187,9 +185,13 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
 
   /** `{ a, b } = value` / `for ({ a } of xs)`: assign each property of `value`. */
   emitObjectAssignmentTarget(pattern: ObjectLiteralExpression, value: string): void {
+    const excludedKeys: string[] = [];
     for (const property of pattern.properties) {
       if (property.kind === SyntaxKind.SpreadElement) {
-        this.unsupported(property, "object rest destructuring");
+        const rest = this.reg();
+        const keys = this.emitValueArguments(excludedKeys);
+        this.emit(`  ${rest} = call i64 @xt_object_rest(i64 ${value}, i32 ${keys.argc}, i64* ${keys.ptr})`);
+        this.emitAssignmentTarget((property as SpreadElement).expression, rest);
         continue;
       }
       if (property.kind === SyntaxKind.PropertyAssignment) {
@@ -200,6 +202,7 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
         } else {
           key = this.stringValue(propertyNameText(assignment.name));
         }
+        excludedKeys.push(key);
         let target: Expression = assignment.initializer;
         let fallback: Expression | undefined;
         if (isPlainAssignment(target)) {
@@ -215,6 +218,7 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
       }
       const shorthand = property as ShorthandPropertyAssignment;
       const key = this.stringValue(shorthand.name.text);
+      excludedKeys.push(key);
       let elementValue = this.reg();
       this.emit(`  ${elementValue} = call i64 @xt_get(i64 ${value}, i64 ${key})`);
       if (shorthand.initializer) elementValue = this.emitBindingDefault(elementValue, shorthand.initializer);

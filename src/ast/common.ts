@@ -207,4 +207,14 @@ export interface SourceFileNode extends Node {
   readonly statements: Statement[];
   readonly fileName: string;
   readonly text: string;
+  /**
+   * For a bundled program: the original module each node was parsed from.
+   *
+   * The bundler merges every module into one `SourceFile`, but the nodes keep
+   * their module-local `start`/`end` offsets. Diagnostics must therefore report
+   * the module a node came from, not the entry file, or a cross-module error
+   * shows the wrong file and a nonsensical excerpt. Absent for a single-file
+   * compile, where `fileName` is the only source.
+   */
+  readonly origins?: Map<object, string>;
 }

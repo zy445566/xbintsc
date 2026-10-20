@@ -21,8 +21,11 @@ D:\...\build\app.ll:382:37: error: '@.str.0' defined with type '[6 x i8]*' but e
 
 编译器生成的 LLVM IR 依赖不透明指针（opaque pointers），而有类型指针在 LLVM 16
 中被移除（[LLVM 发布说明](https://github.com/llvm/llvm-project/blob/release/15.x/llvm/docs/ReleaseNotes.rst#changes-to-the-llvm-ir)）。
-用 `clang --version` 确认；如果机器上的系统 clang 太旧，装一个新版 LLVM 并让 xbintsc
-用它：
+`xbintsc build`/`run` 现在会先检查版本，直接停止并提示 "reports clang 15.0.2,
+but xbintsc requires clang 16 or newer"；`xbintsc doctor` 会打印
+`status : ok` 或 `status : too old`（后者以非零码退出）。搜索工具链时会优先选择受支持
+的 clang——包括 Windows 上 Visual Studio 自带的 LLVM——所以装了新版时旧的
+`/usr/bin/clang` 会被跳过。也可以显式指定：
 
 ```powershell
 $env:xbintsc_CLANG = "C:\Program Files\LLVM\bin\clang.exe"

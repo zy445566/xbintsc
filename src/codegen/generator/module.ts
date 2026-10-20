@@ -83,6 +83,14 @@ export const moduleMethods: ModuleMethods = {
   // -- module level --------------------------------------------------------
 
   emitFunction(fn: FunctionInfo): void {
+    this.unsupportedCount = 0;
+    // `async function*` would need an async iterator and a promise-returning
+    // `.next()`; the generator/async lowering below would silently produce a
+    // synchronous generator instead, so reject it rather than miscompile.
+    if (fn.isAsync && fn.isGenerator) {
+      this.unsupported(fn.node, "async generator function");
+      return;
+    }
     const name = this.functionName(fn);
     const state: FunctionState = {
       fn,
@@ -229,8 +237,22 @@ export const moduleMethods: ModuleMethods = {
     const moduleName = this.functionName(this.binding.moduleFunction);
     // Module bindings and class constructors live in globals; register them as
     // GC roots before the module body runs so a collection cannot free them.
-    const roots = [...this.classGlobals.values(), ...this.moduleGlobals.values()];
+    const stringEntries = [...this.strings.values()];
+    const roots = [
+      ...this.classGlobals.values(),
+      ...this.moduleGlobals.values(),
+      ...stringEntries.map((entry) => entry.slot),
+    ];
     const rootLines = roots.map((name) => `  call void @xt_gc_add_root(i64* ${name})`);
+    // Every interned string literal is materialised once here and shared by all
+    // uses, so property names and other literals stop allocating per access.
+    const stringInit = stringEntries.flatMap((entry) => {
+      const register = `%strv.${entry.slot.replace("@.strv.", "")}`;
+      return [
+        `  ${register} = call i64 @xt_string_new(i8* ${entry.label}, i64 ${entry.length})`,
+        `  store i64 ${register}, i64* ${entry.slot}`,
+      ];
+    });
     this.functions.push(
       [
         "define i32 @main(i32 %argc, i8** %argv) {",
@@ -239,6 +261,7 @@ export const moduleMethods: ModuleMethods = {
         "  call void @xt_gc_set_stack_base(i8* %stackbase.ptr)",
         "  call void @xt_gc_init()",
         ...rootLines,
+        ...stringInit,
         "  call void @xt_gc_arm()",
         "  call void @xt_set_program_args(i32 %argc, i8** %argv)",
         `  %result = call i64 @${moduleName}(i64 ${i64(XT_UNDEFINED)}, i64 ${i64(XT_UNDEFINED)}, i32 0, i64* null)`,

@@ -53,8 +53,10 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 
 `env` threads captured variables (by reference, through boxes), so direct calls
 and closure calls share one code path. JavaScript semantics that are awkward to
-inline (`+` coercion, relational comparison, property access, inspection) are
-delegated to `@xt_*` runtime calls.
+inline (`+` coercion, property access, inspection) are delegated to `@xt_*`
+runtime calls. Numeric arithmetic and comparison are the exception: when both
+operands are doubles, codegen emits the hardware operation inline and only falls
+back to the runtime for the coercing cases.
 
 ### Runtime
 
@@ -194,6 +196,7 @@ CLI options:
     --app-id <id>     macOS bundle identifier (e.g. com.example.demo)
     --force           Ignore the incremental cache
     --verbose         Print progress information
+    --time            Print per-phase build timings
 ```
 
 ### Project config & application icon

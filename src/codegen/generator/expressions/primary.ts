@@ -193,7 +193,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           DiagnosticCode.CodegenError,
           `Imported binding '${identifier.text}' cannot be used as a value`,
           identifier,
-          this.sourceFile.fileName,
+          this.fileNameOf(identifier),
         );
         return i64(XT_UNDEFINED);
       }
@@ -244,7 +244,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           DiagnosticCode.CannotFindName,
           `Cannot find name '${identifier.text}'`,
           identifier,
-          this.sourceFile.fileName,
+          this.fileNameOf(identifier),
         );
         return i64(XT_UNDEFINED);
       }

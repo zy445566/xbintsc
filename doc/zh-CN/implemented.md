@@ -247,7 +247,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 运算符辅助：`xt_in`（`in`）、`xt_delete`（`delete`）、`xt_rest_args`（剩余参数 / `arguments`）。
 - Box：`box_new/get/set`（用于闭包捕获变量）。
 - 函数与闭包：`arg`、`closure_new/call/env/arity`。
-- 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `_setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。
+- 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `_setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。codegen 还会维护一条影子调用栈（函数名、源文件、行号）：`Error.stack` 用它生成堆栈，原生崩溃时致命信号处理器也会打印同一组帧。
 - 输出：`xt_print/xt_println/xt_console_log/info/warn/error`（Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`；`info`/`log` 到 stdout，`warn`/`error` 到 stderr），以及 `dir/trace/assert/count/countReset/group/groupEnd/table/time/timeEnd/timeLog`。
 - 对象 / 函数：`xt_object` 带原型链，`xt_function` 带属性包（静态成员与 `prototype`）；`xt_new`（实例化）、`xt_instance_of`（原型链）、`xt_object_freeze/is_frozen/from_entries`。
 - 标准库扩展（`xt_stdlib2.c`）：数组 / 字符串 / 数字 / 对象的扩展方法；`Object` / `Array` / `Number` / `String` 静态方法；`JSON.parse` / `JSON.stringify`；`Map` / `Set`；`Date`（`gmtime_r`）；`RegExp`（POSIX ERE `regcomp`/`regexec` 的 `test`/`exec`）。

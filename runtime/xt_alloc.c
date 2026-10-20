@@ -210,6 +210,9 @@ void xt_gc_init(void) {
       g_gc_threshold_pinned = 1;
     }
   }
+  /* A crash is the one case where the JavaScript-level shadow stack is the
+   * most useful thing to print; install the handler once per process. */
+  xt_install_crash_handler();
 }
 
 void xt_gc_arm(void) { g_gc_armed = 1; }

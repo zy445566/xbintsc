@@ -58,7 +58,12 @@ export class GeneratorContext {
   readonly classGlobals = new Map<number, string>();
   readonly moduleGlobals = new Map<number, string>();
   readonly extraDeclarations = new Set<string>();
+  /** Static C strings used only as metadata (stack frame names/files). */
+  readonly staticStrings = new Map<string, string>();
+  /** Lazily built line-start indexes per source file, for stack frames. */
+  readonly lineStartsByFile = new Map<string, number[]>();
   stringCounter = 0;
+  staticCounter = 0;
   /**
    * How many `UnsupportedFeature` diagnostics the function currently being
    * emitted produced. Unsupported constructs can leave the generator with a
@@ -440,7 +445,51 @@ export class GeneratorContext {
   }
 
   /**
-   * The source file a node belongs to. Bundling merges every module into one
+   * Intern a string purely as static module data (no `xt_string` value), for
+   * metadata such as shadow-stack frame names and file paths.
+   */
+  internStatic(text: string): string {
+    const existing = this.staticStrings.get(text);
+    if (existing) return existing;
+    const label = `@.meta.${this.staticCounter++}`;
+    const bytes = utf8Bytes(text);
+    this.staticStrings.set(text, label);
+    this.globals.push(`${label} = private unnamed_addr constant [${bytes.length + 1} x i8] c"${escapeBytes(bytes)}\\00"`);
+    return label;
+  }
+
+  /** Strip a bundler-generated module prefix (`m1_`) from a display name. */
+  displayNameOf(name: string): string {
+    for (const prefix of this.sourceFile.modulePrefixes ?? []) {
+      if (name.startsWith(prefix) && name.length > prefix.length) return name.slice(prefix.length);
+    }
+    return name;
+  }
+
+  /** 1-based line of `node` in the module it came from (for stack frames). */
+  lineOf(node: Node): number {
+    const file = this.fileNameOf(node);
+    const text = this.sourceFile.moduleTexts?.get(file) ?? this.sourceFile.text;
+    let starts = this.lineStartsByFile.get(file);
+    if (!starts) {
+      starts = [0];
+      for (let index = 0; index < text.length; index++) {
+        if (text.charCodeAt(index) === 10) starts.push(index + 1);
+      }
+      this.lineStartsByFile.set(file, starts);
+    }
+    const offset = Math.max(0, Math.min(node.start, text.length));
+    let low = 0;
+    let high = starts.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >> 1;
+      if (starts[middle]! <= offset) low = middle;
+      else high = middle - 1;
+    }
+    return low + 1;
+  }
+
+  /** The source file a node belongs to. Bundling merges every module into one
    * `SourceFile` while keeping module-local offsets, so the origin map is what
    * keeps diagnostics pointing at the file the user actually wrote.
    */

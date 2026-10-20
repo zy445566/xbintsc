@@ -98,7 +98,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 缺失或行为不同 | 状态 |
 | --- | --- |
 | `String.prototype.normalize`、`structuredClone` | 🚫 |
-| `Error.stack` 采集 | 🚫（不采集） |
+| `Error.stack` 采集 | ⚠️ 函数级帧（名称/文件/行号），没有列号；生成器函数体不产生帧 |
 | `Object.getPrototypeOf({})` | ⚠️ 返回 `undefined`，而非 `Object.prototype` |
 | 全局 RegExp `lastIndex` | ⚠️ `/g`、`/y` 下 `test`/`exec` 忽略它 |
 | 稀疏数组空洞、数组越界 | ⚠️ 不区分空洞；越界读得 `undefined` |

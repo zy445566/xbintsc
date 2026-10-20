@@ -122,6 +122,24 @@ described in [../gui.md](../gui.md).
 Windows, embedding a PE icon needs `llvm-rc` or `windres`; `doctor` reports which
 one was found, and a missing one is only fatal when an icon was requested.
 
+## Reading a stack trace
+
+`Error.stack` is captured by codegen, not from the C runtime's native frames:
+every non-generator function pushes `{name, file, line}` on entry and pops it
+before returning. Frames look like
+
+```
+Error: boom
+    at inner (app.ts:12)
+    at module (app.ts:3)
+```
+
+Lines are function declaration lines, except that the innermost frame is moved
+to the `new Error(...)` line; there are no column numbers. Generator bodies are
+not tracked because they switch stacks. A fatal native signal prints
+`xbintsc: fatal signal …` followed by the same frames, so a crash without a
+debugger still shows which JavaScript functions were running.
+
 ## Build behaviour that looks wrong but is not
 
 ### The build printed `(cached)` and did nothing

@@ -75,6 +75,12 @@ small live set collects often and keeps a small resident set;
 `XT_GC_TRACE=1` prints one line per collection (heap and live-allocation counts,
 the next trigger and the live set by object kind) to stderr.
 
+Errors capture a JavaScript-level stack (function name, source file and a
+function-level line) from a shadow call stack maintained by generated code; the
+same frames are dumped on a fatal native signal. Function symbols keep their
+source names (`xt_fn_3_add`), so native debuggers and crash reports are readable
+too.
+
 ## Usage
 
 > **Before you start:** check the per-platform prerequisites in

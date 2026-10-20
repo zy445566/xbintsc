@@ -217,4 +217,17 @@ export interface SourceFileNode extends Node {
    * compile, where `fileName` is the only source.
    */
   readonly origins?: Map<object, string>;
+  /**
+   * For a bundled program: the original text of every module, keyed like
+   * {@link origins}. A node's `start` is relative to its module's text, so
+   * computing a frame's line number needs that text rather than the merged
+   * concatenation in `text`.
+   */
+  readonly moduleTexts?: Map<string, string>;
+  /**
+   * Bundler-generated symbol prefixes (`m0_`, `m1_`, …). Display names (stack
+   * frames, symbol suffixes) strip them so a bundled `fail()` still shows as
+   * `fail`, not `m1_fail`.
+   */
+  readonly modulePrefixes?: readonly string[];
 }

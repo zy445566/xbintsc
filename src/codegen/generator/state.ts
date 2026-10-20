@@ -50,6 +50,12 @@ export interface FunctionState {
   thisPtr?: string;
   /** Set when the function contains a `try`, forcing locals to live in memory. */
   usesTry: boolean;
+  /**
+   * True when the function pushes/pops a shadow-stack frame. Generator bodies
+   * are excluded: they switch stacks and can be suspended, so a global shadow
+   * stack would attribute their frames to the wrong caller.
+   */
+  trackFrames: boolean;
 }
 
 export interface CodegenResult {
@@ -300,6 +306,9 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i8* @xt_try_enter()",
   "declare i64 @xt_try_exception(i8*)",
   "declare void @xt_try_leave(i8*)",
+  "declare void @xt_stack_push(i8*, i8*, i32)",
+  "declare void @xt_stack_pop()",
+  "declare void @xt_stack_set_line(i32)",
   "declare void @xt_console_log(i32, i64*)",
   "declare void @xt_console_info(i32, i64*)",
   "declare void @xt_console_warn(i32, i64*)",

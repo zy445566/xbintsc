@@ -59,8 +59,13 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 `runtime/` 实现字符串、对象、数组、闭包、算术、比较、异常与类 Node 的
 `console.log` 打印。C 代码按功能拆分到多个翻译单元（`xt_alloc.c`、`xt_values.c`、
 `xt_containers.c`、`xt_stdlib.c`、`xt_builtins.c`、`xt_io.c`），共享私有头
-`runtime/rt_internal.h`。它使用 bump arena 且永不释放 —— 垃圾回收被有意推迟并
-隔离在 `xt_alloc` 之后，因此可以在不改动编译器的前提下替换。
+`runtime/rt_internal.h`。堆对象由 `xt_alloc` 分配，由非移动标记-清扫回收器回收：
+根包括显式值槽（模块全局、原型缓存）、运行时根提供者（事件循环、Promise 微任务队列）
+与对活动 C 栈的保守扫描。存活堆超过阈值后自动回收（`XT_GC_THRESHOLD` 可固定阈值），
+也可按需触发；每次回收后阈值变为存活堆的两倍（下限 1 MiB），`XT_GC_TRACE=1` 会为
+每次回收打印一行。错误对象会从生成代码维护的影子调用栈采集 JS 级堆栈（函数名、源文件
+与函数级行号）；原生致命信号也会打印同一组帧。函数符号保留源码名称（如
+`xt_fn_3_add`），原生调试器与崩溃报告同样可读。
 
 ## 使用方法
 

@@ -99,6 +99,10 @@ typedef struct {
   uint8_t frozen;
   uint8_t is_array_base;
   uint16_t reserved2;
+  /* Captured `Error.stack` for XT_OBJECT_KIND_ERROR, XT_UNDEFINED otherwise.
+   * Deliberately not a property: `Object.keys`, `for...in` and JSON.stringify
+   * must not see it, while `error.stack` returns it through `xt_get`. */
+  xt_value error_stack;
 } xt_object;
 
 typedef struct {
@@ -284,6 +288,10 @@ typedef struct xt_try_frame {
   jmp_buf buf;
   struct xt_try_frame *prev;
   xt_value exception;
+  /* Shadow-stack depth when the protected region was entered; restored when
+   * the region is left (normally or through a throw) so frames from unwound
+   * calls do not leak into later stack traces. */
+  int32_t stack_depth;
 } xt_try_frame;
 /* Save a try frame with clang's `_setjmp` built-in.
  *
@@ -299,6 +307,23 @@ typedef struct xt_try_frame {
 #define xt_try_setjmp(framePtr) _setjmp(((xt_try_frame *)(framePtr))->buf)
 void *xt_try_mark(void);
 void xt_try_restore(void *mark);
+
+/* -- shadow call stack and diagnostics (xt_io/exception.inc) --------------- */
+/* Generated code pushes a frame on entry and pops it before returning, so an
+ * Error can capture a JavaScript-level stack without any debug metadata. Frame
+ * strings live in the module's static data and are never freed. */
+void xt_stack_push(const char *name, const char *file, int32_t line);
+void xt_stack_pop(void);
+int32_t xt_stack_depth(void);
+void xt_stack_set_line(int32_t line);
+/* Restore the depth saved by a try frame after unwinding inner calls. */
+void xt_stack_trim(int32_t depth);
+/* Format `Name: message` plus the current frames as an `Error.stack` string. */
+xt_value xt_stack_capture(const char *name, const char *message);
+/* The captured stack of an error object, or XT_UNDEFINED. */
+xt_value xt_error_stack(xt_value error);
+/* Best-effort stack dump on a fatal native signal / unhandled exception. */
+void xt_install_crash_handler(void);
 
 /* -- collection / date / regexp representations --------------------------- */
 typedef struct {

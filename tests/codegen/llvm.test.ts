@@ -31,6 +31,14 @@ describe("codegen", () => {
     expect(ir).toContain(numberLiteral(42));
   });
 
+  it("emits shadow-stack frames with readable function symbols", () => {
+    const { ir } = compileToIr("function add(a: number, b: number) { return a + b; }\nadd(1, 2);");
+    expect(ir).toMatch(/@xt_fn_\d+_add/);
+    expect(ir).toContain("call void @xt_stack_push");
+    expect(ir).toContain("call void @xt_stack_pop");
+    expect(ir).toContain("@.meta.");
+  });
+
   it("emits string literals as private globals and allocates them at runtime", () => {
     const { ir } = compileToIr('console.log("hello");');
     expect(ir).toContain('@.str.0 = private unnamed_addr constant');

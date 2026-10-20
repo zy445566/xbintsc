@@ -50,6 +50,15 @@ xt_value xt_error_prototype(xt_value nameValue) {
   return xt_error_proto_for(name);
 }
 
+/* Capture `Error.stack` into the object's private field (not a property, so it
+ * stays out of Object.keys/JSON.stringify, like V8's own non-enumerable stack). */
+static void xt_error_capture_stack(xt_value error, const char *name, xt_value message) {
+  if (!XT_IS_OBJECT(error)) return;
+  xt_string *text = xt_as_string(xt_to_string(message));
+  xt_value stack = xt_stack_capture(name, text ? text->data : "");
+  ((xt_object *)XT_GET_PTR(error))->error_stack = stack;
+}
+
 static xt_value xt_make_error(const char *name, int32_t argc, xt_value *argv) {
   if (!xt_error_is_family(name)) name = "Error";
   xt_value error = xt_object_new();
@@ -64,9 +73,10 @@ static xt_value xt_make_error(const char *name, int32_t argc, xt_value *argv) {
   } else {
     message = xt_arg_at(argc, argv, 0);
   }
+  xt_value messageValue = message == XT_UNDEFINED ? xt_string_from_cstr("") : message;
   xt_object_set(error, xt_string_from_cstr("name"), xt_string_from_cstr(name));
-  xt_object_set(error, xt_string_from_cstr("message"),
-                message == XT_UNDEFINED ? xt_string_from_cstr("") : message);
+  xt_object_set(error, xt_string_from_cstr("message"), messageValue);
+  xt_error_capture_stack(error, name, messageValue);
   return error;
 }
 
@@ -159,6 +169,11 @@ xt_value xt_error_init(xt_value thisValue, xt_value nameValue, int32_t argc,
                        xt_value *argv) {
   const char *name = XT_IS_STRING(nameValue) ? xt_string_data(nameValue) : "Error";
   if (!xt_error_is_family(name)) name = "Error";
+  /* `class MyError extends Error` allocates a plain object first; mark it as an
+   * Error so `.stack` and the error-specific property access apply. */
+  if (XT_IS_OBJECT(thisValue)) {
+    ((xt_object *)XT_GET_PTR(thisValue))->header.kind = XT_OBJECT_KIND_ERROR;
+  }
   xt_object_set(thisValue, xt_string_from_cstr("name"), xt_string_from_cstr(name));
   xt_value message;
   if (strcmp(name, "AggregateError") == 0) {
@@ -167,7 +182,8 @@ xt_value xt_error_init(xt_value thisValue, xt_value nameValue, int32_t argc,
   } else {
     message = xt_arg_at(argc, argv, 0);
   }
-  xt_object_set(thisValue, xt_string_from_cstr("message"),
-                message == XT_UNDEFINED ? xt_string_from_cstr("") : message);
+  xt_value messageValue = message == XT_UNDEFINED ? xt_string_from_cstr("") : message;
+  xt_object_set(thisValue, xt_string_from_cstr("message"), messageValue);
+  xt_error_capture_stack(thisValue, name, messageValue);
   return thisValue;
 }

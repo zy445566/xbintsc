@@ -26,6 +26,8 @@ static xt_value xt_error_proto_for(const char *name) {
                   xt_string_from_cstr("Error"));
     xt_object_set(xt_error_root_proto, xt_string_from_cstr("message"),
                   xt_string_from_cstr(""));
+    xt_value constructor = xt_error_constructor(xt_string_from_cstr("Error"));
+    xt_object_set(xt_error_root_proto, xt_string_from_cstr("constructor"), constructor);
   }
   if (strcmp(name, "Error") == 0) return xt_error_root_proto;
   xt_value key = xt_string_from_cstr(name);
@@ -41,6 +43,8 @@ static xt_value xt_error_proto_for(const char *name) {
   xt_object_set(proto, xt_string_from_cstr("name"), key);
   xt_object_set(proto, xt_string_from_cstr("message"), xt_string_from_cstr(""));
   xt_object_set(registry, key, proto);
+  xt_value constructor = xt_error_constructor(key);
+  xt_object_set(proto, xt_string_from_cstr("constructor"), constructor);
   return proto;
 }
 
@@ -160,6 +164,13 @@ xt_value xt_uri_error_ctor(int32_t argc, xt_value *argv) {
 
 xt_value xt_aggregate_error_ctor(int32_t argc, xt_value *argv) {
   return xt_make_error("AggregateError", argc, argv);
+}
+
+/* Dispatch used by the first-class constructor factory (`const E = TypeError`). */
+xt_value xt_error_ctor_by_name(xt_value nameValue, int32_t argc, xt_value *argv) {
+  const char *name = XT_IS_STRING(nameValue) ? xt_string_data(nameValue) : "Error";
+  if (!xt_error_is_family(name)) name = "Error";
+  return xt_make_error(name, argc, argv);
 }
 
 /* `super(message)` inside a subclass of the builtin Error family: initialize

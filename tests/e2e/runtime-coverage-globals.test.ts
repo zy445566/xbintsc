@@ -48,6 +48,53 @@ describeE2E(
       ]);
     });
 
+    it("exposes first-class built-in constructors and Object.prototype", () => {
+      const source = `
+        const A = Array;
+        console.log(typeof A, A === Array, A.name, A.length);
+        const a = new A(1, 2, 3);
+        console.log(a.length, a.join(","), a instanceof A, A.isArray(a));
+        console.log(Object.getPrototypeOf({}) === Object.prototype);
+        console.log(Object.prototype.hasOwnProperty.call({x:1}, "x"), Object.prototype.hasOwnProperty.call({x:1}, "y"));
+        const F = Function;
+        function f() {}
+        console.log(f instanceof F, Object.getPrototypeOf([]) === Array.prototype);
+        const M = Map;
+        const m = new M();
+        m.set("k", 1);
+        console.log(m instanceof M, m.get("k"), Object.getPrototypeOf(m) === M.prototype);
+        const E = TypeError;
+        const e = new E("bad");
+        console.log(e instanceof E, e instanceof Error, e.name, e.message);
+        const U = Uint8Array;
+        const u = new U(2);
+        u[0] = 300;
+        console.log(u instanceof U, u[0], U.BYTES_PER_ELEMENT);
+        const S = String;
+        const N = Number;
+        console.log(S.fromCharCode(65), S(42), N.isInteger(3), N.MAX_SAFE_INTEGER);
+        const Sym = Symbol;
+        console.log(Sym.prototype.constructor === Sym, Sym.iterator === Symbol.iterator);
+        console.log(Array.isArray(Array.prototype), ({}).constructor === Object, [].constructor === Array);
+        console.log(Object.getPrototypeOf(Object.prototype) === null);
+      `;
+      const stdout = h.runProgram(source, { extensions: true, timeout: TIMEOUT });
+      expect(stdout.split("\n")).toEqual([
+        "function true Array 1",
+        "3 1,2,3 true true",
+        "true",
+        "true false",
+        "true true",
+        "true 1 true",
+        "true true TypeError bad",
+        "true 44 1",
+        "A 42 true 9007199254740991",
+        "true true",
+        "true true true",
+        "true",
+      ]);
+    });
+
     it("uses the console surface, inspect and base64 helpers", () => {
       const source = `
         console.count("x");

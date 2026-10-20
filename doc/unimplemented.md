@@ -101,6 +101,7 @@ None known at the expression level.
 - `JSON.parse` / `JSON.stringify`
 - `Date`, `RegExp` (POSIX ERE subset with capture groups), `Map`, `Set`, `Promise`, `BigInt`
 - `Array` statics (`isArray/of/from`), `Object` statics, `Number` statics, `String` statics (`fromCharCode` / `fromCodePoint` / `raw`)
+- Built-in constructors as first-class values (`const A = Array`, `new A(...)`, `A.isArray`, `x instanceof A`) and `Object.prototype` (`hasOwnProperty`, `toString`, `valueOf`, `isPrototypeOf`, `propertyIsEnumerable`, `__proto__`), with `Object.getPrototypeOf({}) === Object.prototype`
 - `Error` family (`Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, `AggregateError`): `new`, `instanceof`, `extends`, `String(err)` / `err.toString()` and `.stack`
 
 ### 3.3 Still unimplemented
@@ -133,7 +134,7 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 | `keys` / `values` / `entries` | ~ return arrays, not iterator objects |
 | `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` semantics | ✗ no backing buffer type; `.byteOffset` is always 0 |
 | `BigInt64Array` / `BigUint64Array` | ✗ not implemented |
-| `instanceof` built-in constructors | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` family / typed arrays are recognised by name; the constructors are still not first-class values (`const A = Array` fails) |
+| `instanceof` built-in constructors | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` family / typed arrays are recognised by name **and through a first-class constructor value** (`const A = Array; x instanceof A`); constructors can be stored, passed, aliased, called and used with `new` |
 | Typed-array views over a `Buffer` / `ArrayBuffer` | ✗ constructors copy from a length / array-like / typed array only |
 
 ---
@@ -175,6 +176,7 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 | Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ implemented (the bound closure does not track partial-argument `length`) |
 | `fn.name` / `fn.length` | ✓ | ✓ implemented (inferred from the declaration / assignment / property key; bound functions use `"bound ..."` and adjusted arity) |
+| First-class built-in constructors (`const A = Array`, `new A(...)`, `typeof Map`) | ✓ | ✓ constructors are ordinary function values with `name`/`length`, a `prototype`, their statics (`A.isArray`) and the full `instanceof` protocol |
 | First-class built-in methods (`typeof arr.map`, `const f = arr.push`, `obj.method?.()`) | ✓ | ✓ implemented as *unbound* method values: reading `arr.map` yields a function, `arr.map?.(cb)` and `obj.method?.()` bind the receiver as `this`, and a detached call (`const f = arr.map; f(cb)`) throws exactly like JavaScript. Method `name`/`length` are exposed |
 | `fn.toString()` | ~ | returns a native-style placeholder (`function name() { [native code] }`) instead of the original source text |
 
@@ -223,7 +225,6 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Item | Deviation |
 | --- | --- |
 | String `length` | Counted in UTF-8 bytes, not UTF-16 code units (`"\u00e9".length` reports 1 instead of 2; `"\u{1F600}".length` reports 4 instead of 2; `codePointAt` likewise differs) |
-| `Object.getPrototypeOf({})` | Returns `undefined` instead of the `Object.prototype` object |
 | Global RegExp `lastIndex` | `test` / `exec` do not advance or honour a caller-set `lastIndex` for `/g` / `/y` regexes |
 | String `normalize` / `structuredClone` | Not implemented |
 | First-class built-in methods | Implemented as unbound method values (see section 5); `fn.toString()` returns a placeholder rather than source text |
@@ -281,7 +282,7 @@ Unimplemented (type system): type checking, generic instantiation, assertion
                              semantics, optional-chaining narrowing
 
 Unimplemented (runtime): a real async event loop, UTF-16 string length,
-                         Object.prototype identity, global-regex lastIndex
+                         global-regex lastIndex
 
 Unimplemented (engineering): type checker
 ```

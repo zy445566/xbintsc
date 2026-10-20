@@ -43,6 +43,10 @@ static xt_value xt_ta_proto(int kind) {
   xt_ta_define(proto, "keys", (void *)xt_ta_method_keys);
   xt_ta_define(proto, "values", (void *)xt_ta_method_values);
   xt_ta_define(proto, "entries", (void *)xt_ta_method_entries);
+  xt_value constructor = xt_builtin_constructor(xt_string_from_cstr(xt_ta_names[kind]));
+  if (constructor != XT_UNDEFINED) {
+    xt_object_set(proto, xt_string_from_cstr("constructor"), constructor);
+  }
   return proto;
 }
 
@@ -139,4 +143,39 @@ XT_TA_CTOR(u32, XT_TA_U32)
 XT_TA_CTOR(i32, XT_TA_I32)
 XT_TA_CTOR(f32, XT_TA_F32)
 XT_TA_CTOR(f64, XT_TA_F64)
+
+/* Dispatch by constructor name, used when a typed-array constructor is a
+ * first-class value (`const T = Uint8Array; new T(4)`). */
+static int xt_ta_kind_from_name(const char *name) {
+  if (!name) return -1;
+  if (strcmp(name, "Uint8Array") == 0) return XT_TA_U8;
+  if (strcmp(name, "Int8Array") == 0) return XT_TA_I8;
+  if (strcmp(name, "Uint8ClampedArray") == 0) return XT_TA_U8C;
+  if (strcmp(name, "Uint16Array") == 0) return XT_TA_U16;
+  if (strcmp(name, "Int16Array") == 0) return XT_TA_I16;
+  if (strcmp(name, "Uint32Array") == 0) return XT_TA_U32;
+  if (strcmp(name, "Int32Array") == 0) return XT_TA_I32;
+  if (strcmp(name, "Float32Array") == 0) return XT_TA_F32;
+  if (strcmp(name, "Float64Array") == 0) return XT_TA_F64;
+  return -1;
+}
+
+xt_value xt_typed_array_ctor_by_name(xt_value nameValue, int32_t argc, xt_value *argv) {
+  int kind = xt_ta_kind_from_name(XT_IS_STRING(nameValue) ? xt_string_data(nameValue) : NULL);
+  if (kind < 0) return XT_UNDEFINED;
+  return xt_ta_ctor_impl(kind, argc, argv);
+}
+
+xt_value xt_typed_array_static_by_name(xt_value nameValue, xt_value method, int32_t argc,
+                                       xt_value *argv) {
+  int kind = xt_ta_kind_from_name(XT_IS_STRING(nameValue) ? xt_string_data(nameValue) : NULL);
+  if (kind < 0) return XT_UNDEFINED;
+  return xt_ta_static_impl(kind, method, argc, argv);
+}
+
+xt_value xt_typed_array_prototype(xt_value nameValue) {
+  int kind = xt_ta_kind_from_name(XT_IS_STRING(nameValue) ? xt_string_data(nameValue) : NULL);
+  if (kind < 0) return XT_UNDEFINED;
+  return xt_ta_proto(kind);
+}
 

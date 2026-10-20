@@ -14,7 +14,149 @@ static void xt_object_reserve(xt_object *obj, uint32_t needed) {
   obj->capacity = capacity;
 }
 
-xt_value xt_object_new(void) { return xt_object_new_with_proto(XT_UNDEFINED); }
+xt_value xt_object_new(void) { return xt_object_new_with_proto(xt_object_prototype()); }
+
+/* ------------------------------------------------------------------------- */
+/* Object.prototype                                                          */
+/* ------------------------------------------------------------------------- */
+
+/* `Object.prototype` is the root of the ordinary object prototype chain. Every
+ * plain object created by `xt_object_new` inherits from it, which is what makes
+ *
+ *     Object.getPrototypeOf({}) === Object.prototype
+ *     Object.prototype.hasOwnProperty.call(obj, key)
+ *
+ * hold. It is created lazily (and exactly once) with a null prototype, so the
+ * root itself terminates the chain. */
+static xt_value xt_object_proto_root = XT_UNDEFINED;
+static int xt_object_proto_ready = 0;
+static xt_value xt_function_proto_root = XT_UNDEFINED;
+static int xt_function_proto_ready = 0;
+
+static const char *xt_object_tag_of(xt_value value) {
+  if (value == XT_UNDEFINED) return "Undefined";
+  if (value == XT_NULL) return "Null";
+  if (XT_IS_ARRAY(value)) return "Array";
+  if (XT_IS_FUNCTION(value)) return "Function";
+  if (XT_IS_STRING(value)) return "String";
+  if (XT_IS_BIGINT(value)) return "BigInt";
+  if (XT_IS_NUMBER(value)) return "Number";
+  if (value == XT_TRUE || value == XT_FALSE) return "Boolean";
+  if (XT_IS_OBJECT(value)) {
+    switch (((xt_object *)XT_GET_PTR(value))->header.kind) {
+      case XT_OBJECT_KIND_ERROR: return "Error";
+      case XT_OBJECT_KIND_MAP: return "Map";
+      case XT_OBJECT_KIND_SET: return "Set";
+      case XT_OBJECT_KIND_DATE: return "Date";
+      case XT_OBJECT_KIND_REGEXP: return "RegExp";
+      case XT_OBJECT_KIND_PROMISE: return "Promise";
+      case XT_OBJECT_KIND_SYMBOL: return "Symbol";
+      case XT_OBJECT_KIND_GENERATOR: return "Generator";
+      default: return "Object";
+    }
+  }
+  return "Object";
+}
+
+/* Backing trampoline for the methods on `Object.prototype`. The method name
+ * travels in environment slot 0; `this` is the receiver, exactly like a
+ * JavaScript method. */
+static xt_value xt_object_proto_method(xt_value thisValue, xt_value env, int32_t argc,
+                                       xt_value *argv) {
+  xt_value nameValue = xt_closure_env(env, 0);
+  const char *name = xt_string_data(nameValue);
+  if (!name) return XT_UNDEFINED;
+  if (strcmp(name, "hasOwnProperty") == 0) {
+    if (thisValue == XT_UNDEFINED || thisValue == XT_NULL) {
+      xt_throw(xt_string_from_cstr("TypeError: Cannot convert undefined or null to object"));
+    }
+    return xt_object_has_own(thisValue, xt_arg_at(argc, argv, 0));
+  }
+  if (strcmp(name, "propertyIsEnumerable") == 0) {
+    if (thisValue == XT_UNDEFINED || thisValue == XT_NULL) {
+      xt_throw(xt_string_from_cstr("TypeError: Cannot convert undefined or null to object"));
+    }
+    /* Enumerability is not tracked; every own property is enumerable. */
+    return xt_object_has_own(thisValue, xt_arg_at(argc, argv, 0));
+  }
+  if (strcmp(name, "toString") == 0) {
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "[object %s]", xt_object_tag_of(thisValue));
+    return xt_string_from_cstr(buffer);
+  }
+  if (strcmp(name, "valueOf") == 0) return thisValue;
+  if (strcmp(name, "isPrototypeOf") == 0) {
+    xt_value cursor = xt_object_get_prototype(xt_arg_at(argc, argv, 0));
+    while (cursor != XT_UNDEFINED && cursor != XT_NULL) {
+      if (cursor == thisValue) return XT_TRUE;
+      cursor = xt_object_get_prototype(cursor);
+    }
+    return XT_FALSE;
+  }
+  if (strcmp(name, "__proto__") == 0) return xt_object_get_prototype(thisValue);
+  return XT_UNDEFINED;
+}
+
+/* `__proto__ = value`: ordinary assignment through the inherited setter. */
+static xt_value xt_object_proto_setter(xt_value thisValue, xt_value env, int32_t argc,
+                                       xt_value *argv) {
+  (void)env;
+  (void)argc;
+  xt_value proto = xt_arg_at(argc, argv, 0);
+  if (proto == XT_NULL || XT_IS_OBJECT(proto) || XT_IS_ARRAY(proto) || XT_IS_FUNCTION(proto)) {
+    xt_object_set_prototype(thisValue, proto);
+  }
+  return XT_UNDEFINED;
+}
+
+static xt_value xt_object_proto_define(xt_value proto, const char *name, int32_t arity) {
+  xt_value env[1] = {xt_string_from_cstr(name)};
+  xt_value closure = xt_closure_new((void *)xt_object_proto_method, 1, env);
+  xt_function_set_metadata(closure, env[0], arity);
+  xt_object_set(proto, env[0], closure);
+  return closure;
+}
+
+xt_value xt_function_prototype(void) {
+  if (xt_function_proto_ready) return xt_function_proto_root;
+  xt_function_proto_ready = 1;
+  xt_function_proto_root = xt_object_new_with_proto(xt_object_prototype());
+  xt_gc_add_root(&xt_function_proto_root);
+  /* `Array.constructor === Function` (every function inherits from here). The
+   * factory sees the ready flag, so this does not recurse. */
+  xt_value constructor = xt_builtin_constructor(xt_string_from_cstr("Function"));
+  if (constructor != XT_UNDEFINED) {
+    xt_object_set(xt_function_proto_root, xt_string_from_cstr("constructor"), constructor);
+  }
+  return xt_function_proto_root;
+}
+
+xt_value xt_object_prototype(void) {
+  if (xt_object_proto_ready) return xt_object_proto_root;
+  xt_object_proto_ready = 1;
+  xt_object_proto_root = xt_object_new_with_proto(XT_NULL);
+  xt_gc_add_root(&xt_object_proto_root);
+  xt_object_proto_define(xt_object_proto_root, "hasOwnProperty", 1);
+  xt_object_proto_define(xt_object_proto_root, "propertyIsEnumerable", 1);
+  xt_object_proto_define(xt_object_proto_root, "isPrototypeOf", 1);
+  xt_object_proto_define(xt_object_proto_root, "toString", 0);
+  xt_object_proto_define(xt_object_proto_root, "valueOf", 0);
+  xt_value protoEnv[1] = {xt_string_from_cstr("__proto__")};
+  xt_value getter = xt_closure_new((void *)xt_object_proto_method, 1, protoEnv);
+  xt_value setter = xt_closure_new((void *)xt_object_proto_setter, 0, NULL);
+  xt_function_set_metadata(getter, protoEnv[0], 0);
+  xt_function_set_metadata(setter, protoEnv[0], 1);
+  xt_object_define_getter(xt_object_proto_root, protoEnv[0], getter);
+  xt_object_define_setter(xt_object_proto_root, protoEnv[0], setter);
+  /* `({}).constructor === Object`. The constructor factory calls back into
+   * `xt_object_prototype` while building the Object function, but the ready
+   * flag is already set and the root exists. */
+  xt_value constructor = xt_builtin_constructor(xt_string_from_cstr("Object"));
+  if (constructor != XT_UNDEFINED) {
+    xt_object_set(xt_object_proto_root, xt_string_from_cstr("constructor"), constructor);
+  }
+  return xt_object_proto_root;
+}
 
 xt_value xt_object_new_with_proto(xt_value proto) {
   xt_object *obj = (xt_object *)xt_alloc(sizeof(xt_object), XT_OBJECT_KIND_OBJECT);
@@ -32,7 +174,7 @@ xt_object *xt_as_object(xt_value value) {
   if (XT_IS_FUNCTION(value)) {
     /* Functions carry their own property bag (used for static members). */
     xt_function *fn = (xt_function *)XT_GET_PTR(value);
-    if (!fn->properties) fn->properties = (xt_object *)XT_GET_PTR(xt_object_new_with_proto(XT_UNDEFINED));
+    if (!fn->properties) fn->properties = (xt_object *)XT_GET_PTR(xt_object_new_with_proto(xt_function_prototype()));
     return fn->properties;
   }
   return NULL;
@@ -224,12 +366,38 @@ xt_value xt_object_define_setter(xt_value value, xt_value key, xt_value setter) 
 }
 
 xt_value xt_object_get_prototype(xt_value value) {
-  xt_object *obj = xt_as_object(value);
-  if (obj) return obj->prototype;
+  if (XT_IS_ARRAY(value)) return ((xt_array *)XT_GET_PTR(value))->prototype;
+  if (XT_IS_FUNCTION(value)) {
+    /* A function's [[Prototype]] is the prototype of its property bag
+     * (`Function.prototype` unless `Object.setPrototypeOf` changed it). */
+    xt_object *bag = xt_as_object(value);
+    return bag ? bag->prototype : XT_UNDEFINED;
+  }
+  if (XT_IS_OBJECT(value)) {
+    xt_object *obj = (xt_object *)XT_GET_PTR(value);
+    switch (obj->header.kind) {
+      case XT_OBJECT_KIND_OBJECT:
+      case XT_OBJECT_KIND_ERROR:
+        return obj->prototype;
+      case XT_OBJECT_KIND_SYMBOL:
+      case XT_OBJECT_KIND_MAP:
+      case XT_OBJECT_KIND_SET:
+      case XT_OBJECT_KIND_DATE:
+      case XT_OBJECT_KIND_REGEXP:
+      case XT_OBJECT_KIND_PROMISE:
+        return xt_builtin_prototype_for_kind(obj->header.kind);
+      default:
+        return XT_UNDEFINED;
+    }
+  }
   return XT_UNDEFINED;
 }
 
 xt_value xt_object_set_prototype(xt_value value, xt_value proto) {
+  if (XT_IS_ARRAY(value)) {
+    ((xt_array *)XT_GET_PTR(value))->prototype = proto;
+    return value;
+  }
   xt_object *obj = xt_as_object(value);
   if (obj && !obj->frozen) obj->prototype = proto;
   return value;
@@ -247,8 +415,33 @@ int xt_object_is_frozen(xt_value value) {
 }
 
 xt_value xt_object_has_own(xt_value value, xt_value key) {
+  if (XT_IS_ARRAY(value)) {
+    xt_array *array = (xt_array *)XT_GET_PTR(value);
+    xt_value propertyKey = xt_to_property_key(key);
+    if (XT_IS_STRING(propertyKey)) {
+      xt_string *k = xt_as_string(propertyKey);
+      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
+      uint32_t index = 0;
+      if (xt_key_is_array_index(k, &index)) return xt_bool(index < array->length);
+    }
+    return xt_bool(XT_IS_OBJECT(array->extra) &&
+                   xt_object_find((xt_object *)XT_GET_PTR(array->extra), propertyKey));
+  }
+  if (XT_IS_STRING(value)) {
+    xt_string *string = xt_as_string(value);
+    if (xt_is_symbol(key)) return XT_FALSE;
+    xt_string *k = xt_as_string(xt_to_string(key));
+    if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
+    uint32_t index = 0;
+    return xt_bool(xt_key_is_array_index(k, &index) && index < string->length);
+  }
   xt_object *obj = xt_as_object(value);
   if (!obj) return XT_FALSE;
+  /* Map/Set/Date/RegExp/Promise/Symbol use their own struct layout and have no
+   * property bag; interpreting them as `xt_object` would read past the end. */
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+    return XT_FALSE;
+  }
   return xt_bool(xt_object_find(obj, xt_to_property_key(key)) != NULL);
 }
 
@@ -267,6 +460,9 @@ xt_value xt_object_from_entries(xt_value entries) {
 xt_value xt_object_has(xt_value value, xt_value key) {
   if (!XT_IS_OBJECT(value)) return XT_FALSE;
   xt_object *obj = (xt_object *)XT_GET_PTR(value);
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+    return XT_FALSE;
+  }
   return xt_bool(xt_object_find(obj, xt_to_property_key(key)) != NULL);
 }
 

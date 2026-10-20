@@ -286,11 +286,19 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     if (kind != XT_OBJECT_KIND_OBJECT && kind != XT_OBJECT_KIND_FUNCTION) {
       xt_value result = xt_ext_container_method(target, method, argc, argv, &handled);
       if (handled) return result;
+      /* Containers keep their methods in dedicated C dispatch tables, but
+       * still inherit `Object.prototype` (`new Map().toString()`). */
+      xt_value inherited = xt_get(target, name);
+      if (XT_IS_FUNCTION(inherited)) return xt_call_with_this(inherited, target, argc, argv);
     }
     xt_value fn = xt_object_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
     xt_value result = xt_ext_object_method(target, method, argc, argv, &handled);
     if (handled) return result;
+    /* Inherited Object.prototype methods on containers without a property bag
+     * (`new Map().toString()`, ...). */
+    xt_value inherited = xt_get(target, name);
+    if (XT_IS_FUNCTION(inherited)) return xt_call_with_this(inherited, target, argc, argv);
     {
       char message[256];
       snprintf(message, sizeof(message), "TypeError: object has no callable method '%s'", method);
@@ -333,6 +341,13 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     }
     xt_value fn = xt_object_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
+    /* Statics of a first-class built-in constructor (`const A = Array;
+     * A.isArray(x)`). */
+    xt_value builtinStatic = xt_builtin_static_value(target, name);
+    if (builtinStatic != XT_UNDEFINED) {
+      if (XT_IS_FUNCTION(builtinStatic)) return xt_call_with_this(builtinStatic, target, argc, argv);
+      return builtinStatic;
+    }
     if (strcmp(method, "toString") == 0) {
       /* Source text is not retained; report a native-style representation. */
       xt_function *self = (xt_function *)XT_GET_PTR(target);

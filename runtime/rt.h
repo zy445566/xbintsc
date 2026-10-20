@@ -163,6 +163,10 @@ xt_value xt_not(xt_value a);
 /* -- objects -------------------------------------------------------------- */
 xt_value xt_object_new(void);
 xt_value xt_object_new_with_proto(xt_value proto);
+/** The shared `Object.prototype` object (root of the ordinary object chain). */
+xt_value xt_object_prototype(void);
+/** The shared `Function.prototype` object. */
+xt_value xt_function_prototype(void);
 xt_value xt_object_get(xt_value obj, xt_value key);
 xt_value xt_object_get_prototype(xt_value obj);
 xt_value xt_object_set_prototype(xt_value obj, xt_value proto);
@@ -193,6 +197,17 @@ xt_value xt_symbol_static(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_symbol_get(xt_value name);
 
 /* -- standard library dispatch -------------------------------------------- */
+/* -- built-in constructors as first-class values -------------------------- */
+/** The first-class value of a built-in constructor (`Array`, `Map`, ...). */
+xt_value xt_builtin_constructor(xt_value name);
+/** A static method/value of a first-class constructor (`A.isArray`, ...). */
+xt_value xt_builtin_static_value(xt_value ctor, xt_value key);
+/** The constructor prototype for a runtime object kind (`Map` -> Map.prototype). */
+xt_value xt_builtin_prototype_for_kind(int32_t kind);
+/** `Array(...)` / `new Array(...)`. */
+xt_value xt_array_ctor(int32_t argc, xt_value *argv);
+/** `Object(...)` / `new Object(...)`. */
+xt_value xt_object_ctor(int32_t argc, xt_value *argv);
 /** Call `target[name](...)`, falling back to built-in Array/String methods. */
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv);
 /** Implements `Math.<name>(...)`; the name is interned by the compiler. */
@@ -207,6 +222,14 @@ xt_value xt_object_static(xt_value name, int32_t argc, xt_value *argv);
 /** Implements `Number.<name>(...)` / `String.<name>(...)` statics. */
 xt_value xt_number_static(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_string_static(xt_value name, int32_t argc, xt_value *argv);
+/** Typed-array constructor/static/prototype dispatch by constructor name. */
+xt_value xt_typed_array_ctor_by_name(xt_value name, int32_t argc, xt_value *argv);
+xt_value xt_typed_array_static_by_name(xt_value name, xt_value method, int32_t argc, xt_value *argv);
+xt_value xt_typed_array_prototype(xt_value name);
+/** Error-family construction and prototype lookup by constructor name. */
+xt_value xt_error_ctor_by_name(xt_value name, int32_t argc, xt_value *argv);
+xt_value xt_error_prototype(xt_value name);
+xt_value xt_error_constructor(xt_value name);
 /** Map / Set constructors and dispatch. */
 xt_value xt_map_ctor(int32_t argc, xt_value *argv);
 xt_value xt_set_ctor(int32_t argc, xt_value *argv);
@@ -314,6 +337,8 @@ extern char **xt_program_argv;
 
 /* -- arrays --------------------------------------------------------------- */
 xt_value xt_array_new(int32_t count, xt_value *items);
+/** The shared `Array.prototype` array. */
+xt_value xt_array_prototype(void);
 xt_value xt_array_get(xt_value arr, xt_value index);
 xt_value xt_array_set(xt_value arr, xt_value index, xt_value value);
 xt_value xt_array_push(xt_value arr, xt_value value);

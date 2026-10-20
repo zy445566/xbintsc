@@ -93,13 +93,14 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 已实现：`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`/`WeakSet`、
 `Symbol`、`Error` 家族、`BigInt`、`Array`/`String`/`Number`/`Object` 方法、TypedArray、
 带捕获组的 `String.prototype.match`/`split`/`replace`、不可变数组方法
-（`toReversed`、`toSorted`、`toSpliced`、`with`）、全局 URI 函数。
+（`toReversed`、`toSorted`、`toSpliced`、`with`）、全局 URI 函数、
+一等公民内建构造器（`const A = Array; new A(...)`、`A.isArray`、`x instanceof A`）
+与 `Object.prototype`（`Object.getPrototypeOf({}) === Object.prototype`）。
 
 | 缺失或行为不同 | 状态 |
 | --- | --- |
 | `String.prototype.normalize`、`structuredClone` | 🚫 |
 | `Error.stack` 采集 | ⚠️ 函数级帧（名称/文件/行号），没有列号；生成器函数体不产生帧 |
-| `Object.getPrototypeOf({})` | ⚠️ 返回 `undefined`，而非 `Object.prototype` |
 | 全局 RegExp `lastIndex` | ⚠️ `/g`、`/y` 下 `test`/`exec` 忽略它 |
 | 稀疏数组空洞、数组越界 | ⚠️ 不区分空洞；越界读得 `undefined` |
 

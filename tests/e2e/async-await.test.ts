@@ -52,18 +52,27 @@ console.log("before");`;
   });
 
   it("runs independent async functions concurrently", () => {
+    /* Do not assert which timer fires first: Windows timer granularity can
+     * batch 1ms and 8ms deadlines into the same reactor turn. Instead observe
+     * that both bodies reach their `await` before either resumes (peak 2),
+     * and that `Promise.all` keeps the array order regardless of completion
+     * order. */
     const source = `${prelude}
-const order: string[] = [];
-async function task(name: string, ms: number): Promise<void> {
+let active = 0;
+let peak = 0;
+async function task(ms: number): Promise<number> {
+  active++;
+  if (active > peak) peak = active;
   await sleep(ms);
-  order.push(name);
+  active--;
+  return ms;
 }
 async function main(): Promise<void> {
-  await Promise.all([task("slow", 8), task("fast", 1)]);
-  console.log(order.join(","));
+  const results = await Promise.all([task(8), task(1)]);
+  console.log("peak", peak, "results", results.join(","));
 }
 main();`;
-    expect(runProgram(source)).toBe("fast,slow");
+    expect(runProgram(source)).toBe("peak 2 results 8,1");
   });
 
   it("rejects when an awaited timer promise rejects and is catchable", () => {

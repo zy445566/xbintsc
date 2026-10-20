@@ -18,5 +18,8 @@ static xt_value xt_string_concat(xt_string *a, xt_string *b) {
 }
 
 int xt_string_equals(xt_string *a, xt_string *b) {
+  /* Interned literals (property names above all) are shared, so identity is the
+   * common case and skips the length and byte comparison entirely. */
+  if (a == b) return 1;
   return a->length == b->length && memcmp(a->data, b->data, a->length) == 0;
 }

@@ -39,13 +39,18 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 ```
 
 `env` 通过 box 以引用方式传递捕获变量，直接调用与闭包调用共用一条代码路径。
-不易内联的 JS 语义（`+` 隐式转换、关系比较、属性访问、打印）委托给 `@xt_*` 运行时调用。
+不易内联的 JS 语义（`+` 隐式转换、属性访问、打印）委托给 `@xt_*` 运行时调用。
+数值算术与比较是例外：codegen 内联 double 快路径（`numeric.ts`），需要隐式转换时
+才调用运行时。
 
 ### 运行时
 
-`runtime/xt_runtime.c` 实现字符串、对象、数组、闭包、算术、比较、异常与
-类 Node 的 `console.log` 打印。现在 `xt_alloc` 背后使用非移动标记-清扫回收器
-（显式根、子系统根提供者与保守 C 栈扫描），其内部实现对编译器保持隔离。
+`runtime/` 实现字符串、对象、数组、闭包、算术、比较、异常与类 Node 的
+`console.log` 打印。它按职责拆分为多个编译单元（`xt_values.c`、
+`xt_containers.c`、`xt_stdlib.c`、`xt_builtins.c`、`xt_io.c`、`xt_alloc.c` 等），
+每个单元 `#include` 自己的实现片段（`.inc`），这样文件保持小巧而不改变链接范围。
+`xt_alloc` 背后使用非移动标记-清扫回收器（显式根、子系统根提供者与保守 C 栈扫描），
+其内部实现对编译器保持隔离。
 
 ### llc 的替代
 
@@ -92,13 +97,14 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 同样覆盖：Windows 下 xbintsc 使用系统 clang 按 MSVC ABI 链接，示例即针对该 ABI 构建。
 参见 `examples/extensions/` 与 `runtime/xt_ext.h` / `runtime/xt_ext.rs`。
 
-## 自举路线
+## 自举
 
-编译器本身使用 TypeScript 编写并输出 IR 文本，`runtime` 已与编译器解耦。后续可
-用 TS 重写运行时，并由 xbintsc 编译自身，逐步达成自举。
+编译器已经能编译自身：`xbintsc build src/cli/main.ts --ext node` 会产出一个可用的
+`xbintsc` 二进制，且从第一代起生成的 IR 就是不动点。CI 会为每个支持的平台构建这些
+二进制并检查不动点。运行时仍使用 C；以后是否用 TS 重写只是可选项，并不是自举的前提。
 
 ## 测试
 
 按模块划分：`tests/lexer`、`tests/parser`、`tests/binder`、`tests/codegen`、
-`tests/driver`、`tests/extensions`、`tests/cli`、`tests/e2e`。e2e 会在存在
-`clang` 时真正编译并运行二进制，否则自动跳过。
+`tests/driver`、`tests/extensions`、`tests/cli`、`tests/e2e`。存在受支持的 clang
+（16+，与 `build` 使用的版本门槛一致）时，e2e 会真正编译并运行二进制，否则自动跳过。

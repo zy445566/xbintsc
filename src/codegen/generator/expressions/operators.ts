@@ -7,14 +7,33 @@ import {
   BinaryOperator,
   PostfixUnaryOperator,
   PrefixUnaryOperator,
+  SyntaxKind,
   type BinaryExpression,
   type ConditionalExpression,
+  type Expression,
+  type Identifier,
   type PostfixUnaryExpression,
   type PrefixUnaryExpression,
 } from "../../../ast/nodes.js";
 import { i64, numberLiteral, XT_UNDEFINED } from "../../values.js";
-import { BINARY_RUNTIME, isAssignmentOperator } from "../tables.js";
+import { BINARY_RUNTIME, BUILTIN_INSTANCEOF, isAssignmentOperator } from "../tables.js";
 import type { Generator } from "../generator.js";
+
+/** True for an expression whose value is known to be a string. */
+function isStringLike(node: Expression): boolean {
+  return node.kind === SyntaxKind.StringLiteral || node.kind === SyntaxKind.NoSubstitutionTemplateLiteral;
+}
+
+/**
+ * The built-in constructor a right-hand `instanceof` operand names, if any.
+ * A user binding with the same name shadows it.
+ */
+function builtinInstanceofId(generator: Generator, expression: Expression): number | undefined {
+  if (expression.kind !== SyntaxKind.Identifier) return undefined;
+  const identifier = expression as Identifier;
+  if (generator.binding.symbolOfIdentifier.get(identifier)) return undefined;
+  return BUILTIN_INSTANCEOF[identifier.text];
+}
 
 export interface OperatorExpressionMethods {
   emitBinaryOrAssignment(this: Generator, node: BinaryExpression): string;
@@ -44,6 +63,17 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
       default:
         break;
     }
+    // `x instanceof Array` and friends: the built-in constructor is not a
+    // first-class value, so compare by the value's runtime kind instead.
+    if (operator === BinaryOperator.InstanceOf) {
+      const builtin = builtinInstanceofId(this, node.right);
+      if (builtin !== undefined) {
+        const leftValue = this.emitExpression(node.left);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @xt_instance_of_builtin(i64 ${leftValue}, i32 ${builtin})`);
+        return result;
+      }
+    }
     const left = this.emitExpression(node.left);
     const right = this.emitExpression(node.right);
     const runtime = BINARY_RUNTIME[operator];
@@ -51,9 +81,10 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
       this.unsupported(node, `operator '${operator}'`);
       return i64(XT_UNDEFINED);
     }
-    const result = this.reg();
-    this.emit(`  ${result} = call i64 @${runtime}(i64 ${left}, i64 ${right})`);
-    return result;
+    // `+` concatenates when either side is known to be a string; skip the
+    // numeric tag checks for that shape and call the runtime directly.
+    const knownStringConcat = operator === "+" && (isStringLike(node.left) || isStringLike(node.right));
+    return this.emitBinaryOperation(left, right, operator, runtime, !knownStringConcat);
   },
 
   emitShortCircuit(node: BinaryExpression, kind: "and" | "or" | "nullish"): string {
@@ -159,8 +190,12 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
         const one = numberLiteral(1);
         const current = this.emitExpression(node.operand);
         const fn = node.operator === PrefixUnaryOperator.PlusPlus ? "xt_add" : "xt_sub";
-        const next = this.reg();
-        this.emit(`  ${next} = call i64 @${fn}(i64 ${current}, i64 ${one})`);
+        const next = this.emitBinaryOperation(
+          current,
+          one,
+          node.operator === PrefixUnaryOperator.PlusPlus ? "+" : "-",
+          fn,
+        );
         this.emitAssignmentTarget(node.operand, next);
         return next;
       }
@@ -174,8 +209,12 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
     const one = numberLiteral(1);
     const current = this.emitExpression(node.operand);
     const fn = node.operator === PostfixUnaryOperator.PlusPlus ? "xt_add" : "xt_sub";
-    const next = this.reg();
-    this.emit(`  ${next} = call i64 @${fn}(i64 ${current}, i64 ${one})`);
+    const next = this.emitBinaryOperation(
+      current,
+      one,
+      node.operator === PostfixUnaryOperator.PlusPlus ? "+" : "-",
+      fn,
+    );
     this.emitAssignmentTarget(node.operand, next);
     return current;
   },

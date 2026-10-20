@@ -62,6 +62,73 @@ xt_value xt_object_spread(xt_value target, xt_value source) {
   return xt_object_assign(2, args);
 }
 
+/* True when `key` is one of the explicitly destructured properties. */
+static int xt_object_rest_excludes(xt_value key, int32_t argc, xt_value *argv) {
+  for (int32_t i = 0; i < argc; i++) {
+    if (xt_property_key_equals(key, argv[i])) return 1;
+  }
+  return 0;
+}
+
+static void xt_object_rest_copy(xt_value target, xt_value key, xt_value value, int32_t argc, xt_value *argv) {
+  if (xt_object_rest_excludes(key, argc, argv)) return;
+  xt_object_set(target, key, value);
+}
+
+/*
+ * `const { a, ...rest } = source` (and the assignment / parameter forms).
+ *
+ * Copies the *own enumerable* properties that the pattern did not name, in
+ * insertion order. Arrays and strings contribute their index properties, like
+ * ECMAScript; accessor properties are read through their getter, with the
+ * source as the receiver.
+ */
+xt_value xt_object_rest(xt_value source, int32_t argc, xt_value *argv) {
+  if (source == XT_UNDEFINED || source == XT_NULL) {
+    xt_throw(xt_string_from_cstr("TypeError: Cannot destructure null or undefined"));
+    return XT_UNDEFINED;
+  }
+  xt_value result = xt_object_new();
+
+  if (XT_IS_ARRAY(source)) {
+    xt_array *array = (xt_array *)XT_GET_PTR(source);
+    for (uint32_t i = 0; i < array->length; i++) {
+      char buffer[16];
+      snprintf(buffer, sizeof(buffer), "%u", i);
+      xt_object_rest_copy(result, xt_string_from_cstr(buffer), array->items[i], argc, argv);
+    }
+    return result;
+  }
+
+  if (XT_IS_STRING(source)) {
+    xt_string *string = (xt_string *)XT_GET_PTR(source);
+    for (uint32_t i = 0; i < string->length; i++) {
+      char buffer[16];
+      snprintf(buffer, sizeof(buffer), "%u", i);
+      xt_object_rest_copy(result, xt_string_from_cstr(buffer), xt_string_new(string->data + i, 1), argc, argv);
+    }
+    return result;
+  }
+
+  if (!XT_IS_OBJECT(source) && !XT_IS_FUNCTION(source)) return result;
+  xt_object *object = xt_as_object(source);
+  if (!object) return result;
+  if (object->header.kind != XT_OBJECT_KIND_OBJECT && object->header.kind != XT_OBJECT_KIND_ERROR) {
+    /* Map/Set/Date/RegExp/Promise have no own enumerable string properties. */
+    return result;
+  }
+  for (uint32_t i = 0; i < object->count; i++) {
+    xt_property *property = &object->properties[i];
+    if (xt_object_rest_excludes(property->key, argc, argv)) continue;
+    xt_value value = property->value;
+    if (property->getter != XT_UNDEFINED && XT_IS_FUNCTION(property->getter)) {
+      value = xt_call_with_this(property->getter, source, 0, NULL);
+    }
+    xt_object_set(result, property->key, value);
+  }
+  return result;
+}
+
 xt_value xt_parse_int(int32_t argc, xt_value *argv) {
   xt_string *s = xt_as_string(xt_to_string(xt_arg_at(argc, argv, 0)));
   const char *p = s->data;
@@ -444,6 +511,57 @@ xt_value xt_instance_of(xt_value value, xt_value ctor) {
     cur = (xt_object *)XT_GET_PTR(cur->prototype);
   }
   return XT_FALSE;
+}
+
+/*
+ * `value instanceof Array` (and the rest of the built-in constructors).
+ *
+ * Built-in constructors are not first-class values: the codegen recognises the
+ * name and asks this helper instead. Ids match `BUILTIN_INSTANCEOF` in
+ * `src/codegen/generator/tables.ts`; 16..24 map onto the runtime's `XT_TA_*`
+ * order (Uint8Array first).
+ */
+enum {
+  XT_INSTANCE_ARRAY = 0,
+  XT_INSTANCE_OBJECT = 1,
+  XT_INSTANCE_FUNCTION = 2,
+  XT_INSTANCE_MAP = 3,
+  XT_INSTANCE_SET = 4,
+  XT_INSTANCE_DATE = 5,
+  XT_INSTANCE_REGEXP = 6,
+  XT_INSTANCE_PROMISE = 7,
+  XT_INSTANCE_TYPED_ARRAY_FIRST = 16,
+  XT_INSTANCE_TYPED_ARRAY_LAST = 24
+};
+
+static int xt_value_has_kind(xt_value value, uint8_t kind) {
+  return XT_IS_OBJECT(value) && ((xt_object *)XT_GET_PTR(value))->header.kind == kind;
+}
+
+xt_value xt_instance_of_builtin(xt_value value, int32_t id) {
+  switch (id) {
+    case XT_INSTANCE_ARRAY:
+      return xt_bool(XT_IS_ARRAY(value));
+    case XT_INSTANCE_OBJECT:
+      return xt_bool(XT_IS_OBJECT(value) || XT_IS_ARRAY(value) || XT_IS_FUNCTION(value));
+    case XT_INSTANCE_FUNCTION:
+      return xt_bool(XT_IS_FUNCTION(value));
+    case XT_INSTANCE_MAP:
+      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_MAP));
+    case XT_INSTANCE_SET:
+      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_SET));
+    case XT_INSTANCE_DATE:
+      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_DATE));
+    case XT_INSTANCE_REGEXP:
+      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_REGEXP));
+    case XT_INSTANCE_PROMISE:
+      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_PROMISE));
+    default:
+      if (id >= XT_INSTANCE_TYPED_ARRAY_FIRST && id <= XT_INSTANCE_TYPED_ARRAY_LAST) {
+        return xt_bool(xt_typed_array_kind_of(value) == id - XT_INSTANCE_TYPED_ARRAY_FIRST);
+      }
+      return XT_FALSE;
+  }
 }
 
 xt_value xt_closure_env(xt_value value, int32_t index) {

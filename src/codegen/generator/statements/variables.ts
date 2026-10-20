@@ -87,13 +87,19 @@ export const variableStatementMethods: VariableStatementMethods = {
       return;
     }
     const pattern = name as ObjectBindingPattern;
+    /* Keys named by the pattern are excluded from `...rest`. */
+    const excludedKeys: string[] = [];
     for (const element of pattern.elements) {
-      const key = element.propertyName ?? (element.name.kind === SyntaxKind.Identifier ? element.name : undefined);
       if (element.dotDotDotToken) {
-        this.unsupported(element, "object rest destructuring");
+        const rest = this.reg();
+        const keys = this.emitValueArguments(excludedKeys);
+        this.emit(`  ${rest} = call i64 @xt_object_rest(i64 ${value}, i32 ${keys.argc}, i64* ${keys.ptr})`);
+        this.emitBindingPattern(element.name, rest);
         continue;
       }
+      const key = element.propertyName ?? (element.name.kind === SyntaxKind.Identifier ? element.name : undefined);
       const keyValue = this.stringValue(key ? propertyNameText(key) : "undefined");
+      excludedKeys.push(keyValue);
       let elementValue = this.reg();
       this.emit(`  ${elementValue} = call i64 @xt_get(i64 ${value}, i64 ${keyValue})`);
       if (element.initializer) elementValue = this.emitBindingDefault(elementValue, element.initializer);

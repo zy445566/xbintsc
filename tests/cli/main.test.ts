@@ -198,13 +198,42 @@ describe("cli", () => {
     expect(err.join("")).toContain("Unable to read native extension manifest");
   });
 
+  it("reports a bundled module's diagnostics at that module's own file and line", () => {
+    const directory = temporaryDirectory();
+    const helper = join(directory, "helper.ts");
+    writeFileSync(
+      helper,
+      'import { readFileSync } from "node:fs";\n\nexport function read(path: string): string {\n  return readFileSync(path, "utf8");\n}\n',
+    );
+    const entry = join(directory, "main.ts");
+    writeFileSync(entry, 'import { read } from "./helper.ts";\nconsole.log(read("x"));\n');
+
+    const { io, err } = capture();
+    expect(run(["emit", entry], io)).toBe(1);
+    const text = err.join("");
+    expect(text).toContain("helper.ts:1:");
+    expect(text).toContain('from "node:fs"');
+    expect(text).not.toContain("main.ts:1:");
+  });
+
+  it("reports per-phase timings with --time", () => {
+    const entry = writeProgram();
+    withWorkingDirectory((directory) => {
+      const outDir = join(directory, "out");
+      const { io, out } = capture();
+      expect(run(["build", entry, "--emit", "ir", "--time", "--out", outDir], io)).toBe(0);
+      expect(out.join("")).toContain("timing");
+    });
+  });
+
   it("reports doctor information", () => {
     const { io, out } = capture();
-    expect(run(["doctor"], io)).toBe(0);
+    expect(run(["doctor"], io)).toBe(hasClang() ? 0 : 1);
     const text = out.join("");
     expect(text).toContain("platform");
     expect(text).toContain("toolchain");
     expect(text).toContain("runtime");
+    expect(text).toContain("status");
   });
 
   it("builds an IR artifact and then serves it from the cache", () => {

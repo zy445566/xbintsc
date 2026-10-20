@@ -35,6 +35,7 @@ git config core.hooksPath .githooks
 | `npm run test:watch` | vitest 监听模式 |
 | `npm run coverage` | TypeScript 编译器（`src/`）的 V8 覆盖率 |
 | `npm run coverage:runtime` | C 运行时（`runtime/`）的 LLVM 覆盖率 |
+| `npm run bench` | 构建并计时固定基准套件（可与 Node 对比） |
 
 单元测试在 `tests/` 下按模块一个目录（`lexer`、`parser`、`binder`、`codegen`、
 `driver`、`extensions`、`cli`、`e2e`），与源码树镜像对应。边界用例放在它覆盖的模块
@@ -90,8 +91,11 @@ diff scratch/ref.ll scratch/gen2.ll
 - 每个值都是一个 64 位字：double 不装箱，其余都是带标签指针（16 位标签 + 48 位载荷）。
   该表示只定义一次：[../../../src/codegen/values.ts](../../../src/codegen/values.ts) 与
   [../../../runtime/rt.h](../../../runtime/rt.h)；要改就一起改，否则别动。
-- 别扭的 JS 语义（`+` 强转、关系比较、属性访问、打印）委托给 `@xt_*` 运行时调用，而
-  不是内联。
+- 别扭的 JS 语义（`+` 强转、关系比较、属性访问、打印）委托给 `@xt_*` 运行时调用。
+  数值算术与比较是例外：codegen 内联双 double 快路径
+  （`src/codegen/generator/numeric.ts`），其余情况调用运行时。
+- 字符串字面量会被驻留：每个不同字面量只在 `main` 中创建一次，存入 GC 根全局，
+  每次使用只做一次 load；属性名因此不再逐次分配。
 - GC 是非移动标记清扫：新堆对象走 `xt_alloc`；值存活期间必须能从显式根槽、已注册的
   根提供者（事件循环、微任务队列）或 C 栈保守扫描到达。只存在于未被扫描的 C 局部
   变量里的值就是 bug。

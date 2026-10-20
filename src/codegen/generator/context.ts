@@ -54,11 +54,19 @@ export class GeneratorContext {
   readonly importDefaults = new Map<number, ModuleExport>();
   readonly globals: string[] = [];
   readonly functions: string[] = [];
-  readonly strings = new Map<string, { label: string; length: number }>();
+  readonly strings = new Map<string, { label: string; length: number; slot: string }>();
   readonly classGlobals = new Map<number, string>();
   readonly moduleGlobals = new Map<number, string>();
   readonly extraDeclarations = new Set<string>();
   stringCounter = 0;
+  /**
+   * How many `UnsupportedFeature` diagnostics the function currently being
+   * emitted produced. Unsupported constructs can leave the generator with a
+   * partially-bound tree; reporting the resulting invariant failures as
+   * "Internal: …" only buries the actionable error, so they are suppressed
+   * while this is non-zero.
+   */
+  unsupportedCount = 0;
   current!: FunctionState;
 
   constructor(sourceFile: SourceFileNode, diagnostics: DiagnosticBag, options: CodegenOptions = {}) {
@@ -120,7 +128,7 @@ export class GeneratorContext {
               DiagnosticCode.ModuleNotFound,
               `Module '"${specifier}"' has no exported member '${importedName}'`,
               specifierNode.name,
-              this.sourceFile.fileName,
+              this.fileNameOf(specifierNode.name),
             );
             this.missingModuleSymbols.add(symbol.id);
           }
@@ -148,7 +156,7 @@ export class GeneratorContext {
         DiagnosticCode.ModuleNotFound,
         `module '${specifier}' is provided by the '${provider}' extension; pass --ext ${provider}`,
         declaration.moduleSpecifier,
-        this.sourceFile.fileName,
+        this.fileNameOf(declaration.moduleSpecifier),
       );
       this.markMissingModuleSymbols(declaration);
       return;
@@ -165,7 +173,7 @@ export class GeneratorContext {
       `module '${specifier}' is not supported: xbintsc can import built-in platform modules, ` +
         "relative '.ts' files and ESM packages under node_modules; CommonJS packages are not supported",
       declaration.moduleSpecifier,
-      this.sourceFile.fileName,
+      this.fileNameOf(declaration.moduleSpecifier),
     );
     for (const symbol of symbols) this.missingModuleSymbols.add(symbol.id);
   }
@@ -283,6 +291,19 @@ export class GeneratorContext {
     return ptr;
   }
 
+  /** Lay already-computed values out as a contiguous `i64*` argument buffer. */
+  emitValueArguments(values: readonly string[]): { argc: string; ptr: string } {
+    if (values.length === 0) return { argc: "0", ptr: "null" };
+    const ptr = `%args${this.current.allocas.length}`;
+    this.current.allocas.push(`${ptr} = alloca i64, i32 ${values.length}`);
+    for (let index = 0; index < values.length; index++) {
+      const slot = this.reg();
+      this.emit(`  ${slot} = getelementptr i64, i64* ${ptr}, i32 ${index}`);
+      this.emit(`  store i64 ${values[index]}, i64* ${slot}`);
+    }
+    return { argc: String(values.length), ptr };
+  }
+
   const(value: bigint): string {
     return i64(value);
   }
@@ -333,11 +354,15 @@ export class GeneratorContext {
     const slot = this.current.slots.get(symbol.id);
     if (!slot) {
       // Referenced from an inner function without a capture slot: this should
-      // be impossible once the binder has run, but stay defensive.
-      this.diagnostics.error(
-        DiagnosticCode.CodegenError,
-        `Internal: no slot for '${symbol.name}' in ${this.current.fn.name}`,
-      );
+      // be impossible once the binder has run, but stay defensive. After an
+      // unsupported construct the tree can be partially bound, so do not add
+      // an "Internal" error on top of the actionable one.
+      if (this.unsupportedCount === 0) {
+        this.diagnostics.error(
+          DiagnosticCode.CodegenError,
+          `Internal: no slot for '${symbol.name}' in ${this.current.fn.name}`,
+        );
+      }
       return i64(XT_UNDEFINED);
     }
     const value = this.reg();
@@ -362,7 +387,9 @@ export class GeneratorContext {
     }
     const slot = this.current.slots.get(symbol.id);
     if (!slot) {
-      this.diagnostics.error(DiagnosticCode.CodegenError, `Internal: no slot for '${symbol.name}'`);
+      if (this.unsupportedCount === 0) {
+        this.diagnostics.error(DiagnosticCode.CodegenError, `Internal: no slot for '${symbol.name}'`);
+      }
       return;
     }
     if (!slot.boxed) {
@@ -390,28 +417,45 @@ export class GeneratorContext {
   stringValue(text: string): string {
     const entry = this.internString(text);
     const result = this.reg();
-    this.emit(`  ${result} = call i64 @xt_string_new(i8* ${entry.label}, i64 ${entry.length})`);
+    // The value is created once in `main` and shared by every use, so a string
+    // literal (especially a property name in a hot loop) no longer allocates on
+    // each evaluation.
+    this.emit(`  ${result} = load i64, i64* ${entry.slot}`);
     return result;
   }
 
-  internString(text: string): { label: string; length: number } {
+  internString(text: string): { label: string; length: number; slot: string } {
     const existing = this.strings.get(text);
     if (existing) return existing;
-    const label = `@.str.${this.stringCounter++}`;
+    const index = this.stringCounter++;
+    const label = `@.str.${index}`;
+    const slot = `@.strv.${index}`;
     const bytes = utf8Bytes(text);
-    const entry = { label, length: bytes.length };
+    const entry = { label, length: bytes.length, slot };
     this.strings.set(text, entry);
     this.globals.push(`${label} = private unnamed_addr constant [${bytes.length + 1} x i8] c"${escapeBytes(bytes)}\\00"`);
+    // A GC-rooted global holding the runtime string value, initialised in main.
+    this.globals.push(`${slot} = internal global i64 0`);
     return entry;
+  }
+
+  /**
+   * The source file a node belongs to. Bundling merges every module into one
+   * `SourceFile` while keeping module-local offsets, so the origin map is what
+   * keeps diagnostics pointing at the file the user actually wrote.
+   */
+  fileNameOf(node: Node): string {
+    return this.sourceFile.origins?.get(node) ?? this.sourceFile.fileName;
   }
 
   unsupported(node: Node, what: string): void {
     const label = kindName(node.kind);
+    this.unsupportedCount++;
     this.diagnostics.error(
       DiagnosticCode.UnsupportedFeature,
       `xbintsc does not yet support this ${what} (${label})`,
       node,
-      this.sourceFile.fileName,
+      this.fileNameOf(node),
     );
   }
 
@@ -429,7 +473,7 @@ export class GeneratorContext {
       DiagnosticCode.UnsupportedFeature,
       `CommonJS \`require()\` is not supported; ${replacement}`,
       node,
-      this.sourceFile.fileName,
+      this.fileNameOf(node),
     );
   }
 }

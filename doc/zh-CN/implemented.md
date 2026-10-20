@@ -338,7 +338,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 实现位置：`tests/`（`lexer` / `parser` / `binder` / `codegen` / `driver` / `extensions` / `cli` / `e2e`）
 
 - 各模块单元测试；e2e 在存在 `clang` 时真正编译并运行二进制，否则自动跳过。
-- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、`Map`/`Set` 的 `for...of`、数组 `length` 赋值与可迭代展开、多文件 `import`/`export`、类型化数组（元素强制转换、`from`/`of`、迭代与原型方法），以及全局 `fetch`（HTTP GET/POST、请求头、重定向、JSON/文本/二进制响应体与 `TypeError` 拒绝）。
+- e2e 覆盖：算术与打印、递归函数、循环 / 数组 / 字符串拼接、闭包按引用捕获、对象 / 数组 JS 风格打印、Node `fs` 扩展（经 `import`）、`switch` 穿透、数组 / 字符串方法、`Math` 与全局函数与 `console` 各等级、默认 / 剩余参数与 `arguments`、`Object` 助手与展开与 `in`/`delete`、`for...in` 对象键枚举、`try/catch/finally`、可选链、类与 `new`/`this`/`static`/`extends`/`super`/`instanceof`、`async`/`await` 与 `Promise`、`Map`/`Set`/`JSON` 与扩展标准库、`Map`/`Set` 的 `for...of`、数组 `length` 赋值与可迭代展开、多文件 `import`/`export`、类型化数组（元素强制转换、`from`/`of`、迭代与原型方法）、对象 rest 解构与内建 `instanceof`，以及全局 `fetch`（HTTP GET/POST、请求头、重定向、JSON/文本/二进制响应体与 `TypeError` 拒绝）。
 
 ---
 

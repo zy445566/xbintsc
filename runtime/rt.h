@@ -119,6 +119,8 @@ xt_value xt_function_set_metadata(xt_value fn, xt_value name, int32_t arity);
 xt_value xt_this(void);
 xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv);
 xt_value xt_instance_of(xt_value value, xt_value ctor);
+/** `value instanceof <built-in constructor>`; id from `BUILTIN_INSTANCEOF`. */
+xt_value xt_instance_of_builtin(xt_value value, int32_t id);
 xt_value xt_function_set_prototype(xt_value fn, xt_value proto);
 xt_value xt_function_get_prototype(xt_value fn);
 
@@ -177,6 +179,8 @@ xt_value xt_object_values(xt_value obj);
 xt_value xt_object_entries(xt_value obj);
 xt_value xt_object_assign(int32_t argc, xt_value *argv);
 xt_value xt_object_spread(xt_value target, xt_value source);
+/** Own enumerable properties of `source` except the keys in `argv` (object rest). */
+xt_value xt_object_rest(xt_value source, int32_t argc, xt_value *argv);
 
 /* -- symbols -------------------------------------------------------------- */
 /** Implements `Symbol(description)`. */

@@ -41,16 +41,21 @@ xt_value fn(xt_value env, int32_t argc, xt_value *argv);
 
 `env` threads captured variables by reference through boxes, so direct calls and
 closure calls share a single code path. JavaScript semantics that are awkward to
-inline (`+` coercion, relational comparison, property access, inspection) are
-delegated to `@xt_*` runtime calls.
+inline (`+` coercion, property access, inspection) are delegated to `@xt_*`
+runtime calls. Numeric arithmetic and comparison are the exception: codegen emits
+the double fast path inline (`numeric.ts`) and calls the runtime for the coercing
+cases.
 
 ### Runtime
 
-`runtime/xt_runtime.c` implements strings, objects, arrays, closures, arithmetic,
-comparison, exceptions and Node-like `console.log` inspection. It uses a
-non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem
-root providers and a conservative C-stack scan), so the collector's internals
-stay isolated from the compiler.
+`runtime/` implements strings, objects, arrays, closures, arithmetic, comparison,
+exceptions and Node-like `console.log` inspection. It is split by concern into
+translation units (`xt_values.c`, `xt_containers.c`, `xt_stdlib.c`,
+`xt_builtins.c`, `xt_io.c`, `xt_alloc.c`, …), each `#include`-ing its
+implementation fragments (`.inc`) so files stay small without changing the link
+surface. It uses a non-moving mark-sweep collector behind `xt_alloc` (explicit
+roots, subsystem root providers and a conservative C-stack scan), so the
+collector's internals stay isolated from the compiler.
 
 ### Replacing llc
 
@@ -103,15 +108,18 @@ found on `PATH` (the MSVC ABI when LLVM + the Visual Studio C++ build tools are
 installed), and each manifest declares any platform-specific linker flags. See
 `examples/extensions/` and `runtime/xt_ext.h` / `runtime/xt_ext.rs`.
 
-## Self-hosting roadmap
+## Self-hosting
 
-The compiler itself is written in TypeScript and emits IR text, and `runtime` is
-already decoupled from the compiler. Later, the runtime can be rewritten in TS
-and the compiler can compile itself, gradually reaching self-hosting.
+The compiler compiles itself: `xbintsc build src/cli/main.ts --ext node` produces
+a working `xbintsc` binary, and the emitted IR is a fixpoint from the first
+generation onward. CI builds those binaries for every supported platform and
+checks the fixpoint. The runtime stays in C; rewriting it in TypeScript is an
+option for later, not a prerequisite for self-hosting.
 
 ## Tests
 
 Organised by module: `tests/lexer`, `tests/parser`, `tests/binder`,
 `tests/codegen`, `tests/driver`, `tests/extensions`, `tests/cli`, `tests/e2e`.
-When `clang` is present, e2e tests really compile and run binaries; otherwise
+When a supported clang (16+, the same version gate `build` applies) is present,
+e2e tests really compile and run binaries; otherwise
 they are skipped automatically.

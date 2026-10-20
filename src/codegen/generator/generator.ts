@@ -14,13 +14,19 @@ import { moduleMethods, type ModuleMethods } from "./module.js";
 import { statementMethods, type StatementMethods } from "./statements.js";
 import { expressionMethods, type ExpressionMethods } from "./expressions.js";
 import { callMethods, type CallMethods } from "./calls.js";
+import { numericMethods, type NumericMethods } from "./numeric.js";
 import type { CodegenOptions, CodegenResult } from "./state.js";
 
 export class Generator extends GeneratorContext {}
 
-export interface Generator extends ModuleMethods, StatementMethods, ExpressionMethods, CallMethods {}
+export interface Generator
+  extends ModuleMethods,
+    StatementMethods,
+    ExpressionMethods,
+    CallMethods,
+    NumericMethods {}
 
-Object.assign(Generator.prototype, moduleMethods, statementMethods, expressionMethods, callMethods);
+Object.assign(Generator.prototype, moduleMethods, statementMethods, expressionMethods, callMethods, numericMethods);
 
 export type { CodegenOptions, CodegenResult } from "./state.js";
 

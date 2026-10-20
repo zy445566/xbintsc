@@ -43,6 +43,40 @@ jobs:
       - name: Lint
         run: npm run lint
 
+  # The documented minimum is clang 16 (opaque pointers). The matrix above uses
+  # the runner's newer clang, so this job pins the oldest supported toolchain:
+  # it catches codegen that silently starts requiring a newer LLVM, and proves
+  # the version gate accepts exactly what doc/requirements.md promises.
+  minimum-clang:
+    name: Minimum clang 16
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install clang 16
+        run: sudo apt-get update && sudo apt-get install -y clang-16 lld-16
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify the toolchain gate
+        env:
+          xbintsc_CLANG: clang-16
+        run: npx tsx src/cli/main.ts doctor
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit and end-to-end tests (minimum clang)
+        env:
+          xbintsc_CLANG: clang-16
+        run: npm test
+
   test:
     name: ${{ matrix.os }} / node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}

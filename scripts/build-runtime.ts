@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { RUNTIME_SOURCES } from "../src/driver/compiler.js";
 import { platformSlug } from "../src/driver/paths.js";
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
+import { RUNTIME_CFLAGS } from "../src/driver/toolchain.js";
 import { nodeExtension } from "../src/extensions/node/index.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -72,7 +73,7 @@ function compile(sources: readonly string[], extension: string): string[] {
     const object = join(objDir, `${extension}_${index}_${basename(source, ".c")}.o`);
     const result = spawnSync(
       clang,
-      ["-O2", "-Wall", "-Wextra", "-D_CRT_SECURE_NO_WARNINGS", "-c", source, "-o", object, `-I${runtimeDir}`],
+      [...RUNTIME_CFLAGS, "-c", source, "-o", object, `-I${runtimeDir}`],
       { stdio: "inherit", env: childEnv },
     );
     if (result.status !== 0) {

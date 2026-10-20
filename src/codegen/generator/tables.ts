@@ -22,6 +22,32 @@ export function requiresSetjmpex(platform: string, arch: string): boolean {
   return platform === "win32" && arch === "arm64";
 }
 
+/**
+ * Built-in constructors usable on the right of `instanceof`, mapped to the id
+ * `xt_instance_of_builtin` expects. Keep in sync with the `XT_INSTANCE_*` enum
+ * in `runtime/xt_builtins.c`; the typed-array ids follow the runtime's
+ * `XT_TA_*` order (Uint8Array first).
+ */
+export const BUILTIN_INSTANCEOF: Readonly<Record<string, number>> = {
+  Array: 0,
+  Object: 1,
+  Function: 2,
+  Map: 3,
+  Set: 4,
+  Date: 5,
+  RegExp: 6,
+  Promise: 7,
+  Uint8Array: 16,
+  Int8Array: 17,
+  Uint8ClampedArray: 18,
+  Uint16Array: 19,
+  Int16Array: 20,
+  Uint32Array: 21,
+  Int32Array: 22,
+  Float32Array: 23,
+  Float64Array: 24,
+};
+
 export const BINARY_RUNTIME: Record<string, string | undefined> = {
   [BinaryOperator.Add]: "xt_add",
   [BinaryOperator.Subtract]: "xt_sub",

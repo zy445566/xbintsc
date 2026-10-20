@@ -42,8 +42,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 解构（绑定、参数、嵌套） | ✅ | 支持默认值与剩余 |
 | `delete`、`in`、`instanceof`、`typeof` | ✅ | |
 | 逗号运算符、`void` | ✅ | |
-| `new.target` | 🚫 | 未实现 |
-| `import.meta` | 🚫 | 能解析，但没有值 |
+| `new.target` | 🚫 | 能解析，但会给出明确的 `UnsupportedFeature` |
+| `import.meta` | ✅ | `url`、`dirname`、`filename`（由可执行文件路径解析） |
 | `super` | ⚠️ | 单层继承正确；继承深度 > 1 可能不准 |
 
 ## 函数、类与对象
@@ -117,7 +117,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `require()` / CommonJS | 🚫 | 被拒绝，并提示改用 `import` |
 | 循环依赖 | 🚫 | |
 | 实时绑定 | ⚠️ | 导入与命名空间成员都是快照 |
-| `import.meta`、`__dirname`、`__filename` | 🚫 | |
+| `__dirname`、`__filename` | 🚫 | 请使用 `import.meta.dirname` / `import.meta.filename` |
 
 ## 字符串、数字与内存
 

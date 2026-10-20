@@ -45,8 +45,8 @@ Canonical detail (always current, much longer):
 | Destructuring (bindings, parameters, nested) | ✅ | defaults + rest supported |
 | `delete`, `in`, `instanceof`, `typeof` | ✅ | |
 | Comma operator, `void` | ✅ | |
-| `new.target` | 🚫 | not implemented |
-| `import.meta` | 🚫 | parsed but has no value |
+| `new.target` | 🚫 | parsed, then rejected with a clear `UnsupportedFeature` |
+| `import.meta` | ✅ | `url`, `dirname`, `filename` (resolved from the executable path) |
 | `super` | ⚠️ | single-level inheritance correct; depth > 1 may be inaccurate |
 
 ## Functions, classes, objects
@@ -122,7 +122,7 @@ See section 3 of [../unimplemented.md](../unimplemented.md) for the full list.
 | `require()` / CommonJS | 🚫 | rejected with a hint to use `import` |
 | Circular dependencies | 🚫 | |
 | Live bindings | ⚠️ | imports and namespace members are snapshots |
-| `import.meta`, `__dirname`, `__filename` | 🚫 | |
+| `__dirname`, `__filename` | 🚫 | use `import.meta.dirname` / `import.meta.filename` |
 
 ## Strings, numbers, memory
 

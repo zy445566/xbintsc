@@ -22,8 +22,12 @@ D:\...\build\app.ll:382:37: error: '@.str.0' defined with type '[6 x i8]*' but e
 
 The compiler emits LLVM IR that relies on opaque pointers; typed pointers were
 removed in LLVM 16 ([LLVM release notes](https://github.com/llvm/llvm-project/blob/release/15.x/llvm/docs/ReleaseNotes.rst#changes-to-the-llvm-ir)).
-Confirm with `clang --version`; if the machine has an old system clang, install a
-newer LLVM and point xbintsc at it:
+`xbintsc build`/`run` check the version up front and stop with "reports clang
+15.0.2, but xbintsc requires clang 16 or newer", and `xbintsc doctor` prints
+`status : ok` or `status : too old` (exiting non-zero in the latter case). The
+search prefers a supported clang — including the LLVM bundled with Visual Studio
+on Windows — so an old `/usr/bin/clang` is skipped when a newer one is installed.
+To choose one explicitly:
 
 ```bash
 export xbintsc_CLANG=/usr/lib/llvm-18/bin/clang     # PowerShell: $env:xbintsc_CLANG = "C:\Program Files\LLVM\bin\clang.exe"

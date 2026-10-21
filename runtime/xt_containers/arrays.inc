@@ -93,7 +93,7 @@ xt_value xt_array_push(xt_value value, xt_value newValue) {
 
 xt_value xt_array_length(xt_value value) {
   if (XT_IS_ARRAY(value)) return xt_number((double)((xt_array *)XT_GET_PTR(value))->length);
-  if (XT_IS_STRING(value)) return xt_number((double)xt_string_length(xt_as_string(value)));
+  if (XT_IS_STRING(value)) return xt_number((double)xt_string_utf16_length(xt_as_string(value)));
   /* Functions expose their arity as `.length`. */
   if (XT_IS_FUNCTION(value)) {
     int32_t arity = ((xt_function *)XT_GET_PTR(value))->arity;

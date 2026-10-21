@@ -203,7 +203,7 @@ xt_value xt_regexp_exec(xt_value target, xt_value input) {
     }
     xt_array_push(out, groupValue);
   }
-  xt_set(out, xt_string_from_cstr("index"), xt_number((double)matches[0].rm_so));
+  xt_set(out, xt_string_from_cstr("index"), xt_number((double)xt_string_unit_offset(text, matches[0].rm_so)));
   xt_set(out, xt_string_from_cstr("input"), textValue);
   xt_set(out, xt_string_from_cstr("groups"), XT_UNDEFINED);
   free(matches);
@@ -351,7 +351,7 @@ xt_value xt_regexp_replace(xt_value value, xt_value regexpValue, xt_value replac
         }
         xt_array_push(argArray, groupValue);
       }
-      xt_array_push(argArray, xt_number((double)start));
+      xt_array_push(argArray, xt_number((double)xt_string_unit_offset(text, start)));
       xt_array_push(argArray, xt_to_string(value));
       xt_value produced = xt_closure_call(replacementValue, jsTotal + 3, xt_as_array(argArray)->items);
       xt_string *producedText = xt_as_string(xt_to_string(produced));

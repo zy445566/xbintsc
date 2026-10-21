@@ -41,24 +41,33 @@ xt_value xt_number_static(xt_value name, int32_t argc, xt_value *argv) {
 xt_value xt_string_static(xt_value name, int32_t argc, xt_value *argv) {
   const char *fn = xt_string_data(name);
   if (!fn) return XT_UNDEFINED;
-  if (strcmp(fn, "fromCharCode") == 0 || strcmp(fn, "fromCodePoint") == 0) {
-    xt_string *out = xt_string_alloc((size_t)argc * 4 + 1);
-    char *mutable = xt_string_mutable(out);
+  if (strcmp(fn, "fromCharCode") == 0) {
+    /* `fromCharCode` takes UTF-16 code units (modulo 65536) and joins adjacent
+     * high/low surrogates into one code point, like JavaScript. */
+    if (argc <= 0) return xt_string_from_cstr("");
+    uint16_t *units = (uint16_t *)malloc(sizeof(uint16_t) * (size_t)argc);
+    if (!units) abort();
+    for (int32_t i = 0; i < argc; i++) units[i] = (uint16_t)(xt_to_int32(argv[i]) & 0xFFFF);
+    xt_value result = xt_string_from_units(units, (size_t)argc);
+    free(units);
+    return result;
+  }
+  if (strcmp(fn, "fromCodePoint") == 0) {
+    char *out = (char *)malloc((size_t)argc * 4 + 1);
+    if (!out) abort();
     size_t length = 0;
     for (int32_t i = 0; i < argc; i++) {
-      unsigned code = (unsigned)xt_to_int32(argv[i]);
-      char buffer[4];
-      int bytes = 0;
-      if (code < 0x80) buffer[bytes++] = (char)code;
-      else if (code < 0x800) { buffer[bytes++] = (char)(0xC0 | (code >> 6)); buffer[bytes++] = (char)(0x80 | (code & 0x3F)); }
-      else if (code < 0x10000) { buffer[bytes++] = (char)(0xE0 | (code >> 12)); buffer[bytes++] = (char)(0x80 | ((code >> 6) & 0x3F)); buffer[bytes++] = (char)(0x80 | (code & 0x3F)); }
-      else { buffer[bytes++] = (char)(0xF0 | (code >> 18)); buffer[bytes++] = (char)(0x80 | ((code >> 12) & 0x3F)); buffer[bytes++] = (char)(0x80 | ((code >> 6) & 0x3F)); buffer[bytes++] = (char)(0x80 | (code & 0x3F)); }
-      memcpy(mutable + length, buffer, (size_t)bytes);
-      length += (size_t)bytes;
+      int32_t code = xt_to_int32(argv[i]);
+      if (code < 0 || code > 0x10FFFF) {
+        free(out);
+        xt_throw(xt_string_from_cstr("RangeError: Invalid code point"));
+        return XT_UNDEFINED;
+      }
+      length += xt_utf8_encode((uint32_t)code, out + length);
     }
-    mutable[length] = '\0';
-    out->length = (uint32_t)length;
-    return XT_FROM_PTR(XT_TAG_STRING, out);
+    xt_value result = xt_string_new(out, length);
+    free(out);
+    return result;
   }
   if (strcmp(fn, "raw") == 0) {
     xt_value strings = xt_arg_at(argc, argv, 0);

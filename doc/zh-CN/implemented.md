@@ -235,13 +235,13 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 
 - 分配器：`xt_alloc` 背后的非移动标记-清扫回收器（显式根、子系统根提供者与保守 C 栈扫描）。
 - 值构造：`xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`。
-- 字符串：UTF-8 存储、惰性 cons 节点拼接（首次观察时才扁平化，因此循环追加保持线性复杂度）、相等比较、格式化数字转字符串。
+- 字符串：UTF-8 存储，对外呈现 JavaScript 的 UTF-16 视图（`length`、索引、`slice`、`indexOf`、`split`、`padStart`、`codePointAt` 按码元计数；`for...of` 与 `Array.from` 按码点计数；孤立代理项以 WTF-8 保存，并在拼接时重新组合）、惰性 cons 节点拼接（首次观察时才扁平化，因此循环追加保持线性复杂度）、相等比较、格式化数字转字符串。`xt_string_length` 供 I/O 使用，返回字节数；`xt_string_utf16_length` 返回 JavaScript 长度。
 - 类型转换：`xt_truthy`、`xt_to_number`、`xt_to_string`、`xt_typeof`。
 - 算术：`add/sub/mul/div/mod/pow/neg/pos`。
 - 位运算：`and/or/xor/not/shl/shr/ushr`（含 `ToInt32` 语义）。
 - 比较：`lt/le/gt/ge`、宽松 / 严格相等、`not`、`is_nullish`。
 - 对象：线性属性列表，`object_new/get/set/has/keys/values/entries/assign/spread`。
-- 数组：`array_new/get/set/push/length/spread`；对 `arr.length` 赋值会截断 / 扩展（与 JS 一致）；`iter_length` / `iter_value` 为数组、字符串、`Map`、`Set` 提供统一迭代视图。
+- 数组：`array_new/get/set/push/length/spread`；对 `arr.length` 赋值会截断 / 扩展（与 JS 一致）；`iter_length` / `iter_value` 为数组、字符串（按码点）、`Map`、`Set` 提供统一迭代视图。
 - 类型化数组（`xt_typed_array.c`）：以属性包对象表示，每种元素类型一个原型；读取返回已存值，写入按元素类型强制转换；提供 `from` / `of` 静态方法与完整原型方法集；`subarray` 返回副本。
 - Symbol（`xt_symbol.c`）：`Symbol(description)` 原始值（`XT_OBJECT_KIND_SYMBOL`）、13 个著名符号（`Symbol.iterator`、`Symbol.asyncIterator`、`Symbol.match` 等）、`Symbol.for` / `Symbol.keyFor` 全局注册表、`symbol.description` / `toString()` / `valueOf()`；symbol 可作为属性键（`Object.getOwnPropertySymbols`，symbol 键的 `get`/`set`/`in`/`delete`），会被 `Object.keys` / `values` / `entries` / `for...in` / `JSON.stringify` 跳过，打印为 `Symbol(desc)`。
 - 通用成员访问：`xt_get` / `xt_set`（对数组 / 对象 / 字符串分发）。

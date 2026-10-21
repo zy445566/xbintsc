@@ -150,20 +150,20 @@ xt_value xt_get(xt_value target, xt_value key) {
   }
   if (XT_IS_STRING(target)) {
     /* Property access on a string: `.length`, numeric indexing and built-in
-     * methods. */
+     * methods. Indices are UTF-16 code units, so `s[0]` of a Chinese string is
+     * the whole character and an emoji index into its surrogate pair. */
     xt_string *s = xt_as_string(target);
+    uint32_t units = xt_string_utf16_length(s);
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
-      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return xt_number((double)s->length);
+      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return xt_number((double)units);
       uint32_t index = 0;
-      if (xt_key_is_array_index(k, &index) && index < s->length) {
-        return xt_string_new(xt_string_bytes(s) + index, 1);
-      }
+      if (xt_key_is_array_index(k, &index) && index < units) return xt_string_unit_value(s, (int32_t)index);
       return xt_method_value(target, key);
     }
     if (XT_IS_NUMBER(key)) {
       int32_t index = xt_to_int32(key);
-      if (index >= 0 && (uint32_t)index < s->length) return xt_string_new(xt_string_bytes(s) + index, 1);
+      if (index >= 0 && (uint32_t)index < units) return xt_string_unit_value(s, index);
     }
     return XT_UNDEFINED;
   }

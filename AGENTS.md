@@ -53,8 +53,10 @@ in [doc/ai/language-support.md](./doc/ai/language-support.md).
   `as` do nothing at runtime — a type error in the source is not caught for you.
 - **Node modules need `--ext node`.** Bare third-party npm imports are not
   supported.
-- **Strings are UTF-8 bytes.** `"é".length` is 1, `"😀".length` is 4 — not the
-  ECMAScript UTF-16 counts.
+- **Strings are UTF-8 storage with UTF-16 semantics.** `"é".length` is 1 and
+  `"😀".length` is 2; `"中文😀".length` is 4. Indexing, `slice`, `indexOf`,
+  `split`, `padStart` and `for...of` follow UTF-16 code units (or code points for
+  iteration). The lazy cons-node representation is still byte based.
 - **`async`/`await` suspends on pending promises.** An `async` body runs on a
   stackful coroutine, so a promise settled from a timer or socket callback can be
   awaited. Awaiting an already-settled value continues synchronously, and

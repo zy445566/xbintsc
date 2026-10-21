@@ -62,9 +62,13 @@ const char *xt_string_bytes(xt_string *s) {
 
   out[offset] = '\0';
   s->flat = out;
+  s->length = (uint32_t)offset;
   s->capacity = (uint32_t)(total + 1);
   s->left = NULL;
   s->right = NULL;
+  /* A concat boundary can split a surrogate pair; flattening is where the two
+   * halves meet, so normalise and record the UTF-16/code-point view now. */
+  xt_string_finish(s);
   return s->flat;
 }
 
@@ -74,12 +78,22 @@ static xt_value xt_string_concat(xt_string *a, xt_string *b) {
   size_t total = (size_t)a->length + (size_t)b->length;
   if (total <= XT_STRING_CONS_THRESHOLD) {
     xt_string *out = xt_string_alloc(total);
-    memcpy(out->flat, xt_string_bytes(a), a->length);
-    memcpy(out->flat + a->length, xt_string_bytes(b), b->length);
+    const char *aBytes = xt_string_bytes(a);
+    uint32_t aLength = a->length;
+    const char *bBytes = xt_string_bytes(b);
+    uint32_t bLength = b->length;
+    memcpy(out->flat, aBytes, aLength);
+    memcpy(out->flat + aLength, bBytes, bLength);
+    xt_string_finish(out);
     return XT_FROM_PTR(XT_TAG_STRING, out);
   }
   xt_string *out = (xt_string *)xt_alloc(sizeof(xt_string), XT_OBJECT_KIND_STRING);
   out->length = (uint32_t)total;
+  /* UTF-16 length is additive even when the boundary joins a surrogate pair;
+   * the code-point count is not, so leave it to be recomputed after
+   * flattening. */
+  out->utf16_length = xt_string_utf16_length(a) + xt_string_utf16_length(b);
+  out->code_point_count = 0;
   out->capacity = 0;
   out->flat = NULL;
   out->left = a;
@@ -91,6 +105,8 @@ int xt_string_equals(xt_string *a, xt_string *b) {
   /* Interned literals (property names above all) are shared, so identity is the
    * common case and skips the length, flattening and byte comparison entirely. */
   if (a == b) return 1;
+  const char *aBytes = xt_string_bytes(a);
+  const char *bBytes = xt_string_bytes(b);
   if (a->length != b->length) return 0;
-  return memcmp(xt_string_bytes(a), xt_string_bytes(b), a->length) == 0;
+  return memcmp(aBytes, bBytes, a->length) == 0;
 }

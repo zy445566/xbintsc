@@ -96,7 +96,10 @@ xt_value xt_string_from_cstr(const char *data);
  * Materialises a lazily concatenated string, so the returned pointer is stable
  * until the string is collected. */
 const char *xt_string_data(xt_value value);
+/** Byte length of the UTF-8 storage (what I/O and C extensions consume). */
 int32_t xt_string_length_value(xt_value value);
+/** JavaScript `String.prototype.length`: UTF-16 code units. */
+int32_t xt_string_utf16_length_value(xt_value value);
 
 /* -- bigint -------------------------------------------------------------- */
 xt_value xt_bigint_from_string(const char *data, size_t len);

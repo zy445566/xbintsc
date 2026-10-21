@@ -428,9 +428,10 @@ Check your environment with `xbintsc doctor`.
 
 The compiler is strict about its language subset — types are erased rather than
 checked, Node modules need `--ext node`, third-party npm imports are unsupported,
-strings are UTF-8 bytes and `await` only suspends on a pending promise. An agent
-that assumes "TypeScript" means "what Node accepts" will write code that does
-not compile, so the documentation is layered for exactly that reader:
+strings follow UTF-16 length/indexing over UTF-8 storage, and `await` only
+suspends on a pending promise. An agent that assumes "TypeScript" means "what
+Node accepts" will write code that does not compile, so the documentation is
+layered for exactly that reader:
 
 - [AGENTS.md](./AGENTS.md) — the entry point for an agent working **in this
   repository**: what xbintsc is, the repository map, the build gate and the rules.

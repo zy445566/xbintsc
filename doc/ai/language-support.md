@@ -130,7 +130,8 @@ See section 3 of [../unimplemented.md](../unimplemented.md) for the full list.
 
 | Item | Behaviour |
 | --- | --- |
-| `String.prototype.length` | ⚠️ **UTF-8 bytes**, not UTF-16 units: `"é".length === 1`, `"😀".length === 4`; `codePointAt` differs accordingly |
+| `String.prototype.length` | ✅ UTF-16 code units (`"中文😀".length === 4`); indexing, `slice`, `indexOf`, `split`, `padStart` and `codePointAt` use the same model. Storage stays UTF-8 |
+| RegExp Unicode matching | ⚠️ the engine is byte-oriented: a literal `中` still matches, but `.` and character classes consume one byte per repetition, and `\d`/`\w` stay ASCII. Match offsets (`match.index`, `search`, replacement callbacks) are reported in UTF-16 code units |
 | Number formatting and coercion | ✅ matches Node (`toFixed`, `toPrecision`, hex/octal/binary parsing) |
 | `BigInt` | ✅ implemented |
 | Garbage collection | ✅ non-moving mark-sweep; explicit roots plus a conservative C-stack scan; single-threaded and stop-the-world; no weak references |

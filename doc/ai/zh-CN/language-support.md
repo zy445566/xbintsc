@@ -125,7 +125,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 | 项目 | 行为 |
 | --- | --- |
-| `String.prototype.length` | ⚠️ 按 **UTF-8 字节**计，不是 UTF-16 码元：`"é".length === 1`，`"😀".length === 4`；`codePointAt` 相应不同 |
+| `String.prototype.length` | ✅ UTF-16 码元（`"中文😀".length === 4`）；索引、`slice`、`indexOf`、`split`、`padStart`、`codePointAt` 使用同一模型。底层仍以 UTF-8 存储 |
+| 正则 Unicode 匹配 | ⚠️ 引擎按字节工作：字面量 `中` 仍能匹配，但 `.` 与字符类每次只消费一个字节，`\d`/`\w` 仍是 ASCII。匹配偏移（`match.index`、`search`、替换回调）按 UTF-16 码元报告 |
 | 数字格式化与强转 | ✅ 与 Node 一致（`toFixed`、`toPrecision`、十六/八/二进制解析） |
 | `BigInt` | ✅ 已实现 |
 | 垃圾回收 | ✅ 非移动标记清扫；显式根 + C 栈保守扫描；单线程、stop-the-world；无弱引用 |

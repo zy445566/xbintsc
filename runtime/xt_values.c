@@ -19,6 +19,7 @@
 
 #include "xt_values/constructors.inc"
 #include "xt_values/strings.inc"
+#include "xt_values/utf16.inc"
 #include "xt_values/number-format.inc"
 #include "xt_values/conversions.inc"
 #include "xt_values/arithmetic.inc"

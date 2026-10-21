@@ -435,7 +435,7 @@ export function utf8Bytes(text: string): number[] {
   if (!hasMultiByteUnit(text)) {
     const bytes: number[] = [];
     for (let index = 0; index < text.length; index++) bytes.push(text.charCodeAt(index) & 0xff);
-    return bytes;
+    return combineSurrogateBytes(bytes);
   }
   const bytes: number[] = [];
   const length = text.length;
@@ -459,6 +459,47 @@ function hasMultiByteUnit(text: string): boolean {
     if (text.charCodeAt(index) > 0xff) return true;
   }
   return false;
+}
+
+/**
+ * Join adjacent WTF-8 surrogate halves into one four-byte sequence.
+ *
+ * A literal such as `"\uD83D\uDE00"` scans to two separate three-byte
+ * escapes. JavaScript's string value is one code point, so the emitted bytes
+ * must be the four-byte UTF-8 form (and a lone escape must stay three bytes,
+ * which is why this runs after scanning rather than per escape).
+ */
+function combineSurrogateBytes(bytes: number[]): number[] {
+  const out: number[] = [];
+  for (let index = 0; index < bytes.length; index++) {
+    if (
+      index + 5 < bytes.length &&
+      bytes[index] === 0xed &&
+      bytes[index + 1]! >= 0xa0 &&
+      bytes[index + 1]! <= 0xaf &&
+      bytes[index + 2]! >= 0x80 &&
+      bytes[index + 2]! <= 0xbf &&
+      bytes[index + 3] === 0xed &&
+      bytes[index + 4]! >= 0xb0 &&
+      bytes[index + 4]! <= 0xbf &&
+      bytes[index + 5]! >= 0x80 &&
+      bytes[index + 5]! <= 0xbf
+    ) {
+      const high = ((bytes[index]! & 0x0f) << 12) | ((bytes[index + 1]! & 0x3f) << 6) | (bytes[index + 2]! & 0x3f);
+      const low = ((bytes[index + 3]! & 0x0f) << 12) | ((bytes[index + 4]! & 0x3f) << 6) | (bytes[index + 5]! & 0x3f);
+      const code = 0x10000 + ((high - 0xd800) << 10) + (low - 0xdc00);
+      out.push(
+        0xf0 | (code >> 18),
+        0x80 | ((code >> 12) & 0x3f),
+        0x80 | ((code >> 6) & 0x3f),
+        0x80 | (code & 0x3f),
+      );
+      index += 5;
+      continue;
+    }
+    out.push(bytes[index]!);
+  }
+  return out;
 }
 
 export function escapeBytes(bytes: readonly number[]): string {

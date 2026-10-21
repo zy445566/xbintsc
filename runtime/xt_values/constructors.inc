@@ -10,6 +10,8 @@ xt_value xt_number(double d) { return xt_from_double(d); }
 xt_string *xt_string_alloc(size_t length) {
   xt_string *s = (xt_string *)xt_alloc(sizeof(xt_string), XT_OBJECT_KIND_STRING);
   s->length = (uint32_t)length;
+  s->utf16_length = 0;
+  s->code_point_count = 0;
   /* Keep the terminator in the allocation: many consumers hand `flat` to libc. */
   s->capacity = (uint32_t)length + 1;
   s->flat = (char *)malloc(s->capacity);
@@ -26,6 +28,7 @@ xt_string *xt_string_alloc(size_t length) {
 xt_value xt_string_new(const char *data, size_t len) {
   xt_string *s = xt_string_alloc(len);
   if (len > 0) memcpy(s->flat, data, len);
+  xt_string_finish(s);
   return XT_FROM_PTR(XT_TAG_STRING, s);
 }
 
@@ -43,4 +46,9 @@ const char *xt_string_data(xt_value value) {
 int32_t xt_string_length_value(xt_value value) {
   xt_string *s = xt_as_string(value);
   return s ? (int32_t)s->length : -1;
+}
+
+int32_t xt_string_utf16_length_value(xt_value value) {
+  xt_string *s = xt_as_string(value);
+  return s ? (int32_t)xt_string_utf16_length(s) : -1;
 }

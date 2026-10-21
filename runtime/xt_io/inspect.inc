@@ -2,15 +2,36 @@
 /* Output and inspection                                                     */
 /* ------------------------------------------------------------------------- */
 
+/* Write UTF-8 bytes, turning a lone surrogate half (WTF-8) into U+FFFD. Node's
+ * terminal encoding does the same, so `console.log("😀"[0])` prints one
+ * replacement character instead of emitting invalid UTF-8. */
+static void xt_print_utf8(FILE *out, const char *bytes, size_t length) {
+  size_t offset = 0;
+  while (offset < length) {
+    unsigned char c = (unsigned char)bytes[offset];
+    if (c == 0xED && offset + 2 < length) {
+      unsigned char second = (unsigned char)bytes[offset + 1];
+      unsigned char third = (unsigned char)bytes[offset + 2];
+      if (second >= 0xA0 && second <= 0xBF && third >= 0x80 && third <= 0xBF) {
+        fwrite("\xEF\xBF\xBD", 1, 3, out);
+        offset += 3;
+        continue;
+      }
+    }
+    fputc((int)c, out);
+    offset++;
+  }
+}
+
 static void xt_print_value(xt_value v, FILE *out) {
   if (XT_IS_STRING(v)) {
     xt_string *s = xt_as_string(v);
-    fwrite(xt_string_bytes(s), 1, s->length, out);
+    xt_print_utf8(out, xt_string_bytes(s), s->length);
     return;
   }
   xt_value text = xt_to_string(v);
   xt_string *s = xt_as_string(text);
-  fwrite(xt_string_bytes(s), 1, s->length, out);
+  xt_print_utf8(out, xt_string_bytes(s), s->length);
 }
 
 void xt_print(xt_value v) { xt_print_value(v, stdout); }
@@ -83,6 +104,18 @@ static void xt_inspect_string(xt_string *s, FILE *out) {
       default:
         if (c == (unsigned char)quote) { fputc('\\', out); fputc(c, out); }
         else if (c < 0x20) fprintf(out, "\\x%02x", c);
+        else if (c == 0xED && i + 2 < s->length) {
+          unsigned char second = (unsigned char)bytes[i + 1];
+          unsigned char third = (unsigned char)bytes[i + 2];
+          if (second >= 0xA0 && second <= 0xBF && third >= 0x80 && third <= 0xBF) {
+            unsigned code = ((unsigned)(c & 0x0F) << 12) | ((unsigned)(second & 0x3F) << 6) |
+                            (unsigned)(third & 0x3F);
+            fprintf(out, "\\u%04x", code);
+            i += 2;
+          } else {
+            fputc(c, out);
+          }
+        }
         else fputc(c, out);
     }
   }

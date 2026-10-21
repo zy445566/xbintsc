@@ -243,13 +243,13 @@ Location: `runtime/xt_alloc.c`, `runtime/xt_values.c`, `runtime/xt_containers.c`
 
 - Allocator: non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem root providers and a conservative C-stack scan).
 - Value construction: `xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`.
-- Strings: UTF-8 storage, lazy cons-node concatenation (bytes are flattened on first observation, so append loops stay linear), equality comparison, formatted number-to-string.
+- Strings: UTF-8 storage exposed through JavaScript's UTF-16 view (`length`, indexing, `slice`, `indexOf`, `split`, `padStart` and `codePointAt` count code units; `for...of` and `Array.from` count code points; lone surrogate halves are kept as WTF-8 and recombined on concatenation), lazy cons-node concatenation (bytes are flattened on first observation, so append loops stay linear), equality comparison, formatted number-to-string. `xt_string_length` reports bytes for I/O; `xt_string_utf16_length` reports the JavaScript length.
 - Type conversion: `xt_truthy`, `xt_to_number`, `xt_to_string`, `xt_typeof`.
 - Arithmetic: `add/sub/mul/div/mod/pow/neg/pos`.
 - Bitwise: `and/or/xor/not/shl/shr/ushr` (including `ToInt32` semantics).
 - Comparison: `lt/le/gt/ge`, loose / strict equality, `not`, `is_nullish`.
 - Objects: linear property list, `object_new/get/set/has/keys/values/entries/assign/spread`.
-- Arrays: `array_new/get/set/push/length/spread`; assigning `arr.length` truncates or extends (matching JS); `iter_length` / `iter_value` expose a uniform iteration view over arrays, strings, `Map` and `Set`.
+- Arrays: `array_new/get/set/push/length/spread`; assigning `arr.length` truncates or extends (matching JS); `iter_length` / `iter_value` expose a uniform iteration view over arrays, strings (by code point), `Map` and `Set`.
 - Typed arrays (`xt_typed_array.c`): typed arrays as property-bag objects with one prototype per element kind; element reads return the stored value and writes are coerced to the element type; `from` / `of` statics plus the full prototype method set; `subarray` copies.
 - Symbols (`xt_symbol.c`): `Symbol(description)` primitives (`XT_OBJECT_KIND_SYMBOL`), the 13 well-known symbols (`Symbol.iterator`, `Symbol.asyncIterator`, `Symbol.match`, …), `Symbol.for` / `Symbol.keyFor` global registry, `symbol.description` / `toString()` / `valueOf()`; symbols are valid property keys (`Object.getOwnPropertySymbols`, symbol keyed `get`/`set`/`in`/`delete`), are skipped by `Object.keys` / `values` / `entries` / `for...in` / `JSON.stringify`, and print as `Symbol(desc)`.
 - Generic member access: `xt_get` / `xt_set` (dispatch over arrays / objects / strings).

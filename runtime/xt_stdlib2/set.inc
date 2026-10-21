@@ -17,6 +17,8 @@ int32_t xt_set_size(xt_value value) {
 xt_value xt_iter_length(xt_value value) {
   if (xt_is_map(value)) return xt_number((double)xt_map_size(value));
   if (xt_is_set(value)) return xt_number((double)xt_set_size(value));
+  /* Strings iterate by code point, not by UTF-16 unit. */
+  if (XT_IS_STRING(value)) return xt_number((double)xt_string_code_point_count(xt_as_string(value)));
   return xt_array_length(value);
 }
 
@@ -70,12 +72,16 @@ xt_value xt_iter_has(xt_value value, xt_value index) {
   if (xt_is_generator(value)) return xt_bool(xt_generator_has_next(value));
   if (xt_is_map(value)) return xt_bool(xt_to_int32(index) < xt_map_size(value));
   if (xt_is_set(value)) return xt_bool(xt_to_int32(index) < xt_set_size(value));
+  if (XT_IS_STRING(value))
+    return xt_bool(xt_to_int32(index) <
+                   (int32_t)xt_string_code_point_count(xt_as_string(value)));
   return xt_bool(xt_to_int32(index) < xt_to_int32(xt_array_length(value)));
 }
 
 xt_value xt_iter_value(xt_value value, xt_value index) {
   if (xt_is_iterator_state(value)) return ((xt_iterator_state *)XT_GET_PTR(value))->cached;
   if (xt_is_generator(value)) return xt_generator_iter_value(value);
+  if (XT_IS_STRING(value)) return xt_string_code_point_value(xt_as_string(value), xt_to_int32(index));
   if (xt_is_map(value)) {
     xt_map *map = (xt_map *)XT_GET_PTR(value);
     int64_t i = (int64_t)xt_to_int32(index);

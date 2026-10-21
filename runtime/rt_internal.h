@@ -21,12 +21,15 @@
  *    code free of write barriers and makes the first implementation small and
  *    predictable. Replacing it with a precise/conservative collector is an
  *    isolated change behind `xt_alloc` plus root registration.
- *  * Strings are UTF-8. Concatenation is lazy: a `+` between two non-empty
- *    strings builds an immutable cons node (`flat == NULL`) and the bytes are
- *    materialised once, on first observation, by `xt_string_bytes`. This keeps
- *    `s += x` in a loop linear instead of copying the accumulated prefix every
- *    iteration. JavaScript measures string length in UTF-16 code units;
- *    `xt_string_length` currently reports code points (see README).
+ *  * Strings are stored as UTF-8 (with lone surrogate halves kept as WTF-8) but
+ *    expose JavaScript's UTF-16 view: `length`, indexing, slicing, searching
+ *    and splitting all count UTF-16 code units. `xt_string_length` is the raw
+ *    byte length (what extensions and I/O need), while
+ *    `xt_string_utf16_length` is the JavaScript `.length`. Concatenation is
+ *    lazy: a `+` between two non-empty strings builds an immutable cons node
+ *    (`flat == NULL`) and the bytes are materialised once, on first
+ *    observation, by `xt_string_bytes`. This keeps `s += x` in a loop linear
+ *    instead of copying the accumulated prefix every iteration.
  *  * Objects use a small linear property list. Fine for the language subset
  *    xbintsc targets today; swap for a hash map when the profile demands it.
  */
@@ -71,13 +74,18 @@ typedef struct xt_header {
 
 /* A string is either *flat* (`flat` points at `capacity` bytes, the last one
  * NUL) or a *cons* node (`flat == NULL`, `left`/`right` name the operands).
- * `length` is always the total byte length, so `.length`, comparisons and the
- * GC never need to force a cons node. `xt_string_bytes` turns a cons node into
- * a flat one in place; treat the result as immutable and never write through a
- * pointer obtained from it. */
+ * `length` is the raw UTF-8 byte length; `utf16_length` (cached, 0 means
+ * "not computed yet" and is also the length of the empty string) is the same
+ * text measured in UTF-16 code units, which is what JavaScript observes.
+ * `code_point_count` is the number of Unicode scalar values (used by
+ * `for...of` and `Array.from`). `xt_string_bytes` turns a cons node into a flat
+ * one in place; treat the result as immutable and never write through a pointer
+ * obtained from it. */
 typedef struct xt_string {
   xt_header header;
   uint32_t length;
+  uint32_t utf16_length;
+  uint32_t code_point_count;
   uint32_t capacity;
   char *flat;
   struct xt_string *left;
@@ -235,6 +243,42 @@ int xt_string_equals(xt_string *a, xt_string *b);
 /* Contiguous UTF-8 bytes of a string, flattening a cons node in place on first
  * use. The result is NUL-terminated at `s->length`; never write through it. */
 const char *xt_string_bytes(xt_string *s);
+
+/* UTF-8 <-> UTF-16 helpers (xt_values/utf16.inc). Decoding accepts WTF-8, so
+ * lone surrogate halves produced by indexing survive a round trip. */
+uint32_t xt_utf8_decode(const char *data, size_t length, size_t *width);
+size_t xt_utf8_encode(uint32_t code, char *out);
+uint32_t xt_utf8_utf16_length(const char *data, size_t length);
+void xt_utf8_measure(const char *data, size_t length, uint32_t *units, uint32_t *points);
+/* Combine an adjacent WTF-8 high/low surrogate pair into one four-byte
+ * sequence, in place. Returns the resulting byte length. */
+size_t xt_utf8_normalize_surrogates(char *data, size_t length);
+
+/* Publish a manually filled buffer (`xt_string_alloc` + `xt_string_mutable`):
+ * normalises surrogate pairs, records the byte length and caches the UTF-16 and
+ * code-point counts. */
+void xt_string_finish(xt_string *s);
+uint32_t xt_string_utf16_length(xt_string *s);
+uint32_t xt_string_code_point_count(xt_string *s);
+/* UTF-16 code unit at `index`, or -1 when out of range. */
+int32_t xt_string_code_unit(xt_string *s, int32_t index);
+/* Unicode code point beginning at UTF-16 index `index` (combining a surrogate
+ * pair), or -1 when out of range. */
+int32_t xt_string_code_point_at(xt_string *s, int32_t index);
+/* A one-code-unit string (a lone surrogate when `index` points into a pair). */
+xt_value xt_string_unit_value(xt_string *s, int32_t index);
+xt_value xt_string_from_code_point(uint32_t code);
+xt_value xt_string_from_units(const uint16_t *units, size_t count);
+/* Copy UTF-16 range [start, end), splitting a surrogate pair when needed. */
+xt_value xt_string_slice_units(xt_string *s, int32_t start, int32_t end);
+/* Byte offset / UTF-16 index conversions; both clamp to the string bounds. */
+int32_t xt_string_byte_offset(xt_string *s, int32_t unit_index);
+int32_t xt_string_unit_offset(xt_string *s, int32_t byte_offset);
+/* True when `unit_index` sits on a code-point boundary (not between the two
+ * halves of a surrogate pair). */
+int xt_string_is_boundary(xt_string *s, int32_t unit_index);
+/* The `index`-th Unicode code point (for `for...of` and `Array.from`). */
+xt_value xt_string_code_point_value(xt_string *s, int32_t index);
 /* Mutable bytes of a string just created with `xt_string_alloc` (never a cons
  * node). Used by the constructors that fill a buffer before publishing it. */
 char *xt_string_mutable(xt_string *s);

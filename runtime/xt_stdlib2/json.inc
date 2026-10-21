@@ -36,14 +36,31 @@ static xt_value xt_json_parse_string(xt_json_cursor *c) {
           else if (h >= 'a' && h <= 'f') code |= (unsigned)(h - 'a' + 10);
           else if (h >= 'A' && h <= 'F') code |= (unsigned)(h - 'A' + 10);
         }
+        /* A high surrogate followed by `\u` and a low surrogate denotes one
+         * supplementary code point, exactly like a JavaScript string. */
+        if (code >= 0xD800 && code <= 0xDBFF && c->pos + 5 < c->length &&
+            c->data[c->pos] == '\\' && c->data[c->pos + 1] == 'u') {
+          unsigned low = 0;
+          int valid = 1;
+          for (int i = 0; i < 4; i++) {
+            char h = c->data[c->pos + 2 + (size_t)i];
+            low <<= 4;
+            if (h >= '0' && h <= '9') low |= (unsigned)(h - '0');
+            else if (h >= 'a' && h <= 'f') low |= (unsigned)(h - 'a' + 10);
+            else if (h >= 'A' && h <= 'F') low |= (unsigned)(h - 'A' + 10);
+            else valid = 0;
+          }
+          if (valid && low >= 0xDC00 && low <= 0xDFFF) {
+            code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00);
+            c->pos += 6;
+          }
+        }
         if (code >= 0x80) {
           char tmp[4];
-          int bytes = 0;
-          if (code < 0x800) { tmp[bytes++] = (char)(0xC0 | (code >> 6)); tmp[bytes++] = (char)(0x80 | (code & 0x3F)); }
-          else { tmp[bytes++] = (char)(0xE0 | (code >> 12)); tmp[bytes++] = (char)(0x80 | ((code >> 6) & 0x3F)); tmp[bytes++] = (char)(0x80 | (code & 0x3F)); }
-          if (length + (size_t)bytes + 1 > capacity) { capacity = (length + (size_t)bytes + 1) * 2; out = (char *)realloc(out, capacity); if (!out) abort(); }
-          memcpy(out + length, tmp, (size_t)bytes);
-          length += (size_t)bytes;
+          size_t bytes = xt_utf8_encode(code, tmp);
+          if (length + bytes + 1 > capacity) { capacity = (length + bytes + 1) * 2; out = (char *)realloc(out, capacity); if (!out) abort(); }
+          memcpy(out + length, tmp, bytes);
+          length += bytes;
           continue;
         }
         ch = (char)code;
@@ -195,14 +212,26 @@ static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_va
     xt_string *s = xt_as_string(value);
     const char *bytes = xt_string_bytes(s);
     *out = xt_add(*out, xt_string_from_cstr("\""));
-    for (uint32_t i = 0; i < s->length; i++) {
-      char ch = bytes[i];
-      if (ch == '"') *out = xt_add(*out, xt_string_from_cstr("\\\""));
-      else if (ch == '\\') *out = xt_add(*out, xt_string_from_cstr("\\\\"));
-      else if (ch == '\n') *out = xt_add(*out, xt_string_from_cstr("\\n"));
-      else if (ch == '\r') *out = xt_add(*out, xt_string_from_cstr("\\r"));
-      else if (ch == '\t') *out = xt_add(*out, xt_string_from_cstr("\\t"));
-      else *out = xt_add(*out, xt_string_new(&ch, 1));
+    size_t offset = 0;
+    while (offset < s->length) {
+      size_t width = 0;
+      uint32_t code = xt_utf8_decode(bytes + offset, s->length - offset, &width);
+      const char *escape = NULL;
+      char buffer[8];
+      if (code == '"') escape = "\\\"";
+      else if (code == '\\') escape = "\\\\";
+      else if (code == '\b') escape = "\\b";
+      else if (code == '\f') escape = "\\f";
+      else if (code == '\n') escape = "\\n";
+      else if (code == '\r') escape = "\\r";
+      else if (code == '\t') escape = "\\t";
+      else if (code < 0x20 || (code >= 0xD800 && code <= 0xDFFF)) {
+        snprintf(buffer, sizeof(buffer), "\\u%04x", (unsigned)code);
+        escape = buffer;
+      }
+      if (escape) *out = xt_add(*out, xt_string_from_cstr(escape));
+      else *out = xt_add(*out, xt_string_new(bytes + offset, width));
+      offset += width;
     }
     *out = xt_add(*out, xt_string_from_cstr("\""));
     return;
@@ -216,7 +245,7 @@ xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
   int indent = 0;
   xt_value space = xt_arg_at(argc, argv, 1);
   if (XT_IS_NUMBER(space)) indent = xt_to_int32(space);
-  else if (XT_IS_STRING(space)) indent = (int)((xt_string *)XT_GET_PTR(space))->length;
+  else if (XT_IS_STRING(space)) indent = (int)xt_string_utf16_length((xt_string *)XT_GET_PTR(space));
   if (indent < 0) indent = 0;
   if (indent > 10) indent = 10;
   xt_value value = xt_arg_at(argc, argv, 0);

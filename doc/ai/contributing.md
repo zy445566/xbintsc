@@ -76,13 +76,15 @@ nondeterminism (a `Map`/`Set` iteration over insertion-ordered data you did not
 control, a timestamp, a filesystem-order dependency) into codegen.
 
 A second consequence is the string model: the compiler's own source text has to
-mean the same thing in every generation. A compiled string is UTF-8 bytes, so the
-self-hosted `readFileSync` (`--ext node`) hands the scanner the bytes of a file,
-while Node hands it the same file already decoded — read source files through
-`decodeUtf8` ([src/diagnostics/utf8.ts](../../src/diagnostics/utf8.ts)) and never
-assume a code unit is a byte or a character. Getting this wrong shows up as a
-non-ASCII literal (`—` in a hint string) coming out re-encoded in `gen2.ll`, which
-is why the emitted IR is compared byte-for-byte rather than line-by-line.
+mean the same thing in every generation. A compiled string stores UTF-8 bytes
+but indexes them in UTF-16 code units, so the self-hosted `readFileSync`
+(`--ext node`) hands the scanner a byte string (one byte per code unit, all
+`<= 0xFF`), while Node hands it the same file already decoded — read source
+files through `decodeUtf8` ([src/diagnostics/utf8.ts](../../src/diagnostics/utf8.ts))
+and never assume a code unit is a byte or a character. Getting this wrong shows
+up as a non-ASCII literal (`—` in a hint string) coming out re-encoded in
+`gen2.ll`, which is why the emitted IR is compared byte-for-byte rather than
+line-by-line.
 
 Verify locally:
 

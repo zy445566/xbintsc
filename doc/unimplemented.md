@@ -224,7 +224,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 
 | Item | Deviation |
 | --- | --- |
-| String `length` | Counted in UTF-8 bytes, not UTF-16 code units (`"\u00e9".length` reports 1 instead of 2; `"\u{1F600}".length` reports 4 instead of 2; `codePointAt` likewise differs) |
+| RegExp byte-oriented matching | The engine matches UTF-8 bytes: literal multi-byte text works, but `.` and character classes consume one byte per repetition (`\d` / `\w` stay ASCII). Offsets returned by `exec` / `search` / replacement callbacks are converted to UTF-16 code units |
 | Global RegExp `lastIndex` | `test` / `exec` do not advance or honour a caller-set `lastIndex` for `/g` / `/y` regexes |
 | String `normalize` / `structuredClone` | Not implemented |
 | First-class built-in methods | Implemented as unbound method values (see section 5); `fn.toString()` returns a placeholder rather than source text |
@@ -281,7 +281,7 @@ Unimplemented (modules): circular dependencies, live bindings, dynamic
 Unimplemented (type system): type checking, generic instantiation, assertion
                              semantics, optional-chaining narrowing
 
-Unimplemented (runtime): asynchronous I/O scheduling, UTF-16 string length,
+Unimplemented (runtime): asynchronous I/O scheduling,
                          global-regex lastIndex
 
 Unimplemented (engineering): type checker

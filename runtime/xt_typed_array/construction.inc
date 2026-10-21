@@ -68,7 +68,7 @@ static int xt_ta_length_of(xt_value value, uint32_t *out) {
     return 1;
   }
   if (XT_IS_STRING(value)) {
-    *out = xt_as_string(value)->length;
+    *out = xt_string_code_point_count(xt_as_string(value));
     return 1;
   }
   if (xt_typed_array_kind_of(value) >= 0) {
@@ -90,8 +90,10 @@ static xt_value xt_ta_from_value(int kind, xt_value value, xt_value mapFn, xt_va
   uint32_t length = 0;
   if (!xt_ta_length_of(value, &length)) length = 0;
   xt_value array = xt_ta_new(kind, length);
+  xt_string *sourceString = XT_IS_STRING(value) ? xt_as_string(value) : NULL;
   for (uint32_t i = 0; i < length; i++) {
-    xt_value item = xt_get(value, xt_number((double)i));
+    xt_value item = sourceString ? xt_string_code_point_value(sourceString, (int32_t)i)
+                                 : xt_get(value, xt_number((double)i));
     if (haveMap) {
       xt_value args[3] = {item, xt_number((double)i), array};
       item = xt_call_with_this(mapFn, thisArg, 3, args);

@@ -433,7 +433,7 @@ xt_value xt_object_has_own(xt_value value, xt_value key) {
     xt_string *k = xt_as_string(xt_to_string(key));
     if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
     uint32_t index = 0;
-    return xt_bool(xt_key_is_array_index(k, &index) && index < string->length);
+    return xt_bool(xt_key_is_array_index(k, &index) && index < xt_string_utf16_length(string));
   }
   xt_object *obj = xt_as_object(value);
   if (!obj) return XT_FALSE;
@@ -506,7 +506,8 @@ xt_value xt_object_keys(xt_value value) {
   }
   if (XT_IS_STRING(value)) {
     xt_string *s = xt_as_string(value);
-    for (uint32_t i = 0; i < s->length; i++) {
+    uint32_t units = xt_string_utf16_length(s);
+    for (uint32_t i = 0; i < units; i++) {
       char buffer[32];
       snprintf(buffer, sizeof(buffer), "%u", i);
       xt_array_push(result, xt_string_from_cstr(buffer));

@@ -18,23 +18,22 @@
 
 xt_value xt_object_values(xt_value value) {
   xt_value result = xt_array_new(0, NULL);
-  if (!XT_IS_OBJECT(value)) return result;
-  xt_object *obj = (xt_object *)XT_GET_PTR(value);
-  for (uint32_t i = 0; i < obj->count; i++) {
-    if (XT_IS_STRING(obj->properties[i].key)) xt_array_push(result, obj->properties[i].value);
-  }
+  xt_value keys = xt_object_keys(value);
+  xt_array *array = xt_as_array(keys);
+  if (!array) return result;
+  for (uint32_t i = 0; i < array->length; i++) xt_array_push(result, xt_get(value, array->items[i]));
   return result;
 }
 
 xt_value xt_object_entries(xt_value value) {
   xt_value result = xt_array_new(0, NULL);
-  if (!XT_IS_OBJECT(value)) return result;
-  xt_object *obj = (xt_object *)XT_GET_PTR(value);
-  for (uint32_t i = 0; i < obj->count; i++) {
-    if (!XT_IS_STRING(obj->properties[i].key)) continue;
+  xt_value keys = xt_object_keys(value);
+  xt_array *array = xt_as_array(keys);
+  if (!array) return result;
+  for (uint32_t i = 0; i < array->length; i++) {
     xt_value pair = xt_array_new(0, NULL);
-    xt_array_push(pair, obj->properties[i].key);
-    xt_array_push(pair, obj->properties[i].value);
+    xt_array_push(pair, array->items[i]);
+    xt_array_push(pair, xt_get(value, array->items[i]));
     xt_array_push(result, pair);
   }
   return result;
@@ -45,8 +44,11 @@ xt_value xt_object_assign(int32_t argc, xt_value *argv) {
   xt_value target = argv[0];
   if (!XT_IS_OBJECT(target)) return target;
   for (int32_t i = 1; i < argc; i++) {
-    if (!XT_IS_OBJECT(argv[i])) continue;
-    xt_object *source = (xt_object *)XT_GET_PTR(argv[i]);
+    if (!XT_IS_OBJECT(argv[i]) && !XT_IS_ARRAY(argv[i]) && !XT_IS_STRING(argv[i])) continue;
+    /* Arrays and strings contribute their index properties, exactly like
+     * `{ ..."ab" }` / `Object.assign({}, [1, 2])` in ECMAScript. */
+    xt_value properties = xt_object_rest(argv[i], 0, NULL);
+    xt_object *source = (xt_object *)XT_GET_PTR(properties);
     for (uint32_t j = 0; j < source->count; j++) {
       xt_object_set(target, source->properties[j].key, source->properties[j].value);
     }
@@ -102,11 +104,11 @@ xt_value xt_object_rest(xt_value source, int32_t argc, xt_value *argv) {
 
   if (XT_IS_STRING(source)) {
     xt_string *string = (xt_string *)XT_GET_PTR(source);
-    const char *bytes = xt_string_bytes(string);
-    for (uint32_t i = 0; i < string->length; i++) {
+    uint32_t units = xt_string_utf16_length(string);
+    for (uint32_t i = 0; i < units; i++) {
       char buffer[16];
       snprintf(buffer, sizeof(buffer), "%u", i);
-      xt_object_rest_copy(result, xt_string_from_cstr(buffer), xt_string_new(bytes + i, 1), argc, argv);
+      xt_object_rest_copy(result, xt_string_from_cstr(buffer), xt_string_unit_value(string, (int32_t)i), argc, argv);
     }
     return result;
   }
@@ -395,7 +397,7 @@ xt_value xt_in(xt_value key, xt_value value) {
     xt_string *k = xt_as_string(xt_to_string(key));
     if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
     int32_t index = xt_to_int32(key);
-    return xt_bool(index >= 0 && (uint32_t)index < s->length);
+    return xt_bool(index >= 0 && (uint32_t)index < xt_string_utf16_length(s));
   }
   return XT_FALSE;
 }

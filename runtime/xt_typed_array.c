@@ -1,16 +1,12 @@
 /*
  * xbintsc runtime - typed arrays.
  *
- * JavaScript TypedArrays are modelled as plain property-bag objects with one
- * numbered property per element plus `length`, `byteLength` and `byteOffset`.
- * Every write is coerced to the array's element type, so
- * `new Uint8Array(2)[0] = 300` stores 44 exactly like ECMAScript and a
- * `Float32Array` round-trips through single precision.
- *
- * There is no shared `ArrayBuffer` backing store: `slice` / `subarray` return
- * independent copies and the `.buffer` property is not exposed. That matches
- * xbintsc's runtime, which has no distinct binary value type (strings are
- * UTF-8 byte arrays and `Buffer` is likewise a property bag).
+ * A TypedArray is a view over an `ArrayBuffer`: its elements live in the
+ * buffer's bytes at `byteOffset`, and `length` / `byteLength` describe the
+ * window. `subarray` shares that buffer; `slice` copies into a new one.
+ * Every write is coerced to the element type, so `new Uint8Array(2)[0] = 300`
+ * stores 44 exactly like ECMAScript and a `Float32Array` round-trips through
+ * single precision.
  */
 
 #include "rt_internal.h"
@@ -46,6 +42,7 @@ static xt_value xt_ta_protos[XT_TA_KIND_COUNT];
 static xt_value xt_ta_method_fill(xt_value, xt_value, int32_t, xt_value *);
 static xt_value xt_ta_method_set(xt_value, xt_value, int32_t, xt_value *);
 static xt_value xt_ta_method_slice(xt_value, xt_value, int32_t, xt_value *);
+static xt_value xt_ta_method_subarray(xt_value, xt_value, int32_t, xt_value *);
 static xt_value xt_ta_method_join(xt_value, xt_value, int32_t, xt_value *);
 static xt_value xt_ta_method_to_string(xt_value, xt_value, int32_t, xt_value *);
 static xt_value xt_ta_method_index_of(xt_value, xt_value, int32_t, xt_value *);

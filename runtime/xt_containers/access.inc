@@ -138,6 +138,25 @@ xt_value xt_get(xt_value target, xt_value key) {
       }
     }
     {
+      /* Typed arrays keep their elements in a shared ArrayBuffer: serve
+       * `.buffer` / element reads from it instead of the property bag. */
+      int typed = xt_typed_array_kind_of(target);
+      if (typed >= 0) {
+        if (XT_IS_STRING(key)) {
+          xt_string *k = xt_as_string(key);
+          if (k->length == 6 && memcmp(xt_string_bytes(k), "buffer", 6) == 0) {
+            return xt_typed_array_buffer_of(target);
+          }
+          if (k->length == 10 && memcmp(xt_string_bytes(k), "byteOffset", 10) == 0) {
+            return xt_number((double)xt_typed_array_byte_offset_of(target));
+          }
+          uint32_t index = 0;
+          if (xt_key_is_array_index(k, &index)) return xt_typed_array_read(target, index);
+        } else if (XT_IS_NUMBER(key)) {
+          int32_t index = xt_to_int32(key);
+          if (index >= 0) return xt_typed_array_read(target, (uint32_t)index);
+        }
+      }
       xt_value value = xt_object_get(target, key);
       if (value != XT_UNDEFINED) return value;
       xt_value method = xt_method_value(target, key);
@@ -227,7 +246,8 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
       if (isIndex) {
         double length = xt_to_number(xt_object_get_cstr(target, "length"));
         if (index >= (uint32_t)length) return value; /* out-of-bounds writes are ignored */
-        return xt_object_set(target, key, xt_number(xt_typed_array_coerce(typed, xt_to_number(value))));
+        xt_typed_array_write(target, index, value);
+        return value;
       }
     }
     return xt_object_set(target, key, value);

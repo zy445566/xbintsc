@@ -209,7 +209,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - 标识符、数字、BigInt（任意精度）、字符串、模板、布尔、`null`、`undefined`、`arguments`
   - 算术 / 比较 / 逻辑 / 短路 / 条件 / 位运算 / 一元（含 `typeof` `void`）/ 前后缀增减 / 复合赋值 / 逻辑赋值
   - 数组字面量（含展开 `[...]`）、对象字面量（含简写 / 方法 / 对象展开 `{...obj}`）
-  - 类型化数组（`Uint8Array`、`Int8Array`、`Uint8ClampedArray`、`Uint16Array`、`Int16Array`、`Uint32Array`、`Int32Array`、`Float32Array`、`Float64Array`）：构造（`new X(n)` / `new X(可迭代)` / `X.from` / `X.of`）、`length` / `byteLength` / `byteOffset` / `BYTES_PER_ELEMENT`、按元素类型强制的读写（`ToIntN` / `ToUintN`、`Uint8ClampedArray` 舍入、`Float32` 单精度舍入）以及原型方法 `fill` / `set` / `slice` / `subarray` / `join` / `toString` / `indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` / `some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` / `at` / `keys` / `values` / `entries`。有意保留的差异见未实现文档（`subarray` 返回副本、迭代器方法返回数组、类型化数组无共享缓冲区）。
+  - 类型化数组（`Uint8Array`、`Int8Array`、`Uint8ClampedArray`、`Uint16Array`、`Int16Array`、`Uint32Array`、`Int32Array`、`Float32Array`、`Float64Array`）：构造（`new X(n)` / `new X(可迭代)` / `new X(buffer[, offset[, length]])` / `X.from` / `X.of`）、`length` / `byteLength` / `byteOffset` / `.buffer` / `BYTES_PER_ELEMENT`、按元素类型强制的读写（`ToIntN` / `ToUintN`、`Uint8ClampedArray` 舍入、`Float32` 单精度舍入）以及原型方法 `fill` / `set` / `slice` / `subarray` / `join` / `toString` / `indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` / `some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` / `at` / `keys` / `values` / `entries`。类型化数组是 `ArrayBuffer` 上的视图；`subarray` 共享缓冲区，`slice` 复制。迭代器方法仍返回数组。
   - `ArrayBuffer`（`byteLength`、`slice`、`ArrayBuffer.isView`）与 `DataView`（默认大端，可选 `littleEndian`，支持 Uint8/Int8/Uint16/Int16/Uint32/Int32/Float32/Float64 的 get/set）；同一缓冲区上的多个视图共享字节。
   - 属性访问（含 `length` 特判、`Math` 常量）、元素访问、调用
   - 一等公民内建构造器（`const A = Array`、`const M = Map`、`const E = TypeError`、类型化数组）：裸引用下降为 `xt_builtin_constructor`，得到带 `name` / `length`、`prototype` 与静态成员（`A.isArray`、`A.from`、`M.prototype` 等）的缓存函数。通过别名调用或 `new` 会分派到同一运行时构造器，`x instanceof A` 沿共享原型链判断。
@@ -243,7 +243,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 比较：`lt/le/gt/ge`、宽松 / 严格相等、`not`、`is_nullish`。
 - 对象：线性属性列表，`object_new/get/set/has/keys/values/entries/assign/spread`。
 - 数组：`array_new/get/set/push/length/spread`；对 `arr.length` 赋值会截断 / 扩展（与 JS 一致）；`iter_length` / `iter_value` 为数组、字符串（按码点）、`Map`、`Set` 提供统一迭代视图。
-- 类型化数组（`xt_typed_array.c`）：以属性包对象表示，每种元素类型一个原型；读取返回已存值，写入按元素类型强制转换；提供 `from` / `of` 静态方法与完整原型方法集；`subarray` 返回副本。
+- 类型化数组（`xt_typed_array.c`）：由缓冲区支撑的视图，每种元素类型一个原型；元素存放在共享的 `ArrayBuffer` 中，读写通过字节级助手完成（按类型强制、`.buffer` / `.byteOffset`、`subarray` 视图 / `slice` 复制）；提供 `from` / `of` 静态方法与完整原型方法集。
 - Symbol（`xt_symbol.c`）：`Symbol(description)` 原始值（`XT_OBJECT_KIND_SYMBOL`）、13 个著名符号（`Symbol.iterator`、`Symbol.asyncIterator`、`Symbol.match` 等）、`Symbol.for` / `Symbol.keyFor` 全局注册表、`symbol.description` / `toString()` / `valueOf()`；symbol 可作为属性键（`Object.getOwnPropertySymbols`，symbol 键的 `get`/`set`/`in`/`delete`），会被 `Object.keys` / `values` / `entries` / `for...in` / `JSON.stringify` 跳过，打印为 `Symbol(desc)`。
 - 通用成员访问：`xt_get` / `xt_set`（对数组 / 对象 / 字符串分发）。
 - 标准库：`xt_call_method`（统一分发数组 / 字符串方法与对象上的函数属性）、`xt_math_call`（`Math.*` 与常量）、全局函数 `xt_parse_int/parse_float/is_nan/is_finite/number_ctor/string_ctor/boolean_ctor/fetch`。

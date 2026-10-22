@@ -47,6 +47,20 @@ static xt_value xt_ta_method_slice(xt_value self, xt_value env, int32_t argc, xt
   return out;
 }
 
+static xt_value xt_ta_method_subarray(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  int kind = xt_typed_array_kind_of(self);
+  if (kind < 0) return XT_UNDEFINED;
+  xt_value buffer = xt_typed_array_buffer_of(self);
+  if (!xt_is_array_buffer(buffer)) return xt_ta_method_slice(self, env, argc, argv);
+  int32_t length = (int32_t)xt_ta_length(self);
+  int32_t start = xt_ta_relative(argc > 0 && argv[0] != XT_UNDEFINED ? xt_to_int32(argv[0]) : 0, length);
+  int32_t end = xt_ta_relative(argc > 1 && argv[1] != XT_UNDEFINED ? xt_to_int32(argv[1]) : length, length);
+  if (end < start) end = start;
+  uint32_t offset = xt_typed_array_byte_offset_of(self) + (uint32_t)start * (uint32_t)xt_ta_bytes[kind];
+  return xt_ta_view(kind, buffer, offset, (uint32_t)(end - start));
+}
+
 static xt_value xt_ta_method_join(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   xt_value separator = argc > 0 && argv[0] != XT_UNDEFINED ? xt_to_string(argv[0]) : xt_string_from_cstr(",");
@@ -137,14 +151,16 @@ static xt_value xt_ta_method_filter(xt_value self, xt_value env, int32_t argc, x
   xt_value callback = xt_arg_at(argc, argv, 0);
   xt_value thisArg = xt_arg_at(argc, argv, 1);
   int32_t length = (int32_t)xt_ta_length(self);
-  xt_value out = xt_ta_new(kind, 0);
+  /* A fixed-length buffer cannot grow, so collect matches first and build the
+   * result typed array from that array. */
+  xt_value matches = xt_array_new(0, NULL);
   for (int32_t i = 0; i < length; i++) {
     xt_value args[3] = {xt_ta_element(self, (uint32_t)i), xt_number((double)i), self};
     if (xt_truthy(xt_call_with_this(callback, thisArg, 3, args))) {
-      xt_ta_append(out, kind, xt_ta_element(self, (uint32_t)i));
+      xt_array_push(matches, xt_ta_element(self, (uint32_t)i));
     }
   }
-  return out;
+  return xt_ta_from_value(kind, matches, XT_UNDEFINED, XT_UNDEFINED, 0);
 }
 
 static xt_value xt_ta_method_every(xt_value self, xt_value env, int32_t argc, xt_value *argv) {

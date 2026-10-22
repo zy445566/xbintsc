@@ -517,10 +517,15 @@ export class GeneratorContext {
 
   unsupported(node: Node, what: string): void {
     const label = kindName(node.kind);
+    const hasName = label !== String(node.kind);
+    /* `unsupported(statement, "statement")` is the generic fallback; when the
+     * syntax kind has a human name, use it directly instead of appending a
+     * redundant "(statement)". */
+    const subject = what === "statement" && hasName ? `this ${label}` : `this ${what} (${label})`;
     this.unsupportedCount++;
     this.diagnostics.error(
       DiagnosticCode.UnsupportedFeature,
-      `xbintsc does not yet support this ${what} (${label})`,
+      `xbintsc does not yet support ${subject}`,
       node,
       this.fileNameOf(node),
     );

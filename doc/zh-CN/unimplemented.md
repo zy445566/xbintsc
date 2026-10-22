@@ -82,11 +82,12 @@
 | `Symbol` 构造器与 symbol 原始值 | ✓ `Symbol(description)`、著名符号、`Symbol.for` / `Symbol.keyFor`、symbol 属性键与 `Object.getOwnPropertySymbols` |
 | `String.prototype.normalize` | ✗ 未实现 |
 | `structuredClone` | ✓ 数组、对象、Map、Set、Date、RegExp 与类型化数组（保留循环引用与共享引用）；函数、symbol、Promise、生成器会被拒绝 |
+| `JSON.stringify` 选项 | ~ 已支持 `space`（数字或字符串，最多 10 个单位）；函数/数组形式的 `replacer` 仍被忽略 |
 | 内置错误子类（`TypeError`、`RangeError` 等） | ✓ 一等公民构造器与原型；整个家族 `instanceof Error` 成立 |
 | `AggregateError` 构造器 | ✓ `new AggregateError(errors, message)`；`Promise.any` 现以其作为 rejection |
 | 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | ✓ 数组、字符串、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象均可在 `for...of` / 展开中使用 |
 | 生成器（`function*`、`yield`、`yield*`、`next`/`throw`/`return`） | ✓ 基于有栈协程实现；支持 `for...of`、展开与委托。`return()` 直接结束，不执行 `finally` |
-| 定时器 | ✓ 核心事件循环提供 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval`（返回数字 id，无 `Timeout` 对象；无 `setImmediate` / `queueMicrotask`）。定时器 settle 的 promise 可以被 await：async 函数体在 pending promise 上挂起，定时器触发时恢复 |
+| 定时器与微任务 | ✓ 核心事件循环提供 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` / `setImmediate` / `clearImmediate` / `queueMicrotask` 与 `performance.now`（返回数字 id，无 `Timeout` / `Immediate` 对象）。定时器 settle 的 promise 可以被 await：async 函数体在 pending promise 上挂起，定时器触发时恢复 |
 | I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
 
 ### 3.4 类型化数组

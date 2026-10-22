@@ -317,6 +317,12 @@ xt_value xt_set_timeout(int32_t argc, xt_value *argv);
 xt_value xt_clear_timeout(int32_t argc, xt_value *argv);
 xt_value xt_set_interval(int32_t argc, xt_value *argv);
 xt_value xt_clear_interval(int32_t argc, xt_value *argv);
+/* `setImmediate` runs on the timer queue with a zero delay; `clearImmediate`
+ * is an alias of `clearTimeout` (ids share one namespace). */
+xt_value xt_set_immediate(int32_t argc, xt_value *argv);
+xt_value xt_clear_immediate(int32_t argc, xt_value *argv);
+/* Schedule `callback` on the promise microtask queue (same FIFO as `.then`). */
+xt_value xt_queue_microtask(int32_t argc, xt_value *argv);
 
 /* -- global functions ------------------------------------------------------ */
 xt_value xt_parse_int(int32_t argc, xt_value *argv);

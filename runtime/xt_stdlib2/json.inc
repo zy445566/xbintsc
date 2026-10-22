@@ -133,12 +133,49 @@ static xt_value xt_json_parse_value(xt_json_cursor *c) {
   return xt_json_parse_number(c);
 }
 
+/* Reviver walk: rebuild each container bottom-up, then pass the value to the
+ * user callback with its holder as `this`. Returning undefined deletes an
+ * object property / array element, exactly like the specification. */
+static xt_value xt_json_revive(xt_value holder, xt_value key, xt_value reviver) {
+  xt_value value = xt_get(holder, key);
+  if (XT_IS_ARRAY(value)) {
+    xt_array *array = xt_as_array(value);
+    for (uint32_t i = 0; i < array->length; i++) {
+      /* Reviver keys are strings even for array indices. */
+      char keyBuffer[16];
+      snprintf(keyBuffer, sizeof(keyBuffer), "%u", i);
+      xt_value index = xt_string_from_cstr(keyBuffer);
+      xt_value updated = xt_json_revive(value, index, reviver);
+      if (updated == XT_UNDEFINED) xt_delete(value, index);
+      else xt_set(value, index, updated);
+    }
+  } else if (XT_IS_OBJECT(value)) {
+    xt_value keys = xt_object_keys(value);
+    xt_array *list = xt_as_array(keys);
+    if (list) {
+      for (uint32_t i = 0; i < list->length; i++) {
+        xt_value childKey = list->items[i];
+        xt_value updated = xt_json_revive(value, childKey, reviver);
+        if (updated == XT_UNDEFINED) xt_delete(value, childKey);
+        else xt_object_set(value, childKey, updated);
+      }
+    }
+  }
+  xt_value args[2] = {key, value};
+  return xt_call_with_this(reviver, holder, 2, args);
+}
+
 xt_value xt_json_parse(int32_t argc, xt_value *argv) {
   xt_value input = xt_to_string(xt_arg_at(argc, argv, 0));
   xt_string *s = xt_as_string(input);
   if (!s) return XT_UNDEFINED;
   xt_json_cursor cursor = {xt_string_bytes(s), s->length, 0};
-  return xt_json_parse_value(&cursor);
+  xt_value parsed = xt_json_parse_value(&cursor);
+  xt_value reviver = xt_arg_at(argc, argv, 1);
+  if (!XT_IS_FUNCTION(reviver)) return parsed;
+  xt_value holder = xt_object_new();
+  xt_object_set(holder, xt_string_from_cstr(""), parsed);
+  return xt_json_revive(holder, xt_string_from_cstr(""), reviver);
 }
 
 static void xt_json_stringify_value(xt_value value, xt_value indent, int depth, xt_value *out);

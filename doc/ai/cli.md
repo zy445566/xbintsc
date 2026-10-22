@@ -10,6 +10,7 @@ the help text leaves implicit.
 | --- | --- | --- |
 | `xbintsc build <file.ts>` | Compile to `exe` (default), `obj` or `ir` | yes, except `--emit ir` |
 | `xbintsc run <file.ts> [-- args]` | Compile to an executable and execute it | yes (`--emit exe` only) |
+| `xbintsc watch <file.ts>` | Rebuild whenever the source tree changes (Ctrl+C to stop) | yes |
 | `xbintsc emit <file.ts>` | Print LLVM IR to stdout, write nothing | no |
 | `xbintsc doctor` | Report the resolved toolchain, runtime and icon tools | only for the probe |
 | `xbintsc version` | Print the version | no |
@@ -17,6 +18,11 @@ the help text leaves implicit.
 
 Any command also accepts `--help`, which prints the help text and exits 0. An
 unknown command prints an error plus the help text and exits 1.
+
+`watch` polls the entry file's directory (build output, `dist`, `coverage` and
+`node_modules` are ignored) and re-runs `build` on every change. It accepts the
+same options as `build`; package sources under `node_modules` are not watched,
+so restart it after installing a dependency.
 
 ## Options
 

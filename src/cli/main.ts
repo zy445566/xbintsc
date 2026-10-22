@@ -43,6 +43,10 @@ import {
   type AppConfig,
   type ProjectConfig,
 } from "../driver/config.js";
+import { fingerprintTree, startWatching } from "./watch.js";
+
+/** Sentinel: watch mode keeps the process alive instead of exiting. */
+const KEEP_RUNNING = -1;
 
 export interface CliIo {
   readonly stdout: (text: string) => void;
@@ -238,6 +242,7 @@ Usage:
   xbintsc build <file.ts> [options]   Compile to a native binary
   xbintsc run <file.ts> [-- args]     Compile and execute
   xbintsc check <file.ts>             Parse and bind without linking
+  xbintsc watch <file.ts> [options]   Rebuild whenever the source tree changes
   xbintsc emit <file.ts>              Print LLVM IR
   xbintsc doctor                      Report the resolved toolchain
   xbintsc version                     Print the version
@@ -447,6 +452,32 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     return failed ? 1 : 0;
   }
 
+  if (command === "watch") {
+    const cliEntry = args.positionals[0];
+    const resolved = resolveProjectConfig(args.flags, cliEntry);
+    if (!resolved.ok) return reportConfigError(resolved.error, io);
+    const entry = cliEntry ?? resolved.config.entry;
+    if (!entry) {
+      io.stderr(`xbintsc: watch requires a source file (or 'entry' in ${CONFIG_FILE_NAME})\n`);
+      emitHint(io, `hint: pass the entry file, or set 'entry' in ${CONFIG_FILE_NAME} — see ${DOC_CLI}`);
+      return 1;
+    }
+    /* Re-enter the normal build path with the same flags, exactly as if the
+     * user had typed `build`; the config is re-read on every rebuild too. */
+    const forwarded = ["build", ...argv.slice(1)];
+    run(forwarded, io);
+    const root = dirname(resolve(entry));
+    startWatching({
+      scan: () => fingerprintTree(root),
+      onRebuild: () => {
+        io.stdout("\n");
+        run(forwarded, io);
+      },
+    });
+    io.stdout(`xbintsc: watching ${root} for changes (Ctrl+C to stop)\n`);
+    return KEEP_RUNNING;
+  }
+
   if (command === "emit") {
     const cliEntry = args.positionals[0];
     const resolved = resolveProjectConfig(args.flags, cliEntry);
@@ -534,5 +565,8 @@ function dispatch(argv: readonly string[], io: CliIo): number {
 const isMain =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
-  process.exit(run(process.argv.slice(2)));
+  const status = run(process.argv.slice(2));
+  /* Watch mode returns KEEP_RUNNING; the polling interval keeps the process
+   * alive, so calling process.exit here would stop it immediately. */
+  if (status !== KEEP_RUNNING) process.exit(status);
 }

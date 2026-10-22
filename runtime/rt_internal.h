@@ -387,6 +387,8 @@ int xt_promise_state_of(xt_value value);
 xt_value xt_promise_value_of(xt_value value);
 /* Register a coroutine to resume when `promise` settles (it must be pending). */
 void xt_promise_add_async_waiter(xt_value promise, void *async);
+/* Queue a microtask that resumes `async` with an already settled value. */
+void xt_promise_queue_async_wake(void *async, xt_value settled, int rejected);
 
 /* Exception-frame plumbing shared with the generator runtime. The struct is
  * public so a coroutine can `_setjmp` its own boundary directly (a `setjmp`

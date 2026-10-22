@@ -20,6 +20,7 @@ export enum DiagnosticCode {
   InvalidAssignmentTarget = 2005,
   DuplicateDefault = 2006,
   InvalidTypeSyntax = 2007,
+  NestingTooDeep = 2008,
 
   // Binder 3xxx
   DuplicateIdentifier = 3001,

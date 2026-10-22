@@ -19,6 +19,7 @@ import {
   type TypeParameterDeclaration,
 } from "../../ast/nodes.js";
 import type { BindingElement, BindingName } from "../../ast/declarations.js";
+import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { expressionToPropertyName } from "../helpers.js";
 import type { Parser } from "../parser.js";
 
@@ -43,7 +44,17 @@ export const declarationFunctionMethods: DeclarationFunctionMethods = {
     if (this.hasModifier(modifiers, ModifierKind.Async)) flags |= NodeFlags.Async;
     if (this.hasModifier(modifiers, ModifierKind.Declare)) flags |= NodeFlags.Declare;
     let name: Identifier | undefined;
-    if (!this.at(TokenKind.OpenParen) && !this.at(TokenKind.LessThan)) name = this.parseIdentifier();
+    if (!this.at(TokenKind.OpenParen) && !this.at(TokenKind.LessThan)) {
+      name = this.parseIdentifier();
+    } else if (this.hasModifier(modifiers, ModifierKind.Default)) {
+      /* `export default function () {}` is the one valid anonymous form. Give
+       * it the internal binding name the default export is mapped to, so the
+       * bundler can export it like `export default <expression>`. */
+      name = { kind: SyntaxKind.Identifier, text: "default", start, end: start };
+    } else {
+      /* A plain `function () {}` is not a declaration. */
+      this.error(DiagnosticCode.ExpectedIdentifier, "Function declaration needs a name");
+    }
     const typeParameters = this.parseTypeParameters();
     const parameters = this.parseParameters();
     let returnType: TypeNode | undefined;

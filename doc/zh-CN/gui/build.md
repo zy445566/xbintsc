@@ -19,10 +19,17 @@
 - `src/extensions/gui/index.ts` 通过 `nativeObjects()` 暴露该归档（经由
   `findRuntimeLibrary`，因此 `.a`/`.lib` 都可用），并通过 `linkerFlags()`
   暴露操作系统框架。
+- `scripts/build-gui.ts` 使用与驱动**相同**的 clang
+  （`src/driver/toolchain-provider.ts`）；Windows 上就是 Visual Studio 自带的、
+  面向 MSVC 的 LLVM，并配套使用其同目录下的 `clang++`/`llvm-ar` 来配置 CMake、
+  编译引擎和合并归档。脚本不提供 `gcc`/`g++` 回退，Windows 上也始终使用
+  `llvm-ar`，因此归档不会混入其他目标文件格式或 C++ 运行时。Visual Studio
+  工具链按绝对路径查找，无需开发者命令提示符。Windows 上 SDL_GPU 会选择 Vulkan
+  后端，不需要 DXIL/`dxc` 工具链。
 - CI 在组装发布归档之前构建 `gui.a`，因此它会随 `runtime/lib/<slug>/` 一起
   发布（发布 tarball 会复制整个 `runtime/` 树）。归档在 Linux（Xvfb 下，
   使用 lavapipe 软件 Vulkan 驱动）与 macOS 上构建并运行示例；Windows 为
-  试验性。
+  试验性，因为托管 runner 没有 GPU/Vulkan 驱动。
 - 现有的缓存指纹已经会对 `nativeObjects()` 的内容做哈希，因此重建 `gui.a`
   会自动使缓存二进制失效。
 - CMake 构建树位于其源码**旁边**（`vendor/sdl-build`、`vendor/freetype-build`、
@@ -55,8 +62,9 @@ xbintsc run examples/gui/hello.ts --ext gui
 `volume` 驱动播放。媒体 `src` 相对于进程工作目录解析，因此从仓库根目录运行：
 `xbintsc run examples/gui/media.ts --ext gui`。几何报告见该目录的 README。
 
-这些测试套件在 Windows 上默认跳过（该平台会构建归档，但 CI 未验证运行）。
-如果本机有 `gui.lib` 与可用的 GPU，可用 `xbintsc_GUI_TESTS=1` 选择启用：
+这些测试套件在 Windows 上默认跳过（归档可以在本机通过 Vulkan 运行，但 CI
+runner 没有可用的 GPU 驱动）。如果本机有 `gui.lib` 与可用的 GPU，可用
+`xbintsc_GUI_TESTS=1` 选择启用：
 
 ```bat
 set xbintsc_GUI_TESTS=1

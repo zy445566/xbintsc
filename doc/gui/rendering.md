@@ -43,7 +43,9 @@ its own GPU scissor rectangle (scaled to device pixels), so painter order and
   Note that SDL 3.2.10's Direct3D 12 backend cannot create a graphics pipeline
   whose shaders declare a uniform buffer (it fails with `E_INVALIDARG`); the
   engine passes the viewport that way, so the DXIL path is built but not usable
-  until that is resolved upstream.
+  until that is resolved upstream. Windows does not hit this: SDL_GPU selects the
+  Vulkan backend there (confirmed by `win.driver()`), which consumes the SPIR-V
+  blobs.
 - A **rounded-rectangle distance field** in the shape fragment shader gives
   antialiased fills; the vertex carries `position`, `local`, `half extents`,
   `radius` and colour, and a viewport-size push constant does the projection.

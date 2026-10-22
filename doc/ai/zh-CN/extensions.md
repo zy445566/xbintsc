@@ -128,7 +128,8 @@ xbintsc build demo.ts --ext-native a.json,b.json      # 多个
 与值的辅助函数。关键 ABI 事实：值是 64 位 NaN-boxed 字；字符串**不**以 NUL 结尾，
 所以要把 `xt_string_data` 与 `xt_string_length_value` 配对使用；运行时交给你的内存
 不会被移动或释放。请使用与 xbintsc 解析到的同一个 clang/ABI 构建（`xbintsc doctor`
-会打印它）；在 Windows 上要在 **x64/ARM64 Native Tools 命令提示符**里构建。
+会打印它）。Windows 上必须是面向 MSVC 的 clang，通常就是 Visual Studio 自带的
+LLVM；不需要开发者命令提示符。
 
 可直接照抄的工程：[`examples/extensions/cpp`](../../../examples/extensions/cpp) 与
 [`examples/extensions/rust`](../../../examples/extensions/rust)；完整指南见

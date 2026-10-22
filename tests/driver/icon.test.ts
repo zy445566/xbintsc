@@ -203,36 +203,23 @@ describe("resolveResourceCompiler", () => {
     process.env.xbintsc_RC = "my-rc";
     try {
       const { runner } = recordingRunner();
-      expect(resolveResourceCompiler(runner, "clang")).toEqual({ tool: "my-rc", kind: "llvm-rc" });
+      expect(resolveResourceCompiler(runner, "clang")).toEqual({ tool: "my-rc" });
     } finally {
       if (previous === undefined) delete process.env.xbintsc_RC;
       else process.env.xbintsc_RC = previous;
     }
   });
 
-  it("detects windres overrides and skips missing sibling paths", () => {
-    const previous = process.env.xbintsc_RC;
-    process.env.xbintsc_RC = "/opt/mingw/bin/windres";
-    try {
-      const { runner } = recordingRunner();
-      expect(resolveResourceCompiler(runner, "clang")).toEqual({
-        tool: "/opt/mingw/bin/windres",
-        kind: "windres",
-      });
-    } finally {
-      if (previous === undefined) delete process.env.xbintsc_RC;
-      else process.env.xbintsc_RC = previous;
-    }
-
+  it("skips missing sibling paths", () => {
     const { runner, calls } = recordingRunner();
     const clang = join(temporaryDirectory(), "bin", "clang");
-    expect(resolveResourceCompiler(runner, clang)).toEqual({ tool: LLVM_RC, kind: "llvm-rc" });
+    expect(resolveResourceCompiler(runner, clang)).toEqual({ tool: LLVM_RC });
     expect(calls.some((call) => call.command === clang)).toBe(false);
   });
 
   it("accepts llvm-rc's usage-only probe", () => {
     // `llvm-rc` has no `--version`: `/?` prints its banner and exits 1. A probe
-    // that only accepted exit 0 used to fall through to windres.
+    // that only accepted exit 0 used to skip a perfectly good llvm-rc.
     const { runner, calls } = recordingRunner((command, args) => {
       if (command !== LLVM_RC) return { status: 127 };
       return args[0] === "/?"
@@ -240,7 +227,7 @@ describe("resolveResourceCompiler", () => {
         : { status: 1 };
     });
     const clang = join(temporaryDirectory(), "bin", "clang");
-    expect(resolveResourceCompiler(runner, clang)).toEqual({ tool: LLVM_RC, kind: "llvm-rc" });
+    expect(resolveResourceCompiler(runner, clang)).toEqual({ tool: LLVM_RC });
     expect(calls.some((call) => call.command === LLVM_RC && call.args[0] === "/?")).toBe(true);
   });
 
@@ -254,7 +241,7 @@ describe("resolveResourceCompiler", () => {
     process.env.xbintsc_RC = "broken-rc";
     try {
       const { runner } = recordingRunner((command) => (command === "broken-rc" ? { status: 1 } : {}));
-      expect(resolveResourceCompiler(runner, "clang")).toEqual({ tool: LLVM_RC, kind: "llvm-rc" });
+      expect(resolveResourceCompiler(runner, "clang")).toEqual({ tool: LLVM_RC });
     } finally {
       if (previous === undefined) delete process.env.xbintsc_RC;
       else process.env.xbintsc_RC = previous;
@@ -263,7 +250,7 @@ describe("resolveResourceCompiler", () => {
 });
 
 describe("ensureWindowsIconResource", () => {
-  const compiler = { tool: "llvm-rc", kind: "llvm-rc" } as const;
+  const compiler = { tool: "llvm-rc" } as const;
 
   it("writes an .rc and compiles it", () => {
     const directory = temporaryDirectory();
@@ -283,23 +270,6 @@ describe("ensureWindowsIconResource", () => {
     // The generated .ico sits next to the .rc so the relative reference resolves.
     const icoName = rcContents.match(/"([^"]+)"/)![1]!;
     expect(existsSync(join(cacheDir, icoName))).toBe(true);
-  });
-
-  it("uses windres argument style", () => {
-    const directory = temporaryDirectory();
-    const cacheDir = join(directory, "cache");
-    const icon = readIcon(writePng(directory));
-    const { runner, calls } = recordingRunner((_command, args) => {
-      writeFileSync(args[args.indexOf("-o") + 1]!, "");
-      return {};
-    });
-    ensureWindowsIconResource(runner, cacheDir, icon, { tool: "windres", kind: "windres" });
-    expect(calls[0]!.args).toContain("-O");
-    expect(calls[0]!.args).toContain("coff");
-    // Without an explicit `-F`, windres defaults to pe-i386 and the x64 linker
-    // rejects the object with LNK1112.
-    expect(calls[0]!.args).toContain("-F");
-    expect(calls[0]!.args).toContain(process.arch === "arm64" ? "pe-aarch64" : "pe-x86-64");
   });
 
   it("throws when the resource compiler fails", () => {

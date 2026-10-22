@@ -117,8 +117,8 @@ typedef struct {
 
 /* Hidden-class descriptor for ordinary objects. Shapes are interned by their
  * (parent, key) transition and never freed, so an object's shape pointer is a
- * stable layout identity. Values added to a shape are rooted by a collector
- * provider in xt_containers/objects.inc. */
+ * stable layout identity. Shape keys are rooted by a collector provider in
+ * xt_containers/shapes.inc. */
 typedef struct xt_shape {
   xt_value key;
   uint32_t count;
@@ -358,8 +358,8 @@ void xt_array_reserve(xt_array *array, uint32_t needed);
 xt_object *xt_as_object(xt_value value);
 xt_property *xt_object_find_property(xt_object *obj, xt_value key);
 /* Hidden-class helpers. `xt_object_shape_changed` rebuilds the shape after a
- * property was inserted out of order or deleted. */
-xt_shape *xt_shape_empty(void);
+ * property was inserted out of order or deleted. `xt_shape_empty` stays local
+ * to xt_containers.c, which is why it has no prototype here. */
 xt_shape *xt_shape_transition(xt_shape *parent, xt_value key);
 void xt_object_shape_changed(xt_object *obj);
 

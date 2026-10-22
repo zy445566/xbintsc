@@ -162,11 +162,8 @@ const unsigned int       xt_app_icon_height;
 1. PNG 输入被包进最小 ICO 容器（`ICONDIR` + 指向 PNG 载荷的 `ICONDIRENTRY`）；
    Vista+ 接受 PNG-in-ICO。
 2. 在缓存中写入 `.rc`（`1 ICON "icon-<hash>.ico"`）。
-3. 优先 `llvm-rc /fo app.res app.rc`（解析出的 clang 同目录或 `PATH`），
-   否则 MinGW `windres app.rc -O coff -F pe-x86-64 -o app_res.o`（Windows arm64
-   用 `pe-aarch64`）。`llvm-rc` 用 `/?` 探测（它没有 `--version`）；`windres`
-   总是显式指定目标格式：缺省 `-F` 会产出 32 位 `pe-i386` 资源，x64 链接器会以
-   `LNK1112` 拒绝。可用 `xbintsc_RC` 覆盖。
+3. 运行 `llvm-rc /fo app.res app.rc`（解析出的 clang 同目录或 `PATH`）。
+   `llvm-rc` 用 `/?` 探测（它没有 `--version`）。可用 `xbintsc_RC` 覆盖。
 4. 找不到资源编译器时继续构建（仅运行时图标），装饰性功能绝不导致构建硬失败。
 
 #### macOS（`MyApp.app` bundle）—— `src/driver/mac-bundle.ts`
@@ -217,7 +214,7 @@ Wayland。
 
 - `tests/driver/config.test.ts` —— 解析/校验、发现、路径解析。
 - `tests/driver/icon.test.ts` —— 格式识别、生成的 C、ICO 转换、图标对象缓存、
-  `llvm-rc`/`windres` 命令行、mac bundle 布局与退化路径，以及 `build()` 集成
+  `llvm-rc` 命令行、mac bundle 布局与退化路径，以及 `build()` 集成
   （链接图标对象；图标缺失 ⇒ `DiagnosticCode.IOError`）。
 - `tests/e2e/icon.test.ts` —— 用 `app.icon` 编译真实 GUI 程序，断言可执行文件中
   存在 PNG 字节，并在无头模式运行；darwin 上校验 `.app` bundle 与 `.icns`。

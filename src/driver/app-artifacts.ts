@@ -64,7 +64,7 @@ export function ensureAppArtifacts(request: AppArtifactRequest): AppArtifacts {
         if (resourceCompiler) {
           iconObjects.push(ensureWindowsIconResource(runner, cacheDir, icon, resourceCompiler, env));
         } else if (verbose) {
-          process.stderr.write("xbintsc: no llvm-rc/windres found; skipping the embedded .exe icon\n");
+          process.stderr.write("xbintsc: no llvm-rc found; skipping the embedded .exe icon\n");
         }
       }
     } catch (error) {

@@ -65,8 +65,8 @@ The scene is a fixed 1000×620 box, exactly as in the native window.
 
 ## Build and run natively
 
-From the repository root, in an **x64 Native Tools Command Prompt for VS 2022**
-(clang needs the MSVC/SDK environment on Windows):
+From the repository root (no developer prompt required — the Visual Studio LLVM
+clang locates the MSVC/SDK itself):
 
 ```bat
 set xbintsc_CLANG=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang.exe

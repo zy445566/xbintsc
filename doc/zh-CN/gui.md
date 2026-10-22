@@ -143,8 +143,9 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
      一起发布（`package-release` 复制整个 `runtime/`）。
    - `vendor/`（SDL3/FreeType/HarfBuzz，缓慢的部分）按 OS/arch 缓存，以
      `scripts/build-gui.ts` 为键。
-   - Windows（构建 + 运行）保持试验性，直到验证 MSVC 兼容的 `gui.lib` 与
-     D3D12/DXIL 着色器路径；失败只记录日志而不标注运行（见[待决问题](./gui/known-issues.md)）。
+   - Windows（构建 + 运行）在 CI 中保持试验性：MSVC 兼容的 `gui.lib` 可在本机
+     通过 SDL_GPU 的 Vulkan 后端构建并运行，但托管 runner 没有 GPU/Vulkan
+     驱动。失败只记录日志而不标注运行（见[待决问题](./gui/known-issues.md)）。
 8. **M8 — 交互式 DOM** ✅
    - 具有稳定标识的元素/文档句柄、通过运行时访问器读写属性、遍历/特性/查询、
      带有延迟重算样式/重新布局的变更

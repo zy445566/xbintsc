@@ -113,9 +113,10 @@ sudo apk add clang lld                   # Alpine
 用 `clang --version` 验证。如果 xbintsc 用错了链接器，可用 `xbintsc_CLANG` 指定
 clang，并通过 `xbintsc_LINKER_ARGS` 追加参数（例如 `-fuse-ld=lld`）。
 
-## Windows —— 安装 LLVM 与 MSVC C++ 生成工具
+## Windows —— 安装 MSVC C++ 生成工具（与 LLVM）
 
-用 `winget` 安装 LLVM 和 Visual Studio C++ 生成工具：
+Windows 上的 xbintsc 面向 **MSVC ABI**。用 `winget` 安装 Visual Studio C++
+生成工具和 LLVM：
 
 ```powershell
 winget install -e --id LLVM.LLVM
@@ -123,15 +124,22 @@ winget install -e --id Microsoft.VisualStudio.2022.BuildTools `
   --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 ```
 
-clang 需要 MSVC/SDK 的环境变量（`INCLUDE`、`LIB`、`PATH`）才能找到 C 标准库头文件、
-导入库和链接器。请在 **x64 Native Tools Command Prompt for VS 2022**（Windows on
-ARM 上用 **ARM64 Native Tools** 提示符）中运行 `xbintsc`，或自行导入环境：
+Visual Studio 2022 自带的 LLVM（`VC\Tools\Llvm\x64\bin\clang.exe`，当前版本
+19.1.5）已经够用，独立安装的 LLVM 也可以。但编译器必须以 MSVC ABI 为目标
+（`Target: *-windows-msvc`）：面向其他 Windows ABI 的 clang 无法与 MSVC
+运行库链接，`xbintsc` 会直接给出明确错误并拒绝使用。
+
+通常**不再需要**开发者命令提示符：`xbintsc` 会按绝对路径找到 Visual Studio
+自带的 LLVM，而这个 clang 会自行定位 MSVC/SDK 的头文件、库与链接器。如果你的
+安装仍需要显式导入环境，可在 **x64 Native Tools Command Prompt for VS 2022**
+（Windows on ARM 上用 **ARM64 Native Tools**）中构建，或手动导入：
 
 ```powershell
 & "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
 ```
 
-用 `clang --version` 验证。（也可用 chocolatey：`choco install llvm`。）
+用 `xbintsc doctor`（或 `clang --version`）验证；输出会列出解析到的编译器、
+版本与目标。
 
 ## 从源码构建（仅贡献者需要）
 

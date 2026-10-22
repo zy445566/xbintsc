@@ -36,6 +36,5 @@ export {
   ensureWindowsIconResource,
   resolveResourceCompiler,
   type ResourceCompiler,
-  type ResourceCompilerKind,
 } from "./win-icon.js";
 export { bundlePathFor, infoPlist, packageMacApp, type MacBundleOptions } from "./mac-bundle.js";

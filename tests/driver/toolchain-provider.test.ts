@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveToolchain } from "../../src/driver/toolchain-provider.js";
 import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
-import { ToolchainError } from "../../src/driver/toolchain.js";
+import { isMsvcTarget, parseClangTarget, ToolchainError } from "../../src/driver/toolchain.js";
 
 const saved = { ...process.env };
 
@@ -12,6 +12,22 @@ afterEach(() => {
 const CLANG_19 = "clang version 19.1.5 (https://github.com/llvm/llvm-project.git)";
 const CLANG_15 = "clang version 15.0.2";
 const CLANG_18 = "Ubuntu clang version 18.1.3 (1ubuntu1)";
+const CLANG_19_MSVC = "clang version 19.1.5\nTarget: x86_64-pc-windows-msvc\nThread model: posix";
+const CLANG_20_GNU = "clang version 20.1.0\nTarget: x86_64-w64-windows-gnu\nThread model: posix";
+
+describe("clang target parsing", () => {
+  it("reads the Target line", () => {
+    expect(parseClangTarget(CLANG_19_MSVC)).toBe("x86_64-pc-windows-msvc");
+    expect(parseClangTarget(CLANG_19)).toBeUndefined();
+  });
+
+  it("recognises only MSVC Windows targets", () => {
+    expect(isMsvcTarget("x86_64-pc-windows-msvc")).toBe(true);
+    expect(isMsvcTarget("aarch64-pc-windows-msvc")).toBe(true);
+    expect(isMsvcTarget("x86_64-w64-windows-gnu")).toBe(false);
+    expect(isMsvcTarget("x86_64-pc-linux-gnu")).toBe(false);
+  });
+});
 
 /** A runner that reports success only for the named commands. */
 function runnerThatWorks(...commands: string[]): Runner {
@@ -82,6 +98,22 @@ describe("resolveToolchain", () => {
     const toolchain = resolveToolchain(runnerReturning({ clang: CLANG_15, "clang-18": CLANG_18 }));
     expect(toolchain.clang).toBe("clang-18");
     expect(toolchain.version?.major).toBe(18);
+  });
+
+  it.runIf(process.platform === "win32")("skips a non-MSVC clang and keeps looking", () => {
+    delete process.env.xbintsc_CLANG;
+    delete process.env.xbintsc_TOOLCHAIN;
+    const toolchain = resolveToolchain(
+      runnerReturning({ clang: CLANG_20_GNU, "clang-16": CLANG_19_MSVC }),
+    );
+    expect(toolchain.clang).toBe("clang-16");
+    expect(toolchain.version?.major).toBe(19);
+  });
+
+  it.runIf(process.platform === "win32")("rejects an explicit non-MSVC clang", () => {
+    process.env.xbintsc_CLANG = "gnu-clang";
+    const runner = runnerReturning({ "gnu-clang": CLANG_20_GNU, clang: CLANG_19_MSVC });
+    expect(() => resolveToolchain(runner)).toThrow(/targets x86_64-w64-windows-gnu/);
   });
 
   it("rejects an explicit compiler that is too old instead of silently switching", () => {

@@ -121,9 +121,10 @@ Verify with `clang --version`. If xbintsc uses the wrong linker, set
 `xbintsc_CLANG` to the clang you want and/or pass extra flags through
 `xbintsc_LINKER_ARGS` (for example `-fuse-ld=lld`).
 
-## Windows — install LLVM and the MSVC C++ build tools
+## Windows — install the MSVC C++ build tools (and LLVM)
 
-Install LLVM and the Visual Studio C++ build tools with `winget`:
+xbintsc targets the **MSVC ABI** on Windows. Install the Visual Studio C++
+build tools plus LLVM with `winget`:
 
 ```powershell
 winget install -e --id LLVM.LLVM
@@ -131,17 +132,24 @@ winget install -e --id Microsoft.VisualStudio.2022.BuildTools `
   --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 ```
 
-clang needs the MSVC/SDK environment (`INCLUDE`, `LIB`, `PATH`) to find the C
-standard library headers, the import libraries and the linker. Open an
-**x64 Native Tools Command Prompt for VS 2022** (or an **ARM64 Native Tools**
-prompt on Windows on ARM) before running `xbintsc`, or import the environment
-yourself:
+The LLVM bundled with Visual Studio 2022
+(`VC\Tools\Llvm\x64\bin\clang.exe`, version 19.1.5 in current installs) is
+enough, and so is a standalone LLVM. Either way the compiler must target the
+MSVC ABI (`Target: *-windows-msvc`): clang built for another Windows ABI cannot
+link with the MSVC runtime, so `xbintsc` rejects it with an explicit error.
+
+A developer prompt is normally **not** required: `xbintsc` resolves the Visual
+Studio LLVM by absolute path, and that clang locates the MSVC/SDK headers,
+libraries and linker itself. If your installation still needs the environment
+imported, run the build from an **x64 Native Tools Command Prompt for VS 2022**
+(or **ARM64 Native Tools** on Windows on ARM), or import it manually:
 
 ```powershell
 & "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
 ```
 
-Verify with `clang --version` (chocolatey also works: `choco install llvm`).
+Verify with `xbintsc doctor` (or `clang --version`); the report names the
+resolved compiler, its version and its target.
 
 ## Building from source (contributors only)
 

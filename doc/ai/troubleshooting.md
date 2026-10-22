@@ -98,8 +98,10 @@ clang itself failed. The thrown message includes the full clang command and its
 stderr — read the stderr, not just the first line. Frequent causes:
 
 - the toolchain is too old (see above);
-- on Windows, clang cannot find the MSVC/SDK headers or libraries because the
-  environment was not imported. Run from an **x64 Native Tools Command Prompt
+- on Windows, the resolved clang cannot find the MSVC/SDK headers or libraries.
+  `xbintsc doctor` shows the compiler and its target; prefer the LLVM bundled
+  with Visual Studio, which locates the SDK itself. If your installation still
+  needs the environment imported, run from an **x64 Native Tools Command Prompt
   for VS 2022** (or **ARM64 Native Tools** on Windows on ARM), or import it
   first:
   ```powershell
@@ -119,8 +121,8 @@ described in [../gui.md](../gui.md).
 ### `Icon file not found` / icon tools missing
 
 `--icon`/`app.icon` paths resolve against the config file's directory. On
-Windows, embedding a PE icon needs `llvm-rc` or `windres`; `doctor` reports which
-one was found, and a missing one is only fatal when an icon was requested.
+Windows, embedding a PE icon needs `llvm-rc` (ships with LLVM); `doctor` reports
+the resolved tool, and a missing one is only fatal when an icon was requested.
 
 ## Reading a stack trace
 

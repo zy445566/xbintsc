@@ -91,9 +91,10 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
 第一行。常见原因：
 
 - 工具链太旧（见上文）；
-- Windows 上 clang 因为环境没导入而找不到 MSVC/SDK 头文件或库。请在
-  **x64 Native Tools Command Prompt for VS 2022**（ARM64 机器上是 **ARM64 Native
-  Tools**）里运行，或先导入环境：
+- Windows 上解析到的 clang 找不到 MSVC/SDK 头文件或库。`xbintsc doctor` 会显示
+  编译器及其目标；优先使用 Visual Studio 自带的 LLVM，它会自行定位 SDK。如果你的
+  安装仍需要显式导入环境，请在 **x64 Native Tools Command Prompt for VS 2022**
+  （ARM64 机器上是 **ARM64 Native Tools**）里运行，或先导入环境：
   ```powershell
   & "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
   ```
@@ -110,8 +111,8 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
 ### `Icon file not found` / 图标工具缺失
 
 `--icon`/`app.icon` 的路径相对配置文件目录解析。Windows 上嵌入 PE 图标需要
-`llvm-rc` 或 `windres`；`doctor` 会报告找到了哪个，只有在确实请求了图标时缺失才是
-致命错误。
+`llvm-rc`（随 LLVM 一起安装）；`doctor` 会报告解析到的工具，只有在确实请求了
+图标时缺失才是致命错误。
 
 ## 怎么看堆栈
 

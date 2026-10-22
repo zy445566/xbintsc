@@ -57,14 +57,17 @@
   collide: `LNK2038: mismatch detected for 'RuntimeLibrary'` plus a wall of
   `LNK2005: already defined`, surfaced as `clang: linker command failed with exit
   code 1169`. `src/extensions/gui/index.ts` now lists only the OS libraries
-  (`user32`, `gdi32`, `d3d12`, …). A Windows link is also the only place the
-  MSVC environment matters, so build from an x64 Native Tools prompt.
+  (`user32`, `gdi32`, `d3d12`, …). `scripts/build-gui.ts` resolves the same
+  MSVC-targeting clang as the driver (the LLVM bundled with Visual Studio when
+  no newer one is on `PATH`), so a developer prompt is not required.
 - Windows: an MSVC-compatible `gui.lib` (COFF objects + `ar -M`/`llvm-ar`) is
   produced by `scripts/build-gui.ts` but is not validated in CI, so the Windows
   step is provisional (the job stays green) and `package` skips it. Building and
   running `examples/gui/pelican-svg` and `examples/gui/pelican-bike` on a
-  developer machine works. It also needs an SDL3 build with the D3D12/DXIL
-  backend (DXIL requires `dxc`).
+  developer machine works. SDL_GPU selects the **Vulkan** backend there
+  (`win.driver()` reports `"vulkan"`), so the archive needs no DXIL/`dxc`
+  toolchain; the hosted Windows runners have no GPU/Vulkan driver, which is why
+  the CI run stays provisional.
 - **Media on Windows:** the media decoders (FFmpeg) are only built and merged
   into the POSIX `gui.a`; the Windows `gui.lib` is produced without them, so
   `<video>`/`<audio>` are inert there (failures fire `error`). Enabling it needs
@@ -75,4 +78,5 @@
   and embedded, so the non-Metal path no longer skips geometry. DXIL remains
   unusable on **SDL 3.2.10**: its D3D12 backend rejects any graphics pipeline
   whose shaders declare a uniform buffer, and the engine passes the viewport that
-  way. Re-check after an SDL upgrade.
+  way. This does not affect Windows in practice because SDL_GPU selects Vulkan
+  there; re-check after an SDL upgrade if the D3D12 path is ever forced.

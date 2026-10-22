@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M15** —— 功能（M1–M14）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
+状态：**M16** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
 `<video>`/`<audio>`——一个 vendored 的最小 FFmpeg 在主线程解码，视频帧走图像
 纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露 `play`/`pause`/`currentTime`/…
 与媒体事件。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
@@ -212,6 +212,16 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
       [布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)；
       e2e 见 `tests/e2e/gui-transform.test.ts` 与
       `tests/e2e/gui-example-svg.test.ts`。
+16. **M16 — 内联 `<svg>`** ✅
+    - `<svg>` 是替换元素（`layout.*`）：固有尺寸先取 `width`/`height` 属性，
+      其次 `viewBox`，最后 300x150；常规盒树遍历不再进入其子元素。
+    - `inline_svg.{h,cpp}` 把子树序列化为独立 SVG 文档，并还原 HTML 解析器
+      小写掉的、区分大小写的名称（`viewBox`、`preserveAspectRatio`、
+      `linearGradient`、`gradientUnits` 等）。
+    - 绘制把 markup 挂在图像 op 上（`PaintImage::svg`），渲染器按绘制设备尺寸、
+      通过与 SVG 文件相同的 NanoSVG 缓存（`svg.{h,cpp}`）解析并光栅化；markup
+      缓存有界，DOM 变更会在下一次布局时重新序列化。e2e 见
+      `tests/e2e/gui-inline-svg.test.ts`。
 
 ## 进度日志
 
@@ -299,4 +309,11 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
   `getBoundingClientRect` 返回变换后的包围盒。`examples/gui/pelican-svg` 用它
   为自己的画做动画；e2e 见 `tests/e2e/gui-transform.test.ts` 与
   `tests/e2e/gui-example-svg.test.ts`。
+- **M16** ✅ 内联 `<svg>`。`buildBoxTree` 把 `<svg>` 元素当作替换盒（固有尺寸
+  依次取 `width`/`height`、`viewBox`、300x150）并停止下探，
+  `inline_svg.{h,cpp}` 以规范 SVG 大小写序列化子树，绘制把 markup 放进
+  `PaintImage::svg`，`renderer_image.cpp` 通过 NanoSVG 缓存（`svg.{h,cpp}`，
+  markup 采用有界 LRU）按绘制设备像素尺寸光栅化。`win.inlineSvg` 诊断钩子
+  暴露序列化文档，`tests/e2e/gui-inline-svg.test.ts` 固定了尺寸、命中测试、
+  渐变、CSS 盒样式与 DOM 变更。
 

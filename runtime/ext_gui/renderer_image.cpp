@@ -12,6 +12,7 @@
 #include "canvas.h"
 #include "image.h"
 #include "media.h"
+#include "svg.h"
 
 #include "renderer_shaders.h"
 
@@ -227,6 +228,32 @@ SDL_GPUGraphicsPipeline *createImagePipeline(SDL_GPUDevice *device, SDL_Window *
   return pipeline;
 }
 
+/** Create an RGBA texture holding `image` and upload its pixels. Returns null
+ * (after reporting the SDL error) when either step fails. */
+SDL_GPUTexture *createImageTexture(SDL_GPUDevice *device, const xtgui::Image &image) {
+  SDL_GPUTextureCreateInfo info;
+  memset(&info, 0, sizeof(info));
+  info.type = SDL_GPU_TEXTURETYPE_2D;
+  info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+  info.width = (Uint32)image.width;
+  info.height = (Uint32)image.height;
+  info.layer_count_or_depth = 1;
+  info.num_levels = 1;
+  info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+  SDL_GPUTexture *texture = SDL_CreateGPUTexture(device, &info);
+  if (texture == nullptr) {
+    fprintf(stderr, "xt_gui: image texture creation failed: %s\n", SDL_GetError());
+    return nullptr;
+  }
+  uint32_t bytes = (uint32_t)(image.pixels.size());
+  if (!uploadPixels(device, texture, image.width, image.height, image.pixels.data(), bytes)) {
+    SDL_ReleaseGPUTexture(device, texture);
+    return nullptr;
+  }
+  return texture;
+}
+
 /** Decode `src` (cached) and upload it as an RGBA texture. Vector sources are
  * rasterised at the drawn pixel size and cached by that size; bitmaps decode at
  * their intrinsic size and are cached by path. */
@@ -246,30 +273,29 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
     return nullptr;
   }
 
-  SDL_GPUTextureCreateInfo info;
-  memset(&info, 0, sizeof(info));
-  info.type = SDL_GPU_TEXTURETYPE_2D;
-  info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-  info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-  info.width = (Uint32)image->width;
-  info.height = (Uint32)image->height;
-  info.layer_count_or_depth = 1;
-  info.num_levels = 1;
-  info.sample_count = SDL_GPU_SAMPLECOUNT_1;
-  SDL_GPUTexture *texture = SDL_CreateGPUTexture(device, &info);
-  if (texture == nullptr) {
-    fprintf(stderr, "xt_gui: image texture creation failed: %s\n", SDL_GetError());
+  SDL_GPUTexture *texture = createImageTexture(device, *image);
+  g_image_textures.emplace(key, texture);
+  return texture;
+}
+
+/** Rasterise the serialized subtree of an inline `<svg>` at the drawn pixel
+ * size and upload it. The markup is the cache key: a static document therefore
+ * rasterises once per drawn size, and an edited one gets a fresh texture. */
+SDL_GPUTexture *ensureInlineSvgTexture(SDL_GPUDevice *device, const std::string &markup,
+                                       int pixel_width, int pixel_height) {
+  std::string key = "inline-svg@" + std::to_string(pixel_width) + "x" +
+                    std::to_string(pixel_height) + ":" + markup;
+  auto found = g_image_textures.find(key);
+  if (found != g_image_textures.end()) return found->second;
+
+  xtgui::Image image;
+  if (!xtgui::xt_svg_markup_render(markup, pixel_width, pixel_height, &image)) {
+    fprintf(stderr, "xt_gui: could not rasterise inline SVG\n");
     g_image_textures.emplace(key, nullptr);
     return nullptr;
   }
 
-  uint32_t bytes = (uint32_t)(image->pixels.size());
-  if (!uploadPixels(device, texture, image->width, image->height, image->pixels.data(), bytes)) {
-    SDL_ReleaseGPUTexture(device, texture);
-    g_image_textures.emplace(key, nullptr);
-    return nullptr;
-  }
-
+  SDL_GPUTexture *texture = createImageTexture(device, image);
   g_image_textures.emplace(key, texture);
   return texture;
 }
@@ -298,18 +324,20 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   for (size_t index = 0; index < list.images.size(); index++) {
     const xtgui::PaintImage &image = list.images[index];
     if (image.width <= 0.0f || image.height <= 0.0f) continue;
+    /* Draw-time device pixels: an SVG (file or inline) is rasterised at this
+     * size so it stays crisp on HiDPI and when scaled. */
+    int pixel_width = (int)(image.width * scale + 0.5f);
+    int pixel_height = (int)(image.height * scale + 0.5f);
+    if (pixel_width < 1) pixel_width = 1;
+    if (pixel_height < 1) pixel_height = 1;
     SDL_GPUTexture *texture = nullptr;
     if (image.canvas_id != 0) {
       texture = ensureCanvasTexture(device, image.canvas_id);
     } else if (image.media_id != 0) {
       texture = ensureMediaTexture(device, image.media_id);
+    } else if (!image.svg.empty()) {
+      texture = ensureInlineSvgTexture(device, image.svg, pixel_width, pixel_height);
     } else {
-      /* Draw-time device pixels: an SVG is rasterised at this size so it stays
-       * crisp on HiDPI and when scaled. */
-      int pixel_width = (int)(image.width * scale + 0.5f);
-      int pixel_height = (int)(image.height * scale + 0.5f);
-      if (pixel_width < 1) pixel_width = 1;
-      if (pixel_height < 1) pixel_height = 1;
       texture = ensureImageTexture(device, image.src, pixel_width, pixel_height);
     }
     if (texture == nullptr) continue;

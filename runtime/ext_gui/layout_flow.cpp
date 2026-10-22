@@ -44,7 +44,8 @@ float Layouter::verticalEdges(const LayoutBox *box) const {
 float Layouter::preferredContentWidth(const LayoutBox *box, float available) const {
   const XtStyle &style = *box->style;
   if (!isAuto(style.width)) return px(style.width, available, style.font_size, 0.0f);
-  if ((box->is_image || box->is_canvas) && box->intrinsic_width > 0) return box->intrinsic_width;
+  if ((box->is_image || box->is_canvas || box->is_inline_svg) && box->intrinsic_width > 0)
+    return box->intrinsic_width;
   float best = 0;
   for (const std::unique_ptr<LayoutBox> &child : box->children) {
     if (child->display == Display::None) continue;
@@ -225,8 +226,8 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
     if (contentHeight < 0) contentHeight = 0;
   }
   /* Replaced elements keep their aspect ratio when only one axis is set. */
-  if ((box->is_image || box->is_canvas) && forcedContentHeight < 0 && isAuto(style.height) &&
-      box->intrinsic_width > 0 && box->intrinsic_height > 0) {
+  if ((box->is_image || box->is_canvas || box->is_inline_svg) && forcedContentHeight < 0 &&
+      isAuto(style.height) && box->intrinsic_width > 0 && box->intrinsic_height > 0) {
     contentHeight = contentWidth * box->intrinsic_height / box->intrinsic_width;
   }
   box->content_height = contentHeight;

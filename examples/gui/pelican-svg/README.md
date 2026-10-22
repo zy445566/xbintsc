@@ -46,10 +46,11 @@ copy examples\resources\pelican-bike.svg build\pelican-svg\pelican-bike.svg
 >   读不了 `data:`，实测 `<img src="data:image/svg+xml;base64,…">` 得到 0×0 的盒子、显示列表里没有图。
 >   所以图必须是磁盘上的真实文件。
 
-引擎**不支持内联 `<svg>` 子树**（HTML 解析器只认元素和属性、布局只认盒子、绘制只认矩形/文本/图像），
-但支持 SVG **文件**：`runtime/ext_gui/svg.cpp` 封装了 vendored 的 **NanoSVG** 解析器 + 抗锯齿扫描线光栅化器，
-`image.{h,cpp}` 把 SVG 当作矢量图，按**绘制尺寸**光栅化，所以放大也依然锐利，而不是放大位图。
-本示例要的正是这条路径。
+引擎同时支持 SVG **文件**与**内联 `<svg>` 子树**：`runtime/ext_gui/svg.cpp` 封装了 vendored 的
+**NanoSVG** 解析器 + 抗锯齿扫描线光栅化器，`image.{h,cpp}` 把 SVG 当作矢量图，按**绘制尺寸**
+光栅化，所以放大也依然锐利，而不是放大位图；内联子树则先由 `inline_svg.{h,cpp}` 序列化回
+独立文档，再走同一条路径。本示例仍用**文件**，因为原图 `examples/resources/pelican-bike.svg`
+要同时给其它示例和外部 SVG 编辑器使用，而不是内嵌在这一个 HTML 里。
 
 `main.ts` 因此特意很短：开窗 → `loadHTML` → 在第一个呈现帧上打印一份 `label=value` 报告。报告里
 `painted-image` 那一行直接来自显示列表，是“这张 SVG 真的解码并画出来了”的证据——路径写错时 CSS 仍然
@@ -181,5 +182,5 @@ gui exited
 - [doc/gui/media.md](../../../doc/gui/media.md) — 图片与 SVG 的加载、内在尺寸、矢量按绘制尺寸缓存
 - [doc/gui/layout.md](../../../doc/gui/layout.md#变换m15) — `transform`/`transform-origin` 的合成、命中测试与包围盒
 - [doc/gui/animation.md](../../../doc/gui/animation.md#css-transformm15) — 逐帧姿态与 `transition: transform`
-- [doc/gui/known-issues.md](../../../doc/gui/known-issues.md) — 内联 `<svg>` 为何不支持
+- [doc/gui/known-issues.md](../../../doc/gui/known-issues.md) — SVG 受限于 NanoSVG 的哪些语法
 - [doc/ai/extensions.md](../../../doc/ai/extensions.md) — `gui` / `node` 扩展

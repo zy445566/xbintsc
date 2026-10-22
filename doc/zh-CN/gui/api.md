@@ -64,6 +64,7 @@ win.documentTree()                     // 序列化的 DOM（调试用）
 win.layoutTree()                       // 序列化的布局盒（调试用）
 win.paintCount()                       // 显示列表中图形的数量
 win.paintList()                        // 序列化的显示列表（调试用）
+win.inlineSvg(selector)                // 序列化的内联 <svg>：{ markup, width, height, shapes }
 win.measureText(text, fontSize?, family?)  // 整形后的推进宽度（像素）
 win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
 win.hitTest(x, y)                      // 最深的元素描述符，或 ""
@@ -71,6 +72,12 @@ win.sendEvent(type, options?)          // 合成输入（测试用）
 win.advance(ms)                        // 推进 CSS transition 时钟（测试用）
 win.stats()                            // 引擎/运行时计数器（内存排查用）
 ```
+
+`win.inlineSvg(selector)` 返回引擎为第一个匹配 `selector` 的 `<svg>` 元素构建的
+独立 SVG 文档（`markup`），以及 NanoSVG 从它解析出的固有尺寸与图形数量；没有
+匹配或元素不是 `<svg>` 时返回 `undefined`。它让序列化器的规范大小写
+（`viewBox`、`linearGradient`、`gradientUnits` 等）无需 GPU 即可测试——HTML
+解析器会把它们全部小写化。
 
 `win.stats()` 返回 `{ heapBytes, heapAllocations, treeNodes, detachedRoots,`
 `detachedNodes, handles, handleSlots, listeners }`：运行时存活堆、DOM 树规模、

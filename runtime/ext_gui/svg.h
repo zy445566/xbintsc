@@ -9,9 +9,10 @@
  * (`nanosvg.h` + `nanosvgrast.h`) — the same class of low-level, third-party
  * image library `stb_image` is (see doc/gui.md).
  *
- * Only *files* are handled: `<img src="logo.svg">`. Inline `<svg>` trees in a
- * document are still ordinary unknown elements to the HTML parser and generate
- * no boxes.
+ * Both SVG *files* (`<img src="logo.svg">`) and inline `<svg>` trees go through
+ * this module: an inline element's DOM subtree is serialized into a document by
+ * `inline_svg.{h,cpp}` and parsed with the markup entry points below, so both
+ * kinds produce the same RGBA8 `Image` at the drawn device size.
  */
 #ifndef XT_GUI_SVG_H
 #define XT_GUI_SVG_H
@@ -29,6 +30,16 @@ bool xt_svg_is_svg(const std::string &path);
 /** Read the intrinsic size from an SVG file without rasterising it. Returns
  * false when the file is missing or cannot be parsed. Cached per path. */
 bool xt_svg_size(const std::string &path, int *width, int *height);
+
+/** The same two operations for an SVG *document string* rather than a file:
+ * the markup of an inline `<svg>` subtree (see `inline_svg.h`). The parse is
+ * cached by content (least-recently-used, so an animated document cannot grow
+ * the cache without bound); each rasterisation is fresh. */
+bool xt_svg_markup_size(const std::string &markup, int *width, int *height);
+bool xt_svg_markup_render(const std::string &markup, int width, int height, Image *out);
+
+/** Number of shapes NanoSVG parsed out of `markup` (diagnostics/tests). */
+int xt_svg_markup_shapes(const std::string &markup);
 
 /** Rasterise `path` to RGBA8. `width`/`height` are the requested pixel size;
  * when either is `<= 0` the intrinsic SVG size is used. The viewBox is scaled

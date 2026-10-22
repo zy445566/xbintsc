@@ -12,7 +12,8 @@ PNG/JPEG/BMP/GIF/TGA 解码为 RGBA8，并带有解码缓存与仅头文件的�
 `runtime/ext_gui/svg.{h,cpp}` 在其上增加 SVG：它封装 vendored **NanoSVG**
 库（解析 + 抗锯齿扫描线光栅化），按扩展名或内容识别 SVG，并产出与既有管线
 相同的 RGBA8 `Image`。`stb_image` 无法解码 SVG，这正是
-`<img src="logo.svg">` 能工作的原因。
+`<img src="logo.svg">` 能工作的原因。内联 `<svg>` 子树会先被序列化成一个
+独立文档（`inline_svg.{h,cpp}`），再交给同一个解析器。
 
 - `<img>` 是一个替换元素（`display: inline-block`）：设置了 CSS 尺寸时布局
   采用该尺寸，否则采用固有像素尺寸；当只约束一个轴时保持宽高比。构建盒树时
@@ -23,11 +24,34 @@ PNG/JPEG/BMP/GIF/TGA 解码为 RGBA8，并带有解码缓存与仅头文件的�
   **位图**按固有分辨率解码并按路径缓存；**矢量图**（SVG）按设备像素下的绘制
   尺寸（逻辑尺寸 × 窗口像素密度）光栅化并保持 viewBox 宽高比，再按该尺寸缓存，
   因此缩放或 HiDPI 得到的是清晰渲染而非放大的位图。
+- **内联** `<svg>` 元素与 `<img>` 一样是替换元素，但它的来源就是 DOM 子树
+  本身。`runtime/ext_gui/inline_svg.{h,cpp}` 把该子树序列化回独立 SVG 文档，
+  还原 HTML 解析器会小写掉的、NanoSVG 又按大小写精确匹配的拼写（`viewBox`、
+  `preserveAspectRatio`、`linearGradient`、`gradientUnits` 等）。布局先取
+  `width`/`height` 属性、其次 `viewBox`、最后 300x150 作为固有尺寸；绘制把
+  markup 挂在图像 op 上，渲染器按绘制设备像素尺寸，通过与 SVG 文件相同的
+  NanoSVG 缓存解析并光栅化。DOM 变更会在下一次布局时重新序列化（因此
+  `setAttribute` 与 `innerHTML` 都会重绘图像），markup 缓存有界
+  （最近最少使用），动画文档不会让它无限增长。
 - 解析结果按路径缓存；解析与光栅化器状态在 `xt_svg_shutdown`
   （`xt_image_shutdown`）中释放。
 
+文档 CSS 只作用于 `<svg>` **盒子**——尺寸、外边距、背景、边框、`transform`、
+opacity、`display`——与任何其他元素一样。盒子内部的艺术内容保持 SVG 语义：
+表现属性与 SVG `<style>` 中基于 `class` 的规则由 NanoSVG 读取，而不是 HTML
+层叠，所以这里的 `fill`/`stroke` 不是 CSS 属性。对布局、绘制、命中测试与事件
+而言整个 `<svg>` 就是一个替换盒：其子元素没有 DOM 盒，因此点击的 `e.target`
+是 `<svg>` 元素而不是某个 `<rect>`。渲染器按 markup 与尺寸缓存纹理，所以每帧
+重写艺术内容的程序会为每个变体保留一张纹理；更好的做法是用 `transform`、
+`opacity` 给盒子做动画，或在一小组文档之间切换。
+
 图像仍需完成：CSS `background-image: url(...)`、`data:` URI、`object-fit`、
-九宫格边框与内联 `<svg>` 元素（仅支持 SVG *文件*，参见[待决问题](./known-issues.md)）。
+九宫格边框。
+
+两种 SVG 都受限于 NanoSVG 的子集：`path`、`rect`、`circle`、`ellipse`、
+`line`、`polyline`、`polygon`、组（`g`）、带线性/径向渐变的 `defs` 以及基于
+`class` 的 `<style>` 规则会被光栅化；`<text>`、`<use>`、滤镜、遮罩与裁剪路径
+不会渲染（见[已知问题](./known-issues.md)）。
 
 ## 视频与音频（M13）
 

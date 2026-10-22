@@ -51,13 +51,17 @@ struct PaintText {
 /** An image to draw, scaled into the given rectangle (viewport-relative).
  * A non-zero `media_id` names a live `<video>` frame owned by the media
  * subsystem; a non-zero `canvas_id` names a live `<canvas>` bitmap owned by the
- * DOM; `src` is then empty and the renderer binds that subsystem's texture. */
+ * DOM; `src` is then empty and the renderer binds that subsystem's texture.
+ * A non-empty `svg` carries the serialized `<svg>` subtree of an inline SVG
+ * element, which the renderer rasterises at the drawn device size (there is no
+ * file to load). */
 struct PaintImage {
   float x = 0;
   float y = 0;
   float width = 0;
   float height = 0;
   std::string src;
+  std::string svg;
   uint64_t media_id = 0;
   uint64_t canvas_id = 0;
   Matrix2D transform;

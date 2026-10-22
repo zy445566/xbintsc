@@ -12,7 +12,9 @@ size cache (`stbi_info`). Paths accept a `file://` prefix and percent-encoding.
 library (parse + anti-aliased scanline rasteriser), detects an SVG by extension
 or by its contents, and produces the same RGBA8 `Image` the pipeline already
 consumes. `stb_image` cannot decode SVG, so this is what makes
-`<img src="logo.svg">` work.
+`<img src="logo.svg">` work. The same parser is used for an inline `<svg>`
+subtree, whose DOM nodes are serialized into a document first
+(`inline_svg.{h,cpp}`).
 
 - `<img>` is a replaced element (`display: inline-block`): layout gives it the
   CSS size when set, otherwise the intrinsic pixel size, and preserves the
@@ -27,12 +29,39 @@ consumes. `stb_image` cannot decode SVG, so this is what makes
   pixels (logical size × the window's pixel density), preserving the viewBox
   aspect ratio, and cached by that size, so scaling or a HiDPI display produces
   a crisp render instead of a magnified bitmap.
+- An **inline** `<svg>` element is a replaced element like `<img>`, but its
+  source is the DOM subtree itself. `runtime/ext_gui/inline_svg.{h,cpp}`
+  serializes that subtree back into a standalone SVG document, restoring the
+  case-sensitive spellings NanoSVG matches (`viewBox`, `preserveAspectRatio`,
+  `linearGradient`, `gradientUnits`, …) that the HTML parser lowercased. Layout
+  sizes the box from the `width`/`height` attributes, else the `viewBox`, else
+  300x150; paint carries the markup on its image op and the renderer parses and
+  rasterises it at the drawn device pixel size through the same NanoSVG cache as
+  an SVG file. A DOM mutation re-serializes the subtree on the next layout (so
+  `setAttribute` and `innerHTML` both repaint the artwork), and the markup cache
+  is bounded (least-recently-used) so an animated document cannot grow it
+  without limit.
 - The parse is cached per path; the parse and rasteriser state are released in
   `xt_svg_shutdown` (`xt_image_shutdown`).
 
+Document CSS styles the `<svg>` **box** — size, margins, background, borders,
+`transform`, opacity, `display` — exactly as it styles any other element. The
+artwork inside it keeps SVG semantics: presentation attributes and the
+`class`-based rules of an SVG `<style>` block are read by NanoSVG, not by the
+HTML cascade, so `fill`/`stroke` are not CSS properties here. For layout, paint,
+hit testing and events the whole `<svg>` is one replaced box: its children get no
+DOM boxes, so a click's `e.target` is the `<svg>` element, not a `<rect>`. The
+renderer caches one texture per markup-and-size pair, so a program that rewrites
+its artwork every frame keeps a texture per variant; prefer animating the box
+(`transform`, `opacity`) or swapping between a small set of documents.
+
 Still to do for images: CSS `background-image: url(...)`, `data:` URIs,
-`object-fit`, 9-slice borders and inline `<svg>` elements (only SVG *files* are
-supported; see [Open questions](./known-issues.md#open-questions)).
+`object-fit` and 9-slice borders.
+
+Both kinds of SVG share NanoSVG's subset: `path`, `rect`, `circle`, `ellipse`,
+`line`, `polyline`, `polygon`, groups (`g`), `defs` with linear/radial gradients
+and class-based `<style>` rules rasterise; `<text>`, `<use>`, filters, masks and
+clip paths are not rendered (see [Known issues](./known-issues.md)).
 
 ## Video & audio (M13)
 

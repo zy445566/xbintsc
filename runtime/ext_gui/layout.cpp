@@ -19,6 +19,7 @@
 #include <cstring>
 
 #include "image.h"
+#include "inline_svg.h"
 #include "style_internal.h"
 
 namespace xtgui {
@@ -104,7 +105,24 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
         }
       }
     }
+  } else if (node->isElement() && node->isTag("svg")) {
+    /* An inline `<svg>` is a replaced element: the subtree is vector art, not
+     * HTML boxes. Serialize it once, take the intrinsic size from the parsed
+     * document (width/height attributes, else the viewBox, else 300x150), and
+     * let paint/rasterisation handle the children — the normal box walk must
+     * not descend into them. */
+    box->is_inline_svg = true;
+    box->svg_markup = xt_inline_svg_serialize(node);
+    int width = 0;
+    int height = 0;
+    if (xt_svg_markup_size(box->svg_markup, &width, &height)) {
+      box->intrinsic_width = (float)width;
+      box->intrinsic_height = (float)height;
+    }
+    if (box->intrinsic_width <= 0.0f) box->intrinsic_width = 300.0f;
+    if (box->intrinsic_height <= 0.0f) box->intrinsic_height = 150.0f;
   }
+  if (box->is_inline_svg) return box;
   for (const std::unique_ptr<Node> &child : node->children) {
     std::unique_ptr<LayoutBox> childBox =
         buildBoxTree(child.get(), styles, style, media, canvases);

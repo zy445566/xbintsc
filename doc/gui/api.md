@@ -65,6 +65,7 @@ win.documentTree()                     // serialized DOM (debugging)
 win.layoutTree()                       // serialized layout boxes (debugging)
 win.paintCount()                       // number of shapes in the display list
 win.paintList()                        // serialized display list (debugging)
+win.inlineSvg(selector)                // serialized inline <svg>: { markup, width, height, shapes }
 win.measureText(text, fontSize?, family?)  // shaped advance width in pixels
 win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
 win.hitTest(x, y)                      // deepest element descriptor, or ""
@@ -72,6 +73,13 @@ win.sendEvent(type, options?)          // synthesise input (testing)
 win.advance(ms)                        // step the CSS transition clock (testing)
 win.stats()                            // engine/runtime counters (memory debugging)
 ```
+
+`win.inlineSvg(selector)` returns the standalone SVG document the engine builds
+from the first `<svg>` element matching `selector` (`markup`), together with the
+intrinsic size and shape count NanoSVG parses out of it; it is `undefined` when
+nothing matches or the element is not an `<svg>`. It makes the serializer's
+canonical casing (`viewBox`, `linearGradient`, `gradientUnits`, …) testable
+without a GPU — the HTML parser delivers those names lowercased.
 
 `win.stats()` returns `{ heapBytes, heapAllocations, treeNodes, detachedRoots,`
 `detachedNodes, handles, handleSlots, listeners }`: the live runtime heap, the

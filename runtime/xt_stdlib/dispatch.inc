@@ -92,7 +92,7 @@ static xt_value xt_method_value_invoke(xt_value thisValue, xt_value env, int32_t
     snprintf(message, sizeof(message),
              "TypeError: Cannot read properties of undefined (reading '%s')",
              method ? method : "method");
-    xt_throw(xt_string_from_cstr(message));
+    xt_throw(xt_error_from_message(message));
   }
   return xt_call_method(thisValue, name, argc, argv);
 }
@@ -240,7 +240,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
    * resolve it as an ordinary property and call it with `target` as `this`. */
   if (xt_is_symbol(name)) {
     if (target == XT_UNDEFINED || target == XT_NULL) {
-      xt_throw(xt_string_from_cstr("TypeError: Cannot read properties of null (reading a Symbol)"));
+      xt_throw(xt_error_from_message("TypeError: Cannot read properties of null (reading a Symbol)"));
     }
     xt_value fn = xt_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
@@ -253,7 +253,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
      * `target` as `this`, instead of silently returning undefined. */
     xt_value fn = xt_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
-    xt_throw(xt_string_from_cstr("TypeError: value at computed index is not a function"));
+    xt_throw(xt_error_from_message("TypeError: value at computed index is not a function"));
     return XT_UNDEFINED;
   }
   if (target == XT_UNDEFINED || target == XT_NULL) {
@@ -261,7 +261,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     char message[256];
     snprintf(message, sizeof(message),
              "TypeError: Cannot read properties of %s (reading '%s')", base, method);
-    xt_throw(xt_string_from_cstr(message));
+    xt_throw(xt_error_from_message(message));
   }
   int handled = 0;
   if (xt_is_symbol(target)) {
@@ -303,7 +303,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     {
       char message[256];
       snprintf(message, sizeof(message), "TypeError: object has no callable method '%s'", method);
-      xt_throw(xt_string_from_cstr(message));
+      xt_throw(xt_error_from_message(message));
     }
     return XT_UNDEFINED;
   }
@@ -360,7 +360,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     {
       char message[256];
       snprintf(message, sizeof(message), "TypeError: function has no callable method '%s'", method);
-      xt_throw(xt_string_from_cstr(message));
+      xt_throw(xt_error_from_message(message));
     }
     return XT_UNDEFINED;
   }

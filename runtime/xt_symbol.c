@@ -89,7 +89,7 @@ xt_value xt_symbol_description(xt_value value) {
 xt_value xt_symbol_to_string(xt_value value) {
   xt_symbol_data *symbol = xt_as_symbol(value);
   if (!symbol) {
-    xt_throw(xt_string_from_cstr(
+    xt_throw(xt_error_from_message(
         "TypeError: Symbol.prototype.toString requires that 'this' be a Symbol"));
   }
   xt_string *description =
@@ -129,7 +129,7 @@ xt_value xt_symbol_for(xt_value key) {
 
 xt_value xt_symbol_key_for(xt_value value) {
   if (!xt_is_symbol(value)) {
-    xt_throw(xt_string_from_cstr("TypeError: Symbol.keyFor requires a symbol"));
+    xt_throw(xt_error_from_message("TypeError: Symbol.keyFor requires a symbol"));
   }
   if (g_symbol_registry == XT_UNDEFINED) return XT_UNDEFINED;
   xt_value keys = xt_object_keys(g_symbol_registry);

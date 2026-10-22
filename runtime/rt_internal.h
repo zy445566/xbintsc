@@ -59,6 +59,10 @@
 #define XT_OBJECT_KIND_GENERATOR 13
 #define XT_OBJECT_KIND_ITERATOR 14
 #define XT_OBJECT_KIND_ASYNC 15
+#define XT_OBJECT_KIND_ASYNC_ITERATOR 16
+#define XT_OBJECT_KIND_WEAK_MAP 17
+#define XT_OBJECT_KIND_WEAK_SET 18
+#define XT_OBJECT_KIND_WEAK_REF 19
 
 /* Common header for every heap object. `flags` bit 0 is the collector's mark
  * bit; it is cleared on every surviving object at the end of a sweep. */
@@ -168,6 +172,9 @@ typedef struct {
   /* Set on `async` function objects: calling the closure starts a coroutine
    * (see xt_async.c) and immediately returns the promise it resolves. */
   uint8_t is_async;
+  /* Set on `async function*` objects. `is_generator` is also set, but the call
+   * path checks this flag first so the generator is created in async mode. */
+  uint8_t is_async_generator;
   /* Non-NULL for the first-class value of a built-in constructor ("Array",
    * "Map", ...). It lets property access resolve the constructor's statics
    * (`const A = Array; A.isArray(x)`). Points at a static string. */
@@ -230,12 +237,26 @@ void xt_gc_scan_region(const void *base, size_t bytes);
 
 /* Kind-specific hooks for allocations with separately allocated sub-objects.
  * Implemented by the translation unit that owns the representation. */
+/* Weak-reference processing. `xt_weak_gc_process_once` marks values whose
+ * WeakMap key is already marked and returns 1 when it marked anything (the
+ * caller repeats until the ephemeron fixed point). `xt_weak_gc_clear` empties
+ * WeakRefs whose target stayed unmarked, and `xt_weak_gc_compact` drops dead
+ * WeakMap/WeakSet entries. */
+int xt_weak_gc_process_once(void);
+void xt_weak_gc_clear(void);
+void xt_weak_gc_compact(void);
+/* Mark-state queries used by the weak-reference pass. */
+int xt_gc_value_is_marked(xt_value value);
+/* Iterate every allocation (used by the weak-reference pass). */
+xt_header *xt_gc_heap_head(void);
+
 void xt_promise_gc_trace(xt_header *header);
 void xt_promise_gc_release(xt_header *header);
 void xt_generator_gc_trace(xt_header *header);
 void xt_generator_gc_release(xt_header *header);
 void xt_async_gc_trace(xt_header *header);
 void xt_async_gc_release(xt_header *header);
+void xt_async_iterator_gc_trace(xt_header *header);
 
 /* Stackful coroutines (xt_coroutine.c). A coroutine owns a private C stack and
  * switches to it with `ucontext`/fibers; `enter` runs until the body calls
@@ -245,6 +266,9 @@ typedef struct xt_coroutine xt_coroutine;
 xt_coroutine *xt_coroutine_create(void (*entry)(void *), void *arg);
 void xt_coroutine_enter(xt_coroutine *co);
 void xt_coroutine_leave(xt_coroutine *co);
+/* The coroutine whose body is currently executing, or NULL on the main stack. */
+xt_coroutine *xt_coroutine_current(void);
+int xt_coroutine_is_current(xt_coroutine *co);
 void xt_coroutine_gc_trace(xt_coroutine *co);
 void xt_coroutine_release(xt_coroutine *co);
 
@@ -365,6 +389,14 @@ xt_value xt_regexp_split(xt_value value, xt_value regexp, xt_value limit);
 xt_value xt_regexp_get_property(xt_value regexp, xt_value key);
 int32_t xt_map_size(xt_value value);
 int32_t xt_set_size(xt_value value);
+/* WeakMap / WeakSet / WeakRef (xt_weak.c). */
+int xt_is_weak_map(xt_value value);
+int xt_is_weak_set(xt_value value);
+int xt_is_weak_ref(xt_value value);
+xt_value xt_weak_map_ctor(int32_t argc, xt_value *argv);
+xt_value xt_weak_set_ctor(int32_t argc, xt_value *argv);
+xt_value xt_weak_ref_ctor(int32_t argc, xt_value *argv);
+xt_value xt_weak_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 /* `for...of` iteration: dispatch over arrays, strings, Maps and Sets. */
 xt_value xt_iter_length(xt_value value);
 xt_value xt_iter_value(xt_value value, xt_value index);
@@ -388,6 +420,18 @@ xt_value xt_yield(xt_value value);
 xt_value xt_yield_star(xt_value delegate);
 int xt_generator_has_next(xt_value generator);
 xt_value xt_generator_iter_value(xt_value generator);
+/* Async-generator support. `xt_generator_await` handles an `await` inside an
+ * async generator and returns 1; it returns 0 when no async generator is
+ * running (ordinary/async code handles the await itself). */
+int xt_generator_await(xt_value value, xt_value *result);
+void xt_generator_wake(void *generator, xt_value value, int rejected);
+int xt_is_async_generator(xt_value value);
+/* `[Symbol.asyncIterator]()` for a generator object. */
+xt_value xt_async_iterator_method(void);
+/* `for await...of`: resolve the async iteration protocol once, then pull one
+ * step per call. Both return a promise for the step object. */
+xt_value xt_async_iter_open(xt_value value);
+xt_value xt_async_iter_next(xt_value iterator);
 
 /* Async coroutines (xt_async.c). Calling an `async` function runs its body on
  * a coroutine that suspends at a pending `await` and resumes when the awaited
@@ -470,6 +514,29 @@ typedef struct {
   uint32_t count;
   uint32_t capacity;
 } xt_set_object;
+
+/* Weak collections. Keys (WeakMap/WeakSet) and the target of a WeakRef are
+ * deliberately not traced by the collector: `xt_weak_gc_*` in xt_weak.c
+ * implements the ephemeron fixed point and clears unreachable refs. */
+typedef struct {
+  xt_header header;
+  xt_value *keys;
+  xt_value *values;
+  uint32_t count;
+  uint32_t capacity;
+} xt_weak_map;
+
+typedef struct {
+  xt_header header;
+  xt_value *values;
+  uint32_t count;
+  uint32_t capacity;
+} xt_weak_set;
+
+typedef struct {
+  xt_header header;
+  xt_value target;
+} xt_weak_ref;
 
 typedef struct {
   xt_header header;

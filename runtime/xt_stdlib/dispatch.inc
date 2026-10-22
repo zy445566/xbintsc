@@ -170,6 +170,18 @@ static const xt_method_spec XT_SET_METHODS[] = {
   {"entries", 0}, {"forEach", 1},
 };
 
+static const xt_method_spec XT_WEAKMAP_METHODS[] = {
+  {"get", 1}, {"set", 2}, {"has", 1}, {"delete", 1},
+};
+
+static const xt_method_spec XT_WEAKSET_METHODS[] = {
+  {"add", 1}, {"has", 1}, {"delete", 1},
+};
+
+static const xt_method_spec XT_WEAKREF_METHODS[] = {
+  {"deref", 0},
+};
+
 static const xt_method_spec XT_REGEXP_METHODS[] = {
   {"test", 1}, {"exec", 1}, {"toString", 0},
 };
@@ -226,6 +238,12 @@ xt_value xt_method_value(xt_value target, xt_value name) {
       known = xt_method_lookup(XT_MAP_METHODS, XT_NAME_COUNT(XT_MAP_METHODS), method, &arity);
     } else if (kind == XT_OBJECT_KIND_SET) {
       known = xt_method_lookup(XT_SET_METHODS, XT_NAME_COUNT(XT_SET_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_WEAK_MAP) {
+      known = xt_method_lookup(XT_WEAKMAP_METHODS, XT_NAME_COUNT(XT_WEAKMAP_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_WEAK_SET) {
+      known = xt_method_lookup(XT_WEAKSET_METHODS, XT_NAME_COUNT(XT_WEAKSET_METHODS), method, &arity);
+    } else if (kind == XT_OBJECT_KIND_WEAK_REF) {
+      known = xt_method_lookup(XT_WEAKREF_METHODS, XT_NAME_COUNT(XT_WEAKREF_METHODS), method, &arity);
     } else if (kind == XT_OBJECT_KIND_REGEXP) {
       known = xt_method_lookup(XT_REGEXP_METHODS, XT_NAME_COUNT(XT_REGEXP_METHODS), method, &arity);
     } else if (kind == XT_OBJECT_KIND_PROMISE) {

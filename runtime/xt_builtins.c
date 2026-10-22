@@ -453,8 +453,7 @@ xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env) {
   function->properties = NULL;
   function->environment = NULL;
   function->prototype = XT_UNDEFINED;
-  function->is_generator = 0;
-  function->is_async = 0;
+  function->is_generator = function->is_async = function->is_async_generator = 0;
   function->builtin_name = NULL;
   if (env_count > 0) {
     function->environment = (xt_value *)malloc(sizeof(xt_value) * (size_t)env_count);
@@ -474,7 +473,8 @@ xt_value xt_call_with_this(xt_value value, xt_value thisValue, int32_t argc, xt_
   }
   xt_function *function = (xt_function *)XT_GET_PTR(value);
   /* Calling a generator function returns a suspended generator instead of
-   * running the body. */
+   * running the body. `async function*` is a generator whose `.next()` returns
+   * promises; `xt_generator_new` reads the marker from the closure. */
   if (function->is_generator) return xt_generator_new(value, thisValue, argc, argv);
   /* An `async` function runs its body on a coroutine and returns a promise,
    * which may already be settled or may resolve after an event-loop turn. */
@@ -543,6 +543,7 @@ enum {
   XT_INSTANCE_DATE = 5,
   XT_INSTANCE_REGEXP = 6,
   XT_INSTANCE_PROMISE = 7,
+  XT_INSTANCE_WEAK_MAP = 8, XT_INSTANCE_WEAK_SET = 9, XT_INSTANCE_WEAK_REF = 10,
   XT_INSTANCE_TYPED_ARRAY_FIRST = 16,
   XT_INSTANCE_TYPED_ARRAY_LAST = 24
 };
@@ -559,16 +560,14 @@ xt_value xt_instance_of_builtin(xt_value value, int32_t id) {
       return xt_bool(XT_IS_OBJECT(value) || XT_IS_ARRAY(value) || XT_IS_FUNCTION(value));
     case XT_INSTANCE_FUNCTION:
       return xt_bool(XT_IS_FUNCTION(value));
-    case XT_INSTANCE_MAP:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_MAP));
-    case XT_INSTANCE_SET:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_SET));
-    case XT_INSTANCE_DATE:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_DATE));
-    case XT_INSTANCE_REGEXP:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_REGEXP));
-    case XT_INSTANCE_PROMISE:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_PROMISE));
+    case XT_INSTANCE_MAP: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_MAP));
+    case XT_INSTANCE_SET: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_SET));
+    case XT_INSTANCE_WEAK_MAP: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_WEAK_MAP));
+    case XT_INSTANCE_WEAK_SET: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_WEAK_SET));
+    case XT_INSTANCE_WEAK_REF: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_WEAK_REF));
+    case XT_INSTANCE_DATE: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_DATE));
+    case XT_INSTANCE_REGEXP: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_REGEXP));
+    case XT_INSTANCE_PROMISE: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_PROMISE));
     default:
       if (id >= XT_INSTANCE_TYPED_ARRAY_FIRST && id <= XT_INSTANCE_TYPED_ARRAY_LAST) {
         return xt_bool(xt_typed_array_kind_of(value) == id - XT_INSTANCE_TYPED_ARRAY_FIRST);

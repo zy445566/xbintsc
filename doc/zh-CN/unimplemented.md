@@ -41,7 +41,8 @@
 > 标记模板已实现，含 raw 字符串与 `String.raw`。生成器（`function*`、`yield`、`yield*`）
 > 基于有栈协程实现，支持 `next`/`throw`/`return`、`for...of`、展开与委托；
 > `import.meta` 提供 `url`、`dirname`、`filename`，由正在运行的可执行文件路径解析。
-> `async function*` 现在会以 `UnsupportedFeature` **明确拒绝**，不再静默产出同步生成器。
+> `async function*` 与 `for await...of` 已实现：函数体可在 `await` 与 `yield` 两处挂起，
+> 每次 `.next()` 返回 Promise。
 
 ### 2.2 解析器不支持
 
@@ -86,7 +87,7 @@
 | 内置错误子类（`TypeError`、`RangeError` 等） | ✓ 一等公民构造器与原型；整个家族 `instanceof Error` 成立 |
 | `AggregateError` 构造器 | ✓ `new AggregateError(errors, message)`；`Promise.any` 现以其作为 rejection |
 | 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | ✓ 数组、字符串、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象均可在 `for...of` / 展开中使用 |
-| 生成器（`function*`、`yield`、`yield*`、`next`/`throw`/`return`） | ✓ 基于有栈协程实现；支持 `for...of`、展开与委托。`return()` 直接结束，不执行 `finally` |
+| 生成器（`function*`、`yield`、`yield*`、`next`/`throw`/`return`） | ✓ 基于有栈协程实现；支持 `for...of`、展开与委托；`async function*`、`for await...of` 与 `Symbol.asyncIterator` 也已支持 |
 | 定时器与微任务 | ✓ 核心事件循环提供 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` / `setImmediate` / `clearImmediate` / `queueMicrotask` 与 `performance.now`（返回数字 id，无 `Timeout` / `Immediate` 对象）。定时器 settle 的 promise 可以被 await：async 函数体在 pending promise 上挂起，定时器触发时恢复 |
 | I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
 
@@ -141,7 +142,7 @@
 | `this` 绑定 / 方法调用语义 | ✓ | ✓ 已实现（`this` 作为函数首个 ABI 参数线程化；箭头函数词法继承） |
 | `async` / `await` / Promise | ✓ | ✓ 已实现：基于栈式协程的真实挂起；等待 pending promise 会暂停函数体并由事件循环恢复（剩余差异见偏差表） |
 | `new.target` | ✗ | 已解析，但以 `UnsupportedFeature` 明确拒绝（无 `new.target` 语义） |
-| 生成器 / 迭代器 / `yield` | ✓ 已实现 | `function*`、`yield`、`yield*`、`.next/.throw/.return`；异步生成器以 `UnsupportedFeature` 拒绝 |
+| 生成器 / 迭代器 / `yield` | ✓ 已实现 | `function*`、`yield`、`yield*`、`.next/.throw/.return`；`async function*`、`for await...of` 与 `Symbol.asyncIterator` 也已支持 |
 | 闭包 `arity` | — | `xt_closure_arity` 恒为 -1，未填充 |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ 已实现（绑定闭包不跟踪部分参数的 `length`） |
 | `fn.name` / `fn.length` | ✓ | ✓ 已实现（从声明 / 赋值 / 属性键推断；绑定函数为 `"bound ..."` 并调整 arity） |
@@ -200,7 +201,8 @@
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | 非移动标记-清扫回收器（在 `xt_alloc` 之后）：显式根、子系统根提供者与保守 C 栈扫描。单线程、stop-the-world；无移动/压缩与分代 |
 | 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 报告声明的 arity，但调用不做校验 |
-| `async` / `await` | 已在栈式协程上真实挂起；`await` 总会排入一次微任务（非 Promise 与已 settle 的 Promise 也一样），因此与 pending `.then` 回调的交错顺序符合规范。顶层 `await` 会阻塞事件循环等待，而不是让出模块主体。`fs/promises` 仍在 settle 前同步完成 I/O；`fetch` 是阻塞的；不支持 `async` 生成器 |
+| `async` / `await` | 已在栈式协程上真实挂起；`await` 总会排入一次微任务（非 Promise 与已 settle 的 Promise 也一样），因此与 pending `.then` 回调的交错顺序符合规范。顶层 `await` 会阻塞事件循环等待，而不是让出模块主体。`fs/promises` 仍在 settle 前同步完成 I/O；`fetch` 是阻塞的。异步生成器可在 `await` 与 `yield` 处挂起，`for await...of` 每次迭代等待一步 |
+| 异步生成器清理 | `for await...of` 提前退出时不会调用迭代器的 `return()`。异步生成器中的 `yield*` 只委托同步可迭代对象。在挂起的 `yield` 处调用 `.return()` 会直接完成而不执行 `finally`（与同步生成器相同的限制） |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
 | `Error.stack` | 仅函数级帧：每帧为 `at 名称 (文件:行)`，行号取自函数声明（最内层帧会更新为错误构造处）；没有列号，生成器 / `async` 函数体不产生帧（它们会切换栈） |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见第 4 节） |
@@ -214,7 +216,7 @@
 
 | 项 | 现状 |
 | --- | --- |
-| GC（垃圾回收） | ✓ `xt_alloc.c` 中的非移动标记-清扫，按存活堆阈值（`XT_GC_THRESHOLD` 可固定该阈值）或 `xt_gc_collect()` 触发；每次回收后阈值变为存活堆的 2 倍（下限 1 MiB），因此常驻内存跟随存活集而不是只增不减；`XT_GC_TRACE=1` 会为每次回收向 stderr 打印一行统计。显式根 + 根提供者 + 保守活动栈扫描。无压缩、弱引用或后台回收（缺少弱引用意味着扩展必须对它缓存的每个值做强引用，例如 GUI 的元素句柄） |
+| GC（垃圾回收） | ✓ `xt_alloc.c` 中的非移动标记-清扫，按存活堆阈值（`XT_GC_THRESHOLD` 可固定该阈值）或 `xt_gc_collect()` 触发；每次回收后阈值变为存活堆的 2 倍（下限 1 MiB），因此常驻内存跟随存活集而不是只增不减；`XT_GC_TRACE=1` 会为每次回收向 stderr 打印一行统计。显式根 + 根提供者 + 保守活动栈扫描。`WeakMap`/`WeakSet` 的键是 ephemeron（只有键可达时才保留值），`WeakRef` 目标不可达时会被清空；由于栈扫描是保守的，残留的栈字可能延迟清空。无压缩或后台回收 |
 | 自举（self-hosting） | ✓ 编译器已能自编译：`xbintsc build src/cli/main.ts` 可产出可用二进制，且从第 1 代起产出的 IR 保持稳定。运行时仍为 C |
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
 | 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` / `structuredClone` 已实现；String.normalize 缺失 |
@@ -232,7 +234,7 @@
 
 未实现（表达式）：new.target（会给出明确的 UnsupportedFeature）
 
-未实现（函数）：`fn.toString()` 源码文本、异步生成器（已明确拒绝）
+未实现（函数）：`fn.toString()` 源码文本
 
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 

@@ -178,6 +178,17 @@ xt_value xt_get(xt_value target, xt_value key) {
     /* Map/Set expose `.size`; promises, dates and regexps have their own
      * getters implemented in the standard library. */
     xt_object *obj = (xt_object *)XT_GET_PTR(target);
+    if (obj->header.kind == XT_OBJECT_KIND_GENERATOR && xt_is_symbol(key)) {
+      /* Generators are iterable objects: `Symbol.iterator` returns the
+       * generator itself, and an async generator also exposes
+       * `Symbol.asyncIterator`. */
+      if (key == xt_symbol_well_known("asyncIterator") && xt_is_async_generator(target)) {
+        return xt_async_iterator_method();
+      }
+      if (key == xt_symbol_well_known("iterator") && !xt_is_async_generator(target)) {
+        return xt_async_iterator_method();
+      }
+    }
     if (obj->header.kind == XT_OBJECT_KIND_SYMBOL) {
       if (XT_IS_STRING(key)) {
         xt_string *k = xt_as_string(key);

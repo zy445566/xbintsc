@@ -60,7 +60,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `#private` 字段/方法/静态成员 | ⚠️ | 以字面量 `#x` 键存储；不做访问控制；父子类同名可能互相覆盖 |
 | `enum`/`const enum` | ✅ | 正向 + 反向映射 |
 | `private`/`protected`/`public`/`readonly`/`abstract`/`implements` | — | 被擦除，无访问控制 |
-| 生成器 `function*`、`yield`、`yield*` | ✅ | 不支持 `async` 生成器 |
+| 生成器 `function*`、`yield`、`yield*` | ✅ | 同步与 `async function*`；支持 `for await...of` 与 `Symbol.asyncIterator` |
 | `arguments` 对象 | ✅ | 隐式提供；箭头函数看到的是自己的参数 |
 | 参数个数校验 | 🚫 | 从不校验，虽然 `fn.length` 会报声明元数 |
 
@@ -73,7 +73,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `queueMicrotask` / `setImmediate` / `performance.now` | ✅ | 微任务与 Promise 共用 FIFO 队列；`setImmediate` 是零延迟定时器，返回数字 id；`performance.now` 返回单调递增的毫秒小数 |
 | 套接字/服务端（`http`、`net`、`dgram`） | ✅ | 回调在事件循环上执行，可以 settle 你正在 await 的 Promise（测试含 `net`/`http` 示例） |
 | `fs/promises` | ⚠️ | 可以 await，但每次调用仍先同步完成 I/O 再 settle，I/O 期间不会让出 |
-| `async` 生成器、worker 线程 | 🚫 | `async function*` 被拒绝；worker 是子进程 |
+| worker 线程 | 🚫 | worker 是子进程 |
+| `async` 生成器 | ✅ | 可在 `await` 与 `yield` 处挂起；每次 `.next()` 返回 Promise；支持 `for await...of` |
 
 ## 类型：解析后擦除
 
@@ -92,7 +93,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 ## 标准库
 
-已实现：`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`/`WeakSet`、
+已实现：`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`/`WeakSet`/`WeakRef`、
 `Symbol`、`Error` 家族、`BigInt`、`Array`/`String`/`Number`/`Object` 方法、TypedArray、
 带捕获组的 `String.prototype.match`/`split`/`replace`、不可变数组方法
 （`toReversed`、`toSorted`、`toSpliced`、`with`）、全局 URI 函数、
@@ -130,7 +131,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 正则 Unicode 匹配 | ⚠️ 引擎按字节工作：字面量 `中` 仍能匹配，但 `.` 与字符类每次只消费一个字节，`\d`/`\w` 仍是 ASCII。匹配偏移（`match.index`、`search`、替换回调）按 UTF-16 码元报告 |
 | 数字格式化与强转 | ✅ 与 Node 一致（`toFixed`、`toPrecision`、十六/八/二进制解析） |
 | `BigInt` | ✅ 已实现 |
-| 垃圾回收 | ✅ 非移动标记清扫；显式根 + C 栈保守扫描；单线程、stop-the-world；无弱引用 |
+| 垃圾回收 | ✅ 非移动标记清扫；显式根 + C 栈保守扫描；单线程、stop-the-world。`WeakMap`/`WeakSet` 键使用 ephemeron 不动点，`WeakRef` 目标不可达时清空；保守栈上的残留字可能延迟清空 |
 | 线程 | 🚫 单线程；`worker_threads` 只存在于 Node 扩展中 |
 
 ## 平台

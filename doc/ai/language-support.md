@@ -63,7 +63,7 @@ Canonical detail (always current, much longer):
 | `#private` fields / methods / statics | ⚠️ | stored under a literal `#x` key; no access enforcement; parent/child name collisions may alias |
 | `enum` / `const enum` | ✅ | forward + reverse mapping |
 | `private` / `protected` / `public` / `readonly` / `abstract` / `implements` | — | erased, no access control |
-| Generators `function*`, `yield`, `yield*` | ✅ | `async` generators are not supported |
+| Generators `function*`, `yield`, `yield*` | ✅ | sync and `async function*`; `for await...of` and `Symbol.asyncIterator` |
 | `arguments` object | ✅ | implicit; arrows see their own parameters |
 | Argument-count validation | 🚫 | never checked, though `fn.length` reports declared arity |
 
@@ -76,7 +76,8 @@ Canonical detail (always current, much longer):
 | `queueMicrotask` / `setImmediate` / `performance.now` | ✅ | microtasks share the promise FIFO queue; `setImmediate` is a zero-delay timer with numeric ids; `performance.now` is monotonic fractional milliseconds |
 | Sockets / servers (`http`, `net`, `dgram`) | ✅ | callbacks run on the event loop and can settle a promise you await (`net` / `http` examples included in the tests) |
 | `fs/promises` | ⚠️ | awaitable, but each call performs its I/O synchronously before settling, so it does not yield while the I/O runs |
-| `async` generators, worker threads | 🚫 | `async function*` is rejected; workers are child processes |
+| Worker threads | 🚫 | workers are child processes |
+| `async` generators | ✅ | suspend at `await` and `yield`; every `.next()` returns a promise; `for await...of` supported |
 
 ## Types: parsed, then erased
 
@@ -96,7 +97,7 @@ behaviour is checked. Write the runtime code you mean.
 
 ## Standard library
 
-Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`,
+Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`/`WeakRef`,
 `Symbol`, `Error` family, `BigInt`, `Array`/`String`/`Number`/`Object` methods,
 typed arrays, `String.prototype.match`/`split`/`replace` with capture groups,
 immutable array helpers (`toReversed`, `toSorted`, `toSpliced`, `with`), global
@@ -135,7 +136,7 @@ See section 3 of [../unimplemented.md](../unimplemented.md) for the full list.
 | RegExp Unicode matching | ⚠️ the engine is byte-oriented: a literal `中` still matches, but `.` and character classes consume one byte per repetition, and `\d`/`\w` stay ASCII. Match offsets (`match.index`, `search`, replacement callbacks) are reported in UTF-16 code units |
 | Number formatting and coercion | ✅ matches Node (`toFixed`, `toPrecision`, hex/octal/binary parsing) |
 | `BigInt` | ✅ implemented |
-| Garbage collection | ✅ non-moving mark-sweep; explicit roots plus a conservative C-stack scan; single-threaded and stop-the-world; no weak references |
+| Garbage collection | ✅ non-moving mark-sweep; explicit roots plus a conservative C-stack scan; single-threaded and stop-the-world. WeakMap/WeakSet keys use an ephemeron fixed point and WeakRef targets are cleared when unreachable; a stale conservative stack word can delay clearing |
 | Threads | 🚫 single-threaded; `worker_threads` exists in the Node extension only |
 
 ## Platform

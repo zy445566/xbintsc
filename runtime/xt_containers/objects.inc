@@ -47,6 +47,9 @@ static const char *xt_object_tag_of(xt_value value) {
       case XT_OBJECT_KIND_ERROR: return "Error";
       case XT_OBJECT_KIND_MAP: return "Map";
       case XT_OBJECT_KIND_SET: return "Set";
+      case XT_OBJECT_KIND_WEAK_MAP: return "WeakMap";
+      case XT_OBJECT_KIND_WEAK_SET: return "WeakSet";
+      case XT_OBJECT_KIND_WEAK_REF: return "WeakRef";
       case XT_OBJECT_KIND_DATE: return "Date";
       case XT_OBJECT_KIND_REGEXP: return "RegExp";
       case XT_OBJECT_KIND_PROMISE: return "Promise";
@@ -388,6 +391,9 @@ xt_value xt_object_get_prototype(xt_value value) {
       case XT_OBJECT_KIND_SYMBOL:
       case XT_OBJECT_KIND_MAP:
       case XT_OBJECT_KIND_SET:
+      case XT_OBJECT_KIND_WEAK_MAP:
+      case XT_OBJECT_KIND_WEAK_SET:
+      case XT_OBJECT_KIND_WEAK_REF:
       case XT_OBJECT_KIND_DATE:
       case XT_OBJECT_KIND_REGEXP:
       case XT_OBJECT_KIND_PROMISE:

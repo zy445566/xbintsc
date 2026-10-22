@@ -131,12 +131,12 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 
 | Feature | Status |
 | --- | --- |
-| `subarray` | ~ returns a copy, not a view over a shared buffer |
+| `subarray` | ✓ returns a view over the same buffer; `slice` copies |
 | `keys` / `values` / `entries` | ~ return arrays, not iterator objects |
-| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` semantics | ~ `ArrayBuffer` and `DataView` exist (big-endian by default, `slice`, `isView`); typed arrays still have no shared backing buffer and do not expose `.buffer` |
+| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` semantics | ✓ `ArrayBuffer` (`slice`, `isView`), `DataView` (big-endian by default, `littleEndian` option), typed arrays backed by a buffer and exposing `.buffer` / `.byteOffset`; `new X(buffer, offset, length)` creates views |
 | `BigInt64Array` / `BigUint64Array` | ✗ not implemented |
 | `instanceof` built-in constructors | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` family / typed arrays are recognised by name **and through a first-class constructor value** (`const A = Array; x instanceof A`); constructors can be stored, passed, aliased, called and used with `new` |
-| Typed-array views over a `Buffer` / `ArrayBuffer` | ✗ constructors copy from a length / array-like / typed array only; a `DataView` over an `ArrayBuffer` does share its bytes |
+| Typed-array views over a `Buffer` / `ArrayBuffer` | ✓ typed arrays and `DataView` share the `ArrayBuffer` bytes; `Buffer`-backed typed-array views are still not implemented |
 
 ---
 

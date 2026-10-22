@@ -482,6 +482,18 @@ xt_value xt_object_own_property_symbols(xt_value value) {
 
 xt_value xt_object_keys(xt_value value) {
   xt_value result = xt_array_new(0, NULL);
+  /* A typed array's enumerable own keys are its indices; `length` and the
+   * buffer metadata are observable but not enumerable. */
+  int typed = xt_typed_array_kind_of(value);
+  if (typed >= 0) {
+    uint32_t length = (uint32_t)xt_to_number(xt_object_get_cstr(value, "length"));
+    for (uint32_t i = 0; i < length; i++) {
+      char buffer[32];
+      snprintf(buffer, sizeof(buffer), "%u", i);
+      xt_array_push(result, xt_string_from_cstr(buffer));
+    }
+    return result;
+  }
   if (XT_IS_OBJECT(value)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(value);
     for (uint32_t i = 0; i < obj->count; i++) {

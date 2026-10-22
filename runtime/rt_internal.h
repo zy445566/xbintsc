@@ -490,5 +490,18 @@ xt_value xt_arg_at(int32_t argc, xt_value *argv, int32_t index);
 /* Typed arrays (xt_typed_array.c). */
 int xt_typed_array_kind_of(xt_value value);
 double xt_typed_array_coerce(int kind, double value);
+/* Buffer-backed element access; the array must be a typed-array value. */
+xt_value xt_typed_array_read(xt_value array, uint32_t index);
+void xt_typed_array_write(xt_value array, uint32_t index, xt_value value);
+xt_value xt_typed_array_buffer_of(xt_value array);
+uint32_t xt_typed_array_byte_offset_of(xt_value array);
+const char *xt_typed_array_name_of(int kind);
+
+/* ArrayBuffer helpers (xt_array_buffer.c). */
+int xt_is_array_buffer(xt_value value);
+uint32_t xt_array_buffer_byte_length(xt_value value);
+uint8_t xt_array_buffer_get_byte(xt_value buffer, uint32_t index);
+void xt_array_buffer_set_byte(xt_value buffer, uint32_t index, uint8_t value);
+xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv);
 
 #endif /* XT_RT_INTERNAL_H */

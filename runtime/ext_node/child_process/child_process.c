@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <io.h>
 #include <process.h>
+#include <windows.h>
 #else
 #include <poll.h>
 #include <sys/wait.h>
@@ -69,38 +70,115 @@ static xt_value make_result(double status, const char *out, const char *err) {
 
 #if defined(_WIN32)
 
-static char *read_temp(FILE *file) {
-  fflush(file);
-  if (_fseeki64(file, 0, SEEK_END) != 0) return NULL;
-  long long size = _ftelli64(file);
-  if (size < 0) return NULL;
-  _fseeki64(file, 0, SEEK_SET);
-  char *buffer = (char *)malloc((size_t)size + 1);
-  if (!buffer) return NULL;
-  size_t read = fread(buffer, 1, (size_t)size, file);
-  buffer[read] = 0;
-  return buffer;
+/*
+ * `spawnSync` captures stdout/stderr through anonymous pipes. Temporary files
+ * are deliberately not used: `tmpfile()` creates its file in the root of the
+ * current drive on the UCRT, which fails with "Permission denied" on machines
+ * where that directory is not writable, and a restricted temp directory makes
+ * every `spawnSync` fail as well. Pipes also avoid the pipe-buffer deadlock the
+ * old temp-file design was working around, because one reader thread drains
+ * each stream while the child runs.
+ */
+typedef struct {
+  HANDLE read;
+  char *data;
+  size_t length;
+  size_t capacity;
+} CapturePipe;
+
+static void capture_append(CapturePipe *pipe, const char *chunk, size_t count) {
+  if (pipe->length + count + 1 > pipe->capacity) {
+    size_t next = pipe->capacity ? pipe->capacity * 2 : 4096;
+    while (next < pipe->length + count + 1) next *= 2;
+    char *grown = (char *)realloc(pipe->data, next);
+    if (!grown) return;
+    pipe->data = grown;
+    pipe->capacity = next;
+  }
+  memcpy(pipe->data + pipe->length, chunk, count);
+  pipe->length += count;
+  pipe->data[pipe->length] = 0;
 }
 
-/*
- * MSVC's `_spawnvp` builds the child command line from argv without quoting
- * argv[0]. When the executable path contains a space — the default install
- * location is "C:\Program Files\…" — the child sees the path split into several
- * arguments ("Files\Microsoft", "Visual", …). Quote argv[0] ourselves. Returns
- * NULL when no quoting is needed (the caller keeps the original pointer).
- */
-static char *quote_argv0(char **child_argv) {
-  const char *arg = child_argv[0];
-  if (arg == NULL || strchr(arg, ' ') == NULL) return NULL;
-  size_t length = strlen(arg);
-  char *quoted = (char *)malloc(length + 3);
-  if (!quoted) return NULL;
-  quoted[0] = '"';
-  memcpy(quoted + 1, arg, length);
-  quoted[length + 1] = '"';
-  quoted[length + 2] = 0;
-  child_argv[0] = quoted;
-  return quoted;
+static DWORD WINAPI capture_thread(LPVOID parameter) {
+  CapturePipe *pipe = (CapturePipe *)parameter;
+  char chunk[4096];
+  DWORD got = 0;
+  while (ReadFile(pipe->read, chunk, sizeof(chunk), &got, NULL) && got > 0) {
+    capture_append(pipe, chunk, (size_t)got);
+  }
+  return 0;
+}
+
+static int create_capture_pipe(CapturePipe *pipe, HANDLE *write_end) {
+  SECURITY_ATTRIBUTES attributes;
+  HANDLE read_handle = NULL;
+  HANDLE write_handle = NULL;
+  attributes.nLength = sizeof(attributes);
+  attributes.lpSecurityDescriptor = NULL;
+  attributes.bInheritHandle = TRUE;
+  if (!CreatePipe(&read_handle, &write_handle, &attributes, 0)) return 0;
+  /* The child inherits the write end only. */
+  SetHandleInformation(read_handle, HANDLE_FLAG_INHERIT, 0);
+  pipe->read = read_handle;
+  pipe->data = NULL;
+  pipe->length = 0;
+  pipe->capacity = 0;
+  *write_end = write_handle;
+  return 1;
+}
+
+static void close_capture_pipe(CapturePipe *pipe) {
+  if (pipe->read != NULL) CloseHandle(pipe->read);
+  free(pipe->data);
+  pipe->read = NULL;
+  pipe->data = NULL;
+  pipe->length = 0;
+  pipe->capacity = 0;
+}
+
+/* Quote one argument following the CommandLineToArgvW/MSVC rules. */
+static char *append_quoted_argument(char *out, const char *argument) {
+  if (*argument != 0 && strpbrk(argument, " \t\n\v\"") == NULL) {
+    size_t length = strlen(argument);
+    memcpy(out, argument, length);
+    return out + length;
+  }
+  *out++ = '"';
+  const char *cursor = argument;
+  for (;;) {
+    size_t backslashes = 0;
+    while (*cursor == '\\') {
+      cursor++;
+      backslashes++;
+    }
+    if (*cursor == 0) {
+      for (size_t i = 0; i < backslashes * 2; i++) *out++ = '\\';
+      *out++ = '"';
+      return out;
+    }
+    if (*cursor == '"') {
+      for (size_t i = 0; i < backslashes * 2 + 1; i++) *out++ = '\\';
+    } else {
+      for (size_t i = 0; i < backslashes; i++) *out++ = '\\';
+    }
+    *out++ = *cursor++;
+  }
+}
+
+/* Build the child command line; every argv element is quoted as needed. */
+static char *build_command_line(char **child_argv, int count) {
+  size_t capacity = 1;
+  for (int i = 0; i < count; i++) capacity += strlen(child_argv[i]) * 2 + 4;
+  char *line = (char *)malloc(capacity);
+  if (!line) return NULL;
+  char *cursor = line;
+  for (int i = 0; i < count; i++) {
+    if (i > 0) *cursor++ = ' ';
+    cursor = append_quoted_argument(cursor, child_argv[i]);
+  }
+  *cursor = 0;
+  return line;
 }
 
 xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
@@ -112,60 +190,82 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   int count = 0;
   char **child_argv = (char **)build_argv(command, args, &count);
   if (!child_argv) return make_result(-1, "", "out of memory");
-  char *quoted_command = quote_argv0(child_argv);
+  char *command_line = build_command_line(child_argv, count);
+  if (!command_line) {
+    free(child_argv);
+    return make_result(-1, "", "out of memory");
+  }
 
-  char previous[4096];
-  int had_cwd = cwd && _getcwd(previous, sizeof(previous)) != NULL;
+  STARTUPINFOA startup;
+  PROCESS_INFORMATION process;
+  ZeroMemory(&startup, sizeof(startup));
+  ZeroMemory(&process, sizeof(process));
+  startup.cb = sizeof(startup);
 
   if (option_stdio_inherit(argc > 2 ? argv[2] : XT_UNDEFINED)) {
-    if (cwd) _chdir(cwd);
-    intptr_t inherit_rc = _spawnvp(_P_WAIT, command, (const char *const *)child_argv);
-    if (had_cwd) _chdir(previous);
-    free(quoted_command);
+    BOOL created = CreateProcessA(
+      NULL, command_line, NULL, NULL, TRUE, 0, NULL, cwd, &startup, &process);
+    free(command_line);
     free(child_argv);
-    return make_result(inherit_rc < 0 ? -1 : (double)inherit_rc, "", "");
+    if (!created) return make_result(-1, "", "failed to start process");
+    WaitForSingleObject(process.hProcess, INFINITE);
+    DWORD exit_code = 0;
+    GetExitCodeProcess(process.hProcess, &exit_code);
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    return make_result((double)exit_code, "", "");
   }
 
-  FILE *out_file = tmpfile();
-  FILE *err_file = tmpfile();
-  if (!out_file || !err_file) {
-    free(quoted_command);
+  CapturePipe out_pipe;
+  CapturePipe err_pipe;
+  ZeroMemory(&out_pipe, sizeof(out_pipe));
+  ZeroMemory(&err_pipe, sizeof(err_pipe));
+  HANDLE out_write = NULL;
+  HANDLE err_write = NULL;
+  if (!create_capture_pipe(&out_pipe, &out_write) || !create_capture_pipe(&err_pipe, &err_write)) {
+    if (out_write != NULL) CloseHandle(out_write);
+    if (err_write != NULL) CloseHandle(err_write);
+    close_capture_pipe(&out_pipe);
+    close_capture_pipe(&err_pipe);
+    free(command_line);
     free(child_argv);
-    if (out_file) fclose(out_file);
-    if (err_file) fclose(err_file);
-    return make_result(-1, "", "could not create temporary files");
+    return make_result(-1, "", "could not create pipes");
   }
+  startup.dwFlags = STARTF_USESTDHANDLES;
+  startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+  startup.hStdOutput = out_write;
+  startup.hStdError = err_write;
 
-  /* Flush anything the parent has already buffered on stdout/stderr before
-   * redirecting the descriptors; otherwise that pending output would be
-   * flushed into the child's capture file (and lost from the real stdout). */
-  fflush(stdout);
-  fflush(stderr);
-  int saved_out = _dup(_fileno(stdout));
-  int saved_err = _dup(_fileno(stderr));
-  _dup2(_fileno(out_file), _fileno(stdout));
-  _dup2(_fileno(err_file), _fileno(stderr));
-
-  if (cwd) _chdir(cwd);
-  intptr_t rc = _spawnvp(_P_WAIT, command, (const char *const *)child_argv);
-  if (had_cwd) _chdir(previous);
-  fflush(stdout);
-  fflush(stderr);
-  _dup2(saved_out, _fileno(stdout));
-  _dup2(saved_err, _fileno(stderr));
-  _close(saved_out);
-  _close(saved_err);
-
-  char *out = read_temp(out_file);
-  char *err = read_temp(err_file);
-  fclose(out_file);
-  fclose(err_file);
-  free(quoted_command);
+  BOOL created = CreateProcessA(
+    NULL, command_line, NULL, NULL, TRUE, 0, NULL, cwd, &startup, &process);
+  free(command_line);
   free(child_argv);
+  CloseHandle(out_write);
+  CloseHandle(err_write);
+  if (!created) {
+    close_capture_pipe(&out_pipe);
+    close_capture_pipe(&err_pipe);
+    return make_result(-1, "", "failed to start process");
+  }
 
-  xt_value result = make_result(rc < 0 ? -1 : (double)rc, out, err);
-  free(out);
-  free(err);
+  CloseHandle(process.hThread);
+  HANDLE threads[2];
+  threads[0] = CreateThread(NULL, 0, capture_thread, &out_pipe, 0, NULL);
+  threads[1] = CreateThread(NULL, 0, capture_thread, &err_pipe, 0, NULL);
+  for (int i = 0; i < 2; i++) {
+    if (threads[i] != NULL) WaitForSingleObject(threads[i], INFINITE);
+  }
+  WaitForSingleObject(process.hProcess, INFINITE);
+  DWORD exit_code = 0;
+  GetExitCodeProcess(process.hProcess, &exit_code);
+  CloseHandle(process.hProcess);
+  for (int i = 0; i < 2; i++) {
+    if (threads[i] != NULL) CloseHandle(threads[i]);
+  }
+
+  xt_value result = make_result((double)exit_code, out_pipe.data, err_pipe.data);
+  close_capture_pipe(&out_pipe);
+  close_capture_pipe(&err_pipe);
   return result;
 }
 

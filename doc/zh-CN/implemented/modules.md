@@ -7,7 +7,7 @@
 
 ## 语法
 
-- `import default, { named } from "..."`、`import * as ns from "..."`（相对模块的命名空间导入会降级为合成对象字面量；扩展模块如 `path` 亦已支持）、`import type`
+- `import default, { named } from "..."`、`import * as ns from "..."`（相对模块的命名空间导入会降级为合成对象字面量；扩展模块如 `path` 亦已支持）、`import "./side-effect"`、`import type`
 - `export default`、`export { a as b }`、`export *`、`export =`
 - import attributes（`with` / `assert`）
 
@@ -17,6 +17,7 @@
 - 包可以是 ESM 或 CommonJS：`node_modules` 内的 CJS 文件会获得合成的 `module` / `exports`，`require` 调用被降级为依赖的导出对象，静态识别出的导出对 ESM 导入方可见；`node_modules` 之外的 `require()` 仍报错并提示改用 `import`。循环依赖报错。
 - `.js` 系列说明符解析到对应 `.ts` 源码；省略后缀时优先 TypeScript 后缀而非同名的 JavaScript 文件；纯 `.js` / `.jsx` / `.mjs` / `.cjs` 源码也可直接打包。
 - 导入绑定与命名空间成员是模块求值时的快照（无实时绑定）—— 见[未实现：模块系统](../unimplemented/modules.md)。
+- 纯类型导入与再导出（`import type { T } from "..."`、`import { type T } from "..."`、`export type { T } from "..."`）会被擦除，**不构成模块依赖边**：目标模块不会被加载或打包，模块之间的纯类型循环也不属于循环依赖。若需要仅求值一个模块而不绑定名字，请使用副作用导入（`import "./mod"`）。
 
 ## import.meta
 

@@ -15,6 +15,10 @@
 | `stdio: "inherit"` | 共用父进程的 stdout/stderr，而不是捕获 |
 | `encoding` | 接受但忽略（输出始终按 UTF-8 解码） |
 
+Windows 上子进程通过 `CreateProcess` 启动，stdout/stderr 由读线程经匿名管道持续排空。
+不使用临时文件，因此受限的 `%TEMP%` 不会让 `spawnSync` 失败，输出超过管道缓冲区时
+也不会死锁。
+
 ```ts
 import { spawnSync } from "child_process";
 

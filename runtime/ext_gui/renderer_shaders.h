@@ -6,8 +6,8 @@
  * them, one per SDL_GPU backend:
  *
  *   - Metal: the MSL string literals below, which SDL_GPU compiles at runtime.
- *   - Vulkan: SPIR-V blobs in `renderer_shaders_data.h`, compiled from
- *     `spirv/*.{vert,frag}` by `scripts/build-gui-shaders.mjs`.
+ *   - Vulkan: SPIR-V blobs in `renderer_shaders_data.h`, compiled from the
+ *     `.vert`/`.frag` sources in `spirv/` by `scripts/build-gui-shaders.mjs`.
  *   - Direct3D 12: DXIL blobs from the same header, compiled from `shaders.hlsl`.
  *
  * `selectShader` resolves a logical program and stage to whichever of those the

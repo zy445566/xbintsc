@@ -54,4 +54,14 @@ describeE2E("end-to-end module bundling", (harness) => {
       }),
     ).toBe("5");
   });
+
+  it("evaluates a side-effect-only import before the importer", () => {
+    const source = `
+      import "./side_effect";
+      console.log("main");
+    `;
+    expect(
+      runProgram(source, { files: { "side_effect.ts": 'console.log("side");' } }),
+    ).toBe("side\nmain");
+  });
 });

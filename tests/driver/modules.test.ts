@@ -188,6 +188,47 @@ describe("bundleModules", () => {
     expect(cycle?.fileName?.endsWith("b.ts")).toBe(true);
   });
 
+  it("erases type-only imports instead of treating them as module edges", () => {
+    // `import type` must not create a runtime dependency. Before this was
+    // handled, the compiler's own split source files formed type-only cycles
+    // and `xbintsc emit src/cli/main.ts` failed with TS6005.
+    const directory = writeFiles({
+      "a.ts": 'import type { B } from "./b";\nexport interface A { b: B }\nexport const a = 1;',
+      "b.ts": 'import { type A } from "./a";\nexport interface B { a: A }\nexport const b = 2;',
+      "main.ts":
+        'import { a } from "./a";\nimport { b } from "./b";\nimport type { A } from "./a";\nconst value: A | null = null;\nconsole.log(a + b + (value === null ? 1 : 0));',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(3);
+    // File imports are lowered away; only value exports survive.
+    expect(result!.sourceFile.statements.some((statement) => statement.kind === SyntaxKind.ImportDeclaration)).toBe(false);
+  });
+
+  it("does not resolve type-only imports or re-exports at runtime", () => {
+    const directory = writeFiles({
+      "types.ts": "export interface Shape { n: number }",
+      "lib.ts": 'export type { Shape } from "./types";\nexport const lib = 1;',
+      "main.ts": 'import type { Missing } from "./missing";\nimport { lib } from "./lib";\nconst value: Missing | null = null;\nconsole.log(lib + (value === null ? 1 : 0));',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    // `types.ts` and the never-existing `missing.ts` are not runtime modules.
+    expect(result?.moduleCount).toBe(2);
+  });
+
+  it("keeps side-effect imports and empty clauses as module edges", () => {
+    const directory = writeFiles({
+      "side.ts": 'console.log("side");',
+      "other.ts": 'console.log("other");',
+      "main.ts": 'import "./side";\nimport {} from "./other";',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    // `import "./x"` and `import {} from "x"` both evaluate the module.
+    expect(result?.moduleCount).toBe(3);
+  });
+
   it("resolves an extension-less import to a `.js` source", () => {
     const directory = writeFiles({
       "util.js": "export function add(a, b) { return a + b; }",

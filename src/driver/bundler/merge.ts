@@ -77,8 +77,10 @@ export function bundleModules(
     for (const statement of record.sourceFile.statements) {
       if (statement.kind === SyntaxKind.ExportDeclaration) {
         const declaration = statement as ExportDeclaration;
+        if (declaration.isTypeOnly) continue;
         if (declaration.exportClause && declaration.exportClause.kind === SyntaxKind.NamedExports) {
           for (const specifier of declaration.exportClause.elements) {
+            if (specifier.isTypeOnly) continue;
             const localName = specifier.propertyName?.text ?? specifier.name.text;
             const exportedName = specifier.name.text;
             if (declaration.moduleSpecifier) {
@@ -144,7 +146,7 @@ export function bundleModules(
       const declaration = statement as ImportDeclaration;
       const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
       const clause = declaration.importClause;
-      if (!clause || !dependency) continue;
+      if (!clause || clause.isTypeOnly || !dependency) continue;
       if (clause.name) {
         const target = dependency.exports.get("default") ?? dependency.exports.get("default");
         const local = scope.symbols.get(clause.name.text);
@@ -153,6 +155,7 @@ export function bundleModules(
       const bindings = clause.namedBindings;
       if (bindings && bindings.kind === SyntaxKind.NamedImports) {
         for (const specifier of bindings.elements) {
+          if (specifier.isTypeOnly) continue;
           const importedName = specifier.propertyName?.text ?? specifier.name.text;
           const target = dependency.exports.get(importedName);
           const local = scope.symbols.get(specifier.name.text);

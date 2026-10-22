@@ -23,6 +23,28 @@ export interface ResourceCompiler {
 }
 
 /**
+ * Probe a resource compiler.
+ *
+ * `llvm-rc` has no `--version` flag: any invocation that is not a valid
+ * conversion exits non-zero, but a usage-only run (`/?`) prints the tool name,
+ * which is what identifies it. Probing `llvm-rc --version` therefore always
+ * failed and silently selected the MinGW `windres` fallback — and a 32-bit
+ * `windres` emits an i386 resource object that the x64 linker rejects with
+ * `LNK1112`. Treat a usage banner as success so the compiler that matches the
+ * clang ABI wins.
+ */
+function isResourceCompiler(runner: Runner, candidate: ResourceCompiler): boolean {
+  const args = candidate.kind === "llvm-rc" ? ["/?"] : ["--version"];
+  try {
+    const result = runner.run(candidate.tool, args);
+    if (result.status === 0) return true;
+    return candidate.kind === "llvm-rc" && /LLVM Resource Converter/i.test(result.stdout + result.stderr);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Locate a resource compiler. `xbintsc_RC` wins, then `llvm-rc` next to the
  * resolved clang, then `llvm-rc` and `windres` on `PATH`.
  */
@@ -33,11 +55,7 @@ export function resolveResourceCompiler(runner: Runner, clang: string): Resource
   const override = process.env.xbintsc_RC;
   if (override) {
     const kind: ResourceCompilerKind = /windres/i.test(override) ? "windres" : "llvm-rc";
-    try {
-      if (runner.run(override, ["--version"]).status === 0) return { tool: override, kind };
-    } catch {
-      // Fall through to the discovered compilers.
-    }
+    if (isResourceCompiler(runner, { tool: override, kind })) return { tool: override, kind };
   }
   const candidates: ResourceCompiler[] = [];
   if (clang && (clang.includes("/") || clang.includes("\\"))) {
@@ -48,13 +66,19 @@ export function resolveResourceCompiler(runner: Runner, clang: string): Resource
 
   for (const candidate of candidates) {
     if ((candidate.tool.includes("/") || candidate.tool.includes("\\")) && !existsSync(candidate.tool)) continue;
-    try {
-      if (runner.run(candidate.tool, ["--version"]).status === 0) return candidate;
-    } catch {
-      // Not runnable; try the next candidate.
-    }
+    if (isResourceCompiler(runner, candidate)) return candidate;
   }
   return undefined;
+}
+
+/**
+ * The COFF/COFF-PE target `windres` must emit. Without an explicit `-F` it
+ * defaults to `pe-i386` even when the tool itself is 64-bit hosted, and the
+ * x64 clang linker then fails with `LNK1112: module machine type 'x86'
+ * conflicts with target machine type 'x64'`.
+ */
+function windresTargetFormat(): string {
+  return process.arch === "arm64" ? "pe-aarch64" : "pe-x86-64";
 }
 
 /**
@@ -84,7 +108,7 @@ export function ensureWindowsIconResource(
 
   const args =
     compiler.kind === "windres"
-      ? [rcPath, "-O", "coff", "-o", objectPath]
+      ? [rcPath, "-O", "coff", "-F", windresTargetFormat(), "-o", objectPath]
       : ["/fo", objectPath, rcPath];
   const result = runner.run(compiler.tool, args, { cwd: cacheDir, env });
   if (result.status !== 0 || !existsSync(objectPath)) {

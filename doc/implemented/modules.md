@@ -7,7 +7,7 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
 
 ## Syntax
 
-- `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules are lowered to a synthetic object literal; extension modules such as `path` are also supported), `import type`
+- `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules are lowered to a synthetic object literal; extension modules such as `path` are also supported), `import "./side-effect"`, `import type`
 - `export default`, `export { a as b }`, `export *`, `export =`
 - Import attributes (`with` / `assert`)
 
@@ -17,6 +17,7 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
 - Packages may be ESM or CommonJS: a CommonJS file under `node_modules` gets a synthetic `module`/`exports` pair, its `require` calls are lowered to the bundled dependency's exports, and its statically-detected exports are exposed to ESM importers. `require()` outside `node_modules` is still rejected with a hint to use `import`. Circular dependencies error out.
 - A `.js`-family specifier resolves to its `.ts` source, and TypeScript suffixes are preferred over JavaScript siblings when the specifier omits the extension; plain `.js` / `.jsx` / `.mjs` / `.cjs` sources are bundled directly.
 - Imported bindings and namespace members are snapshots at module-evaluation time (no live bindings) — see [Unimplemented: module system](../unimplemented/modules.md).
+- Type-only imports and re-exports (`import type { T } from "..."`, `import { type T } from "..."`, `export type { T } from "..."`) are erased. They are **not** module edges: the target is not loaded or bundled, and a type-only cycle between modules is not a circular dependency. Use a side-effect import (`import "./mod"`) when a module must be evaluated without binding a name.
 
 ## import.meta
 

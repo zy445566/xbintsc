@@ -185,4 +185,11 @@ describe("unsupported semantics", () => {
     expect(errors.some((e) => e.code === DiagnosticCode.UnsupportedFeature)).toBe(true);
     expect(errors.some((e) => e.message.includes("Internal"))).toBe(false);
   });
+
+  it("names the unsupported declaration instead of leaking a syntax-kind number", () => {
+    const errors = errorsOf("namespace N { export const x = 1; }");
+    const unsupported = errors.find((e) => e.code === DiagnosticCode.UnsupportedFeature);
+    expect(unsupported?.message).toContain("namespace declaration");
+    expect(unsupported?.message).not.toMatch(/\(\d+\)/);
+  });
 });

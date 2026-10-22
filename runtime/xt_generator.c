@@ -149,7 +149,7 @@ xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, x
 xt_value xt_generator_next(xt_value generator, xt_value sent) {
   xt_generator *gen = xt_as_generator(generator);
   if (!gen) {
-    xt_throw(xt_string_from_cstr("TypeError: not a generator"));
+    xt_throw(xt_error_from_message("TypeError: not a generator"));
     return XT_UNDEFINED;
   }
   if (gen->done) return xt_generator_result_object(XT_UNDEFINED, 1);
@@ -166,7 +166,7 @@ xt_value xt_generator_next(xt_value generator, xt_value sent) {
 xt_value xt_generator_throw(xt_value generator, xt_value error) {
   xt_generator *gen = xt_as_generator(generator);
   if (!gen) {
-    xt_throw(xt_string_from_cstr("TypeError: not a generator"));
+    xt_throw(xt_error_from_message("TypeError: not a generator"));
     return XT_UNDEFINED;
   }
   if (gen->done) {
@@ -186,7 +186,7 @@ xt_value xt_generator_throw(xt_value generator, xt_value error) {
 xt_value xt_generator_return(xt_value generator, xt_value value) {
   xt_generator *gen = xt_as_generator(generator);
   if (!gen) {
-    xt_throw(xt_string_from_cstr("TypeError: not a generator"));
+    xt_throw(xt_error_from_message("TypeError: not a generator"));
     return XT_UNDEFINED;
   }
   /* Abandon the coroutine without resuming: finally blocks are not run. */

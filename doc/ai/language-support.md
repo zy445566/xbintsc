@@ -120,8 +120,8 @@ See section 3 of [../unimplemented.md](../unimplemented.md) for the full list.
 | Relative multi-file bundling | ✅ | a `./helper.js` specifier resolves to `helper.ts` |
 | `import * as ns`, default and named imports | ✅ | |
 | Node built-in modules | ✅ | only with `--ext node` — see [extensions.md](./extensions.md) |
-| Bare third-party npm packages | 🚫 | `node_modules` ESM packages are bundled as source only when no extension claims the specifier |
-| `require()` / CommonJS | 🚫 | rejected with a hint to use `import` |
+| Bare third-party npm packages | ⚠️ | resolved from `node_modules` and bundled as source (ESM and CommonJS); no runtime lookup, circular dependencies rejected |
+| `require()` / CommonJS | ⚠️ | rejected in your own source with a hint to use `import`; CommonJS packages inside `node_modules` are bundled |
 | Circular dependencies | 🚫 | |
 | Live bindings | ⚠️ | imports and namespace members are snapshots |
 | `__dirname`, `__filename` | 🚫 | use `import.meta.dirname` / `import.meta.filename` |

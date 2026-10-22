@@ -85,7 +85,7 @@ static xt_value xt_array_sort(xt_value value, xt_value fn) {
   int hasFn = XT_IS_FUNCTION(fn);
   xt_value *scratch = (xt_value *)malloc(sizeof(xt_value) * array->length);
   if (!scratch) {
-    xt_throw(xt_string_from_cstr("RangeError: out of memory in Array.prototype.sort"));
+    xt_throw(xt_error_from_message("RangeError: out of memory in Array.prototype.sort"));
     return value;
   }
   xt_array_merge_sort(array->items, scratch, array->length, fn, hasFn);
@@ -225,7 +225,9 @@ static xt_value xt_array_with(xt_value value, xt_value indexValue, xt_value newV
   int32_t index = xt_to_int32(indexValue);
   if (index < 0) index += (int32_t)array->length;
   if (index < 0 || index >= (int32_t)array->length) {
-    xt_throw(xt_add(xt_string_from_cstr("RangeError: Invalid index : "), xt_to_string(indexValue)));
+    xt_value message =
+        xt_add(xt_string_from_cstr("RangeError: Invalid index : "), xt_to_string(indexValue));
+    xt_throw(xt_error_from_message(xt_string_data(message)));
     return copy;
   }
   array->items[index] = newValue;
@@ -266,7 +268,7 @@ xt_value xt_ext_array_method(xt_value target, const char *method, int32_t argc, 
     xt_value acc;
     if (argc >= 2) acc = argv[1];
     else if (array->length > 0) acc = array->items[i--];
-    else { xt_throw(xt_string_from_cstr("TypeError: Reduce of empty array with no initial value")); return XT_UNDEFINED; }
+    else { xt_throw(xt_error_from_message("TypeError: Reduce of empty array with no initial value")); return XT_UNDEFINED; }
     for (; i >= 0; i--) {
       xt_value args[4] = {acc, array->items[i], xt_number((double)i), target};
       acc = xt_closure_call(fn, 4, args);

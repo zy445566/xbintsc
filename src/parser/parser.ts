@@ -21,6 +21,34 @@ import { typeMethods, type TypeMethods } from "./types.js";
 
 export class Parser extends ParserContext {
   parseSourceFile(): SourceFileNode {
+    try {
+      return this.parseSourceFileBody();
+    } catch (error) {
+      /* Deeply nested input (thousands of `(`, arrays, type arguments, ...)
+       * exhausts the JavaScript stack before the recursive-descent parser can
+       * produce a syntax error. Report it as a diagnostic instead of letting a
+       * raw RangeError escape as an "internal error" with no location. */
+      if (error instanceof RangeError && /call stack|stack size/i.test(error.message)) {
+        this.diagnostics.error(
+          DiagnosticCode.NestingTooDeep,
+          "Source is nested too deeply to parse; reduce the nesting depth (for example, split the expression)",
+          { start: this.token.start, end: this.token.end },
+          this.source.fileName,
+        );
+        return {
+          kind: SyntaxKind.SourceFile,
+          statements: [],
+          fileName: this.source.fileName,
+          text: this.source.text,
+          start: 0,
+          end: this.source.text.length,
+        };
+      }
+      throw error;
+    }
+  }
+
+  private parseSourceFileBody(): SourceFileNode {
     const statements: Statement[] = [];
     while (!this.at(TokenKind.EndOfFile)) {
       const before = this.consumed;

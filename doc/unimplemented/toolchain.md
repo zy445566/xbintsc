@@ -9,6 +9,6 @@
 | Type checker | ✗ only diagnostic codes are defined; no checker |
 | Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` / `structuredClone` implemented; String.normalize missing |
 | Multi-file module bundling | partial: relative-path `.ts` bundling, ESM `node_modules` packages, namespace imports and bare-specifier extension module imports implemented; CommonJS is handled only inside `node_modules`; circular dependencies / live bindings are not implemented |
-| Real async runtime | ✓ `async`/`await` suspends on pending promises on the `select(2)` reactor: timers, TCP sockets and promise callbacks resume the coroutine. Still missing: truly asynchronous I/O scheduling (`fs/promises` blocks before settling), a non-blocking `fetch` and worker threads (workers are child processes) |
+| Real async runtime | ✓ `async`/`await` suspends on pending promises on the `select(2)` reactor: timers, TCP sockets, offloaded file/HTTP work and promise callbacks resume the coroutine. Still missing: real OS-level file watching, non-blocking `net.connect`, TLS for `fetch`, and user-visible worker threads (`worker_threads` uses child processes) |
 | Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), verified in CI |
 | Precise ECMAScript number / string / comparison semantics | partial, see [Runtime deviations](./deviations.md) |

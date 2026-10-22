@@ -110,7 +110,8 @@ diff scratch/ref.ll scratch/gen2.ll
   therefore never allocate per access.
 - The GC is a non-moving mark-sweep collector: new heap objects go through
   `xt_alloc`, and a value must be reachable from an explicit root slot, a
-  registered root provider (the event loop, the microtask queue) or the
+  registered root provider (the event loop, the microtask queue, the async I/O
+  job roots) or the
   conservative C-stack scan while it is live. A value held only in a C local that
   is not on the scanned stack is a bug.
 

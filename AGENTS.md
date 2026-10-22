@@ -60,9 +60,11 @@ in [doc/ai/language-support.md](./doc/ai/language-support.md).
   `split`, `padStart` and `for...of` follow UTF-16 code units (or code points for
   iteration). The lazy cons-node representation is still byte based.
 - **`async`/`await` suspends on pending promises.** An `async` body runs on a
-  stackful coroutine, so a promise settled from a timer or socket callback can be
-  awaited. Every `await` queues a microtask (settled values included), and
-  `fs/promises` still blocks before settling.
+  stackful coroutine, so a promise settled from a timer, socket callback or
+  offloaded file operation can be awaited. Every `await` queues a microtask
+  (settled values included). `fs/promises` and `fetch` run their blocking work on
+  a small worker pool and settle on the event loop, so timers keep firing while
+  they wait.
 - **No CommonJS in your own source.** `require()` is rejected; use ESM
   `import`. Packages inside `node_modules` may be CommonJS and are bundled.
   No live bindings.

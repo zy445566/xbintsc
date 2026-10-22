@@ -27,6 +27,7 @@ export const RUNTIME_SOURCES = [
   "xt_promise.c",
   "xt_async.c",
   "xt_loop.c",
+  "xt_async_io.c",
   "xt_generator.c",
   "xt_coroutine.c",
   "xt_fetch.c",

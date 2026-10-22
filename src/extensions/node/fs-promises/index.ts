@@ -1,11 +1,11 @@
 /**
  * Node's `fs/promises` module.
  *
- * There is no asynchronous I/O scheduler, so each function wraps the matching
- * synchronous `fs` implementation in an already-settled promise (rejected on
- * failure). `readFile`, `writeFile`, `mkdir`, `readdir`, `stat`, `rm`,
- * `open` (a `FileHandle`), ... are therefore importable from `fs/promises`.
- * `constants` is re-exported as a value getter.
+ * Each function submits a job to the asynchronous I/O pool: the blocking
+ * syscall runs on a worker thread and the promise settles on the event loop, so
+ * awaiting `readFile`, `writeFile`, `stat`, `rm`, `open` (a `FileHandle`), ...
+ * yields to timers and sockets while the I/O is in flight. `constants` is
+ * re-exported as a value getter.
  */
 
 import type { NodeModule } from "../module.js";
@@ -54,7 +54,7 @@ const exports: ModuleExports = {
 export const fsPromisesModule: NodeModule = {
   name: "fs/promises",
   runtimeSources: () => [
-    // Reuse the synchronous fs implementations the promise wrappers delegate to.
+    // Synchronous builtins (used by `watch` and the sync module) plus the async job split.
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/read_file.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/write_file.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/fs_ops.c"),
@@ -63,6 +63,15 @@ export const fsPromisesModule: NodeModule = {
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/link_ops.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/copy_ops.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/constants.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/dir.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/watch.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_job.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_worker.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_worker_dir.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_worker_fd.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_complete.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_api.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_fh.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/promises.c"),
   ],
   builtins: () => builtins,

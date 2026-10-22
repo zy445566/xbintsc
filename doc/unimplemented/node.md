@@ -10,10 +10,10 @@ is missing or differs from Node.
 ## Contents
 
 - [`fs`](./node/fs.md) — callback-style async operations, real file watching, option callbacks
-- [`fs/promises`](./node/fs-promises.md) — synchronous I/O behind a settled promise, `FileHandle` deviations
+- [`fs/promises`](./node/fs-promises.md) — `FileHandle` append/read offsets, immediate `Dir` callbacks, inert `watch`, no cancellation
 - [Fully unimplemented modules](./node/modules.md) — `https`, `readline`, `tls`, `cluster`, `vm`, ...
 - [Global objects and namespaces](./node/globals.md) — `global`, `__dirname`, `require` outside `node_modules`
-- [Async and the event-loop model](./node/async.md) — no asynchronous I/O scheduler, blocking `connect`, no keep-alive
+- [Async and the event-loop model](./node/async.md) — blocked file watching, blocking `net.connect`, no keep-alive, fixed-size offload pool
 - [The Bun extension](./node/bun.md) — design example only
 
 A module's implemented page links to its limitation page; when a limitation is

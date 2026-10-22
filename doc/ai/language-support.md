@@ -75,7 +75,8 @@ Canonical detail (always current, much longer):
 | `setTimeout` and callbacks | ✅ | timers run on the core event loop; `await new Promise(r => setTimeout(r, ms))` works |
 | `queueMicrotask` / `setImmediate` / `performance.now` | ✅ | microtasks share the promise FIFO queue; `setImmediate` is a zero-delay timer with numeric ids; `performance.now` is monotonic fractional milliseconds |
 | Sockets / servers (`http`, `net`, `dgram`) | ✅ | callbacks run on the event loop and can settle a promise you await (`net` / `http` examples included in the tests) |
-| `fs/promises` | ⚠️ | awaitable, but each call performs its I/O synchronously before settling, so it does not yield while the I/O runs |
+| `fs/promises` | ✅ | file, directory and `FileHandle` operations run on the async I/O worker pool and settle on the reactor, so timers and sockets keep running while they wait |
+| Global `fetch` | ✅ | HTTP/1.1 client whose connect/send/receive runs on the same worker pool; `await fetch(...)` yields and redirects are followed on the reactor. `http://` only (no TLS) and the body is buffered before resolving |
 | Worker threads | 🚫 | workers are child processes |
 | `async` generators | ✅ | suspend at `await` and `yield`; every `.next()` returns a promise; `for await...of` supported |
 

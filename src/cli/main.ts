@@ -258,8 +258,8 @@ Options:
       --no-hints        Do not append the "hint: … see <doc>" line to failures
 
 xbintsc compiles a subset of TypeScript to a native binary. Types are erased
-(never checked), Node modules need --ext node, third-party npm imports are not
-supported, and clang 16+ is required to link.
+(never checked), Node built-ins need --ext node, packages in node_modules are
+bundled at build time, and clang 16+ is required to link.
 
 Docs: doc/ai/README.md (task guide) - doc/ai/language-support.md (subset) -
 doc/ai/troubleshooting.md (failures) - llms.txt (index of every document)

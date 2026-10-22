@@ -47,12 +47,12 @@ it in `xbintsc.config.json` so it is always on:
 xbintsc run app.ts --ext node
 ```
 
-### `module '<pkg>' is not supported: xbintsc can import built-in platform modules, relative '.ts' files and ESM packages under node_modules; CommonJS packages are not supported`
+### `module '<pkg>' is not supported: expected a Node built-in (with --ext node), a relative .ts/.js file, or a package in node_modules`
 
-A bare third-party import that nothing can link. Either the package is CommonJS
-(unsupported), or it is an ESM package that failed to bundle. Prefer a Node
-built-in from the `node` extension; see [extensions.md](./extensions.md) for
-what can actually be bundled.
+A bare import that neither the enabled extensions nor `node_modules` resolved.
+Check the package name and its `exports`/`main` map, or use a Node built-in from
+the `node` extension; see [extensions.md](./extensions.md) for what can be
+bundled.
 
 ### ``CommonJS `require()` is not supported``
 

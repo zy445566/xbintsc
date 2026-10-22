@@ -180,6 +180,8 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_process_get(i64)",
   "declare i64 @xt_map_ctor(i32, i64*)",
   "declare i64 @xt_set_ctor(i32, i64*)",
+  "declare i64 @xt_text_encoder_ctor(i32, i64*)",
+  "declare i64 @xt_text_decoder_ctor(i32, i64*)",
   "declare i64 @xt_date_ctor(i32, i64*)",
   "declare i64 @xt_regexp_ctor(i32, i64*)",
   "declare i64 @xt_error_ctor(i32, i64*)",

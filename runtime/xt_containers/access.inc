@@ -35,6 +35,76 @@ static void xt_throw_read_of_nullish(xt_value target, xt_value key) {
   xt_throw(xt_string_from_cstr(message));
 }
 
+/* -- Array.prototype[Symbol.iterator] -------------------------------------- */
+/*
+ * `for...of` and spread use the internal index protocol, but libraries also
+ * call the iterator method explicitly (`arr[Symbol.iterator]()`, `Array.from`,
+ * manual `.next()`). Build a small iterator object per call: `next` closes over
+ * the array and a one-element box holding the current index, and the iterator
+ * is itself iterable so it can be passed back to `for...of` / spread.
+ */
+static xt_value xt_array_iterator_next(xt_value thisValue, xt_value env, int32_t argc,
+                                       xt_value *argv) {
+  (void)thisValue;
+  (void)argc;
+  (void)argv;
+  xt_value array = xt_closure_env(env, 0);
+  xt_value indexBox = xt_closure_env(env, 1);
+  int32_t index = xt_to_int32(xt_get(indexBox, xt_number(0)));
+  xt_array *items = xt_as_array(array);
+  xt_value result = xt_object_new();
+  if (!items || index < 0 || (uint32_t)index >= items->length) {
+    xt_object_set(result, xt_string_from_cstr("value"), XT_UNDEFINED);
+    xt_object_set(result, xt_string_from_cstr("done"), XT_TRUE);
+    return result;
+  }
+  xt_object_set(result, xt_string_from_cstr("value"), items->items[index]);
+  xt_object_set(result, xt_string_from_cstr("done"), XT_FALSE);
+  xt_set(indexBox, xt_number(0), xt_number(index + 1));
+  return result;
+}
+
+static xt_value xt_iterator_return_this(xt_value thisValue, xt_value env, int32_t argc,
+                                        xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return thisValue;
+}
+
+static xt_value xt_array_iterator(xt_value thisValue, xt_value env, int32_t argc,
+                                  xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  if (!XT_IS_ARRAY(thisValue)) {
+    xt_value message =
+        xt_string_from_cstr("Array.prototype[Symbol.iterator] called on a non-array");
+    xt_throw(xt_type_error_ctor(1, &message));
+  }
+  xt_value indexBox = xt_array_new(0, NULL);
+  xt_array_push(indexBox, xt_number(0));
+  xt_value captured[2] = {thisValue, indexBox};
+  xt_value iterator = xt_object_new();
+  xt_object_set(iterator, xt_string_from_cstr("next"),
+                xt_closure_new((void *)xt_array_iterator_next, 2, captured));
+  xt_object_set(iterator, xt_symbol_well_known("iterator"),
+                xt_closure_new((void *)xt_iterator_return_this, 0, NULL));
+  return iterator;
+}
+
+/* The method value is stable (`arr[Symbol.iterator] === arr[Symbol.iterator]`),
+ * so cache it and root the cache for the collector. */
+static xt_value xt_array_iterator_method_value = XT_UNDEFINED;
+
+static xt_value xt_array_iterator_method(void) {
+  if (!XT_IS_FUNCTION(xt_array_iterator_method_value)) {
+    xt_array_iterator_method_value = xt_closure_new((void *)xt_array_iterator, 0, NULL);
+    xt_gc_add_root(&xt_array_iterator_method_value);
+  }
+  return xt_array_iterator_method_value;
+}
+
 xt_value xt_get(xt_value target, xt_value key) {
   if (target == XT_UNDEFINED || target == XT_NULL) xt_throw_read_of_nullish(target, key);
   if (XT_IS_ARRAY(target)) {
@@ -71,6 +141,9 @@ xt_value xt_get(xt_value target, xt_value key) {
         xt_value value = xt_object_get(extra, key);
         if (value != XT_UNDEFINED) return value;
       }
+      /* Array.prototype[Symbol.iterator] is the fallback, after any own
+       * symbol property the program assigned. */
+      if (key == xt_symbol_well_known("iterator")) return xt_array_iterator_method();
       xt_value method = xt_method_value(target, key);
       if (method != XT_UNDEFINED) return method;
       xt_value proto = ((xt_array *)XT_GET_PTR(target))->prototype;

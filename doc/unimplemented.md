@@ -111,6 +111,7 @@ None known at the expression level.
 | `Symbol` constructor and symbol primitives | ✓ `Symbol(description)`, well-known symbols, `Symbol.for` / `Symbol.keyFor`, symbol property keys and `Object.getOwnPropertySymbols` |
 | `String.prototype.normalize` | ✗ not implemented |
 | `structuredClone` | ✗ not implemented |
+| `JSON.stringify` options | ~ `space` (number/string, clamped to 10) is honored; a function/array `replacer` is still ignored |
 | Built-in error subclasses (`TypeError`, `RangeError`, …) | ✓ first-class constructors and prototypes; `instanceof Error` holds for the whole family |
 | `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
 | Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | ✓ arrays, strings, `Map`, `Set`, generators and any object exposing `[Symbol.iterator]()` are iterable in `for...of` / spread |

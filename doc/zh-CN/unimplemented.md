@@ -82,6 +82,7 @@
 | `Symbol` 构造器与 symbol 原始值 | ✓ `Symbol(description)`、著名符号、`Symbol.for` / `Symbol.keyFor`、symbol 属性键与 `Object.getOwnPropertySymbols` |
 | `String.prototype.normalize` | ✗ 未实现 |
 | `structuredClone` | ✗ 未实现 |
+| `JSON.stringify` 选项 | ~ 已支持 `space`（数字或字符串，最多 10 个单位）；函数/数组形式的 `replacer` 仍被忽略 |
 | 内置错误子类（`TypeError`、`RangeError` 等） | ✓ 一等公民构造器与原型；整个家族 `instanceof Error` 成立 |
 | `AggregateError` 构造器 | ✓ `new AggregateError(errors, message)`；`Promise.any` 现以其作为 rejection |
 | 迭代器协议 / `Symbol.iterator` / `for...of` 自定义可迭代 | ✓ 数组、字符串、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象均可在 `for...of` / 展开中使用 |

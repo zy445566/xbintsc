@@ -42,7 +42,7 @@ import {
  * `package.json`); a stale version would let an upgraded compiler reuse binaries
  * produced by the previous one.
  */
-export const COMPILER_VERSION = "0.5.15";
+export const COMPILER_VERSION = "0.5.16";
 
 export type EmitKind = "exe" | "obj" | "ir";
 
@@ -465,6 +465,7 @@ export const RUNTIME_SOURCES = [
   "xt_structured_clone.c",
   "xt_performance.c",
   "xt_text_codec.c",
+  "xt_url.c",
   "xt_array_buffer.c",
   "xt_io.c",
 ] as const;

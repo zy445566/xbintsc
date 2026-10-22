@@ -83,6 +83,13 @@ struct LayoutBox {
   bool is_canvas = false;
   uint64_t canvas_id = 0;
 
+  /* Inline `<svg>`: a replaced element whose pixels are the serialized subtree
+   * (`svg_markup`), rasterised like an SVG file at the drawn device size. The
+   * normal box walk does not descend into its children — they are vector art,
+   * not HTML boxes. */
+  bool is_inline_svg = false;
+  std::string svg_markup;
+
   Display display = Display::Inline;
 
   /* Resolved (px) box edges. */

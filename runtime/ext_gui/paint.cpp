@@ -187,6 +187,16 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         image.media_id = box->media_id;
         image.transform = matrix;
         addImage(image, out, clip);
+      } else if (box->is_inline_svg && !box->svg_markup.empty() && box->content_width > 0.0f &&
+                 box->content_height > 0.0f) {
+        PaintImage image;
+        image.x = box->content_x;
+        image.y = box->content_y;
+        image.width = box->content_width;
+        image.height = box->content_height;
+        image.svg = box->svg_markup;
+        image.transform = matrix;
+        addImage(image, out, clip);
       } else if (box->is_image && !box->image_src.empty() && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
         PaintImage image;
@@ -243,6 +253,10 @@ std::string DisplayList::dump() const {
         std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f media=%llu",
                       image.x, image.y, image.width, image.height,
                       (unsigned long long)image.media_id);
+      } else if (!image.svg.empty()) {
+        std::snprintf(buffer, sizeof(buffer),
+                      "image x=%.1f y=%.1f w=%.1f h=%.1f inline-svg=%zu", image.x, image.y,
+                      image.width, image.height, image.svg.size());
       } else if (image.canvas_id != 0) {
         std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f canvas=%llu",
                       image.x, image.y, image.width, image.height,

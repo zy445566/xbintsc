@@ -23,13 +23,14 @@
   `tests/e2e/gui-example-browser.test.ts` 中。
 - **`display: none -> flex` 的重排。** 通过类名切换让隐藏元素显示在 flex 容器上时，也曾观察
   到同样的崩溃；`examples/gui/pelican-bike` 改用 `opacity` 显示游戏结束遮罩。
-- **SVG：** 支持 SVG *文件*，经图像加载器处理（`<img src="logo.svg">`）：
-  `runtime/ext_gui/svg.cpp` 封装 vendored **NanoSVG** 解析/光栅化器，
-  `image.{h,cpp}` 把 SVG 视为矢量图像并按绘制像素尺寸光栅化。文档中的内联
-  `<svg>` **子树**仍不支持：HTML 解析器只认识元素与属性，布局只认识盒子，
-  绘制只认识矩形/文本/图像；`<svg>` 子树需要另一套几何与绘制路径。因此矢量
-  美术要么以 SVG/PNG 文件形式提供，要么像 `examples/gui/pelican-bike` 那样用
-  盒子绘制。
+- **SVG 是 NanoSVG 的子集。** SVG *文件*（`<img src="logo.svg">`）与内联
+  `<svg>` 子树共用 vendored 的 NanoSVG 解析/光栅化器（`runtime/ext_gui/svg.cpp`、
+  `inline_svg.cpp`），它会渲染 `path`/`rect`/`circle`/`ellipse`/`line`/
+  `polyline`/`polygon`、组、`defs` 渐变以及基于 `class` 的 `<style>` 规则。
+  `<text>`、`<use>`、滤镜、遮罩与裁剪路径不会渲染，文档层叠的 CSS 也不会进入
+  图像内部（这里的 `fill`/`stroke` 是 SVG 表现属性，不是 CSS 属性）。需要这些
+  能力的矢量美术必须预先光栅化、用盒子绘制，或限制在受支持的语法内。参见
+  [媒体](./media.md#图像m6a)。
 
 ## 待决问题
 

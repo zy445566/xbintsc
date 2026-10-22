@@ -34,20 +34,21 @@
   *class change* on a flex container has also been observed to crash the same
   way; `examples/gui/pelican-bike` reveals its game-over overlay with `opacity`
   instead.
+- **SVG is NanoSVG's subset.** SVG *files* (`<img src="logo.svg">`) and inline
+  `<svg>` trees share the vendored NanoSVG parser/rasteriser
+  (`runtime/ext_gui/svg.cpp`, `inline_svg.cpp`), which renders
+  `path`/`rect`/`circle`/`ellipse`/`line`/`polyline`/`polygon`, groups, `defs`
+  gradients and class-based `<style>` rules. `<text>`, `<use>`, filters, masks
+  and clip paths are not rendered, and CSS applied by the document cascade does
+  not reach inside the artwork (fill/stroke are SVG presentation attributes,
+  not CSS properties here). Vector art that needs those has to be rasterised
+  beforehand, drawn from boxes, or restricted to the supported syntax. See
+  [Media](./media.md#images-m6a).
 
 ## Open questions
 
 - Whether Linux ships X11, Wayland, or both in the first cut. (Decision:
   X11 first, Wayland later.)
-- **SVG:** SVG *files* are supported through the image loader
-  (`<img src="logo.svg">`): `runtime/ext_gui/svg.cpp` wraps the vendored
-  **NanoSVG** parser/rasteriser and `image.{h,cpp}` treats an SVG as a vector
-  image, rasterised at the drawn pixel size. Inline `<svg>` **trees** in a
-  document are still not supported: the HTML parser knows elements and
-  attributes, the layout engine knows boxes, and paint knows
-  rectangles/text/images, so `<svg>` subtrees would need a whole second
-  geometry+paint path. Vector art therefore has to arrive as an SVG/PNG file or
-  be drawn from boxes, as `examples/gui/pelican-bike` does.
 - **Windows: the C++ runtime must not be named on the link line.** `gui.lib` is
   built with the *static* CRT (`CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`) and
   every engine object records `libcpmt` as a dependent library, which is also

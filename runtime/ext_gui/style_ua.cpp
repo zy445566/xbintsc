@@ -40,6 +40,9 @@ void xt_style_apply_user_agent(const Node *node, XtStyle *style) {
     style->display = Display::InlineBlock;
   }
   if (tag == "img") style->display = Display::InlineBlock;
+  /* An inline `<svg>` is a replaced inline-block too: its intrinsic size comes
+   * from the SVG document and its subtree is vector art, not HTML boxes. */
+  if (tag == "svg") style->display = Display::InlineBlock;
   /* `<video>` mirrors `<img>` (a replaced inline-block; 300x150 by default from
    * layout), while `<audio>` and its `<source>`/`<track>` children have no
    * rendered box of their own. */

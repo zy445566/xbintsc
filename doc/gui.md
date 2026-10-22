@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M15** — features (M1–M14) are complete: HTML parsing, CSS selector
+Status: **M16** — features (M1–M15) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -9,7 +9,9 @@ tested and delivered to native TS handlers, `:hover`/`:focus` are matched
 dynamically, `<img>` is sized from its intrinsic dimensions and drawn from a
 texture — PNG/JPEG/… bitmaps and SVG files alike, the latter rasterised at the
 drawn size so vector art stays crisp — and CSS transitions animate paint
-properties. **M8** adds an interactive
+properties. **M16** gives inline `<svg>` trees the same treatment: the subtree is
+serialized back into an SVG document and rasterised at the drawn device size, so
+an icon needs no separate file. **M8** adds an interactive
 DOM: element handles with stable identity, mutation (`appendChild`, `textContent`,
 `classList`, `style`, …) and element-level events with capture/bubbling.
 **M9** compiles `<script>` bodies ahead of time (inline and `<script src>`) — see
@@ -257,6 +259,18 @@ engine were Rust.
       [Layout](./gui/layout.md#transforms-m15) and
       [Animation](./gui/animation.md#css-transforms-m15); e2e in
       `tests/e2e/gui-transform.test.ts` and `tests/e2e/gui-example-svg.test.ts`.
+16. **M16 — inline `<svg>`** ✅
+    - `<svg>` is a replaced element (`layout.*`): its intrinsic size comes from
+      the `width`/`height` attributes, else the `viewBox`, else 300x150, and the
+      normal box walk does not descend into its children.
+    - `inline_svg.{h,cpp}` serializes the subtree into a standalone SVG document,
+      restoring the case-sensitive names the HTML parser lowercased (`viewBox`,
+      `preserveAspectRatio`, `linearGradient`, `gradientUnits`, …).
+    - Paint carries the markup on its image op (`PaintImage::svg`) and the
+      renderer parses/rasterises it at the drawn device size through the same
+      NanoSVG cache as an SVG file (`svg.{h,cpp}`); the markup cache is bounded
+      and a DOM mutation re-serializes on the next layout. e2e in
+      `tests/e2e/gui-inline-svg.test.ts`.
 
 ## Progress log
 
@@ -355,4 +369,12 @@ engine were Rust.
   through the inverse, and `getBoundingClientRect` returns the transformed AABB.
   `examples/gui/pelican-svg` animates its artwork with it; e2e in
   `tests/e2e/gui-transform.test.ts` and `tests/e2e/gui-example-svg.test.ts`.
+- **M16** ✅ inline `<svg>`. `buildBoxTree` treats an `<svg>` element as a
+  replaced box (intrinsic size from `width`/`height`, then `viewBox`, then
+  300x150) and stops descending, `inline_svg.{h,cpp}` serializes the subtree with
+  canonical SVG casing, paint carries the markup on `PaintImage::svg`, and
+  `renderer_image.cpp` rasterises it at the drawn device pixel size through the
+  NanoSVG cache (`svg.{h,cpp}`, bounded LRU for markup). The `win.inlineSvg`
+  diagnostic exposes the serialized document, and `tests/e2e/gui-inline-svg.test.ts`
+  pins sizing, hit testing, gradients, CSS box styling and mutation.
 

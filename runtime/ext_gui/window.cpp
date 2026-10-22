@@ -12,6 +12,7 @@
 
 #include <algorithm>
 
+#include "inline_svg.h"
 #include "paint.h"
 #include "text.h"
 
@@ -214,6 +215,32 @@ static xt_value win_paint_count(xt_value self, xt_value env, int32_t argc, xt_va
   xtgui::DisplayList list;
   xtgui::xt_paint_build(win->document->layout().root(), list);
   return xt_number((double)list.rects.size());
+}
+
+/** Diagnostic/test hook: the serialized SVG document of the first `<svg>`
+ * element matching `selector`, plus the intrinsic size and shape count the
+ * NanoSVG parse yields. Returns `undefined` when there is no such element. */
+static xt_value win_inline_svg(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == nullptr || win->document == nullptr || argc < 1) return XT_UNDEFINED;
+  xt_gui_flush_dom(win);
+  xt_value selectorValue = xt_to_string(xt_arg(argc, argv, 0));
+  const char *selector = xt_string_data(selectorValue);
+  if (selector == nullptr) return XT_UNDEFINED;
+  const xtgui::Node *node = win->document->querySelector(selector);
+  if (!xtgui::xt_inline_svg_is_root(node)) return XT_UNDEFINED;
+  std::string markup = xtgui::xt_inline_svg_serialize(node);
+  int width = 0;
+  int height = 0;
+  xtgui::xt_svg_markup_size(markup, &width, &height);
+  xt_value object = xt_object_new();
+  xt_object_set(object, xt_string_from_cstr("markup"), xt_string_from_cstr(markup.c_str()));
+  xt_object_set(object, xt_string_from_cstr("width"), xt_number(width));
+  xt_object_set(object, xt_string_from_cstr("height"), xt_number(height));
+  xt_object_set(object, xt_string_from_cstr("shapes"),
+                xt_number(xtgui::xt_svg_markup_shapes(markup)));
+  return object;
 }
 
 /** Diagnostic/test hook: advance the CSS transition clock by `ms`. */
@@ -527,6 +554,7 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "setBackground", (void *)win_set_background);
   define_method(proto, "paintList", (void *)win_paint_list);
   define_method(proto, "paintCount", (void *)win_paint_count);
+  define_method(proto, "inlineSvg", (void *)win_inline_svg);
   define_method(proto, "advance", (void *)win_advance);
   define_method(proto, "measureText", (void *)win_measure_text);
   define_method(proto, "fontMetrics", (void *)win_font_metrics);

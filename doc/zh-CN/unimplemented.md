@@ -103,10 +103,10 @@
 | --- | --- |
 | `subarray` | ~ 返回副本，而非共享缓冲区上的视图 |
 | `keys` / `values` / `entries` | ~ 返回数组，而非迭代器对象 |
-| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` 语义 | ✗ 无底层缓冲区类型；`.byteOffset` 恒为 0 |
+| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` 语义 | ~ 已有 `ArrayBuffer` 与 `DataView`（默认大端、`slice`、`isView`）；类型化数组仍无共享缓冲区，也不暴露 `.buffer` |
 | `BigInt64Array` / `BigUint64Array` | ✗ 未实现 |
 | `instanceof` 内建构造器 | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` 家族 / 类型化数组都能按名字识别，**也能通过一等公民构造器值判断**（`const A = Array; x instanceof A`）；构造器可保存、传参、取别名、调用与 `new` |
-| 基于 `Buffer` / `ArrayBuffer` 的类型化数组视图 | ✗ 构造器仅能从长度 / 数组样 / 类型化数组复制 |
+| 基于 `Buffer` / `ArrayBuffer` 的类型化数组视图 | ✗ 构造器仅能从长度 / 数组样 / 类型化数组复制；`DataView` 可以共享 `ArrayBuffer` 的字节 |
 
 ---
 

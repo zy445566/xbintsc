@@ -122,6 +122,7 @@ export function documentationFor(diagnostic: Diagnostic): DocumentationPointer |
     case DiagnosticCode.InvalidAssignmentTarget:
     case DiagnosticCode.DuplicateDefault:
     case DiagnosticCode.InvalidTypeSyntax:
+    case DiagnosticCode.NestingTooDeep:
     case DiagnosticCode.DuplicateIdentifier:
     case DiagnosticCode.CannotFindName:
     case DiagnosticCode.IllegalRedeclaration:

@@ -403,6 +403,9 @@ static void xt_gc_process(xt_header *header) {
     case XT_OBJECT_KIND_ASYNC:
       xt_async_gc_trace(header);
       return;
+    case XT_OBJECT_KIND_ASYNC_ITERATOR:
+      xt_async_iterator_gc_trace(header);
+      return;
     case XT_OBJECT_KIND_WEAK_MAP:
     case XT_OBJECT_KIND_WEAK_SET:
     case XT_OBJECT_KIND_WEAK_REF:

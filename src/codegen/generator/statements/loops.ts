@@ -128,6 +128,50 @@ export const loopStatementMethods: LoopStatementMethods = {
   emitForOf(statement: ForOfStatement | ForInStatement): void {
     const source = this.emitExpression(statement.expression);
     const isForIn = statement.kind === SyntaxKind.ForInStatement;
+    /* `for await (const x of xs)`: resolve the async iteration protocol once,
+     * await one step per iteration, then bind its `value`. Running the await
+     * inside the surrounding async coroutine is what makes the loop suspend
+     * between elements instead of blocking the event loop. */
+    if (!isForIn && (statement as ForOfStatement).awaitModifier) {
+      const iterable = this.runtimeCall("xt_async_iter_open", [source]);
+      const condLabel = this.label("forawait.cond");
+      const bodyLabel = this.label("forawait.body");
+      const updateLabel = this.label("forawait.update");
+      const endLabel = this.label("forawait.end");
+      this.terminate(`br label %${condLabel}`);
+
+      this.startBlock(condLabel);
+      const next = this.runtimeCall("xt_async_iter_next", [iterable]);
+      const step = this.runtimeCall("xt_await", [next]);
+      const doneKey = this.stringValue("done");
+      const done = this.runtimeCall("xt_get", [step, doneKey]);
+      /* `xt_truthy` returns i32, so it cannot go through `runtimeCall`
+       * (which types every result as i64). */
+      const truthy = this.reg();
+      this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${done})`);
+      const nonzero = this.reg();
+      this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
+      this.terminate(`br i1 ${nonzero}, label %${endLabel}, label %${bodyLabel}`);
+
+      this.startBlock(bodyLabel);
+      const valueKey = this.stringValue("value");
+      const element = this.runtimeCall("xt_get", [step, valueKey]);
+      this.bindLoopVariable(statement.initializer, element);
+      this.current.loops.push({
+        breakLabel: endLabel,
+        continueLabel: updateLabel,
+        tryDepth: this.current.tryFrames.length,
+        labels: this.takePendingLabels(),
+      });
+      this.emitStatement(statement.statement);
+      this.current.loops.pop();
+      if (!this.current.terminated) this.terminate(`br label %${updateLabel}`);
+
+      this.startBlock(updateLabel);
+      this.terminate(`br label %${condLabel}`);
+      this.startBlock(endLabel);
+      return;
+    }
     // `for...in` iterates the enumerable keys (indices become strings);
     // `for...of` resolves the iteration protocol once, then walks it.
     const iterable = isForIn

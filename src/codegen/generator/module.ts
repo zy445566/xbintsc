@@ -100,13 +100,6 @@ export const moduleMethods: ModuleMethods = {
 
   emitFunction(fn: FunctionInfo): void {
     this.unsupportedCount = 0;
-    // `async function*` would need an async iterator and a promise-returning
-    // `.next()`; the generator/async lowering below would silently produce a
-    // synchronous generator instead, so reject it rather than miscompile.
-    if (fn.isAsync && fn.isGenerator) {
-      this.unsupported(fn.node, "async generator function");
-      return;
-    }
     const name = this.functionName(fn);
     const debugSubprogram = this.debugSubprogramFor(fn);
     const state: FunctionState = {

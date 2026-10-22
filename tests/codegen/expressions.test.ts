@@ -175,9 +175,16 @@ describe("codegen unary operators", () => {
 });
 
 describe("unsupported semantics", () => {
-  it("rejects async generator functions", () => {
-    const errors = errorsOf("async function* g() { yield 1; }");
-    expect(errors.map((e) => e.code)).toContain(DiagnosticCode.UnsupportedFeature);
+  it("marks async generator functions with the combined runtime flag", () => {
+    const ir = irOf("async function* g() { yield 1; }");
+    expect(ir).toContain("@xt_function_set_async_generator");
+  });
+
+  it("lowers for await...of through the async iteration protocol", () => {
+    const ir = irOf("async function f(xs: number[]) { for await (const x of xs) console.log(x); }");
+    expect(ir).toContain("@xt_async_iter_open");
+    expect(ir).toContain("@xt_async_iter_next");
+    expect(ir).toContain("@xt_await");
   });
 
   it("does not cascade an internal error after an unsupported construct", () => {

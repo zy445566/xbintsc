@@ -132,6 +132,8 @@ xt_value xt_function_get_prototype(xt_value fn);
 xt_value xt_function_set_generator(xt_value fn);
 /** Mark a closure as an `async` function so calling it starts a coroutine. */
 xt_value xt_function_set_async(xt_value fn);
+/** Mark a closure as an `async function*` (generator + async iterator). */
+xt_value xt_function_set_async_generator(xt_value fn);
 
 /* -- conversions ---------------------------------------------------------- */
 int xt_truthy(xt_value v);

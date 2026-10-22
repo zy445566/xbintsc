@@ -452,8 +452,7 @@ xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env) {
   function->properties = NULL;
   function->environment = NULL;
   function->prototype = XT_UNDEFINED;
-  function->is_generator = 0;
-  function->is_async = 0;
+  function->is_generator = function->is_async = function->is_async_generator = 0;
   function->builtin_name = NULL;
   if (env_count > 0) {
     function->environment = (xt_value *)malloc(sizeof(xt_value) * (size_t)env_count);
@@ -473,7 +472,8 @@ xt_value xt_call_with_this(xt_value value, xt_value thisValue, int32_t argc, xt_
   }
   xt_function *function = (xt_function *)XT_GET_PTR(value);
   /* Calling a generator function returns a suspended generator instead of
-   * running the body. */
+   * running the body. `async function*` is a generator whose `.next()` returns
+   * promises; `xt_generator_new` reads the marker from the closure. */
   if (function->is_generator) return xt_generator_new(value, thisValue, argc, argv);
   /* An `async` function runs its body on a coroutine and returns a promise,
    * which may already be settled or may resolve after an event-loop turn. */

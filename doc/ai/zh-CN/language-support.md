@@ -60,7 +60,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `#private` 字段/方法/静态成员 | ⚠️ | 以字面量 `#x` 键存储；不做访问控制；父子类同名可能互相覆盖 |
 | `enum`/`const enum` | ✅ | 正向 + 反向映射 |
 | `private`/`protected`/`public`/`readonly`/`abstract`/`implements` | — | 被擦除，无访问控制 |
-| 生成器 `function*`、`yield`、`yield*` | ✅ | 不支持 `async` 生成器 |
+| 生成器 `function*`、`yield`、`yield*` | ✅ | 同步与 `async function*`；支持 `for await...of` 与 `Symbol.asyncIterator` |
 | `arguments` 对象 | ✅ | 隐式提供；箭头函数看到的是自己的参数 |
 | 参数个数校验 | 🚫 | 从不校验，虽然 `fn.length` 会报声明元数 |
 
@@ -73,7 +73,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `queueMicrotask` / `setImmediate` / `performance.now` | ✅ | 微任务与 Promise 共用 FIFO 队列；`setImmediate` 是零延迟定时器，返回数字 id；`performance.now` 返回单调递增的毫秒小数 |
 | 套接字/服务端（`http`、`net`、`dgram`） | ✅ | 回调在事件循环上执行，可以 settle 你正在 await 的 Promise（测试含 `net`/`http` 示例） |
 | `fs/promises` | ⚠️ | 可以 await，但每次调用仍先同步完成 I/O 再 settle，I/O 期间不会让出 |
-| `async` 生成器、worker 线程 | 🚫 | `async function*` 被拒绝；worker 是子进程 |
+| worker 线程 | 🚫 | worker 是子进程 |
+| `async` 生成器 | ✅ | 可在 `await` 与 `yield` 处挂起；每次 `.next()` 返回 Promise；支持 `for await...of` |
 
 ## 类型：解析后擦除
 

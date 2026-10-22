@@ -143,7 +143,14 @@ export const accessCallMethods: AccessCallMethods = {
     const access = (): string => {
       const key = this.emitExpression(node.argumentExpression);
       const result = this.reg();
-      this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
+      /* Array-index reads are not object property layouts, so skip the IC for
+       * a numeric literal; every other key may benefit from it. */
+      if (node.argumentExpression.kind === SyntaxKind.NumericLiteral) {
+        this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
+      } else {
+        const cache = this.icCachePointer();
+        this.emit(`  ${result} = call i64 @xt_get_ic(i64 ${object}, i64 ${key}, i64* ${cache})`);
+      }
       return result;
     };
     return node.optional ? this.emitOptional(object, access) : access();
@@ -158,8 +165,9 @@ export const accessCallMethods: AccessCallMethods = {
       return result;
     }
     const key = this.stringValue(name);
+    const cache = this.icCachePointer();
     const result = this.reg();
-    this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
+    this.emit(`  ${result} = call i64 @xt_get_ic(i64 ${object}, i64 ${key}, i64* ${cache})`);
     return result;
   },
 

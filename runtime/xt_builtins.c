@@ -414,6 +414,7 @@ xt_value xt_delete(xt_value value, xt_value key) {
       if (xt_property_key_equals(obj->properties[i].key, k)) {
         for (uint32_t j = i + 1; j < obj->count; j++) obj->properties[j - 1] = obj->properties[j];
         obj->count--;
+        xt_object_shape_changed(obj);
         break;
       }
     }

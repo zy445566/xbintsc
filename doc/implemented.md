@@ -208,6 +208,8 @@ Location: `src/codegen/llvm.ts`
 
 - Emits LLVM IR text (`.ll`); no custom register allocation (relies on `alloca` + mem2reg).
 - Statement / block boundary values live in `alloca`; conditionals and short-circuits materialize into temporary slots instead of `phi`.
+- Property reads are inline-cached per source site: each access owns a zeroed `[2 x i64]` global (`@ic.N`) passed to `xt_get_ic`. Ordinary objects carry an interned hidden-class shape (`xt_shape`, a `(parent, key)` transition tree) and the cache stores `(shape, property index)`, so a hit is a shape-pointer compare plus one key check instead of a linear property scan. Inserts/deletes and integer-key reordering rebuild or transition the shape, which invalidates stale caches; arrays, functions and containers fall back to `xt_get`.
+- Numeric operators keep the inline two-double fast path; operands that are numeric literals skip their tag check. Conditions whose expression is a comparison, `in`, `instanceof` or `!` are already boolean tags, so codegen emits `icmp eq i64 value, XT_TRUE` instead of calling `xt_truthy` (this removes the call from the hot loop condition).
 - Control flow: `if` / `while` / `do` / `for` / `for...of` / `for...in`, `switch`, `try/catch/finally`, `break` / `continue` / `return`.
   - `for...of` and spread iterate arrays, strings, typed arrays, `Map`, `Set`, generators and any object exposing `[Symbol.iterator]()` through `xt_iter_open` → `xt_iter_has` / `xt_iter_value` (`Map` yields `[key, value]` pairs); a non-iterable throws `TypeError`. Arrays also expose a stable `Array.prototype[Symbol.iterator]`; calling it returns an iterator object with `next()` that is itself iterable.
   - `switch` tests each `case` with strict equality, executes on a hit, and falls through until `break`.
@@ -294,11 +296,13 @@ Location: `src/extensions/registry.ts`, `src/extensions/node/`
 Location: `src/driver/compiler.ts`, `src/driver/cache.ts`, `src/driver/toolchain.ts`, `src/driver/paths.ts`
 
 - Compilation pipeline: read source → module bundling (`src/driver/modules.ts`, when the entry contains `import`/`export`) → parse → bind/check → IR → object file → link.
-- Incremental cache: keyed on "compiler version + source hash + emit kind + optimization level + platform + extension fingerprint (names, linker flags, native object contents)"; if the artifacts exist and are fresh, the build is skipped.
-- C runtime and extension sources are cached as object files by content hash and compiled only once.
+- Incremental cache: keyed on "compiler version + source hash + emit kind + optimization level + LTO/PGO mode + platform + extension fingerprint (names, linker flags, native object contents)"; if the artifacts exist and are fresh, the build is skipped. `--pgo-use` always rebuilds because the profile data can change without the source.
+- C runtime and extension sources are cached as object files by content hash and compiled only once (the cache key includes the LTO/PGO flags).
 - Toolchain wrapper: locates `clang` (overridable with `xbintsc_CLANG`), compiles IR, compiles C, links.
+- LTO (`--lto` / `"lto": true`): the program and runtime compile to LLVM bitcode (`-flto`) and link with `-fuse-ld=lld`; lld is required.
+- PGO (`--pgo-generate[=dir]` then `--pgo-use[=dir]`, or `"pgo"` / `"pgoDir"`): the generated IR and runtime C are instrumented with `-fprofile-generate=<dir>`; after running the instrumented binary, `--pgo-use` merges `.profraw` files with `llvm-profdata` (preferring the copy next to clang, overridable with `xbintsc_LLVM_PROFDATA`) and rebuilds with `-fprofile-use=<dir>`.
 - Link flags: `-lm` is added automatically on non-Windows; extensions may append extra link flags.
-- Project config (`src/driver/config.ts`, `xbintsc.config.json`): `entry`, `outDir`, `output`, `optimize`, `extensions`, `extNative`, `force` and `app` (`name`, `icon`, `bundle`, `bundleId`). Discovered by walking up from the entry/cwd, overridable with `--config`, disabled with `--no-config`; every path resolves against the config directory; CLI flags win over config values.
+- Project config (`src/driver/config.ts`, `xbintsc.config.json`): `entry`, `outDir`, `output`, `optimize`, `lto`, `pgo`, `pgoDir`, `extensions`, `extNative`, `force` and `app` (`name`, `icon`, `bundle`, `bundleId`). Discovered by walking up from the entry/cwd, overridable with `--config`, disabled with `--no-config`; every path resolves against the config directory; CLI flags win over config values.
 - Application icon (`src/driver/icon.ts`, `win-icon.ts`, `mac-bundle.ts`, `--icon`/`app.icon`): PNG/ICO/ICNS is embedded as `xt_app_icon_*` symbols, synthesized into a PE resource via `llvm-rc`/`windres` on Windows, and packaged into `Foo.app` (with `AppIcon.icns` via `sips`/`iconutil`) on macOS. The `gui` extension calls `SDL_SetWindowIcon` from the embedded bytes. `xbintsc_RC` overrides the resource compiler.
 
 ---
@@ -374,7 +378,7 @@ Location: `tests/` (`lexer` / `parser` / `binder` / `codegen` / `driver` / `exte
 | Extensions | Extension registry, `core` (print), `node` (fs / path / os / process / buffer / stream / net / dgram / http imported by specifier) |
 | GUI (`gui` extension) | Self-hosted HTML/CSS renderer window (SDL3 + SDL_GPU): DOM/CSS/layout, CSS `transform`/`transform-origin`, `<img>`/SVG, `<video>`/`<audio>`, `<canvas>` 2D, events, transitions (including `transform`) |
 | Toolchain | clang compiles IR/C, linking, incremental cache |
-| Project config | `xbintsc.config.json` (`entry` / `outDir` / `optimize` / `extensions` / `app`), discovery + CLI precedence |
+| Project config | `xbintsc.config.json` (`entry` / `outDir` / `optimize` / `lto` / `pgo` / `pgoDir` / `extensions` / `app`), discovery + CLI precedence |
 | Application icon | compile-time embed (PNG/ICO/ICNS), PE resource on Windows, `.app` bundle on macOS, runtime window/Dock icon via `gui` |
 | Self-hosting | `xbintsc` compiles `src/cli/main.ts` to a native binary; the emitted IR is at a fixpoint from generation 1 |
 | Platforms | macOS / Linux / Windows (adapted at the build level, CI in `.github/workflows`) |

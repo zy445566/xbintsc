@@ -44,6 +44,12 @@ build/app.ll:382:37: error: '@.str.0' defined with type '[6 x i8]*' but expected
 Windows 发布包面向 **MSVC ABI**：clang 使用 Windows SDK
 以及 MSVC 的 C/C++ 运行库与头文件。
 
+可选优化特性额外依赖两个工具：
+
+- `--lto` 需要 **lld**（`-fuse-ld=lld`）；上面的 LLVM 安装包已包含。
+- `--pgo-use` 需要 **llvm-profdata** 合并 `.profraw`。驱动优先使用 clang
+  旁边的副本，可用 `xbintsc_LLVM_PROFDATA` 覆盖。
+
 ## 预编译发布包（推荐）
 
 从 [GitHub Releases](https://github.com/zy445566/xbintsc/releases/latest) 下载对应

@@ -11,6 +11,23 @@ function defineNames(ir: string): string[] {
 }
 
 describe("codegen", () => {
+  it("emits per-site property inline caches and folds comparison truthiness", () => {
+    const { ir } = compileToIr(`
+      function read(o: { value: number }, x: number) {
+        let total = 0;
+        for (let i = 0; i < x; i++) total += o.value;
+        return total;
+      }
+      read({ value: 1 }, 3);
+    `);
+    expect(ir).toContain("@ic.0 = internal global [2 x i64] zeroinitializer");
+    expect(ir).toContain("call i64 @xt_get_ic");
+    expect(ir).toContain("fcmp olt double");
+    // The loop condition is a comparison, so its truthiness is a tag compare.
+    expect(ir).toContain("icmp eq i64 %r");
+    expect(ir).not.toContain("call i32 @xt_truthy(i64 %r");
+  });
+
   it("emits a module with a C entry point", () => {
     const { ir, diagnostics } = compileToIr("console.log(1);");
     expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);

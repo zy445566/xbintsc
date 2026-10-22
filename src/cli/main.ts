@@ -83,6 +83,8 @@ const VALUE_FLAGS = new Set([
   "icon",
   "app-id",
   "app-name",
+  "pgo-generate",
+  "pgo-use",
 ]);
 
 function parseArgs(argv: readonly string[]): ParsedArgs {
@@ -267,6 +269,9 @@ Options:
       --verbose         Print progress information
       --time            Print per-phase build timings
       --debug           Emit debug info (DWARF/CodeView) and keep frame pointers
+      --lto             Compile program and runtime to LTO bitcode; link with lld
+      --pgo-generate [dir]  Build an instrumented binary writing profiles to dir
+      --pgo-use [dir]   Build with the profiles collected from --pgo-generate
       --json            Print diagnostics as a JSON array on stdout
       --no-hints        Do not append the "hint: … see <doc>" line to failures
 
@@ -520,6 +525,24 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     const extNames = listFlag(args.flags, "ext") ?? config.extensions ?? [];
     const nativeManifests = listFlag(args.flags, "ext-native") ?? config.extNative ?? [];
     const registry = buildRegistry(extNames, nativeManifests);
+    const pgoGenerate = args.flags.get("pgo-generate");
+    const pgoUse = args.flags.get("pgo-use");
+    if (pgoGenerate !== undefined && pgoUse !== undefined) {
+      io.stderr("xbintsc: --pgo-generate and --pgo-use are mutually exclusive\n");
+      return 1;
+    }
+    const pgo =
+      pgoGenerate !== undefined
+        ? ("generate" as const)
+        : pgoUse !== undefined
+          ? ("use" as const)
+          : config.pgo;
+    const pgoDir =
+      typeof pgoGenerate === "string"
+        ? pgoGenerate
+        : typeof pgoUse === "string"
+          ? pgoUse
+          : config.pgoDir;
 
     const result = build(entry, {
       output: typeof args.flags.get("output") === "string" ? (args.flags.get("output") as string) : config.output,
@@ -531,6 +554,9 @@ function dispatch(argv: readonly string[], io: CliIo): number {
       extensions: registry,
       app: mergeAppConfig(args.flags, config),
       debug: Boolean(args.flags.get("debug")),
+      lto: Boolean(args.flags.get("lto")) || config.lto === true,
+      ...(pgo ? { pgo } : {}),
+      ...(pgoDir ? { pgoDir } : {}),
     });
 
     if (result.diagnostics.some((d) => d.category === "error")) {

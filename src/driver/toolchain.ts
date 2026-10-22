@@ -6,8 +6,8 @@
  */
 
 import { spawnSync, type SpawnSyncOptions } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export interface CommandResult {
   readonly status: number;
@@ -227,6 +227,22 @@ export function findClang(runner: Runner = realRunner): string {
   return locateClang(runner).command;
 }
 
+/** Profile-guided optimization stage (`--pgo-generate` / `--pgo-use`). */
+export type PgoMode = "generate" | "use";
+
+/** clang flags for LTO and the selected PGO stage. */
+export function optimizationFlags(
+  lto: boolean | undefined,
+  pgo: PgoMode | undefined,
+  pgoDir: string | undefined,
+): string[] {
+  const flags: string[] = [];
+  if (lto) flags.push("-flto");
+  if (pgo === "generate") flags.push(`-fprofile-generate=${pgoDir ?? "pgo"}`);
+  else if (pgo === "use") flags.push(`-fprofile-use=${pgoDir ?? "pgo"}`);
+  return flags;
+}
+
 export interface CompileIrOptions {
   readonly clang: string;
   readonly irPath: string;
@@ -235,6 +251,11 @@ export interface CompileIrOptions {
   readonly env?: Record<string, string>;
   /** Emit debug info (`-g`) and keep frame pointers for crash backtraces. */
   readonly debug?: boolean;
+  /** Compile to LTO bitcode and let the linker optimize across units. */
+  readonly lto?: boolean;
+  /** Instrument (`generate`) or consume (`use`) an LLVM profile. */
+  readonly pgo?: PgoMode;
+  readonly pgoDir?: string;
 }
 
 /**
@@ -247,9 +268,19 @@ const SECTION_FLAGS = ["-ffunction-sections", "-fdata-sections"];
 /** Compile an LLVM IR file to a native object file. */
 export function compileIr(runner: Runner, options: CompileIrOptions): void {
   const debugFlags = options.debug ? ["-g", "-fno-omit-frame-pointer"] : [];
+  const profileFlags = optimizationFlags(options.lto, options.pgo, options.pgoDir);
   const result = runner.run(
     options.clang,
-    [`-O${options.optimize}`, ...SECTION_FLAGS, ...debugFlags, "-c", options.irPath, "-o", options.objectPath],
+    [
+      `-O${options.optimize}`,
+      ...SECTION_FLAGS,
+      ...debugFlags,
+      ...profileFlags,
+      "-c",
+      options.irPath,
+      "-o",
+      options.objectPath,
+    ],
     { env: options.env },
   );
   if (result.status !== 0) throw new ToolchainError(`${options.clang} ${options.irPath}`, result.status, result.stderr);
@@ -262,6 +293,9 @@ export interface LinkOptions {
   readonly linkerFlags: readonly string[];
   readonly optimize: string;
   readonly env?: Record<string, string>;
+  readonly lto?: boolean;
+  readonly pgo?: PgoMode;
+  readonly pgoDir?: string;
 }
 
 /** Platform flag that drops unreferenced sections (paired with {@link SECTION_FLAGS}). */
@@ -272,8 +306,14 @@ function deadStripFlag(): string[] {
 }
 
 export function link(runner: Runner, options: LinkOptions): void {
+  const profileFlags = optimizationFlags(options.lto, options.pgo, options.pgoDir);
   const args = [
     `-O${options.optimize}`,
+    ...profileFlags,
+    /* LTO bitcode needs a linker with an LTO plugin. lld ships with LLVM and
+     * understands both ELF/Mach-O and COFF; without it MSVC link.exe rejects
+     * the bitcode object on Windows. */
+    ...(options.lto ? ["-fuse-ld=lld"] : []),
     ...options.objectPaths,
     "-o",
     options.outputPath,
@@ -305,11 +345,59 @@ export function compileC(
   objectPath: string,
   includeDir: string,
   env?: Record<string, string>,
+  extraFlags: readonly string[] = [],
 ): void {
   const result = runner.run(
     clang,
-    [...RUNTIME_CFLAGS, "-c", sourcePath, "-o", objectPath, `-I${includeDir}`],
+    [...RUNTIME_CFLAGS, ...extraFlags, "-c", sourcePath, "-o", objectPath, `-I${includeDir}`],
     { env },
   );
   if (result.status !== 0) throw new ToolchainError(`${clang} ${sourcePath}`, result.status, result.stderr);
+}
+
+/**
+ * Merge the `.profraw` files written by an instrumented binary into the
+ * `default.profdata` that `-fprofile-use=<dir>` expects. Clang's `-fprofile-use`
+ * does not read raw profiles directly; this runs `llvm-profdata merge`.
+ *
+ * `xbintsc_LLVM_PROFDATA` selects the tool when it is not on `PATH`.
+ */
+export function mergeProfileData(
+  runner: Runner,
+  directory: string,
+  clang: string,
+  env?: Record<string, string>,
+): void {
+  const profdata = join(directory, "default.profdata");
+  if (existsSync(profdata)) return;
+  let raw: string[];
+  try {
+    raw = readdirSync(directory)
+      .filter((name) => name.endsWith(".profraw"))
+      .map((name) => join(directory, name));
+  } catch {
+    raw = [];
+  }
+  if (raw.length === 0) {
+    throw new ToolchainError(
+      "llvm-profdata merge",
+      1,
+      `no .profraw files found in ${directory}; run the --pgo-generate binary before --pgo-use.`,
+    );
+  }
+  /* Prefer the llvm-profdata shipped next to clang: a system-wide copy from a
+   * different LLVM version rejects newer raw profile formats. */
+  const suffix = process.platform === "win32" ? ".exe" : "";
+  const adjacent = join(dirname(clang), `llvm-profdata${suffix}`);
+  const tool =
+    process.env.xbintsc_LLVM_PROFDATA ??
+    (existsSync(adjacent) ? adjacent : "llvm-profdata");
+  const result = runner.run(tool, ["merge", "-o", profdata, ...raw], env ? { env } : undefined);
+  if (result.status !== 0) {
+    throw new ToolchainError(
+      `${tool} merge`,
+      result.status,
+      `${result.stderr}\nInstall LLVM's llvm-profdata or set xbintsc_LLVM_PROFDATA to it.`,
+    );
+  }
 }

@@ -115,11 +115,24 @@ typedef struct {
   xt_value setter;
 } xt_property;
 
+/* Hidden-class descriptor for ordinary objects. Shapes are interned by their
+ * (parent, key) transition and never freed, so an object's shape pointer is a
+ * stable layout identity. Values added to a shape are rooted by a collector
+ * provider in xt_containers/objects.inc. */
+typedef struct xt_shape {
+  xt_value key;
+  uint32_t count;
+  struct xt_shape *parent;
+  struct xt_shape *next;     /* hash-bucket chain */
+  struct xt_shape *all_next; /* every shape, for the GC root provider */
+} xt_shape;
+
 typedef struct {
   xt_header header;
   uint32_t count;
   uint32_t capacity;
   xt_property *properties;
+  xt_shape *shape;
   xt_value prototype;
   uint8_t frozen;
   uint8_t is_array_base;
@@ -344,6 +357,11 @@ void xt_array_reserve(xt_array *array, uint32_t needed);
 /* Object helpers used by the standard library. */
 xt_object *xt_as_object(xt_value value);
 xt_property *xt_object_find_property(xt_object *obj, xt_value key);
+/* Hidden-class helpers. `xt_object_shape_changed` rebuilds the shape after a
+ * property was inserted out of order or deleted. */
+xt_shape *xt_shape_empty(void);
+xt_shape *xt_shape_transition(xt_shape *parent, xt_value key);
+void xt_object_shape_changed(xt_object *obj);
 
 /* Property keys are either strings or symbols. */
 xt_value xt_to_property_key(xt_value key);

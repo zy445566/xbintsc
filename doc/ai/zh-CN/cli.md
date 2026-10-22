@@ -44,8 +44,29 @@
     --verbose         打印进度信息
     --time            打印各构建阶段耗时
     --debug           生成调试信息（DWARF/CodeView）并保留帧指针
+    --lto             程序与运行时编译为 LTO bitcode，并用 lld 链接
+    --pgo-generate [dir]  构建插桩二进制，把 profile 写入 dir
+    --pgo-use [dir]   使用 --pgo-generate 收集的 profile 重新构建
     --json            把诊断以 JSON 数组打到 stdout
 ```
+
+### LTO 与 PGO
+
+`--lto` 把生成的 IR 与 C 运行时都编译为 LLVM bitcode（`-flto`），并用 lld
+（`-fuse-ld=lld`）链接，让 LLVM 能跨语言/运行时边界优化。需要安装 lld。
+
+PGO 是两次构建的流程：
+
+```bash
+xbintsc build app.ts --pgo-generate=profiles   # 插桩二进制
+./build/app                                    # 运行代表性负载
+xbintsc build app.ts --pgo-use=profiles        # 使用 profile 重新构建
+```
+
+`--pgo-use` 会用 `llvm-profdata` 合并 `.profraw`（优先 clang 旁边的副本，可用
+`xbintsc_LLVM_PROFDATA` 覆盖），并向 clang 传 `-fprofile-use=<dir>`。profile 目录默认
+为 `<outDir>/pgo`。LTO 与 PGO 可以同时使用。`--pgo-use` 构建不会命中增量缓存，因为
+profile 数据可能独立于源码变化。
 
 少数容易踩的解析细节：
 
@@ -66,6 +87,9 @@
 | `outDir` | string | 输出目录（默认 `build/`） |
 | `output` | string | 显式输出路径，覆盖 `outDir` |
 | `optimize` | `"0"｜"1"｜"2"｜"3"` | 优化级别 |
+| `lto` | boolean | 程序与运行时编译为 LTO bitcode，并用 lld 链接 |
+| `pgo` | `"generate"｜"use"` | 按 profile 优化的阶段 |
+| `pgoDir` | string | Profile 目录（默认 `<outDir>/pgo`） |
 | `extensions` | string[] | 开启的内置扩展，如 `["node"]` |
 | `extNative` | string[] | 原生扩展清单路径 |
 | `force` | boolean | 忽略增量缓存 |
@@ -80,6 +104,7 @@ JSON schema：[xbintsc.config.schema.json](../../xbintsc.config.schema.json)。�
 | --- | --- |
 | `xbintsc_CLANG` | 指定 clang，替代从 `PATH` 解析 |
 | `xbintsc_LINKER_ARGS` | 额外链接参数（如 `-fuse-ld=lld`） |
+| `xbintsc_LLVM_PROFDATA` | 合并 PGO `.profraw` 所用的 `llvm-profdata` |
 | `xbintsc_CACHE_DIR` | 对象缓存目录（默认 `.xbintsc`） |
 | `xbintsc_PREFER_PREBUILT` | `0` 强制从源码编译运行时 |
 | `xbintsc_BINARY` | `bin/` 启动器应运行的原生编译器二进制 |

@@ -12,8 +12,40 @@
  * mask and the operation is `bitcast` → `fadd`/`fcmp` → `bitcast`.
  */
 
+import {
+  BinaryOperator,
+  PrefixUnaryOperator,
+  SyntaxKind,
+  type BinaryExpression,
+  type Expression,
+  type PrefixUnaryExpression,
+} from "../../ast/nodes.js";
 import { i64, XT_FALSE, XT_NUMBER_MASK, XT_TRUE } from "../values.js";
 import type { Generator } from "./generator.js";
+
+/** Operators whose runtime result is always `XT_TRUE` / `XT_FALSE`. */
+const BOOLEAN_BINARY: ReadonlySet<string> = new Set([
+  BinaryOperator.LessThan,
+  BinaryOperator.LessThanEquals,
+  BinaryOperator.GreaterThan,
+  BinaryOperator.GreaterThanEquals,
+  BinaryOperator.EqualsEquals,
+  BinaryOperator.ExclamationEquals,
+  BinaryOperator.EqualsEqualsEquals,
+  BinaryOperator.ExclamationEqualsEquals,
+  BinaryOperator.In,
+  BinaryOperator.InstanceOf,
+]);
+
+/** True when the expression's value is a boolean tag, not an arbitrary value. */
+function isBooleanValue(node: Expression): boolean {
+  if (node.kind === SyntaxKind.TrueKeyword || node.kind === SyntaxKind.FalseKeyword) return true;
+  if (node.kind === SyntaxKind.BinaryExpression) {
+    return BOOLEAN_BINARY.has((node as BinaryExpression).operator as string);
+  }
+  return node.kind === SyntaxKind.PrefixUnaryExpression &&
+    (node as PrefixUnaryExpression).operator === PrefixUnaryOperator.Exclamation;
+}
 
 export interface NumericMethods {
   /**
@@ -27,11 +59,31 @@ export interface NumericMethods {
     operator: string,
     runtime: string,
     allowFastPath?: boolean,
+    leftKnownNumber?: boolean,
+    rightKnownNumber?: boolean,
   ): string;
-  emitNumericBinary(this: Generator, left: string, right: string, instruction: string, runtime: string): string;
-  emitNumericComparison(this: Generator, left: string, right: string, predicate: string, runtime: string): string;
+  emitNumericBinary(
+    this: Generator,
+    left: string,
+    right: string,
+    instruction: string,
+    runtime: string,
+    leftKnownNumber?: boolean,
+    rightKnownNumber?: boolean,
+  ): string;
+  emitNumericComparison(
+    this: Generator,
+    left: string,
+    right: string,
+    predicate: string,
+    runtime: string,
+    leftKnownNumber?: boolean,
+    rightKnownNumber?: boolean,
+  ): string;
   /** Emit an i1 SSA value that is true when `value` is an unboxed double. */
   isNumberValue(this: Generator, value: string): string;
+  /** Emit an i1 branch condition, folding boolean producers to a tag compare. */
+  emitTruthiness(this: Generator, value: string, expression?: Expression): string;
 }
 
 /** Canonical quiet NaN; the runtime uses the same pattern in `xt_from_double`. */
@@ -57,12 +109,16 @@ const NUMERIC_COMPARISON: Record<string, string | undefined> = {
 };
 
 export const numericMethods: NumericMethods = {
-  emitBinaryOperation(left, right, operator, runtime, allowFastPath = true) {
+  emitBinaryOperation(left, right, operator, runtime, allowFastPath = true, leftKnownNumber = false, rightKnownNumber = false) {
     if (allowFastPath) {
       const instruction = NUMERIC_ARITHMETIC[operator];
-      if (instruction) return this.emitNumericBinary(left, right, instruction, runtime);
+      if (instruction) {
+        return this.emitNumericBinary(left, right, instruction, runtime, leftKnownNumber, rightKnownNumber);
+      }
       const predicate = NUMERIC_COMPARISON[operator];
-      if (predicate) return this.emitNumericComparison(left, right, predicate, runtime);
+      if (predicate) {
+        return this.emitNumericComparison(left, right, predicate, runtime, leftKnownNumber, rightKnownNumber);
+      }
     }
     const result = this.reg();
     this.emit(`  ${result} = call i64 @${runtime}(i64 ${left}, i64 ${right})`);
@@ -78,10 +134,10 @@ export const numericMethods: NumericMethods = {
     return result;
   },
 
-  emitNumericBinary(left, right, instruction, runtime) {
+  emitNumericBinary(left, right, instruction, runtime, leftKnownNumber = false, rightKnownNumber = false) {
     const result = this.alloca();
-    const leftIsNumber = this.isNumberValue(left);
-    const rightIsNumber = this.isNumberValue(right);
+    const leftIsNumber = leftKnownNumber ? "true" : this.isNumberValue(left);
+    const rightIsNumber = rightKnownNumber ? "true" : this.isNumberValue(right);
     const bothNumbers = this.reg();
     this.emit(`  ${bothNumbers} = and i1 ${leftIsNumber}, ${rightIsNumber}`);
     const fast = this.label("num.fast");
@@ -119,10 +175,10 @@ export const numericMethods: NumericMethods = {
     return value;
   },
 
-  emitNumericComparison(left, right, predicate, runtime) {
+  emitNumericComparison(left, right, predicate, runtime, leftKnownNumber = false, rightKnownNumber = false) {
     const result = this.alloca();
-    const leftIsNumber = this.isNumberValue(left);
-    const rightIsNumber = this.isNumberValue(right);
+    const leftIsNumber = leftKnownNumber ? "true" : this.isNumberValue(left);
+    const rightIsNumber = rightKnownNumber ? "true" : this.isNumberValue(right);
     const bothNumbers = this.reg();
     this.emit(`  ${bothNumbers} = and i1 ${leftIsNumber}, ${rightIsNumber}`);
     const fast = this.label("cmp.fast");
@@ -154,5 +210,23 @@ export const numericMethods: NumericMethods = {
     const merged = this.reg();
     this.emit(`  ${merged} = load i64, i64* ${result}`);
     return merged;
+  },
+
+  /**
+   * A comparison, `in`/`instanceof` or `!` already evaluates to a boolean tag,
+   * so its truthiness is a tag compare instead of an `xt_truthy` call. This is
+   * the hot condition in `for (let i = 0; i < n; i++)` loops.
+   */
+  emitTruthiness(value, expression) {
+    if (expression && isBooleanValue(expression)) {
+      const result = this.reg();
+      this.emit(`  ${result} = icmp eq i64 ${value}, ${i64(XT_TRUE)}`);
+      return result;
+    }
+    const truthy = this.reg();
+    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${value})`);
+    const result = this.reg();
+    this.emit(`  ${result} = icmp ne i32 ${truthy}, 0`);
+    return result;
   },
 };

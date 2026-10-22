@@ -39,6 +39,9 @@ export interface ProjectConfig {
   readonly outDir?: string;
   readonly output?: string;
   readonly optimize?: "0" | "1" | "2" | "3";
+  readonly lto?: boolean;
+  readonly pgo?: "generate" | "use";
+  readonly pgoDir?: string;
   readonly extensions?: readonly string[];
   readonly extNative?: readonly string[];
   readonly force?: boolean;
@@ -103,6 +106,10 @@ export function parseProjectConfig(text: string, where: string = CONFIG_FILE_NAM
   if (optimize !== undefined && !["0", "1", "2", "3"].includes(optimize)) {
     throw new ProjectConfigError(`${where}: 'optimize' must be one of "0", "1", "2", "3"`);
   }
+  const pgo = readString(root, "pgo", where);
+  if (pgo !== undefined && pgo !== "generate" && pgo !== "use") {
+    throw new ProjectConfigError(`${where}: 'pgo' must be "generate" or "use"`);
+  }
 
   let app: AppConfig | undefined;
   if (root.app !== undefined) {
@@ -123,6 +130,9 @@ export function parseProjectConfig(text: string, where: string = CONFIG_FILE_NAM
     outDir: readString(root, "outDir", where),
     output: readString(root, "output", where),
     optimize: optimize as ProjectConfig["optimize"],
+    lto: readBoolean(root, "lto", where),
+    pgo: pgo as ProjectConfig["pgo"],
+    pgoDir: readString(root, "pgoDir", where),
     extensions: readStringArray(root, "extensions", where),
     extNative: readStringArray(root, "extNative", where),
     force: readBoolean(root, "force", where),
@@ -174,6 +184,7 @@ export function resolveConfigPaths(loaded: LoadedProjectConfig): ProjectConfig {
     ...(config.entry ? { entry: resolvePath(directory, config.entry) } : {}),
     ...(config.outDir ? { outDir: resolvePath(directory, config.outDir) } : {}),
     ...(config.output ? { output: resolvePath(directory, config.output) } : {}),
+    ...(config.pgoDir ? { pgoDir: resolvePath(directory, config.pgoDir) } : {}),
     ...(config.extNative ? { extNative: config.extNative.map((path) => resolvePath(directory, path)) } : {}),
     ...(app ? { app } : {}),
   };

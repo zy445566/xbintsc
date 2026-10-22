@@ -372,6 +372,9 @@ xt_value xt_iter_value(xt_value value, xt_value index);
 
 /* -- generic member access ------------------------------------------------ */
 xt_value xt_get(xt_value target, xt_value key);
+/** Interned shape/offset inline cache for a property read. `cache` points at
+ * two zero-initialised i64 words owned by the generated code. */
+xt_value xt_get_ic(xt_value target, xt_value key, int64_t *cache);
 xt_value xt_set(xt_value target, xt_value key, xt_value value);
 /* Materialise a first-class runtime method value (`arr.map`) as an unbound
  * closure that expects the receiver through `this`. Returns `XT_UNDEFINED` when

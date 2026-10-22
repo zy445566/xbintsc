@@ -137,7 +137,7 @@ export function documentationFor(diagnostic: Diagnostic): DocumentationPointer |
 
     case DiagnosticCode.ModuleNotFound:
       return {
-        text: "Node modules need the `node` extension (`--ext node`); third-party npm packages are not supported",
+        text: "Node built-ins need the `node` extension (`--ext node`); a package in `node_modules` is bundled at build time — check its name and exports map",
         path: DOC_EXTENSIONS,
       };
 

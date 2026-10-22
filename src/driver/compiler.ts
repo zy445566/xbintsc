@@ -463,6 +463,7 @@ export const RUNTIME_SOURCES = [
   "xt_builtins.c",
   "xt_constructors.c",
   "xt_structured_clone.c",
+  "xt_performance.c",
   "xt_array_buffer.c",
   "xt_io.c",
 ] as const;

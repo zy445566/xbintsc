@@ -259,6 +259,8 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv);
 xt_value xt_fetch(int32_t argc, xt_value *argv);
 /** Construct a `TypeError` with one message argument (used by `fetch`). */
 xt_value xt_type_error_ctor(int32_t argc, xt_value *argv);
+/** Construct a `RangeError` with one message argument. */
+xt_value xt_range_error_ctor(int32_t argc, xt_value *argv);
 
 /* -- promises / async ----------------------------------------------------- */
 xt_value xt_promise_resolve(xt_value value);

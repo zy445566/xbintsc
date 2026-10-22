@@ -47,10 +47,10 @@ export xbintsc_CLANG=/usr/lib/llvm-18/bin/clang
 xbintsc run app.ts --ext node
 ```
 
-### `module '<pkg>' is not supported: xbintsc can import built-in platform modules, relative '.ts' files and ESM packages under node_modules; CommonJS packages are not supported`
+### `module '<pkg>' is not supported: expected a Node built-in (with --ext node), a relative .ts/.js file, or a package in node_modules`
 
-一个没人认领、也链不进来的裸第三方导入。要么该包是 CommonJS（不支持），要么它是
-打包失败的 ESM 包。优先改用 `node` 扩展提供的 Node 内置模块；可打包的范围见
+一个既没有被已启用扩展认领、也没能在 `node_modules` 里解析到的裸导入。检查包名和它的
+`exports`/`main` 字段，或改用 `node` 扩展提供的 Node 内置模块；可打包的范围见
 [extensions.md](./extensions.md)。
 
 ### ``CommonJS `require()` is not supported``

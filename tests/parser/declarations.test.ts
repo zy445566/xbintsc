@@ -9,6 +9,21 @@ function firstDeclaration(source: string): { decl: any; diagnostics: readonly an
 }
 
 describe("function declarations", () => {
+  it("rejects an anonymous function declaration", () => {
+    const { diagnostics } = firstDeclaration("function () {}");
+    expect(diagnostics.some((diagnostic) => diagnostic.message.includes("needs a name"))).toBe(true);
+  });
+
+  it("gives an anonymous default export the internal `default` name", () => {
+    const fn = firstDeclaration("export default function () { return 1; }");
+    expect(fn.diagnostics).toHaveLength(0);
+    expect(fn.decl.name.text).toBe("default");
+
+    const cls = firstDeclaration("export default class { x = 1; }");
+    expect(cls.diagnostics).toHaveLength(0);
+    expect(cls.decl.name.text).toBe("default");
+  });
+
   it("parses an overload signature without a body", () => {
     const { decl, diagnostics } = firstDeclaration("function f(a: number): void;");
     expect(diagnostics).toHaveLength(0);

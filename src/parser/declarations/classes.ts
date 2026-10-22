@@ -38,6 +38,10 @@ export const declarationClassMethods: DeclarationClassMethods = {
     let name: Identifier | undefined;
     if (!this.at(TokenKind.OpenBrace) && !this.at(TokenKind.ExtendsKeyword) && !this.at(TokenKind.ImplementsKeyword)) {
       name = this.parseIdentifier();
+    } else if (this.hasModifier(modifiers, ModifierKind.Default)) {
+      /* `export default class {}` gets the internal binding name the bundler
+       * maps the default export to. */
+      name = { kind: SyntaxKind.Identifier, text: "default", start, end: start };
     }
     const typeParameters = this.parseTypeParameters();
     const heritage = this.parseHeritageClauses();

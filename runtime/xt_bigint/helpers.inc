@@ -54,7 +54,7 @@ static void bi_throw_type(const char *message) {
   size_t len = strlen(message);
   char *buffer = (char *)malloc(len + 16);
   snprintf(buffer, len + 16, "TypeError: %s", message);
-  xt_throw(xt_string_from_cstr(buffer));
+  xt_throw(xt_error_from_message(buffer));
   free(buffer);
 }
 
@@ -62,7 +62,7 @@ static void bi_throw_range(const char *message) {
   size_t len = strlen(message);
   char *buffer = (char *)malloc(len + 16);
   snprintf(buffer, len + 16, "RangeError: %s", message);
-  xt_throw(xt_string_from_cstr(buffer));
+  xt_throw(xt_error_from_message(buffer));
   free(buffer);
 }
 
@@ -70,7 +70,7 @@ static void bi_throw_syntax(const char *message) {
   size_t len = strlen(message);
   char *buffer = (char *)malloc(len + 16);
   snprintf(buffer, len + 16, "SyntaxError: %s", message);
-  xt_throw(xt_string_from_cstr(buffer));
+  xt_throw(xt_error_from_message(buffer));
   free(buffer);
 }
 

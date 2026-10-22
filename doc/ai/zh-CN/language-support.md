@@ -6,8 +6,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 权威细节（始终最新、篇幅长得多）：
 
 - [../../zh-CN/implemented.md](../../zh-CN/implemented.md) —— 所有已实现能力，按编译器阶段组织
-- [../../zh-CN/unimplemented.md](../../zh-CN/unimplemented.md) —— 不支持的语法、行为偏差、速查表
-- [../../zh-CN/node-implemented.md](../../zh-CN/node-implemented.md) / [../../zh-CN/node-unimplemented.md](../../zh-CN/node-unimplemented.md) —— Node 扩展
+- [../../zh-CN/unimplemented.md](../../zh-CN/unimplemented.md) —— 不支持的语法、行为偏差，按领域分页
+- [../../zh-CN/implemented/node.md](../../zh-CN/implemented/node.md) / [../../zh-CN/unimplemented/node.md](../../zh-CN/unimplemented/node.md) —— Node 扩展
 
 ## 图例
 
@@ -102,12 +102,13 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 | 缺失或行为不同 | 状态 |
 | --- | --- |
-| `String.prototype.normalize`、`structuredClone` | 🚫 |
+| `String.prototype.normalize` | 🚫 |
+| `structuredClone` | ✅ 数组、对象、Map、Set、Date、RegExp 与类型化数组 |
 | `Error.stack` 采集 | ⚠️ 函数级帧（名称/文件/行号），没有列号；生成器函数体不产生帧 |
 | 全局 RegExp `lastIndex` | ⚠️ `/g`、`/y` 下 `test`/`exec` 忽略它 |
 | 稀疏数组空洞、数组越界 | ⚠️ 不区分空洞；越界读得 `undefined` |
 
-完整列表见 [../../zh-CN/unimplemented.md](../../zh-CN/unimplemented.md) 第 3 节。
+完整列表见[未实现：标准库](../../unimplemented/stdlib.md)。
 
 ## 模块
 

@@ -5,178 +5,35 @@
  * The runtime (and any registered extension sources) are compiled once and
  * cached, and the whole build is skipped when the incremental cache says
  * nothing relevant changed.
+ *
+ * This module only orchestrates the phases. The front end lives in
+ * `frontend.ts`, cache-key inputs in `build-key.ts`, runtime compilation in
+ * `runtime-objects.ts`, platform artifacts in `app-artifacts.ts`, and the
+ * version constant in `version.ts`.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { DiagnosticBag, DiagnosticCode, type Diagnostic } from "../diagnostics/diagnostic.js";
-import { SourceFile } from "../diagnostics/source.js";
-import { sourceTextBytes } from "../diagnostics/source-text.js";
-import { Parser } from "../parser/parser.js";
+import { DiagnosticBag, DiagnosticCode } from "../diagnostics/diagnostic.js";
 import { generate } from "../codegen/llvm.js";
-import { SyntaxKind } from "../ast/nodes.js";
-import { bundleModules } from "./modules.js";
-import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
-import { BuildCache, hashParts } from "./cache.js";
-import { compilerFingerprint, registryFingerprint, runtimeFingerprint } from "./fingerprint.js";
+import { createDefaultRegistry } from "../extensions/registry.js";
+import { BuildCache } from "./cache.js";
 import { findRuntimeDir } from "./paths.js";
-import { findRuntimeLibrary } from "./runtime-lib.js";
 import { resolveToolchain } from "./toolchain-provider.js";
-import { ensureIconObject, readIcon, EMPTY_ICON, IconError, type IconInfo } from "./icon.js";
-import { ensureWindowsIconResource, resolveResourceCompiler } from "./win-icon.js";
-import { ensureWindowsEntryObject } from "./win-entry.js";
+import { readIcon, IconError, type IconInfo } from "./icon.js";
 import { bundlePathFor, packageMacApp } from "./mac-bundle.js";
 import type { AppConfig } from "./config.js";
-import {
-  compileC,
-  compileIr,
-  link,
-  mergeProfileData,
-  optimizationFlags,
-  realRunner,
-  RUNTIME_CFLAGS,
-  ToolchainError,
-  type PgoMode,
-  type Runner,
-} from "./toolchain.js";
+import { compileIr, link, mergeProfileData, realRunner, ToolchainError } from "./toolchain.js";
+import { parseEntry } from "./frontend.js";
+import { ensureRuntimeObjects } from "./runtime-objects.js";
+import { ensureAppArtifacts } from "./app-artifacts.js";
+import { buildCacheKey } from "./build-key.js";
+import type { BuildOptions, BuildResult, EmitKind, PhaseTiming } from "./options.js";
 
-/**
- * The compiler's own version. It is part of the incremental cache key, so it
- * must be bumped for every release (a test enforces that it matches
- * `package.json`); a stale version would let an upgraded compiler reuse binaries
- * produced by the previous one.
- */
-export const COMPILER_VERSION = "0.5.20";
-
-export type EmitKind = "exe" | "obj" | "ir";
-
-export interface BuildOptions {
-  /** Explicit output path (defaults to the source base name in `outDir`). */
-  readonly output?: string;
-  readonly outDir?: string;
-  readonly optimize?: "0" | "1" | "2" | "3";
-  readonly emit?: EmitKind;
-  readonly force?: boolean;
-  readonly verbose?: boolean;
-  readonly cacheDir?: string;
-  readonly extensions?: ExtensionRegistry;
-  readonly runner?: Runner;
-  readonly clang?: string;
-  /** Prefer a prebuilt `runtime/lib/<os>-<arch>/*.a` archive when present (default true). */
-  readonly preferPrebuilt?: boolean;
-  readonly write?: boolean;
-  /** Application icon embedded into the binary (shorthand for `app.icon`). */
-  readonly icon?: string;
-  /** Application metadata: name, icon and macOS bundle settings. */
-  readonly app?: AppConfig;
-  /** Emit LLVM debug metadata so `-g` produces DWARF/CodeView (default false). */
-  readonly debug?: boolean;
-  /** Compile the program and runtime to LTO bitcode and link with lld. */
-  readonly lto?: boolean;
-  /**
-   * Profile-guided optimization. `generate` builds an instrumented binary that
-   * writes `.profraw` files into `pgoDir`; `use` consumes them.
-   */
-  readonly pgo?: PgoMode;
-  /** Profile directory (default: `<outDir>/pgo`). */
-  readonly pgoDir?: string;
-}
-
-/** One phase of a build, in milliseconds (reported by `--time`). */
-export interface PhaseTiming {
-  readonly phase: "frontend" | "codegen" | "runtime" | "clang" | "link";
-  readonly ms: number;
-}
-
-export interface BuildResult {
-  readonly outputPath: string;
-  readonly irPath?: string;
-  readonly cached: boolean;
-  readonly diagnostics: readonly Diagnostic[];
-  readonly ir?: string;
-  /** macOS `.app` bundle produced by `app.bundle` (darwin only). */
-  readonly bundlePath?: string;
-  /** Per-phase timings, collected for `xbintsc build --time`. */
-  readonly timings?: readonly PhaseTiming[];
-}
-
-export interface CompileStringResult {
-  readonly ir: string;
-  readonly diagnostics: readonly Diagnostic[];
-}
-
-/** Compile TypeScript source text to LLVM IR without touching the toolchain. */
-export function compileString(
-  source: string,
-  fileName = "input.ts",
-  extensions?: ExtensionRegistry,
-  options: { readonly debug?: boolean } = {},
-): CompileStringResult {
-  const file = new SourceFile(fileName, source);
-  const diagnostics = new DiagnosticBag();
-  const parser = new Parser(file, diagnostics);
-  const sourceFile = parser.parseSourceFile();
-  const registry = extensions ?? createDefaultRegistry();
-  /* Code generation assumes a well-formed tree (binder and codegen both read
-   * required children), so never lower a file that already failed to parse. */
-  if (diagnostics.hasErrors) return { ir: "", diagnostics: diagnostics.diagnostics };
-  const { ir } = generate(sourceFile, diagnostics, {
-    builtins: registry.builtins(),
-    modules: registry.modules(),
-    moduleHints: registry.moduleHints(),
-    debug: options.debug === true,
-  });
-  return { ir, diagnostics: diagnostics.diagnostics };
-}
-
-/**
- * Every module specifier the registry can resolve at code generation time (the
- * registered platform modules plus the hints for known-but-disabled
- * extensions). Bare imports outside this set are looked up in `node_modules`
- * and bundled as source.
- */
-function externalModuleSpecifiers(registry: ExtensionRegistry): Set<string> {
-  return new Set([
-    ...Object.keys(registry.modules()),
-    ...Object.keys(registry.moduleHints()),
-  ]);
-}
-
-/**
- * Compile a file to LLVM IR, bundling every reachable relative module first so
- * that imports from other TypeScript sources resolve exactly like `build`.
- */
-export function compileEntry(
-  entryPath: string,
-  extensions?: ExtensionRegistry,
-  options: { readonly debug?: boolean } = {},
-): CompileStringResult {
-  const absoluteEntry = resolve(entryPath);
-  const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
-  const file = new SourceFile(absoluteEntry, sourceText);
-  const diagnostics = new DiagnosticBag();
-  const parser = new Parser(file, diagnostics);
-  let sourceFile = parser.parseSourceFile();
-  const registry = extensions ?? createDefaultRegistry();
-  const isModule = sourceFile.statements.some(
-    (statement) =>
-      statement.kind === SyntaxKind.ImportDeclaration ||
-      statement.kind === SyntaxKind.ExportDeclaration ||
-      statement.kind === SyntaxKind.ExportAssignment,
-  );
-  if (isModule) {
-    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry), registry.assetLoaders());
-    if (bundled) sourceFile = bundled.sourceFile;
-  }
-  if (diagnostics.hasErrors) return { ir: "", diagnostics: diagnostics.diagnostics };
-  const { ir } = generate(sourceFile, diagnostics, {
-    builtins: registry.builtins(),
-    modules: registry.modules(),
-    moduleHints: registry.moduleHints(),
-    debug: options.debug === true,
-  });
-  return { ir, diagnostics: diagnostics.diagnostics };
-}
+export { COMPILER_VERSION } from "./version.js";
+export { compileString, compileEntry, parseEntry, type ParsedEntry } from "./frontend.js";
+export { RUNTIME_SOURCES, type RuntimeObjects } from "./runtime-objects.js";
+export type { BuildOptions, BuildResult, CompileStringResult, EmitKind, PhaseTiming } from "./options.js";
 
 /**
  * Where the incremental cache lives when the caller does not name a directory:
@@ -222,7 +79,6 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   if (pgo) mkdirSync(pgoDir, { recursive: true });
 
   const absoluteEntry = resolve(entryPath);
-  const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
   const buildStarted = Date.now();
   const timings: PhaseTiming[] = [];
 
@@ -235,26 +91,8 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
         : executableName(absoluteEntry, outDir, options.output);
 
   // -- front end -----------------------------------------------------------
-  const file = new SourceFile(absoluteEntry, sourceText);
   const diagnostics = new DiagnosticBag();
-  const parser = new Parser(file, diagnostics);
-  let sourceFile = parser.parseSourceFile();
-
-  // Lower `import`/`export` by merging every reachable module into one file.
-  const isModule = sourceFile.statements.some(
-    (statement) =>
-      statement.kind === SyntaxKind.ImportDeclaration ||
-      statement.kind === SyntaxKind.ExportDeclaration ||
-      statement.kind === SyntaxKind.ExportAssignment,
-  );
-  let cacheText = sourceText;
-  if (isModule) {
-    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry), registry.assetLoaders());
-    if (bundled) {
-      sourceFile = bundled.sourceFile;
-      cacheText = bundled.text;
-    }
-  }
+  const parsed = parseEntry(absoluteEntry, registry, diagnostics);
   timings.push({ phase: "frontend", ms: Date.now() - buildStarted });
 
   /* Parse (or module-graph) errors leave missing nodes in the tree. Stop before
@@ -263,7 +101,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, cached: false, diagnostics: diagnostics.diagnostics, timings };
   }
 
-  const app = options.app ?? {};
+  const app: AppConfig = options.app ?? {};
   const iconPath = options.icon ?? app.icon;
   let icon: IconInfo | undefined;
   if (iconPath) {
@@ -279,24 +117,19 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   }
 
   const runtimeDir = findRuntimeDir();
-  const cacheKey = hashParts([
-    COMPILER_VERSION,
-    compilerFingerprint(),
-    cacheText,
+  const cacheKey = buildCacheKey({
+    sourceText: parsed.cacheText,
     emit,
     optimize,
-    process.platform,
-    registryFingerprint(registry),
-    runtimeFingerprint(runtimeDir),
-    icon ? hashParts(["icon", icon.format, Buffer.from(icon.bytes).toString("base64")]) : "",
-    app.name ?? "",
-    String(app.bundle ?? false),
-    app.bundleId ?? "",
-    String(options.debug === true),
-    String(lto),
-    pgo ?? "",
-    pgo ? pgoDir : "",
-  ]);
+    registry,
+    runtimeDir,
+    icon,
+    app,
+    debug: options.debug === true,
+    lto,
+    pgo,
+    pgoDir,
+  });
 
   // A `.app` bundle is deterministic from the output path and name, so it can be
   // part of the cache key before the bundle actually exists.
@@ -313,7 +146,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   }
 
   const codegenStarted = Date.now();
-  const { ir } = generate(sourceFile, diagnostics, {
+  const { ir } = generate(parsed.sourceFile, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
@@ -383,53 +216,33 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   }
 
   const runtimeStarted = Date.now();
-  const { runtimeObjects, extensionObjects, nativeObjects } = ensureRuntimeObjects(
+  const { runtimeObjects, extensionObjects, nativeObjects } = ensureRuntimeObjects({
     runner,
     clang,
     runtimeDir,
     cacheDir,
     registry,
-    resolvePreferPrebuilt(options.preferPrebuilt) && !lto && pgo === undefined,
-    toolchain.env,
+    preferPrebuilt: resolvePreferPrebuilt(options.preferPrebuilt) && !lto && pgo === undefined,
+    env: toolchain.env,
     lto,
     pgo,
     pgoDir,
-  );
+  });
   timings.push({ phase: "runtime", ms: Date.now() - runtimeStarted });
 
-  /* On Windows a GUI program links as a **Windows-subsystem** executable, so
-   * launching it does not flash a console window. That subsystem's C runtime
-   * wants `WinMain`, so a tiny shim object bridges it to the runtime's `main`.
-   * `app.console: true` keeps the console subsystem instead (useful while
-   * debugging, because stdout and stderr only exist there). Other platforms
-   * have no equivalent. */
-  const windowsSubsystem = process.platform === "win32" && registry.has("gui") && app.console !== true;
-  const consoleSubsystem = windowsSubsystem ? ["-Wl,/SUBSYSTEM:WINDOWS"] : [];
-  const entryObject = windowsSubsystem
-    ? ensureWindowsEntryObject(runner, clang, cacheDir, toolchain.env)
-    : undefined;
-
-  const iconObjects: string[] = [];
-  // The GUI extension references the icon symbols unconditionally, so a GUI
-  // program gets an (empty) icon object even with no icon configured.
-  if (icon !== undefined || registry.has("gui")) {
-    try {
-      iconObjects.push(ensureIconObject(runner, clang, cacheDir, icon ?? EMPTY_ICON, toolchain.env));
-      if (icon && process.platform === "win32") {
-        const resourceCompiler = resolveResourceCompiler(runner, clang);
-        if (resourceCompiler) {
-          iconObjects.push(ensureWindowsIconResource(runner, cacheDir, icon, resourceCompiler, toolchain.env));
-        } else if (options.verbose) {
-          process.stderr.write("xbintsc: no llvm-rc/windres found; skipping the embedded .exe icon\n");
-        }
-      }
-    } catch (error) {
-      if (error instanceof IconError) {
-        diagnostics.error(DiagnosticCode.ToolchainError, error.message);
-        return { outputPath, irPath, cached: false, diagnostics: diagnostics.diagnostics, ir };
-      }
-      throw error;
-    }
+  const artifacts = ensureAppArtifacts({
+    runner,
+    clang,
+    cacheDir,
+    registry,
+    app,
+    icon,
+    env: toolchain.env,
+    verbose: options.verbose,
+  });
+  if (artifacts.iconError !== undefined) {
+    diagnostics.error(DiagnosticCode.ToolchainError, artifacts.iconError);
+    return { outputPath, irPath, cached: false, diagnostics: diagnostics.diagnostics, ir };
   }
 
   const linkStarted = Date.now();
@@ -440,8 +253,8 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
       ...runtimeObjects,
       ...extensionObjects,
       ...nativeObjects,
-      ...(entryObject !== undefined ? [entryObject] : []),
-      ...iconObjects,
+      ...(artifacts.entryObject !== undefined ? [artifacts.entryObject] : []),
+      ...artifacts.iconObjects,
     ],
     outputPath,
     linkerFlags: [
@@ -452,7 +265,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
        * created when it is launched. Console output (stdout/stderr) is lost in
        * that subsystem, so a program that wants to report things opts back in
        * with `app.console: true`. */
-      ...consoleSubsystem,
+      ...artifacts.linkerFlags,
     ],
     optimize,
     env: toolchain.env,
@@ -482,119 +295,4 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 function defaultBundleId(name: string): string {
   const sanitized = name.replace(/[^A-Za-z0-9.-]/g, "");
   return `com.xbintsc.${sanitized || "app"}`;
-}
-
-interface RuntimeObjects {
-  readonly runtimeObjects: readonly string[];
-  readonly extensionObjects: readonly string[];
-  /** Pre-built C++/Rust objects and archives contributed by native extensions. */
-  readonly nativeObjects: readonly string[];
-}
-
-/** Core runtime translation units (each compiled and cached independently). */
-export const RUNTIME_SOURCES = [
-  "xt_alloc.c",
-  "xt_values.c",
-  "xt_bigint.c",
-  "xt_containers.c",
-  "xt_weak.c",
-  "xt_typed_array.c",
-  "xt_stdlib.c",
-  "xt_stdlib2.c",
-  "xt_promise.c",
-  "xt_async.c",
-  "xt_loop.c",
-  "xt_generator.c",
-  "xt_coroutine.c",
-  "xt_fetch.c",
-  "xt_symbol.c",
-  "xt_builtins.c",
-  "xt_constructors.c",
-  "xt_structured_clone.c",
-  "xt_performance.c",
-  "xt_text_codec.c",
-  "xt_url.c",
-  "xt_array_buffer.c",
-  "xt_io.c",
-] as const;
-
-/**
- * Compile the core runtime and every extension source, reusing cached object
- * files keyed on the C source hash. Returns the object paths to link.
- *
- * When `preferPrebuilt` is set, a shipped static archive
- * (`runtime/lib/<os>-<arch>/{core,ext_<name>}.a`) is used instead of compiling
- * that group's C sources. Missing archives fall back to compiling the sources.
- */
-function ensureRuntimeObjects(
-  runner: Runner,
-  clang: string,
-  runtimeDir: string,
-  cacheDir: string,
-  registry: ExtensionRegistry,
-  preferPrebuilt: boolean,
-  env: Record<string, string>,
-  lto: boolean,
-  pgo: PgoMode | undefined,
-  pgoDir: string,
-): RuntimeObjects {
-  const optimization = optimizationFlags(lto, pgo, pgoDir);
-  /* Runtime objects depend on the shared headers (rt.h/rt_internal.h/...) and
-     the `#include`d implementation fragments (`.inc`), so any change to them
-     must invalidate every cached object. Hash them all. */
-  const headerParts: string[] = [];
-  const collectHeaders = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) collectHeaders(full);
-      else if (entry.name.endsWith(".h") || entry.name.endsWith(".inc")) headerParts.push(readFileSync(full, "utf8"));
-    }
-  };
-  collectHeaders(runtimeDir);
-  const headerStamp = hashParts(headerParts);
-
-  const compileOne = (sourcePath: string, tag: string): string => {
-    const body = readFileSync(sourcePath, "utf8");
-    const key = hashParts([
-      "runtime",
-      COMPILER_VERSION,
-      RUNTIME_CFLAGS.join(" "),
-      optimization.join(" "),
-      tag,
-      headerStamp,
-      body,
-      clang,
-      process.platform,
-    ]);
-    const objectPath = join(cacheDir, `${tag}-${key}.o`);
-    if (!existsSync(objectPath)) {
-      compileC(runner, clang, sourcePath, objectPath, runtimeDir, env, optimization);
-    }
-    return objectPath;
-  };
-
-  const coreArchive = preferPrebuilt ? findRuntimeLibrary("core") : undefined;
-  const runtimeObjects = coreArchive
-    ? [coreArchive]
-    : RUNTIME_SOURCES.map((source) => compileOne(join(runtimeDir, source), basename(source, ".c")));
-
-  const extensionObjects: string[] = [];
-  const seen = new Set<string>();
-  for (const extension of registry.all()) {
-    const sources = extension.runtimeSources ? extension.runtimeSources() : [];
-    if (sources.length === 0) continue;
-    const archive = preferPrebuilt ? findRuntimeLibrary(`ext_${extension.name}`) : undefined;
-    if (archive) {
-      extensionObjects.push(archive);
-      continue;
-    }
-    for (const sourcePath of sources) {
-      const dedupeKey = resolve(sourcePath);
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
-      extensionObjects.push(compileOne(sourcePath, `ext_${extensionObjects.length}_${basename(sourcePath, ".c")}`));
-    }
-  }
-  // A native archive may be shared by several manifests; link each once.
-  return { runtimeObjects, extensionObjects, nativeObjects: [...new Set(registry.nativeObjects())] };
 }

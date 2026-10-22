@@ -9,7 +9,7 @@
 > `__dirname` / `__filename`、`Object.defineProperty` getter 形式。详见下文 4.x 与 `unimplemented.md`。
 >
 > 目标版本：0.4.x
-> 关联文档：[unimplemented.md](./unimplemented.md) 第 4 节（模块系统）、[implemented.md](./implemented.md) 第 3.4 节
+> 关联文档：[unimplemented/modules.md](./unimplemented/modules.md)（模块系统）、[implemented/modules.md](./implemented/modules.md)
 
 ## 1. 背景与现状
 
@@ -223,7 +223,7 @@ hasModuleSyntax(entry)  ||  entryAstContainsRequire(entry)
 | **P4** | require 调用点重写 + 诊断（4.7） | 单测：node_modules 内重写为 `__load`，外部保持报错 |
 | **P5** | ESM→CJS 互操作 default/named/namespace（4.6） | 差分测试：与 Node 输出一致（default 函数、命名导出、`__esModule`） |
 | **P6** | 扩展模块 / 可选：`require(esm)`、JSON 模块 | 按需 |
-| **P7** | 文档更新：implemented / unimplemented 第 4 节、README | 文档评审 |
+| **P7** | 文档更新：implemented / unimplemented 的 modules 页面、README | 文档评审 |
 
 每个阶段都应保持现有测试全绿；P0 单独可合入。
 
@@ -237,13 +237,13 @@ hasModuleSyntax(entry)  ||  entryAstContainsRequire(entry)
 | `src/driver/bundler/graph.ts` | 格式判定、收集 `require` 依赖、递归加载 |
 | `src/driver/bundler/merge.ts` | CJS 工厂包装、注册/加载语句注入、require 重写、互操作、依赖表 |
 | `src/driver/bundler/cjs.ts`（新增） | 加载器源码字符串 + 工厂/依赖表/DepsMap 的 AST 构造 helper |
-| `src/driver/compiler.ts` | `isModule` 扩展（4.8），`cacheText` 覆盖新注入代码 |
+| `src/driver/frontend.ts` | `isModule` 扩展（4.8），`cacheText` 覆盖新注入代码 |
 | `src/codegen/generator/context.ts` | `reportRequireUse` 文案更新（node_modules 限定） |
 | `tests/driver/bundler-resolve.test.ts` | 解析/格式/条件单测 |
 | `tests/driver/bundler-cjs.test.ts`（新增） | 工厂包装与重写单测 |
 | `tests/e2e/npm-modules.test.ts` | CJS 包 e2e + 差分 |
 | `tests/parser/*` | P0 回归 |
-| `doc/implemented.md`、`doc/unimplemented.md`、`doc/zh-CN/*` | 第 4 节状态更新 |
+| `doc/implemented/modules.md`、`doc/unimplemented/modules.md`、`doc/zh-CN/*` | 模块状态更新 |
 
 ## 7. 测试计划
 

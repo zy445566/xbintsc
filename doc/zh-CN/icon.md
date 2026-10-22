@@ -148,7 +148,8 @@ const unsigned int       xt_app_icon_height;
 
 - `src/cli/main.ts`：新增 `--icon`、`--bundle`、`--app-name`、`--app-id`、
   `--config`、`--no-config`，并与配置合并（`mergeAppConfig`）。
-- `src/driver/compiler.ts`：`BuildOptions.icon` 与 `BuildOptions.app`。
+- `src/driver/options.ts`：`BuildOptions.icon` 与 `BuildOptions.app`（由
+  `src/driver/build-key.ts` 计入缓存键）。
   - 图标的**内容哈希**与打包选项计入可执行文件 `cacheKey`，图标变化即重建。
   - 图标对象以及（win32 上）资源对象追加到链接输入。
   - 链接后生成 macOS `.app` bundle；`BuildResult.bundlePath` 返回其路径

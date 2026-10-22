@@ -96,8 +96,12 @@ doc/                               the detailed, canonical documentation
 - **Runtime changes are C.** Compiled functions use one ABI —
   `xt_value fn(xt_value env, int32_t argc, xt_value *argv)` — and every value is
   one NaN-boxed 64-bit word (see `runtime/rt.h`, `src/codegen/values.ts`).
-- **Update the docs when support changes.** `doc/implemented.md`,
-  `doc/unimplemented.md` and `doc/ai/language-support.md` are the contract AI
-  agents rely on; a feature that lands without them becomes a wrong answer later.
+- **Update the docs when support changes.** `doc/implemented.md` and
+  `doc/unimplemented.md` are indexes over one page per compiler stage / feature
+  area; edit the page that owns the feature (the "Where does a change belong?"
+  table in `doc/implemented.md` says which) and its Chinese mirror.
+  `doc/ai/language-support.md` is the AI-facing summary.
 - **Bilingual docs.** `doc/*.md` is English and `doc/zh-CN/*.md` is its
-  translation; `doc/ai/` follows the same split.
+  translation; `doc/ai/` follows the same split. Every page under
+  `doc/implemented/` has a counterpart under `doc/zh-CN/implemented/` (and the
+  same for `unimplemented/`); `tests/docs/structure.test.ts` enforces it.

@@ -6,8 +6,8 @@ what you can write; follow the links for exact wording.
 Canonical detail (always current, much longer):
 
 - [../implemented.md](../implemented.md) — everything that works, by compiler stage
-- [../unimplemented.md](../unimplemented.md) — unsupported syntax, deviations, quick reference
-- [../node-implemented.md](../node-implemented.md) / [../node-unimplemented.md](../node-unimplemented.md) — the Node extension
+- [../unimplemented.md](../unimplemented.md) — unsupported syntax and deviations, one page per area
+- [../implemented/node.md](../implemented/node.md) / [../unimplemented/node.md](../unimplemented/node.md) — the Node extension
 
 > Chinese: [../zh-CN/implemented.md](../zh-CN/implemented.md), [../zh-CN/unimplemented.md](../zh-CN/unimplemented.md)
 
@@ -107,12 +107,13 @@ URI functions, first-class built-in constructors (`const A = Array; new A(...)`,
 
 | Missing or different | Status |
 | --- | --- |
-| `String.prototype.normalize`, `structuredClone` | 🚫 |
+| `String.prototype.normalize` | 🚫 |
+| `structuredClone` | ✅ arrays, objects, Map, Set, Date, RegExp and typed arrays |
 | `Error.stack` capture | ⚠️ function-level frames (name/file/line), no columns; generator bodies are omitted |
 | Global RegExp `lastIndex` | ⚠️ `test`/`exec` ignore it for `/g` and `/y` |
 | Sparse array holes, array out-of-bounds | ⚠️ holes are not tracked distinctly; out-of-bounds reads give `undefined` |
 
-See section 3 of [../unimplemented.md](../unimplemented.md) for the full list.
+See [Unimplemented: standard library](../unimplemented/stdlib.md) for the full list.
 
 ## Modules
 

@@ -287,8 +287,8 @@ export const nodeExtension: Extension = {
 
 Node 模块覆盖情况：
 
-- [Node 扩展：已实现](./doc/zh-CN/node-implemented.md)
-- [Node 扩展：未实现](./doc/zh-CN/node-unimplemented.md)
+- [Node 扩展：已实现](./doc/zh-CN/implemented/node.md)
+- [Node 扩展：未实现](./doc/zh-CN/unimplemented/node.md)
 
 ### 原生扩展（C++ / Rust）
 

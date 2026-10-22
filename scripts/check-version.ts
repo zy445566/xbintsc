@@ -15,9 +15,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 /** Read the version literal from the compiler source. */
 export function compilerVersionOf(root: string): string {
-  const text = readFileSync(join(root, "src", "driver", "compiler.ts"), "utf8");
+  const text = readFileSync(join(root, "src", "driver", "version.ts"), "utf8");
   const match = /export const COMPILER_VERSION = "([^"]+)"/.exec(text);
-  if (!match) throw new Error("COMPILER_VERSION is not declared in src/driver/compiler.ts");
+  if (!match) throw new Error("COMPILER_VERSION is not declared in src/driver/version.ts");
   return match[1]!;
 }
 
@@ -35,7 +35,7 @@ export function checkCompilerVersion(root: string): string | undefined {
   if (packageVersion === compilerVersion) return undefined;
   return (
     `COMPILER_VERSION is "${compilerVersion}" but package.json is "${packageVersion}".\n` +
-    'Update COMPILER_VERSION in src/driver/compiler.ts (it keys the incremental cache), or fix package.json.'
+    'Update COMPILER_VERSION in src/driver/version.ts (it keys the incremental cache), or fix package.json.'
   );
 }
 

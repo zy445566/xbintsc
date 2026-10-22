@@ -49,8 +49,8 @@ xbintsc run app.ts --ext node
 | `util`、`querystring`、`url`、`assert`、`test`、`zlib` | |
 
 各模块的具体覆盖（确切函数与选项）见
-[../../zh-CN/node-implemented.md](../../zh-CN/node-implemented.md)，缺失项见
-[../../zh-CN/node-unimplemented.md](../../zh-CN/node-unimplemented.md)。
+[../../zh-CN/implemented/node.md](../../zh-CN/implemented/node.md)，缺失项见
+[../../zh-CN/unimplemented/node.md](../../zh-CN/unimplemented/node.md)。
 
 在 `net`/`http` 上搭东西之前，先记住运行时模型：事件循环在**程序主体之后**才运行，
 但 `async`/`await` 现在会在 pending Promise 上挂起，因此由套接字回调 settle 的 Promise

@@ -159,7 +159,7 @@ export function documentationFor(diagnostic: Diagnostic): DocumentationPointer |
     case DiagnosticCode.CircularDependency:
       return {
         text: "xbintsc does not support circular imports; move the shared binding into a third module",
-        path: "doc/unimplemented.md",
+        path: "doc/unimplemented/modules.md",
       };
 
     // The checker codes are defined but never emitted today.

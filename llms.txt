@@ -31,10 +31,38 @@
 
 - [doc/ai/contributing.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/contributing.md): test suites, the self-hosting fixpoint invariant, the runtime ABI and value model, adding extensions or diagnostics, documentation duties
 - [doc/DESIGN.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/DESIGN.md): architecture and design rationale
-- [doc/implemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented.md): everything implemented, by compiler stage — the canonical reference
-- [doc/unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented.md): unsupported syntax, missing semantics and known deviations, with a quick-reference list
-- [doc/node-implemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/node-implemented.md): Node module coverage of the `node` extension
-- [doc/node-unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/node-unimplemented.md): what the `node` extension is still missing
+- [doc/implemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented.md): index of everything implemented — one page per compiler stage / feature area
+  - [doc/implemented/pipeline.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/pipeline.md): pipeline and self-hosting
+  - [doc/implemented/lexer.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/lexer.md): tokens, literals and lexical diagnostics
+  - [doc/implemented/parser.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/parser.md): statement, expression and type syntax
+  - [doc/implemented/binder.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/binder.md): scopes, symbols and capture
+  - [doc/implemented/operators.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/operators.md): operators and assignment
+  - [doc/implemented/value-model.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/value-model.md): NaN-boxing and the function ABI
+  - [doc/implemented/codegen.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/codegen.md): LLVM IR lowering
+  - [doc/implemented/runtime-core.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/runtime-core.md): allocator, values, exceptions
+  - [doc/implemented/strings.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/strings.md): the string model and text codecs
+  - [doc/implemented/stdlib.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/stdlib.md): Object/Array/Number/Math/JSON/Date/RegExp/Symbol/errors/console
+  - [doc/implemented/collections.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/collections.md): Map/Set/WeakMap/WeakSet/WeakRef
+  - [doc/implemented/typed-arrays.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/typed-arrays.md): typed arrays, ArrayBuffer and DataView
+  - [doc/implemented/async.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/async.md): async/await, promises, generators and timers
+  - [doc/implemented/fetch.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/fetch.md): the HTTP client
+  - [doc/implemented/modules.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/modules.md): import/export and bundling
+  - [doc/implemented/extensions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/extensions.md): the extension registry and the `node` extension
+  - [doc/implemented/driver.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/driver.md): incremental cache, clang, LTO/PGO, config, icons
+  - [doc/implemented/cli.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/cli.md): CLI and the embedder API
+  - [doc/implemented/tests.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/tests.md): test suites and the differential harness
+- [doc/unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented.md): index of unsupported syntax, missing semantics and known deviations
+  - [doc/unimplemented/statements.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/statements.md): statement gaps
+  - [doc/unimplemented/expressions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/expressions.md): expression and operator gaps
+  - [doc/unimplemented/stdlib.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/stdlib.md): standard-library gaps, including typed arrays
+  - [doc/unimplemented/modules.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/modules.md): circular dependencies, live bindings, CommonJS boundaries
+  - [doc/unimplemented/functions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/functions.md): function semantics
+  - [doc/unimplemented/classes.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/classes.md): class and OO gaps
+  - [doc/unimplemented/types.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/types.md): the erased type system
+  - [doc/unimplemented/deviations.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/deviations.md): runtime behaviour that differs from ECMAScript
+  - [doc/unimplemented/toolchain.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/toolchain.md): toolchain, platform and engineering gaps
+- [doc/implemented/node.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/node.md): Node extension — index, one page per Node module under `doc/implemented/node/`
+- [doc/unimplemented/node.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/node.md): what the `node` extension is still missing — per-module and cross-cutting pages under `doc/unimplemented/node/`
 - [doc/gui.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui.md): the self-hosted GPU HTML/CSS renderer — overview, architecture and roadmap
   - [doc/gui/api.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/api.md): the TypeScript window API, events and diagnostics hooks
   - [doc/gui/dom.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/dom.md): HTML/CSS parsing, the cascade, the interactive DOM and AOT scripts

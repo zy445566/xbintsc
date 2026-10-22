@@ -1,12 +1,27 @@
 #!/bin/sh
 #
-# Bump the patch version on every commit and fold it into that commit.
+# Bump the patch version when committing to main/master, and fold it into that
+# commit.
+#
 # COMPILER_VERSION keys the incremental cache and must match package.json
-# (tests/version.test.ts enforces it), so update both in the same step.
+# (tests/version.test.ts enforces it), so both files are updated in one step.
+#
+# Feature branches deliberately do NOT bump: they used to, which made every
+# branch edit package.json/package-lock.json and the version constant, so every
+# merge conflicted on those lines. Version churn belongs to main only; a branch
+# keeps the version it branched from and still builds with a correct cache key
+# (the cache also fingerprints the compiler sources).
+#
 # No git tag is created here - release.yml owns tags.
 # Installed via: git config core.hooksPath .githooks
 set -eu
 
+branch="$(git symbolic-ref --short -q HEAD || true)"
+case "$branch" in
+  main | master) ;;
+  *) exit 0 ;;
+esac
+
 npm version patch --no-git-tag-version --ignore-scripts >/dev/null
-node -e 'const fs = require("fs"); const path = "src/driver/compiler.ts"; const version = require("./package.json").version; const source = fs.readFileSync(path, "utf8"); if (!/COMPILER_VERSION = "/.test(source)) { console.error("COMPILER_VERSION not found in src/driver/compiler.ts"); process.exit(1); } fs.writeFileSync(path, source.replace(/COMPILER_VERSION = "[^"]+"/, `COMPILER_VERSION = "${version}"`));'
-git add package.json package-lock.json src/driver/compiler.ts
+node -e 'const fs = require("fs"); const path = "src/driver/version.ts"; const version = require("./package.json").version; const source = fs.readFileSync(path, "utf8"); if (!/COMPILER_VERSION = "/.test(source)) { console.error("COMPILER_VERSION not found in src/driver/version.ts"); process.exit(1); } fs.writeFileSync(path, source.replace(/COMPILER_VERSION = "[^"]+"/, `COMPILER_VERSION = "${version}"`));'
+git add package.json package-lock.json src/driver/version.ts

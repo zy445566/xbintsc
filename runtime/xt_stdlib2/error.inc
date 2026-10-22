@@ -112,6 +112,30 @@ xt_value xt_error_constructor(xt_value nameValue) {
   return closure;
 }
 
+/* Build the value thrown by the runtime for an internal "Name: message"
+ * string. JavaScript code can observe anything thrown, so internal failures
+ * must be real Error instances (`instanceof Error`, `.name`, `.message`,
+ * `.stack`), exactly like `new TypeError("...")`; a bare string would make
+ * `catch` blocks silently misbehave. User `throw` expressions never go
+ * through this helper. */
+xt_value xt_error_from_message(const char *message) {
+  const char *separator = strstr(message, ": ");
+  if (separator != NULL) {
+    size_t nameLength = (size_t)(separator - message);
+    char name[24];
+    if (nameLength > 0 && nameLength < sizeof(name)) {
+      memcpy(name, message, nameLength);
+      name[nameLength] = '\0';
+      if (xt_error_is_family(name)) {
+        xt_value argument = xt_string_from_cstr(separator + 2);
+        return xt_make_error(name, 1, &argument);
+      }
+    }
+  }
+  xt_value argument = xt_string_from_cstr(message);
+  return xt_make_error("Error", 1, &argument);
+}
+
 xt_value xt_error_to_string(xt_value error) {
   xt_value name = xt_object_get(error, xt_string_from_cstr("name"));
   xt_value message = xt_object_get(error, xt_string_from_cstr("message"));

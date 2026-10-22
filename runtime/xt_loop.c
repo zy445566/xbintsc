@@ -228,7 +228,7 @@ static void xt_timer_run_due(void) {
 xt_value xt_set_timeout(int32_t argc, xt_value *argv) {
   xt_value callback = xt_arg_at(argc, argv, 0);
   if (!XT_IS_FUNCTION(callback)) {
-    xt_throw(xt_string_from_cstr("TypeError: The \"callback\" argument must be of type function"));
+    xt_throw(xt_error_from_message("TypeError: The \"callback\" argument must be of type function"));
     return XT_UNDEFINED;
   }
   int64_t delay = xt_timer_delay_arg(xt_arg_at(argc, argv, 1));
@@ -240,7 +240,7 @@ xt_value xt_set_timeout(int32_t argc, xt_value *argv) {
 xt_value xt_set_interval(int32_t argc, xt_value *argv) {
   xt_value callback = xt_arg_at(argc, argv, 0);
   if (!XT_IS_FUNCTION(callback)) {
-    xt_throw(xt_string_from_cstr("TypeError: The \"callback\" argument must be of type function"));
+    xt_throw(xt_error_from_message("TypeError: The \"callback\" argument must be of type function"));
     return XT_UNDEFINED;
   }
   int64_t delay = xt_timer_delay_arg(xt_arg_at(argc, argv, 1));

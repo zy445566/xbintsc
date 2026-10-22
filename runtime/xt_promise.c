@@ -199,6 +199,23 @@ void xt_drain_microtasks(void) {
 
 xt_value xt_promise_create(void) { return xt_promise_value(xt_promise_new()); }
 
+/* Queue a microtask that resumes a suspended async coroutine with an already
+ * settled value. Reusing a reaction keeps FIFO order with pending `.then`
+ * callbacks (the specification always yields once per `await`). */
+void xt_promise_queue_async_wake(void *asyncPointer, xt_value settled, int rejected) {
+  xt_promise *promise = xt_promise_new();
+  promise->state = rejected ? XT_PROMISE_REJECTED : XT_PROMISE_FULFILLED;
+  promise->value = settled;
+  xt_reaction *reaction = (xt_reaction *)malloc(sizeof(xt_reaction));
+  if (!reaction) abort();
+  reaction->promise = promise;
+  reaction->on_fulfilled = XT_UNDEFINED;
+  reaction->on_rejected = XT_UNDEFINED;
+  reaction->result = NULL;
+  reaction->async = asyncPointer;
+  xt_microtask_push(reaction);
+}
+
 void xt_promise_fulfill(xt_value promise, xt_value value) {
   xt_promise *target = xt_as_promise(promise);
   if (target) xt_promise_resolve_into(target, value);
@@ -346,7 +363,12 @@ xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv) {
           xt_promise_settle(result, XT_PROMISE_REJECTED, inner->value);
           return xt_promise_value(result);
         }
-        xt_value settled = xt_await(item);
+        xt_value settled;
+        if (xt_promise_state_of(item) == XT_PROMISE_FULFILLED) {
+          settled = xt_promise_value_of(item);
+        } else {
+          settled = xt_await(item);
+        }
         if (strcmp(fn, "any") == 0 || strcmp(fn, "race") == 0) {
           xt_promise_settle(result, XT_PROMISE_FULFILLED, settled);
           return xt_promise_value(result);

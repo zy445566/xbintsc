@@ -201,7 +201,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 生成 LLVM IR 文本（`.ll`），无需自建寄存器分配（依赖 `alloca` + mem2reg）。
 - 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
 - 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`switch`，`try/catch/finally`，`break` / `continue` / `return`。
-  - `for...of` 与展开通过 `xt_iter_open` → `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、类型化数组、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象（`Map` 产出 `[key, value]` 对）；非可迭代值抛出 `TypeError`。
+  - `for...of` 与展开通过 `xt_iter_open` → `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、类型化数组、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象（`Map` 产出 `[key, value]` 对）；非可迭代值抛出 `TypeError`。数组还暴露稳定的 `Array.prototype[Symbol.iterator]`，调用后返回带 `next()` 且自身可迭代的迭代器对象。
   - `switch` 以严格相等逐 `case` 测试，命中后执行并在 `break` 前穿透。
   - `try/catch/finally` 通过运行时 `_setjmp` 帧实现：`xt_try_enter` 入栈、`_setjmp` 捕获、`xt_throw` 长跳转；IR 会把调用方的帧地址（`@llvm.frameaddress(0)`）作为 `_setjmp` 的第二个参数传入，与 clang 编译 MSVC 时的降级方式一致：Windows UCRT 的 `_setjmp` 会把这个帧存入 `_JUMP_BUFFER.Frame`，`longjmp` 再交给 `RtlUnwind` 执行栈展开；若不传该参数，`longjmp` 会展开到错误目标（`STATUS_BAD_FUNCTION_TABLE`）。使用 `_setjmp` 而非导出的 `setjmp` 符号，因为后者的 Windows ABI 是不兼容的双参数例程。含 `try` 的函数会强制局部变量驻留内存（内联汇编逃生点）以保证长跳转后值不丢失。
   - `for...in` 复用 `xt_object_keys` 枚举键（数组 / 字符串得到字符串下标）。
@@ -209,7 +209,8 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - 标识符、数字、BigInt（任意精度）、字符串、模板、布尔、`null`、`undefined`、`arguments`
   - 算术 / 比较 / 逻辑 / 短路 / 条件 / 位运算 / 一元（含 `typeof` `void`）/ 前后缀增减 / 复合赋值 / 逻辑赋值
   - 数组字面量（含展开 `[...]`）、对象字面量（含简写 / 方法 / 对象展开 `{...obj}`）
-  - 类型化数组（`Uint8Array`、`Int8Array`、`Uint8ClampedArray`、`Uint16Array`、`Int16Array`、`Uint32Array`、`Int32Array`、`Float32Array`、`Float64Array`）：构造（`new X(n)` / `new X(可迭代)` / `X.from` / `X.of`）、`length` / `byteLength` / `byteOffset` / `BYTES_PER_ELEMENT`、按元素类型强制的读写（`ToIntN` / `ToUintN`、`Uint8ClampedArray` 舍入、`Float32` 单精度舍入）以及原型方法 `fill` / `set` / `slice` / `subarray` / `join` / `toString` / `indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` / `some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` / `at` / `keys` / `values` / `entries`。有意保留的差异见未实现文档（`subarray` 返回副本、迭代器方法返回数组、无 `ArrayBuffer`/`DataView`）。
+  - 类型化数组（`Uint8Array`、`Int8Array`、`Uint8ClampedArray`、`Uint16Array`、`Int16Array`、`Uint32Array`、`Int32Array`、`Float32Array`、`Float64Array`）：构造（`new X(n)` / `new X(可迭代)` / `X.from` / `X.of`）、`length` / `byteLength` / `byteOffset` / `BYTES_PER_ELEMENT`、按元素类型强制的读写（`ToIntN` / `ToUintN`、`Uint8ClampedArray` 舍入、`Float32` 单精度舍入）以及原型方法 `fill` / `set` / `slice` / `subarray` / `join` / `toString` / `indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` / `some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` / `at` / `keys` / `values` / `entries`。有意保留的差异见未实现文档（`subarray` 返回副本、迭代器方法返回数组、类型化数组无共享缓冲区）。
+  - `ArrayBuffer`（`byteLength`、`slice`、`ArrayBuffer.isView`）与 `DataView`（默认大端，可选 `littleEndian`，支持 Uint8/Int8/Uint16/Int16/Uint32/Int32/Float32/Float64 的 get/set）；同一缓冲区上的多个视图共享字节。
   - 属性访问（含 `length` 特判、`Math` 常量）、元素访问、调用
   - 一等公民内建构造器（`const A = Array`、`const M = Map`、`const E = TypeError`、类型化数组）：裸引用下降为 `xt_builtin_constructor`，得到带 `name` / `length`、`prototype` 与静态成员（`A.isArray`、`A.from`、`M.prototype` 等）的缓存函数。通过别名调用或 `new` 会分派到同一运行时构造器，`x instanceof A` 沿共享原型链判断。
   - 可选链 `?.` / `?.[]` / `?.()`：以空值判断短路到 `undefined`
@@ -253,7 +254,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 输出：`xt_print/xt_println/xt_console_log/info/warn/error`（Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`；`info`/`log` 到 stdout，`warn`/`error` 到 stderr），以及 `dir/trace/assert/count/countReset/group/groupEnd/table/time/timeEnd/timeLog`。
 - 对象 / 函数：`xt_object` 带原型链，`xt_function` 带属性包（静态成员与 `prototype`）；`xt_new`（实例化）、`xt_instance_of`（原型链）、`xt_object_freeze/is_frozen/from_entries`；`xt_constructors.c` 保存一等公民构造器缓存、构造器原型与静态值分派。
 - 标准库扩展（`xt_stdlib2.c`）：数组 / 字符串 / 数字 / 对象的扩展方法；`Object` / `Array` / `Number` / `String` 静态方法；`JSON.parse` / `JSON.stringify`；`Map` / `Set`；`Date`（`gmtime_r`；`Date.parse` / `new Date(string)` 支持 ISO 8601）；`RegExp`（POSIX ERE `regcomp`/`regexec` 的 `test`/`exec`）。
-- Promise（`xt_promise.c`）：微任务队列（`xt_microtasks`）；`xt_promise_ctor/resolve/reject/static`（含 `withResolvers`）、实例 `then/catch/finally`；`xt_drain_microtasks` 在程序结束时清空队列，事件循环也会在回调之间清空它。`xt_await`（位于 `xt_async.c`）对已 settle 的值同步返回，对 pending promise 则挂起当前 async 协程并登记等待者。
+- Promise（`xt_promise.c`）：微任务队列（`xt_microtasks`）；`xt_promise_ctor/resolve/reject/static`（含 `withResolvers`）、实例 `then/catch/finally`；`xt_drain_microtasks` 在程序结束时清空队列，事件循环也会在回调之间清空它。`xt_await`（位于 `xt_async.c`）对非 Promise / 已 settle 值排入一次微任务，对 pending promise 则挂起当前 async 协程直到 settle。
 - 异步协程（`xt_async.c`）复用共享的栈式协程运行时（`xt_coroutine.c`，POSIX `ucontext` / Windows fiber）：每次 `async` 调用拥有私有栈，切换异常帧栈与 GC 栈区间，因此 `await` 可跨越 `try`/`finally`、循环与闭包。由定时器、套接字回调或另一个协程 settle 的 promise 会在微任务队列上恢复挂起的函数体。
 - Fetch（`xt_fetch.c`）：全局 `fetch(input, init)` 是阻塞式 HTTP/1.1 客户端，返回的 promise 已经 settle（交换同步完成，不经过 reactor 调度）。只接受 `http://` URL——由于未链接 TLS 后端，`https://` 会以 `TypeError` 拒绝——支持 `method`、`headers`（普通对象或 `Headers`）、`body` 与 `redirect`（`follow` / `manual` / `error`），最多跟随 20 次重定向，并在 301/302/303 时将 POST 改为 GET。解析出的 `Response` 形状对象暴露 `ok` / `status` / `statusText` / `url` / `headers` 以及 `text()` / `json()` / `arrayBuffer()` / `bytes()` / `clone()`；`Headers` 大小写不敏感，提供 `get` / `has` / `set` / `append` / `delete` / `keys` / `values` / `entries` / `forEach` / `getSetCookie`。非法 URL 与网络失败会以 `TypeError` 拒绝。
 

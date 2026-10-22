@@ -468,6 +468,9 @@ xt_value xt_ext_object_method(xt_value target, const char *method, int32_t argc,
 
 /* Error family helpers (xt_stdlib2.c). */
 xt_value xt_error_to_string(xt_value error);
+/* Turn an internal "TypeError: message" / "RangeError: message" string into a
+ * real Error-family value so `catch` observes an Error, not a string. */
+xt_value xt_error_from_message(const char *message);
 xt_value xt_aggregate_error_ctor(int32_t argc, xt_value *argv);
 xt_value xt_ext_container_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);

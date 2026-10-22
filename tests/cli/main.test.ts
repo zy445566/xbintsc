@@ -105,6 +105,27 @@ describe("cli", () => {
     expect(err.join("")).toContain("error TS");
   });
 
+  it("reports malformed input as diagnostics instead of crashing", () => {
+    for (const source of ["function () {}", "class {", "if (true) {"]) {
+      const entry = writeProgram(source);
+      const { io, err } = capture();
+      expect(run(["emit", entry], io), source).toBe(1);
+      const output = err.join("");
+      expect(output, source).toContain("error TS");
+      expect(output, source).not.toContain("internal error");
+      expect(output, source).not.toContain("Cannot read properties");
+    }
+  });
+
+  it("accepts anonymous default function and class exports", () => {
+    for (const source of ["export default function () {}", "export default class { x = 1; }"]) {
+      const entry = writeProgram(source);
+      const { io, out } = capture();
+      expect(run(["emit", entry], io), source).toBe(0);
+      expect(out.join(""), source).toContain("define i32 @main");
+    }
+  });
+
   it("parses inline, separate and short option forms", () => {
     const entry = writeProgram();
     const forms = [

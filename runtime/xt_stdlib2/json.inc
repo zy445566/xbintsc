@@ -237,7 +237,38 @@ static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_va
     return;
   }
   if (XT_IS_ARRAY(value)) { xt_json_stringify_array(value, indent, depth, out); return; }
-  if (XT_IS_OBJECT(value)) { xt_json_stringify_object(value, indent, depth, out); return; }
+  if (XT_IS_OBJECT(value)) {
+    /* Map/Set/Date/RegExp/Promise/generators are not property-bag objects;
+     * handing them to xt_json_stringify_object reads their fields as a property
+     * table and crashed with an access violation. JSON sees no enumerable own
+     * properties on the first group and calls Date.prototype.toJSON. */
+    xt_object *object = (xt_object *)XT_GET_PTR(value);
+    switch (object->header.kind) {
+      case XT_OBJECT_KIND_MAP:
+      case XT_OBJECT_KIND_SET:
+      case XT_OBJECT_KIND_REGEXP:
+      case XT_OBJECT_KIND_PROMISE:
+      case XT_OBJECT_KIND_GENERATOR:
+      case XT_OBJECT_KIND_ITERATOR:
+      case XT_OBJECT_KIND_ASYNC:
+        *out = xt_add(*out, xt_string_from_cstr("{}"));
+        return;
+      case XT_OBJECT_KIND_DATE: {
+        xt_value time = xt_call_method(value, xt_string_from_cstr("getTime"), 0, NULL);
+        if (isnan(xt_to_number(time))) {
+          *out = xt_add(*out, xt_string_from_cstr("null"));
+          return;
+        }
+        xt_value text = xt_call_method(value, xt_string_from_cstr("toJSON"), 0, NULL);
+        xt_json_stringify_value(text, indent, depth, out);
+        return;
+      }
+      default:
+        break;
+    }
+    xt_json_stringify_object(value, indent, depth, out);
+    return;
+  }
   *out = xt_add(*out, xt_string_from_cstr("null"));
 }
 

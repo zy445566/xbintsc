@@ -43,6 +43,7 @@ export enum DiagnosticCode {
   IOError = 6002,
   ToolchainError = 6003,
   IncrementalCacheError = 6004,
+  CircularDependency = 6005,
 }
 
 export interface Diagnostic {

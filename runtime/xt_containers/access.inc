@@ -32,7 +32,7 @@ static void xt_throw_read_of_nullish(xt_value target, xt_value key) {
   char message[256];
   snprintf(message, sizeof(message),
            "TypeError: Cannot read properties of %s (reading '%s')", base, keybuf);
-  xt_throw(xt_string_from_cstr(message));
+  xt_throw(xt_error_from_message(message));
 }
 
 /* -- Array.prototype[Symbol.iterator] -------------------------------------- */
@@ -282,7 +282,7 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
         if ((k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) ||
             (k->length == 10 && memcmp(xt_string_bytes(k), "byteLength", 10) == 0) ||
             (k->length == 10 && memcmp(xt_string_bytes(k), "byteOffset", 10) == 0)) {
-          xt_throw(xt_string_from_cstr("TypeError: Cannot assign to read only property"));
+          xt_throw(xt_error_from_message("TypeError: Cannot assign to read only property"));
           return value;
         }
       }

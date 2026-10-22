@@ -55,7 +55,7 @@ xt_value xt_iter_open(xt_value value) {
       return XT_FROM_PTR(XT_TAG_OBJECT, state);
     }
   }
-  xt_throw(xt_string_from_cstr("TypeError: value is not iterable"));
+  xt_throw(xt_error_from_message("TypeError: value is not iterable"));
   return XT_UNDEFINED;
 }
 

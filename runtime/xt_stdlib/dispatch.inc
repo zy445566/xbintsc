@@ -1,5 +1,16 @@
 /* -- method dispatch ------------------------------------------------------ */
 
+/* A method that no built-in table recognises must throw, exactly like a
+ * missing property called as a function in JavaScript. Returning `undefined`
+ * made typos and unimplemented APIs (e.g. `"x".normalize()`) fail silently. */
+static _Noreturn void xt_throw_no_method(const char *type, const char *method) {
+  char message[256];
+  snprintf(message, sizeof(message), "TypeError: %s has no callable method '%s'", type, method);
+  xt_value argument = xt_string_from_cstr(message);
+  xt_throw(xt_type_error_ctor(1, &argument));
+  abort();
+}
+
 static xt_value xt_array_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled) {
   *handled = 1;
   if (strcmp(method, "push") == 0) {
@@ -92,7 +103,7 @@ static xt_value xt_method_value_invoke(xt_value thisValue, xt_value env, int32_t
     snprintf(message, sizeof(message),
              "TypeError: Cannot read properties of undefined (reading '%s')",
              method ? method : "method");
-    xt_throw(xt_string_from_cstr(message));
+    xt_throw(xt_error_from_message(message));
   }
   return xt_call_method(thisValue, name, argc, argv);
 }
@@ -240,7 +251,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
    * resolve it as an ordinary property and call it with `target` as `this`. */
   if (xt_is_symbol(name)) {
     if (target == XT_UNDEFINED || target == XT_NULL) {
-      xt_throw(xt_string_from_cstr("TypeError: Cannot read properties of null (reading a Symbol)"));
+      xt_throw(xt_error_from_message("TypeError: Cannot read properties of null (reading a Symbol)"));
     }
     xt_value fn = xt_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
@@ -253,7 +264,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
      * `target` as `this`, instead of silently returning undefined. */
     xt_value fn = xt_get(target, name);
     if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
-    xt_throw(xt_string_from_cstr("TypeError: value at computed index is not a function"));
+    xt_throw(xt_error_from_message("TypeError: value at computed index is not a function"));
     return XT_UNDEFINED;
   }
   if (target == XT_UNDEFINED || target == XT_NULL) {
@@ -261,13 +272,13 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     char message[256];
     snprintf(message, sizeof(message),
              "TypeError: Cannot read properties of %s (reading '%s')", base, method);
-    xt_throw(xt_string_from_cstr(message));
+    xt_throw(xt_error_from_message(message));
   }
   int handled = 0;
   if (xt_is_symbol(target)) {
     if (strcmp(method, "toString") == 0) return xt_symbol_to_string(target);
     if (strcmp(method, "valueOf") == 0) return target;
-    return XT_UNDEFINED;
+    xt_throw_no_method("symbol", method);
   }
   if (XT_IS_OBJECT(target)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(target);
@@ -303,7 +314,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     {
       char message[256];
       snprintf(message, sizeof(message), "TypeError: object has no callable method '%s'", method);
-      xt_throw(xt_string_from_cstr(message));
+      xt_throw(xt_error_from_message(message));
     }
     return XT_UNDEFINED;
   }
@@ -360,32 +371,38 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
     {
       char message[256];
       snprintf(message, sizeof(message), "TypeError: function has no callable method '%s'", method);
-      xt_throw(xt_string_from_cstr(message));
+      xt_throw(xt_error_from_message(message));
     }
     return XT_UNDEFINED;
   }
   if (XT_IS_ARRAY(target)) {
     xt_value result = xt_ext_array_method(target, method, argc, argv, &handled);
     if (handled) return result;
-    return xt_array_method(target, method, argc, argv, &handled);
+    result = xt_array_method(target, method, argc, argv, &handled);
+    if (handled) return result;
+    xt_throw_no_method("array", method);
   }
   if (XT_IS_STRING(target)) {
     xt_value result = xt_ext_string_method(target, method, argc, argv, &handled);
     if (handled) return result;
-    return xt_string_method(target, method, argc, argv, &handled);
+    result = xt_string_method(target, method, argc, argv, &handled);
+    if (handled) return result;
+    xt_throw_no_method("string", method);
   }
   if (XT_IS_BIGINT(target)) {
     xt_value result = xt_bigint_method(target, method, argc, argv, &handled);
     if (handled) return result;
+    xt_throw_no_method("bigint", method);
   }
   if (XT_IS_NUMBER(target)) {
     xt_value result = xt_ext_number_method(target, method, argc, argv, &handled);
     if (handled) return result;
+    xt_throw_no_method("number", method);
   }
   if (target == XT_TRUE || target == XT_FALSE) {
     if (strcmp(method, "toString") == 0) return target == XT_TRUE ? xt_string_from_cstr("true") : xt_string_from_cstr("false");
     if (strcmp(method, "valueOf") == 0) return target;
-    return XT_UNDEFINED;
+    xt_throw_no_method("boolean", method);
   }
-  return XT_UNDEFINED;
+  xt_throw_no_method("value", method);
 }

@@ -93,9 +93,11 @@ its limits.
 ## Third-party npm packages
 
 Bare specifiers that no enabled extension claims are looked up in `node_modules`
-and bundled **as source**. A package that is not plain ESM TypeScript/JavaScript
-— or that relies on CommonJS, `require`, `__dirname`, or circular dependencies —
-will not work. `require()` is rejected with a hint to convert to `import`.
+and bundled **as source**, including CommonJS packages (the bundler gives them a
+synthetic `module`/`exports` and lowers their `require` calls). What does not
+work: dynamic `require(<expression>)`, packages that depend on Node globals such
+as `__dirname`, and circular dependencies. `require()` in your own source is
+rejected with a hint to convert to `import`.
 
 Practical consequence: for a Node program, enabling `--ext node` is usually the
 right answer; reach for an npm dependency only when you must.

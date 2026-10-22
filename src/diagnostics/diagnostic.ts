@@ -121,9 +121,27 @@ export function formatDiagnostic(d: Diagnostic, source?: SourceFile): string {
     const lineText = source.text.split("\n")[line - 1] ?? "";
     const end = d.end ?? d.start;
     const endCol = source.positionAt(end).column;
-    const caretPad = " ".repeat(Math.max(0, column - 1));
-    const caret = "^".repeat(Math.max(1, endCol - column));
-    excerpt = `\n${lineText}\n${caretPad}${caret}`;
+
+    /* Long lines (a minified bundle, a generated one-liner, deeply nested
+     * source) would otherwise print tens of thousands of characters and make
+     * the actual message impossible to find. Keep a window around the caret. */
+    const maxExcerpt = 160;
+    const caretIndex = Math.max(0, column - 1);
+    let windowStart = 0;
+    let windowEnd = lineText.length;
+    if (lineText.length > maxExcerpt) {
+      windowStart = Math.max(0, caretIndex - Math.floor(maxExcerpt / 2));
+      windowEnd = Math.min(lineText.length, windowStart + maxExcerpt);
+      if (windowEnd === lineText.length) windowStart = Math.max(0, windowEnd - maxExcerpt);
+    }
+    const prefix = windowStart > 0 ? "\u2026" : "";
+    const suffix = windowEnd < lineText.length ? "\u2026" : "";
+    const visible = lineText.slice(windowStart, windowEnd);
+    const visibleCaret = caretIndex - windowStart;
+    const caretWidth = Math.max(1, Math.min(endCol - column, visible.length - visibleCaret));
+    const caretPad = " ".repeat(prefix.length + Math.max(0, visibleCaret));
+    const caret = "^".repeat(caretWidth);
+    excerpt = `\n${prefix}${visible}${suffix}\n${caretPad}${caret}`;
   }
   return `${location} - ${severity} TS${d.code}: ${d.message}${excerpt}`;
 }

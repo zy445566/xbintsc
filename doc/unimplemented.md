@@ -133,10 +133,10 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 | --- | --- |
 | `subarray` | ~ returns a copy, not a view over a shared buffer |
 | `keys` / `values` / `entries` | ~ return arrays, not iterator objects |
-| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` semantics | ✗ no backing buffer type; `.byteOffset` is always 0 |
+| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` semantics | ~ `ArrayBuffer` and `DataView` exist (big-endian by default, `slice`, `isView`); typed arrays still have no shared backing buffer and do not expose `.buffer` |
 | `BigInt64Array` / `BigUint64Array` | ✗ not implemented |
 | `instanceof` built-in constructors | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` family / typed arrays are recognised by name **and through a first-class constructor value** (`const A = Array; x instanceof A`); constructors can be stored, passed, aliased, called and used with `new` |
-| Typed-array views over a `Buffer` / `ArrayBuffer` | ✗ constructors copy from a length / array-like / typed array only |
+| Typed-array views over a `Buffer` / `ArrayBuffer` | ✗ constructors copy from a length / array-like / typed array only; a `DataView` over an `ArrayBuffer` does share its bytes |
 
 ---
 
@@ -233,7 +233,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Non-moving mark-sweep collector behind `xt_alloc`: explicit roots, subsystem root providers and a conservative C-stack scan. Single-threaded and stop-the-world; no moving/compaction or generational mode |
 | Function `arity` / argument count | No argument count validation; `fn.length` reports the declared arity but calls are never checked against it |
-| `async` / `await` | Real suspension on a stackful coroutine, but `await` on a value that is **already settled** continues synchronously instead of queueing a microtask as the specification requires, so interleaving with pending `.then` callbacks can differ. Top-level `await` blocks on the event loop rather than yielding the module body. `fs/promises` still performs the I/O synchronously before settling; `fetch` is blocking; `async` generators are unsupported |
+| `async` / `await` | Real suspension on a stackful coroutine; `await` always queues a microtask (non-promises and already-settled promises included), so interleaving with pending `.then` callbacks matches the specification. Top-level `await` blocks on the event loop rather than yielding the module body. `fs/promises` still performs the I/O synchronously before settling; `fetch` is blocking; `async` generators are unsupported |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
 | `Error.stack` | Function-level frames only: each frame is `at name (file:line)` with the function's declaration line (updated to the construction line for the innermost frame); no column numbers and no frames for generator / `async` bodies (they switch stacks) |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see section 4) |

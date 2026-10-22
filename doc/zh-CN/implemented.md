@@ -220,7 +220,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - 闭包（箭头函数 / 函数表达式）与捕获环境构建
 - 类：构造器闭包 + 原型对象，存入 LLVM 全局（`@class.<id>`）；实例字段在构造器体前初始化；`static` 成员存于构造器属性包；`extends` 设置原型链；`super(...)` 通过原型上的隐藏 `__ctor` 调用。
 - `async`：闭包用 `xt_function_set_async` 标记；调用时在栈式协程（`xt_coroutine.c`、`xt_async.c`）上运行函数体并立即返回 promise。函数体同步执行到第一个等待**未 settle** promise 的 `await` 后挂起；promise settle 时排入微任务恢复协程。逃出函数体的异常会让该 promise reject，而不是同步抛出。`await` 非 promise 或已 settle 的值仍走同步快路径，rejection 触发异常。
-- 标准库调用：`console.*`、`Math.*`、`Object.*`、数组 / 字符串方法统一走 `xt_call_method` / `xt_math_call` / `xt_object_*`；`JSON`/`Date`/`Map`/`Set`/`RegExp`/`Promise` 静态与构造走对应 `xt_*`；全局函数（`parseInt` 等）走 `xt_parse_int` 等。
+- 标准库调用：`console.*`、`Math.*`、`Object.*`、数组 / 字符串方法统一走 `xt_call_method` / `xt_math_call` / `xt_object_*`；`JSON`/`Date`/`Map`/`Set`/`WeakMap`/`WeakSet`/`WeakRef`/`RegExp`/`Promise` 静态与构造走对应 `xt_*`；全局函数（`parseInt` 等）走 `xt_parse_int` 等。
 - 全局字符串池（`@.str.N` 私有常量，UTF-8 转义）。
 - 内置调用：`console.log` / `info` / `warn` / `error`、`Math.*`、`Object.*`、数组 / 字符串方法、全局函数、扩展 builtins（统一 `(argc, argv)` ABI）。
 - `main` 入口（返回 0，调用模块函数，并在返回前 `xt_drain_microtasks`）。
@@ -254,7 +254,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 - 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `_setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。codegen 还会维护一条影子调用栈（函数名、源文件、行号）：`Error.stack` 用它生成堆栈，原生崩溃时致命信号处理器也会打印同一组帧。`--debug` 还会生成 `!DICompileUnit` / `!DISubprogram` / `!DILocation` 元数据，并用 `-g -fno-omit-frame-pointer` 编译，因此 gdb/lldb/WinDbg 可以把指令映射回源码行。
 - 输出：`xt_print/xt_println/xt_console_log/info/warn/error`（Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`；`info`/`log` 到 stdout，`warn`/`error` 到 stderr），以及 `dir/trace/assert/count/countReset/group/groupEnd/table/time/timeEnd/timeLog`。
 - 对象 / 函数：`xt_object` 带原型链，`xt_function` 带属性包（静态成员与 `prototype`）；`xt_new`（实例化）、`xt_instance_of`（原型链）、`xt_object_freeze/is_frozen/from_entries`；`xt_constructors.c` 保存一等公民构造器缓存、构造器原型与静态值分派。
-- 标准库扩展（`xt_stdlib2.c`）：数组 / 字符串 / 数字 / 对象的扩展方法；`Object` / `Array` / `Number` / `String` 静态方法；`Object.defineProperty` / `getOwnPropertyDescriptor(s)`（数据属性与访问器属性；属性标志会被报告，但后续写入/枚举尚未强制执行）；`JSON.parse`（支持 reviver）/ `JSON.stringify`（函数或数组 replacer、`toJSON`）；`Map` / `Set`；`URLSearchParams`；`Date`（`gmtime_r`；`Date.parse` / `new Date(string)` 支持 ISO 8601）；`RegExp`（POSIX ERE `regcomp`/`regexec` 的 `test`/`exec`）。
+- 标准库扩展（`xt_stdlib2.c`、`xt_weak.c`）：数组 / 字符串 / 数字 / 对象的扩展方法；`Object` / `Array` / `Number` / `String` 静态方法；`Object.defineProperty` / `getOwnPropertyDescriptor(s)`（数据属性与访问器属性；属性标志会被报告，但后续写入/枚举尚未强制执行）；`JSON.parse`（支持 reviver）/ `JSON.stringify`（函数或数组 replacer、`toJSON`）；`Map` / `Set` / `WeakMap` / `WeakSet` / `WeakRef`；`URLSearchParams`；`Date`（`gmtime_r`；`Date.parse` / `new Date(string)` 支持 ISO 8601）；`RegExp`（POSIX ERE `regcomp`/`regexec` 的 `test`/`exec`）。
 - Promise（`xt_promise.c`）：微任务队列（`xt_microtasks`）；`xt_promise_ctor/resolve/reject/static`（含 `withResolvers`）、实例 `then/catch/finally`；`xt_drain_microtasks` 在程序结束时清空队列，事件循环也会在回调之间清空它。`xt_await`（位于 `xt_async.c`）对非 Promise / 已 settle 值排入一次微任务，对 pending promise 则挂起当前 async 协程直到 settle。
 - 异步协程（`xt_async.c`）复用共享的栈式协程运行时（`xt_coroutine.c`，POSIX `ucontext` / Windows fiber）：每次 `async` 调用拥有私有栈，切换异常帧栈与 GC 栈区间，因此 `await` 可跨越 `try`/`finally`、循环与闭包。由定时器、套接字回调或另一个协程 settle 的 promise 会在微任务队列上恢复挂起的函数体。
 - Fetch（`xt_fetch.c`）：全局 `fetch(input, init)` 是阻塞式 HTTP/1.1 客户端，返回的 promise 已经 settle（交换同步完成，不经过 reactor 调度）。只接受 `http://` URL——由于未链接 TLS 后端，`https://` 会以 `TypeError` 拒绝——支持 `method`、`headers`（普通对象或 `Headers`）、`body` 与 `redirect`（`follow` / `manual` / `error`），最多跟随 20 次重定向，并在 301/302/303 时将 POST 改为 GET。解析出的 `Response` 形状对象暴露 `ok` / `status` / `statusText` / `url` / `headers` 以及 `text()` / `json()` / `arrayBuffer()` / `bytes()` / `clone()`；`Headers` 大小写不敏感，提供 `get` / `has` / `set` / `append` / `delete` / `keys` / `values` / `entries` / `forEach` / `getSetCookie`。非法 URL 与网络失败会以 `TypeError` 拒绝。
@@ -359,7 +359,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 类 / OO | 构造函数、实例字段、方法、`static`、继承 `extends`/`super`、原型链、`instanceof` |
 | 异步 | `async`/`await` 具备真实的栈式协程挂起（pending promise 会暂停函数体，直到定时器/套接字/其他协程将其 settle）、`Promise`（`then/catch/finally`、`resolve/reject/all/allSettled/race`） |
 | 模块 | `import`/`export`（具名 / 默认 / 再导出 / `export *`），相对路径多文件打包（`.js` 系列说明符解析到对应 `.ts` 源码，省略后缀时优先 TypeScript 后缀而非同名的 JavaScript 文件；纯 `.js` / `.jsx` / `.mjs` / `.cjs` 源码也可直接打包）与 `node_modules` 包（`exports` / `module` / `main`、作用域包与子路径），裸说明符解析到扩展模块；`node_modules` 内的 CommonJS 包会被降级（`require` / `module.exports` / `exports`），用户代码中的 `require()` 报错并提示改用 `import` |
-| 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、类型化数组、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`Symbol`、`Error` 家族、`Object/Array/Number/String/Symbol` 静态、`console.*` |
+| 标准库 | 数组 / 字符串 / 数字 / 对象扩展方法、类型化数组、`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`、`WeakSet`、`WeakRef`、`Symbol`、`Error` 家族、`Object/Array/Number/String/Symbol` 静态、`console.*` |
 | 值模型 | 64 位 NaN-boxing、统一函数 ABI（含 `this`）、闭包环境、对象原型链 |
 | 运行时 | 字符串 / 对象 / 数组 / 类型化数组 / 闭包 / 算术 / 比较 / 可捕获异常 / Promise / 异步协程 / 集合 / symbol / 生成器 / `fetch` / `console` |
 | 扩展 | 扩展注册表、`core`（print）、`node`（fs / path / os / process / buffer / stream / net / dgram / http，按说明符导入） |

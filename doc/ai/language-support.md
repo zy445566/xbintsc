@@ -96,7 +96,7 @@ behaviour is checked. Write the runtime code you mean.
 
 ## Standard library
 
-Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`,
+Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`/`WeakRef`,
 `Symbol`, `Error` family, `BigInt`, `Array`/`String`/`Number`/`Object` methods,
 typed arrays, `String.prototype.match`/`split`/`replace` with capture groups,
 immutable array helpers (`toReversed`, `toSorted`, `toSpliced`, `with`), global
@@ -135,7 +135,7 @@ See section 3 of [../unimplemented.md](../unimplemented.md) for the full list.
 | RegExp Unicode matching | ⚠️ the engine is byte-oriented: a literal `中` still matches, but `.` and character classes consume one byte per repetition, and `\d`/`\w` stay ASCII. Match offsets (`match.index`, `search`, replacement callbacks) are reported in UTF-16 code units |
 | Number formatting and coercion | ✅ matches Node (`toFixed`, `toPrecision`, hex/octal/binary parsing) |
 | `BigInt` | ✅ implemented |
-| Garbage collection | ✅ non-moving mark-sweep; explicit roots plus a conservative C-stack scan; single-threaded and stop-the-world; no weak references |
+| Garbage collection | ✅ non-moving mark-sweep; explicit roots plus a conservative C-stack scan; single-threaded and stop-the-world. WeakMap/WeakSet keys use an ephemeron fixed point and WeakRef targets are cleared when unreachable; a stale conservative stack word can delay clearing |
 | Threads | 🚫 single-threaded; `worker_threads` exists in the Node extension only |
 
 ## Platform

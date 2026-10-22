@@ -2,6 +2,11 @@ xt_value xt_ext_container_method(xt_value target, const char *method, int32_t ar
   xt_object *obj = (xt_object *)XT_GET_PTR(target);
   if (obj->header.kind == XT_OBJECT_KIND_MAP) return xt_map_method(target, method, argc, argv, handled);
   if (obj->header.kind == XT_OBJECT_KIND_SET) return xt_set_method(target, method, argc, argv, handled);
+  if (obj->header.kind == XT_OBJECT_KIND_WEAK_MAP ||
+      obj->header.kind == XT_OBJECT_KIND_WEAK_SET ||
+      obj->header.kind == XT_OBJECT_KIND_WEAK_REF) {
+    return xt_weak_method(target, method, argc, argv, handled);
+  }
   if (obj->header.kind == XT_OBJECT_KIND_DATE) return xt_date_method(target, method, argc, argv, handled);
   if (obj->header.kind == XT_OBJECT_KIND_REGEXP) {
     xt_regexp *regexp = (xt_regexp *)obj;

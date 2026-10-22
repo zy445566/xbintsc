@@ -271,6 +271,15 @@ static void xt_inspect(xt_value v, FILE *out, int nested) {
         fputs(" }", out);
         return;
       }
+      case XT_OBJECT_KIND_WEAK_MAP:
+        fputs("WeakMap { <items unknown> }", out);
+        return;
+      case XT_OBJECT_KIND_WEAK_SET:
+        fputs("WeakSet { <items unknown> }", out);
+        return;
+      case XT_OBJECT_KIND_WEAK_REF:
+        fputs("WeakRef {}", out);
+        return;
       case XT_OBJECT_KIND_GENERATOR:
         fputs("Object [Generator] {}", out);
         return;

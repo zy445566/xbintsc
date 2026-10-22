@@ -303,6 +303,17 @@ void xt_gc_mark_value(xt_value value) {
   }
 }
 
+int xt_gc_value_is_marked(xt_value value) {
+  if (!(XT_IS_STRING(value) || XT_IS_OBJECT(value) || XT_IS_ARRAY(value) ||
+        XT_IS_FUNCTION(value) || XT_IS_BIGINT(value))) {
+    return 0;
+  }
+  xt_header *header = xt_gc_table_lookup((uintptr_t)XT_GET_PTR(value));
+  return header != NULL && (header->flags & XT_GC_MARK) != 0;
+}
+
+xt_header *xt_gc_heap_head(void) { return g_heap_head; }
+
 void xt_gc_scan_region(const void *base, size_t bytes) {
   if (!base) return;
   const uint64_t *words = (const uint64_t *)base;
@@ -392,6 +403,12 @@ static void xt_gc_process(xt_header *header) {
     case XT_OBJECT_KIND_ASYNC:
       xt_async_gc_trace(header);
       return;
+    case XT_OBJECT_KIND_WEAK_MAP:
+    case XT_OBJECT_KIND_WEAK_SET:
+    case XT_OBJECT_KIND_WEAK_REF:
+      /* Weak references are not traced; `xt_weak_gc_*` owns the ephemeron
+       * fixed point after the ordinary mark phase. */
+      return;
     default:
       /* Symbols, regexps, iterators and any future kind whose references live
        * inline: the payload scan covers them. */
@@ -428,6 +445,13 @@ static void xt_gc_release(xt_header *header) {
       break;
     case XT_OBJECT_KIND_SET:
       free(((xt_set_object *)header)->values);
+      break;
+    case XT_OBJECT_KIND_WEAK_MAP:
+      free(((xt_weak_map *)header)->keys);
+      free(((xt_weak_map *)header)->values);
+      break;
+    case XT_OBJECT_KIND_WEAK_SET:
+      free(((xt_weak_set *)header)->values);
       break;
     case XT_OBJECT_KIND_PROMISE:
       xt_promise_gc_release(header);
@@ -478,16 +502,25 @@ void xt_gc_collect(void) {
 
   xt_gc_table_build();
   xt_gc_mark_roots();
-  while (g_gray_count > 0) {
-    xt_header *header = g_gray[--g_gray_count];
-    xt_gc_process(header);
+  /* Ephemeron fixed point: a WeakMap value is reachable only when its key is
+   * reachable. Marking a value can reach further keys, so repeat until a pass
+   * marks nothing new. WeakRefs are cleared only after this settles, because
+   * an ephemeron may still keep their target alive. */
+  for (;;) {
+    while (g_gray_count > 0) {
+      xt_header *header = g_gray[--g_gray_count];
+      xt_gc_process(header);
+    }
+    if (!xt_weak_gc_process_once()) break;
   }
+  xt_weak_gc_clear();
+  xt_weak_gc_compact();
 
   xt_header **link = &g_heap_head;
   xt_header *header = g_heap_head;
-  size_t live_by_kind[16];
-  size_t bytes_by_kind[16];
-  for (int i = 0; i < 16; i++) {
+  size_t live_by_kind[32];
+  size_t bytes_by_kind[32];
+  for (int i = 0; i < 32; i++) {
     live_by_kind[i] = 0;
     bytes_by_kind[i] = 0;
   }
@@ -497,7 +530,7 @@ void xt_gc_collect(void) {
       header->flags &= (uint8_t)~XT_GC_MARK;
       link = &header->gc_next;
       if (trace) {
-        size_t kind = header->kind < 16 ? header->kind : 0;
+        size_t kind = header->kind < 32 ? header->kind : 0;
         live_by_kind[kind]++;
         bytes_by_kind[kind] += header->size;
       }

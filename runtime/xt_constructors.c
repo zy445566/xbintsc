@@ -45,6 +45,9 @@ typedef struct {
   X(Function, 1, XT_PROTO_FUNCTION)                                        \
   X(Map, 0, XT_PROTO_PLAIN)                                                \
   X(Set, 0, XT_PROTO_PLAIN)                                                \
+  X(WeakMap, 0, XT_PROTO_PLAIN)                                            \
+  X(WeakSet, 0, XT_PROTO_PLAIN)                                            \
+  X(WeakRef, 1, XT_PROTO_PLAIN)                                            \
   X(Date, 7, XT_PROTO_PLAIN)                                               \
   X(RegExp, 2, XT_PROTO_PLAIN)                                             \
   X(Promise, 1, XT_PROTO_PLAIN)                                            \
@@ -166,6 +169,9 @@ static xt_value xt_builtin_ctor_call(const char *name, int32_t argc, xt_value *a
   }
   if (strcmp(name, "Map") == 0) return xt_map_ctor(argc, argv);
   if (strcmp(name, "Set") == 0) return xt_set_ctor(argc, argv);
+  if (strcmp(name, "WeakMap") == 0) return xt_weak_map_ctor(argc, argv);
+  if (strcmp(name, "WeakSet") == 0) return xt_weak_set_ctor(argc, argv);
+  if (strcmp(name, "WeakRef") == 0) return xt_weak_ref_ctor(argc, argv);
   if (strcmp(name, "Date") == 0) return xt_date_ctor(argc, argv);
   if (strcmp(name, "RegExp") == 0) return xt_regexp_ctor(argc, argv);
   if (strcmp(name, "Promise") == 0) return xt_promise_ctor(argc, argv);
@@ -379,6 +385,9 @@ xt_value xt_builtin_prototype_for_kind(int32_t kind) {
   switch (kind) {
     case XT_OBJECT_KIND_MAP: name = "Map"; break;
     case XT_OBJECT_KIND_SET: name = "Set"; break;
+    case XT_OBJECT_KIND_WEAK_MAP: name = "WeakMap"; break;
+    case XT_OBJECT_KIND_WEAK_SET: name = "WeakSet"; break;
+    case XT_OBJECT_KIND_WEAK_REF: name = "WeakRef"; break;
     case XT_OBJECT_KIND_DATE: name = "Date"; break;
     case XT_OBJECT_KIND_REGEXP: name = "RegExp"; break;
     case XT_OBJECT_KIND_PROMISE: name = "Promise"; break;

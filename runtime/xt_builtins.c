@@ -542,6 +542,7 @@ enum {
   XT_INSTANCE_DATE = 5,
   XT_INSTANCE_REGEXP = 6,
   XT_INSTANCE_PROMISE = 7,
+  XT_INSTANCE_WEAK_MAP = 8, XT_INSTANCE_WEAK_SET = 9, XT_INSTANCE_WEAK_REF = 10,
   XT_INSTANCE_TYPED_ARRAY_FIRST = 16,
   XT_INSTANCE_TYPED_ARRAY_LAST = 24
 };
@@ -558,16 +559,14 @@ xt_value xt_instance_of_builtin(xt_value value, int32_t id) {
       return xt_bool(XT_IS_OBJECT(value) || XT_IS_ARRAY(value) || XT_IS_FUNCTION(value));
     case XT_INSTANCE_FUNCTION:
       return xt_bool(XT_IS_FUNCTION(value));
-    case XT_INSTANCE_MAP:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_MAP));
-    case XT_INSTANCE_SET:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_SET));
-    case XT_INSTANCE_DATE:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_DATE));
-    case XT_INSTANCE_REGEXP:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_REGEXP));
-    case XT_INSTANCE_PROMISE:
-      return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_PROMISE));
+    case XT_INSTANCE_MAP: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_MAP));
+    case XT_INSTANCE_SET: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_SET));
+    case XT_INSTANCE_WEAK_MAP: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_WEAK_MAP));
+    case XT_INSTANCE_WEAK_SET: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_WEAK_SET));
+    case XT_INSTANCE_WEAK_REF: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_WEAK_REF));
+    case XT_INSTANCE_DATE: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_DATE));
+    case XT_INSTANCE_REGEXP: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_REGEXP));
+    case XT_INSTANCE_PROMISE: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_PROMISE));
     default:
       if (id >= XT_INSTANCE_TYPED_ARRAY_FIRST && id <= XT_INSTANCE_TYPED_ARRAY_LAST) {
         return xt_bool(xt_typed_array_kind_of(value) == id - XT_INSTANCE_TYPED_ARRAY_FIRST);

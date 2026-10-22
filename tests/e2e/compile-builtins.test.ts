@@ -148,7 +148,7 @@ describeE2E("end-to-end built-in library", (harness) => {
       main();
       Promise.resolve(10).then((x) => console.log("then", x + 1));
     `;
-    expect(runProgram(source)).toBe("hello world\n3\nfulfilled rejected\ncaught boom\nthen 11");
+    expect(runProgram(source)).toBe("hello world\nthen 11\n3\nfulfilled rejected\ncaught boom");
   });
 
   it("supports Map, Set, JSON and extended standard library methods", () => {

@@ -304,9 +304,34 @@ xt_value xt_promise_reject(xt_value value) {
   return xt_promise_value(promise);
 }
 
+static xt_value xt_promise_with_resolvers_resolve(xt_value thisValue, xt_value env, int32_t argc,
+                                                  xt_value *argv) {
+  (void)thisValue;
+  xt_promise_fulfill(xt_closure_env(env, 0), xt_arg_at(argc, argv, 0));
+  return XT_UNDEFINED;
+}
+
+static xt_value xt_promise_with_resolvers_reject(xt_value thisValue, xt_value env, int32_t argc,
+                                                 xt_value *argv) {
+  (void)thisValue;
+  xt_promise_reject_value(xt_closure_env(env, 0), xt_arg_at(argc, argv, 0));
+  return XT_UNDEFINED;
+}
+
 xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv) {
   const char *fn = xt_string_data(name);
   if (!fn) return XT_UNDEFINED;
+  if (strcmp(fn, "withResolvers") == 0) {
+    xt_value promise = xt_promise_create();
+    xt_value environment[1] = {promise};
+    xt_value result = xt_object_new();
+    xt_object_set(result, xt_string_from_cstr("promise"), promise);
+    xt_object_set(result, xt_string_from_cstr("resolve"),
+                  xt_closure_new((void *)xt_promise_with_resolvers_resolve, 1, environment));
+    xt_object_set(result, xt_string_from_cstr("reject"),
+                  xt_closure_new((void *)xt_promise_with_resolvers_reject, 1, environment));
+    return result;
+  }
   if (strcmp(fn, "resolve") == 0) return xt_promise_resolve(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "reject") == 0) return xt_promise_reject(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "all") == 0 || strcmp(fn, "allSettled") == 0 || strcmp(fn, "race") == 0 || strcmp(fn, "any") == 0) {
@@ -406,5 +431,20 @@ xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt
     return target;
   }
   *handled = 0;
+  return XT_UNDEFINED;
+}
+
+xt_value xt_queue_microtask(int32_t argc, xt_value *argv) {
+  xt_value callback = xt_arg_at(argc, argv, 0);
+  if (!XT_IS_FUNCTION(callback)) {
+    xt_value message = xt_string_from_cstr("The \"callback\" argument must be of type function");
+    xt_throw(xt_type_error_ctor(1, &message));
+    return XT_UNDEFINED;
+  }
+  /* Reuse the promise reaction queue: a settled promise's `then` callback is
+   * exactly a microtask, and it keeps FIFO order with pending `.then`s. */
+  xt_value promise = xt_promise_resolve(XT_UNDEFINED);
+  int handled = 0;
+  xt_promise_method(promise, "then", 1, &callback, &handled);
   return XT_UNDEFINED;
 }

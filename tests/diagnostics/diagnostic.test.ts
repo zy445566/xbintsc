@@ -129,6 +129,18 @@ describe("formatDiagnostic", () => {
     );
     expect(text).toBe("a.ts - error TS5001: no pos");
   });
+
+  it("truncates a very long source line around the caret", () => {
+    const source = new SourceFile("long.ts", "a".repeat(500) + "B" + "c".repeat(500));
+    const text = formatDiagnostic(
+      { category: "error", code: DiagnosticCode.CodegenError, message: "long line", start: 500, end: 501 },
+      source,
+    );
+    expect(text.length).toBeLessThan(400);
+    expect(text).toContain("\u2026");
+    expect(text).toContain("B");
+    expect(text).not.toContain("a".repeat(200));
+  });
 });
 
 describe("formatDiagnostics", () => {

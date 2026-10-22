@@ -277,7 +277,7 @@ static const char *const XT_BIGINT_STATICS[] = {"asIntN", "asUintN"};
 static const char *const XT_SYMBOL_STATICS[] = {"for", "keyFor"};
 static const char *const XT_DATE_STATICS[] = {"now", "parse", "UTC"};
 static const char *const XT_PROMISE_STATICS[] = {
-    "resolve", "reject", "all", "allSettled", "race", "any",
+    "resolve", "reject", "all", "allSettled", "race", "any", "withResolvers",
 };
 static const char *const XT_TYPED_ARRAY_STATICS[] = {"from", "of"};
 

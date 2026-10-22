@@ -126,6 +126,9 @@ static xt_value xt_clone_value(xt_clone_context *context, xt_value value) {
   }
 
   if (object->header.kind == XT_OBJECT_KIND_PROMISE) xt_clone_fail("Promise");
+  if (object->header.kind == XT_OBJECT_KIND_WEAK_MAP) xt_clone_fail("WeakMap");
+  if (object->header.kind == XT_OBJECT_KIND_WEAK_SET) xt_clone_fail("WeakSet");
+  if (object->header.kind == XT_OBJECT_KIND_WEAK_REF) xt_clone_fail("WeakRef");
   if (object->header.kind == XT_OBJECT_KIND_GENERATOR) xt_clone_fail("generator");
   if (object->header.kind == XT_OBJECT_KIND_ITERATOR) xt_clone_fail("iterator");
   if (object->header.kind == XT_OBJECT_KIND_ASYNC) xt_clone_fail("async function");

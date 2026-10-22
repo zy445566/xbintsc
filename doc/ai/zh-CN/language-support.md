@@ -93,7 +93,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 ## 标准库
 
-已实现：`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`/`WeakSet`、
+已实现：`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`/`WeakSet`/`WeakRef`、
 `Symbol`、`Error` 家族、`BigInt`、`Array`/`String`/`Number`/`Object` 方法、TypedArray、
 带捕获组的 `String.prototype.match`/`split`/`replace`、不可变数组方法
 （`toReversed`、`toSorted`、`toSpliced`、`with`）、全局 URI 函数、
@@ -131,7 +131,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 正则 Unicode 匹配 | ⚠️ 引擎按字节工作：字面量 `中` 仍能匹配，但 `.` 与字符类每次只消费一个字节，`\d`/`\w` 仍是 ASCII。匹配偏移（`match.index`、`search`、替换回调）按 UTF-16 码元报告 |
 | 数字格式化与强转 | ✅ 与 Node 一致（`toFixed`、`toPrecision`、十六/八/二进制解析） |
 | `BigInt` | ✅ 已实现 |
-| 垃圾回收 | ✅ 非移动标记清扫；显式根 + C 栈保守扫描；单线程、stop-the-world；无弱引用 |
+| 垃圾回收 | ✅ 非移动标记清扫；显式根 + C 栈保守扫描；单线程、stop-the-world。`WeakMap`/`WeakSet` 键使用 ephemeron 不动点，`WeakRef` 目标不可达时清空；保守栈上的残留字可能延迟清空 |
 | 线程 | 🚫 单线程；`worker_threads` 只存在于 Node 扩展中 |
 
 ## 平台

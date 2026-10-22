@@ -211,6 +211,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - 数组字面量（含展开 `[...]`）、对象字面量（含简写 / 方法 / 对象展开 `{...obj}`）
   - 类型化数组（`Uint8Array`、`Int8Array`、`Uint8ClampedArray`、`Uint16Array`、`Int16Array`、`Uint32Array`、`Int32Array`、`Float32Array`、`Float64Array`）：构造（`new X(n)` / `new X(可迭代)` / `X.from` / `X.of`）、`length` / `byteLength` / `byteOffset` / `BYTES_PER_ELEMENT`、按元素类型强制的读写（`ToIntN` / `ToUintN`、`Uint8ClampedArray` 舍入、`Float32` 单精度舍入）以及原型方法 `fill` / `set` / `slice` / `subarray` / `join` / `toString` / `indexOf` / `lastIndexOf` / `includes` / `forEach` / `map` / `filter` / `every` / `some` / `find` / `findIndex` / `reduce` / `reverse` / `sort` / `copyWithin` / `at` / `keys` / `values` / `entries`。有意保留的差异见未实现文档（`subarray` 返回副本、迭代器方法返回数组、类型化数组无共享缓冲区）。
   - `ArrayBuffer`（`byteLength`、`slice`、`ArrayBuffer.isView`）与 `DataView`（默认大端，可选 `littleEndian`，支持 Uint8/Int8/Uint16/Int16/Uint32/Int32/Float32/Float64 的 get/set）；同一缓冲区上的多个视图共享字节。
+  - `TextEncoder` / `TextDecoder`（通过 `Uint8Array` 做 UTF-8 编解码；仅支持 UTF-8）
   - 属性访问（含 `length` 特判、`Math` 常量）、元素访问、调用
   - 一等公民内建构造器（`const A = Array`、`const M = Map`、`const E = TypeError`、类型化数组）：裸引用下降为 `xt_builtin_constructor`，得到带 `name` / `length`、`prototype` 与静态成员（`A.isArray`、`A.from`、`M.prototype` 等）的缓存函数。通过别名调用或 `new` 会分派到同一运行时构造器，`x instanceof A` 沿共享原型链判断。
   - 可选链 `?.` / `?.[]` / `?.()`：以空值判断短路到 `undefined`

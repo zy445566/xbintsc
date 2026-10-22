@@ -42,7 +42,7 @@ import {
  * `package.json`); a stale version would let an upgraded compiler reuse binaries
  * produced by the previous one.
  */
-export const COMPILER_VERSION = "0.5.12";
+export const COMPILER_VERSION = "0.5.13";
 
 export type EmitKind = "exe" | "obj" | "ir";
 

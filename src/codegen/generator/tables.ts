@@ -235,6 +235,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   Symbol: "xt_symbol_static",
   Date: "xt_date_static",
   Promise: "xt_promise_static",
+  ArrayBuffer: "xt_array_buffer_static",
   path: "xt_path_static",
   os: "xt_os_static",
   process: "xt_process_call",
@@ -298,6 +299,8 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   EventEmitter: "xt_event_emitter_ctor",
   TextEncoder: "xt_text_encoder_ctor",
   TextDecoder: "xt_text_decoder_ctor",
+  ArrayBuffer: "xt_array_buffer_ctor",
+  DataView: "xt_data_view_ctor",
   ...ERROR_CONSTRUCTORS,
   ...TYPED_ARRAY_CTORS,
 };

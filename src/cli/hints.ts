@@ -156,6 +156,12 @@ export function documentationFor(diagnostic: Diagnostic): DocumentationPointer |
         path: DOC_CLI,
       };
 
+    case DiagnosticCode.CircularDependency:
+      return {
+        text: "xbintsc does not support circular imports; move the shared binding into a third module",
+        path: "doc/unimplemented.md",
+      };
+
     // The checker codes are defined but never emitted today.
     case DiagnosticCode.TypeMismatch:
     case DiagnosticCode.NotCallable:

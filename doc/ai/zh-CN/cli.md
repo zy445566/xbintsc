@@ -9,6 +9,7 @@
 | --- | --- | --- |
 | `xbintsc build <file.ts>` | 编译为 `exe`（默认）、`obj` 或 `ir` | 需要，`--emit ir` 除外 |
 | `xbintsc run <file.ts> [-- args]` | 编译成可执行文件并运行 | 需要（且只支持 `--emit exe`） |
+| `xbintsc watch <file.ts>` | 源码树变化时自动重新构建（Ctrl+C 退出） | 需要 |
 | `xbintsc emit <file.ts>` | 把 LLVM IR 打到 stdout，不写文件 | 不需要 |
 | `xbintsc check <file.ts>` | 前端检查（语法、导入、支持的子集），不写文件 | 不需要 |
 | `xbintsc doctor` | 报告解析到的工具链、运行时与图标工具 | 仅在探测时需要 |
@@ -19,6 +20,10 @@
 它能发现语法错误、无法解析的导入以及超出支持子集的写法，适合作为提交前或编辑器的快速门禁。
 
 任何命令加 `--help` 都会打印帮助并返回 0。未知命令会打印错误与帮助文本，返回 1。
+
+`watch` 轮询入口文件所在目录（忽略 build 输出、`dist`、`coverage` 与 `node_modules`），
+每次变化后重新执行 `build`；它接受与 `build` 相同的参数。`node_modules` 里的包源码
+不会被监视，安装依赖后请重启 watch。
 
 ## 参数
 

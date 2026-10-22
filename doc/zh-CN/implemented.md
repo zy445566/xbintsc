@@ -65,7 +65,7 @@ source.ts
 ### 3.1 语句
 
 - 变量声明：`var` / `let` / `const`，支持多声明符 `const a = 1, b = 2;`
-- 函数声明、函数表达式和方法，含 `async` 修饰与生成器（`function*`、`yield`、`yield*`、`.next`/`.throw`/`.return`）
+- 函数声明、函数表达式和方法，含 `async` 修饰、生成器（`function*`、`yield`、`yield*`、`.next`/`.throw`/`.return`）与异步生成器（`async function*`、`for await...of`）
 - `class` 声明 / 类表达式（构造函数、字段、方法、`static`、`extends`）
 - `if` / `else`
 - `while`、`do...while`
@@ -220,6 +220,7 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
   - 闭包（箭头函数 / 函数表达式）与捕获环境构建
 - 类：构造器闭包 + 原型对象，存入 LLVM 全局（`@class.<id>`）；实例字段在构造器体前初始化；`static` 成员存于构造器属性包；`extends` 设置原型链；`super(...)` 通过原型上的隐藏 `__ctor` 调用。
 - `async`：闭包用 `xt_function_set_async` 标记；调用时在栈式协程（`xt_coroutine.c`、`xt_async.c`）上运行函数体并立即返回 promise。函数体同步执行到第一个等待**未 settle** promise 的 `await` 后挂起；promise settle 时排入微任务恢复协程。逃出函数体的异常会让该 promise reject，而不是同步抛出。`await` 非 promise 或已 settle 的值仍走同步快路径，rejection 触发异常。
+- `async function*`：闭包用 `xt_function_set_async_generator` 标记；每次 `.next()` / `.throw()` / `.return()` 入队一个请求并返回 promise。函数体在生成器协程上运行，可在 `yield` 或 `await` 处挂起；`xt_generator_await` 将协程挂在被等待的 promise 上，并让当前请求保持 pending，直到下一次 yield 或函数体结束。`for await...of` 降级为 `xt_async_iter_open` / `xt_async_iter_next` + `xt_await`，因此同时支持异步可迭代对象与同步迭代协议。
 - 标准库调用：`console.*`、`Math.*`、`Object.*`、数组 / 字符串方法统一走 `xt_call_method` / `xt_math_call` / `xt_object_*`；`JSON`/`Date`/`Map`/`Set`/`RegExp`/`Promise` 静态与构造走对应 `xt_*`；全局函数（`parseInt` 等）走 `xt_parse_int` 等。
 - 全局字符串池（`@.str.N` 私有常量，UTF-8 转义）。
 - 内置调用：`console.log` / `info` / `warn` / `error`、`Math.*`、`Object.*`、数组 / 字符串方法、全局函数、扩展 builtins（统一 `(argc, argv)` ABI）。

@@ -79,9 +79,17 @@ export const closureCallMethods: ClosureCallMethods = {
     if (fn.isConstructor && fn.classInfo) name = fn.classInfo.name;
     const nameValue = this.stringValue(name);
     this.emit(`  call i64 @xt_function_set_metadata(i64 ${closure}, i64 ${nameValue}, i32 ${arity})`);
-    if (fn.isGenerator) this.emit(`  call i64 @xt_function_set_generator(i64 ${closure})`);
-    /* `async` functions run on a coroutine: the runtime must know at call time
-     * so it can return a promise and suspend at `await`. */
-    if (fn.isAsync) this.emit(`  call i64 @xt_function_set_async(i64 ${closure})`);
+    if (fn.isAsync && fn.isGenerator) {
+      /* `async function*`: a generator whose `.next()` returns promises. The
+       * runtime needs both flags, so use the combined marker instead of the
+       * two separate setters. */
+      this.emit(`  call i64 @xt_function_set_async_generator(i64 ${closure})`);
+    } else if (fn.isGenerator) {
+      this.emit(`  call i64 @xt_function_set_generator(i64 ${closure})`);
+    } else if (fn.isAsync) {
+      /* `async` functions run on a coroutine: the runtime must know at call
+       * time so it can return a promise and suspend at `await`. */
+      this.emit(`  call i64 @xt_function_set_async(i64 ${closure})`);
+    }
   },
 };

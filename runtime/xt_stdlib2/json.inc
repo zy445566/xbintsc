@@ -141,12 +141,46 @@ xt_value xt_json_parse(int32_t argc, xt_value *argv) {
   return xt_json_parse_value(&cursor);
 }
 
-static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_value *out);
+static void xt_json_stringify_value(xt_value value, xt_value indent, int depth, xt_value *out);
 
-static void xt_json_indent(xt_value *out, int indent, int depth) {
-  if (indent <= 0) return;
+/* The indentation unit for the `space` argument: up to 10 spaces for a
+ * number, or the first 10 UTF-16 code units of a string (any characters,
+ * not just spaces), matching JSON.stringify. An empty string means compact. */
+static xt_value xt_json_space_unit(xt_value space) {
+  if (XT_IS_NUMBER(space)) {
+    int count = xt_to_int32(space);
+    if (count < 0) count = 0;
+    if (count > 10) count = 10;
+    char spaces[10];
+    memset(spaces, ' ', (size_t)count);
+    return xt_string_new(spaces, (size_t)count);
+  }
+  if (XT_IS_STRING(space)) {
+    xt_string *s = xt_as_string(space);
+    const char *bytes = xt_string_bytes(s);
+    size_t offset = 0;
+    size_t end = 0;
+    uint32_t units = 0;
+    while (offset < s->length && units < 10) {
+      size_t width = 0;
+      uint32_t code = xt_utf8_decode(bytes + offset, s->length - offset, &width);
+      units += code >= 0x10000 ? 2 : 1;
+      offset += width;
+      if (units <= 10) end = offset;
+    }
+    return xt_string_new(bytes, end);
+  }
+  return xt_string_from_cstr("");
+}
+
+static int xt_json_indented(xt_value unit) {
+  return XT_IS_STRING(unit) && xt_as_string(unit)->length > 0;
+}
+
+static void xt_json_indent(xt_value *out, xt_value unit, int depth) {
+  if (!xt_json_indented(unit)) return;
   *out = xt_add(*out, xt_string_from_cstr("\n"));
-  for (int i = 0; i < indent * depth; i++) *out = xt_add(*out, xt_string_from_cstr(" "));
+  for (int i = 0; i < depth; i++) *out = xt_add(*out, unit);
 }
 
 /* Containers on the current serialization path. A repeated pointer is a cycle;
@@ -177,7 +211,7 @@ static void xt_json_leave(void) {
   if (xt_json_path_count > 0) xt_json_path_count--;
 }
 
-static void xt_json_stringify_array(xt_value value, int indent, int depth, xt_value *out) {
+static void xt_json_stringify_array(xt_value value, xt_value indent, int depth, xt_value *out) {
   xt_array *array = xt_as_array(value);
   if (!array || array->length == 0) { *out = xt_add(*out, xt_string_from_cstr("[]")); return; }
   *out = xt_add(*out, xt_string_from_cstr("["));
@@ -192,7 +226,7 @@ static void xt_json_stringify_array(xt_value value, int indent, int depth, xt_va
   *out = xt_add(*out, xt_string_from_cstr("]"));
 }
 
-static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_value *out) {
+static void xt_json_stringify_object(xt_value value, xt_value indent, int depth, xt_value *out) {
   xt_value keys = xt_object_keys(value);
   xt_array *array = xt_as_array(keys);
   if (!array) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
@@ -216,7 +250,7 @@ static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_v
     *out = xt_add(*out, xt_string_from_cstr("\""));
     *out = xt_add(*out, key);
     *out = xt_add(*out, xt_string_from_cstr("\":"));
-    if (indent > 0) *out = xt_add(*out, xt_string_from_cstr(" "));
+    if (xt_json_indented(indent)) *out = xt_add(*out, xt_string_from_cstr(" "));
     xt_json_stringify_value(item, indent, depth + 1, out);
   }
   xt_json_indent(out, indent, depth);
@@ -224,7 +258,7 @@ static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_v
   *out = xt_add(*out, xt_string_from_cstr("}"));
 }
 
-static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_value *out) {
+static void xt_json_stringify_value(xt_value value, xt_value indent, int depth, xt_value *out) {
   if (value == XT_UNDEFINED || value == XT_NULL || XT_IS_FUNCTION(value) || xt_is_symbol(value)) {
     *out = xt_add(*out, xt_string_from_cstr("null"));
     return;
@@ -312,7 +346,7 @@ static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_va
  */
 typedef struct {
   xt_value replacer;
-  int indent;
+  xt_value indent;
   xt_value *path;
   uint32_t path_count;
   uint32_t path_capacity;
@@ -340,9 +374,7 @@ static void xt_json_replacer_leave(xt_json_replacer_context *ctx) {
 }
 
 static void xt_json_replacer_indent(xt_json_replacer_context *ctx, int depth, xt_value *out) {
-  if (ctx->indent <= 0) return;
-  *out = xt_add(*out, xt_string_from_cstr("\n"));
-  for (int i = 0; i < ctx->indent * depth; i++) *out = xt_add(*out, xt_string_from_cstr(" "));
+  xt_json_indent(out, ctx->indent, depth);
 }
 
 static int xt_json_replacer_allows(xt_value replacer, xt_value key) {
@@ -401,7 +433,7 @@ static int xt_json_replacer_container(xt_json_replacer_context *ctx, xt_value va
       *out = xt_add(*out, xt_string_from_cstr("\""));
       *out = xt_add(*out, childKey);
       *out = xt_add(*out, xt_string_from_cstr("\":"));
-      if (ctx->indent > 0) *out = xt_add(*out, xt_string_from_cstr(" "));
+      if (xt_json_indented(ctx->indent)) *out = xt_add(*out, xt_string_from_cstr(" "));
       *out = xt_add(*out, temporary);
     }
   }
@@ -454,14 +486,13 @@ static int xt_json_replacer_write(xt_json_replacer_context *ctx, xt_value holder
 
 xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
   xt_value value = xt_arg_at(argc, argv, 0);
+  if (value == XT_UNDEFINED || XT_IS_FUNCTION(value) || xt_is_symbol(value)) return XT_UNDEFINED;
+  /* Signature: stringify(value, replacer, space). The replacer is argv[1] and
+   * the indentation is argv[2]; reading argv[1] as `space` silently ignored
+   * `JSON.stringify(value, null, 2)`. */
+  xt_value indent = xt_json_space_unit(xt_arg_at(argc, argv, 2));
   xt_value replacer = xt_arg_at(argc, argv, 1);
   if (XT_IS_FUNCTION(replacer) || XT_IS_ARRAY(replacer)) {
-    int indent = 0;
-    xt_value space = xt_arg_at(argc, argv, 2);
-    if (XT_IS_NUMBER(space)) indent = xt_to_int32(space);
-    else if (XT_IS_STRING(space)) indent = (int)xt_string_utf16_length((xt_string *)XT_GET_PTR(space));
-    if (indent < 0) indent = 0;
-    if (indent > 10) indent = 10;
     xt_json_replacer_context context = {replacer, indent, NULL, 0, 0};
     xt_value wrapper = xt_object_new();
     xt_object_set(wrapper, xt_string_from_cstr(""), value);
@@ -470,13 +501,6 @@ xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
     free(context.path);
     return wrote ? out : XT_UNDEFINED;
   }
-  int indent = 0;
-  xt_value space = xt_arg_at(argc, argv, 1);
-  if (XT_IS_NUMBER(space)) indent = xt_to_int32(space);
-  else if (XT_IS_STRING(space)) indent = (int)xt_string_utf16_length((xt_string *)XT_GET_PTR(space));
-  if (indent < 0) indent = 0;
-  if (indent > 10) indent = 10;
-  if (value == XT_UNDEFINED || XT_IS_FUNCTION(value) || xt_is_symbol(value)) return XT_UNDEFINED;
   /* A caught circular-structure error longjmps past xt_json_leave; start every
    * top-level serialization with a clean path. */
   xt_json_path_count = 0;

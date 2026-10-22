@@ -237,6 +237,7 @@ const HELP = `xbintsc ${COMPILER_VERSION} - TypeScript binary compiler
 Usage:
   xbintsc build <file.ts> [options]   Compile to a native binary
   xbintsc run <file.ts> [-- args]     Compile and execute
+  xbintsc check <file.ts>             Parse and bind without linking
   xbintsc emit <file.ts>              Print LLVM IR
   xbintsc doctor                      Report the resolved toolchain
   xbintsc version                     Print the version
@@ -261,6 +262,7 @@ Options:
       --verbose         Print progress information
       --time            Print per-phase build timings
       --debug           Emit debug info (DWARF/CodeView) and keep frame pointers
+      --json            Print diagnostics as a JSON array on stdout
       --no-hints        Do not append the "hint: … see <doc>" line to failures
 
 xbintsc compiles a subset of TypeScript to a native binary. Types are erased
@@ -420,6 +422,31 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     return 0;
   }
 
+  if (command === "check") {
+    const cliEntry = args.positionals[0];
+    const resolved = resolveProjectConfig(args.flags, cliEntry);
+    if (!resolved.ok) return reportConfigError(resolved.error, io);
+    const entry = cliEntry ?? resolved.config.entry;
+    if (!entry) {
+      io.stderr(`xbintsc: check requires a source file (or 'entry' in ${CONFIG_FILE_NAME})\n`);
+      emitHint(io, `hint: pass the entry file, or set 'entry' in ${CONFIG_FILE_NAME} — see ${DOC_CLI}`);
+      return 1;
+    }
+    const extNames = listFlag(args.flags, "ext") ?? resolved.config.extensions ?? [];
+    const nativeManifests = listFlag(args.flags, "ext-native") ?? resolved.config.extNative ?? [];
+    const registry = buildRegistry(extNames, nativeManifests);
+    /* Front-end only: parse, bundle and lower far enough to report binder /
+     * unsupported-feature diagnostics, but never invoke clang or write output. */
+    const { diagnostics } = compileEntry(entry, registry);
+    const failed = diagnostics.some((diagnostic) => diagnostic.category === "error");
+    if (args.flags.has("json")) {
+      io.stdout(`${JSON.stringify(diagnostics)}\n`);
+    } else if (failed) {
+      printDiagnostics(diagnostics, entry, io);
+    }
+    return failed ? 1 : 0;
+  }
+
   if (command === "emit") {
     const cliEntry = args.positionals[0];
     const resolved = resolveProjectConfig(args.flags, cliEntry);
@@ -435,6 +462,10 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     const registry = buildRegistry(extNames, nativeManifests);
     const { ir, diagnostics } = compileEntry(entry, registry, { debug: Boolean(args.flags.get("debug")) });
     if (diagnostics.some((d) => d.category === "error")) {
+      if (args.flags.has("json")) {
+        io.stdout(`${JSON.stringify(diagnostics)}\n`);
+        return 1;
+      }
       printDiagnostics(diagnostics, entry, io);
       return 1;
     }
@@ -472,6 +503,10 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     });
 
     if (result.diagnostics.some((d) => d.category === "error")) {
+      if (args.flags.has("json")) {
+        io.stdout(`${JSON.stringify(result.diagnostics)}\n`);
+        return 1;
+      }
       printDiagnostics(result.diagnostics, entry, io);
       return 1;
     }

@@ -33,9 +33,10 @@ the rules for changing the compiler.
 2. **Types are erased, never checked.** Annotations, interfaces, generics,
    `as`/`satisfies` and non-null `!` have no runtime effect, and no type checker
    runs. Only real runtime behaviour matters.
-3. **Node compatibility is opt-in and incomplete.** Node modules come from the
-   `node` extension (`--ext node`); bare third-party npm imports are not
-   supported.
+3. **Node compatibility is opt-in and incomplete.** Node built-ins come from the
+   `node` extension (`--ext node`). Packages under `node_modules` are resolved
+   and bundled at build time (ESM and CommonJS); there is no runtime package
+   lookup and circular dependencies are rejected.
 
 ## Choose your command
 

@@ -11,9 +11,13 @@
 | `xbintsc run <file.ts> [-- args]` | 编译成可执行文件并运行 | 需要（且只支持 `--emit exe`） |
 | `xbintsc watch <file.ts>` | 源码树变化时自动重新构建（Ctrl+C 退出） | 需要 |
 | `xbintsc emit <file.ts>` | 把 LLVM IR 打到 stdout，不写文件 | 不需要 |
+| `xbintsc check <file.ts>` | 前端检查（语法、导入、支持的子集），不写文件 | 不需要 |
 | `xbintsc doctor` | 报告解析到的工具链、运行时与图标工具 | 仅在探测时需要 |
 | `xbintsc version` | 打印版本 | 不需要 |
 | `xbintsc help` | 打印帮助文本 | 不需要 |
+
+`check` 不是类型检查器：类型注解会被擦除，所以通过 `check` 的程序仍可能在运行时出错。
+它能发现语法错误、无法解析的导入以及超出支持子集的写法，适合作为提交前或编辑器的快速门禁。
 
 任何命令加 `--help` 都会打印帮助并返回 0。未知命令会打印错误与帮助文本，返回 1。
 
@@ -40,6 +44,7 @@
     --verbose         打印进度信息
     --time            打印各构建阶段耗时
     --debug           生成调试信息（DWARF/CodeView）并保留帧指针
+    --json            把诊断以 JSON 数组打到 stdout
 ```
 
 少数容易踩的解析细节：

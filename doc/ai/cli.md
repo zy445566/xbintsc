@@ -12,9 +12,15 @@ the help text leaves implicit.
 | `xbintsc run <file.ts> [-- args]` | Compile to an executable and execute it | yes (`--emit exe` only) |
 | `xbintsc watch <file.ts>` | Rebuild whenever the source tree changes (Ctrl+C to stop) | yes |
 | `xbintsc emit <file.ts>` | Print LLVM IR to stdout, write nothing | no |
+| `xbintsc check <file.ts>` | Front-end check (syntax, imports, supported subset); writes nothing | no |
 | `xbintsc doctor` | Report the resolved toolchain, runtime and icon tools | only for the probe |
 | `xbintsc version` | Print the version | no |
 | `xbintsc help` | Print the help text | no |
+
+`check` is not a type checker: annotations are erased, so a program that passes
+`check` can still fail at runtime. It catches syntax errors, unresolved imports
+and constructs outside the supported subset, which makes it a fast pre-commit
+or editor gate.
 
 Any command also accepts `--help`, which prints the help text and exits 0. An
 unknown command prints an error plus the help text and exits 1.
@@ -44,6 +50,7 @@ so restart it after installing a dependency.
     --verbose         Print progress information
     --time            Print per-phase build timings
     --debug           Emit debug info (DWARF/CodeView) and keep frame pointers
+    --json            Print diagnostics as a JSON array on stdout
 ```
 
 Parsing details that occasionally surprise:

@@ -150,7 +150,7 @@ static xt_value xt_array_reduce(xt_value value, xt_value fn, int32_t hasInitial,
     accumulator = array->items[0];
     i = 1;
   } else {
-    xt_throw(xt_string_from_cstr("TypeError: Reduce of empty array with no initial value"));
+    xt_throw(xt_error_from_message("TypeError: Reduce of empty array with no initial value"));
     return XT_UNDEFINED;
   }
   for (; i < array->length; i++) {

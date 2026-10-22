@@ -11,10 +11,10 @@
  * a real C stack, `try`/`finally`, loops and locals all survive the suspension
  * without a state-machine transform.
  *
- * `await` on an already-settled value keeps the historical fast path: it
- * returns (or throws) synchronously instead of forcing a microtask turn. This
- * makes the common "await a synchronous builtin" case cheap and preserves the
- * existing ordering guarantees.
+ * `await` always yields: even a non-promise or an already-settled promise
+ * queues a microtask before the body resumes, matching the specification's
+ * interleaving with pending `.then` callbacks. (Top-level `await`, with no
+ * coroutine to suspend, still blocks on the event loop.)
  */
 
 #include "rt_internal.h"
@@ -110,25 +110,30 @@ void xt_async_wake(void *asyncPointer, xt_value value, int rejected) {
   xt_async_resume(async);
 }
 
-/* `await value`: unwrap promises, suspending the running async coroutine when
- * the promise is still pending. */
+/* `await value`: every await yields once. A settled promise (or a plain value)
+ * queues a microtask before resuming, so an await always interleaves with
+ * pending `.then` callbacks exactly like the specification. */
 xt_value xt_await(xt_value value) {
   int state = xt_promise_state_of(value);
-  if (state < 0) return value;
-  if (state == XT_PROMISE_REJECTED) {
-    xt_throw(xt_promise_value_of(value));
-    return XT_UNDEFINED;
-  }
-  if (state == XT_PROMISE_FULFILLED) return xt_promise_value_of(value);
-
   xt_async *async = g_active_async;
   if (async && async->coroutine) {
-    async->await_threw = 0;
-    async->resume_value = XT_UNDEFINED;
-    xt_promise_add_async_waiter(value, async);
-    xt_coroutine_leave(async->coroutine);
-    /* The waiter resumed us. A rejection is rethrown inside the coroutine so
-     * its own `try`/`catch` and `finally` see it. */
+    if (state == XT_PROMISE_PENDING) {
+      async->await_threw = 0;
+      async->resume_value = XT_UNDEFINED;
+      xt_promise_add_async_waiter(value, async);
+      xt_coroutine_leave(async->coroutine);
+    } else {
+      int rejected = state == XT_PROMISE_REJECTED;
+      xt_value settled = (state == XT_PROMISE_FULFILLED || rejected)
+                             ? xt_promise_value_of(value)
+                             : value;
+      async->await_threw = rejected;
+      async->resume_value = settled;
+      xt_promise_queue_async_wake(async, settled, rejected);
+      xt_coroutine_leave(async->coroutine);
+    }
+    /* The waiter/queued microtask resumed us. A rejection is rethrown inside
+     * the coroutine so its own `try`/`catch` and `finally` see it. */
     if (async->await_threw) {
       async->await_threw = 0;
       xt_throw(async->resume_value);
@@ -136,6 +141,13 @@ xt_value xt_await(xt_value value) {
     }
     return async->resume_value;
   }
+
+  if (state < 0) return value;
+  if (state == XT_PROMISE_REJECTED) {
+    xt_throw(xt_promise_value_of(value));
+    return XT_UNDEFINED;
+  }
+  if (state == XT_PROMISE_FULFILLED) return xt_promise_value_of(value);
 
   /* No coroutine to suspend (top-level `await`, or `await` reached outside an
    * async function): block on the reactor until the promise settles, exactly

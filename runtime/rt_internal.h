@@ -59,6 +59,7 @@
 #define XT_OBJECT_KIND_GENERATOR 13
 #define XT_OBJECT_KIND_ITERATOR 14
 #define XT_OBJECT_KIND_ASYNC 15
+#define XT_OBJECT_KIND_ASYNC_ITERATOR 16
 
 /* Common header for every heap object. `flags` bit 0 is the collector's mark
  * bit; it is cleared on every surviving object at the end of a sweep. */
@@ -155,6 +156,9 @@ typedef struct {
   /* Set on `async` function objects: calling the closure starts a coroutine
    * (see xt_async.c) and immediately returns the promise it resolves. */
   uint8_t is_async;
+  /* Set on `async function*` objects. `is_generator` is also set, but the call
+   * path checks this flag first so the generator is created in async mode. */
+  uint8_t is_async_generator;
   /* Non-NULL for the first-class value of a built-in constructor ("Array",
    * "Map", ...). It lets property access resolve the constructor's statics
    * (`const A = Array; A.isArray(x)`). Points at a static string. */
@@ -223,6 +227,7 @@ void xt_generator_gc_trace(xt_header *header);
 void xt_generator_gc_release(xt_header *header);
 void xt_async_gc_trace(xt_header *header);
 void xt_async_gc_release(xt_header *header);
+void xt_async_iterator_gc_trace(xt_header *header);
 
 /* Stackful coroutines (xt_coroutine.c). A coroutine owns a private C stack and
  * switches to it with `ucontext`/fibers; `enter` runs until the body calls
@@ -232,6 +237,9 @@ typedef struct xt_coroutine xt_coroutine;
 xt_coroutine *xt_coroutine_create(void (*entry)(void *), void *arg);
 void xt_coroutine_enter(xt_coroutine *co);
 void xt_coroutine_leave(xt_coroutine *co);
+/* The coroutine whose body is currently executing, or NULL on the main stack. */
+xt_coroutine *xt_coroutine_current(void);
+int xt_coroutine_is_current(xt_coroutine *co);
 void xt_coroutine_gc_trace(xt_coroutine *co);
 void xt_coroutine_release(xt_coroutine *co);
 
@@ -370,6 +378,18 @@ xt_value xt_yield(xt_value value);
 xt_value xt_yield_star(xt_value delegate);
 int xt_generator_has_next(xt_value generator);
 xt_value xt_generator_iter_value(xt_value generator);
+/* Async-generator support. `xt_generator_await` handles an `await` inside an
+ * async generator and returns 1; it returns 0 when no async generator is
+ * running (ordinary/async code handles the await itself). */
+int xt_generator_await(xt_value value, xt_value *result);
+void xt_generator_wake(void *generator, xt_value value, int rejected);
+int xt_is_async_generator(xt_value value);
+/* `[Symbol.asyncIterator]()` for a generator object. */
+xt_value xt_async_iterator_method(void);
+/* `for await...of`: resolve the async iteration protocol once, then pull one
+ * step per call. Both return a promise for the step object. */
+xt_value xt_async_iter_open(xt_value value);
+xt_value xt_async_iter_next(xt_value iterator);
 
 /* Async coroutines (xt_async.c). Calling an `async` function runs its body on
  * a coroutine that suspends at a pending `await` and resumes when the awaited

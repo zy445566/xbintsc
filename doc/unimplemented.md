@@ -68,9 +68,10 @@ None — generators are implemented.
 > Tagged templates are implemented, including raw strings and `String.raw`.
 > Generators (`function*`, `yield`, `yield*`) are implemented with stackful
 > coroutines, including `next`/`throw`/`return`, `for...of`, spread and
-> delegation. `import.meta` exposes `url`, `dirname` and `filename`, resolved
-> from the running executable's path. `async function*` is **rejected with
-> `UnsupportedFeature`** instead of silently producing a synchronous generator.
+> delegation. `async function*` and `for await...of` are implemented: the body
+> may suspend at both `await` and `yield`, and every `.next()` returns a
+> promise. `import.meta` exposes `url`, `dirname` and `filename`, resolved from
+> the running executable's path.
 
 ### 2.2 Not supported by the parser
 
@@ -173,7 +174,7 @@ element writes, and `fill` / `set` / `slice` / `subarray` / `join` / `toString` 
 | `this` binding / method call semantics | ✓ | ✓ implemented (`this` is threaded as the first ABI parameter; arrow functions inherit lexically) |
 | `async` / `await` / Promise | ✓ | ✓ implemented with stackful-coroutine suspension: awaiting a pending promise pauses the body and the event loop resumes it (see the deviations table for the remaining differences) |
 | `new.target` | ✗ | parsed, then rejected with `UnsupportedFeature` (no `new.target` semantics) |
-| Generators / iterators / `yield` | ✓ implemented | `function*`, `yield`, `yield*`, `.next/.throw/.return`; `async` generators are rejected with `UnsupportedFeature` |
+| Generators / iterators / `yield` | ✓ implemented | `function*`, `yield`, `yield*`, `.next/.throw/.return`; `async function*`, `for await...of` and `Symbol.asyncIterator` are supported |
 | Closure `arity` | — | `xt_closure_arity` is always -1, never filled in |
 | `fn.call` / `fn.apply` / `fn.bind` | ✓ | ✓ implemented (the bound closure does not track partial-argument `length`) |
 | `fn.name` / `fn.length` | ✓ | ✓ implemented (inferred from the declaration / assignment / property key; bound functions use `"bound ..."` and adjusted arity) |
@@ -233,7 +234,8 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Non-moving mark-sweep collector behind `xt_alloc`: explicit roots, subsystem root providers and a conservative C-stack scan. Single-threaded and stop-the-world; no moving/compaction or generational mode |
 | Function `arity` / argument count | No argument count validation; `fn.length` reports the declared arity but calls are never checked against it |
-| `async` / `await` | Real suspension on a stackful coroutine; `await` always queues a microtask (non-promises and already-settled promises included), so interleaving with pending `.then` callbacks matches the specification. Top-level `await` blocks on the event loop rather than yielding the module body. `fs/promises` still performs the I/O synchronously before settling; `fetch` is blocking; `async` generators are unsupported |
+| `async` / `await` | Real suspension on a stackful coroutine; `await` always queues a microtask (non-promises and already-settled promises included), so interleaving with pending `.then` callbacks matches the specification. Top-level `await` blocks on the event loop rather than yielding the module body. `fs/promises` still performs the I/O synchronously before settling; `fetch` is blocking. Async generators suspend at both `await` and `yield`; `for await...of` awaits one step per iteration |
+| Async generator cleanup | `for await...of` does not call the iterator's `return()` when the loop exits early. `yield*` inside an async generator delegates to synchronous iterables only. `.return()` at a suspended `yield` completes without running `finally` (the same limitation as synchronous generators) |
 | `super` | `super.x` / `super(...)` takes the prototype of `this`'s prototype; single-level inheritance is correct, but depth > 1 may be inaccurate |
 | `Error.stack` | Function-level frames only: each frame is `at name (file:line)` with the function's declaration line (updated to the construction line for the innermost frame); no column numbers and no frames for generator / `async` bodies (they switch stacks) |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see section 4) |
@@ -268,7 +270,7 @@ Unimplemented (statements): namespace/module declarations
 
 Unimplemented (expressions): new.target (clear UnsupportedFeature)
 
-Unimplemented (functions): `fn.toString()` source text, async generators (rejected)
+Unimplemented (functions): `fn.toString()` source text
 
 Unimplemented (classes/OO): abstract/implements, access control,
                             parent/child #x collision

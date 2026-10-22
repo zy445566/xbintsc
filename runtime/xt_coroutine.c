@@ -48,6 +48,11 @@ struct xt_coroutine {
   int booted;
   int started;
   void *saved_try_top;
+  /* Coroutine that was current when this one was entered. Used to answer
+   * "which JavaScript execution context is running?" so a nested async
+   * function inside an async generator (or vice versa) does not mistake the
+   * outer coroutine for its own. */
+  xt_coroutine *previous;
 #ifdef _WIN32
   void *fiber;
   void *caller_fiber;
@@ -65,6 +70,14 @@ struct xt_coroutine {
 /* Filled in just before a coroutine is first entered (POSIX has no portable
  * way to pass a pointer to `makecontext`). */
 static xt_coroutine *g_boot_coroutine = NULL;
+/* The coroutine whose body is executing right now (NULL on the main stack). */
+static xt_coroutine *g_current_coroutine = NULL;
+
+xt_coroutine *xt_coroutine_current(void) { return g_current_coroutine; }
+
+int xt_coroutine_is_current(xt_coroutine *co) {
+  return co != NULL && g_current_coroutine == co;
+}
 #ifdef _WIN32
 static void *g_main_fiber = NULL;
 #else
@@ -150,6 +163,8 @@ void xt_coroutine_enter(xt_coroutine *co) {
   }
   void *caller_try = xt_try_mark();
   xt_try_restore(co->saved_try_top);
+  co->previous = g_current_coroutine;
+  g_current_coroutine = co;
 #ifdef _WIN32
   _setjmp(co->caller_regs);
   co->has_caller_regs = 1;
@@ -158,6 +173,7 @@ void xt_coroutine_enter(xt_coroutine *co) {
 #else
   swapcontext(&co->caller, &co->ctx);
 #endif
+  g_current_coroutine = co->previous;
   co->saved_try_top = xt_try_mark();
   xt_try_restore(caller_try);
   if (co->stack_pushed) {
@@ -168,6 +184,7 @@ void xt_coroutine_enter(xt_coroutine *co) {
 
 void xt_coroutine_leave(xt_coroutine *co) {
   co->saved_try_top = xt_try_mark();
+  g_current_coroutine = co->previous;
 #ifdef _WIN32
   SwitchToFiber(co->caller_fiber);
 #else

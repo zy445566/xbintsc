@@ -103,8 +103,16 @@ xt_value xt_async_call(xt_value function, xt_value thisValue, int32_t argc, xt_v
 }
 
 void xt_async_wake(void *asyncPointer, xt_value value, int rejected) {
+  if (!asyncPointer) return;
+  /* Async generators park the same kind of waiter, but their completion sends
+   * a promise to the current `.next()` request instead of settling a single
+   * `async` promise. */
+  if (((xt_header *)asyncPointer)->kind == XT_OBJECT_KIND_GENERATOR) {
+    xt_generator_wake(asyncPointer, value, rejected);
+    return;
+  }
   xt_async *async = (xt_async *)asyncPointer;
-  if (!async || async->done || !async->coroutine) return;
+  if (async->done || !async->coroutine) return;
   async->resume_value = value;
   async->await_threw = rejected;
   xt_async_resume(async);
@@ -114,9 +122,14 @@ void xt_async_wake(void *asyncPointer, xt_value value, int rejected) {
  * queues a microtask before resuming, so an await always interleaves with
  * pending `.then` callbacks exactly like the specification. */
 xt_value xt_await(xt_value value) {
+  /* An `await` inside an async generator suspends that generator's coroutine
+   * while leaving the current `.next()` promise pending. */
+  xt_value generatorResult;
+  if (xt_generator_await(value, &generatorResult)) return generatorResult;
+
   int state = xt_promise_state_of(value);
   xt_async *async = g_active_async;
-  if (async && async->coroutine) {
+  if (async && async->coroutine && xt_coroutine_is_current(async->coroutine)) {
     if (state == XT_PROMISE_PENDING) {
       async->await_threw = 0;
       async->resume_value = XT_UNDEFINED;

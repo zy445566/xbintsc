@@ -30,7 +30,6 @@ import {
   thrownFailure,
   toolchainPointer,
   UNEXPECTED_FAILURE_HINT,
-  type DocumentationPointer,
 } from "./hints.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import { bundledExtensions } from "../extensions/catalog.js";
@@ -200,20 +199,27 @@ function emitHint(io: CliIo, line: string): void {
  * the question.
  */
 function reportThrown(error: unknown, io: CliIo): number {
-  const message =
-    error instanceof ToolchainError
-      ? `xbintsc: ${error.message}`
-      : `xbintsc: ${error instanceof Error ? error.message : String(error)}`;
-  io.stderr(`${message.trimEnd()}\n`);
-  const text = error instanceof ToolchainError ? error.message : message;
-  const pointer = error instanceof ToolchainError ? toolchainPointer(text) : thrownPointer(text);
-  emitHint(io, `hint: ${pointer.text} — see ${pointer.path}`);
+  if (error instanceof ToolchainError) {
+    io.stderr(`xbintsc: ${error.message.trimEnd()}\n`);
+    const pointer = toolchainPointer(error.message);
+    emitHint(io, `hint: ${pointer.text} — see ${pointer.path}`);
+    return 1;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  const failure = thrownFailure(message);
+  if (failure === undefined) {
+    /* An uncaught exception that is not a known toolchain/setup failure is a
+     * compiler bug: say so instead of blaming the user's source or toolchain. */
+    io.stderr(`xbintsc: internal error: ${message.trimEnd()}\n`);
+    emitHint(
+      io,
+      `hint: this is a bug in xbintsc, not in your program — please report it with the input that triggered it — see ${UNEXPECTED_FAILURE_HINT.path}`,
+    );
+    return 1;
+  }
+  io.stderr(`xbintsc: ${message.trimEnd()}\n`);
+  emitHint(io, `hint: ${failure.pointer.text} — see ${failure.pointer.path}`);
   return 1;
-}
-
-/** The document that explains a failure the CLI reports as a plain message. */
-function thrownPointer(message: string): DocumentationPointer {
-  return thrownFailure(message)?.pointer ?? UNEXPECTED_FAILURE_HINT;
 }
 
 /** Report a project-config failure, which never becomes a diagnostic bag. */

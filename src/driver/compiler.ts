@@ -104,6 +104,9 @@ export function compileString(
   const parser = new Parser(file, diagnostics);
   const sourceFile = parser.parseSourceFile();
   const registry = extensions ?? createDefaultRegistry();
+  /* Code generation assumes a well-formed tree (binder and codegen both read
+   * required children), so never lower a file that already failed to parse. */
+  if (diagnostics.hasErrors) return { ir: "", diagnostics: diagnostics.diagnostics };
   const { ir } = generate(sourceFile, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
@@ -152,6 +155,7 @@ export function compileEntry(
     const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry), registry.assetLoaders());
     if (bundled) sourceFile = bundled.sourceFile;
   }
+  if (diagnostics.hasErrors) return { ir: "", diagnostics: diagnostics.diagnostics };
   const { ir } = generate(sourceFile, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
@@ -235,6 +239,12 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     }
   }
   timings.push({ phase: "frontend", ms: Date.now() - buildStarted });
+
+  /* Parse (or module-graph) errors leave missing nodes in the tree. Stop before
+   * code generation instead of letting the binder crash on them. */
+  if (diagnostics.hasErrors) {
+    return { outputPath, cached: false, diagnostics: diagnostics.diagnostics, timings };
+  }
 
   const app = options.app ?? {};
   const iconPath = options.icon ?? app.icon;

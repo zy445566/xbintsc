@@ -68,7 +68,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 | 特性 | 状态 | 说明 |
 | --- | --- | --- |
-| `async`/`await`、`Promise`、`Promise.all` | ✅ | 真实挂起：async 函数体运行在栈式协程上，等待**未 settle** 的 Promise 时暂停，settle 后恢复。等待已 settle 的值仍同步继续 |
+| `async`/`await`、`Promise`、`Promise.all` | ✅ | 真实挂起：async 函数体运行在栈式协程上，等待**未 settle** 的 Promise 时暂停，settle 后恢复。每次 `await` 都会让出一次，已 settle 的值或非 Promise 也会像 Node 一样排入微任务 |
 | `setTimeout` 与回调 | ✅ | 定时器运行在核心事件循环上；`await new Promise(r => setTimeout(r, ms))` 可用 |
 | 套接字/服务端（`http`、`net`、`dgram`） | ✅ | 回调在事件循环上执行，可以 settle 你正在 await 的 Promise（测试含 `net`/`http` 示例） |
 | `fs/promises` | ⚠️ | 可以 await，但每次调用仍先同步完成 I/O 再 settle，I/O 期间不会让出 |

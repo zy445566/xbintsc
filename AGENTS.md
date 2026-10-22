@@ -59,7 +59,7 @@ in [doc/ai/language-support.md](./doc/ai/language-support.md).
   iteration). The lazy cons-node representation is still byte based.
 - **`async`/`await` suspends on pending promises.** An `async` body runs on a
   stackful coroutine, so a promise settled from a timer or socket callback can be
-  awaited. Awaiting an already-settled value continues synchronously, and
+  awaited. Every `await` queues a microtask (settled values included), and
   `fs/promises` still blocks before settling.
 - **No CommonJS.** `require()` is rejected; use ESM `import`. No live bindings.
 - **clang ≥ 16 is required.** clang 15 rejects the emitted IR (typed-pointer

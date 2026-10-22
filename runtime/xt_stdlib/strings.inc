@@ -190,7 +190,7 @@ static xt_value xt_string_repeat(xt_value value, xt_value countValue) {
   if (!s) return value;
   int32_t count = xt_to_int32(countValue);
   if (count < 0) {
-    xt_throw(xt_string_from_cstr("RangeError: Invalid count value"));
+    xt_throw(xt_error_from_message("RangeError: Invalid count value"));
     return XT_UNDEFINED;
   }
   xt_string *out = xt_string_alloc((size_t)s->length * (size_t)count);

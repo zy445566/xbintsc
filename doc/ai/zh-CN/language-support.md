@@ -72,7 +72,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `setTimeout` 与回调 | ✅ | 定时器运行在核心事件循环上；`await new Promise(r => setTimeout(r, ms))` 可用 |
 | `queueMicrotask` / `setImmediate` / `performance.now` | ✅ | 微任务与 Promise 共用 FIFO 队列；`setImmediate` 是零延迟定时器，返回数字 id；`performance.now` 返回单调递增的毫秒小数 |
 | 套接字/服务端（`http`、`net`、`dgram`） | ✅ | 回调在事件循环上执行，可以 settle 你正在 await 的 Promise（测试含 `net`/`http` 示例） |
-| `fs/promises` | ⚠️ | 可以 await，但每次调用仍先同步完成 I/O 再 settle，I/O 期间不会让出 |
+| `fs/promises` | ✅ | 文件、目录与 `FileHandle` 操作跑在异步 I/O 线程池上，并在 reactor 上 settle，等待期间定时器与套接字继续运行 |
+| 全局 `fetch` | ✅ | HTTP/1.1 客户端，connect/send/receive 跑在同一线程池；`await fetch(...)` 会让出，重定向在 reactor 上处理。仅 `http://`（无 TLS），resolve 前缓冲整个响应体 |
 | worker 线程 | 🚫 | worker 是子进程 |
 | `async` 生成器 | ✅ | 可在 `await` 与 `yield` 处挂起；每次 `.next()` 返回 Promise；支持 `for await...of` |
 

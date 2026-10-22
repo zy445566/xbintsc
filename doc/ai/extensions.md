@@ -36,7 +36,7 @@ resolve to the same implementation.
 | Module | Notes |
 | --- | --- |
 | `fs` | **synchronous API only** (`readFileSync`, `writeFileSync`, …); `fs/promises` is separate |
-| `fs/promises` | promise-based file APIs |
+| `fs/promises` | promise-based file APIs; the blocking I/O runs on the async I/O worker pool and settles on the reactor |
 | `path` | also hooks namespace dispatch, so `path.join(...)` works |
 | `os` | |
 | `process` | `process.cwd()`, `argv`, `env`, …; namespace dispatch too |
@@ -54,8 +54,9 @@ Coverage per module (exact functions and options) is in
 [../unimplemented/node.md](../unimplemented/node.md).
 
 Remember the runtime model before building on `net`/`http`: the event loop runs
-**after** the program body, but `async`/`await` now suspends on pending promises,
-so a promise settled from a socket callback can be awaited. See
+**after** the program body, but `async`/`await` suspends on pending promises, so a
+promise settled from a socket callback, a timer or an offloaded file/HTTP job can
+be awaited. `net.connect` itself is still blocking. See
 [language-support.md](./language-support.md).
 
 ### `gui` — HTML/CSS window

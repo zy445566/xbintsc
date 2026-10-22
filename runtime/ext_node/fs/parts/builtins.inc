@@ -2,6 +2,7 @@
 
 xt_value xt_node_stat_result(const xt_fs_stat_t *info);
 xt_value xt_node_dirent_result(const char *dir, const char *name);
+xt_value xt_node_dirent_named(const char *name, unsigned int mode);
 
 /* -- synchronous fs builtins (one translation unit per group) ------------- */
 
@@ -63,6 +64,39 @@ xt_value xt_node_glob(int32_t argc, xt_value *argv);
 xt_value xt_node_watch(int32_t argc, xt_value *argv);
 xt_value xt_node_watch_file(int32_t argc, xt_value *argv);
 xt_value xt_node_unwatch_file(int32_t argc, xt_value *argv);
+
+/* async_api.c — promise-returning counterparts, backed by the async I/O pool */
+xt_value xt_node_p_read_file(int32_t argc, xt_value *argv);
+xt_value xt_node_p_write_file(int32_t argc, xt_value *argv);
+xt_value xt_node_p_append_file(int32_t argc, xt_value *argv);
+xt_value xt_node_p_mkdir(int32_t argc, xt_value *argv);
+xt_value xt_node_p_readdir(int32_t argc, xt_value *argv);
+xt_value xt_node_p_rm(int32_t argc, xt_value *argv);
+xt_value xt_node_p_unlink(int32_t argc, xt_value *argv);
+xt_value xt_node_p_rmdir(int32_t argc, xt_value *argv);
+xt_value xt_node_p_rename(int32_t argc, xt_value *argv);
+xt_value xt_node_p_copy_file(int32_t argc, xt_value *argv);
+xt_value xt_node_p_cp(int32_t argc, xt_value *argv);
+xt_value xt_node_p_realpath(int32_t argc, xt_value *argv);
+xt_value xt_node_p_stat(int32_t argc, xt_value *argv);
+xt_value xt_node_p_lstat(int32_t argc, xt_value *argv);
+xt_value xt_node_p_statfs(int32_t argc, xt_value *argv);
+xt_value xt_node_p_access(int32_t argc, xt_value *argv);
+xt_value xt_node_p_open(int32_t argc, xt_value *argv);
+xt_value xt_node_p_chmod(int32_t argc, xt_value *argv);
+xt_value xt_node_p_lchmod(int32_t argc, xt_value *argv);
+xt_value xt_node_p_chown(int32_t argc, xt_value *argv);
+xt_value xt_node_p_lchown(int32_t argc, xt_value *argv);
+xt_value xt_node_p_truncate(int32_t argc, xt_value *argv);
+xt_value xt_node_p_utimes(int32_t argc, xt_value *argv);
+xt_value xt_node_p_lutimes(int32_t argc, xt_value *argv);
+xt_value xt_node_p_link(int32_t argc, xt_value *argv);
+xt_value xt_node_p_symlink(int32_t argc, xt_value *argv);
+xt_value xt_node_p_readlink(int32_t argc, xt_value *argv);
+xt_value xt_node_p_mkdtemp(int32_t argc, xt_value *argv);
+xt_value xt_node_p_opendir(int32_t argc, xt_value *argv);
+xt_value xt_node_p_glob(int32_t argc, xt_value *argv);
+xt_value xt_node_p_watch(int32_t argc, xt_value *argv);
 
 /* constants.c */
 xt_value xt_fs_constants(void);

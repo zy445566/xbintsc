@@ -259,7 +259,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     outputPath,
     linkerFlags: [
       ...toolchain.linkerArgs,
-      ...(process.platform === "win32" ? ["-lws2_32"] : ["-lm"]),
+      ...(process.platform === "win32" ? ["-lws2_32"] : ["-lm", "-pthread"]),
       ...registry.linkerFlags(),
       /* A GUI program is a Windows-subsystem executable: no console window is
        * created when it is launched. Console output (stdout/stderr) is lost in

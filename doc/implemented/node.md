@@ -19,7 +19,7 @@ work on another. Missing or different behaviour is recorded under
 | Module | Page | Notes |
 | --- | --- | --- |
 | `fs` | [fs](./node/fs.md) | synchronous API only |
-| `fs/promises` | [fs/promises](./node/fs-promises.md) | wraps the synchronous API in settled promises |
+| `fs/promises` | [fs/promises](./node/fs-promises.md) | reactor-driven file and `FileHandle` operations on the async I/O pool |
 | `path` | [path](./node/path.md) | `path.<name>(...)` namespace calls |
 | `os` | [os](./node/os.md) | `os.<name>(...)` namespace calls |
 | `process` | [process](./node/process.md) | object: methods and properties |

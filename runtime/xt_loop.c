@@ -33,6 +33,10 @@
 
 #define XT_LOOP_MAX_WATCHERS 1024
 
+/* Fallback wait bound while offloaded I/O is outstanding; the completion
+ * channel normally wakes `select` immediately. */
+#define XT_ASYNC_POLL_MS 10
+
 typedef struct {
   int fd;
   int events;
@@ -294,6 +298,11 @@ xt_value xt_clear_immediate(int32_t argc, xt_value *argv) {
   return xt_clear_timeout(argc, argv);
 }
 
+/* Reset to 1 while the reactor is dispatching handlers. Reusing a removed slot
+ * mid-dispatch would make the new watcher observe the current `fd_set`, so a
+ * registration from inside a callback appends instead. */
+static int xt_loop_dispatching = 0;
+
 int xt_loop_add(int fd, int events, xt_io_handler handler, void *userdata) {
   if (fd < 0 || !handler) return -1;
   xt_loop_gc_register();
@@ -303,6 +312,21 @@ int xt_loop_add(int fd, int events, xt_io_handler handler, void *userdata) {
     existing->handler = handler;
     existing->userdata = userdata;
     return 0;
+  }
+  /* Reuse a slot left by a removed watcher (the async pool toggles its wakeup
+   * descriptor on and off, and sockets are opened and closed repeatedly). */
+  if (!xt_loop_dispatching) {
+    for (int i = 0; i < xt_loop_watcher_count; i++) {
+      xt_loop_watcher *slot = &xt_loop_watchers[i];
+      if (slot->active) continue;
+      slot->fd = fd;
+      slot->events = events;
+      slot->handler = handler;
+      slot->userdata = userdata;
+      slot->active = 1;
+      xt_loop_active_count++;
+      return 0;
+    }
   }
   if (xt_loop_watcher_count >= XT_LOOP_MAX_WATCHERS) return -1;
   xt_loop_watcher *watcher = &xt_loop_watchers[xt_loop_watcher_count++];
@@ -337,7 +361,8 @@ void xt_loop_set_main(xt_main_loop_fn fn) { xt_loop_main = fn; }
 int xt_loop_poll(int timeout_ms) {
   int has_fds = xt_loop_active_count > 0;
   int64_t next_due = xt_timer_next_due();
-  if (!has_fds && next_due < 0) {
+  int async_pending = xt_async_pending() > 0;
+  if (!has_fds && next_due < 0 && !async_pending) {
     xt_drain_microtasks();
     return 0;
   }
@@ -350,11 +375,15 @@ int xt_loop_poll(int timeout_ms) {
     if (delta > 100000000) delta = 100000000;
     if (wait_ms < 0 || delta < (int64_t)wait_ms) wait_ms = (int)delta;
   }
+  /* The completion channel normally wakes `select` immediately; polling every
+   * few milliseconds keeps progress even if it could not be registered. */
+  if (async_pending && (wait_ms < 0 || wait_ms > XT_ASYNC_POLL_MS)) wait_ms = XT_ASYNC_POLL_MS;
 
   /* Timers only: sleep, then run whatever is due. */
   if (!has_fds) {
     xt_loop_sleep_ms(wait_ms);
     xt_timer_run_due();
+    xt_async_poll();
     xt_drain_microtasks();
     return (int)(xt_loop_active_count + xt_timer_active_count());
   }
@@ -372,7 +401,9 @@ int xt_loop_poll(int timeout_ms) {
     if (watcher->fd > maxFd) maxFd = watcher->fd;
   }
   if (maxFd < 0) {
+    xt_loop_sleep_ms(wait_ms);
     xt_timer_run_due();
+    xt_async_poll();
     xt_drain_microtasks();
     return (int)(xt_loop_active_count + xt_timer_active_count());
   }
@@ -390,7 +421,13 @@ int xt_loop_poll(int timeout_ms) {
 
   if (ready > 0) {
     /* Collect the ready watchers first: handlers may add/remove descriptors. */
-    for (int i = 0; i < xt_loop_watcher_count; i++) {
+    int previousDispatching = xt_loop_dispatching;
+    xt_loop_dispatching = 1;
+    /* Snapshot the table: a handler may register a new descriptor, and it must
+     * wait for the next iteration rather than being tested against this
+     * iteration's `fd_set`. */
+    int dispatchCount = xt_loop_watcher_count;
+    for (int i = 0; i < dispatchCount; i++) {
       xt_loop_watcher *watcher = &xt_loop_watchers[i];
       if (!watcher->active) continue;
       int events = 0;
@@ -398,9 +435,11 @@ int xt_loop_poll(int timeout_ms) {
       if ((watcher->events & XT_IO_WRITE) && FD_ISSET(watcher->fd, &writeSet)) events |= XT_IO_WRITE;
       if (events) watcher->handler(watcher->userdata, events);
     }
+    xt_loop_dispatching = previousDispatching;
   }
 
   xt_timer_run_due();
+  xt_async_poll();
   xt_drain_microtasks();
   return (int)(xt_loop_active_count + xt_timer_active_count());
 }
@@ -417,4 +456,6 @@ void xt_run_event_loop(void) {
   }
 }
 
-int xt_loop_has_work(void) { return xt_loop_active_count > 0 || xt_timer_active_count() > 0; }
+int xt_loop_has_work(void) {
+  return xt_loop_active_count > 0 || xt_timer_active_count() > 0 || xt_async_pending() > 0;
+}

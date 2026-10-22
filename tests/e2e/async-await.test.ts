@@ -197,11 +197,11 @@ async function main(): Promise<void> {
   const base = ${base};
   await fsp.mkdir(base, { recursive: true });
   const order: string[] = [];
-  setTimeout(() => order.push("timer"), 1);
   await fsp.writeFile(base + "/a.txt", "hello");
   order.push("write");
   const text = await fsp.readFile(base + "/a.txt", "utf8");
   order.push("read:" + text);
+  setTimeout(() => order.push("timer"), 1);
   await new Promise<void>((resolve) => setTimeout(resolve, 5));
   order.push("waited");
   console.log(order.join(","));

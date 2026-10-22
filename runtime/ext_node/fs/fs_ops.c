@@ -33,6 +33,22 @@ xt_value xt_node_exists(int32_t argc, xt_value *argv) {
    `readdirSync(path, { withFileTypes: true })` reuse the same closures. */
 static void xt_fs_define_stat_method(xt_value object, const char *name, unsigned int mode);
 
+/* Build the Node `Dirent`-shaped object from an already-known mode. The async
+   promise layer collects the mode on its worker so it does not have to `stat`
+   the entry again on the main thread. */
+xt_value xt_node_dirent_named(const char *name, unsigned int mode) {
+  xt_value object = xt_object_new();
+  xt_object_set(object, xt_string_from_cstr("name"), xt_string_from_cstr(name));
+  xt_fs_define_stat_method(object, "isFile", mode);
+  xt_fs_define_stat_method(object, "isDirectory", mode);
+  xt_fs_define_stat_method(object, "isSymbolicLink", mode);
+  xt_fs_define_stat_method(object, "isFIFO", mode);
+  xt_fs_define_stat_method(object, "isSocket", mode);
+  xt_fs_define_stat_method(object, "isBlockDevice", mode);
+  xt_fs_define_stat_method(object, "isCharacterDevice", mode);
+  return object;
+}
+
 /* Build the Node `Dirent`-shaped object (`name` plus stat predicates) for a
    single directory entry. Types come from `lstat`, matching Node's `d_type`
    based `Dirent` (a symlink reports `isSymbolicLink()` true). */
@@ -46,17 +62,7 @@ xt_value xt_node_dirent_result(const char *dir, const char *name) {
     if (xt_fs_lstat_fn(full, &info) == 0) mode = (unsigned int)info.st_mode;
     free(full);
   }
-
-  xt_value object = xt_object_new();
-  xt_object_set(object, xt_string_from_cstr("name"), xt_string_from_cstr(name));
-  xt_fs_define_stat_method(object, "isFile", mode);
-  xt_fs_define_stat_method(object, "isDirectory", mode);
-  xt_fs_define_stat_method(object, "isSymbolicLink", mode);
-  xt_fs_define_stat_method(object, "isFIFO", mode);
-  xt_fs_define_stat_method(object, "isSocket", mode);
-  xt_fs_define_stat_method(object, "isBlockDevice", mode);
-  xt_fs_define_stat_method(object, "isCharacterDevice", mode);
-  return object;
+  return xt_node_dirent_named(name, mode);
 }
 
 /* Entries accumulate in an `xt_array`, not a raw `xt_value` buffer: the

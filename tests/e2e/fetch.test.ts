@@ -53,6 +53,11 @@ const server = createServer((req, res) => {
   } else if (url === "/cookies") {
     res.writeHead(200, { "set-cookie": ["a=1", "b=2"], "content-type": "text/plain" });
     res.end("cookies");
+  } else if (url === "/slow") {
+    setTimeout(() => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("slow");
+    }, 150);
   } else if (url === "/bytes") {
     res.writeHead(200, { "content-type": "application/octet-stream" });
     res.end(Buffer.from([0, 1, 2, 255]));
@@ -267,6 +272,26 @@ describeWithClang("fetch builtin", () => {
       "rejected true",
       "missing true",
     ]);
+  });
+
+  it("keeps the reactor running while a request is in flight", () => {
+    const base = baseUrl();
+    const { status, stdout } = run(`
+      async function main() {
+        const order: string[] = [];
+        const slow = fetch("${base}/slow");
+        slow.then(async (res) => order.push("response:" + (await res.text())));
+        setTimeout(() => order.push("timer"), 10);
+        await slow;
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        console.log(order.join(","));
+      }
+      main();
+    `);
+    expect(status).toBe(0);
+    // A blocking client would finish the 150ms response before the 10ms timer
+    // is even scheduled; a reactor-driven one fires the timer first.
+    expect(stdout.trim()).toBe("timer,response:slow");
   });
 
   it("is usable as a first-class value", () => {

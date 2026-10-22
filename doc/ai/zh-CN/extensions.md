@@ -35,7 +35,7 @@ xbintsc run app.ts --ext node
 | 模块 | 说明 |
 | --- | --- |
 | `fs` | **仅同步 API**（`readFileSync`、`writeFileSync` 等）；`fs/promises` 是独立模块 |
-| `fs/promises` | 基于 Promise 的文件 API |
+| `fs/promises` | 基于 Promise 的文件 API；阻塞 I/O 跑在异步 I/O 线程池上并在 reactor 上 settle |
 | `path` | 同时接入命名空间分发，`path.join(...)` 可用 |
 | `os` | |
 | `process` | `process.cwd()`、`argv`、`env` 等；也接入命名空间分发 |
@@ -53,8 +53,9 @@ xbintsc run app.ts --ext node
 [../../zh-CN/unimplemented/node.md](../../zh-CN/unimplemented/node.md)。
 
 在 `net`/`http` 上搭东西之前，先记住运行时模型：事件循环在**程序主体之后**才运行，
-但 `async`/`await` 现在会在 pending Promise 上挂起，因此由套接字回调 settle 的 Promise
-可以被 await。见 [language-support.md](./language-support.md)。
+但 `async`/`await` 会在 pending Promise 上挂起，因此由套接字回调、定时器或 offload 的
+文件/HTTP job settle 的 Promise 都可以 await。`net.connect` 本身仍是阻塞的。见
+[language-support.md](./language-support.md)。
 
 ### `gui` —— HTML/CSS 窗口
 

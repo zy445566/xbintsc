@@ -17,7 +17,7 @@ TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编
 | 模块 | 页面 | 说明 |
 | --- | --- | --- |
 | `fs` | [fs](./node/fs.md) | 仅同步 API |
-| `fs/promises` | [fs/promises](./node/fs-promises.md) | 把同步 API 包进已 settle 的 Promise |
+| `fs/promises` | [fs/promises](./node/fs-promises.md) | 由 reactor 驱动、跑在异步 I/O 线程池上的文件与 `FileHandle` 操作 |
 | `path` | [path](./node/path.md) | `path.<name>(...)` 命名空间调用 |
 | `os` | [os](./node/os.md) | `os.<name>(...)` 命名空间调用 |
 | `process` | [process](./node/process.md) | 对象：方法与属性 |

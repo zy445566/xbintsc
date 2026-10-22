@@ -1,10 +1,11 @@
 /* -- TCP socket helpers --------------------------------------------------- */
 
 /*
- * `fetch` performs a conventional blocking request/response exchange: connect,
- * write the request, read until the response is complete (or the peer closes).
- * The socket carries a receive timeout so a stalled server cannot hang the
- * program forever; the timeout surfaces as a rejected promise.
+ * `fetch` performs a conventional blocking request/response exchange on an
+ * async I/O worker: connect, write the request, read until the response is
+ * complete (or the peer closes). The socket carries a receive timeout so a
+ * stalled server cannot pin a worker forever; the timeout surfaces as a
+ * rejected promise.
  */
 #define XT_FETCH_TIMEOUT_SECONDS 30
 

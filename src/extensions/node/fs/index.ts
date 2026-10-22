@@ -1,8 +1,9 @@
 /**
  * Node's `fs` module: synchronous file and directory operations backed by
- * `runtime/ext_node/fs`. Asynchronous callbacks are not supported (xbintsc has
- * no event loop), so the API is the `*Sync` surface plus `watch`/`watchFile`
- * (which return API-shaped watchers that never emit).
+ * `runtime/ext_node/fs`, plus the `fs.promises` namespace (implemented in
+ * `async_*.c` on top of the asynchronous I/O pool). The callback-style
+ * `readFile`/`writeFile` forms are not supported; `*Sync` and `fs.promises` are.
+ * `watch`/`watchFile` return API-shaped watchers that never emit.
  *
  * `fs.constants` and `fs.promises` are exposed as value getters, so both
  * `import { constants } from "fs"` and the `fs.constants.F_OK` property form
@@ -40,6 +41,14 @@ export const fsModule: NodeModule = {
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/watch.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/constants.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/streams.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_job.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_worker.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_worker_dir.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_worker_fd.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_complete.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_api.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/async_fh.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/promises.c"),
   ],
   builtins: () => builtins,
   exports: () => exports,

@@ -32,4 +32,13 @@
 #include "parts/buffer-bridge.inc"
 #include "parts/encoding.inc"
 
+/* One directory entry collected by the asynchronous worker (see async_job.h).
+ * `name` is relative to the scanned directory, `bare` is the entry name alone.
+ * Defined here because both the sync `Dir` and the async promise layer use it. */
+typedef struct {
+  char *name;
+  char *bare;
+  unsigned int mode;
+} xt_fs_entry;
+
 #endif /* XT_NODE_FS_COMMON_H */

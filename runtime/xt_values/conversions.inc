@@ -94,7 +94,7 @@ xt_value xt_to_string(xt_value v) {
   }
   if (XT_IS_FUNCTION(v)) return xt_string_from_cstr("function () { [native code] }");
   if (xt_is_symbol(v)) {
-    xt_throw(xt_string_from_cstr("TypeError: Cannot convert a Symbol value to a string"));
+    xt_throw(xt_error_from_message("TypeError: Cannot convert a Symbol value to a string"));
   }
   if (XT_IS_OBJECT(v) &&
       ((xt_object *)XT_GET_PTR(v))->header.kind == XT_OBJECT_KIND_ERROR) {

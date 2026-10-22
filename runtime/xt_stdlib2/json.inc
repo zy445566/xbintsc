@@ -232,7 +232,7 @@ static void xt_json_stringify_object(xt_value value, xt_value indent, int depth,
   if (!array) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
   int any = 0;
   for (uint32_t i = 0; i < array->length; i++) {
-    xt_value item = xt_object_get(value, array->items[i]);
+    xt_value item = xt_get(value, array->items[i]);
     if (item != XT_UNDEFINED && !XT_IS_FUNCTION(item) && !xt_is_symbol(item)) { any = 1; break; }
   }
   if (!any) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
@@ -241,7 +241,7 @@ static void xt_json_stringify_object(xt_value value, xt_value indent, int depth,
   int written = 0;
   for (uint32_t i = 0; i < array->length; i++) {
     xt_value key = array->items[i];
-    xt_value item = xt_object_get(value, key);
+    xt_value item = xt_get(value, key);
     /* `undefined`, functions and symbols are omitted from objects. */
     if (item == XT_UNDEFINED || XT_IS_FUNCTION(item) || xt_is_symbol(item)) continue;
     if (written > 0) *out = xt_add(*out, xt_string_from_cstr(","));
@@ -338,6 +338,152 @@ static void xt_json_stringify_value(xt_value value, xt_value indent, int depth, 
   *out = xt_add(*out, xt_string_from_cstr("null"));
 }
 
+/* -- replacer-aware stringify -------------------------------------------- */
+/*
+ * The replacer overload needs the holder and key of every value, so it gets a
+ * separate walk instead of complicating the fast path. It also calls `toJSON`
+ * and filters object keys through an array replacer.
+ */
+typedef struct {
+  xt_value replacer;
+  xt_value indent;
+  xt_value *path;
+  uint32_t path_count;
+  uint32_t path_capacity;
+} xt_json_replacer_context;
+
+static void xt_json_replacer_enter(xt_json_replacer_context *ctx, xt_value value) {
+  for (uint32_t i = 0; i < ctx->path_count; i++) {
+    if (ctx->path[i] == value) {
+      xt_value message = xt_string_from_cstr("Converting circular structure to JSON");
+      xt_throw(xt_type_error_ctor(1, &message));
+    }
+  }
+  if (ctx->path_count >= ctx->path_capacity) {
+    uint32_t capacity = ctx->path_capacity == 0 ? 16 : ctx->path_capacity * 2;
+    xt_value *path = (xt_value *)realloc(ctx->path, sizeof(xt_value) * capacity);
+    if (!path) abort();
+    ctx->path = path;
+    ctx->path_capacity = capacity;
+  }
+  ctx->path[ctx->path_count++] = value;
+}
+
+static void xt_json_replacer_leave(xt_json_replacer_context *ctx) {
+  if (ctx->path_count > 0) ctx->path_count--;
+}
+
+static void xt_json_replacer_indent(xt_json_replacer_context *ctx, int depth, xt_value *out) {
+  xt_json_indent(out, ctx->indent, depth);
+}
+
+static int xt_json_replacer_allows(xt_value replacer, xt_value key) {
+  if (!XT_IS_ARRAY(replacer)) return 1;
+  xt_array *allowed = xt_as_array(replacer);
+  for (uint32_t i = 0; i < allowed->length; i++) {
+    xt_value item = allowed->items[i];
+    if (!XT_IS_STRING(item) && !XT_IS_NUMBER(item)) continue;
+    xt_value text = xt_to_string(item);
+    xt_string *a = xt_as_string(text);
+    xt_string *b = xt_as_string(key);
+    if (a && b && xt_string_equals(a, b)) return 1;
+  }
+  return 0;
+}
+
+static int xt_json_replacer_write(xt_json_replacer_context *ctx, xt_value holder, xt_value key,
+                                  int depth, xt_value *out);
+
+static int xt_json_replacer_container(xt_json_replacer_context *ctx, xt_value value, int depth,
+                                      xt_value *out) {
+  xt_json_replacer_enter(ctx, value);
+  if (XT_IS_ARRAY(value)) {
+    xt_array *array = xt_as_array(value);
+    *out = xt_add(*out, xt_string_from_cstr("["));
+    for (uint32_t i = 0; i < array->length; i++) {
+      if (i > 0) *out = xt_add(*out, xt_string_from_cstr(","));
+      xt_json_replacer_indent(ctx, depth + 1, out);
+      char keyBuffer[16];
+      snprintf(keyBuffer, sizeof(keyBuffer), "%u", i);
+      xt_value temporary = xt_string_from_cstr("");
+      int wrote = xt_json_replacer_write(ctx, value, xt_string_from_cstr(keyBuffer), depth + 1,
+                                         &temporary);
+      *out = xt_add(*out, wrote ? temporary : xt_string_from_cstr("null"));
+    }
+    xt_json_replacer_indent(ctx, depth, out);
+    xt_json_replacer_leave(ctx);
+    *out = xt_add(*out, xt_string_from_cstr("]"));
+    return 1;
+  }
+
+  xt_value keys = xt_object_keys(value);
+  xt_array *list = xt_as_array(keys);
+  *out = xt_add(*out, xt_string_from_cstr("{"));
+  int written = 0;
+  if (list) {
+    for (uint32_t i = 0; i < list->length; i++) {
+      xt_value childKey = list->items[i];
+      if (!xt_json_replacer_allows(ctx->replacer, childKey)) continue;
+      xt_value temporary = xt_string_from_cstr("");
+      int wrote = xt_json_replacer_write(ctx, value, childKey, depth + 1, &temporary);
+      if (!wrote) continue;
+      if (written > 0) *out = xt_add(*out, xt_string_from_cstr(","));
+      written++;
+      xt_json_replacer_indent(ctx, depth + 1, out);
+      *out = xt_add(*out, xt_string_from_cstr("\""));
+      *out = xt_add(*out, childKey);
+      *out = xt_add(*out, xt_string_from_cstr("\":"));
+      if (xt_json_indented(ctx->indent)) *out = xt_add(*out, xt_string_from_cstr(" "));
+      *out = xt_add(*out, temporary);
+    }
+  }
+  xt_json_replacer_indent(ctx, depth, out);
+  xt_json_replacer_leave(ctx);
+  *out = xt_add(*out, xt_string_from_cstr("}"));
+  return 1;
+}
+
+static int xt_json_replacer_write(xt_json_replacer_context *ctx, xt_value holder, xt_value key,
+                                  int depth, xt_value *out) {
+  xt_value value = xt_get(holder, key);
+  if (XT_IS_FUNCTION(ctx->replacer)) {
+    xt_value args[2] = {key, value};
+    value = xt_call_with_this(ctx->replacer, holder, 2, args);
+  }
+  if (xt_is_date(value)) {
+    value = xt_call_method(value, xt_string_from_cstr("toJSON"), 1, &key);
+  } else if (XT_IS_ARRAY(value) ||
+             (XT_IS_OBJECT(value) &&
+              (((xt_object *)XT_GET_PTR(value))->header.kind == XT_OBJECT_KIND_OBJECT ||
+               ((xt_object *)XT_GET_PTR(value))->header.kind == XT_OBJECT_KIND_ERROR))) {
+    xt_value toJSON = XT_IS_ARRAY(value) ? xt_get(value, xt_string_from_cstr("toJSON"))
+                                         : xt_object_get(value, xt_string_from_cstr("toJSON"));
+    if (XT_IS_FUNCTION(toJSON)) {
+      xt_value args[1] = {key};
+      value = xt_call_with_this(toJSON, value, 1, args);
+    }
+  }
+  if (value == XT_UNDEFINED || XT_IS_FUNCTION(value) || xt_is_symbol(value)) return 0;
+  if (XT_IS_BIGINT(value)) {
+    xt_value message = xt_string_from_cstr("Do not know how to serialize a BigInt");
+    xt_throw(xt_type_error_ctor(1, &message));
+  }
+  if (XT_IS_ARRAY(value)) return xt_json_replacer_container(ctx, value, depth, out);
+  if (XT_IS_OBJECT(value)) {
+    int kind = ((xt_object *)XT_GET_PTR(value))->header.kind;
+    if (kind == XT_OBJECT_KIND_MAP || kind == XT_OBJECT_KIND_SET ||
+        kind == XT_OBJECT_KIND_REGEXP || kind == XT_OBJECT_KIND_PROMISE ||
+        kind == XT_OBJECT_KIND_GENERATOR || kind == XT_OBJECT_KIND_ITERATOR ||
+        kind == XT_OBJECT_KIND_ASYNC) {
+      *out = xt_add(*out, xt_string_from_cstr("{}"));
+      return 1;
+    }
+    return xt_json_replacer_container(ctx, value, depth, out);
+  }
+  xt_json_stringify_value(value, ctx->indent, depth, out);
+  return 1;
+}
+
 xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
   xt_value value = xt_arg_at(argc, argv, 0);
   if (value == XT_UNDEFINED || XT_IS_FUNCTION(value) || xt_is_symbol(value)) return XT_UNDEFINED;
@@ -345,6 +491,16 @@ xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
    * the indentation is argv[2]; reading argv[1] as `space` silently ignored
    * `JSON.stringify(value, null, 2)`. */
   xt_value indent = xt_json_space_unit(xt_arg_at(argc, argv, 2));
+  xt_value replacer = xt_arg_at(argc, argv, 1);
+  if (XT_IS_FUNCTION(replacer) || XT_IS_ARRAY(replacer)) {
+    xt_json_replacer_context context = {replacer, indent, NULL, 0, 0};
+    xt_value wrapper = xt_object_new();
+    xt_object_set(wrapper, xt_string_from_cstr(""), value);
+    xt_value out = xt_string_from_cstr("");
+    int wrote = xt_json_replacer_write(&context, wrapper, xt_string_from_cstr(""), 0, &out);
+    free(context.path);
+    return wrote ? out : XT_UNDEFINED;
+  }
   /* A caught circular-structure error longjmps past xt_json_leave; start every
    * top-level serialization with a clean path. */
   xt_json_path_count = 0;

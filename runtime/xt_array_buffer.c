@@ -8,9 +8,10 @@
  * order and the optional `littleEndian` argument follow ECMAScript.
  *
  * Keeping both as ordinary objects means the garbage collector, property
- * lookup and the rest of the runtime need no new object kind. Typed arrays do
- * not yet share the buffer: `new Uint8Array(buffer)` remains future work, and
- * this document does not claim view semantics for them.
+ * lookup and the rest of the runtime need no new object kind. Typed arrays
+ * are buffer-backed views over this object and share its bytes; `new
+ * Uint8Array(buffer, offset, length)`, `.buffer` and `subarray` are handled by
+ * xt_typed_array.c.
  */
 
 #include "rt_internal.h"
@@ -57,6 +58,25 @@ xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv) {
   xt_value buffer = xt_ab_new((uint32_t)length);
   xt_ab_install(buffer, "slice", (void *)xt_ab_slice);
   return buffer;
+}
+
+int xt_is_array_buffer(xt_value value) { return xt_ab_is_buffer(value); }
+
+uint32_t xt_array_buffer_byte_length(xt_value value) {
+  if (!xt_ab_is_buffer(value)) return 0;
+  return (uint32_t)xt_to_number(xt_get(value, xt_string_from_cstr("byteLength")));
+}
+
+uint8_t xt_array_buffer_get_byte(xt_value buffer, uint32_t index) {
+  xt_value data = xt_ab_data(buffer);
+  if (!XT_IS_ARRAY(data)) return 0;
+  return (uint8_t)xt_to_int32(xt_get(data, xt_number((double)index)));
+}
+
+void xt_array_buffer_set_byte(xt_value buffer, uint32_t index, uint8_t value) {
+  xt_value data = xt_ab_data(buffer);
+  if (!XT_IS_ARRAY(data)) return;
+  xt_set(data, xt_number((double)index), xt_number((double)value));
 }
 
 static xt_value xt_ab_slice(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {

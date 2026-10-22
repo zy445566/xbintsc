@@ -103,10 +103,10 @@
 | --- | --- |
 | `subarray` | ~ 返回副本，而非共享缓冲区上的视图 |
 | `keys` / `values` / `entries` | ~ 返回数组，而非迭代器对象 |
-| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` 语义 | ✗ 无底层缓冲区类型；`.byteOffset` 恒为 0 |
+| `ArrayBuffer` / `DataView` / `.buffer` / `.byteOffset` 语义 | ~ 已有 `ArrayBuffer` 与 `DataView`（默认大端、`slice`、`isView`）；类型化数组仍无共享缓冲区，也不暴露 `.buffer` |
 | `BigInt64Array` / `BigUint64Array` | ✗ 未实现 |
 | `instanceof` 内建构造器 | ✓ `instanceof Array` / `Object` / `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Error` 家族 / 类型化数组都能按名字识别，**也能通过一等公民构造器值判断**（`const A = Array; x instanceof A`）；构造器可保存、传参、取别名、调用与 `new` |
-| 基于 `Buffer` / `ArrayBuffer` 的类型化数组视图 | ✗ 构造器仅能从长度 / 数组样 / 类型化数组复制 |
+| 基于 `Buffer` / `ArrayBuffer` 的类型化数组视图 | ✗ 构造器仅能从长度 / 数组样 / 类型化数组复制；`DataView` 可以共享 `ArrayBuffer` 的字节 |
 
 ---
 
@@ -199,7 +199,7 @@
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | 非移动标记-清扫回收器（在 `xt_alloc` 之后）：显式根、子系统根提供者与保守 C 栈扫描。单线程、stop-the-world；无移动/压缩与分代 |
 | 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 报告声明的 arity，但调用不做校验 |
-| `async` / `await` | 已在栈式协程上真实挂起；但对**已 settle** 的值 `await` 会同步继续，而不是像规范要求那样排入微任务，因此与 pending `.then` 回调的交错顺序可能不同。顶层 `await` 会阻塞事件循环等待，而不是让出模块主体。`fs/promises` 仍在 settle 前同步完成 I/O；`fetch` 是阻塞的；不支持 `async` 生成器 |
+| `async` / `await` | 已在栈式协程上真实挂起；`await` 总会排入一次微任务（非 Promise 与已 settle 的 Promise 也一样），因此与 pending `.then` 回调的交错顺序符合规范。顶层 `await` 会阻塞事件循环等待，而不是让出模块主体。`fs/promises` 仍在 settle 前同步完成 I/O；`fetch` 是阻塞的；不支持 `async` 生成器 |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
 | `Error.stack` | 仅函数级帧：每帧为 `at 名称 (文件:行)`，行号取自函数声明（最内层帧会更新为错误构造处）；没有列号，生成器 / `async` 函数体不产生帧（它们会切换栈） |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见第 4 节） |

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "../helpers.js";
+import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
 import { SyntaxKind, ModifierKind, type Node } from "../../src/ast/nodes.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -45,6 +46,15 @@ describe("parser", () => {
 
     const withBlock = first("const g = () => { return 1; };");
     expect(withBlock.declarationList.declarations[0].initializer.body.kind).toBe(SyntaxKind.Block);
+  });
+
+  it("reports deeply nested source instead of overflowing the JS stack", () => {
+    const depth = 20000;
+    const source = "console.log" + "(".repeat(depth) + "1" + ")".repeat(depth) + ";";
+    const { diagnostics } = parse(source);
+    expect(
+      diagnostics.some((diagnostic) => diagnostic.code === DiagnosticCode.NestingTooDeep),
+    ).toBe(true);
   });
 
   it("respects operator precedence and associativity", () => {

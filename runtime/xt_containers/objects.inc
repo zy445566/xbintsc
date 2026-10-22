@@ -68,13 +68,13 @@ static xt_value xt_object_proto_method(xt_value thisValue, xt_value env, int32_t
   if (!name) return XT_UNDEFINED;
   if (strcmp(name, "hasOwnProperty") == 0) {
     if (thisValue == XT_UNDEFINED || thisValue == XT_NULL) {
-      xt_throw(xt_string_from_cstr("TypeError: Cannot convert undefined or null to object"));
+      xt_throw(xt_error_from_message("TypeError: Cannot convert undefined or null to object"));
     }
     return xt_object_has_own(thisValue, xt_arg_at(argc, argv, 0));
   }
   if (strcmp(name, "propertyIsEnumerable") == 0) {
     if (thisValue == XT_UNDEFINED || thisValue == XT_NULL) {
-      xt_throw(xt_string_from_cstr("TypeError: Cannot convert undefined or null to object"));
+      xt_throw(xt_error_from_message("TypeError: Cannot convert undefined or null to object"));
     }
     /* Enumerability is not tracked; every own property is enumerable. */
     return xt_object_has_own(thisValue, xt_arg_at(argc, argv, 0));

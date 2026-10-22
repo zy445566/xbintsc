@@ -60,7 +60,7 @@ xt_value xt_string_static(xt_value name, int32_t argc, xt_value *argv) {
       int32_t code = xt_to_int32(argv[i]);
       if (code < 0 || code > 0x10FFFF) {
         free(out);
-        xt_throw(xt_string_from_cstr("RangeError: Invalid code point"));
+        xt_throw(xt_error_from_message("RangeError: Invalid code point"));
         return XT_UNDEFINED;
       }
       length += xt_utf8_encode((uint32_t)code, out + length);

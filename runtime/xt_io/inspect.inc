@@ -194,6 +194,96 @@ static void xt_inspect(xt_value v, FILE *out, int nested) {
   }
   if (XT_IS_OBJECT(v)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(v);
+    /* Map, Set, Date, RegExp, Promise, generators and iterators are heap
+     * objects with their own struct layouts, so treating them as `xt_object`
+     * and reading `count`/`properties` reads unrelated memory (it used to
+     * crash on a non-empty Map). Format each kind from its real fields. */
+    switch (obj->header.kind) {
+      case XT_OBJECT_KIND_MAP: {
+        xt_map *map = (xt_map *)obj;
+        int seenMap = xt_inspect_seen(map);
+        if (seenMap > 0) {
+          fprintf(out, "[Circular *%d]", seenMap);
+          return;
+        }
+        if (xt_inspect_depth >= XT_INSPECT_MAX_DEPTH) {
+          fputs("[Map]", out);
+          return;
+        }
+        xt_inspect_push(map);
+        fprintf(out, "Map(%u) {", map->count);
+        for (uint32_t i = 0; i < map->count; i++) {
+          fputs(i == 0 ? " " : ", ", out);
+          xt_inspect(map->keys[i], out, 1);
+          fputs(" => ", out);
+          xt_inspect(map->values[i], out, 1);
+        }
+        if (map->count > 0) fputc(' ', out);
+        fputc('}', out);
+        xt_inspect_pop();
+        return;
+      }
+      case XT_OBJECT_KIND_SET: {
+        xt_set_object *set = (xt_set_object *)obj;
+        int seenSet = xt_inspect_seen(set);
+        if (seenSet > 0) {
+          fprintf(out, "[Circular *%d]", seenSet);
+          return;
+        }
+        if (xt_inspect_depth >= XT_INSPECT_MAX_DEPTH) {
+          fputs("[Set]", out);
+          return;
+        }
+        xt_inspect_push(set);
+        fprintf(out, "Set(%u) {", set->count);
+        for (uint32_t i = 0; i < set->count; i++) {
+          fputs(i == 0 ? " " : ", ", out);
+          xt_inspect(set->values[i], out, 1);
+        }
+        if (set->count > 0) fputc(' ', out);
+        fputc('}', out);
+        xt_inspect_pop();
+        return;
+      }
+      case XT_OBJECT_KIND_DATE: {
+        /* `Date.prototype.toISOString` is the representation Node prints. */
+        xt_value text = xt_call_method(v, xt_string_from_cstr("toISOString"), 0, NULL);
+        xt_inspect(text, out, 0);
+        return;
+      }
+      case XT_OBJECT_KIND_REGEXP: {
+        xt_regexp *regexp = (xt_regexp *)obj;
+        fputc('/', out);
+        xt_inspect(regexp->source, out, 0);
+        fputc('/', out);
+        xt_inspect(regexp->flags, out, 0);
+        return;
+      }
+      case XT_OBJECT_KIND_PROMISE: {
+        int state = xt_promise_state_of(v);
+        fputs("Promise { ", out);
+        if (state == XT_PROMISE_PENDING) {
+          fputs("<pending>", out);
+        } else {
+          if (state == XT_PROMISE_REJECTED) fputs("<rejected> ", out);
+          xt_inspect(xt_promise_value_of(v), out, 1);
+        }
+        fputs(" }", out);
+        return;
+      }
+      case XT_OBJECT_KIND_GENERATOR:
+        fputs("Object [Generator] {}", out);
+        return;
+      case XT_OBJECT_KIND_ITERATOR:
+      case XT_OBJECT_KIND_ASYNC:
+        /* Internal helper objects have no useful user-visible shape. */
+        fputs("[object Object]", out);
+        return;
+      default:
+        /* XT_OBJECT_KIND_OBJECT and XT_OBJECT_KIND_ERROR share the property
+         * bag layout and fall through to the generic formatter below. */
+        break;
+    }
     int seen = xt_inspect_seen(obj);
     if (seen > 0) {
       fprintf(out, "[Circular *%d]", seen);

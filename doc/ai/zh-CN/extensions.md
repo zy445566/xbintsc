@@ -82,9 +82,10 @@ Windows 唯一不支持的：Windows 的 `gui.a` 不构建 FFmpeg，媒体槽位
 
 ## 第三方 npm 包
 
-没有被已启用扩展认领的裸说明符，会在 `node_modules` 里查找并**作为源码**打包。不是
-纯 ESM TypeScript/JavaScript 的包——或依赖 CommonJS、`require`、`__dirname`、循环
-依赖的包——都不会工作。`require()` 会被拒绝并提示改用 `import`。
+没有被已启用扩展认领的裸说明符，会在 `node_modules` 里查找并**作为源码**打包，
+CommonJS 包也在支持范围内（打包器会给它合成 `module`/`exports`，并降级其中的
+`require` 调用）。不支持的场景：动态 `require(<表达式>)`、依赖 `__dirname` 等 Node
+全局变量的包，以及循环依赖。自己源码里的 `require()` 会被拒绝并提示改用 `import`。
 
 实践结论：写 Node 程序时，正确做法通常就是开 `--ext node`；只有确实必要时才去依赖
 npm 包。

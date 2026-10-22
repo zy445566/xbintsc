@@ -294,6 +294,7 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   Socket: "xt_net_socket_ctor",
   Server: "xt_net_server_ctor",
   EventEmitter: "xt_event_emitter_ctor",
+  URLSearchParams: "xt_url_search_params_ctor",
   ...ERROR_CONSTRUCTORS,
   ...TYPED_ARRAY_CTORS,
 };

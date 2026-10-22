@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------------- */
 
 static void xt_throw_mixed_bigint(void) {
-  xt_throw(xt_string_from_cstr("TypeError: Cannot mix BigInt and other types, use explicit conversions"));
+  xt_throw(xt_error_from_message("TypeError: Cannot mix BigInt and other types, use explicit conversions"));
 }
 
 /* ToPrimitive for the operators: arrays/objects/functions stringify (their
@@ -143,7 +143,7 @@ xt_value xt_shr(xt_value a, xt_value b) {
 
 xt_value xt_ushr(xt_value a, xt_value b) {
   if (XT_IS_BIGINT(a) || XT_IS_BIGINT(b)) {
-    xt_throw(xt_string_from_cstr("TypeError: BigInts have no unsigned right shift, use >> instead"));
+    xt_throw(xt_error_from_message("TypeError: BigInts have no unsigned right shift, use >> instead"));
     return XT_UNDEFINED;
   }
   return xt_number((double)(uint32_t)((uint32_t)xt_to_int32(a) >> (xt_to_int32(b) & 31)));

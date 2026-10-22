@@ -364,8 +364,8 @@ V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改�
 
 ## 让 AI 使用 xbintsc
 
-这个编译器对语言子集很严格——类型只被擦除而从不检查、Node 模块需要
-`--ext node`、不支持直接 import 第三方 npm 包、字符串在 UTF-8 存储上按 UTF-16 语义计数、`await`
+这个编译器对语言子集很严格——类型只被擦除而从不检查、Node 内置模块需要
+`--ext node`、`node_modules` 里的 npm 包在构建期打包进二进制、字符串在 UTF-8 存储上按 UTF-16 语义计数、`await`
 只在 Promise 未 settle 时才真正挂起。如果 AI 把"TypeScript"当成"Node 能跑的 TypeScript"，写出来的
 代码就编译不过，因此文档正是按这类读者分层组织的：
 

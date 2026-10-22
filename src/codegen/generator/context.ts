@@ -187,8 +187,8 @@ export class GeneratorContext {
     if (!symbols.some((symbol) => this.usedAsValue(symbol))) return;
     this.diagnostics.error(
       DiagnosticCode.ModuleNotFound,
-      `module '${specifier}' is not supported: xbintsc can import built-in platform modules, ` +
-        "relative '.ts' files and ESM packages under node_modules; CommonJS packages are not supported",
+      `module '${specifier}' is not supported: expected a Node built-in ` +
+        "(with --ext node), a relative .ts/.js file, or a package in node_modules",
       declaration.moduleSpecifier,
       this.fileNameOf(declaration.moduleSpecifier),
     );

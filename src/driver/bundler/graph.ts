@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, relative } from "node:path";
-import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type Statement } from "../../ast/nodes.js";
+import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type NamedExports, type Statement } from "../../ast/nodes.js";
 import { bind } from "../../binder/binder.js";
 import { DiagnosticBag, DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { SourceFile } from "../../diagnostics/source.js";
@@ -16,12 +16,47 @@ import { classifyDependency } from "./resolve.js";
 import { collectRequireSites, isNodeModulesPath, usesCommonJS } from "./commonjs.js";
 import type { ModuleRecord } from "./types.js";
 
+/**
+ * True when an import has no runtime binding, so it is not a module edge:
+ * `import type { T } from "..."` or `import { type T } from "..."`. A
+ * side-effect-only import (`import "..."`) and an empty clause
+ * (`import {} from "..."`) both evaluate the module and *are* edges. Types are
+ * erased, so a type-only import must not pull the target into the bundle —
+ * and, in particular, must not turn the mutual `import type` references
+ * between source files into a circular-import error.
+ */
+function isTypeOnlyImport(declaration: ImportDeclaration): boolean {
+  const clause = declaration.importClause;
+  if (!clause) return false;
+  if (clause.isTypeOnly) return true;
+  if (clause.name) return false;
+  const bindings = clause.namedBindings;
+  if (!bindings) return true;
+  if (bindings.kind === SyntaxKind.NamespaceImport) return false;
+  // `import {} from "..."` is an empty clause but still evaluates the module.
+  return bindings.elements.length > 0 && bindings.elements.every((element) => element.isTypeOnly);
+}
+
+/** True when an export declaration only re-exports types. */
+function isTypeOnlyExport(declaration: ExportDeclaration): boolean {
+  if (declaration.isTypeOnly) return true;
+  const clause = declaration.exportClause;
+  if (!clause || clause.kind !== SyntaxKind.NamedExports) return false;
+  const elements = (clause as NamedExports).elements;
+  // `export {} from "..."` is a side-effect re-export, not a type-only one.
+  return elements.length > 0 && elements.every((element) => element.isTypeOnly);
+}
+
 function moduleSpecifierOf(statement: Statement): string | undefined {
   if (statement.kind === SyntaxKind.ImportDeclaration) {
-    return (statement as ImportDeclaration).moduleSpecifier.value;
+    const declaration = statement as ImportDeclaration;
+    if (isTypeOnlyImport(declaration)) return undefined;
+    return declaration.moduleSpecifier.value;
   }
   if (statement.kind === SyntaxKind.ExportDeclaration) {
-    const specifier = (statement as ExportDeclaration).moduleSpecifier;
+    const declaration = statement as ExportDeclaration;
+    if (isTypeOnlyExport(declaration)) return undefined;
+    const specifier = declaration.moduleSpecifier;
     if (specifier) return specifier.value;
   }
   return undefined;

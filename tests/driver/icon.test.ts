@@ -230,6 +230,20 @@ describe("resolveResourceCompiler", () => {
     expect(calls.some((call) => call.command === clang)).toBe(false);
   });
 
+  it("accepts llvm-rc's usage-only probe", () => {
+    // `llvm-rc` has no `--version`: `/?` prints its banner and exits 1. A probe
+    // that only accepted exit 0 used to fall through to windres.
+    const { runner, calls } = recordingRunner((command, args) => {
+      if (command !== LLVM_RC) return { status: 127 };
+      return args[0] === "/?"
+        ? { status: 1, stdout: "OVERVIEW: LLVM Resource Converter\n", stderr: "" }
+        : { status: 1 };
+    });
+    const clang = join(temporaryDirectory(), "bin", "clang");
+    expect(resolveResourceCompiler(runner, clang)).toEqual({ tool: LLVM_RC, kind: "llvm-rc" });
+    expect(calls.some((call) => call.command === LLVM_RC && call.args[0] === "/?")).toBe(true);
+  });
+
   it("returns undefined when nothing responds", () => {
     const { runner } = recordingRunner(() => ({ status: 127, stderr: "not found" }));
     expect(resolveResourceCompiler(runner, "clang")).toBeUndefined();
@@ -282,6 +296,10 @@ describe("ensureWindowsIconResource", () => {
     ensureWindowsIconResource(runner, cacheDir, icon, { tool: "windres", kind: "windres" });
     expect(calls[0]!.args).toContain("-O");
     expect(calls[0]!.args).toContain("coff");
+    // Without an explicit `-F`, windres defaults to pe-i386 and the x64 linker
+    // rejects the object with LNK1112.
+    expect(calls[0]!.args).toContain("-F");
+    expect(calls[0]!.args).toContain(process.arch === "arm64" ? "pe-aarch64" : "pe-x86-64");
   });
 
   it("throws when the resource compiler fails", () => {

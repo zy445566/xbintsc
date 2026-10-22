@@ -49,6 +49,17 @@ describe("parser module declarations", () => {
     expect(declaration.attributes).toEqual([{ name: "type", value: "json" }]);
   });
 
+  it("parses a side-effect-only import", () => {
+    const declaration = firstStatement('import "./setup";');
+    expect(declaration.kind).toBe(SyntaxKind.ImportDeclaration);
+    expect(declaration.importClause).toBeUndefined();
+    expect(declaration.moduleSpecifier.value).toBe("./setup");
+
+    const withAttributes = firstStatement('import "./d.json" with { type: "json" };');
+    expect(withAttributes.importClause).toBeUndefined();
+    expect(withAttributes.attributes).toEqual([{ name: "type", value: "json" }]);
+  });
+
   it("parses `export =` assignments", () => {
     const assignment = firstStatement("export = foo;");
     expect(assignment.kind).toBe(SyntaxKind.ExportAssignment);

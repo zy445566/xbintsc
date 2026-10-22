@@ -125,7 +125,7 @@ See [Unimplemented: standard library](../unimplemented/stdlib.md) for the full l
 | Node built-in modules | ✅ | only with `--ext node` — see [extensions.md](./extensions.md) |
 | Bare third-party npm packages | ⚠️ | resolved from `node_modules` and bundled as source (ESM and CommonJS); no runtime lookup, circular dependencies rejected |
 | `require()` / CommonJS | ⚠️ | rejected in your own source with a hint to use `import`; CommonJS packages inside `node_modules` are bundled |
-| Circular dependencies | 🚫 | |
+| Circular dependencies | 🚫 | value imports only; `import type` / `export type` are erased and never form an edge |
 | Live bindings | ⚠️ | imports and namespace members are snapshots |
 | `__dirname`, `__filename` | 🚫 | use `import.meta.dirname` / `import.meta.filename` |
 

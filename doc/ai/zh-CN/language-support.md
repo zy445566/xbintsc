@@ -120,7 +120,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | Node 内置模块 | ✅ | 仅在 `--ext node` 下——见 [extensions.md](./extensions.md) |
 | 裸第三方 npm 包 | ⚠️ | 从 `node_modules` 解析并作为源码打包（ESM 和 CommonJS 均支持）；运行时不做包查找，循环依赖会被拒绝 |
 | `require()` / CommonJS | ⚠️ | 在自己的源码里会被拒绝并提示改用 `import`；`node_modules` 内的 CommonJS 包由打包器处理 |
-| 循环依赖 | 🚫 | |
+| 循环依赖 | 🚫 | 仅限值导入；`import type` / `export type` 会被擦除，不构成依赖边 |
 | 实时绑定 | ⚠️ | 导入与命名空间成员都是快照 |
 | `__dirname`、`__filename` | 🚫 | 请使用 `import.meta.dirname` / `import.meta.filename` |
 

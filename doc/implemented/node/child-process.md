@@ -16,6 +16,11 @@ stdout/stderr are captured as UTF-8 strings.
 | `stdio: "inherit"` | share the parent's stdout/stderr instead of capturing |
 | `encoding` | accepted and ignored (output is always decoded as UTF-8) |
 
+On Windows the child is launched with `CreateProcess` and its stdout/stderr are
+drained through anonymous pipes by reader threads. No temporary files are used,
+so a locked-down `%TEMP%` cannot break `spawnSync`, and output larger than a pipe
+buffer cannot deadlock.
+
 ```ts
 import { spawnSync } from "child_process";
 

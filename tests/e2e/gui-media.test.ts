@@ -31,7 +31,15 @@ function mediaSrc(absolutePath: string): string {
 
 const resourcesAvailable = existsSync(moviePath) && existsSync(soundPath);
 
-describe.skipIf(!guiAvailable || !resourcesAvailable)("gui extension — media", () => {
+/**
+ * Windows builds the GUI archive without FFmpeg on purpose (see
+ * `doc/gui/known-issues.md`), so media elements are inert there and the suite
+ * would only report the expected `error` events as failures. It stays skipped
+ * even with `xbintsc_GUI_TESTS=1`.
+ */
+const mediaAvailable = process.platform !== "win32";
+
+describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui extension — media", () => {
   const harness = createGuiHarness();
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());

@@ -2,7 +2,7 @@
  * Import and export declaration parsing.
  */
 
-import { TokenKind } from "../lexer/token.js";
+import { TokenKind, type Token } from "../lexer/token.js";
 import {
   ModifierKind,
   SyntaxKind,
@@ -33,7 +33,11 @@ export const moduleMethods: ModuleMethods = {
   parseImportDeclaration(this: Parser): ImportDeclaration {
     const start = this.parseExpected(TokenKind.ImportKeyword).start;
     let importClause: ImportClause | undefined;
-    if (!this.at(TokenKind.StringLiteral)) {
+    let moduleToken: Token;
+    if (this.at(TokenKind.StringLiteral)) {
+      // `import "mod";` evaluates the module for its side effects only.
+      moduleToken = this.nextToken();
+    } else {
       const clauseStart = this.token.start;
       let isTypeOnly = false;
       if (this.at(TokenKind.TypeKeyword) && !this.lookAhead(1).precededByLineBreak) {
@@ -58,9 +62,9 @@ export const moduleMethods: ModuleMethods = {
         namedBindings = this.parseNamedImports();
       }
       importClause = { kind: SyntaxKind.ImportClause, name, namedBindings, isTypeOnly, start: clauseStart, end: namedBindings?.end ?? name?.end ?? clauseStart };
+      this.parseExpected(TokenKind.FromKeyword);
+      moduleToken = this.parseExpected(TokenKind.StringLiteral);
     }
-    this.parseExpected(TokenKind.FromKeyword);
-    const moduleToken = this.parseExpected(TokenKind.StringLiteral);
     const moduleSpecifier = this.stringLiteralFromToken(moduleToken);
     const attributes: { name: string; value: string }[] = [];
     if (this.at(TokenKind.WithKeyword) || (this.at(TokenKind.Identifier) && this.token.text === "assert")) {

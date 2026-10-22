@@ -177,8 +177,11 @@ does).
    `ICONDIRENTRY` pointing at the PNG payload); Vista+ accepts PNG-in-ICO.
 2. A `.rc` (`1 ICON "icon-<hash>.ico"`) is written next to it in the cache.
 3. `llvm-rc /fo app.res app.rc` (preferred, next to the resolved clang or on
-   `PATH`), else MinGW `windres app.rc -O coff -o app_res.o`. Override with
-   `xbintsc_RC`.
+   `PATH`), else MinGW `windres app.rc -O coff -F pe-x86-64 -o app_res.o`
+   (`pe-aarch64` on Windows arm64). `llvm-rc` is probed with `/?` — it has no
+   `--version` — and `windres` always gets an explicit target format: without
+   `-F` it emits a 32-bit `pe-i386` resource that the x64 linker rejects with
+   `LNK1112`. Override with `xbintsc_RC`.
 4. If no resource compiler exists, the build continues with the runtime icon only
    (a cosmetic feature never hard-fails a build).
 

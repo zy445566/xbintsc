@@ -4,7 +4,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, extname } from "node:path";
+import { dirname, extname, relative } from "node:path";
 import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type Statement } from "../../ast/nodes.js";
 import { bind } from "../../binder/binder.js";
 import { DiagnosticBag, DiagnosticCode } from "../../diagnostics/diagnostic.js";
@@ -36,15 +36,30 @@ export function loadGraph(
 ): ModuleRecord[] | undefined {
   const records = new Map<string, ModuleRecord>();
   const order: ModuleRecord[] = [];
-  const visiting = new Set<string>();
+  /* Modules on the current depth-first path, for cycle reporting. A module is
+   * added to `records` only after its dependencies finish, so a back edge is
+   * still "visiting" when it is reached. */
+  const stack: string[] = [];
   let counter = 0;
   let failed = false;
 
-  const load = (path: string): ModuleRecord | undefined => {
+  const load = (
+    path: string,
+    origin?: { readonly file: string; readonly statement: Statement },
+  ): ModuleRecord | undefined => {
     const existing = records.get(path);
     if (existing) return existing;
-    if (visiting.has(path)) {
-      diagnostics.error(DiagnosticCode.CodegenError, `Circular import detected involving '${path}'`);
+    if (stack.includes(path)) {
+      const start = stack.indexOf(path);
+      const cycle = [...stack.slice(start), path]
+        .map((entry) => relative(dirname(entryPath), entry))
+        .join(" -> ");
+      diagnostics.error(
+        DiagnosticCode.CircularDependency,
+        `Circular import detected: ${cycle}`,
+        origin?.statement,
+        origin?.file,
+      );
       failed = true;
       return undefined;
     }
@@ -53,7 +68,7 @@ export function loadGraph(
       failed = true;
       return undefined;
     }
-    visiting.add(path);
+    stack.push(path);
     const raw = sourceTextBytes(readFileSync(path, "utf8"));
     /* An extension may rewrite an imported asset (e.g. `.html`) into a TS
      * module before it is parsed. The core only sees the transformed text. */
@@ -68,7 +83,7 @@ export function loadGraph(
           error instanceof Error ? error.message : String(error),
         );
         failed = true;
-        visiting.delete(path);
+        stack.pop();
         return undefined;
       }
     }
@@ -90,7 +105,6 @@ export function loadGraph(
     // `require` / `module` / `exports` are only honoured inside `node_modules`,
     // so user code keeps its ESM-only diagnostic.
     record.commonjs = isNodeModulesPath(path) && usesCommonJS(bindResult);
-    records.set(path, record);
 
     for (const statement of sourceFile.statements) {
       const specifier = moduleSpecifierOf(statement);
@@ -107,7 +121,7 @@ export function loadGraph(
         failed = true;
         continue;
       }
-      load(dependency.path);
+      load(dependency.path, { file: path, statement });
     }
 
     // A CommonJS module's `require("...")` calls are dynamic import edges: the
@@ -118,7 +132,8 @@ export function loadGraph(
         if (dependency.kind === "file") load(dependency.path);
       }
     }
-    visiting.delete(path);
+    stack.pop();
+    records.set(path, record);
     order.push(record);
     return record;
   };

@@ -174,16 +174,18 @@ describe("bundleModules", () => {
     expect(result!.sourceFile.statements[0]!.kind).toBe(SyntaxKind.ImportDeclaration);
   });
 
-  it("terminates on a circular import graph", () => {
+  it("reports a circular import graph instead of failing in code generation", () => {
     const directory = writeFiles({
       "a.ts": 'import { b } from "./b";\nexport const a = 1;',
       "b.ts": 'import { a } from "./a";\nexport const b = 2;',
     });
     const { result, bag } = bundle(join(directory, "a.ts"));
-    // Modules are cached before their imports are walked, so a cycle is bundled
-    // once rather than recursing forever.
-    expect(bag.hasErrors).toBe(false);
-    expect(result?.moduleCount).toBe(2);
+    expect(result).toBeUndefined();
+    const cycle = bag.diagnostics.find((diagnostic) => diagnostic.code === DiagnosticCode.CircularDependency);
+    expect(cycle?.message).toContain("Circular import detected");
+    expect(cycle?.message).toContain("a.ts");
+    expect(cycle?.message).toContain("b.ts");
+    expect(cycle?.fileName?.endsWith("b.ts")).toBe(true);
   });
 
   it("resolves an extension-less import to a `.js` source", () => {

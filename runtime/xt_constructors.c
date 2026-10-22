@@ -126,7 +126,7 @@ xt_value xt_array_ctor(int32_t argc, xt_value *argv) {
   if (argc == 1 && XT_IS_NUMBER(argv[0])) {
     double length = xt_to_number(argv[0]);
     if (!(length >= 0) || floor(length) != length || length > 4294967295.0) {
-      xt_throw(xt_string_from_cstr("RangeError: Invalid array length"));
+      xt_throw(xt_error_from_message("RangeError: Invalid array length"));
       return XT_UNDEFINED;
     }
     xt_value array = xt_array_new(0, NULL);

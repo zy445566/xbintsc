@@ -198,7 +198,7 @@ static void xt_json_stringify_value(xt_value value, int indent, int depth, xt_va
     return;
   }
   if (XT_IS_BIGINT(value)) {
-    xt_throw(xt_string_from_cstr("TypeError: Do not know how to serialize a BigInt"));
+    xt_throw(xt_error_from_message("TypeError: Do not know how to serialize a BigInt"));
     return;
   }
   if (XT_IS_BOOL(value)) { *out = xt_add(*out, value == XT_TRUE ? xt_string_from_cstr("true") : xt_string_from_cstr("false")); return; }

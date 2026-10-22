@@ -51,8 +51,10 @@ in [doc/ai/language-support.md](./doc/ai/language-support.md).
   or a parse error. Never assume "TypeScript" means "what Node accepts".
 - **Types are erased, never checked.** Annotations, interfaces, generics and
   `as` do nothing at runtime — a type error in the source is not caught for you.
-- **Node modules need `--ext node`.** Bare third-party npm imports are not
-  supported.
+- **Node built-ins need `--ext node`; npm packages are bundled at build time.**
+  A bare import is resolved from `node_modules` and its sources (ESM or
+  CommonJS) are merged into the binary. There is no runtime package lookup, and
+  circular dependencies are rejected.
 - **Strings are UTF-8 storage with UTF-16 semantics.** `"é".length` is 1 and
   `"😀".length` is 2; `"中文😀".length` is 4. Indexing, `slice`, `indexOf`,
   `split`, `padStart` and `for...of` follow UTF-16 code units (or code points for
@@ -61,7 +63,9 @@ in [doc/ai/language-support.md](./doc/ai/language-support.md).
   stackful coroutine, so a promise settled from a timer or socket callback can be
   awaited. Awaiting an already-settled value continues synchronously, and
   `fs/promises` still blocks before settling.
-- **No CommonJS.** `require()` is rejected; use ESM `import`. No live bindings.
+- **No CommonJS in your own source.** `require()` is rejected; use ESM
+  `import`. Packages inside `node_modules` may be CommonJS and are bundled.
+  No live bindings.
 - **clang ≥ 16 is required.** clang 15 rejects the emitted IR (typed-pointer
   error `'@.str.0' defined with type '[6 x i8]*' but expected 'i8*'`). `xbintsc
   doctor` reports the resolved version.

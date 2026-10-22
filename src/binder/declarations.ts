@@ -98,9 +98,15 @@ export const declarationMethods: DeclarationMethods = {
         case SyntaxKind.FunctionDeclaration:
           this.declare((statement as FunctionDeclaration).name?.text ?? "(anonymous)", SymbolKind.Function, statement, scope, true);
           break;
-        case SyntaxKind.ClassDeclaration:
-          this.declare((statement as { name: Identifier }).name.text, SymbolKind.Class, statement, scope, false);
+        case SyntaxKind.ClassDeclaration: {
+          /* `export default class {}` has no binding name; the bundler maps the
+           * default export, so there is nothing to pre-declare. */
+          const className = (statement as { name?: Identifier }).name?.text;
+          if (className !== undefined) {
+            this.declare(className, SymbolKind.Class, statement, scope, false);
+          }
           break;
+        }
         case SyntaxKind.InterfaceDeclaration:
           this.declare((statement as { name: Identifier }).name.text, SymbolKind.Interface, statement, scope, false);
           break;
@@ -191,7 +197,12 @@ export const declarationMethods: DeclarationMethods = {
         statement.kind === SyntaxKind.FunctionDeclaration ||
         statement.kind === SyntaxKind.ClassDeclaration
       ) {
-        const name = (statement as { name: Identifier }).name.text;
+        const name = (statement as { name?: Identifier }).name?.text;
+        if (name === undefined) {
+          /* `export default function () {}` / `export default class {}` have no
+           * binding name; the default export is handled by the bundler. */
+          continue;
+        }
         if (!fn.scope.symbols.has(name)) {
           this.declare(name, statement.kind === SyntaxKind.FunctionDeclaration ? SymbolKind.Function : SymbolKind.Class, statement, fn.scope, statement.kind === SyntaxKind.FunctionDeclaration);
         }

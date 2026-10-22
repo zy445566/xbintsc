@@ -427,8 +427,9 @@ Check your environment with `xbintsc doctor`.
 ## Using xbintsc with an AI agent
 
 The compiler is strict about its language subset — types are erased rather than
-checked, Node modules need `--ext node`, third-party npm imports are unsupported,
-strings follow UTF-16 length/indexing over UTF-8 storage, and `await` only
+checked, Node built-ins need `--ext node`, packages from `node_modules` are
+bundled at build time, strings follow UTF-16 length/indexing over UTF-8 storage,
+and `await` only
 suspends on a pending promise. An agent that assumes "TypeScript" means "what
 Node accepts" will write code that does not compile, so the documentation is
 layered for exactly that reader:

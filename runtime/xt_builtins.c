@@ -87,7 +87,7 @@ static void xt_object_rest_copy(xt_value target, xt_value key, xt_value value, i
  */
 xt_value xt_object_rest(xt_value source, int32_t argc, xt_value *argv) {
   if (source == XT_UNDEFINED || source == XT_NULL) {
-    xt_throw(xt_string_from_cstr("TypeError: Cannot destructure null or undefined"));
+    xt_throw(xt_error_from_message("TypeError: Cannot destructure null or undefined"));
     return XT_UNDEFINED;
   }
   xt_value result = xt_object_new();
@@ -201,7 +201,7 @@ xt_value xt_is_finite(int32_t argc, xt_value *argv) {
 static _Noreturn void xt_throw_uri_error(const char *message) {
   char buffer[96];
   snprintf(buffer, sizeof(buffer), "URIError: %s", message);
-  xt_throw(xt_string_from_cstr(buffer));
+  xt_throw(xt_error_from_message(buffer));
   abort();
 }
 
@@ -381,6 +381,7 @@ XT_BUILTIN_TRAMPOLINE(xt_builtin_value_clearInterval, xt_clear_interval)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_setImmediate, xt_set_immediate)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_clearImmediate, xt_clear_immediate)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_queueMicrotask, xt_queue_microtask)
+XT_BUILTIN_TRAMPOLINE(xt_builtin_value_structuredClone, xt_structured_clone)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_fetch, xt_fetch)
 
 xt_value xt_in(xt_value key, xt_value value) {
@@ -467,7 +468,7 @@ xt_value xt_closure_call(xt_value value, int32_t argc, xt_value *argv) {
 
 xt_value xt_call_with_this(xt_value value, xt_value thisValue, int32_t argc, xt_value *argv) {
   if (!XT_IS_FUNCTION(value)) {
-    xt_throw(xt_string_from_cstr("TypeError: value is not a function"));
+    xt_throw(xt_error_from_message("TypeError: value is not a function"));
     return XT_UNDEFINED;
   }
   xt_function *function = (xt_function *)XT_GET_PTR(value);
@@ -496,7 +497,7 @@ xt_value xt_function_get_prototype(xt_value value) {
 
 xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv) {
   if (!XT_IS_FUNCTION(ctor)) {
-    xt_throw(xt_string_from_cstr("TypeError: constructor is not a function"));
+    xt_throw(xt_error_from_message("TypeError: constructor is not a function"));
     return XT_UNDEFINED;
   }
   xt_function *function = (xt_function *)XT_GET_PTR(ctor);

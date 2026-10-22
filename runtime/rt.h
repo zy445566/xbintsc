@@ -259,6 +259,8 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv);
 xt_value xt_fetch(int32_t argc, xt_value *argv);
 /** Construct a `TypeError` with one message argument (used by `fetch`). */
 xt_value xt_type_error_ctor(int32_t argc, xt_value *argv);
+/** Construct a `RangeError` with one message argument. */
+xt_value xt_range_error_ctor(int32_t argc, xt_value *argv);
 
 /* -- promises / async ----------------------------------------------------- */
 xt_value xt_promise_resolve(xt_value value);
@@ -334,6 +336,8 @@ xt_value xt_decode_uri(int32_t argc, xt_value *argv);
 xt_value xt_number_ctor(int32_t argc, xt_value *argv);
 xt_value xt_string_ctor(int32_t argc, xt_value *argv);
 xt_value xt_boolean_ctor(int32_t argc, xt_value *argv);
+/* Deep clone arrays/objects/Map/Set/Date/RegExp/typed arrays. */
+xt_value xt_structured_clone(int32_t argc, xt_value *argv);
 /** `key in obj` (the key is the left operand). */
 xt_value xt_in(xt_value key, xt_value obj);
 /** `delete obj[key]`; removes object properties, clears array elements. */

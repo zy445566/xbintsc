@@ -116,8 +116,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 相对路径多文件打包 | ✅ | `./helper.js` 会解析到 `helper.ts` |
 | `import * as ns`、默认导入与具名导入 | ✅ | |
 | Node 内置模块 | ✅ | 仅在 `--ext node` 下——见 [extensions.md](./extensions.md) |
-| 裸第三方 npm 包 | 🚫 | 只有当没有扩展认领该说明符时，`node_modules` 的 ESM 包才会作为源码打包 |
-| `require()` / CommonJS | 🚫 | 被拒绝，并提示改用 `import` |
+| 裸第三方 npm 包 | ⚠️ | 从 `node_modules` 解析并作为源码打包（ESM 和 CommonJS 均支持）；运行时不做包查找，循环依赖会被拒绝 |
+| `require()` / CommonJS | ⚠️ | 在自己的源码里会被拒绝并提示改用 `import`；`node_modules` 内的 CommonJS 包由打包器处理 |
 | 循环依赖 | 🚫 | |
 | 实时绑定 | ⚠️ | 导入与命名空间成员都是快照 |
 | `__dirname`、`__filename` | 🚫 | 请使用 `import.meta.dirname` / `import.meta.filename` |

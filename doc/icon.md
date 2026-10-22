@@ -160,7 +160,8 @@ does).
 
 - `src/cli/main.ts`: `--icon`, `--bundle`, `--app-name`, `--app-id`, `--config`,
   `--no-config`; merged with the config (`mergeAppConfig`).
-- `src/driver/compiler.ts`: `BuildOptions.icon` and `BuildOptions.app`.
+- `src/driver/options.ts`: `BuildOptions.icon` and `BuildOptions.app` (assembled
+  into the cache key by `src/driver/build-key.ts`).
   - The icon **content hash** and the packaging options are part of the
     executable `cacheKey`, so changing the icon rebuilds.
   - The icon object and (on win32) the resource object are appended to the link

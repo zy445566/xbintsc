@@ -12,8 +12,13 @@ describe("compiler version", () => {
   });
 
   it("is part of the incremental cache key", () => {
-    const source = readFileSync(new URL("../src/driver/compiler.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../src/driver/build-key.ts", import.meta.url), "utf8");
     expect(source).toMatch(/hashParts\(\[\s*COMPILER_VERSION,/);
+  });
+
+  it("keeps the version declaration out of compiler.ts", () => {
+    const source = readFileSync(new URL("../src/driver/compiler.ts", import.meta.url), "utf8");
+    expect(source).not.toMatch(/export const COMPILER_VERSION =/);
   });
 
   it("is printed by `xbintsc version`", async () => {

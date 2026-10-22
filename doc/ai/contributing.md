@@ -18,16 +18,12 @@ toolchain is required for anything that links a binary (see
 [troubleshooting.md](./troubleshooting.md)). `xbintsc emit` needs neither clang
 nor the runtime library, which makes it the fastest inner loop.
 
-Optional but recommended — install the repository hook:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-`.githooks/pre-commit` **bumps the patch version on every commit** and folds
-`package.json` + `package-lock.json` into that commit (`npm version patch
---no-git-tag-version`). Expect a version bump in your commits; do not countermand
-it. Release tags are created by `release.yml`, never by the hook.
+Optional: install the repository hook with `git config core.hooksPath .githooks`.
+It bumps the patch version **only on `main`/`master`** — `package.json`,
+`package-lock.json` and `src/driver/version.ts` together. Feature branches never
+touch those files, which is what keeps two feature branches from conflicting on
+the version lines; do not bump the version on a feature branch. Release tags are
+created by `release.yml`, never by the hook.
 
 ## The test suites
 
@@ -80,7 +76,7 @@ mean the same thing in every generation. A compiled string stores UTF-8 bytes
 but indexes them in UTF-16 code units, so the self-hosted `readFileSync`
 (`--ext node`) hands the scanner a byte string (one byte per code unit, all
 `<= 0xFF`), while Node hands it the same file already decoded — read source
-files through `decodeUtf8` ([src/diagnostics/utf8.ts](../../src/diagnostics/utf8.ts))
+files through `sourceTextBytes` ([src/diagnostics/source-text.ts](../../src/diagnostics/source-text.ts))
 and never assume a code unit is a byte or a character. Getting this wrong shows
 up as a non-ASCII literal (`—` in a hint string) coming out re-encoded in
 `gen2.ll`, which is why the emitted IR is compared byte-for-byte rather than
@@ -131,7 +127,7 @@ npm run runtime:clean      # drop build/runtime-obj and runtime/lib
 ```
 
 Add a new C file only together with the place that lists the runtime sources
-(`RUNTIME_SOURCES` in [../../src/driver/compiler.ts](../../src/driver/compiler.ts)),
+(`RUNTIME_SOURCES` in [../../src/driver/runtime-objects.ts](../../src/driver/runtime-objects.ts)),
 because that list decides what gets compiled and linked. Extension C sources are
 declared by the extension itself.
 
@@ -177,12 +173,19 @@ A feature is not done until the docs match:
 
 | Document | Update when |
 | --- | --- |
-| [../implemented.md](../implemented.md) | a feature starts working |
-| [../unimplemented.md](../unimplemented.md) | a limitation appears or is lifted |
-| [../node-implemented.md](../node-implemented.md) / [../node-unimplemented.md](../node-unimplemented.md) | Node module coverage changes |
+| [../implemented/](../implemented/) — the page that owns the feature | a feature starts working |
+| [../unimplemented/](../unimplemented/) — the page that owns the limitation | a limitation appears or is lifted |
+| [../implemented.md](../implemented.md) / [../unimplemented.md](../unimplemented.md) | a whole new page is added (link it from the index) |
+| [../implemented/node.md](../implemented/node.md) / [../unimplemented/node.md](../unimplemented/node.md) | Node module coverage changes |
 | [language-support.md](./language-support.md) | the AI-facing summary of the above changes |
 | [../requirements.md](../requirements.md) | the toolchain or platform requirements change |
 | [cli.md](./cli.md) | a flag, config field or environment variable changes |
+
+Each feature area owns one small page, so a feature branch edits the page for
+its area (and the page's Chinese translation) instead of a monolith. The index
+page's "Where does a change belong?" table maps a change to its page. A test
+(`tests/docs/structure.test.ts`) checks that every English page has a Chinese
+counterpart and is linked from its index.
 
 Keep the Chinese translation (`doc/zh-CN/`, `doc/ai/zh-CN/`) in step with the
 English source; a half-translated page is worse than none because it silently

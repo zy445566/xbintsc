@@ -1,0 +1,19 @@
+# 扩展机制（Extensions）
+
+> 属于[已实现语法与功能](../implemented.md) · [English](../../implemented/extensions.md)
+
+实现位置：`src/extensions/registry.ts`、`src/extensions/node/`
+
+- 扩展是普通对象：`runtimeSources()`（额外 C 源）、`linkerFlags()`（额外链接参数）、`builtins()`（全局标识符 → 运行时符号，统一 `(argc, argv)` ABI）与 `modules()`（导入说明符 → 命名导出 / 命名空间）。
+- `ExtensionRegistry`：注册 / 注销 / 查询 / 汇总 builtins、modules、runtime 源、链接参数。
+- 内置核心扩展 `core`：暴露 `print`（映射 `xt_println`），始终注册。
+- Node 扩展 `node`：
+  - 模块化组织：`src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
+  - 暴露可导入模块（`fs`、`fs/promises`、`path`、`os`、`process` 等），同时支持裸名称与 `node:` 前缀；`import { readFileSync } from "fs"` 解析到 `xt_node_read_text_file`，`path`/`os`/`process` 的导出映射到命名空间分发器。
+- 添加新模块只需新增目录 + C 实现，核心编译器无需改动。
+- 原生 C++/Rust 扩展（`src/extensions/native.ts`、`--ext-native`）：
+  - `nativeObjects()` 链接以 `(argc, argv)` ABI 暴露 `extern "C"` 符号的预编译对象/静态库；JSON manifest 把它们映射为 builtins/modules（`linkerFlags` / `linkerFlagsByPlatform` 用于 C++/Rust 运行时）。
+  - 编写辅助位于 `runtime/xt_ext.h`（C/C++）与 `runtime/xt_ext.rs`（Rust）；可运行工程在 `examples/extensions/`。
+  - 驱动原样链接这些产物，增量缓存会对其内容取指纹，因此重建库会使缓存二进制失效。
+  - CI 在 Linux、macOS、Windows 上都会构建两种语言的示例；Windows 下系统 clang 链接 MSVC ABI（C++ `-lmsvcprt`，Rust `*-pc-windows-msvc` 加 Windows 系统库）。
+- Node 模块覆盖情况见 [Node 扩展](./node.md)。

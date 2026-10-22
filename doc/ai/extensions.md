@@ -50,8 +50,8 @@ resolve to the same implementation.
 | `util`, `querystring`, `url`, `assert`, `test`, `zlib` | |
 
 Coverage per module (exact functions and options) is in
-[../node-implemented.md](../node-implemented.md); what is missing is in
-[../node-unimplemented.md](../node-unimplemented.md).
+[../implemented/node.md](../implemented/node.md); what is missing is in
+[../unimplemented/node.md](../unimplemented/node.md).
 
 Remember the runtime model before building on `net`/`http`: the event loop runs
 **after** the program body, but `async`/`await` now suspends on pending promises,

@@ -16,15 +16,11 @@ npm test                 # 单元测试 + 端到端测试
 （见 [troubleshooting.md](./troubleshooting.md)）。`xbintsc emit` 既不需要 clang 也不需要
 运行时库，因此它是最快的内循环。
 
-可选但推荐——安装仓库钩子：
-
-```bash
-git config core.hooksPath .githooks
-```
-
-`.githooks/pre-commit` **会在每次提交时把补丁版本号 +1**，并把 `package.json` 与
-`package-lock.json` 一起折进该提交（`npm version patch --no-git-tag-version`）。请预期
-你的提交里会带版本号变更，不要对抗它。发布标签由 `release.yml` 创建，钩子从不打标签。
+可选：安装仓库钩子 `git config core.hooksPath .githooks`。它只在
+`main`/`master` 上把补丁版本号 +1（同时更新 `package.json`、
+`package-lock.json` 与 `src/driver/version.ts`）。功能分支从不改动这些文件，
+这正是两个功能分支不会在版本行上冲突的原因；不要在功能分支上改版本号。
+发布标签由 `release.yml` 创建，钩子从不打标签。
 
 ## 测试套件
 
@@ -70,7 +66,7 @@ gen2 --emit--> gen3.ll      # 必须等于 ref.ll
 第二个推论是字符串模型：编译器自身源码文本在各代中必须含义一致。编译后的字符串以 UTF-8
 存储，但索引按 UTF-16 码元进行，所以自举后的 `readFileSync`（`--ext node`）交给扫描器的是
 字节串（一个码元一个字节，全部 `<= 0xFF`），而 Node 交给它的是同一个文件已解码后的文本——
-读取源码文件一律走 `decodeUtf8`（[src/diagnostics/utf8.ts](../../../src/diagnostics/utf8.ts)），
+读取源码文件一律走 `sourceTextBytes`（[src/diagnostics/source-text.ts](../../../src/diagnostics/source-text.ts)），
 不要假设一个码元就是一个字节或一个字符。弄错的表现是：`gen2.ll` 里非 ASCII 字面量（比如提示语里的 `—`）
 被重新编码，这也正是这里逐字节比较 IR 而不是逐行比较的原因。
 
@@ -111,7 +107,7 @@ npm run runtime            # tsx scripts/build-runtime.ts -> runtime/lib/<os>-<a
 npm run runtime:clean      # 删除 build/runtime-obj 与 runtime/lib
 ```
 
-新增 C 文件时必须同时更新列出运行时源文件的地方（[../../../src/driver/compiler.ts](../../../src/driver/compiler.ts)
+新增 C 文件时必须同时更新列出运行时源文件的地方（[../../../src/driver/runtime-objects.ts](../../../src/driver/runtime-objects.ts)
 里的 `RUNTIME_SOURCES`），因为那份列表决定什么会被编译和链接。扩展的 C 源由扩展自己声明。
 
 ## 新增或扩展一个扩展
@@ -153,12 +149,17 @@ src/extensions/node/fs/index.ts        runtime/ext_node/fs/read_file.c
 
 | 文档 | 何时更新 |
 | --- | --- |
-| [../../zh-CN/implemented.md](../../zh-CN/implemented.md) | 某特性开始可用 |
-| [../../zh-CN/unimplemented.md](../../zh-CN/unimplemented.md) | 出现或解除了某个限制 |
-| [../../zh-CN/node-implemented.md](../../zh-CN/node-implemented.md) / [../../zh-CN/node-unimplemented.md](../../zh-CN/node-unimplemented.md) | Node 模块覆盖变化 |
+| [../../zh-CN/implemented/](../../zh-CN/implemented/) 中拥有该功能的页面 | 某特性开始可用 |
+| [../../zh-CN/unimplemented/](../../zh-CN/unimplemented/) 中拥有该限制的页面 | 出现或解除了某个限制 |
+| [../../zh-CN/implemented.md](../../zh-CN/implemented.md) / [../../zh-CN/unimplemented.md](../../zh-CN/unimplemented.md) | 新增整页时（在索引里加链接） |
+| [../../zh-CN/implemented/node.md](../../zh-CN/implemented/node.md) / [../../zh-CN/unimplemented/node.md](../../zh-CN/unimplemented/node.md) | Node 模块覆盖变化 |
 | [language-support.md](./language-support.md) | 上述内容的 AI 摘要变化 |
 | [../../zh-CN/requirements.md](../../zh-CN/requirements.md) | 工具链或平台要求变化 |
 | [cli.md](./cli.md) | 参数、配置字段或环境变量变化 |
+
+每个功能域只拥有一个小页面，因此功能分支改自己领域的页面（以及它的中文翻译），
+而不是一份大文档。索引页的「改动应该写在哪一页？」表把改动映射到页面。
+`tests/docs/structure.test.ts` 会检查每个英文页面都有中文对应页，且都被索引链接。
 
 中文翻译（`doc/zh-CN/`、`doc/ai/zh-CN/`）要与英文源同步；半翻译的页面比没有更糟，因为
 它会静默过期。

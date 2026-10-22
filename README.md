@@ -344,8 +344,8 @@ compiler never changes.
 
 Node module coverage:
 
-- [Node extension: implemented](./doc/node-implemented.md)
-- [Node extension: unimplemented](./doc/node-unimplemented.md)
+- [Node extension: implemented](./doc/implemented/node.md)
+- [Node extension: unimplemented](./doc/unimplemented/node.md)
 
 ### Native extensions (C++ / Rust)
 

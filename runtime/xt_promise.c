@@ -304,9 +304,34 @@ xt_value xt_promise_reject(xt_value value) {
   return xt_promise_value(promise);
 }
 
+static xt_value xt_promise_with_resolvers_resolve(xt_value thisValue, xt_value env, int32_t argc,
+                                                  xt_value *argv) {
+  (void)thisValue;
+  xt_promise_fulfill(xt_closure_env(env, 0), xt_arg_at(argc, argv, 0));
+  return XT_UNDEFINED;
+}
+
+static xt_value xt_promise_with_resolvers_reject(xt_value thisValue, xt_value env, int32_t argc,
+                                                 xt_value *argv) {
+  (void)thisValue;
+  xt_promise_reject_value(xt_closure_env(env, 0), xt_arg_at(argc, argv, 0));
+  return XT_UNDEFINED;
+}
+
 xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv) {
   const char *fn = xt_string_data(name);
   if (!fn) return XT_UNDEFINED;
+  if (strcmp(fn, "withResolvers") == 0) {
+    xt_value promise = xt_promise_create();
+    xt_value environment[1] = {promise};
+    xt_value result = xt_object_new();
+    xt_object_set(result, xt_string_from_cstr("promise"), promise);
+    xt_object_set(result, xt_string_from_cstr("resolve"),
+                  xt_closure_new((void *)xt_promise_with_resolvers_resolve, 1, environment));
+    xt_object_set(result, xt_string_from_cstr("reject"),
+                  xt_closure_new((void *)xt_promise_with_resolvers_reject, 1, environment));
+    return result;
+  }
   if (strcmp(fn, "resolve") == 0) return xt_promise_resolve(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "reject") == 0) return xt_promise_reject(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "all") == 0 || strcmp(fn, "allSettled") == 0 || strcmp(fn, "race") == 0 || strcmp(fn, "any") == 0) {

@@ -149,16 +149,46 @@ static void xt_json_indent(xt_value *out, int indent, int depth) {
   for (int i = 0; i < indent * depth; i++) *out = xt_add(*out, xt_string_from_cstr(" "));
 }
 
+/* Containers on the current serialization path. A repeated pointer is a cycle;
+ * serializing it would recurse until the native stack overflowed (a hard crash,
+ * not the TypeError the platform throws). */
+static xt_value *xt_json_path = NULL;
+static uint32_t xt_json_path_count = 0;
+static uint32_t xt_json_path_capacity = 0;
+
+static void xt_json_enter(xt_value value) {
+  for (uint32_t i = 0; i < xt_json_path_count; i++) {
+    if (xt_json_path[i] == value) {
+      xt_value message = xt_string_from_cstr("Converting circular structure to JSON");
+      xt_throw(xt_type_error_ctor(1, &message));
+    }
+  }
+  if (xt_json_path_count >= xt_json_path_capacity) {
+    uint32_t capacity = xt_json_path_capacity == 0 ? 16 : xt_json_path_capacity * 2;
+    xt_value *path = (xt_value *)realloc(xt_json_path, sizeof(xt_value) * capacity);
+    if (!path) abort();
+    xt_json_path = path;
+    xt_json_path_capacity = capacity;
+  }
+  xt_json_path[xt_json_path_count++] = value;
+}
+
+static void xt_json_leave(void) {
+  if (xt_json_path_count > 0) xt_json_path_count--;
+}
+
 static void xt_json_stringify_array(xt_value value, int indent, int depth, xt_value *out) {
   xt_array *array = xt_as_array(value);
   if (!array || array->length == 0) { *out = xt_add(*out, xt_string_from_cstr("[]")); return; }
   *out = xt_add(*out, xt_string_from_cstr("["));
+  xt_json_enter(value);
   for (uint32_t i = 0; i < array->length; i++) {
     if (i > 0) *out = xt_add(*out, xt_string_from_cstr(","));
     xt_json_indent(out, indent, depth + 1);
     xt_json_stringify_value(array->items[i], indent, depth + 1, out);
   }
   xt_json_indent(out, indent, depth);
+  xt_json_leave();
   *out = xt_add(*out, xt_string_from_cstr("]"));
 }
 
@@ -173,6 +203,7 @@ static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_v
   }
   if (!any) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
   *out = xt_add(*out, xt_string_from_cstr("{"));
+  xt_json_enter(value);
   int written = 0;
   for (uint32_t i = 0; i < array->length; i++) {
     xt_value key = array->items[i];
@@ -189,6 +220,7 @@ static void xt_json_stringify_object(xt_value value, int indent, int depth, xt_v
     xt_json_stringify_value(item, indent, depth + 1, out);
   }
   xt_json_indent(out, indent, depth);
+  xt_json_leave();
   *out = xt_add(*out, xt_string_from_cstr("}"));
 }
 
@@ -250,6 +282,9 @@ xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
   if (indent > 10) indent = 10;
   xt_value value = xt_arg_at(argc, argv, 0);
   if (value == XT_UNDEFINED || XT_IS_FUNCTION(value) || xt_is_symbol(value)) return XT_UNDEFINED;
+  /* A caught circular-structure error longjmps past xt_json_leave; start every
+   * top-level serialization with a clean path. */
+  xt_json_path_count = 0;
   xt_value out = xt_string_from_cstr("");
   xt_json_stringify_value(value, indent, 0, &out);
   return out;

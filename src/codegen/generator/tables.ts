@@ -391,7 +391,7 @@ export const KIND_NAMES = new Map<number, string>([
   [SyntaxKind.DeleteExpression, "delete expression"],
   [SyntaxKind.AwaitExpression, "await expression"],
   [SyntaxKind.YieldExpression, "yield expression"],
-  [SyntaxKind.SwitchStatement, "switch statement"],
+  [SyntaxKind.ModuleDeclaration, "namespace declaration"],
 ]);
 
 /**

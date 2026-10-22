@@ -245,6 +245,10 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           this.reportRequireUse(identifier);
           return i64(XT_UNDEFINED);
         }
+        /* The parser's recovery node for a missing expression. The syntax
+         * error has already been reported; "Cannot find name '<error>'" is
+         * pure noise on top of it. */
+        if (identifier.text === "<error>") return i64(XT_UNDEFINED);
         this.diagnostics.error(
           DiagnosticCode.CannotFindName,
           `Cannot find name '${identifier.text}'`,

@@ -235,8 +235,8 @@ xbintsc run app.ts --ext gui
 平台与完整说明：[doc/zh-CN/gui.md](./doc/zh-CN/gui.md) 是引擎总览（架构与
 路线图）；按功能拆分的文档位于 [doc/zh-CN/gui/](./doc/zh-CN/gui) —— API、
 DOM/CSS、布局、绘制、媒体、输入、动画、运行时、构建与已知问题。Linux 与 macOS 已在 CI 中构建
-并实际运行，其发布包内含引擎（`gui.a`）；Windows 的 `gui.lib`（D3D12）由同一脚本产出，但仍是
-暂定状态，尚未随发布包提供。
+并实际运行，其发布包内含引擎（`gui.a`）；Windows 的 `gui.lib`（通过 SDL_GPU 的
+Vulkan 后端渲染）由同一脚本产出，但仍是暂定状态，尚未随发布包提供。
 
 ## 增量编译
 

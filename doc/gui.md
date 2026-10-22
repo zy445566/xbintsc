@@ -179,9 +179,10 @@ engine were Rust.
      `runtime/`).
    - `vendor/` (SDL3/FreeType/HarfBuzz, the slow part) is cached per OS/arch,
      keyed by `scripts/build-gui.ts`.
-   - Windows (build + run) stays provisional until the MSVC-compatible
-     `gui.lib` and D3D12/DXIL shader path are validated; a failure is logged
-     without annotating the run (see [Open questions](./gui/known-issues.md#open-questions)).
+   - Windows (build + run) stays provisional in CI: the MSVC-compatible
+     `gui.lib` builds and runs locally through SDL_GPU's Vulkan backend, but the
+     hosted runners have no GPU/Vulkan driver. A failure is logged without
+     annotating the run (see [Open questions](./gui/known-issues.md#open-questions)).
 8. **M8 — interactive DOM** ✅
    - Element/document handles with stable identity, read/write properties via
      runtime accessors, traversal/attributes/queries, mutation with lazy

@@ -97,10 +97,11 @@ art-matrix=matrix(1.006,0.01334,-0.01334,1.006,4.486,-3.372)   ← 显示列表�
 
 ## 构建与运行
 
-需要 clang ≥ 16，并且 **Windows 上要有 MSVC/SDK 环境**（clang 要能找到系统头文件和库）：
+需要 clang ≥ 16。Windows 上使用 Visual Studio 自带的 LLVM clang 即可，**无需**
+开发者命令提示符（它会自行找到 MSVC/SDK 的头文件和库）：
 
 ```bat
-:: 在 “x64 Native Tools Command Prompt for VS 2022” 里执行
+:: 无需开发者命令提示符
 set xbintsc_CLANG=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\Llvm\x64\bin\clang.exe
 npx tsx src/cli/main.ts run examples/gui/pelican-svg/main.ts
 ```

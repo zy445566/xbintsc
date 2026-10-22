@@ -20,24 +20,28 @@
  *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
  *
  * Environment:
- *   xbintsc_CXX    C++ compiler override (default: clang++/c++/g++)
+ *   xbintsc_CXX    C++ compiler override (default: clang++ next to the resolved clang)
  *   xbintsc_CMAKE  CMake override (default: a vendored CMake, then `cmake`)
- *   xbintsc_AR     archiver override (default: llvm-ar, then ar)
+ *   xbintsc_AR     archiver override (default: llvm-ar next to clang, then llvm-ar)
  *   SDL3_TAG       SDL3 git tag to check out (default: release-3.2.10)
  *   FREETYPE_VERSION  FreeType version (default: 2.13.3)
  *   HARFBUZZ_VERSION  HarfBuzz version (default: 10.1.0)
  *
- * On Windows the engine is compiled with `clang++` against the MSVC ABI (run
- * from a Visual Studio developer prompt so `INCLUDE`/`LIB` are set) and merged
- * into a COFF `gui.lib` with `llvm-ar`.
+ * The C/C++ compiler is the same clang the driver resolves (see
+ * `src/driver/toolchain-provider.ts`), so the archive always matches the ABI of
+ * the runtime and emitted objects. On Windows that is an MSVC-targeting clang,
+ * normally the LLVM bundled with Visual Studio, and the result is a COFF
+ * `gui.lib`.
  */
 
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platformSlug } from "../src/driver/paths.js";
+import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js";
+import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeDir = join(root, "runtime");
@@ -81,18 +85,27 @@ const output = join(outDir, isWindows ? "gui.lib" : "gui.a");
  * `LNK2038: mismatch detected for 'RuntimeLibrary'`. The variable only takes
  * effect when policy CMP0091 is NEW, but FreeType and HarfBuzz declare
  * `cmake_minimum_required` below 3.15, which defaults the policy to OLD and
- * silently ignores it — hence `CMAKE_POLICY_DEFAULT_CMP0091`. The C/C++ compilers
- * are pinned to the same clang the engine is compiled with, so every object in
- * `gui.a` shares one ABI and optimization behaviour. */
-const cmakeGeneratorArgs: readonly string[] = isWindows
-  ? [
-      "-G", "Ninja",
-      "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
-      "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
-      "-DCMAKE_C_COMPILER=clang",
-      "-DCMAKE_CXX_COMPILER=clang++",
-    ]
-  : [];
+ * silently ignores it — hence `CMAKE_POLICY_DEFAULT_CMP0091`.
+ *
+ * The tool paths are absolute and come from the same clang the driver resolves
+ * (on Windows, the LLVM bundled with Visual Studio when no newer one is on
+ * `PATH`), so every object merged into the archive shares one ABI and one
+ * optimization behaviour. Never leave these as bare `clang`/`clang++`: an older
+ * compiler earlier on `PATH` may be picked up at build time. */
+function cmakeToolchainArgs(): string[] {
+  const compilers = [
+    `-DCMAKE_C_COMPILER=${clang}`,
+    `-DCMAKE_CXX_COMPILER=${clangxx}`,
+  ];
+  if (!isWindows) return compilers;
+  return [
+    "-G", "Ninja",
+    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+    "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
+    ...compilers,
+    `-DCMAKE_AR=${llvmAr}`,
+  ];
+}
 
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
 const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
@@ -168,27 +181,103 @@ function findCmake(): string {
   return cmake;
 }
 
-function findCxx(): string {
-  const cxx = firstAvailable([process.env.xbintsc_CXX, "clang++", "c++", "g++"]);
-  if (!cxx) fail("no C++ compiler found; install clang++ or set xbintsc_CXX");
-  return cxx;
+/** The tool that sits next to `clang` in the same LLVM installation. */
+function siblingTool(clangPath: string, name: string): string | undefined {
+  if (!clangPath.includes("/") && !clangPath.includes("\\")) return undefined;
+  const candidate = join(dirname(clangPath), `${name}${isWindows ? ".exe" : ""}`);
+  return existsSync(candidate) ? candidate : undefined;
 }
 
-function findCc(): string {
-  const cc = firstAvailable([process.env.xbintsc_CC, process.env.CC, "clang", "cc", "gcc"]);
-  if (!cc) fail("no C compiler found; install clang or set xbintsc_CC");
-  return cc;
+/** Resolve `clang++` from the same LLVM as the driver's clang. */
+function findClangxx(clangPath: string): string {
+  const override = process.env.xbintsc_CXX;
+  if (override) {
+    const probe = probeClang(realRunner, override);
+    if (!probe.responds) fail(`xbintsc_CXX ${override} does not respond to --version`);
+    if (isWindows && (probe.version === undefined || (probe.target !== undefined && !isMsvcTarget(probe.target)))) {
+      fail(
+        `xbintsc_CXX ${override} is not an MSVC-targeting clang++ ` +
+          `(target ${probe.target ?? "unknown"}); the Windows GUI build requires one, for example ` +
+          "x86_64-pc-windows-msvc.",
+      );
+    }
+    return override;
+  }
+  const sibling = siblingTool(clangPath, "clang++");
+  if (sibling) return sibling;
+  const onPath = firstAvailable(["clang++"]);
+  if (onPath) return onPath;
+  fail("no clang++ found next to the resolved clang or on PATH; install LLVM or set xbintsc_CXX");
 }
 
-function findArchiver(): string {
-  const ar = firstAvailable([process.env.xbintsc_AR, "llvm-ar", "ar"]);
-  if (!ar) fail("no archiver found; set xbintsc_AR to llvm-ar or ar");
-  return ar;
+/** Resolve the archiver that matches the compiler, preferring LLVM's own. */
+function findArchiver(clangPath: string): string {
+  const sibling = siblingTool(clangPath, "llvm-ar");
+  const archiver = firstAvailable([process.env.xbintsc_AR, sibling, "llvm-ar", isWindows ? undefined : "ar"]);
+  if (!archiver) fail("no archiver found; install llvm-ar or set xbintsc_AR");
+  return archiver;
+}
+
+/* One toolchain for the whole archive: the same clang the driver uses, its
+ * sibling clang++, and the matching llvm-ar. No `gcc`/`g++` fallbacks, and
+ * Windows never falls back to a non-LLVM archiver — mixing another C++ runtime
+ * or object format would break the final link. */
+function driverClang(): string {
+  try {
+    return resolveToolchain().clang;
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+}
+
+const clang = driverClang();
+const clangxx = findClangxx(clang);
+const llvmAr = findArchiver(clang);
+
+
+/** The compiler a previous CMake configure recorded for `buildDir`. */
+function cachedCompiler(buildDir: string, variable: string): string | undefined {
+  const cache = join(buildDir, "CMakeCache.txt");
+  if (!existsSync(cache)) return undefined;
+  const match = new RegExp(`^${variable}:[^=]*=(.*)$`, "m").exec(readFileSync(cache, "utf8"));
+  return match?.[1]?.trim();
+}
+
+function sameToolPath(a: string, b: string): boolean {
+  const normalize = (value: string): string => value.replace(/\\/g, "/").replace(/\/+$/, "");
+  return process.platform === "win32"
+    ? normalize(a).toLowerCase() === normalize(b).toLowerCase()
+    : normalize(a) === normalize(b);
+}
+
+/**
+ * Configure a vendored CMake project, discarding a build tree whose cached
+ * compiler no longer matches the resolved toolchain. CMake refuses to switch
+ * compilers in place, and a tree configured by another clang would mix ABIs in
+ * the final archive.
+ */
+function configureCmake(
+  name: string,
+  source: string,
+  build: string,
+  extraArgs: readonly string[],
+): string {
+  const cachedC = cachedCompiler(build, "CMAKE_C_COMPILER");
+  const cachedCxx = cachedCompiler(build, "CMAKE_CXX_COMPILER");
+  const stale =
+    (cachedC !== undefined && !sameToolPath(cachedC, clang)) ||
+    (cachedCxx !== undefined && !sameToolPath(cachedCxx, clangxx));
+  if (stale) {
+    console.log(`xbintsc: toolchain changed; reconfiguring ${name}`);
+    rmSync(build, { recursive: true, force: true });
+  }
+  const cmake = findCmake();
+  run(cmake, ["-S", source, "-B", build, ...cmakeToolchainArgs(), ...extraArgs]);
+  return cmake;
 }
 
 /** Directories a CMake `find_path` would search, relative to the filesystem
- * root, used to check that a development package is installed. */
-const HEADER_PREFIXES = ["/usr/include", "/usr/local/include", "/opt/homebrew/include"];
+ * root, used to check that a development package is installed. */const HEADER_PREFIXES = ["/usr/include", "/usr/local/include", "/opt/homebrew/include"];
 
 /** True on Debian and its derivatives, where the message below can name the
  * packages to install. Anywhere else the headers may well live under a prefix
@@ -300,19 +389,14 @@ if (!existingSdlArchive) {
   requireHeaders("SDL3's Wayland video driver", ["wayland-client-core.h"],
     "libwayland-dev libxkbcommon-dev libdecor-0-dev");
 
-  const cmake = findCmake();
-  console.log(`xbintsc: building static SDL3 with ${cmake}`);
-  const configureArgs = [
-    "-S", sdlSrc,
-    "-B", sdlBuild,
-    ...cmakeGeneratorArgs,
+  const cmake = configureCmake("SDL3", sdlSrc, sdlBuild, [
     "-DCMAKE_BUILD_TYPE=Release",
     "-DSDL_SHARED=OFF",
     "-DSDL_STATIC=ON",
     "-DSDL_TESTS=OFF",
     "-DSDL_EXAMPLES=OFF",
-  ];
-  run(cmake, configureArgs);
+  ]);
+  console.log(`xbintsc: building static SDL3 with ${cmake}`);
   run(cmake, ["--build", sdlBuild, "--config", "Release", "--target", "SDL3-static", "--parallel"]);
 } else {
   console.log(`xbintsc: reusing existing ${existingSdlArchive}`);
@@ -345,12 +429,7 @@ ensureTarballSource("freetype", FREETYPE_URL, `freetype-${FREETYPE_VERSION}`);
 ensureTarballSource("harfbuzz", HARFBUZZ_URL, `harfbuzz-${HARFBUZZ_VERSION}`);
 
 if (!existsSync(freetypeArchive() ?? "")) {
-  const cmake = findCmake();
-  console.log("xbintsc: building static FreeType");
-  run(cmake, [
-    "-S", freetypeSrc,
-    "-B", freetypeBuild,
-    ...cmakeGeneratorArgs,
+  const cmake = configureCmake("FreeType", freetypeSrc, freetypeBuild, [
     "-DCMAKE_BUILD_TYPE=Release",
     "-DBUILD_SHARED_LIBS=OFF",
     /* We only need TrueType/OpenType outlines; skip the optional codecs. */
@@ -360,18 +439,14 @@ if (!existsSync(freetypeArchive() ?? "")) {
     "-DFT_DISABLE_HARFBUZZ=TRUE",
     "-DFT_DISABLE_BROTLI=TRUE",
   ]);
+  console.log("xbintsc: building static FreeType");
   run(cmake, ["--build", freetypeBuild, "--config", "Release", "--parallel"]);
 } else {
   console.log(`xbintsc: reusing existing ${freetypeArchive()}`);
 }
 
 if (!existsSync(harfbuzzArchive() ?? "")) {
-  const cmake = findCmake();
-  console.log("xbintsc: building static HarfBuzz");
-  run(cmake, [
-    "-S", harfbuzzSrc,
-    "-B", harfbuzzBuild,
-    ...cmakeGeneratorArgs,
+  const cmake = configureCmake("HarfBuzz", harfbuzzSrc, harfbuzzBuild, [
     "-DCMAKE_BUILD_TYPE=Release",
     "-DBUILD_SHARED_LIBS=OFF",
     "-DHB_BUILD_UTILS=OFF",
@@ -382,6 +457,7 @@ if (!existsSync(harfbuzzArchive() ?? "")) {
     "-DHB_HAVE_ICU=OFF",
     "-DHB_HAVE_GRAPHITE2=OFF",
   ]);
+  console.log("xbintsc: building static HarfBuzz");
   run(cmake, ["--build", harfbuzzBuild, "--config", "Release", "--parallel"]);
 } else {
   console.log(`xbintsc: reusing existing ${harfbuzzArchive()}`);
@@ -398,9 +474,7 @@ if (isWindows) {
   ensureTarballSource("ffmpeg", FFMPEG_URL, `ffmpeg-${FFMPEG_VERSION}`, "configure");
   ffmpegLibraries = ffmpegStaticLibraries();
   if (!ffmpegLibraries) {
-    const cc = findCc();
-    const ccxx = findCxx();
-    console.log(`xbintsc: building minimal static FFmpeg ${FFMPEG_VERSION} with ${cc}`);
+    console.log(`xbintsc: building minimal static FFmpeg ${FFMPEG_VERSION} with ${clang}`);
     mkdirSync(ffmpegBuild, { recursive: true });
     run(join(ffmpegSrc, "configure"), [
       `--prefix=${ffmpegInstall}`,
@@ -411,8 +485,8 @@ if (isWindows) {
       "--disable-everything",
       "--enable-avformat", "--enable-avcodec", "--enable-avutil", "--enable-swscale", "--enable-swresample",
       "--disable-network", "--disable-autodetect", "--disable-x86asm", "--disable-debug", "--enable-pic",
-      `--cc=${cc}`,
-      `--cxx=${ccxx}`,
+      `--cc=${clang}`,
+      `--cxx=${clangxx}`,
       ...FFMPEG_COMPONENTS,
     ], { cwd: ffmpegBuild });
     run("make", ["-j", String(availableParallelism())], { cwd: ffmpegBuild });
@@ -426,7 +500,6 @@ if (isWindows) {
 
 /* -- 3. engine objects ---------------------------------------------------- */
 
-const cxx = findCxx();
 mkdirSync(objDir, { recursive: true });
 const includeFlags = [
   "-I", runtimeDir,
@@ -454,7 +527,7 @@ if (!isWindows) cxxFlags.splice(3, 0, "-fPIC");
 for (const source of sources) {
   const object = join(objDir, source.replace(/\.cpp$/, objectSuffix));
   console.log(`xbintsc: compiling ${source}`);
-  run(cxx, [...cxxFlags, "-c", join(engineDir, source), "-o", object]);
+  run(clangxx, [...cxxFlags, "-c", join(engineDir, source), "-o", object]);
   objects.push(object);
 }
 
@@ -480,7 +553,7 @@ if (process.platform === "darwin") {
   /* `ar -M` (GNU/LLVM) merges archives through an MRI script. Windows paths are
    * normalised to `/` so the MRI parser does not read `\` as an escape. */
   const mri = (path: string): string => path.replace(/\\/g, "/");
-  const ar = findArchiver();
+  const ar = llvmAr;
   const script = [
     `create ${mri(output)}`,
     ...objects.map((object) => `addmod ${mri(object)}`),

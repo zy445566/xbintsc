@@ -19,10 +19,19 @@
 - `src/extensions/gui/index.ts` exposes the archive through `nativeObjects()`
   (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the OS frameworks
   through `linkerFlags()`.
+- `scripts/build-gui.ts` compiles with the *same* clang the driver resolves
+  (`src/driver/toolchain-provider.ts`); on Windows that is the MSVC-targeting
+  LLVM bundled with Visual Studio, and its sibling `clang++`/`llvm-ar` are used
+  for CMake, the engine and the archive merge. There are no `gcc`/`g++`
+  fallbacks, and Windows always uses `llvm-ar`, so the archive cannot mix object
+  formats or C++ runtimes. The Visual Studio toolchain is found by absolute
+  path, so no developer prompt is required. On Windows SDL_GPU selects the
+  Vulkan backend; no DXIL/`dxc` toolchain is needed.
 - CI builds `gui.a` before assembling the release archive so it ships inside
   `runtime/lib/<slug>/` (the release tarball copies the whole `runtime/` tree).
   The archive is built and the example is run on Linux (under Xvfb, with the
-  lavapipe software Vulkan driver) and macOS; Windows is provisional.
+  lavapipe software Vulkan driver) and macOS; Windows is provisional because the
+  hosted runners have no GPU/Vulkan driver.
 - The existing cache fingerprint already hashes `nativeObjects()` contents, so
   rebuilding `gui.a` invalidates cached binaries automatically.
 - CMake build trees live *next to* their sources (`vendor/sdl-build`,
@@ -60,9 +69,9 @@ working directory, so run it from the repository root:
 Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
 which the e2e test (`tests/e2e/gui-*.test.ts`) uses to run headlessly.
 
-Those suites are skipped on Windows by default (the archive is built there but
-the run is not validated in CI). With a `gui.lib` and a working GPU, opt in with
-`xbintsc_GUI_TESTS=1`:
+Those suites are skipped on Windows by default (the archive is built and runs
+locally through Vulkan, but CI runners have no GPU driver to run it). With a
+`gui.lib` and a working GPU, opt in with `xbintsc_GUI_TESTS=1`:
 
 ```bat
 set xbintsc_GUI_TESTS=1

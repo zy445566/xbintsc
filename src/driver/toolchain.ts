@@ -75,6 +75,8 @@ export interface ClangProbe {
   /** True when the command ran and exited 0. */
   readonly responds: boolean;
   readonly version?: ClangVersion;
+  /** The `Target:` triple clang was built for, when it prints one. */
+  readonly target?: string;
   /** First line of the version output, for diagnostics. */
   readonly summary: string;
 }
@@ -98,6 +100,22 @@ export function parseClangVersion(output: string): ClangVersion | undefined {
   return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
 }
 
+/**
+ * Extract the `Target:` triple from `clang --version` output. Windows builds
+ * must target the MSVC ABI; clang built for a GNU/Windows or other triple emits
+ * objects that cannot be linked into an xbintsc executable (see
+ * {@link isMsvcTarget}).
+ */
+export function parseClangTarget(output: string): string | undefined {
+  const match = /^\s*Target:\s*(\S+)/m.exec(output);
+  return match?.[1];
+}
+
+/** True when a clang target triple uses the MSVC ABI on Windows. */
+export function isMsvcTarget(target: string): boolean {
+  return /-windows-msvc/i.test(target);
+}
+
 function firstLineOf(text: string): string {
   const end = text.indexOf("\n");
   return (end === -1 ? text : text.slice(0, end)).trim();
@@ -113,10 +131,12 @@ export function probeClang(
     const result = runner.run(command, ["--version"], env ? { env } : undefined);
     const output = `${result.stdout}\n${result.stderr}`;
     const version = parseClangVersion(output);
+    const target = parseClangTarget(output);
     return {
       command,
       responds: result.status === 0,
       ...(version ? { version } : {}),
+      ...(target ? { target } : {}),
       summary: firstLineOf(result.stdout) || firstLineOf(result.stderr),
     };
   } catch {
@@ -171,23 +191,57 @@ function tooOldError(probe: ClangProbe): ToolchainError {
   );
 }
 
+/**
+ * Windows links against the MSVC ABI, so a clang built for another Windows ABI
+ * (or for a different OS) cannot be used: its objects would not link with the
+ * MSVC runtime. This turns that mismatch into an actionable error instead of a
+ * wall of unresolved symbols.
+ */
+function wrongTargetError(probe: ClangProbe): ToolchainError {
+  return new ToolchainError(
+    "clang --version",
+    1,
+    `${probe.command} targets ${probe.target}, but xbintsc on Windows requires a clang whose default ` +
+      "target is the MSVC ABI (for example x86_64-pc-windows-msvc).\n" +
+      "Install the Visual Studio C++ build tools and use the LLVM bundled with Visual Studio " +
+      "(VC\\Tools\\Llvm\\<arch>\\bin\\clang.exe), or set xbintsc_CLANG to an MSVC-targeting clang.",
+  );
+}
+
+function hasWrongWindowsTarget(probe: ClangProbe): boolean {
+  return process.platform === "win32" && probe.target !== undefined && !isMsvcTarget(probe.target);
+}
+
 function noCompilerError(tried: readonly ClangProbe[]): ToolchainError {
   const responded = tried.filter((probe) => probe.responds);
   const details = responded.map((probe) => {
     const version = probe.version
       ? `clang ${probe.version.major}.${probe.version.minor}.${probe.version.patch}`
       : probe.summary || "unknown version";
-    return `  ${probe.command}: ${version}`;
+    const target = probe.target ? ` (target ${probe.target})` : "";
+    return `  ${probe.command}: ${version}${target}`;
   });
+  const wrongTarget = responded.some(hasWrongWindowsTarget);
   const tooOld = responded.some((probe) => probe.version !== undefined && probe.version.major < MINIMUM_CLANG_MAJOR);
-  const reason = tooOld
-    ? `Only clang older than ${MINIMUM_CLANG_MAJOR} was found; xbintsc requires clang ${MINIMUM_CLANG_MAJOR}+ ` +
-      "(the emitted LLVM IR uses opaque pointers)."
-    : `No clang ${MINIMUM_CLANG_MAJOR}+ was found.`;
+  const reasons: string[] = [];
+  if (tooOld) {
+    reasons.push(
+      `Only clang older than ${MINIMUM_CLANG_MAJOR} was found; xbintsc requires clang ${MINIMUM_CLANG_MAJOR}+ ` +
+        "(the emitted LLVM IR uses opaque pointers).",
+    );
+  }
+  if (wrongTarget) {
+    reasons.push(
+      "Only clang targeting a non-MSVC Windows ABI was found; the Windows build links against the MSVC ABI.",
+    );
+  }
+  if (reasons.length === 0) reasons.push(`No clang ${MINIMUM_CLANG_MAJOR}+ was found.`);
   return new ToolchainError(
     "clang --version",
     1,
-    [reason, ...(details.length > 0 ? ["Tested:", ...details] : []), "Set xbintsc_CLANG to a clang binary."].join("\n"),
+    [...reasons, ...(details.length > 0 ? ["Tested:", ...details] : []), "Set xbintsc_CLANG to a clang binary."].join(
+      "\n",
+    ),
   );
 }
 
@@ -207,6 +261,7 @@ export function locateClang(runner: Runner = realRunner): ClangLocation {
   if (explicit) {
     const probe = probeClang(runner, explicit);
     if (probe.responds) {
+      if (hasWrongWindowsTarget(probe)) throw wrongTargetError(probe);
       if (probe.version && probe.version.major < MINIMUM_CLANG_MAJOR) throw tooOldError(probe);
       return { command: explicit, source: "env", ...(probe.version ? { version: probe.version } : {}) };
     }
@@ -216,6 +271,7 @@ export function locateClang(runner: Runner = realRunner): ClangLocation {
     const probe = probeClang(runner, command);
     tried.push(probe);
     if (!probe.responds || !probe.version) continue;
+    if (hasWrongWindowsTarget(probe)) continue;
     if (probe.version.major < MINIMUM_CLANG_MAJOR) continue;
     return { command, source: "system", version: probe.version };
   }

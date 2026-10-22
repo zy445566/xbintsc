@@ -143,8 +143,8 @@ they wrap the argument and value helpers. Key ABI facts: values are 64-bit
 NaN-boxed words; strings are **not** NUL-terminated, so pair `xt_string_data`
 with `xt_string_length_value`; the runtime never moves or frees memory it handed
 out. Build with the same clang/ABI that xbintsc resolves (`xbintsc doctor`
-prints it), and on Windows build inside an **x64/ARM64 Native Tools Command
-Prompt**.
+prints it). On Windows that must be an MSVC-targeting clang — normally the LLVM
+bundled with Visual Studio; a developer prompt is not required.
 
 Working projects to copy: [`examples/extensions/cpp`](../../examples/extensions/cpp)
 and [`examples/extensions/rust`](../../examples/extensions/rust); the full guide

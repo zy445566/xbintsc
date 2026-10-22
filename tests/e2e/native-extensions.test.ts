@@ -38,7 +38,7 @@ function firstRunnable(candidates: readonly (string | undefined)[]): string | un
   return undefined;
 }
 
-const cxx = firstAvailable([process.env.xbintsc_CXX, "clang++", "c++", "g++"]);
+const cxx = firstAvailable([process.env.xbintsc_CXX, "clang++"]);
 const ar = firstRunnable([process.env.xbintsc_AR, "llvm-ar", "ar"]);
 const cargo = firstAvailable([process.env.CARGO, "cargo"]);
 

@@ -341,7 +341,7 @@ function doctor(io: CliIo): number {
   try {
     if (!toolchain) throw new Error("no toolchain");
     const resource = resolveResourceCompiler(realRunner, toolchain.clang);
-    io.stdout(`icon res   : ${resource ? `${resource.tool} (${resource.kind})` : "none (.exe icon disabled)"}\n`);
+    io.stdout(`icon res   : ${resource ? resource.tool : "none (.exe icon disabled)"}\n`);
   } catch {
     io.stdout("icon res   : unknown\n");
   }

@@ -289,9 +289,9 @@ Platforms and full details: [doc/gui.md](./doc/gui.md) is the engine overview
 (architecture and roadmap); the per-function documents live under
 [doc/gui/](./doc/gui) — API, DOM/CSS, layout, rendering, media, input, animation,
 runtime, build and known issues. Linux and macOS are built and exercised in CI
-and their release archives ship the engine (`gui.a`); the Windows archive (`gui.lib`, D3D12) is
-produced by the same script but is still provisional and is not shipped in the
-release yet.
+and their release archives ship the engine (`gui.a`); the Windows archive
+(`gui.lib`, rendered through SDL_GPU's Vulkan backend) is produced by the same
+script but is still provisional and is not shipped in the release yet.
 
 ## Incremental compilation
 

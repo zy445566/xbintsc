@@ -143,7 +143,8 @@ See [Unimplemented: standard library](../unimplemented/stdlib.md) for the full l
 ## Platform
 
 Builds target macOS, Linux and Windows on x64 and arm64. On Windows the target
-is the **MSVC ABI**, so clang needs the MSVC/SDK environment — see
+is the **MSVC ABI**, so the compiler must be an MSVC-targeting clang (the LLVM
+bundled with Visual Studio works) — see
 [../requirements.md](../requirements.md). clang **16 or newer** is required.
 
 ## Before you write a large program

@@ -59,12 +59,13 @@ describe("toolchain", () => {
 
   it("reports the version and first line of a probe", () => {
     const runner: Runner = {
-      run: () => ({ status: 0, stdout: "clang version 19.1.5\nTarget: x86_64", stderr: "" }),
+      run: () => ({ status: 0, stdout: "clang version 19.1.5\nTarget: x86_64-pc-linux-gnu", stderr: "" }),
     };
     expect(probeClang(runner, "clang")).toEqual({
       command: "clang",
       responds: true,
       version: { major: 19, minor: 1, patch: 5 },
+      target: "x86_64-pc-linux-gnu",
       summary: "clang version 19.1.5",
     });
   });

@@ -15,5 +15,5 @@
 - PGO（先 `--pgo-generate[=dir]`，再 `--pgo-use[=dir]`，或配置 `"pgo"` / `"pgoDir"`）：生成 IR 与运行时 C 都用 `-fprofile-generate=<dir>` 插桩；运行插桩后的二进制，`--pgo-use` 会用 `llvm-profdata` 合并 `.profraw`（优先使用 clang 旁边的副本，可用 `xbintsc_LLVM_PROFDATA` 覆盖），再以 `-fprofile-use=<dir>` 重新构建。
 - 链接参数：非 Windows 自动加 `-lm`；扩展可追加链接参数。
 - 项目编译配置（`src/driver/config.ts`、`xbintsc.config.json`）：`entry`、`outDir`、`output`、`optimize`、`lto`、`pgo`、`pgoDir`、`extensions`、`extNative`、`force` 与 `app`（`name`、`icon`、`bundle`、`bundleId`）。从入口/当前目录向上查找，可用 `--config` 指定、`--no-config` 关闭；所有路径以配置文件所在目录为基准；CLI 参数优先于配置。
-- 应用图标（`src/driver/icon.ts`、`win-icon.ts`、`mac-bundle.ts`，`--icon`/`app.icon`）：PNG/ICO/ICNS 以 `xt_app_icon_*` 符号内嵌；Windows 上通过 `llvm-rc`/`windres` 合成 PE 资源；macOS 上打包为 `Foo.app`（用 `sips`/`iconutil` 生成 `AppIcon.icns`）。`gui` 扩展用内嵌字节调用 `SDL_SetWindowIcon`；`xbintsc_RC` 可覆盖资源编译器。
+- 应用图标（`src/driver/icon.ts`、`win-icon.ts`、`mac-bundle.ts`，`--icon`/`app.icon`）：PNG/ICO/ICNS 以 `xt_app_icon_*` 符号内嵌；Windows 上通过 `llvm-rc` 合成 PE 资源；macOS 上打包为 `Foo.app`（用 `sips`/`iconutil` 生成 `AppIcon.icns`）。`gui` 扩展用内嵌字节调用 `SDL_SetWindowIcon`；`xbintsc_RC` 可覆盖资源编译器。
 - 编译器版本：`COMPILER_VERSION` 位于 `src/driver/version.ts`，是缓存键的一部分。pre-commit 钩子只在 `main`/`master` 上（与 `package.json` 一起）提升它，因此功能分支不会改动版本文件。

@@ -163,15 +163,16 @@ extension with the **same** ABI:
 | --- | --- | --- | --- | --- |
 | Linux | system clang | `-lstdc++` | host | `-lpthread -ldl -lm` |
 | macOS | Xcode Command Line Tools | `-lc++` | host | `-liconv -framework Security` |
-| Windows | system clang (MSVC ABI) | `-lmsvcprt` | `*-pc-windows-msvc` | the Windows system libraries (see `rust/xbintsc.manifest.json`) |
+| Windows | Visual Studio LLVM clang (MSVC ABI) | `-lmsvcprt` | `*-pc-windows-msvc` | the Windows system libraries (see `rust/xbintsc.manifest.json`) |
 
 The mechanism is ABI-agnostic — it links whatever objects/archives you give it.
-On Windows, run the build from an **x64/ARM64 Native Tools Command Prompt** so
-clang finds the MSVC headers, import libraries and linker, and build the C++
-object / Rust static library with the same MSVC ABI:
+On Windows the compiler must target the MSVC ABI: use the LLVM bundled with
+Visual Studio (`VC\Tools\Llvm\x64\bin\clang++.exe`) or a standalone LLVM whose
+`Target:` is `*-windows-msvc`. A developer prompt is not required — clang
+locates the MSVC/SDK headers and libraries itself:
 
-- **C++**: compile with the system `clang++` (MSVC ABI) and list `-lmsvcprt` in
-  `linkerFlagsByPlatform.win32`.
+- **C++**: compile with the Visual Studio LLVM `clang++` (MSVC ABI) and list
+  `-lmsvcprt` in `linkerFlagsByPlatform.win32`.
 - **Rust**: build the `x86_64-pc-windows-msvc` (x64) or
   `aarch64-pc-windows-msvc` (arm64) target and add the Windows system libraries
   Rust's `std` needs to `linkerFlagsByPlatform.win32` (see the example manifest).

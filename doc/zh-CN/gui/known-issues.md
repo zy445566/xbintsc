@@ -43,12 +43,16 @@
   for 'RuntimeLibrary'`，外加满屏 `LNK2005: already defined`，最终表现为
   `clang: linker command failed with exit code 1169`。现在
   `src/extensions/gui/index.ts` 只列系统库（`user32`、`gdi32`、`d3d12` 等）。
-  Windows 链接也是唯一需要 MSVC 环境的环节，请在 x64 Native Tools 命令行里构建。
+  Windows 链接不再需要手动准备 MSVC 环境：`scripts/build-gui.ts` 会解析与驱动
+  相同的、面向 MSVC 的 clang（`PATH` 上没有更新版本时就是 Visual Studio 自带的
+  LLVM）。
 - Windows：`scripts/build-gui.ts` 会生成 MSVC 兼容的 `gui.lib`
   （COFF 对象 + `ar -M`/`llvm-ar`），但尚未在 CI 中验证，因此 Windows 步骤
   为试验性（job 保持绿色），`package` 会跳过它；在开发者机器上构建并运行
-  `examples/gui/pelican-svg` 与 `examples/gui/pelican-bike` 是可以的。它还需要
-  一个带 D3D12/DXIL 后端的 SDL3 构建（DXIL 需要 `dxc`）。
+  `examples/gui/pelican-svg` 与 `examples/gui/pelican-bike` 是可以的。那里
+  SDL_GPU 会选择 **Vulkan** 后端（`win.driver()` 返回 `"vulkan"`），因此归档
+  不需要 DXIL/`dxc` 工具链；托管 Windows runner 没有 GPU/Vulkan 驱动，这才是
+  CI 运行仍为试验性的原因。
 - **Windows 上的媒体：** 媒体解码器（FFmpeg）只构建并合并进 POSIX 的
   `gui.a`；Windows 的 `gui.lib` 不含它们，因此那里的 `<video>`/`<audio>` 为空
   操作（失败会触发 `error`）。启用它需要 MSVC 兼容的 FFmpeg 构建，推迟到
@@ -57,4 +61,5 @@
 - **D3D12 着色器：** SPIR-V（Vulkan）与 DXIL（Direct3D 12）二进制块均已构建并
   内嵌，非 Metal 路径不再跳过几何绘制。但在 **SDL 3.2.10** 上 DXIL 仍不可用：
   其 D3D12 后端会拒绝任何着色器中声明了 uniform buffer 的图形管线，而引擎正是
-  用这种方式传视口。SDL 升级后需重新确认。
+  用这种方式传视口。Windows 实际会选择 Vulkan，因此不受影响；若将来强制走
+  D3D12，需在 SDL 升级后重新确认。

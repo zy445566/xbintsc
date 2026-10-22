@@ -37,7 +37,8 @@
   各自的描述性名称。
   需注意：SDL 3.2.10 的 Direct3D 12 后端无法创建着色器中声明了 uniform buffer 的
   图形管线（返回 `E_INVALIDARG`）；引擎正是用这种方式传视口，因此 DXIL 这条路已
-  构建但在上游修复前不可用。
+  构建但在上游修复前不可用。Windows 不受影响：SDL_GPU 在那里会选择 Vulkan 后端
+  （由 `win.driver()` 确认），使用 SPIR-V 二进制块。
 - 图形片元着色器中的**圆角矩形距离场**提供抗锯齿填充；顶点携带
   `position`、`local`、`half extents`、`radius` 与颜色，一个视口尺寸的
   push constant 负责投影。启用 alpha 混合。

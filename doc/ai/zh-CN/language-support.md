@@ -138,8 +138,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 ## 平台
 
 构建目标覆盖 macOS、Linux、Windows 的 x64 与 arm64。Windows 上是 **MSVC ABI**，
-clang 需要 MSVC/SDK 环境——见 [../../zh-CN/requirements.md](../../zh-CN/requirements.md)。
-需要 clang **16 或更新**。
+编译器必须是面向 MSVC 的 clang（Visual Studio 自带的 LLVM 即可）——见
+[../../zh-CN/requirements.md](../../zh-CN/requirements.md)。需要 clang **16 或更新**。
 
 ## 写大程序之前
 

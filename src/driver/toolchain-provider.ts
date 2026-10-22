@@ -17,6 +17,10 @@
  * The version is checked here, not left to the first failed C compile: the
  * emitted IR needs LLVM 16+ (opaque pointers), and a "clang 15 is too old"
  * error up front is far more actionable than a wall of IR type errors later.
+ * On Windows the target is checked as well: only an MSVC-targeting clang can
+ * link against the runtime, so a compiler built for another Windows ABI is
+ * skipped (or rejected, when named explicitly) instead of producing objects
+ * the linker cannot mix.
  *
  * Extra linker arguments (for example `-fuse-ld=lld`) can be supplied through
  * `xbintsc_LINKER_ARGS`.

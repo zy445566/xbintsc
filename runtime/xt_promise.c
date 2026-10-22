@@ -386,3 +386,18 @@ xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt
   *handled = 0;
   return XT_UNDEFINED;
 }
+
+xt_value xt_queue_microtask(int32_t argc, xt_value *argv) {
+  xt_value callback = xt_arg_at(argc, argv, 0);
+  if (!XT_IS_FUNCTION(callback)) {
+    xt_value message = xt_string_from_cstr("The \"callback\" argument must be of type function");
+    xt_throw(xt_type_error_ctor(1, &message));
+    return XT_UNDEFINED;
+  }
+  /* Reuse the promise reaction queue: a settled promise's `then` callback is
+   * exactly a microtask, and it keeps FIFO order with pending `.then`s. */
+  xt_value promise = xt_promise_resolve(XT_UNDEFINED);
+  int handled = 0;
+  xt_promise_method(promise, "then", 1, &callback, &handled);
+  return XT_UNDEFINED;
+}

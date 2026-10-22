@@ -73,6 +73,7 @@ Canonical detail (always current, much longer):
 | --- | --- | --- |
 | `async` / `await`, `Promise`, `Promise.all` | ✅ | real suspension: an `async` body runs on a stackful coroutine, and awaiting a **pending** promise pauses it until the promise settles. Awaiting an already-settled value still continues synchronously |
 | `setTimeout` and callbacks | ✅ | timers run on the core event loop; `await new Promise(r => setTimeout(r, ms))` works |
+| `queueMicrotask` / `setImmediate` / `performance.now` | ✅ | microtasks share the promise FIFO queue; `setImmediate` is a zero-delay timer with numeric ids; `performance.now` is monotonic fractional milliseconds |
 | Sockets / servers (`http`, `net`, `dgram`) | ✅ | callbacks run on the event loop and can settle a promise you await (`net` / `http` examples included in the tests) |
 | `fs/promises` | ⚠️ | awaitable, but each call performs its I/O synchronously before settling, so it does not yield while the I/O runs |
 | `async` generators, worker threads | 🚫 | `async function*` is rejected; workers are child processes |

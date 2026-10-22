@@ -88,8 +88,23 @@ static int64_t xt_loop_now_ms(void) {
 #endif
 }
 
-static void xt_loop_sleep_ms(int ms) {
-  if (ms <= 0) return;
+/* Fractional monotonic milliseconds for `performance.now()`. Kept separate from
+ * xt_loop_now_ms(), which only needs whole milliseconds for timer deadlines. */
+double xt_monotonic_ms(void) {
+#if defined(_WIN32)
+  static LARGE_INTEGER frequency;
+  if (frequency.QuadPart == 0) QueryPerformanceFrequency(&frequency);
+  LARGE_INTEGER counter;
+  QueryPerformanceCounter(&counter);
+  return (double)counter.QuadPart * 1000.0 / (double)frequency.QuadPart;
+#else
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
+#endif
+}
+
+static void xt_loop_sleep_ms(int ms) {  if (ms <= 0) return;
 #if defined(_WIN32)
   Sleep((DWORD)ms);
 #else
@@ -261,6 +276,22 @@ xt_value xt_clear_interval(int32_t argc, xt_value *argv) {
   double id = xt_to_number(xt_arg_at(argc, argv, 0));
   if (id >= 1) xt_timer_cancel((uint64_t)id);
   return XT_UNDEFINED;
+}
+
+xt_value xt_set_immediate(int32_t argc, xt_value *argv) {
+  xt_value callback = xt_arg_at(argc, argv, 0);
+  if (!XT_IS_FUNCTION(callback)) {
+    xt_value message = xt_string_from_cstr("The \"callback\" argument must be of type function");
+    xt_throw(xt_type_error_ctor(1, &message));
+    return XT_UNDEFINED;
+  }
+  int32_t extra = argc > 1 ? argc - 1 : 0;
+  uint64_t id = xt_timer_add(callback, 0, 0, extra, extra > 0 ? argv + 1 : NULL);
+  return xt_number((double)id);
+}
+
+xt_value xt_clear_immediate(int32_t argc, xt_value *argv) {
+  return xt_clear_timeout(argc, argv);
 }
 
 int xt_loop_add(int fd, int events, xt_io_handler handler, void *userdata) {

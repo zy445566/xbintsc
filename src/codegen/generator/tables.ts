@@ -153,6 +153,9 @@ export const GLOBAL_FUNCTIONS: Record<string, string> = {
   clearTimeout: "xt_clear_timeout",
   setInterval: "xt_set_interval",
   clearInterval: "xt_clear_interval",
+  setImmediate: "xt_set_immediate",
+  clearImmediate: "xt_clear_immediate",
+  queueMicrotask: "xt_queue_microtask",
   fetch: "xt_fetch",
   Number: "xt_number_ctor",
   String: "xt_string_ctor",
@@ -177,6 +180,9 @@ export const BUILTIN_FUNCTION_VALUES: Record<string, string> = {
   clearTimeout: "xt_builtin_value_clearTimeout",
   setInterval: "xt_builtin_value_setInterval",
   clearInterval: "xt_builtin_value_clearInterval",
+  setImmediate: "xt_builtin_value_setImmediate",
+  clearImmediate: "xt_builtin_value_clearImmediate",
+  queueMicrotask: "xt_builtin_value_queueMicrotask",
   fetch: "xt_builtin_value_fetch",
   Number: "xt_builtin_value_number",
   String: "xt_builtin_value_string",
@@ -236,6 +242,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   path: "xt_path_static",
   os: "xt_os_static",
   process: "xt_process_call",
+  performance: "xt_performance_call",
   Buffer: "xt_buffer_static",
   stream: "xt_stream_static",
   Readable: "xt_stream_static",
@@ -275,6 +282,7 @@ export const NAMESPACE_PROPERTIES: Record<string, string> = {
   process: "xt_process_get",
   "import.meta": "xt_import_meta",
   Symbol: "xt_symbol_get",
+  performance: "xt_performance_get",
 };
 
 /** Global constructors called as `new X(...)` (all have signature `(i32, i64*)`). */

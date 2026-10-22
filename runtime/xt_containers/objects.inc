@@ -163,6 +163,7 @@ xt_value xt_object_new_with_proto(xt_value proto) {
   obj->count = 0;
   obj->capacity = 0;
   obj->properties = NULL;
+  obj->shape = xt_shape_empty();
   obj->prototype = proto;
   obj->frozen = 0;
   obj->is_array_base = 0;
@@ -229,6 +230,7 @@ static xt_property *xt_object_insert_property(xt_object *obj, xt_value key) {
       }
     }
   }
+  uint32_t oldCount = obj->count;
   xt_object_reserve(obj, obj->count + 1);
   for (uint32_t i = obj->count; i > position; i--) obj->properties[i] = obj->properties[i - 1];
   xt_property *prop = &obj->properties[position];
@@ -237,6 +239,10 @@ static xt_property *xt_object_insert_property(xt_object *obj, xt_value key) {
   prop->getter = XT_UNDEFINED;
   prop->setter = XT_UNDEFINED;
   obj->count++;
+  /* Appending follows a transition; inserting an integer key into the middle
+   * reorders the list, so rebuild the canonical shape from the new layout. */
+  if (position == oldCount && obj->shape) obj->shape = xt_shape_transition(obj->shape, key);
+  else xt_object_shape_changed(obj);
   return prop;
 }
 

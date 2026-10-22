@@ -46,6 +46,13 @@ Working around the limitation by compiling the IR elsewhere is not supported.
 The Windows release targets the **MSVC ABI**: clang uses the
 Windows SDK and the MSVC C/C++ runtime/headers.
 
+Optional optimization features add two tools:
+
+- `--lto` needs **lld** (`-fuse-ld=lld`); the LLVM installs above include it.
+- `--pgo-use` needs **llvm-profdata** to merge `.profraw` files. The driver
+  prefers the copy next to the resolved clang; override it with
+  `xbintsc_LLVM_PROFDATA`.
+
 ## Prebuilt releases (recommended)
 
 Download the archive for your platform from

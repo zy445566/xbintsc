@@ -32,6 +32,9 @@ describe("parseProjectConfig", () => {
         outDir: "build",
         output: "build/app",
         optimize: "3",
+        lto: true,
+        pgo: "use",
+        pgoDir: "profiles",
         extensions: ["gui", "node"],
         extNative: ["native/xbintsc.manifest.json"],
         force: true,
@@ -43,6 +46,9 @@ describe("parseProjectConfig", () => {
       outDir: "build",
       output: "build/app",
       optimize: "3",
+      lto: true,
+      pgo: "use",
+      pgoDir: "profiles",
       extensions: ["gui", "node"],
       extNative: ["native/xbintsc.manifest.json"],
       force: true,
@@ -73,6 +79,10 @@ describe("parseProjectConfig", () => {
 
   it("rejects an unknown optimization level", () => {
     expect(() => parseProjectConfig(JSON.stringify({ optimize: "4" }))).toThrow(/optimize/);
+  });
+
+  it("rejects an unknown PGO stage", () => {
+    expect(() => parseProjectConfig(JSON.stringify({ pgo: "train" }))).toThrow(/pgo/);
   });
 });
 

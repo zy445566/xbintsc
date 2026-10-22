@@ -24,6 +24,15 @@ function isStringLike(node: Expression): boolean {
   return node.kind === SyntaxKind.StringLiteral || node.kind === SyntaxKind.NoSubstitutionTemplateLiteral;
 }
 
+/** True for a numeric literal (optionally signed), whose tag check can be skipped. */
+function isNumericLiteral(node: Expression): boolean {
+  if (node.kind === SyntaxKind.NumericLiteral) return true;
+  if (node.kind !== SyntaxKind.PrefixUnaryExpression) return false;
+  const prefix = node as PrefixUnaryExpression;
+  if (prefix.operator !== PrefixUnaryOperator.Minus && prefix.operator !== PrefixUnaryOperator.Plus) return false;
+  return prefix.operand.kind === SyntaxKind.NumericLiteral;
+}
+
 /**
  * The built-in constructor a right-hand `instanceof` operand names, if any.
  * A user binding with the same name shadows it.
@@ -84,7 +93,15 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
     // `+` concatenates when either side is known to be a string; skip the
     // numeric tag checks for that shape and call the runtime directly.
     const knownStringConcat = operator === "+" && (isStringLike(node.left) || isStringLike(node.right));
-    return this.emitBinaryOperation(left, right, operator, runtime, !knownStringConcat);
+    return this.emitBinaryOperation(
+      left,
+      right,
+      operator,
+      runtime,
+      !knownStringConcat,
+      isNumericLiteral(node.left),
+      isNumericLiteral(node.right),
+    );
   },
 
   emitShortCircuit(node: BinaryExpression, kind: "and" | "or" | "nullish"): string {
@@ -95,15 +112,9 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
     const endLabel = this.label("sc.end");
     let condition: string;
     if (kind === "and") {
-      const truthy = this.reg();
-      this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${left})`);
-      condition = this.reg();
-      this.emit(`  ${condition} = icmp ne i32 ${truthy}, 0`);
+      condition = this.emitTruthiness(left, node.left);
     } else if (kind === "or") {
-      const truthy = this.reg();
-      this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${left})`);
-      const isTruthy = this.reg();
-      this.emit(`  ${isTruthy} = icmp ne i32 ${truthy}, 0`);
+      const isTruthy = this.emitTruthiness(left, node.left);
       condition = this.reg();
       this.emit(`  ${condition} = xor i1 ${isTruthy}, true`);
     } else {
@@ -128,10 +139,7 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
   emitConditional(node: ConditionalExpression): string {
     const result = this.alloca();
     const condition = this.emitExpression(node.condition);
-    const truthy = this.reg();
-    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${condition})`);
-    const nonzero = this.reg();
-    this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
+    const nonzero = this.emitTruthiness(condition, node.condition);
     const trueLabel = this.label("cond.true");
     const falseLabel = this.label("cond.false");
     const endLabel = this.label("cond.end");
@@ -195,6 +203,9 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
           one,
           node.operator === PrefixUnaryOperator.PlusPlus ? "+" : "-",
           fn,
+          true,
+          false,
+          true,
         );
         this.emitAssignmentTarget(node.operand, next);
         return next;
@@ -214,6 +225,9 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
       one,
       node.operator === PostfixUnaryOperator.PlusPlus ? "+" : "-",
       fn,
+      true,
+      false,
+      true,
     );
     this.emitAssignmentTarget(node.operand, next);
     return current;

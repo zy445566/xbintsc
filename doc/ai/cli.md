@@ -50,8 +50,32 @@ so restart it after installing a dependency.
     --verbose         Print progress information
     --time            Print per-phase build timings
     --debug           Emit debug info (DWARF/CodeView) and keep frame pointers
+    --lto             Compile program and runtime to LTO bitcode; link with lld
+    --pgo-generate [dir]  Build an instrumented binary writing profiles to dir
+    --pgo-use [dir]   Build with the profiles collected from --pgo-generate
     --json            Print diagnostics as a JSON array on stdout
 ```
+
+### LTO and PGO
+
+`--lto` compiles the generated IR and the C runtime to LLVM bitcode (`-flto`)
+and links with lld (`-fuse-ld=lld`), so LLVM can optimize across the
+language/runtime boundary. lld must be installed alongside clang.
+
+PGO is a two-build workflow:
+
+```bash
+xbintsc build app.ts --pgo-generate=profiles   # instrumented binary
+./build/app                                    # run a representative workload
+xbintsc build app.ts --pgo-use=profiles        # optimized rebuild
+```
+
+`--pgo-use` merges the `.profraw` files with `llvm-profdata` (the copy next to
+clang is preferred; override with `xbintsc_LLVM_PROFDATA`) and passes
+`-fprofile-use=<dir>` to clang. The profile directory defaults to
+`<outDir>/pgo`. LTO and PGO can be combined. A `--pgo-use` build is never served
+from the incremental cache, because the profile data can change independently
+of the source.
 
 Parsing details that occasionally surprise:
 
@@ -80,6 +104,9 @@ matching field. `--no-config` skips discovery entirely.
 | `outDir` | string | Output directory (default `build/`) |
 | `output` | string | Explicit output path, overriding `outDir` |
 | `optimize` | `"0"｜"1"｜"2"｜"3"` | Optimization level |
+| `lto` | boolean | Compile program and runtime to LTO bitcode and link with lld |
+| `pgo` | `"generate"｜"use"` | Profile-guided optimization stage |
+| `pgoDir` | string | Profile directory (default `<outDir>/pgo`) |
 | `extensions` | string[] | Bundled extensions to enable, e.g. `["node"]` |
 | `extNative` | string[] | Native extension manifest paths |
 | `force` | boolean | Ignore the incremental cache |
@@ -95,6 +122,7 @@ unreadable or malformed config fails the build with `invalid JSON` or
 | --- | --- |
 | `xbintsc_CLANG` | Use this clang instead of resolving one from `PATH` |
 | `xbintsc_LINKER_ARGS` | Extra linker flags (e.g. `-fuse-ld=lld`) |
+| `xbintsc_LLVM_PROFDATA` | `llvm-profdata` used to merge PGO `.profraw` files |
 | `xbintsc_CACHE_DIR` | Object-cache directory (default: `.xbintsc`) |
 | `xbintsc_PREFER_PREBUILT` | `0` forces the runtime to be compiled from source |
 | `xbintsc_BINARY` | Native compiler binary the `bin/` launcher should run |

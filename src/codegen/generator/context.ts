@@ -64,6 +64,8 @@ export class GeneratorContext {
   readonly lineStartsByFile = new Map<string, number[]>();
   stringCounter = 0;
   staticCounter = 0;
+  /** Monotonic id for per-property-access inline-cache globals. */
+  icCounter = 0;
   /**
    * How many `UnsupportedFeature` diagnostics the function currently being
    * emitted produced. Unsupported constructs can leave the generator with a
@@ -306,6 +308,19 @@ export class GeneratorContext {
     const ptr = `%slot${this.current.allocas.length}`;
     this.current.allocas.push(`${ptr} = alloca i64`);
     this.current.escapePointers.push(ptr);
+    return ptr;
+  }
+
+  /**
+   * Allocate a two-word inline cache for one property-access site and return
+   * the `i64*` the runtime fills with (shape, property index). The global is
+   * zero-initialised, which the runtime treats as an empty cache.
+   */
+  icCachePointer(): string {
+    const name = `@ic.${this.icCounter++}`;
+    this.globals.push(`${name} = internal global [2 x i64] zeroinitializer`);
+    const ptr = this.reg();
+    this.emit(`  ${ptr} = getelementptr [2 x i64], [2 x i64]* ${name}, i64 0, i64 0`);
     return ptr;
   }
 

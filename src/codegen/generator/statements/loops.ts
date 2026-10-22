@@ -12,7 +12,7 @@ import {
   type VariableDeclarationList,
   type WhileStatement,
 } from "../../../ast/nodes.js";
-import { numberLiteral } from "../../values.js";
+import { i64, numberLiteral, XT_TRUE } from "../../values.js";
 import type { Generator } from "../generator.js";
 import type { LoopLabels } from "../state.js";
 
@@ -48,10 +48,7 @@ export const loopStatementMethods: LoopStatementMethods = {
     this.terminate(`br label %${condLabel}`);
     this.startBlock(condLabel);
     const condition = this.emitExpression(statement.condition);
-    const truthy = this.reg();
-    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${condition})`);
-    const nonzero = this.reg();
-    this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
+    const nonzero = this.emitTruthiness(condition, statement.condition);
     this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);
     this.startBlock(bodyLabel);
     this.current.loops.push({ breakLabel: endLabel, continueLabel: condLabel, tryDepth: this.current.tryFrames.length, labels: this.takePendingLabels() });
@@ -74,10 +71,7 @@ export const loopStatementMethods: LoopStatementMethods = {
 
     this.startBlock(condLabel);
     const condition = this.emitExpression(statement.condition);
-    const truthy = this.reg();
-    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${condition})`);
-    const nonzero = this.reg();
-    this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
+    const nonzero = this.emitTruthiness(condition, statement.condition);
     this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);
     this.startBlock(endLabel);
   },
@@ -103,10 +97,7 @@ export const loopStatementMethods: LoopStatementMethods = {
     this.startBlock(condLabel);
     if (statement.condition) {
       const condition = this.emitExpression(statement.condition);
-      const truthy = this.reg();
-      this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${condition})`);
-      const nonzero = this.reg();
-      this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
+      const nonzero = this.emitTruthiness(condition, statement.condition);
       this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);
     } else {
       this.terminate(`br label %${bodyLabel}`);
@@ -148,10 +139,9 @@ export const loopStatementMethods: LoopStatementMethods = {
     /* `xt_iter_has` covers generators too, which cannot be sized up front. */
     const hasValue = this.reg();
     this.emit(`  ${hasValue} = call i64 @xt_iter_has(i64 ${iterable}, i64 ${index})`);
-    const truthy = this.reg();
-    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${hasValue})`);
+    /* `xt_iter_has` always returns a boolean tag, so skip `xt_truthy`. */
     const nonzero = this.reg();
-    this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
+    this.emit(`  ${nonzero} = icmp eq i64 ${hasValue}, ${i64(XT_TRUE)}`);
     this.terminate(`br i1 ${nonzero}, label %${bodyLabel}, label %${endLabel}`);
 
     this.startBlock(bodyLabel);

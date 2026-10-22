@@ -200,6 +200,8 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 
 - 生成 LLVM IR 文本（`.ll`），无需自建寄存器分配（依赖 `alloca` + mem2reg）。
 - 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
+- 属性读取按源码位置生成内联缓存：每个访问点拥有一个零初始化的 `[2 x i64]` 全局（`@ic.N`），传给 `xt_get_ic`。普通对象带有驻留的隐藏类 shape（`xt_shape`，`(parent, key)` 转移树），缓存保存 `(shape, 属性下标)`，命中时只需比较 shape 指针并校验一次键，无需线性扫描属性表。插入/删除属性以及整数键重排会重建或转移 shape，从而使旧缓存失效；数组、函数与容器回退到 `xt_get`。
+- 数值运算符保留内联双精度快路径；数值字面量操作数跳过标签检查。若条件表达式本身是比较、`in`、`instanceof` 或 `!`，其值已经是布尔标签，代码生成用 `icmp eq i64 value, XT_TRUE` 代替调用 `xt_truthy`（热循环条件因此少一次调用）。
 - 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`switch`，`try/catch/finally`，`break` / `continue` / `return`。
   - `for...of` 与展开通过 `xt_iter_open` → `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、类型化数组、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象（`Map` 产出 `[key, value]` 对）；非可迭代值抛出 `TypeError`。数组还暴露稳定的 `Array.prototype[Symbol.iterator]`，调用后返回带 `next()` 且自身可迭代的迭代器对象。
   - `switch` 以严格相等逐 `case` 测试，命中后执行并在 `break` 前穿透。
@@ -285,11 +287,13 @@ xt_value fn(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
 实现位置：`src/driver/compiler.ts`、`src/driver/cache.ts`、`src/driver/toolchain.ts`、`src/driver/paths.ts`
 
 - 编译流水线：读源 → 模块打包（`src/driver/modules.ts`，当入口含 `import`/`export` 时）→ 解析 → 绑定/检查 → IR → 目标文件 → 链接。
-- 增量缓存：以「编译器版本 + 源码哈希 + emit 类型 + 优化级别 + 平台 + 扩展指纹（名称、链接参数、原生对象内容）」为键，产物存在且新鲜则跳过构建。
-- C 运行时与扩展源按内容哈希缓存目标文件，只编译一次。
+- 增量缓存：以「编译器版本 + 源码哈希 + emit 类型 + 优化级别 + LTO/PGO 模式 + 平台 + 扩展指纹（名称、链接参数、原生对象内容）」为键，产物存在且新鲜则跳过构建。`--pgo-use` 总是重新构建，因为 profile 数据可能变化而源码不变。
+- C 运行时与扩展源按内容哈希缓存目标文件，只编译一次（缓存键包含 LTO/PGO 参数）。
 - 工具链封装：查找 `clang`（可用 `xbintsc_CLANG` 覆盖）、编译 IR、编译 C、链接。
+- LTO（`--lto` / `"lto": true`）：程序与运行时都编译为 LLVM bitcode（`-flto`），并用 `-fuse-ld=lld` 链接；需要 lld。
+- PGO（先 `--pgo-generate[=dir]`，再 `--pgo-use[=dir]`，或配置 `"pgo"` / `"pgoDir"`）：生成 IR 与运行时 C 都用 `-fprofile-generate=<dir>` 插桩；运行插桩后的二进制，`--pgo-use` 会用 `llvm-profdata` 合并 `.profraw`（优先使用 clang 旁边的副本，可用 `xbintsc_LLVM_PROFDATA` 覆盖），再以 `-fprofile-use=<dir>` 重新构建。
 - 链接参数：非 Windows 自动加 `-lm`；扩展可追加链接参数。
-- 项目编译配置（`src/driver/config.ts`、`xbintsc.config.json`）：`entry`、`outDir`、`output`、`optimize`、`extensions`、`extNative`、`force` 与 `app`（`name`、`icon`、`bundle`、`bundleId`）。从入口/当前目录向上查找，可用 `--config` 指定、`--no-config` 关闭；所有路径以配置文件所在目录为基准；CLI 参数优先于配置。
+- 项目编译配置（`src/driver/config.ts`、`xbintsc.config.json`）：`entry`、`outDir`、`output`、`optimize`、`lto`、`pgo`、`pgoDir`、`extensions`、`extNative`、`force` 与 `app`（`name`、`icon`、`bundle`、`bundleId`）。从入口/当前目录向上查找，可用 `--config` 指定、`--no-config` 关闭；所有路径以配置文件所在目录为基准；CLI 参数优先于配置。
 - 应用图标（`src/driver/icon.ts`、`win-icon.ts`、`mac-bundle.ts`，`--icon`/`app.icon`）：PNG/ICO/ICNS 以 `xt_app_icon_*` 符号内嵌；Windows 上通过 `llvm-rc`/`windres` 合成 PE 资源；macOS 上打包为 `Foo.app`（用 `sips`/`iconutil` 生成 `AppIcon.icns`）。`gui` 扩展用内嵌字节调用 `SDL_SetWindowIcon`；`xbintsc_RC` 可覆盖资源编译器。
 
 ---
@@ -365,7 +369,7 @@ const result = build("program.ts", { emit: "exe", outDir: "build" });
 | 扩展 | 扩展注册表、`core`（print）、`node`（fs / path / os / process / buffer / stream / net / dgram / http，按说明符导入） |
 | GUI（`gui` 扩展） | 自托管 HTML/CSS 渲染器窗口（SDL3 + SDL_GPU）：DOM/CSS/布局、CSS `transform`/`transform-origin`、`<img>`/SVG、`<video>`/`<audio>`、`<canvas>` 2D、事件、transition（含 `transform`） |
 | 工具链 | clang 编译 IR/C、链接、增量缓存 |
-| 项目配置 | `xbintsc.config.json`（`entry` / `outDir` / `optimize` / `extensions` / `app`），支持查找与 CLI 优先级 |
+| 项目配置 | `xbintsc.config.json`（`entry` / `outDir` / `optimize` / `lto` / `pgo` / `pgoDir` / `extensions` / `app`），支持查找与 CLI 优先级 |
 | 应用图标 | 编译期内嵌（PNG/ICO/ICNS），Windows PE 资源、macOS `.app` bundle、`gui` 运行时窗口/Dock 图标 |
 | 自举 | `xbintsc` 可将 `src/cli/main.ts` 编译为原生二进制；产出的 IR 从第 1 代起达到不动点 |
 | 平台 | macOS / Linux / Windows（构建层面已适配，CI 见 `.github/workflows`） |

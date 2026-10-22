@@ -26,6 +26,18 @@
       "description": "Optimization level (default: 2).",
       "enum": ["0", "1", "2", "3"]
     },
+    "lto": {
+      "type": "boolean",
+      "description": "Compile program and runtime to LTO bitcode and link with lld."
+    },
+    "pgo": {
+      "enum": ["generate", "use"],
+      "description": "Profile-guided optimization stage."
+    },
+    "pgoDir": {
+      "type": "string",
+      "description": "Profile directory for pgo (default: <outDir>/pgo)."
+    },
     "extensions": {
       "type": "array",
       "items": { "type": "string" },

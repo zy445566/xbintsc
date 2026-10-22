@@ -71,10 +71,7 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
     const elseLabel = statement.elseStatement ? this.label("if.else") : undefined;
     const endLabel = this.label("if.end");
     const condition = this.emitExpression(statement.condition);
-    const truthy = this.reg();
-    this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${condition})`);
-    const nonzero = this.reg();
-    this.emit(`  ${nonzero} = icmp ne i32 ${truthy}, 0`);
+    const nonzero = this.emitTruthiness(condition, statement.condition);
     this.terminate(`br i1 ${nonzero}, label %${thenLabel}, label %${elseLabel ?? endLabel}`);
 
     this.startBlock(thenLabel);

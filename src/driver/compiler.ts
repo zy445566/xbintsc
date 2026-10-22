@@ -31,8 +31,12 @@ import {
   compileC,
   compileIr,
   link,
+  mergeProfileData,
+  optimizationFlags,
   realRunner,
   RUNTIME_CFLAGS,
+  ToolchainError,
+  type PgoMode,
   type Runner,
 } from "./toolchain.js";
 
@@ -42,7 +46,7 @@ import {
  * `package.json`); a stale version would let an upgraded compiler reuse binaries
  * produced by the previous one.
  */
-export const COMPILER_VERSION = "0.5.16";
+export const COMPILER_VERSION = "0.5.17";
 
 export type EmitKind = "exe" | "obj" | "ir";
 
@@ -67,6 +71,15 @@ export interface BuildOptions {
   readonly app?: AppConfig;
   /** Emit LLVM debug metadata so `-g` produces DWARF/CodeView (default false). */
   readonly debug?: boolean;
+  /** Compile the program and runtime to LTO bitcode and link with lld. */
+  readonly lto?: boolean;
+  /**
+   * Profile-guided optimization. `generate` builds an instrumented binary that
+   * writes `.profraw` files into `pgoDir`; `use` consumes them.
+   */
+  readonly pgo?: PgoMode;
+  /** Profile directory (default: `<outDir>/pgo`). */
+  readonly pgoDir?: string;
 }
 
 /** One phase of a build, in milliseconds (reported by `--time`). */
@@ -203,6 +216,10 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const cacheDir = resolve(options.cacheDir ?? defaultCacheDir());
   const emit: EmitKind = options.emit ?? "exe";
   const optimize = options.optimize ?? "2";
+  const lto = options.lto === true;
+  const pgo = options.pgo;
+  const pgoDir = resolve(options.pgoDir ?? join(outDir, "pgo"));
+  if (pgo) mkdirSync(pgoDir, { recursive: true });
 
   const absoluteEntry = resolve(entryPath);
   const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
@@ -276,6 +293,9 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     String(app.bundle ?? false),
     app.bundleId ?? "",
     String(options.debug === true),
+    String(lto),
+    pgo ?? "",
+    pgo ? pgoDir : "",
   ]);
 
   // A `.app` bundle is deterministic from the output path and name, so it can be
@@ -286,7 +306,9 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
       : undefined;
   const cache = new BuildCache(cacheDir);
   const outputs = bundle ? [outputPath, bundle] : [outputPath];
-  if (!options.force && !diagnostics.hasErrors && cache.isFresh(cacheKey, outputs)) {
+  /* PGO profile data can change without the cache key changing, so always
+   * rebuild a `--pgo-use` binary; it is an explicit optimization step. */
+  if (!options.force && pgo !== "use" && !diagnostics.hasErrors && cache.isFresh(cacheKey, outputs)) {
     return { outputPath, cached: true, diagnostics: [], timings, ...(bundle ? { bundlePath: bundle } : {}) };
   }
 
@@ -328,10 +350,30 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     ? { clang: options.clang, linkerArgs: [] as string[], env: {} as Record<string, string> }
     : resolveToolchain(runner);
   const clang = toolchain.clang;
+  if (pgo === "use") {
+    try {
+      mergeProfileData(runner, pgoDir, clang, toolchain.env);
+    } catch (error) {
+      if (error instanceof ToolchainError) {
+        diagnostics.error(DiagnosticCode.ToolchainError, error.message);
+        return { outputPath, irPath, cached: false, diagnostics: diagnostics.diagnostics, ir };
+      }
+      throw error;
+    }
+  }
   mkdirSync(cacheDir, { recursive: true });
 
   const objectPath = emit === "obj" ? outputPath : resolve(outDir, baseName + ".o");
-  compileIr(runner, { clang, irPath, objectPath, optimize, env: toolchain.env, debug: options.debug === true });
+  compileIr(runner, {
+    clang,
+    irPath,
+    objectPath,
+    optimize,
+    env: toolchain.env,
+    debug: options.debug === true,
+    lto,
+    ...(pgo ? { pgo, pgoDir } : {}),
+  });
   timings.push({ phase: "clang", ms: Date.now() - clangStarted });
 
   if (emit === "obj") {
@@ -347,8 +389,11 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     runtimeDir,
     cacheDir,
     registry,
-    resolvePreferPrebuilt(options.preferPrebuilt),
+    resolvePreferPrebuilt(options.preferPrebuilt) && !lto && pgo === undefined,
     toolchain.env,
+    lto,
+    pgo,
+    pgoDir,
   );
   timings.push({ phase: "runtime", ms: Date.now() - runtimeStarted });
 
@@ -411,6 +456,8 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     ],
     optimize,
     env: toolchain.env,
+    lto,
+    ...(pgo ? { pgo, pgoDir } : {}),
   });
   timings.push({ phase: "link", ms: Date.now() - linkStarted });
 
@@ -486,7 +533,11 @@ function ensureRuntimeObjects(
   registry: ExtensionRegistry,
   preferPrebuilt: boolean,
   env: Record<string, string>,
+  lto: boolean,
+  pgo: PgoMode | undefined,
+  pgoDir: string,
 ): RuntimeObjects {
+  const optimization = optimizationFlags(lto, pgo, pgoDir);
   /* Runtime objects depend on the shared headers (rt.h/rt_internal.h/...) and
      the `#include`d implementation fragments (`.inc`), so any change to them
      must invalidate every cached object. Hash them all. */
@@ -507,6 +558,7 @@ function ensureRuntimeObjects(
       "runtime",
       COMPILER_VERSION,
       RUNTIME_CFLAGS.join(" "),
+      optimization.join(" "),
       tag,
       headerStamp,
       body,
@@ -515,7 +567,7 @@ function ensureRuntimeObjects(
     ]);
     const objectPath = join(cacheDir, `${tag}-${key}.o`);
     if (!existsSync(objectPath)) {
-      compileC(runner, clang, sourcePath, objectPath, runtimeDir, env);
+      compileC(runner, clang, sourcePath, objectPath, runtimeDir, env, optimization);
     }
     return objectPath;
   };

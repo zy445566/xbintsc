@@ -1,9 +1,13 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   compileC,
   compileIr,
   findClang,
   link,
+  mergeProfileData,
   MINIMUM_CLANG_MAJOR,
   parseClangVersion,
   probeClang,
@@ -119,6 +123,60 @@ describe("toolchain", () => {
     const deadStrip =
       process.platform === "win32" ? [] : [process.platform === "darwin" ? "-Wl,-dead_strip" : "-Wl,--gc-sections"];
     expect(calls[0]!.args).toEqual(["-O1", "a.o", "b.o", "-o", "prog", ...deadStrip, "-lm"]);
+  });
+
+  it("passes LTO and PGO flags to compilation and linking", () => {
+    const { runner, calls } = recordingRunner();
+    compileIr(runner, {
+      clang: "clang",
+      irPath: "in.ll",
+      objectPath: "out.o",
+      optimize: "3",
+      lto: true,
+      pgo: "generate",
+      pgoDir: "profiles",
+    });
+    expect(calls[0]!.args).toEqual([
+      "-O3",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-flto",
+      "-fprofile-generate=profiles",
+      "-c",
+      "in.ll",
+      "-o",
+      "out.o",
+    ]);
+
+    link(runner, {
+      clang: "clang",
+      objectPaths: ["a.o"],
+      outputPath: "prog",
+      linkerFlags: [],
+      optimize: "3",
+      lto: true,
+      pgo: "use",
+      pgoDir: "profiles",
+    });
+    expect(calls[1]!.args.slice(0, 4)).toEqual(["-O3", "-flto", "-fprofile-use=profiles", "-fuse-ld=lld"]);
+  });
+
+  it("merges raw profiles with llvm-profdata", () => {
+    const directory = mkdtempSync(join(tmpdir(), "xbintsc-pgo-"));
+    const previous = process.env.xbintsc_LLVM_PROFDATA;
+    try {
+      writeFileSync(join(directory, "a.profraw"), "raw");
+      process.env.xbintsc_LLVM_PROFDATA = "profdata";
+      const { runner, calls } = recordingRunner();
+      mergeProfileData(runner, directory, "clang");
+      expect(calls[0]!.command).toBe("profdata");
+      expect(calls[0]!.args[0]).toBe("merge");
+      expect(calls[0]!.args).toContain(join(directory, "a.profraw"));
+    } finally {
+      if (previous === undefined) delete process.env.xbintsc_LLVM_PROFDATA;
+      else process.env.xbintsc_LLVM_PROFDATA = previous;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("compiles C sources with an include directory", () => {

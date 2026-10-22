@@ -326,6 +326,7 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_symbol_static(i64, i32, i64*)",
   "declare i64 @xt_symbol_get(i64)",
   "declare i64 @xt_get(i64, i64)",
+  "declare i64 @xt_get_ic(i64, i64, i64*)",
   "declare i64 @xt_set(i64, i64, i64)",
   "declare i64 @xt_box_new(i64)",
   "declare i64 @xt_box_get(i64)",

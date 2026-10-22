@@ -232,7 +232,7 @@ static void xt_json_stringify_object(xt_value value, xt_value indent, int depth,
   if (!array) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
   int any = 0;
   for (uint32_t i = 0; i < array->length; i++) {
-    xt_value item = xt_object_get(value, array->items[i]);
+    xt_value item = xt_get(value, array->items[i]);
     if (item != XT_UNDEFINED && !XT_IS_FUNCTION(item) && !xt_is_symbol(item)) { any = 1; break; }
   }
   if (!any) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
@@ -241,7 +241,7 @@ static void xt_json_stringify_object(xt_value value, xt_value indent, int depth,
   int written = 0;
   for (uint32_t i = 0; i < array->length; i++) {
     xt_value key = array->items[i];
-    xt_value item = xt_object_get(value, key);
+    xt_value item = xt_get(value, key);
     /* `undefined`, functions and symbols are omitted from objects. */
     if (item == XT_UNDEFINED || XT_IS_FUNCTION(item) || xt_is_symbol(item)) continue;
     if (written > 0) *out = xt_add(*out, xt_string_from_cstr(","));

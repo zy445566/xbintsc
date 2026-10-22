@@ -21,7 +21,7 @@ static xt_value xt_ta_proto(int kind) {
   xt_ta_define(proto, "fill", (void *)xt_ta_method_fill);
   xt_ta_define(proto, "set", (void *)xt_ta_method_set);
   xt_ta_define(proto, "slice", (void *)xt_ta_method_slice);
-  xt_ta_define(proto, "subarray", (void *)xt_ta_method_slice);
+  xt_ta_define(proto, "subarray", (void *)xt_ta_method_subarray);
   xt_ta_define(proto, "join", (void *)xt_ta_method_join);
   xt_ta_define(proto, "toString", (void *)xt_ta_method_to_string);
   xt_ta_define(proto, "toLocaleString", (void *)xt_ta_method_to_string);
@@ -50,13 +50,21 @@ static xt_value xt_ta_proto(int kind) {
   return proto;
 }
 
-static xt_value xt_ta_new(int kind, uint32_t length) {
+static xt_value xt_ta_view(int kind, xt_value buffer, uint32_t byteOffset, uint32_t length) {
   xt_value array = xt_object_new_with_proto(xt_ta_proto(kind));
   xt_object_set(array, xt_string_from_cstr("length"), xt_number((double)length));
-  xt_object_set(array, xt_string_from_cstr("byteLength"), xt_number((double)length * xt_ta_bytes[kind]));
-  xt_object_set(array, xt_string_from_cstr("byteOffset"), xt_number(0));
-  for (uint32_t i = 0; i < length; i++) xt_ta_store(array, kind, i, 0);
+  xt_object_set(array, xt_string_from_cstr("byteLength"),
+                xt_number((double)length * xt_ta_bytes[kind]));
+  xt_object_set(array, xt_string_from_cstr("byteOffset"), xt_number((double)byteOffset));
+  xt_object_set(array, xt_ta_buffer_key(), buffer);
+  xt_object_set(array, xt_ta_offset_key(), xt_number((double)byteOffset));
   return array;
+}
+
+static xt_value xt_ta_new(int kind, uint32_t length) {
+  xt_value byteLength = xt_number((double)length * xt_ta_bytes[kind]);
+  xt_value buffer = xt_array_buffer_ctor(1, &byteLength);
+  return xt_ta_view(kind, buffer, 0, length);
 }
 
 /* Length of any value a typed array can be built from, or 0 when it is not
@@ -106,6 +114,28 @@ static xt_value xt_ta_from_value(int kind, xt_value value, xt_value mapFn, xt_va
 static xt_value xt_ta_ctor_impl(int kind, int32_t argc, xt_value *argv) {
   if (argc == 0) return xt_ta_new(kind, 0);
   xt_value argument = argv[0];
+  if (xt_is_array_buffer(argument)) {
+    uint32_t bufferLength = xt_array_buffer_byte_length(argument);
+    double rawOffset = argc > 1 ? xt_to_number(argv[1]) : 0;
+    uint32_t offset = rawOffset > 0 ? (uint32_t)rawOffset : 0;
+    uint32_t width = (uint32_t)xt_ta_bytes[kind];
+    if (offset % width != 0 || offset > bufferLength) {
+      xt_value message = xt_string_from_cstr("start offset is not aligned or out of bounds");
+      xt_throw(xt_range_error_ctor(1, &message));
+    }
+    uint32_t length;
+    if (argc > 2 && argv[2] != XT_UNDEFINED) {
+      double rawLength = xt_to_number(argv[2]);
+      length = rawLength > 0 ? (uint32_t)rawLength : 0;
+    } else {
+      length = (bufferLength - offset) / width;
+    }
+    if (length > (bufferLength - offset) / width) {
+      xt_value message = xt_string_from_cstr("Invalid typed array length");
+      xt_throw(xt_range_error_ctor(1, &message));
+    }
+    return xt_ta_view(kind, argument, offset, length);
+  }
   /* Objects (arrays / typed arrays / array-likes / iterables) are copied
    * element-wise; every other argument is a length via `ToIndex`. */
   if (XT_IS_ARRAY(argument) || XT_IS_OBJECT(argument)) {

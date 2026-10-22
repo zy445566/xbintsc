@@ -179,6 +179,19 @@ static void xt_inspect(xt_value v, FILE *out, int nested) {
     xt_inspect_pop();
     return;
   }
+  int typedKind = xt_typed_array_kind_of(v);
+  if (typedKind >= 0) {
+    const char *name = xt_typed_array_name_of(typedKind);
+    uint32_t length = (uint32_t)xt_to_number(xt_get(v, xt_string_from_cstr("length")));
+    fprintf(out, "%s(%u) [", name ? name : "TypedArray", length);
+    for (uint32_t i = 0; i < length; i++) {
+      fputs(i == 0 ? " " : ", ", out);
+      xt_inspect(xt_typed_array_read(v, i), out, 1);
+    }
+    if (length > 0) fputc(' ', out);
+    fputc(']', out);
+    return;
+  }
   if (XT_IS_OBJECT(v)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(v);
     /* Map, Set, Date, RegExp, Promise, generators and iterators are heap

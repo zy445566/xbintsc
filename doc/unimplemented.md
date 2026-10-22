@@ -111,11 +111,12 @@ None known at the expression level.
 | `Symbol` constructor and symbol primitives | ✓ `Symbol(description)`, well-known symbols, `Symbol.for` / `Symbol.keyFor`, symbol property keys and `Object.getOwnPropertySymbols` |
 | `String.prototype.normalize` | ✗ not implemented |
 | `structuredClone` | ✓ arrays, objects, Map, Set, Date, RegExp and typed arrays (cycles and shared references preserved); functions, symbols, promises and generators are rejected |
+| `JSON.stringify` options | ~ `space` (number/string, clamped to 10) is honored; a function/array `replacer` is still ignored |
 | Built-in error subclasses (`TypeError`, `RangeError`, …) | ✓ first-class constructors and prototypes; `instanceof Error` holds for the whole family |
 | `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
 | Iterator protocol / `Symbol.iterator` / custom `for...of` iterables | ✓ arrays, strings, `Map`, `Set`, generators and any object exposing `[Symbol.iterator]()` are iterable in `for...of` / spread |
 | Generators (`function*`, `yield`, `yield*`, `next`/`throw`/`return`) | ✓ implemented with stackful coroutines; `for...of`, spread and delegation supported. `return()` completes without running `finally` |
-| Timers | ✓ `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` on the core event loop (numeric ids, no `Timeout` object; no `setImmediate` / `queueMicrotask`). A promise settled from a timer can be awaited: the async body suspends on the pending promise and resumes when the timer fires |
+| Timers and microtasks | ✓ `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` / `setImmediate` / `clearImmediate` / `queueMicrotask` and `performance.now` (numeric ids, no `Timeout` / `Immediate` object). A promise settled from a timer can be awaited: the async body suspends on the pending promise and resumes when the timer fires |
 | I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
 
 ### 3.4 Typed arrays

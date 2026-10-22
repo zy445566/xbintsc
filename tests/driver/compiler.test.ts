@@ -33,6 +33,13 @@ describe("compileString", () => {
     expect(diagnostics.some((d) => d.category === "error")).toBe(true);
   });
 
+  it("does not cascade a name error from the parser's recovery node", () => {
+    const { diagnostics } = compileString("const value = ;", "bad.ts");
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors.some((d) => d.code === DiagnosticCode.UnexpectedToken)).toBe(true);
+    expect(errors.some((d) => d.message.includes("<error>"))).toBe(false);
+  });
+
   it("hints the enabling flag for a known module from an unregistered extension", () => {
     const registry = createDefaultRegistry().hintExtension(nodeExtension);
     const { diagnostics } = compileString(

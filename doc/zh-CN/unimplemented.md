@@ -81,7 +81,7 @@
 | --- | --- |
 | `Symbol` 构造器与 symbol 原始值 | ✓ `Symbol(description)`、著名符号、`Symbol.for` / `Symbol.keyFor`、symbol 属性键与 `Object.getOwnPropertySymbols` |
 | `String.prototype.normalize` | ✗ 未实现 |
-| `structuredClone` | ✗ 未实现 |
+| `structuredClone` | ✓ 数组、对象、Map、Set、Date、RegExp 与类型化数组（保留循环引用与共享引用）；函数、symbol、Promise、生成器会被拒绝 |
 | `JSON.stringify` 选项 | ~ 已支持 `space`（数字或字符串，最多 10 个单位）；函数/数组形式的 `replacer` 仍被忽略 |
 | 内置错误子类（`TypeError`、`RangeError` 等） | ✓ 一等公民构造器与原型；整个家族 `instanceof Error` 成立 |
 | `AggregateError` 构造器 | ✓ `new AggregateError(errors, message)`；`Promise.any` 现以其作为 rejection |
@@ -194,7 +194,7 @@
 | --- | --- |
 | 正则按字节匹配 | 引擎按 UTF-8 字节匹配：多字节字面量仍可匹配，但 `.` 与字符类每次只消费一个字节（`\d`/`\w` 仍是 ASCII）。`exec` / `search` / 替换回调返回的偏移会转换为 UTF-16 码元 |
 | 全局正则 `lastIndex` | `/g`、`/y` 正则的 `test` / `exec` 不推进也不读取调用方设置的 `lastIndex` |
-| `String.normalize` / `structuredClone` | 未实现 |
+| `String.normalize` | 未实现 |
 | 内置方法一等公民 | 以未绑定方法值实现（见第 5 节）；`fn.toString()` 返回占位字符串而非源码文本 |
 | `for...in` | 枚举对象 / 数组 / 字符串的自身键；不含原型链属性 |
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
@@ -217,7 +217,7 @@
 | GC（垃圾回收） | ✓ `xt_alloc.c` 中的非移动标记-清扫，按存活堆阈值（`XT_GC_THRESHOLD` 可固定该阈值）或 `xt_gc_collect()` 触发；每次回收后阈值变为存活堆的 2 倍（下限 1 MiB），因此常驻内存跟随存活集而不是只增不减；`XT_GC_TRACE=1` 会为每次回收向 stderr 打印一行统计。显式根 + 根提供者 + 保守活动栈扫描。无压缩、弱引用或后台回收（缺少弱引用意味着扩展必须对它缓存的每个值做强引用，例如 GUI 的元素句柄） |
 | 自举（self-hosting） | ✓ 编译器已能自编译：`xbintsc build src/cli/main.ts` 可产出可用二进制，且从第 1 代起产出的 IR 保持稳定。运行时仍为 C |
 | 类型检查器 | ✗ 仅定义诊断码，无 checker |
-| 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` 已实现；String.normalize / structuredClone 缺失 |
+| 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` / `structuredClone` 已实现；String.normalize 缺失 |
 | 多文件模块打包 | 部分：相对路径 `.ts` 打包、ESM `node_modules` 包、命名空间导入、裸说明符扩展模块导入已实现；循环依赖 / CommonJS / 实时绑定未实现 |
 | 异步运行时 | ✓ `async`/`await` 在 `select(2)` reactor 上对 pending promise 挂起：定时器、TCP 套接字与 promise 回调都能恢复协程。仍缺：真正的异步 I/O 调度（`fs/promises` 会先阻塞完成 I/O 再 settle）、非阻塞 `fetch` 与 worker 线程（worker 是子进程） |
 | Windows 二进制产物验证 | 构建层已适配（`.exe` 后缀、链接参数分支），并在 CI 中验证 |
@@ -236,7 +236,7 @@
 
 未实现（类/面向对象）：abstract/implements、访问控制、父子类 #x 同名
 
-未实现（标准库）：String.normalize、structuredClone
+未实现（标准库）：String.normalize
 
 未实现（模块）：循环依赖、实时绑定、动态 `require(expr)`、
                      `require.resolve` / `require.cache`、`__dirname` / `__filename`

@@ -1,5 +1,16 @@
 /* -- Array statics -------------------------------------------------------- */
 
+/* True when `Array.from` should consume the value through the iteration
+ * protocol instead of the array-like `length` path. Typed arrays stay on the
+ * length path because their indexed properties already work that way. */
+static int xt_array_from_is_iterable(xt_value value) {
+  if (xt_is_map(value) || xt_is_set(value) || xt_is_generator(value)) return 1;
+  if (XT_IS_OBJECT(value) && xt_typed_array_kind_of(value) < 0) {
+    return XT_IS_FUNCTION(xt_object_get(value, xt_symbol_well_known("iterator")));
+  }
+  return 0;
+}
+
 xt_value xt_array_static(xt_value name, int32_t argc, xt_value *argv) {
   const char *fn = xt_string_data(name);
   if (!fn) return XT_UNDEFINED;
@@ -22,6 +33,20 @@ xt_value xt_array_static(xt_value name, int32_t argc, xt_value *argv) {
       for (uint32_t i = 0; i < points; i++) {
         xt_value item = xt_string_code_point_value(s, (int32_t)i);
         if (XT_IS_FUNCTION(mapper)) { xt_value args[2] = {item, xt_number((double)i)}; item = xt_closure_call(mapper, 2, args); }
+        xt_array_push(out, item);
+      }
+    } else if (xt_array_from_is_iterable(source)) {
+      /* Map, Set, generators, iterator objects and custom `[Symbol.iterator]`
+       * values do not expose a `length`; walk their `next()` protocol instead
+       * of silently producing an empty array. */
+      xt_value iterator = xt_iter_open(source);
+      for (uint32_t i = 0;; i++) {
+        if (!xt_truthy(xt_iter_has(iterator, xt_number((double)i)))) break;
+        xt_value item = xt_iter_value(iterator, xt_number((double)i));
+        if (XT_IS_FUNCTION(mapper)) {
+          xt_value args[2] = {item, xt_number((double)i)};
+          item = xt_closure_call(mapper, 2, args);
+        }
         xt_array_push(out, item);
       }
     } else {

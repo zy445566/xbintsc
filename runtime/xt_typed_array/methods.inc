@@ -24,7 +24,7 @@ static xt_value xt_ta_method_set(xt_value self, xt_value env, int32_t argc, xt_v
   if (!xt_ta_length_of(source, &sourceLength)) return XT_UNDEFINED;
   int32_t offset = argc > 1 ? xt_to_int32(argv[1]) : 0;
   if (offset < 0 || offset + (int32_t)sourceLength > (int32_t)xt_ta_length(self)) {
-    xt_throw(xt_string_from_cstr("RangeError: offset is out of bounds"));
+    xt_throw(xt_error_from_message("RangeError: offset is out of bounds"));
     return XT_UNDEFINED;
   }
   for (uint32_t i = 0; i < sourceLength; i++) {
@@ -208,7 +208,7 @@ static xt_value xt_ta_method_reduce(xt_value self, xt_value env, int32_t argc, x
     accumulator = xt_ta_element(self, 0);
     index = 1;
   } else {
-    xt_throw(xt_string_from_cstr("TypeError: Reduce of empty array with no initial value"));
+    xt_throw(xt_error_from_message("TypeError: Reduce of empty array with no initial value"));
     return XT_UNDEFINED;
   }
   for (; index < length; index++) {

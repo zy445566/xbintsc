@@ -110,7 +110,7 @@ None known at the expression level.
 | --- | --- |
 | `Symbol` constructor and symbol primitives | ✓ `Symbol(description)`, well-known symbols, `Symbol.for` / `Symbol.keyFor`, symbol property keys and `Object.getOwnPropertySymbols` |
 | `String.prototype.normalize` | ✗ not implemented |
-| `structuredClone` | ✗ not implemented |
+| `structuredClone` | ✓ arrays, objects, Map, Set, Date, RegExp and typed arrays (cycles and shared references preserved); functions, symbols, promises and generators are rejected |
 | `JSON.stringify` options | ~ `space` (number/string, clamped to 10) is honored; a function/array `replacer` is still ignored |
 | Built-in error subclasses (`TypeError`, `RangeError`, …) | ✓ first-class constructors and prototypes; `instanceof Error` holds for the whole family |
 | `AggregateError` constructor | ✓ `new AggregateError(errors, message)`; `Promise.any` now rejects with one |
@@ -227,7 +227,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | --- | --- |
 | RegExp byte-oriented matching | The engine matches UTF-8 bytes: literal multi-byte text works, but `.` and character classes consume one byte per repetition (`\d` / `\w` stay ASCII). Offsets returned by `exec` / `search` / replacement callbacks are converted to UTF-16 code units |
 | Global RegExp `lastIndex` | `test` / `exec` do not advance or honour a caller-set `lastIndex` for `/g` / `/y` regexes |
-| String `normalize` / `structuredClone` | Not implemented |
+| String `normalize` | Not implemented |
 | First-class built-in methods | Implemented as unbound method values (see section 5); `fn.toString()` returns a placeholder rather than source text |
 | `for...in` | Enumerates own keys of objects / arrays / strings; does not include prototype-chain properties |
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
@@ -253,7 +253,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | GC (garbage collection) | ✓ non-moving mark-sweep in `xt_alloc.c`, armed by a live-heap threshold (`XT_GC_THRESHOLD` pins it) or `xt_gc_collect()`; after each collection the threshold becomes twice the surviving heap (floor 1 MiB), so the resident set follows the live set instead of only growing. `XT_GC_TRACE=1` prints one line per collection to stderr. Explicit roots + root providers + conservative active-stack scan. No compaction, weak references or background collection — without weak references an extension must keep a strong reference to every value it caches (the GUI's element handles do) |
 | Self-hosting | ✓ the compiler compiles itself: `xbintsc build src/cli/main.ts` produces a working binary, and the emitted IR is stable from generation 1 onward. The runtime is still C |
 | Type checker | ✗ only diagnostic codes are defined; no checker |
-| Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` implemented; String.normalize / structuredClone missing |
+| Full standard library | partial: Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` / `structuredClone` implemented; String.normalize missing |
 | Multi-file module bundling | partial: relative-path `.ts` bundling, ESM `node_modules` packages, namespace imports and bare-specifier extension module imports implemented; circular dependencies / CommonJS / live bindings not implemented |
 | Real async runtime | ✓ `async`/`await` suspends on pending promises on the `select(2)` reactor: timers, TCP sockets and promise callbacks resume the coroutine. Still missing: truly asynchronous I/O scheduling (`fs/promises` blocks before settling), a non-blocking `fetch` and worker threads (workers are child processes) |
 | Windows binary artifact verification | adapted at the build layer (`.exe` suffix, link flag branch), verified in CI |
@@ -273,7 +273,7 @@ Unimplemented (functions): `fn.toString()` source text, async generators (reject
 Unimplemented (classes/OO): abstract/implements, access control,
                             parent/child #x collision
 
-Unimplemented (standard library): String.normalize, structuredClone
+Unimplemented (standard library): String.normalize
 
 Unimplemented (modules): circular dependencies, live bindings, dynamic
                            `require(expr)`, `require.resolve` / `require.cache`,

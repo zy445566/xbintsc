@@ -32,6 +32,9 @@ describeE2E("typed array buffer views", (harness) => {
 
       const dataView = new DataView(bytes.buffer);
       console.log(dataView.getUint8(1));
+
+      console.log(Object.keys(new Uint8Array([1, 2])).join(","));
+      console.log(JSON.stringify(new Uint8Array([1, 2])));
     `);
   });
 });

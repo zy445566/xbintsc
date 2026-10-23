@@ -91,6 +91,15 @@ describe("scanner", () => {
     expect(tokens[0]!.kind).toBe(TokenKind.Identifier);
   });
 
+  it("skips Chinese comments without disturbing the following token", () => {
+    const { tokens, diagnostics } = lex("// 中文行注释\n/* 多行\n中文块注释 */\nconst x = 1;");
+    expect(diagnostics).toHaveLength(0);
+    expect(tokens[0]!.kind).toBe(TokenKind.ConstKeyword);
+    expect(tokens[0]!.precededByLineBreak).toBe(true);
+    const identifier = tokens.find((token) => token.kind === TokenKind.Identifier)!;
+    expect(identifier.text).toBe("x");
+  });
+
   it("tracks whether a token is preceded by a line break", () => {
     const { tokens } = lex("a\nb c");
     const identifiers = tokens.filter((t) => t.kind === TokenKind.Identifier);

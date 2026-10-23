@@ -10,4 +10,17 @@ describe("scanner identifiers", () => {
     expect(diagnostics).toHaveLength(0);
     expect(tokens.some((token) => token.kind === TokenKind.Identifier && token.text === "a\\u0041bc")).toBe(true);
   });
+
+  it("scans a Chinese identifier as one identifier token", () => {
+    const { tokens, diagnostics } = lex("const 姓名 = 1;");
+    expect(diagnostics).toHaveLength(0);
+    const identifiers = tokens.filter((token) => token.kind === TokenKind.Identifier);
+    expect(identifiers).toHaveLength(1);
+    const name = Buffer.from("姓名", "utf8").toString("latin1");
+    expect(identifiers[0]!.text).toBe(name);
+    // The scanner walks UTF-8 source bytes, so the token covers all six bytes
+    // of the name rather than stopping after the first one.
+    expect(identifiers[0]!.start).toBe("const ".length);
+    expect(identifiers[0]!.end).toBe(identifiers[0]!.start + name.length);
+  });
 });

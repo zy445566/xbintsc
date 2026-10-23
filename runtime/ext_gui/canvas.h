@@ -19,7 +19,9 @@
 #define XT_GUI_CANVAS_H
 
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "image.h"
@@ -40,6 +42,8 @@ struct CanvasTransform {
   bool axis_aligned() const { return b == 0.0f && c == 0.0f; }
   /** Approximate uniform scale, used to size stroked lines and text. */
   float scale() const;
+  /** The inverse transform (device -> user space); identity when singular. */
+  CanvasTransform inverted() const;
 };
 
 /** A point in device (canvas) space. */
@@ -50,6 +54,51 @@ struct CanvasPoint {
 
 /** One subpath of the current path (device space). */
 using CanvasSubpath = std::vector<CanvasPoint>;
+
+/**
+ * A `CanvasGradient` handle: the colour stops plus the geometric definition of
+ * a linear or radial gradient. Gradients are owned by the canvas that created
+ * them, so a stale context handle resolves to no gradient instead of a dangling
+ * pointer. The DOM layer copies only the id around; the stops stay live, which
+ * is what makes `addColorStop` after `fillStyle = gradient` affect later fills.
+ */
+class CanvasGradient {
+ public:
+  enum class Type { Linear, Radial };
+
+  CanvasGradient(uint64_t id, Type type, float x0, float y0, float x1, float y1, float r0,
+                 float r1);
+
+  uint64_t id() const { return id_; }
+  Type type() const { return type_; }
+
+  /** Add a colour stop (offset clamped to 0..1, stops kept sorted by offset). */
+  void add_color_stop(float offset, const float color[4]);
+  /** Sample the gradient at a user-space point. A gradient with no stops is
+   * transparent black, so this always fills `out`. */
+  bool color_at(float x, float y, float out[4]) const;
+
+ private:
+  struct Stop {
+    float offset = 0.0f;
+    float color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+  };
+
+  uint64_t id_ = 0;
+  Type type_ = Type::Linear;
+  float x0_ = 0.0f, y0_ = 0.0f, x1_ = 0.0f, y1_ = 0.0f;
+  float r0_ = 0.0f, r1_ = 0.0f;
+  std::vector<Stop> stops_;
+};
+
+/** What a fill or stroke paints with: a solid colour, or a gradient sampled
+ * through the inverse of the current transform. `color` points into the
+ * canvas state and stays valid for the duration of one draw call. */
+struct CanvasPaint {
+  const float *color = nullptr;
+  const CanvasGradient *gradient = nullptr;
+  CanvasTransform inverse;
+};
 
 class Canvas2D {
  public:
@@ -77,14 +126,30 @@ class Canvas2D {
   void transform(float a, float b, float c, float d, float e, float f);
   void set_transform(float a, float b, float c, float d, float e, float f);
   void reset_transform() { state_.transform = CanvasTransform(); }
+  const CanvasTransform &current_transform() const { return state_.transform; }
 
   /* -- style ------------------------------------------------------------- */
   void set_fill_style(const std::string &css);
   const std::string &fill_style() const { return state_.fill_style; }
   void set_stroke_style(const std::string &css);
   const std::string &stroke_style() const { return state_.stroke_style; }
+  /** Use a gradient created by this canvas (`0` restores the solid colour). */
+  void set_fill_gradient(uint64_t id);
+  void set_stroke_gradient(uint64_t id);
+  uint64_t fill_gradient_id() const { return state_.fill_gradient; }
+  uint64_t stroke_gradient_id() const { return state_.stroke_gradient; }
   void set_line_width(float width) { state_.line_width = width > 0.0f ? width : 0.0f; }
   float line_width() const { return state_.line_width; }
+  void set_line_cap(const std::string &value);
+  const std::string &line_cap() const { return state_.line_cap_string; }
+  void set_line_join(const std::string &value);
+  const std::string &line_join() const { return state_.line_join_string; }
+  void set_miter_limit(float limit);
+  float miter_limit() const { return state_.miter_limit; }
+  void set_line_dash(const std::vector<float> &segments);
+  const std::vector<float> &line_dash() const { return state_.line_dash; }
+  void set_line_dash_offset(float offset) { state_.line_dash_offset = offset; }
+  float line_dash_offset() const { return state_.line_dash_offset; }
   void set_global_alpha(float alpha);
   float global_alpha() const { return state_.global_alpha; }
   void set_font(const std::string &font);
@@ -94,13 +159,22 @@ class Canvas2D {
   void set_text_baseline(const std::string &value);
   const std::string &text_baseline() const { return state_.text_baseline_string; }
 
+  /* -- gradients --------------------------------------------------------- */
+  CanvasGradient *create_linear_gradient(float x0, float y0, float x1, float y1);
+  CanvasGradient *create_radial_gradient(float x0, float y0, float r0, float x1, float y1,
+                                         float r1);
+  CanvasGradient *find_gradient(uint64_t id) const;
+
   /* -- paths ------------------------------------------------------------- */
   void begin_path();
   void close_path();
   void move_to(float x, float y);
   void line_to(float x, float y);
   void rect(float x, float y, float width, float height);
+  void round_rect(float x, float y, float width, float height, float radius);
   void arc(float cx, float cy, float radius, float start, float end, bool counterclockwise);
+  void ellipse(float cx, float cy, float rx, float ry, float rotation, float start, float end,
+               bool counterclockwise);
   void quadratic_curve_to(float cpx, float cpy, float x, float y);
   void bezier_curve_to(float c1x, float c1y, float c2x, float c2y, float x, float y);
   void fill();
@@ -132,6 +206,11 @@ class Canvas2D {
     CanvasTransform transform;
     float line_width = 1.0f;
     float global_alpha = 1.0f;
+    int line_cap = 0;        // 0 butt, 1 round, 2 square
+    int line_join = 0;       // 0 miter, 1 round, 2 bevel
+    float miter_limit = 10.0f;
+    std::vector<float> line_dash;
+    float line_dash_offset = 0.0f;
     FontSpec font;
     std::string font_string = "10px sans-serif";
     int text_align = 0;      // 0 start/left, 1 center, 2 right/end
@@ -142,6 +221,10 @@ class Canvas2D {
     std::string stroke_style = "#000000";
     float fill_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     float stroke_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    uint64_t fill_gradient = 0;
+    uint64_t stroke_gradient = 0;
+    std::string line_cap_string = "butt";
+    std::string line_join_string = "miter";
   };
 
   /** Transform a user-space point into device space. */
@@ -151,8 +234,23 @@ class Canvas2D {
   /** Add one device-space polygon loop to `out`. */
   void flatten_arc(float cx, float cy, float radius, float start, float end, bool ccw,
                    CanvasSubpath *out) const;
-  void stroke_subpath(const CanvasSubpath &points, bool closed, const float color[4]);
-  void paint_text(const std::string &text, float x, float y, const float color[4], bool stroke);
+  /** Append a flattened arc to the current subpath, moving/line-to its start as
+   * the canvas path rules require. Shared by `arc` and `ellipse`. */
+  void append_path_points(const CanvasSubpath &points);
+  /** Paint descriptors for the current state. */
+  CanvasPaint fill_paint() const;
+  CanvasPaint stroke_paint() const;
+  CanvasPaint make_paint(uint64_t gradient_id, const float color[4]) const;
+  void stroke_subpath(const CanvasSubpath &points, bool closed, const CanvasPaint &paint);
+  /** Stroke one polyline with caps and joins; `half` is half the device-space
+   * line width. Used by `stroke_subpath` for both solid and dashed paths. */
+  void stroke_polyline(const CanvasSubpath &points, bool closed, float half,
+                       const CanvasPaint &paint);
+  /** Split `points` into the "on" pieces of the current dash pattern. */
+  void dash_polyline(const CanvasSubpath &points, bool closed,
+                     std::vector<CanvasSubpath> *out) const;
+  void paint_text(const std::string &text, float x, float y, const CanvasPaint &paint,
+                  bool stroke);
 
   Image image_;
   uint64_t id_ = 0;
@@ -160,6 +258,7 @@ class Canvas2D {
   State state_;
   std::vector<State> stack_;
   std::vector<CanvasSubpath> path_;
+  std::unordered_map<uint64_t, std::unique_ptr<CanvasGradient>> gradients_;
 };
 
 /** The canvas with the given process-wide id, or null. Used by the renderer. */

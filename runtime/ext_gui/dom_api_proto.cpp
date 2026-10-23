@@ -181,6 +181,14 @@ xt_value canvas_proto() {
   define_setter(proto, "textAlign", (void *)canvas_text_align_set);
   define_getter(proto, "textBaseline", (void *)canvas_text_baseline_get);
   define_setter(proto, "textBaseline", (void *)canvas_text_baseline_set);
+  define_getter(proto, "lineCap", (void *)canvas_line_cap_get);
+  define_setter(proto, "lineCap", (void *)canvas_line_cap_set);
+  define_getter(proto, "lineJoin", (void *)canvas_line_join_get);
+  define_setter(proto, "lineJoin", (void *)canvas_line_join_set);
+  define_getter(proto, "miterLimit", (void *)canvas_miter_limit_get);
+  define_setter(proto, "miterLimit", (void *)canvas_miter_limit_set);
+  define_getter(proto, "lineDashOffset", (void *)canvas_line_dash_offset_get);
+  define_setter(proto, "lineDashOffset", (void *)canvas_line_dash_offset_set);
   /* Methods. */
   define_method(proto, "save", (void *)canvas_save);
   define_method(proto, "restore", (void *)canvas_restore);
@@ -195,7 +203,9 @@ xt_value canvas_proto() {
   define_method(proto, "moveTo", (void *)canvas_move_to);
   define_method(proto, "lineTo", (void *)canvas_line_to);
   define_method(proto, "rect", (void *)canvas_rect);
+  define_method(proto, "roundRect", (void *)canvas_round_rect);
   define_method(proto, "arc", (void *)canvas_arc);
+  define_method(proto, "ellipse", (void *)canvas_ellipse);
   define_method(proto, "quadraticCurveTo", (void *)canvas_quadratic_curve_to);
   define_method(proto, "bezierCurveTo", (void *)canvas_bezier_curve_to);
   define_method(proto, "fill", (void *)canvas_fill);
@@ -208,7 +218,21 @@ xt_value canvas_proto() {
   define_method(proto, "strokeText", (void *)canvas_stroke_text);
   define_method(proto, "drawImage", (void *)canvas_draw_image);
   define_method(proto, "getImageData", (void *)canvas_get_image_data);
+  define_method(proto, "setLineDash", (void *)canvas_line_dash_set);
+  define_method(proto, "getLineDash", (void *)canvas_line_dash_get);
+  define_method(proto, "getTransform", (void *)canvas_get_transform);
+  define_method(proto, "createLinearGradient", (void *)canvas_create_linear_gradient);
+  define_method(proto, "createRadialGradient", (void *)canvas_create_radial_gradient);
   g_canvas_proto = proto;
+  return proto;
+}
+
+xt_value canvas_gradient_proto() {
+  xt_gc_add_root(&g_canvas_gradient_proto);
+  if (XT_IS_OBJECT(g_canvas_gradient_proto)) return g_canvas_gradient_proto;
+  xt_value proto = xt_object_new();
+  define_method(proto, "addColorStop", (void *)canvas_gradient_add_color_stop);
+  g_canvas_gradient_proto = proto;
   return proto;
 }
 

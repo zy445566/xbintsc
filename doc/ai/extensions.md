@@ -76,9 +76,10 @@ media API (`play`/`pause`/`currentTime`/`volume`/…) plus the
 program drive playback. There are no built-in controls — draw your own chrome
 with elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM
 are decoded on the main thread. `<canvas>` is supported too: `getContext("2d")`
-returns a context whose fills, paths, text and `drawImage` are rasterised by a
-self-written CPU rasteriser, and element handles expose `canvas` drawing plus
-`width`/`height`. CSS `transform`/`transform-origin` work as paint-time
+returns a context whose fills, paths, gradients, text and `drawImage` are
+rasterised by a self-written CPU rasteriser (plus line caps/joins, dashed
+strokes, `ellipse` and `roundRect`), and element handles expose `canvas` drawing
+plus `width`/`height`. CSS `transform`/`transform-origin` work as paint-time
 effects, so a box (and the text, images and children in it) can be translated,
 scaled and rotated without reflowing anything — animate it per frame from
 `requestAnimationFrame` or with `transition: transform` (see

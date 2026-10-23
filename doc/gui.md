@@ -354,7 +354,13 @@ engine were Rust.
   `getContext("2d")` handle and its API are bound in `dom_api_canvas.cpp`, and
   `gui_canvas.cpp` owns the per-window lifetime. The bitmap uploads through the
   image texture path (`renderer_image.cpp`) and the display list carries a
-  `canvas_id` (`paint.*`). See [Canvas](./gui/canvas.md); e2e in
+  `canvas_id` (`paint.*`). The drawing surface was later widened with linear /
+  radial gradients (`canvas_gradient.cpp`), `ellipse`/`roundRect`, line
+  caps/joins/miter limits and dash patterns (`canvas_style.cpp`,
+  `canvas_stroke.cpp`), and `getTransform`; `transform` now post-multiplies, so
+  `translate(x, y); rotate(a)` rotates around the translated origin, and
+  `examples/gui/pelican-canvas` draws an animated pelican on a bicycle entirely
+  with these APIs. See [Canvas](./gui/canvas.md); e2e in
   `tests/e2e/gui-canvas.test.ts`.
 - **M15** ✅ CSS `transform` / `transform-origin`. A new translation unit
   (`transform.{h,cpp}`) parses `translate`/`translateX`/`translateY`/`scale`/

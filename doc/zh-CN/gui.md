@@ -296,8 +296,12 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
   （4 条子扫描线 + 水平解析覆盖率、非零环绕），`getContext("2d")` 句柄及其 API
   在 `dom_api_canvas.cpp` 绑定，`gui_canvas.cpp` 持有按窗口的生命周期。位图经
   图像纹理路径上传（`renderer_image.cpp`），显示列表携带 `canvas_id`
-  （`paint.*`）。参见 [Canvas](./gui/canvas.md)；e2e 见
-  `tests/e2e/gui-canvas.test.ts`。
+  （`paint.*`）。此后绘制面又补齐了线性/径向渐变（`canvas_gradient.cpp`）、
+  `ellipse`/`roundRect`、线段端点/连接/斜接上限与虚线模式（`canvas_style.cpp`、
+  `canvas_stroke.cpp`）以及 `getTransform`；`transform` 改为后乘，因此
+  `translate(x, y); rotate(a)` 围绕平移后的原点旋转，而
+  `examples/gui/pelican-canvas` 完全用这些 API 画出会动的鹈鹕骑自行车。参见
+  [Canvas](./gui/canvas.md)；e2e 见 `tests/e2e/gui-canvas.test.ts`。
 - **M15** ✅ CSS `transform` / `transform-origin`。新的翻译单元
   （`transform.{h,cpp}`）把 `translate`/`translateX`/`translateY`/`scale`/
   `scaleX`/`scaleY`/`rotate`/`matrix`（以及 `translate3d`/`scale3d`，其 `z` 参数被丢弃）

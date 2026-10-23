@@ -71,7 +71,8 @@ import { createWindow, run } from "gui";
 `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件可让程序驱动播放。
 没有内置控件——用元素和 CSS 自绘控件（见 `examples/gui/media.ts`）；视频帧与音频 PCM
 都在主线程解码。也支持 `<canvas>`：`getContext("2d")` 返回的上下文，其填充、路径、
-文本与 `drawImage` 由自研 CPU 光栅器处理，元素句柄还暴露 `width`/`height`。CSS
+渐变、文本与 `drawImage` 由自研 CPU 光栅器处理（另有线段端点/连接、虚线描边、
+`ellipse` 与 `roundRect`），元素句柄还暴露 `width`/`height`。CSS
 `transform`/`transform-origin` 作为绘制期效果可用，因此一个盒子（以及其中的文本、
 图像与子元素）可以被平移、缩放与旋转而不触发任何重排——可以用
 `requestAnimationFrame` 逐帧驱动，或写成 `transition: transform`（见

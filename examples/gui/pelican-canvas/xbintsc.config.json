@@ -1,0 +1,11 @@
+{
+  "$schema": "../../../doc/xbintsc.config.schema.json",
+  "entry": "main.ts",
+  "outDir": "build",
+  "extensions": ["gui"],
+  "app": {
+    "name": "PelicanCanvas",
+    "bundleId": "com.example.pelicanCanvas",
+    "console": true
+  }
+}

@@ -1,9 +1,11 @@
 /**
- * End-to-end tests for `<video>` / `<audio>` support in the `gui` extension.
+ * End-to-end tests for `<video>` / `<audio>` support.
  *
- * These exercise the real decoding path (vendored FFmpeg + SDL audio) and the
- * DOM media API. The fixtures live in `examples/resources`; when they are
- * absent (a trim checkout) the suite is skipped rather than failing.
+ * These exercise the real decoding path (the `media` extension's vendored
+ * FFmpeg + the GUI's SDL audio sink) and the DOM media API. They are skipped
+ * unless both the `gui` and `media` archives exist: the `gui` extension alone
+ * is deliberately decoder-free. The fixtures live in `examples/resources`; when
+ * they are absent (a trim checkout) the suite is skipped rather than failing.
  */
 
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -15,6 +17,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
+import { mediaExtension } from "../../src/extensions/media/index.js";
+import { findRuntimeLibrary } from "../../src/driver/runtime-lib.js";
 import { createGuiHarness, guiAvailable } from "./gui-helpers.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -32,14 +36,13 @@ function mediaSrc(absolutePath: string): string {
 const resourcesAvailable = existsSync(moviePath) && existsSync(soundPath);
 
 /**
- * Windows builds the GUI archive without FFmpeg on purpose (see
- * `doc/gui/known-issues.md`), so media elements are inert there and the suite
- * would only report the expected `error` events as failures. It stays skipped
- * even with `xbintsc_GUI_TESTS=1`.
+ * The `media` archive is built separately (`npm run media`) and is POSIX-only
+ * for now. Without it the suite would compile GUI programs that report the
+ * expected `error` events, i.e. it would test the wrong thing.
  */
-const mediaAvailable = process.platform !== "win32";
+const mediaAvailable = process.platform !== "win32" && findRuntimeLibrary("media") !== undefined;
 
-describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui extension — media", () => {
+describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui + media extensions", () => {
   const harness = createGuiHarness();
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());
@@ -91,7 +94,7 @@ describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui ex
 
       run();
       `,
-      { autocloseMs: 8000 },
+      { autocloseMs: 8000, extensions: [mediaExtension] },
     );
 
     expect(stdout).not.toContain("video-error");
@@ -111,7 +114,7 @@ describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui ex
     try {
       writeFileSync(join(workdir, "media.html"), readFileSync(join(exampleDir, "media.html"), "utf8"));
       writeFileSync(join(workdir, "media.ts"), readFileSync(join(exampleDir, "media.ts"), "utf8"));
-      const extensions = createDefaultRegistry().register(guiExtension);
+      const extensions = createDefaultRegistry().register(guiExtension).register(mediaExtension);
       const result = build(join(workdir, "media.ts"), {
         emit: "exe",
         outDir: join(workdir, "out"),

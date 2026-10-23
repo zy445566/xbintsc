@@ -32,7 +32,7 @@
     --out <dir>       输出目录（默认 build/）
     --emit <kind>     exe | obj | ir（默认 exe）
 -O0 .. -O3            传给 clang 的优化级别（默认 -O2）
-    --ext <names>     开启内置扩展，逗号分隔（如 node,gui）
+    --ext <names>     开启内置扩展，逗号分隔（如 node,gui,media）
     --ext-native <m>  通过 JSON 清单注册 C++/Rust 扩展（多个用逗号分隔）
     --config <path>   使用指定项目配置，不做自动发现
     --no-config       完全不读取项目配置

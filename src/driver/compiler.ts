@@ -69,6 +69,7 @@ function executableName(entry: string, outDir: string, explicit: string | undefi
 export function build(entryPath: string, options: BuildOptions = {}): BuildResult {
   const runner = options.runner ?? realRunner;
   const registry = options.extensions ?? createDefaultRegistry();
+  registry.validate();
   const outDir = resolve(options.outDir ?? join(process.cwd(), "build"));
   const cacheDir = resolve(options.cacheDir ?? defaultCacheDir());
   const emit: EmitKind = options.emit ?? "exe";

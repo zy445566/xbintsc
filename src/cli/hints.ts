@@ -78,6 +78,17 @@ const THROWN_FAILURES: readonly ThrownFailure[] = [
     },
   },
   {
+    /* A dependent extension (`media` needs `gui`) or a missing prebuilt archive
+     * (`gui.a`/`media.a`) both mean "the extension set is not ready", and the
+     * extensions guide explains both the flags and `npm run gui`/`media`. */
+    match: /requires the '.*' extension|native library not found/i,
+    code: DiagnosticCode.IOError,
+    pointer: {
+      text: "enable the extension's dependencies together, and build its prebuilt archive first",
+      path: DOC_EXTENSIONS,
+    },
+  },
+  {
     match: /config|JSON/i,
     code: DiagnosticCode.IOError,
     pointer: {

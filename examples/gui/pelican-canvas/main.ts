@@ -59,7 +59,7 @@ const report = (game: any): void => {
   line("pixel-road", game.probe(500, 620));
   line("pixel-pelican", game.probe(388, 286));
   line("pixel-wheel", game.probe(320, 516 - 70));
-  line("pixel-title", game.probe(38, 56));
+  line("pixel-title", game.probeMax(36, 36, 220, 40));
 };
 
 win.on("ready", () => {

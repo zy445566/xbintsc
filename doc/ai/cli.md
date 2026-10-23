@@ -37,7 +37,7 @@ so restart it after installing a dependency.
     --out <dir>       Output directory (default: build/)
     --emit <kind>     exe | obj | ir (default: exe)
 -O0 .. -O3            Optimization level passed to clang (default: -O2)
-    --ext <names>     Enable bundled extensions, comma separated (e.g. node,gui)
+    --ext <names>     Enable bundled extensions, comma separated (e.g. node,gui,media)
     --ext-native <m>  Register a C++/Rust extension from a JSON manifest
                       (comma separated for several)
     --config <path>   Use this project config instead of discovering one

@@ -55,25 +55,36 @@ opacity、`display`——与任何其他元素一样。盒子内部的艺术内�
 
 ## 视频与音频（M13）
 
-`runtime/ext_gui/media.{h,cpp}` 封装一个静态 vendored 的 **FFmpeg** 构建，
-`runtime/ext_gui/gui_media.cpp` 把 DOM 树接到它上面。`<video>` 与 `<audio>`
-真正解码并播放；路径中没有 WebView，也没有平台媒体框架。
+媒体播放横跨两个扩展，因此只做界面的 GUI 程序不必为用不到的解码器付出体积：
+
+- **`gui`**（`gui.a`）负责 `<video>`/`<audio>` 元素、DOM API、渲染器集成与 SDL
+  音频 sink，但**不含 FFmpeg**。`runtime/ext_gui/media.{h,cpp}` 声明播放器接口，
+  并通过媒体后端在启动时安装的函数表分发（`runtime/ext_gui/media_api.h`）。
+- **`media`**（`media.a`、`runtime/ext_media/`）是可选的解码后端：
+  `runtime/ext_media/media.cpp` 封装静态 vendored 的 **FFmpeg** 构建，
+  `runtime/ext_media/media_bridge.c` 把它注册进引擎。用 `--ext media`（或
+  `--ext gui,media`）启用。`media` 依赖 `gui`；注册表会拒绝错误的组合。
+
+没有 `media` 扩展时，元素仍然存在、DOM API 仍可调用，但打开源会失败并触发
+`error`。Windows 目前也是如此：该归档仅支持 POSIX。两条路径都没有 WebView，也
+没有平台媒体框架。
 
 - **解码。** `avformat_open_input` 打开 `src`（是路径——接受 `file://`，但与
   图像不同，媒体路径*不做*百分号解码），为每种媒体选取最佳流，软件解码器
   产出 `yuv/rgb` 帧，`sws_scale` 按编码尺寸转换为 RGBA8。支持的容器/编码即
-  `scripts/build-gui.ts` 的最小 FFmpeg 配置：MP4/MOV/MKV/AVI/FLV/MPEG-TS/M4V/
+  `scripts/build-media.ts` 的最小 FFmpeg 配置：MP4/MOV/MKV/AVI/FLV/MPEG-TS/M4V/
   ASF，MP3/OGG/WAV/FLAC/AAC；视频 H.264、HEVC、VP8、VP9、AV1、MPEG-4、MJPEG；
   音频 AAC、MP3、Opus、Vorbis、FLAC、ALAC、AC3/E-AC3、WMAv2 及原始 PCM 格式。
 - **视频。** `<video>` 与 `<img>` 一样是替换元素（UA 默认 `300x150`，解码
   尺寸通过 `setMediaSize` 覆盖）。绘制产出与图像相同的 `PaintImage`；渲染器把
   每个新解码帧上传到 RGBA 纹理（`ensureMediaTexture`）并绘制带纹理四边形，
-  因此由 GPU 缩放到 CSS 盒，而非 CPU 缩放。播放计时基于墙钟
-  （`SDL_GetTicks`），不是帧间隔。
-- **音频。** 没有音频回调：解码器随主线程 tick 被推送，PCM 以 push 模式
-  （`NULL` 回调）通过 `SDL_OpenAudioDeviceStream` 排队，在前方缓冲约 0.25 秒，
-  格式为 48 kHz 立体声 `SDL_AUDIO_F32`。`volume` 映射到
-  `SDL_SetAudioStreamGain`；音频是尽力而为，无设备时（无头 CI）跳过。
+  因此由 GPU 缩放到 CSS 盒，而非 CPU 缩放。播放计时基于进程单调时钟，不是帧间隔。
+- **音频。** 没有音频回调：解码器随主线程 tick 被推送，并写入
+  `xtgui::AudioSink`。GUI 在 `gui_media.cpp` 中用 push 模式（`NULL` 回调）的
+  `SDL_OpenAudioDeviceStream` 实现该 sink，在前方缓冲约 0.25 秒，格式为
+  48 kHz 立体声 `SDL_AUDIO_F32`。`volume` 映射到 `SDL_SetAudioStreamGain`；
+  音频是尽力而为，无设备时（无头 CI）跳过。把 sink 留在 `gui.a` 中意味着
+  `media.a` 只依赖 FFmpeg。
 - **线程。** 引擎是单线程且非线程感知，因此所有解码都在主线程的
   `xt_gui_media_tick` 内完成——没有解码线程，也没有跨线程 GC 暴露。
 - **DOM API。** 元素句柄直接暴露媒体接口（见

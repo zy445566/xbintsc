@@ -69,12 +69,13 @@
   (`win.driver()` reports `"vulkan"`), so the archive needs no DXIL/`dxc`
   toolchain; the hosted Windows runners have no GPU/Vulkan driver, which is why
   the CI run stays provisional.
-- **Media on Windows:** the media decoders (FFmpeg) are only built and merged
-  into the POSIX `gui.a`; the Windows `gui.lib` is produced without them, so
-  `<video>`/`<audio>` are inert there (failures fire `error`). Enabling it needs
-  an MSVC-compatible FFmpeg build and is deferred until the Windows GUI path
-  itself is validated. `<video controls>` is likewise deferred — the intended
-  pattern is TS + a CSS overlay, as in `examples/gui/media.ts`.
+- **Media on Windows:** the `media` extension is POSIX-only for now. The GUI
+  engine itself builds on Windows, but without the extension `<video>`/`<audio>`
+  are inert there (an open fails and fires `error`), and `--ext media` reports an
+  actionable error instead of linking. Enabling it needs an MSVC-compatible
+  FFmpeg build and is deferred until the Windows GUI path itself is validated.
+  `<video controls>` is likewise deferred — the intended pattern is TS + a CSS
+  overlay, as in `examples/gui/media.ts`.
 - **D3D12 shaders:** the SPIR-V (Vulkan) and DXIL (Direct3D 12) blobs are built
   and embedded, so the non-Metal path no longer skips geometry. DXIL remains
   unusable on **SDL 3.2.10**: its D3D12 backend rejects any graphics pipeline

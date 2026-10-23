@@ -218,6 +218,10 @@ npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 
 # 预编译的 Linux/macOS 发布包已经内含该引擎：
 xbintsc run app.ts --ext gui
+
+# <video>/<audio> 播放是单独的可选归档，因此只做界面的二进制不会链接 FFmpeg：
+npm run media
+xbintsc run examples/gui/media.ts --ext gui,media
 ```
 
 文档里的 `<script>` 脚本会被 xbintsc **提前编译（AOT）**进二进制——内联脚本
@@ -235,8 +239,10 @@ xbintsc run app.ts --ext gui
 平台与完整说明：[doc/zh-CN/gui.md](./doc/zh-CN/gui.md) 是引擎总览（架构与
 路线图）；按功能拆分的文档位于 [doc/zh-CN/gui/](./doc/zh-CN/gui) —— API、
 DOM/CSS、布局、绘制、媒体、输入、动画、运行时、构建与已知问题。Linux 与 macOS 已在 CI 中构建
-并实际运行，其发布包内含引擎（`gui.a`）；Windows 的 `gui.lib`（通过 SDL_GPU 的
-Vulkan 后端渲染）由同一脚本产出，但仍是暂定状态，尚未随发布包提供。
+并实际运行，其发布包内含引擎（`gui.a`）与可选的媒体归档（`media.a`）；Windows 的
+`gui.lib`（通过 SDL_GPU 的 Vulkan 后端渲染）由同一脚本产出，但仍是暂定状态，尚未
+随发布包提供。媒体播放目前仅支持 POSIX：没有 `media.a` 或在 Windows 上，
+`<video>` 与 `<audio>` 会触发 `error`。
 
 ## 增量编译
 
@@ -246,9 +252,10 @@ Vulkan 后端渲染）由同一脚本产出，但仍是暂定状态，尚未随�
 
 ## 扩展
 
-扩展是一个普通对象（`src/extensions/registry.ts`）。内置扩展有两个：`gui`，
+扩展是一个普通对象（`src/extensions/registry.ts`）。内置扩展有三个：`gui`，
 它贡献的是一个 GPU HTML/CSS 渲染器（见下文「GUI 应用（HTML/CSS）」一节与
-[doc/zh-CN/gui.md](./doc/zh-CN/gui.md)）；以及 `node`，它本身按每个 Node
+[doc/zh-CN/gui.md](./doc/zh-CN/gui.md)）；`media`，基于 FFmpeg 的可选
+`<video>`/`<audio>` 解码器，依赖 `gui`；以及 `node`，它本身按每个 Node
 模块拆分目录，每个模块把它对外导出的绑定与实现它们的 C 源配对：
 
 ```

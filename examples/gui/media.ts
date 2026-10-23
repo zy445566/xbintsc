@@ -1,15 +1,16 @@
 // Real `<video>` / `<audio>` playback in the xbintsc GUI engine.
 //
-// There is no WebView and no `<video controls>`: the element decodes through a
-// vendored FFmpeg and the renderer uploads each frame as a GPU texture. The
-// script below drives playback through the DOM API and draws its own progress
-// bar over the video with CSS — the intended "API control + custom overlay"
-// pattern.
+// There is no WebView and no `<video controls>`: the optional `media` extension
+// decodes through a vendored FFmpeg and the renderer uploads each frame as a GPU
+// texture. The script below drives playback through the DOM API and draws its
+// own progress bar over the video with CSS — the intended "API control + custom
+// overlay" pattern.
 //
-// Run from the repository root, because the `src` paths in `media.html` are
-// relative to the process working directory:
+// Build `media.a` once (`npm run media`) and enable both extensions. Run from
+// the repository root, because the `src` paths in `media.html` are relative to
+// the process working directory:
 //
-//   xbintsc run examples/gui/media.ts --ext gui
+//   xbintsc run examples/gui/media.ts --ext gui,media
 //
 // `XT_GUI_AUTOCLOSE_MS` bounds the run when no display is available.
 

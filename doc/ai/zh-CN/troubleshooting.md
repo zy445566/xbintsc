@@ -108,6 +108,14 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
 `gui` 扩展需要各平台预编译的 `gui.a`/`gui.lib`，普通源码检出并没有构建它。去掉
 `--ext gui`，或按 [../../zh-CN/gui.md](../../zh-CN/gui.md) 构建该归档。
 
+### `media native library not found at …`
+
+`<video>`/`<audio>` 播放需要可选的 `media` 归档（`media.a`），用
+`npm run media` 单独构建。构建它，或去掉 `--ext media`；仅启用 `gui` 的构建仍可
+链接，媒体元素只会触发 `error`。`media` 扩展还依赖 `gui`，目前没有 Windows
+归档，单独 `--ext media` 会被拒绝并提示应传的 flag。见
+[../../zh-CN/gui/build.md](../../zh-CN/gui/build.md)。
+
 ### `Icon file not found` / 图标工具缺失
 
 `--icon`/`app.icon` 的路径相对配置文件目录解析。Windows 上嵌入 PE 图标需要

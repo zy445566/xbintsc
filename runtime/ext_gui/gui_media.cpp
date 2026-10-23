@@ -3,8 +3,12 @@
  *
  * This unit bridges three pieces:
  *   - the DOM (`Node`) and the per-window media table on `XtGuiWindow`;
- *   - the decoders (`media.cpp`, backed by FFmpeg + SDL audio);
+ *   - the optional decoders the `media` extension installs (the engine's
+ *     `media.cpp` dispatch; FFmpeg itself lives in `runtime/ext_media/`);
  *   - the renderer (`renderer_image.cpp`), which owns the GPU textures.
+ *
+ * It also provides the SDL audio sink the decoder writes PCM to, which keeps
+ * SDL out of `media.a`.
  *
  * The frame loop calls `xt_gui_media_sync` (open/close decoders so the next
  * layout sees the current sources and intrinsic sizes) and `xt_gui_media_tick`
@@ -15,11 +19,74 @@
 
 #include "gui_internal.h"
 
+#include <cstring>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
 namespace {
+
+/** Audio format the decoder resamples everything to. */
+constexpr int kAudioRate = 48000;
+constexpr int kAudioChannels = 2;
+
+/** Initialise SDL's audio subsystem once, best effort: a headless CI box has
+ * no device, and video still plays without sound. */
+bool audioSubsystemReady() {
+  static const bool ready = SDL_InitSubSystem(SDL_INIT_AUDIO);
+  return ready;
+}
+
+/** SDL push-mode audio output for one decoder.
+ *
+ * There is no audio callback: the decoder writes PCM on the main thread and SDL
+ * pulls from the queued buffer on its own thread. `queued_seconds()` lets the
+ * decoder keep that buffer shallow. */
+class SdlAudioSink final : public xtgui::AudioSink {
+ public:
+  ~SdlAudioSink() override {
+    if (stream_ != nullptr) SDL_DestroyAudioStream(stream_);
+  }
+
+  bool open() override {
+    if (tried_) return stream_ != nullptr;
+    tried_ = true;
+    if (!audioSubsystemReady()) return false;
+    SDL_AudioSpec spec;
+    spec.format = SDL_AUDIO_F32;
+    spec.channels = kAudioChannels;
+    spec.freq = kAudioRate;
+    stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+    if (stream_ == nullptr) return false;
+    SDL_PauseAudioStreamDevice(stream_);
+    return true;
+  }
+
+  void write(const void *data, size_t bytes) override {
+    if (stream_ != nullptr) SDL_PutAudioStreamData(stream_, data, static_cast<int>(bytes));
+  }
+  void clear() override {
+    if (stream_ != nullptr) SDL_ClearAudioStream(stream_);
+  }
+  void pause() override {
+    if (stream_ != nullptr) SDL_PauseAudioStreamDevice(stream_);
+  }
+  void resume() override {
+    if (stream_ != nullptr) SDL_ResumeAudioStreamDevice(stream_);
+  }
+  void set_gain(float gain) override {
+    if (stream_ != nullptr) SDL_SetAudioStreamGain(stream_, gain);
+  }
+  double queued_seconds() const override {
+    if (stream_ == nullptr) return 0.0;
+    const int bytes = SDL_GetAudioStreamQueued(stream_);
+    return bytes / static_cast<double>(kAudioRate * kAudioChannels * sizeof(float));
+  }
+
+ private:
+  SDL_AudioStream *stream_ = nullptr;
+  bool tried_ = false;
+};
 
 bool isMediaElement(const xtgui::Node *node) {
   return node != nullptr && node->isElement() && (node->isTag("video") || node->isTag("audio"));
@@ -65,7 +132,7 @@ xtgui::MediaPlayer *openEntry(XtGuiWindow *win, const xtgui::Node *node, const s
   XtGuiMediaEntry entry;
   entry.src = src;
   std::string error;
-  entry.player = xtgui::MediaPlayer::open(src, &error);
+  entry.player = xtgui::MediaPlayer::open(src, &error, std::make_unique<SdlAudioSink>());
   if (!entry.player) {
     entry.failed = true;
     win->media_players[node] = std::move(entry);

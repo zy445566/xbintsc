@@ -150,6 +150,23 @@ describe("documentation hints", () => {
     expect(output).not.toContain(DOC_LANGUAGE_SUPPORT);
   });
 
+  it("points a missing extension dependency at the extensions document", () => {
+    const entry = temporaryFile("console.log(1);");
+    const { io, err } = capture();
+    expect(run(["build", entry, "--ext", "media"], io)).toBe(1);
+    const output = err.join("");
+    expect(output).toContain("requires the 'gui' extension");
+    expect(output).toContain(DOC_EXTENSIONS);
+    expect(output).not.toContain("internal error");
+  });
+
+  it("classifies a missing extension archive as a setup failure", () => {
+    const mediaFailure = thrownFailure("media native library not found at /tmp/media.a");
+    const guiFailure = thrownFailure("GUI native library not found at /tmp/gui.a");
+    expect(mediaFailure?.pointer.path).toBe(DOC_EXTENSIONS);
+    expect(guiFailure?.pointer.path).toBe(DOC_EXTENSIONS);
+  });
+
   it("points a missing native manifest at the extensions document", () => {
     const entry = temporaryFile("console.log(1);");
     const directory = mkdtempSync(join(tmpdir(), "xbintsc-hints-manifest-"));

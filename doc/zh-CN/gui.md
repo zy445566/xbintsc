@@ -3,9 +3,9 @@
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
 状态：**M16** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
-`<video>`/`<audio>`——一个 vendored 的最小 FFmpeg 在主线程解码，视频帧走图像
-纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露 `play`/`pause`/`currentTime`/…
-与媒体事件。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
+`<video>`/`<audio>`——可选的 `media` 扩展用 vendored 的最小 FFmpeg 在主线程解码，
+视频帧走图像纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露
+`play`/`pause`/`currentTime`/… 与媒体事件。只启用 `gui` 不会链接 FFmpeg。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
 填充、路径、文本与 `drawImage`），并经图像纹理路径上传——参见
 [Canvas](./gui/canvas.md)。**M15** 增加了 CSS `transform` /
 `transform-origin`：每个布局盒一个合成好的 `Matrix2D`，由显示列表一路带到
@@ -52,7 +52,7 @@
 | 4 | 引擎**非自托管**（它是 C/C++，不是 TS），但不得影响编译器的平台无关设计。以按平台预构建的归档形式交付，通过 `nativeObjects` 链接。 |
 | 5 | **事件循环是通用的**：运行时暴露一个通用主循环钩子与一个轮询原语；任何 GUI 特定的东西都不会进入 `runtime/`。 |
 | 6 | 核心对象模型支持**多窗口**。 |
-| 7 | 第三方底层库**静态链接进 `gui.a`**，使发布版保持自包含；链接时只额外加入操作系统框架。 |
+| 7 | 第三方底层库**静态链接进扩展归档**，使发布版保持自包含；链接时只额外加入操作系统框架。`gui.a` 携带 SDL3/FreeType/HarfBuzz，可选的 `media.a` 携带 FFmpeg，仅在 `--ext media` 时链接。 |
 
 ## 架构
 
@@ -74,6 +74,7 @@
         窗口 + 输入（SDL3）── 多窗口
         文本（HarfBuzz + FreeType）── 字形图集 / SDF
         图像（stb_image；SVG 经 NanoSVG）
+        媒体 DOM + 音频 sink ── 可选的 media.a（FFmpeg）安装解码器
 ```
 
 引擎从不与编译器通信。编译器只看到一个带有 `nativeObjects()`、`linkerFlags()` 和 `modules()` 的 `Extension`。
@@ -87,16 +88,16 @@
 | 文本整形 | **HarfBuzz** | 正确处理复杂文种的整形 |
 | 字形光栅化 | **FreeType** | 字形轮廓 → GPU 图集 / SDF |
 | 图像 | 位图用 **stb_image**（vendored 头文件），SVG 用 **NanoSVG**（vendored 头文件） | 起步阶段用单头文件；SVG 文件按需光栅化 |
-| 视频 + 音频 | **FFmpeg**（静态 vendored，最小化构建） | 解码常用容器/编码；不依赖 WebView 或平台媒体框架 |
+| 视频 + 音频 | **FFmpeg**（静态 vendored，最小化构建，可选 `media` 扩展） | 解码常用容器/编码；不依赖 WebView 或平台媒体框架 |
 
 固定版本：SDL3 `release-3.2.10`、FreeType `2.13.3`、HarfBuzz `10.1.0`、
-FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
-`FFMPEG_VERSION` 覆盖）。
+FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
+`FREETYPE_VERSION` / `HARFBUZZ_VERSION` / `FFMPEG_VERSION` 覆盖）。
 
 如果否决 SDL3，备选是 **GLFW + OpenGL 3.3**（更简单，但 OpenGL 在 macOS 上
 已弃用，且不提供现代 GPU 抽象）。如果引擎用 Rust 编写，则用 **wgpu-native**。
 
-> 这些 vendored 库会**静态链接进 `gui.a`**，因此发布的 xbintsc 保持
+> 这些 vendored 库会**静态链接进 `gui.a` / `media.a`**，因此发布的 xbintsc 保持
 > “下载即用”；`linkerFlags()` 只添加操作系统框架。
 
 ## 里程碑
@@ -135,14 +136,15 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
      `background-color`/`color`/`border-color`/`border-radius` 的动画、重定向
      与 `win.advance(ms)`。`@keyframes` 仍待完成。
 7. **M7 — CI 与发布** ✅（Linux/macOS 构建） / 🚧（运行 + Windows）
-   - `compile-examples` 在 Linux 与 macOS 上构建 `gui.a`（必需），然后在
-     Linux 上的 Xvfb + lavapipe 下运行示例与 `tests/e2e/gui-*.test.ts`（必需）。
-     macOS 运行在确认 WindowServer 之前为试验性；它被保护起来，失败只记录
-     日志而不标注运行。
-   - `package` job 在组装发布之前构建 `gui.a`，因此它会随现有 runtime 归档
-     一起发布（`package-release` 复制整个 `runtime/`）。
-   - `vendor/`（SDL3/FreeType/HarfBuzz，缓慢的部分）按 OS/arch 缓存，以
-     `scripts/build-gui.ts` 为键。
+   - `compile-examples` 在 Linux 与 macOS 上构建 `gui.a` 与 `media.a`（必需），
+     然后在 Linux 上的 Xvfb + lavapipe 下运行示例与 `tests/e2e/gui-*.test.ts`
+     （必需）。macOS 运行在确认 WindowServer 之前为试验性；它被保护起来，失败
+     只记录日志而不标注运行。
+   - `package` job 在组装发布之前构建 `gui.a` 与 `media.a`，因此两者都会随现有
+     runtime 归档一起发布（`package-release` 复制整个 `runtime/`）。
+   - `vendor/`（`gui.a` 的 SDL3/FreeType/HarfBuzz，以及 `media.a` 的 FFmpeg，
+     缓慢的部分）按 OS/arch 缓存，以 `scripts/build-gui.ts` /
+     `scripts/build-media.ts` 为键。
    - Windows（构建 + 运行）在 CI 中保持试验性：MSVC 兼容的 `gui.lib` 可在本机
      通过 SDL_GPU 的 Vulkan 后端构建并运行，但托管 runner 没有 GPU/Vulkan
      驱动。失败只记录日志而不标注运行（见[待决问题](./gui/known-issues.md)）。
@@ -189,13 +191,14 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
     - `win.stats()` 暴露引擎计数器；e2e 覆盖见
       `tests/e2e/gui-retention.test.ts`（见[内存与 GC](./gui/runtime.md)）。
 13. **M13 — 视频与音频** ✅
-    - `<video>` / `<audio>` 通过静态 vendored 的最小 FFmpeg 解码
-      （`media.*`、`gui_media.cpp`），帧沿用现有图像管线上传到 GPU 纹理，
-      音频在主线程推送进 SDL 流，并在元素句柄上暴露 DOM 媒体 API 与
-      `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件
-      （`dom_api_media.cpp`、`dom_api_proto.cpp`）。由 TS + CSS 控制；没有
-      内置控件。示例见 `examples/gui/media.*`，e2e 见
-      `tests/e2e/gui-media.test.ts`。
+    - `<video>` / `<audio>` 通过可选的 `media` 扩展（`runtime/ext_media/media.cpp`）
+      使用静态 vendored 的最小 FFmpeg 解码，帧沿用现有图像管线上传到 GPU 纹理，
+      音频由 GUI 的音频 sink 在主线程推送进 SDL 流，并在元素句柄上暴露 DOM
+      媒体 API 与 `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error`
+      事件（`dom_api_media.cpp`、`dom_api_proto.cpp`）。由 TS + CSS 控制；没有
+      内置控件。示例见 `examples/gui/media.*`；e2e 见
+      `tests/e2e/gui-media.test.ts`（启用 `media`）与
+      `tests/e2e/gui-media-disabled.test.ts`（不启用）。
 14. **M14 — `<canvas>` 2D** ✅
     - `<canvas>` 是一个替换元素（`xtgui::Canvas2D`、`layout.*`），
       `getContext("2d")` 句柄与绘制 API 位于 `dom_api_canvas.cpp`，自研的抗锯齿
@@ -249,10 +252,10 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
   按绘制设备像素尺寸光栅化并按该尺寸缓存，因此缩放与 HiDPI 保持清晰。
 - **M6b** ✅ CSS transition（在 `style.*` 中解析、在 `document.*` 中维护动画
   时钟与 transition 状态、`advance`/`advance(ms)` 钩子、e2e 覆盖）。
-- **M7** ✅ 在 CI 中于 Linux 与 macOS 上构建 `gui.a`（必需），并在 Linux 的
-  Xvfb 下运行示例与 GUI e2e 套件；`package` 发布 `gui.a`，`vendor/` 被缓存，
-  `ar -M` 合并在 GNU/Linux 与 macOS 上可用。macOS 运行与所有 Windows 在 CI
-  中仍为试验性。
+- **M7** ✅ 在 CI 中于 Linux 与 macOS 上构建 `gui.a`（以及可选的 `media.a`，
+  必需），并在 Linux 的 Xvfb 下运行示例与 GUI e2e 套件；`package` 发布两个归档，
+  `vendor/` 被缓存，`ar -M` 合并在 GNU/Linux 与 macOS 上可用。macOS 运行与所有
+  Windows 在 CI 中仍为试验性。
 - **M8** ✅ 元素/文档句柄（`dom_api.*`）、带延迟重算样式/重新布局的 DOM 变更
   （`document.*`、`xt_gui_flush_dom`）、带捕获/冒泡与 `stopPropagation` 的
   元素事件分发（`dom_api.*`、`gui.cpp`），以及
@@ -283,11 +286,13 @@ FFmpeg `7.1`（可用 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
   失效；收集器的触发阈值改为跟随存活集，而不再只升不降。`win.stats()` 暴露
   引擎计数器，`tests/e2e/gui-retention.test.ts` 对其做断言；每帧重写精灵的游戏
   循环现在内存恒定（见[内存与 GC](./gui/runtime.md)）。
-- **M13** ✅ `<video>` / `<audio>` 支持。一个最小化的静态 FFmpeg 被 vendored
-  并合并进 `gui.a`（`scripts/build-gui.ts`），`media.*` 在主线程把视频解码为
-  RGBA 帧、把音频解码为 48 kHz 立体声 PCM，`gui_media.cpp` 持有播放器并在每帧
-  推进媒体时钟与事件，`renderer_image.cpp` 把每个新视频帧沿图像纹理路径上传，
-  `dom_api_media.cpp` 在元素句柄上暴露 `play`/`pause`/`load` 与媒体属性。
+- **M13** ✅ `<video>` / `<audio>` 支持。可选的 `media` 扩展 vendored 并构建一个
+  最小化的静态 FFmpeg（`scripts/build-media.ts`），合并进 `media.a`；
+  `runtime/ext_media/media.cpp` 在主线程把视频解码为 RGBA 帧、把音频解码为
+  48 kHz 立体声 PCM，`runtime/ext_gui/gui_media.cpp` 持有播放器、实现 SDL 音频
+  sink 并在每帧推进媒体时钟与事件，`renderer_image.cpp` 把每个新视频帧沿图像纹理
+  路径上传，`dom_api_media.cpp` 在元素句柄上暴露 `play`/`pause`/`load` 与媒体
+  属性。`gui.a` 不含 FFmpeg；只启用 `media` 而不启用 `gui` 会被注册表拒绝。
   `examples/gui/media.*` 演示 TS + CSS 控件的模式，
   `tests/e2e/gui-media.test.ts` 对其做断言。
 - **M14** ✅ `<canvas>` 支持。新的替换元素（`layout.*`）从 `width`/`height`

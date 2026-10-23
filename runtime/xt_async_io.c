@@ -61,13 +61,17 @@ static int xt_async_roots_registered = 0;
 static int xt_async_watcher_fd = -1;
 
 #if defined(_WIN32)
-static CRITICAL_SECTION xt_async_lock;
-static CONDITION_VARIABLE xt_async_cond;
-static int xt_async_sync_ready = 0;
+/* Statically initialised like the POSIX primitives below: the reactor polls
+ * the pool on every timer/socket iteration, even when no async job was ever
+ * submitted, so the lock must be usable before `xt_async_submit` runs. */
+static SRWLOCK xt_async_lock = SRWLOCK_INIT;
+static CONDITION_VARIABLE xt_async_cond = CONDITION_VARIABLE_INIT;
 static SOCKET xt_async_wake_socket = INVALID_SOCKET;
-#define XT_ASYNC_LOCK() EnterCriticalSection(&xt_async_lock)
-#define XT_ASYNC_UNLOCK() LeaveCriticalSection(&xt_async_lock)
-static void xt_async_cond_wait(void) { SleepConditionVariableCS(&xt_async_cond, &xt_async_lock, INFINITE); }
+#define XT_ASYNC_LOCK() AcquireSRWLockExclusive(&xt_async_lock)
+#define XT_ASYNC_UNLOCK() ReleaseSRWLockExclusive(&xt_async_lock)
+static void xt_async_cond_wait(void) {
+  SleepConditionVariableSRW(&xt_async_cond, &xt_async_lock, INFINITE, 0);
+}
 static void xt_async_cond_signal(void) { WakeConditionVariable(&xt_async_cond); }
 #else
 static pthread_mutex_t xt_async_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -289,13 +293,6 @@ void xt_async_submit(xt_async_job *job) {
   xt_async_live_add(job);
   xt_async_pending_jobs++;
 
-#if defined(_WIN32)
-  if (!xt_async_sync_ready) {
-    InitializeCriticalSection(&xt_async_lock);
-    InitializeConditionVariable(&xt_async_cond);
-    xt_async_sync_ready = 1;
-  }
-#endif
   xt_async_wake_create();
   if (xt_async_watcher_fd < 0 && xt_async_wake_fd() >= 0) {
     if (xt_loop_add(xt_async_wake_fd(), XT_IO_READ, xt_async_wake_handler, NULL) == 0) {

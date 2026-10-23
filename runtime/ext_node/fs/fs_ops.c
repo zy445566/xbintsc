@@ -155,24 +155,7 @@ static int xt_fs_recursive(xt_value options) {
 }
 
 static int xt_fs_mkdir_recursive(const char *path, int mode) {
-  size_t length = strlen(path);
-  char *copy = (char *)malloc(length + 1);
-  if (!copy) return -1;
-  memcpy(copy, path, length + 1);
-
-  while (length > 1 && copy[length - 1] == '/') copy[--length] = '\0';
-  for (size_t i = 1; i <= length; i++) {
-    if (copy[i] != '/' && copy[i] != '\0') continue;
-    char saved = copy[i];
-    copy[i] = '\0';
-    if (xt_fs_mkdir_mode(copy, mode) != 0 && errno != EEXIST) {
-      free(copy);
-      return -1;
-    }
-    copy[i] = saved;
-  }
-  free(copy);
-  return 0;
+  return xt_fs_mkdir_parents(path, mode);
 }
 
 xt_value xt_node_mkdir(int32_t argc, xt_value *argv) {

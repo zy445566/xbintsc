@@ -132,26 +132,9 @@ static void xt_fs_worker_mkdir(xt_fs_job *job) {
     }
     return;
   }
-  size_t length = strlen(job->path);
-  char *copy = (char *)malloc(length + 1);
-  if (!copy) {
-    xt_fs_job_fail(job, ENOMEM, "mkdir", job->path);
-    return;
+  if (xt_fs_mkdir_parents(job->path, job->mode) != 0) {
+    xt_fs_job_fail(job, errno, "mkdir", job->path);
   }
-  memcpy(copy, job->path, length + 1);
-  while (length > 1 && (copy[length - 1] == '/' || copy[length - 1] == '\\')) copy[--length] = '\0';
-  for (size_t i = 1; i <= length; i++) {
-    if (copy[i] != '/' && copy[i] != '\\' && copy[i] != '\0') continue;
-    char saved = copy[i];
-    copy[i] = '\0';
-    if (xt_fs_mkdir_mode(copy, job->mode) != 0 && errno != EEXIST) {
-      xt_fs_job_fail(job, errno, "mkdir", job->path);
-      free(copy);
-      return;
-    }
-    copy[i] = saved;
-  }
-  free(copy);
 }
 
 static void xt_fs_worker_realpath(xt_fs_job *job) {

@@ -74,7 +74,9 @@ describe.skipIf(!guiAvailable)("gui example — pelican canvas", () => {
     expect(stdout).toContain("window=1000x640 (gui extension, SDL_GPU)");
     expect(stdout).toContain("canvas-box=x=0 y=0 1000x640");
     expect(stdout).toContain("canvas-size=1000x640");
-    // The title is white text on the gradient sky.
+    // The title is white text on the gradient sky. Probe its whole box: the
+    // ink offset depends on the platform font (YaHei vs STHeiti/PingFang), so a
+    // single point at the left edge is not stable across platforms.
     expect(stdout).toContain("pixel-title=255,255,255,255");
     // The road gradient, and the pelican body (not the sky colour).
     expect(stdout).toMatch(/pixel-road=\d+,\d+,\d+,255/);

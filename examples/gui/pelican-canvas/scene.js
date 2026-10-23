@@ -588,6 +588,23 @@ const probe = (x, y) => {
     return data[0] + "," + data[1] + "," + data[2] + "," + data[3];
 };
 
+/* Brightest pixel in a box. A single point is a brittle text probe: the raster
+ * position depends on the resolved font's left side bearing, which differs
+ * between platforms (Helvetica/YaHei on Windows, STHeiti/PingFang on macOS). */
+const probeMax = (x, y, width, height) => {
+    const data = ctx.getImageData(x, y, width, height).data;
+    let best = [0, 0, 0, 0];
+    let bestSum = -1;
+    for (let i = 0; i + 3 < data.length; i += 4) {
+        const sum = data[i] + data[i + 1] + data[i + 2];
+        if (sum > bestSum) {
+            bestSum = sum;
+            best = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+        }
+    }
+    return best.join(",");
+};
+
 const loop = (time) => {
     if (window.closed) return;
     let dt = last > 0 ? (time - last) / 1000 : 0.016;
@@ -605,6 +622,7 @@ const loop = (time) => {
 window["__pelicanCanvas"] = {
     info: info,
     probe: probe,
+    probeMax: probeMax,
     state: state,
     jump: () => jump(state),
     reset: () => resetScene(state),

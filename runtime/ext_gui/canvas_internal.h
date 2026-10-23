@@ -21,22 +21,22 @@ namespace canvas_detail {
  * pixel. `alpha` folds in `globalAlpha`. */
 void blend_pixel(unsigned char *pixel, const float color[4], float coverage, float alpha);
 
-/** Fill one closed polygon loop (already in device space) with `color`,
+/** Fill one closed polygon loop (already in device space) with `paint`,
  * anti-aliased, blending source-over. */
 void fill_loop(std::vector<unsigned char> &pixels, int width, int height,
-               const std::vector<CanvasPoint> &loop, const float color[4], float alpha);
+               const std::vector<CanvasPoint> &loop, const CanvasPaint &paint, float alpha);
 
 /** Fill several loops as one path with the nonzero winding rule (so a contour
  * inside another punches a hole). */
 void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
-                const std::vector<std::vector<CanvasPoint>> &loops, const float color[4],
+                const std::vector<std::vector<CanvasPoint>> &loops, const CanvasPaint &paint,
                 float alpha);
 
 /** Fill a device-space axis-aligned rectangle, anti-aliased. Used by the
  * `fillRect`/`clearRect` fast path when the transform preserves axis
  * alignment. */
 void fill_rect(std::vector<unsigned char> &pixels, int width, int height, float x0, float y0,
-               float x1, float y1, const float color[4], float alpha);
+               float x1, float y1, const CanvasPaint &paint, float alpha);
 
 /** Clear a device-space axis-aligned rectangle to transparent. */
 void clear_rect(std::vector<unsigned char> &pixels, int width, int height, float x0, float y0,
@@ -48,10 +48,10 @@ void draw_image(std::vector<unsigned char> &pixels, int width, int height, const
                 float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh,
                 float alpha);
 
-/** Composite one grayscale glyph bitmap at `(x, baselineY)` with `color`. */
+/** Composite one grayscale glyph bitmap at `(x, baselineY)` with `paint`. */
 void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<unsigned char> &glyph, int glyphWidth, int glyphHeight, int left,
-                int top, float x, float baselineY, const float color[4], float alpha);
+                int top, float x, float baselineY, const CanvasPaint &paint, float alpha);
 
 }  // namespace canvas_detail
 }  // namespace xtgui

@@ -176,6 +176,174 @@ describe.skipIf(!guiAvailable)("gui extension — canvas", () => {
     expect(value("text")).toBe("true");
   });
 
+  it("supports gradients, ellipses, rounded rects, dashes and line styles", () => {
+    const { value } = harness.compileAndRun(
+      "canvas-modern",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>body { margin: 0; }</style></head><body>
+        <canvas id="c" width="240" height="260"></canvas>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "canvas-modern", width: 400, height: 300 });
+      win.on("ready", () => {
+        const canvas: any = win.document.getElementById("c");
+        const ctx: any = canvas.getContext("2d");
+        const px = (x: number, y: number): string => {
+          const d = ctx.getImageData(x, y, 1, 1).data;
+          return d[0] + "," + d[1] + "," + d[2] + "," + d[3];
+        };
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, 240, 260);
+
+        // A horizontal red -> blue gradient, sampled well inside both ends.
+        const linear = ctx.createLinearGradient(0, 0, 100, 0);
+        linear.addColorStop(0, "#ff0000");
+        linear.addColorStop(1, "#0000ff");
+        ctx.fillStyle = linear;
+        ctx.fillRect(0, 0, 100, 20);
+        console.log("grad-left=" + px(5, 10));
+        console.log("grad-right=" + px(95, 10));
+        // The getter returns the same handle, not a copy.
+        console.log("same-gradient=" + (ctx.fillStyle === linear));
+
+        // A stop added after assignment is live: the right side turns blue.
+        const live = ctx.createLinearGradient(0, 0, 100, 0);
+        live.addColorStop(0, "#ff0000");
+        ctx.fillStyle = live;
+        live.addColorStop(1, "#0000ff");
+        ctx.fillRect(0, 30, 100, 20);
+        console.log("live-right=" + px(95, 40));
+
+        const radial = ctx.createRadialGradient(50, 70, 0, 50, 70, 35);
+        radial.addColorStop(0, "#ffffff");
+        radial.addColorStop(1, "#000000");
+        ctx.fillStyle = radial;
+        ctx.fillRect(0, 60, 100, 40);
+        console.log("radial-centre=" + px(50, 70));
+        console.log("radial-edge=" + px(88, 70));
+
+        ctx.fillStyle = "#00ff00";
+        ctx.beginPath();
+        ctx.ellipse(170, 70, 40, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+        console.log("ellipse-centre=" + px(170, 70));
+        console.log("ellipse-outside=" + px(170, 40));
+
+        ctx.fillStyle = "#ff00ff";
+        ctx.beginPath();
+        ctx.roundRect(10, 100, 70, 50, 14);
+        ctx.fill();
+        console.log("roundrect-centre=" + px(45, 125));
+        console.log("roundrect-corner=" + px(11, 101));
+
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "butt";
+        ctx.setLineDash([10, 10]);
+        ctx.lineDashOffset = 0;
+        console.log("cap=" + ctx.lineCap);
+        console.log("join=" + ctx.lineJoin);
+        console.log("miter=" + ctx.miterLimit);
+        console.log("dash=" + ctx.getLineDash().join(","));
+        ctx.beginPath();
+        ctx.moveTo(120, 150);
+        ctx.lineTo(230, 150);
+        ctx.stroke();
+        console.log("dash-on=" + px(124, 150));
+        console.log("dash-off=" + px(136, 150));
+
+        ctx.setLineDash([]);
+        ctx.strokeStyle = "#ff0000";
+        ctx.lineWidth = 10;
+        ctx.lineCap = "square";
+        ctx.beginPath();
+        ctx.moveTo(120, 190);
+        ctx.lineTo(180, 190);
+        ctx.stroke();
+        console.log("square-cap=" + px(115, 190));
+        console.log("square-cap-far=" + px(105, 190));
+
+        // A miter fills the outer corner right to the tip; a bevel cuts it off.
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 20;
+        ctx.lineCap = "butt";
+        ctx.lineJoin = "miter";
+        ctx.beginPath();
+        ctx.moveTo(120, 215);
+        ctx.lineTo(120, 245);
+        ctx.lineTo(160, 245);
+        ctx.stroke();
+        console.log("miter-join=" + px(111, 254));
+        ctx.lineJoin = "bevel";
+        ctx.beginPath();
+        ctx.moveTo(180, 215);
+        ctx.lineTo(180, 245);
+        ctx.lineTo(220, 245);
+        ctx.stroke();
+        console.log("bevel-join=" + px(171, 254));
+
+        ctx.save();
+        ctx.translate(100, 100);
+        ctx.rotate(Math.PI / 2);
+        const t = ctx.getTransform();
+        console.log("nested-transform=" + Math.round(t.e) + "," + Math.round(t.f));
+        // Post-multiplied: the square sits at (90,100)..(100,110), not at the
+        // rotated origin. A pre-multiplied transform would put it elsewhere.
+        ctx.fillStyle = "#ff8800";
+        ctx.fillRect(0, 0, 10, 10);
+        console.log("rotated-rect=" + px(95, 105));
+        ctx.restore();
+        const r = ctx.getTransform();
+        console.log("restored-transform=" + r.a + "," + r.e + "," + r.f);
+
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const channels = (label: string): number[] => value(label).split(",").map(Number);
+
+    const left = channels("grad-left");
+    expect(left[0]).toBeGreaterThan(200);
+    expect(left[2]).toBeLessThan(60);
+    const right = channels("grad-right");
+    expect(right[0]).toBeLessThan(60);
+    expect(right[2]).toBeGreaterThan(200);
+    expect(value("same-gradient")).toBe("true");
+    expect(channels("live-right")[2]).toBeGreaterThan(200);
+
+    // The radial gradient is white at its centre and black at its edge.
+    expect(channels("radial-centre")[0]).toBeGreaterThan(230);
+    expect(channels("radial-edge")[0]).toBeLessThan(40);
+
+    expect(channels("ellipse-centre")).toEqual([0, 255, 0, 255]);
+    expect(channels("ellipse-outside")).toEqual([255, 255, 255, 255]);
+    expect(channels("roundrect-centre")).toEqual([255, 0, 255, 255]);
+    expect(channels("roundrect-corner")).toEqual([255, 255, 255, 255]);
+
+    expect(value("cap")).toBe("butt");
+    expect(value("join")).toBe("miter");
+    expect(value("miter")).toBe("10");
+    expect(value("dash")).toBe("10,10");
+    expect(channels("dash-on")).toEqual([0, 0, 0, 255]);
+    expect(channels("dash-off")).toEqual([255, 255, 255, 255]);
+    // A square cap extends half a line width past the endpoint.
+    expect(channels("square-cap")).toEqual([255, 0, 0, 255]);
+    expect(channels("square-cap-far")).toEqual([255, 255, 255, 255]);
+    expect(channels("miter-join")).toEqual([0, 0, 0, 255]);
+    expect(channels("bevel-join")).toEqual([255, 255, 255, 255]);
+
+    expect(value("nested-transform")).toBe("100,100");
+    expect(channels("rotated-rect")).toEqual([255, 136, 0, 255]);
+    expect(value("restored-transform")).toBe("1,0,0");
+  });
+
   it("draws an image onto a canvas with drawImage", () => {
     const src = harness.imageSrc(harness.logoPath);
     const { value } = harness.compileAndRun(

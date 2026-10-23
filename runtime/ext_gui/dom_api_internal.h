@@ -28,6 +28,7 @@ extern xt_value g_event_proto;
 extern xt_value g_class_list_proto;
 extern xt_value g_style_proto;
 extern xt_value g_canvas_proto;
+extern xt_value g_canvas_gradient_proto;
 
 xt_value node_proto();
 xt_value document_proto();
@@ -35,6 +36,20 @@ xt_value event_proto();
 xt_value class_list_proto();
 xt_value style_proto();
 xt_value canvas_proto();
+xt_value canvas_gradient_proto();
+
+/* -- canvas helpers shared by `dom_api_canvas*.cpp` ----------------------- */
+
+/** The engine canvas behind a 2D context handle, or null when stale/foreign. */
+xtgui::Canvas2D *canvas_from_context(xt_value self);
+double canvas_number_arg(int32_t argc, xt_value *argv, int32_t index, double fallback);
+std::string canvas_string_arg(int32_t argc, xt_value *argv, int32_t index);
+/** The cached `CanvasGradient` handle for `id` on `canvas`; cached on the
+ * context so `ctx.fillStyle === gradient` holds after `fillStyle = gradient`. */
+xt_value canvas_gradient_handle(xt_value context, const xtgui::Canvas2D *canvas, uint64_t id);
+/** The gradient id stored on a handle, or 0 when it is not a gradient for
+ * `canvas` (stale or created by another canvas). */
+uint64_t canvas_gradient_id(xt_value handle, const xtgui::Canvas2D *canvas);
 
 /* -- cross-unit helpers --------------------------------------------------- */
 
@@ -195,6 +210,22 @@ METHOD(canvas_fill_text);
 METHOD(canvas_stroke_text);
 METHOD(canvas_draw_image);
 METHOD(canvas_get_image_data);
+METHOD(canvas_ellipse);
+METHOD(canvas_round_rect);
+METHOD(canvas_line_cap_get);
+METHOD(canvas_line_cap_set);
+METHOD(canvas_line_join_get);
+METHOD(canvas_line_join_set);
+METHOD(canvas_miter_limit_get);
+METHOD(canvas_miter_limit_set);
+METHOD(canvas_line_dash_get);
+METHOD(canvas_line_dash_set);
+METHOD(canvas_line_dash_offset_get);
+METHOD(canvas_line_dash_offset_set);
+METHOD(canvas_get_transform);
+METHOD(canvas_create_linear_gradient);
+METHOD(canvas_create_radial_gradient);
+METHOD(canvas_gradient_add_color_stop);
 
 /* classList methods */
 METHOD(class_list_add);

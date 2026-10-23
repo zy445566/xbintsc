@@ -43,6 +43,16 @@ std::string string_arg(int32_t argc, xt_value *argv, int32_t index) {
 
 }  // namespace
 
+xtgui::Canvas2D *canvas_from_context(xt_value self) { return context_canvas(self); }
+
+double canvas_number_arg(int32_t argc, xt_value *argv, int32_t index, double fallback) {
+  return number_arg(argc, argv, index, fallback);
+}
+
+std::string canvas_string_arg(int32_t argc, xt_value *argv, int32_t index) {
+  return string_arg(argc, argv, index);
+}
+
 METHOD(node_get_context) {
   (void)env;
   std::string mode = string_arg(argc, argv, 0);
@@ -152,13 +162,25 @@ METHOD(canvas_fill_style_get) {
   (void)argc;
   (void)argv;
   xtgui::Canvas2D *canvas = context_canvas(self);
-  return xt_string_from_cstr(canvas != nullptr ? canvas->fill_style().c_str() : "#000000");
+  if (canvas == nullptr) return xt_string_from_cstr("#000000");
+  if (canvas->fill_gradient_id() != 0) {
+    return canvas_gradient_handle(self, canvas, canvas->fill_gradient_id());
+  }
+  return xt_string_from_cstr(canvas->fill_style().c_str());
 }
 
 METHOD(canvas_fill_style_set) {
   (void)env;
   xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr) canvas->set_fill_style(string_arg(argc, argv, 0));
+  if (canvas == nullptr) return XT_UNDEFINED;
+  if (argc > 0) {
+    uint64_t gradient = canvas_gradient_id(xt_arg(argc, argv, 0), canvas);
+    if (gradient != 0) {
+      canvas->set_fill_gradient(gradient);
+      return XT_UNDEFINED;
+    }
+  }
+  canvas->set_fill_style(string_arg(argc, argv, 0));
   return XT_UNDEFINED;
 }
 
@@ -167,13 +189,25 @@ METHOD(canvas_stroke_style_get) {
   (void)argc;
   (void)argv;
   xtgui::Canvas2D *canvas = context_canvas(self);
-  return xt_string_from_cstr(canvas != nullptr ? canvas->stroke_style().c_str() : "#000000");
+  if (canvas == nullptr) return xt_string_from_cstr("#000000");
+  if (canvas->stroke_gradient_id() != 0) {
+    return canvas_gradient_handle(self, canvas, canvas->stroke_gradient_id());
+  }
+  return xt_string_from_cstr(canvas->stroke_style().c_str());
 }
 
 METHOD(canvas_stroke_style_set) {
   (void)env;
   xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr) canvas->set_stroke_style(string_arg(argc, argv, 0));
+  if (canvas == nullptr) return XT_UNDEFINED;
+  if (argc > 0) {
+    uint64_t gradient = canvas_gradient_id(xt_arg(argc, argv, 0), canvas);
+    if (gradient != 0) {
+      canvas->set_stroke_gradient(gradient);
+      return XT_UNDEFINED;
+    }
+  }
+  canvas->set_stroke_style(string_arg(argc, argv, 0));
   return XT_UNDEFINED;
 }
 

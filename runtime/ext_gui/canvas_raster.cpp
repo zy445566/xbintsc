@@ -34,6 +34,22 @@ struct Crossing {
   int winding;
 };
 
+/** Resolve `paint` at a device-space pixel centre. Gradients are defined in
+ * user space, so the pixel is mapped back through the inverse transform. */
+void paint_color_at(const CanvasPaint &paint, float x, float y, float out[4]) {
+  if (paint.gradient != nullptr) {
+    const CanvasTransform &inverse = paint.inverse;
+    float userX = inverse.a * x + inverse.c * y + inverse.e;
+    float userY = inverse.b * x + inverse.d * y + inverse.f;
+    if (paint.gradient->color_at(userX, userY, out)) return;
+  }
+  if (paint.color != nullptr) {
+    for (int i = 0; i < 4; i++) out[i] = paint.color[i];
+    return;
+  }
+  out[0] = out[1] = out[2] = out[3] = 0.0f;
+}
+
 }  // namespace
 
 void blend_pixel(unsigned char *pixel, const float color[4], float coverage, float alpha) {
@@ -74,7 +90,7 @@ static void add_span(float *row, int rowOriginX, float xa, float xb, float weigh
 }
 
 void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
-                const std::vector<std::vector<CanvasPoint>> &loops, const float color[4],
+                const std::vector<std::vector<CanvasPoint>> &loops, const CanvasPaint &paint,
                 float alpha) {
   if (width <= 0 || height <= 0 || loops.empty()) return;
   bool havePoint = false;
@@ -146,18 +162,20 @@ void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
       float c = row[px];
       if (c <= 0.0f) continue;
       if (c > 1.0f) c = 1.0f;
+      float color[4];
+      paint_color_at(paint, (float)(x0 + px) + 0.5f, (float)py + 0.5f, color);
       blend_pixel(dst + (size_t)px * 4, color, c, alpha);
     }
   }
 }
 
 void fill_loop(std::vector<unsigned char> &pixels, int width, int height,
-               const std::vector<CanvasPoint> &loop, const float color[4], float alpha) {
-  fill_loops(pixels, width, height, std::vector<std::vector<CanvasPoint>>{loop}, color, alpha);
+               const std::vector<CanvasPoint> &loop, const CanvasPaint &paint, float alpha) {
+  fill_loops(pixels, width, height, std::vector<std::vector<CanvasPoint>>{loop}, paint, alpha);
 }
 
 void fill_rect(std::vector<unsigned char> &pixels, int width, int height, float x0, float y0,
-               float x1, float y1, const float color[4], float alpha) {
+               float x1, float y1, const CanvasPaint &paint, float alpha) {
   if (x1 < x0) std::swap(x0, x1);
   if (y1 < y0) std::swap(y0, y1);
   int ix0 = std::max(0, (int)std::floor(x0));
@@ -171,6 +189,8 @@ void fill_rect(std::vector<unsigned char> &pixels, int width, int height, float 
     for (int px = ix0; px < ix1; px++) {
       float cx = std::min(x1, (float)(px + 1)) - std::max(x0, (float)px);
       if (cx <= 0.0f) continue;
+      float color[4];
+      paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);
       blend_pixel(dst + (size_t)(px - ix0) * 4, color, cx * cy, alpha);
     }
   }
@@ -233,7 +253,7 @@ void draw_image(std::vector<unsigned char> &pixels, int width, int height, const
 
 void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<unsigned char> &glyph, int glyphWidth, int glyphHeight, int left,
-                int top, float x, float baselineY, const float color[4], float alpha) {
+                int top, float x, float baselineY, const CanvasPaint &paint, float alpha) {
   int originX = (int)std::lround(x) + left;
   int originY = (int)std::lround(baselineY) - top;
   for (int gy = 0; gy < glyphHeight; gy++) {
@@ -244,6 +264,8 @@ void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
       if (px < 0 || px >= width) continue;
       float coverage = glyph[(size_t)gy * (size_t)glyphWidth + (size_t)gx] / 255.0f;
       if (coverage <= 0.0f) continue;
+      float color[4];
+      paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);
       blend_pixel(pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4, color, coverage,
                   alpha);
     }

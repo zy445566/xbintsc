@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>鹈鹕骑自行车 · Canvas 2D</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #0d141f;
+      overflow: hidden;
+    }
+
+    /* The canvas is the whole document. Its bitmap is 1000x640 (the width /
+       height attributes); CSS only pins it to the same box so no scaling
+       softens the drawing. */
+    #stage {
+      display: block;
+      width: 1000px;
+      height: 640px;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="stage" width="1000" height="640"></canvas>
+  <!-- One source for both hosts: a browser runs this as a classic script;
+       xbintsc's `.html` loader AOT-compiles the same file for the native
+       window. Opening this HTML directly needs no build step. -->
+  <script src="./scene.js"></script>
+</body>
+
+</html>

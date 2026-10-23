@@ -74,6 +74,12 @@ export interface Extension {
   readonly name: string;
   /** Description shown by `xbintsc ext list`. */
   readonly description?: string;
+  /**
+   * Other extensions this one needs. The registry rejects a build that enables
+   * it without them, so a dependent extension fails with an actionable message
+   * instead of an unresolved symbol at link time (e.g. `media` needs `gui`).
+   */
+  readonly requires?: readonly string[];
   /** C/asm sources compiled and linked alongside the generated module. */
   runtimeSources?(): readonly string[];
   /**
@@ -143,6 +149,24 @@ export class ExtensionRegistry {
 
   unregister(name: string): boolean {
     return this.extensions.delete(name);
+  }
+
+  /**
+   * Throw when a registered extension requires one that is not registered.
+   * Called before a build so `--ext media` without `--ext gui` reports which
+   * flags to pass instead of failing later with an unresolved symbol.
+   */
+  validate(): this {
+    for (const extension of this.extensions.values()) {
+      for (const dependency of extension.requires ?? []) {
+        if (this.extensions.has(dependency)) continue;
+        throw new Error(
+          `extension '${extension.name}' requires the '${dependency}' extension; ` +
+            `pass --ext ${dependency},${extension.name}`,
+        );
+      }
+    }
+    return this;
   }
 
   get(name: string): Extension | undefined {

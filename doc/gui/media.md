@@ -65,17 +65,31 @@ clip paths are not rendered (see [Known issues](./known-issues.md)).
 
 ## Video & audio (M13)
 
-`runtime/ext_gui/media.{h,cpp}` wraps a statically vendored **FFmpeg** build and
-`runtime/ext_gui/gui_media.cpp` connects the DOM tree to it. `<video>` and
-`<audio>` really decode and play; there is no WebView and no platform media
-framework in the path.
+Media playback is split across two extensions so a GUI program does not pay for
+a decoder it never uses:
+
+- **`gui`** (`gui.a`) owns the `<video>`/`<audio>` elements, the DOM API, the
+  renderer integration and the SDL audio sink, but contains **no FFmpeg**.
+  `runtime/ext_gui/media.{h,cpp}` declares the player interface and dispatches
+  through a table the media backend installs at startup
+  (`runtime/ext_gui/media_api.h`).
+- **`media`** (`media.a`, `runtime/ext_media/`) is the optional decoder
+  backend: `runtime/ext_media/media.cpp` wraps a statically vendored **FFmpeg**
+  build, and `runtime/ext_media/media_bridge.c` registers it with the engine.
+  Enable it with `--ext media` (or `--ext gui,media`). `media` requires `gui`;
+  the registry rejects the combination in the wrong order.
+
+Without the `media` extension the element still exists and its DOM API is
+callable, but opening a source fails and fires `error`. That is also how Windows
+behaves today: the archive is POSIX-only. There is no WebView and no platform
+media framework in the path either way.
 
 - **Decoding.** `avformat_open_input` opens the `src` (a path — `file://` is
   accepted, but media paths are *not* percent-decoded, unlike images), the
   best stream is selected for each kind, and a software decoder yields
   `yuv/rgb` frames which `sws_scale` converts to RGBA8 at the coded size. The
   supported containers/codecs are the minimal FFmpeg configuration from
-  `scripts/build-gui.ts`: MP4/MOV/MKV/AVI/FLV/MPEG-TS/M4V/ASF, MP3/OGG/WAV/FLAC/
+  `scripts/build-media.ts`: MP4/MOV/MKV/AVI/FLV/MPEG-TS/M4V/ASF, MP3/OGG/WAV/FLAC/
   AAC; H.264, HEVC, VP8, VP9, AV1, MPEG-4, MJPEG video; AAC, MP3, Opus, Vorbis,
   FLAC, ALAC, AC3/E-AC3, WMAv2 and the raw PCM formats audio.
 - **Video.** `<video>` is a replaced element like `<img>` (UA default
@@ -83,13 +97,14 @@ framework in the path.
   same `PaintImage` as an image; the renderer uploads each new decoded frame to
   an RGBA texture (`ensureMediaTexture`) and draws a textured quad, so the GPU
   scales it to the CSS box instead of the CPU resizing. Playback timing is the
-  wall clock (`SDL_GetTicks`), not the frame delta.
+  process monotonic clock, not the frame delta.
 - **Audio.** There is no audio callback: the decoder is pushed on the main
-  thread as it is ticked and the PCM is queued with
-  `SDL_OpenAudioDeviceStream` in push mode (`NULL` callback), buffering about
-  0.25 s ahead at 48 kHz stereo `SDL_AUDIO_F32`. `volume` maps to
-  `SDL_SetAudioStreamGain`; audio is best-effort and is skipped when no device
-  is available (headless CI).
+  thread as it is ticked and writes into an `xtgui::AudioSink`. The GUI
+  implements that sink in `gui_media.cpp` with `SDL_OpenAudioDeviceStream` in
+  push mode (`NULL` callback), buffering about 0.25 s ahead at 48 kHz stereo
+  `SDL_AUDIO_F32`. `volume` maps to `SDL_SetAudioStreamGain`; audio is
+  best-effort and is skipped when no device is available (headless CI). Keeping
+  the sink in `gui.a` means `media.a` depends only on FFmpeg.
 - **Threading.** The engine is single-threaded and not thread-aware, so all
   decoding happens on the main thread inside `xt_gui_media_tick` — no decode
   thread, no cross-thread GC exposure.

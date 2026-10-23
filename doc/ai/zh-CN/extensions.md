@@ -1,4 +1,4 @@
-# 扩展：Node 模块、GUI、C++/Rust 库
+# 扩展：Node 模块、GUI、媒体、C++/Rust 库
 
 编译器核心与平台无关。任何与平台相关的东西——Node 的 `fs`、一个 HTML/CSS 渲染器、
 你自己的 C++ 库——都以**扩展**的形式接入：它既贡献模块绑定，也贡献要一起编译/链接的
@@ -66,11 +66,9 @@ import { createWindow, run } from "gui";
 ```
 
 它是自带渲染引擎的 GPU 加速实现（自己的 HTML 解析器、CSS 级联、布局与合成器），不是
-系统 WebView。`<img>`、`<video>`、`<audio>` 都是真正解码：归档内打入一个最小化的
-静态 FFmpeg，DOM 媒体 API（`play`/`pause`/`currentTime`/`volume`/…）与
-`loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件可让程序驱动播放。
-没有内置控件——用元素和 CSS 自绘控件（见 `examples/gui/media.ts`）；视频帧与音频 PCM
-都在主线程解码。也支持 `<canvas>`：`getContext("2d")` 返回的上下文，其填充、路径、
+系统 WebView。`<img>` 由引擎自身解码；而 `<video>`/`<audio>` 在只启用 `gui` 时**不可用**
+——它们需要单独的 [`media`](#media--视频音频解码) 扩展。也支持 `<canvas>`：
+`getContext("2d")` 返回的上下文，其填充、路径、
 渐变、文本与 `drawImage` 由自研 CPU 光栅器处理（另有线段端点/连接、虚线描边、
 `ellipse` 与 `roundRect`），元素句柄还暴露 `width`/`height`。CSS
 `transform`/`transform-origin` 作为绘制期效果可用，因此一个盒子（以及其中的文本、
@@ -78,9 +76,23 @@ import { createWindow, run } from "gui";
 `requestAnimationFrame` 逐帧驱动，或写成 `transition: transform`（见
 `examples/gui/pelican-svg`）。因为主体是 C++，它以各平台预编译的 `gui.a`/`gui.lib` 形式分发。如果该
 平台的归档不存在，构建会以明确的提示失败；设计与路线图见 [../../zh-CN/gui.md](../../zh-CN/gui.md)（总览；引擎按功能拆分在 [`doc/zh-CN/gui/`](../../zh-CN/gui/) 下），
-脚本接口见 [../../zh-CN/gui-scripts.md](../../zh-CN/gui-scripts.md)。媒体播放是
-Windows 唯一不支持的：Windows 的 `gui.a` 不构建 FFmpeg，媒体槽位为空操作。Canvas API
+脚本接口见 [../../zh-CN/gui-scripts.md](../../zh-CN/gui-scripts.md)。Canvas API
 及其限制见 [../../zh-CN/gui/canvas.md](../../zh-CN/gui/canvas.md)。
+
+### `media` —— 视频/音频解码
+
+用 `--ext media` **与 `gui` 一起**开启（`--ext gui,media`；注册表会拒绝单独启用
+`media`）。它链接单独的 FFmpeg 后端 `media.a`，因此加入 `<video>`/`<audio>` 播放
+不会让只做界面的二进制变大。
+
+DOM API 与普通 HTML 媒体元素一致：`play()` / `pause()` / `load()`，以及
+`paused` / `ended` / `duration` / `currentTime` / `volume` / `muted` / `loop` /
+`autoplay` / `videoWidth` / `videoHeight` / `readyState` / `src` 属性，还有
+`loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件。没有内置
+控件——用元素和 CSS 自绘控件（见 `examples/gui/media.ts`）。视频帧与音频 PCM
+都在主线程解码；视频走图像纹理路径。没有该扩展时，打开媒体源会失败并触发
+`error`（元素与 API 仍然存在）。该归档目前仅支持 POSIX，因此 Windows 也只会触发
+同样的 `error`；见 [../../zh-CN/gui/known-issues.md](../../zh-CN/gui/known-issues.md)。
 
 ## 第三方 npm 包
 

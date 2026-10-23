@@ -249,15 +249,16 @@ jobs:
 
       - run: npm ci
 
-      # Building SDL3/FreeType/HarfBuzz from source is the slow part of the GUI
-      # archive; cache them, keyed by the build script (which pins the versions).
-      # actions/cache v5+ runs on node24 (v4 still targets the deprecated node20).
-      # The SDL3 *build* tree is deliberately absent: a CMake build tree records
-      # the machine it was configured on, so a cached one restored here carries
-      # that machine's compiler path and its `SDL_X11`/`SDL_WAYLAND` choices into
-      # a configure that must make its own. `scripts/build-gui.ts` keeps it at
-      # `vendor/sdl-build`, outside every cached path.
-      - name: Cache the GUI vendored libraries
+      # Building SDL3/FreeType/HarfBuzz (and FFmpeg for the media archive) from
+      # source is the slow part; cache the sources, keyed by both build scripts
+      # (which pin the versions). actions/cache v5+ runs on node24 (v4 still
+      # targets the deprecated node20). The SDL3 *build* tree is deliberately
+      # absent: a CMake build tree records the machine it was configured on, so
+      # a cached one restored here carries that machine's compiler path and its
+      # `SDL_X11`/`SDL_WAYLAND` choices into a configure that must make its own.
+      # `scripts/build-gui.ts` keeps it at `vendor/sdl-build`, outside every
+      # cached path.
+      - name: Cache the GUI and media vendored libraries
         if: runner.os != 'Windows'
         uses: actions/cache@v5
         with:
@@ -267,7 +268,8 @@ jobs:
             vendor/freetype-build
             vendor/harfbuzz
             vendor/harfbuzz-build
-          key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts') }}
+            vendor/ffmpeg
+          key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts', 'scripts/build-media.ts') }}
 
       - name: Build the hello example
         run: npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
@@ -318,6 +320,12 @@ jobs:
       - name: Build the GUI archive (Linux/macOS)
         if: runner.os != 'Windows'
         run: npm run gui
+
+      # Media decoding is a separate opt-in archive (media.a). Building it makes
+      # the media e2e suite run; the GUI-only suite covers the no-media path.
+      - name: Build the media archive (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: npm run media
 
       # Linux runs the example and the GUI e2e suite headlessly under Xvfb with
       # the lavapipe software Vulkan driver; this path is validated.
@@ -518,7 +526,7 @@ jobs:
 
       - run: npm ci
 
-      - name: Cache the GUI vendored libraries
+      - name: Cache the GUI and media vendored libraries
         if: runner.os != 'Windows'
         uses: actions/cache@v5
         with:
@@ -528,7 +536,8 @@ jobs:
             vendor/freetype-build
             vendor/harfbuzz
             vendor/harfbuzz-build
-          key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts') }}
+            vendor/ffmpeg
+          key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts', 'scripts/build-media.ts') }}
 
       - name: Download the self-hosted compiler
         uses: actions/download-artifact@v8
@@ -539,12 +548,16 @@ jobs:
       - name: Build the prebuilt runtime archives
         run: npm run runtime
 
-      # `package-release` copies all of `runtime/`, so the `gui.a` built here is
-      # shipped automatically. Built on Linux/macOS; Windows is skipped until the
-      # MSVC archive is validated (see the compile-examples job).
+      # `package-release` copies all of `runtime/`, so the `gui.a` and `media.a`
+      # built here ship automatically. Built on Linux/macOS; Windows is skipped
+      # until the MSVC archive is validated (see the compile-examples job).
       - name: Build the GUI archive
         if: runner.os != 'Windows'
         run: npm run gui
+
+      - name: Build the media archive
+        if: runner.os != 'Windows'
+        run: npm run media
 
       - name: Assemble the release archive
         run: npm run package-release

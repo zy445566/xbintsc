@@ -94,6 +94,17 @@ describe("ExtensionRegistry", () => {
     expect(registry.linkerFlags()).toEqual(["-ldemo"]);
   });
 
+  it("validates declared extension dependencies", () => {
+    const base: Extension = { name: "base" };
+    const dependent: Extension = { name: "dependent", requires: ["base"] };
+    expect(() => new ExtensionRegistry().register(dependent).validate()).toThrow(
+      /extension 'dependent' requires the 'base' extension/,
+    );
+    expect(() => new ExtensionRegistry().register(base).register(dependent).validate()).not.toThrow();
+    // An extension with no declared dependencies always validates.
+    expect(() => new ExtensionRegistry().register(base).validate()).not.toThrow();
+  });
+
   it("ships a core extension exposing print", () => {
     expect(coreExtension.builtins?.().print?.symbol).toBe("xt_println");
     expect(createDefaultRegistry().has("core")).toBe(true);

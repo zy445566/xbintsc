@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { expect } from "vitest";
 import { build } from "../../src/driver/compiler.js";
-import { createDefaultRegistry } from "../../src/extensions/registry.js";
+import { createDefaultRegistry, type Extension } from "../../src/extensions/registry.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { findRuntimeDir, platformSlug } from "../../src/driver/paths.js";
 
@@ -54,6 +54,8 @@ export interface GuiRunResult {
 export interface GuiRunOptions {
   /** Extra files written into the work directory before the build. */
   files?: Record<string, string>;
+  /** Additional extensions to register next to `gui` (e.g. `media`). */
+  extensions?: readonly Extension[];
   /**
    * Milliseconds the frame loop may run before `XT_GUI_AUTOCLOSE_MS` closes
    * every window. A program whose handlers close the window does not need this
@@ -116,6 +118,7 @@ export function createGuiHarness(): GuiHarness {
     const entry = join(workdir, `${name}.ts`);
     writeFileSync(entry, source);
     const extensions = createDefaultRegistry().register(guiExtension);
+    for (const extension of options.extensions ?? []) extensions.register(extension);
     const result = build(entry, {
       emit: "exe",
       outDir: join(workdir, `out-${name}`),

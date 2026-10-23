@@ -269,6 +269,11 @@ npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 
 # A prebuilt Linux/macOS release archive already ships the engine:
 xbintsc run app.ts --ext gui
+
+# <video>/<audio> playback is a separate opt-in archive, so GUI-only binaries
+# stay FFmpeg-free:
+npm run media
+xbintsc run examples/gui/media.ts --ext gui,media
 ```
 
 A document's `<script>` bodies are **AOT-compiled** by xbintsc into the binary —
@@ -289,9 +294,12 @@ Platforms and full details: [doc/gui.md](./doc/gui.md) is the engine overview
 (architecture and roadmap); the per-function documents live under
 [doc/gui/](./doc/gui) — API, DOM/CSS, layout, rendering, media, input, animation,
 runtime, build and known issues. Linux and macOS are built and exercised in CI
-and their release archives ship the engine (`gui.a`); the Windows archive
+and their release archives ship the engine (`gui.a`) plus the optional media
+archive (`media.a`); the Windows archive
 (`gui.lib`, rendered through SDL_GPU's Vulkan backend) is produced by the same
-script but is still provisional and is not shipped in the release yet.
+script but is still provisional and is not shipped in the release yet. Media
+playback is POSIX-only for now: without `media.a`, or on Windows, `<video>` and
+`<audio>` fire `error`.
 
 ## Incremental compilation
 
@@ -302,10 +310,12 @@ sources are compiled once and cached on the same principle.
 
 ## Extensions
 
-An extension is a plain object (`src/extensions/registry.ts`). Two are bundled:
+An extension is a plain object (`src/extensions/registry.ts`). Three are bundled:
 [`gui`](#gui-applications-htmlcss), a GPU HTML/CSS renderer
-(see [doc/gui.md](./doc/gui.md)), and `node`, itself split into one folder per
-Node module, each pairing its exports with the C sources that implement them:
+(see [doc/gui.md](./doc/gui.md)); `media`, the optional FFmpeg-backed
+`<video>`/`<audio>` decoder that requires `gui`; and `node`, itself split into
+one folder per Node module, each pairing its exports with the C sources that
+implement them:
 
 ```
 src/extensions/node/       runtime/ext_node/

@@ -21,9 +21,11 @@ what `examples/gui/pelican-bike` — a playable 2D game — is built on. **M12**
 DOM node lifetime explicit (what a mutation releases, what it keeps) and gives the
 engine bounded memory: see [Node lifetime](./gui/dom.md#node-lifetime) and
 [Memory & GC](./gui/runtime.md#memory--gc). **M13** plays real
-`<video>`/`<audio>` — a vendored minimal FFmpeg decodes them on the main thread,
-video frames go through the image texture path and audio to an SDL stream, with
-the DOM media API exposing `play`/`pause`/`currentTime`/… and media events.
+`<video>`/`<audio>` — the optional `media` extension decodes them on the main
+thread with a vendored minimal FFmpeg, video frames go through the image texture
+path and audio to an SDL stream, with the DOM media API exposing
+`play`/`pause`/`currentTime`/… and media events. Enabling `gui` alone does not
+link FFmpeg.
 **M14** adds `<canvas>` with a self-written 2D software rasteriser (anti-aliased
 fills, paths, text and `drawImage`) uploaded through the image texture path —
 see [Canvas](./gui/canvas.md). **M15** adds CSS `transform` /
@@ -84,7 +86,7 @@ pages above.
 | 4 | The engine is **not self-hosted** (it is C/C++, not TS), but must not affect the compiler's platform-agnostic design. Delivered as a per-platform prebuilt archive linked via `nativeObjects`. |
 | 5 | The **event loop is generic**: the runtime exposes a generic main-loop hook and a poll primitive; nothing GUI-specific enters `runtime/`. |
 | 6 | **Multiple windows** are supported by the core object model. |
-| 7 | Third-party low-level libs are **statically linked into `gui.a`** so releases stay self-contained; only OS frameworks are added at link time. |
+| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3/FreeType/HarfBuzz, and the optional `media.a` carries FFmpeg and is linked only with `--ext media`. |
 
 ## Architecture
 
@@ -106,6 +108,7 @@ pages above.
         windowing + input (SDL3) ── multiple windows
         text (HarfBuzz + FreeType) ── glyph atlas / SDF
         images (stb_image; SVG via NanoSVG)
+        media DOM + audio sink ── optional media.a (FFmpeg) installs the decoder
 ```
 
 The engine never talks to the compiler. The compiler only sees an `Extension`
@@ -120,18 +123,18 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | Text shaping | **HarfBuzz** | correct complex-script shaping |
 | Glyph raster | **FreeType** | glyph outlines → GPU atlas / SDF |
 | Images | **stb_image** (vendored header) for bitmaps, **NanoSVG** (vendored headers) for SVG | single headers to start; SVG files rasterise on demand |
-| Video + audio | **FFmpeg** (statically vendored, minimal build) | decodes the common container/codec set; no WebView or platform media framework |
+| Video + audio | **FFmpeg** (statically vendored, minimal build, optional `media` extension) | decodes the common container/codec set; no WebView or platform media framework |
 
 Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`,
-FFmpeg `7.1` (overridable with `SDL3_TAG` / `FREETYPE_VERSION` /
-`HARFBUZZ_VERSION` / `FFMPEG_VERSION`).
+FFmpeg `7.1` for the optional `media` archive (overridable with `SDL3_TAG` /
+`FREETYPE_VERSION` / `HARFBUZZ_VERSION` / `FFMPEG_VERSION`).
 
 Alternative if SDL3 is rejected: **GLFW + OpenGL 3.3** (simpler, but OpenGL is
 deprecated on macOS and gives no modern GPU abstraction). **wgpu-native** if the
 engine were Rust.
 
-> These vendored libraries are linked **statically into `gui.a`** so a released
-> xbintsc stays "download and run"; only OS frameworks are added by
+> These vendored libraries are linked **statically into `gui.a` / `media.a`** so
+> a released xbintsc stays "download and run"; only OS frameworks are added by
 > `linkerFlags()`.
 
 ## Milestones
@@ -172,15 +175,16 @@ engine were Rust.
      animated `background-color`/`color`/`border-color`/`border-radius`, retargeting
      and `win.advance(ms)`. `@keyframes` remain.
 7. **M7 — CI & releases** ✅ (Linux/macOS build) / 🚧 (run + Windows)
-   - `compile-examples` builds `gui.a` on Linux and macOS (required), then runs
-     the example and `tests/e2e/gui-*.test.ts` under Xvfb + lavapipe on Linux
-     (required). The macOS run is provisional until a WindowServer is confirmed;
-     it is guarded so a failure is logged without annotating the run.
-   - The `package` job builds `gui.a` before assembling the release, so it ships
-     inside the existing runtime archive (`package-release` copies all of
-     `runtime/`).
-   - `vendor/` (SDL3/FreeType/HarfBuzz, the slow part) is cached per OS/arch,
-     keyed by `scripts/build-gui.ts`.
+   - `compile-examples` builds `gui.a` and `media.a` on Linux and macOS
+     (required), then runs the examples and `tests/e2e/gui-*.test.ts` under
+     Xvfb + lavapipe on Linux (required). The macOS run is provisional until a
+     WindowServer is confirmed; it is guarded so a failure is logged without
+     annotating the run.
+   - The `package` job builds `gui.a` and `media.a` before assembling the
+     release, so both ship inside the existing runtime archive
+     (`package-release` copies all of `runtime/`).
+   - `vendor/` (SDL3/FreeType/HarfBuzz for `gui.a`, FFmpeg for `media.a`) is
+     cached per OS/arch, keyed by `scripts/build-gui.ts` / `scripts/build-media.ts`.
    - Windows (build + run) stays provisional in CI: the MSVC-compatible
      `gui.lib` builds and runs locally through SDL_GPU's Vulkan backend, but the
      hosted runners have no GPU/Vulkan driver. A failure is logged without
@@ -234,13 +238,15 @@ engine were Rust.
       `tests/e2e/gui-retention.test.ts` (see [Memory & GC](./gui/runtime.md#memory--gc)).
 13. **M13 — video & audio** ✅
     - `<video>` / `<audio>` decode through a statically vendored minimal FFmpeg
-      (`media.*`, `gui_media.cpp`), frames upload to GPU textures through the
-      existing image pipeline, audio is pushed to an SDL stream on the main
-      thread, and the DOM media API plus `loadedmetadata`/`play`/`pause`/
-      `ended`/`timeupdate`/`error` events are exposed on element handles
+      in the optional `media` extension (`runtime/ext_media/media.cpp`), frames
+      upload to GPU textures through the existing image pipeline, audio is
+      pushed to an SDL stream on the main thread by the GUI's audio sink, and
+      the DOM media API plus `loadedmetadata`/`play`/`pause`/`ended`/
+      `timeupdate`/`error` events are exposed on element handles
       (`dom_api_media.cpp`, `dom_api_proto.cpp`). Controlled from TS + CSS;
       there are no built-in controls. Example in `examples/gui/media.*`, e2e in
-      `tests/e2e/gui-media.test.ts`.
+      `tests/e2e/gui-media.test.ts` (with the `media` extension) and
+      `tests/e2e/gui-media-disabled.test.ts` (without it).
 14. **M14 — `<canvas>` 2D** ✅
     - `<canvas>` is a replaced element (`xtgui::Canvas2D`, `layout.*`), the
       `getContext("2d")` handle and drawing API live in `dom_api_canvas.cpp`,
@@ -300,10 +306,11 @@ engine were Rust.
   pixel size and cached by that size, so scaling and HiDPI stay crisp.
 - **M6b** ✅ CSS transitions (parsing in `style.*`, an animation clock and
   transition state in `document.*`, `advance`/`advance(ms)` hooks, e2e coverage).
-- **M7** ✅ builds `gui.a` in CI on Linux and macOS (required) and runs the
-  example plus the GUI e2e suite under Xvfb on Linux; `package` ships `gui.a`,
-  `vendor/` is cached, and the `ar -M` merge works on GNU/Linux and macOS.
-  macOS runs and all of Windows remain provisional in CI.
+- **M7** ✅ builds `gui.a` (and the optional `media.a`) in CI on Linux and macOS
+  (required) and runs the example plus the GUI e2e suite under Xvfb on Linux;
+  `package` ships both archives, `vendor/` is cached, and the `ar -M` merge
+  works on GNU/Linux and macOS. macOS runs and all of Windows remain provisional
+  in CI.
 - **M8** ✅ element/document handles (`dom_api.*`), DOM mutation with lazy
   restyle/relayout (`document.*`, `xt_gui_flush_dom`), element event dispatch
   with capture/bubble and `stopPropagation` (`dom_api.*`, `gui.cpp`), and e2e
@@ -338,14 +345,17 @@ engine were Rust.
   ratcheting upwards. `win.stats()` exposes the engine counters and
   `tests/e2e/gui-retention.test.ts` pins them; a game loop rewriting its sprite
   every frame now runs in constant memory (see [Memory & GC](./gui/runtime.md#memory--gc)).
-- **M13** ✅ `<video>` / `<audio>` support. A minimal static FFmpeg is vendored
-  and merged into `gui.a` (`scripts/build-gui.ts`), `media.*` decodes video to
-  RGBA frames and audio to 48 kHz stereo PCM on the main thread, `gui_media.cpp`
-  owns the players and pumps the media clock and events each frame,
+- **M13** ✅ `<video>` / `<audio>` support. The optional `media` extension
+  vendors and builds a minimal static FFmpeg (`scripts/build-media.ts`) and
+  merges it into `media.a`; `runtime/ext_media/media.cpp` decodes video to RGBA
+  frames and audio to 48 kHz stereo PCM on the main thread,
+  `runtime/ext_gui/gui_media.cpp` owns the players, implements the SDL audio
+  sink and pumps the media clock and events each frame,
   `renderer_image.cpp` uploads each new video frame through the image texture
   path, and `dom_api_media.cpp` exposes `play`/`pause`/`load` plus the media
-  properties on element handles. `examples/gui/media.*` demonstrates the
-  TS-plus-CSS-controls pattern and `tests/e2e/gui-media.test.ts` pins it.
+  properties on element handles. `gui.a` stays FFmpeg-free; enabling `media`
+  without `gui` is rejected by the registry. `examples/gui/media.*` demonstrates
+  the TS-plus-CSS-controls pattern and `tests/e2e/gui-media.test.ts` pins it.
 - **M14** ✅ `<canvas>` support. A new replaced element (`layout.*`) carries an
   intrinsic size from its `width`/`height` attributes (default `300x150`),
   `xtgui::Canvas2D` (`canvas.{h,cpp}`) owns the RGBA8 bitmap and drawing state,

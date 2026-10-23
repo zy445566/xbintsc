@@ -13,8 +13,9 @@
 import type { Extension } from "./registry.js";
 import { nodeExtension } from "./node/index.js";
 import { guiExtension } from "./gui/index.js";
+import { mediaExtension } from "./media/index.js";
 
 /** Every extension bundled with xbintsc, in registration order. */
 export function bundledExtensions(): readonly Extension[] {
-  return [nodeExtension, guiExtension];
+  return [nodeExtension, guiExtension, mediaExtension];
 }

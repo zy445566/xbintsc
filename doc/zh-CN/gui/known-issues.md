@@ -54,11 +54,12 @@
   SDL_GPU 会选择 **Vulkan** 后端（`win.driver()` 返回 `"vulkan"`），因此归档
   不需要 DXIL/`dxc` 工具链；托管 Windows runner 没有 GPU/Vulkan 驱动，这才是
   CI 运行仍为试验性的原因。
-- **Windows 上的媒体：** 媒体解码器（FFmpeg）只构建并合并进 POSIX 的
-  `gui.a`；Windows 的 `gui.lib` 不含它们，因此那里的 `<video>`/`<audio>` 为空
-  操作（失败会触发 `error`）。启用它需要 MSVC 兼容的 FFmpeg 构建，推迟到
-  Windows GUI 路径本身验证之后。`<video controls>` 同样推迟——预期模式是 TS +
-  CSS 叠层，如 `examples/gui/media.ts`。
+- **Windows 上的媒体：** `media` 扩展目前仅支持 POSIX。GUI 引擎本身可在
+  Windows 上构建，但没有该扩展时 `<video>`/`<audio>` 为空操作（打开失败并触发
+  `error`），`--ext media` 会给出可操作的错误而不是继续链接。启用它需要
+  MSVC 兼容的 FFmpeg 构建，推迟到 Windows GUI 路径本身验证之后。
+  `<video controls>` 同样推迟——预期模式是 TS + CSS 叠层，如
+  `examples/gui/media.ts`。
 - **D3D12 着色器：** SPIR-V（Vulkan）与 DXIL（Direct3D 12）二进制块均已构建并
   内嵌，非 Metal 路径不再跳过几何绘制。但在 **SDL 3.2.10** 上 DXIL 仍不可用：
   其 D3D12 后端会拒绝任何着色器中声明了 uniform buffer 的图形管线，而引擎正是

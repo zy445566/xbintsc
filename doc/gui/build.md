@@ -4,21 +4,27 @@
 > decisions and roadmap live there.
 
 - Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`
-  (gitignored; fetched on demand).
+  (gitignored; fetched on demand). Media decoding lives in
+  `runtime/ext_media/` and is built separately.
 - `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
   default `release-3.2.10`), builds a static SDL3, fetches and builds static
   FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), compiles the
   engine and merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
   `gui.lib` with the MSVC ABI on Windows), same convention as `core.a`,
-  statically bundling all three. It also fetches, configures and builds a
-  minimal static **FFmpeg** (`FFMPEG_VERSION`, default `7.1`) with only the
-  demuxers/parsers/decoders the media elements need and merges those archives
-  into `gui.a`, defining `XT_GUI_WITH_FFMPEG` for the engine. The merge uses
-  `libtool` on macOS and `ar -M` (GNU/LLVM) elsewhere; CMake archives are
-  discovered under the build root or `Release/` for either generator style.
-- `src/extensions/gui/index.ts` exposes the archive through `nativeObjects()`
-  (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the OS frameworks
-  through `linkerFlags()`.
+  statically bundling all three. The merge uses `libtool` on macOS and
+  `ar -M` (GNU/LLVM) elsewhere; CMake archives are discovered under the build
+  root or `Release/` for either generator style.
+- `npm run media` (`scripts/build-media.ts`) builds the optional **FFmpeg**
+  backend. It fetches FFmpeg (`FFMPEG_VERSION`, default `7.1`), configures a
+  minimal static build with only the demuxers/parsers/decoders the media
+  elements need, compiles `runtime/ext_media/media.cpp` against it and merges
+  everything into `runtime/lib/<os>-<arch>/media.a`. `gui.a` does **not** link
+  FFmpeg: a program enables playback explicitly with `--ext media`.
+- `src/extensions/gui/index.ts` exposes the engine archive through
+  `nativeObjects()` (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the
+  OS frameworks through `linkerFlags()`. `src/extensions/media/index.ts` does
+  the same for `media.a` and compiles the registration bridge
+  (`runtime/ext_media/media_bridge.c`) as a normal runtime source.
 - `scripts/build-gui.ts` compiles with the *same* clang the driver resolves
   (`src/driver/toolchain-provider.ts`); on Windows that is the MSVC-targeting
   LLVM bundled with Visual Studio, and its sibling `clang++`/`llvm-ar` are used
@@ -26,14 +32,17 @@
   fallbacks, and Windows always uses `llvm-ar`, so the archive cannot mix object
   formats or C++ runtimes. The Visual Studio toolchain is found by absolute
   path, so no developer prompt is required. On Windows SDL_GPU selects the
-  Vulkan backend; no DXIL/`dxc` toolchain is needed.
-- CI builds `gui.a` before assembling the release archive so it ships inside
-  `runtime/lib/<slug>/` (the release tarball copies the whole `runtime/` tree).
-  The archive is built and the example is run on Linux (under Xvfb, with the
-  lavapipe software Vulkan driver) and macOS; Windows is provisional because the
-  hosted runners have no GPU/Vulkan driver.
-- The existing cache fingerprint already hashes `nativeObjects()` contents, so
-  rebuilding `gui.a` invalidates cached binaries automatically.
+  Vulkan backend; no DXIL/`dxc` toolchain is needed. `scripts/build-media.ts`
+  uses the same resolved toolchain for FFmpeg and the player.
+- CI builds `gui.a` and `media.a` before assembling the release archive so they
+  ship inside `runtime/lib/<slug>/` (the release tarball copies the whole
+  `runtime/` tree). The archives are built and the examples are run on Linux
+  (under Xvfb, with the lavapipe software Vulkan driver) and macOS; Windows is
+  provisional because the hosted runners have no GPU/Vulkan driver, and the
+  media archive is POSIX-only.
+- The existing cache fingerprint already hashes `nativeObjects()` contents and
+  `runtimeSources()` content, so rebuilding either archive invalidates cached
+  binaries automatically.
 - CMake build trees live *next to* their sources (`vendor/sdl-build`,
   `vendor/freetype-build`, `vendor/harfbuzz-build`), never inside them: a
   `CMakeCache.txt` records the machine it was configured on, and SDL's video
@@ -52,6 +61,7 @@
 ```sh
 npm run runtime      # rebuild core.a after a runtime change
 npm run gui          # build runtime/lib/<os>-<arch>/gui.a (fetches SDL3 once)
+npm run media        # optional: build media.a (fetches and builds FFmpeg once)
 xbintsc run examples/gui/hello.ts --ext gui
 ```
 
@@ -62,9 +72,10 @@ its README for controls and the geometry report it prints.
 
 `media.ts` (with `media.html`) demonstrates `<video>`/`<audio>`: it overlays a
 CSS progress bar on the video and drives playback with `play()` / `pause()` /
-`currentTime` / `volume`. Media `src` paths resolve relative to the process
-working directory, so run it from the repository root:
-`xbintsc run examples/gui/media.ts --ext gui`.
+`currentTime` / `volume`. It needs the separate `media` extension, so build and
+enable both. Media `src` paths resolve relative to the process working
+directory, so run it from the repository root:
+`xbintsc run examples/gui/media.ts --ext gui,media`.
 
 Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
 which the e2e test (`tests/e2e/gui-*.test.ts`) uses to run headlessly.
@@ -84,9 +95,14 @@ software Vulkan driver:
 ```sh
 sudo sh scripts/install-gui-deps.sh   # clang, cmake, X11/Wayland headers, Vulkan, Xvfb
 npm run runtime && npm run gui
+npm run media                         # optional: <video>/<audio> playback
 xvfb-run -a --server-args="-screen 0 1280x720x24" \
   npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 ```
+
+The media e2e suite (`tests/e2e/gui-media.test.ts`) skips itself unless both
+`gui.a` and `media.a` exist; `tests/e2e/gui-media-disabled.test.ts` covers the
+GUI-only build and runs with `gui.a` alone.
 
 `scripts/install-gui-deps.sh` holds the package list (`apt-get install -y clang
 cmake libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev

@@ -1,4 +1,4 @@
-# Extensions: Node modules, GUI, C++/Rust libraries
+# Extensions: Node modules, GUI, media, C++/Rust libraries
 
 The compiler core is platform-agnostic. Anything platform-specific — Node's
 `fs`, an HTML/CSS renderer, your own C++ library — arrives as an **extension**
@@ -69,28 +69,40 @@ import { createWindow, run } from "gui";
 
 It is a self-contained GPU-accelerated renderer (own HTML parser, CSS cascade,
 layout and compositor) — not a system WebView. It ships as a per-platform
-prebuilt `gui.a`/`gui.lib` because it is C++. `<img>`, `<video>` and `<audio>`
-really decode: a minimal static FFmpeg is bundled into the archive, and the DOM
-media API (`play`/`pause`/`currentTime`/`volume`/…) plus the
-`loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` events let a
-program drive playback. There are no built-in controls — draw your own chrome
-with elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM
-are decoded on the main thread. `<canvas>` is supported too: `getContext("2d")`
-returns a context whose fills, paths, gradients, text and `drawImage` are
-rasterised by a self-written CPU rasteriser (plus line caps/joins, dashed
-strokes, `ellipse` and `roundRect`), and element handles expose `canvas` drawing
-plus `width`/`height`. CSS `transform`/`transform-origin` work as paint-time
-effects, so a box (and the text, images and children in it) can be translated,
-scaled and rotated without reflowing anything — animate it per frame from
-`requestAnimationFrame` or with `transition: transform` (see
-`examples/gui/pelican-svg`). If that archive is missing for
-your platform, the build fails with an actionable message; design and roadmap
-live in [../gui.md](../gui.md) (overview; the engine is documented by function
-under [`doc/gui/`](../gui/)), and the scripting surface in
-[../gui-scripts.md](../gui-scripts.md). Media playback is the one part that
-Windows does not get: the Windows `gui.a` is built without FFmpeg and media
-slots are inert. See [../gui/canvas.md](../gui/canvas.md) for the canvas API and
-its limits.
+prebuilt `gui.a`/`gui.lib` because it is C++. `<img>` decodes through the engine
+itself; `<video>`/`<audio>` do **not** work with `gui` alone — they need the
+separate [`media`](#media--videoaudio-decoding) extension. `<canvas>` is
+supported too: `getContext("2d")` returns a context whose fills, paths,
+gradients, text and `drawImage` are rasterised by a self-written CPU rasteriser
+(plus line caps/joins, dashed strokes, `ellipse` and `roundRect`), and element
+handles expose `canvas` drawing plus `width`/`height`. CSS
+`transform`/`transform-origin` work as paint-time effects, so a box (and the
+text, images and children in it) can be translated, scaled and rotated without
+reflowing anything — animate it per frame from `requestAnimationFrame` or with
+`transition: transform` (see `examples/gui/pelican-svg`). If the archive is
+missing for your platform, the build fails with an actionable message; design
+and roadmap live in [../gui.md](../gui.md) (overview; the engine is documented by
+function under [`doc/gui/`](../gui/)), and the scripting surface in
+[../gui-scripts.md](../gui-scripts.md). See
+[../gui/canvas.md](../gui/canvas.md) for the canvas API and its limits.
+
+### `media` — video/audio decoding
+
+Enable with `--ext media` **together with** `gui` (`--ext gui,media`; the
+registry rejects `media` on its own). It links a separate FFmpeg-backed
+`media.a`, so adding `<video>`/`<audio>` playback does not make a GUI-only
+binary any larger.
+
+The DOM API is the same as for any HTML media element: `play()` / `pause()` /
+`load()`, the `paused` / `ended` / `duration` / `currentTime` / `volume` /
+`muted` / `loop` / `autoplay` / `videoWidth` / `videoHeight` / `readyState` /
+`src` properties, and `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/
+`error` events. There are no built-in controls — draw your own chrome with
+elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM are
+decoded on the main thread; video goes through the image texture path. Without
+the extension, opening a media source fails and fires `error` (the element and
+its API still exist). The archive is POSIX-only for now, so Windows reports the
+same `error`; see [../gui/known-issues.md](../gui/known-issues.md).
 
 ## Third-party npm packages
 

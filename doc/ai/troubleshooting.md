@@ -118,6 +118,15 @@ The `gui` extension needs its per-platform prebuilt `gui.a`/`gui.lib`, which is
 not built in a plain source checkout. Drop `--ext gui`, or build the archive as
 described in [../gui.md](../gui.md).
 
+### `media native library not found at …`
+
+`<video>`/`<audio>` playback needs the optional `media` archive (`media.a`),
+built separately with `npm run media`. Build it, or drop `--ext media`; a
+GUI-only build still links and media elements simply fire `error`. The `media`
+extension also requires `gui`, has no Windows archive yet, and `--ext media`
+alone is rejected with the flags to pass. See
+[../gui/build.md](../gui/build.md).
+
 ### `Icon file not found` / icon tools missing
 
 `--icon`/`app.icon` paths resolve against the config file's directory. On

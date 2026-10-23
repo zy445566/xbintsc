@@ -19,6 +19,11 @@ function escaped(code: number): string {
   return Buffer.from(String.fromCodePoint(code), "utf8").toString("latin1");
 }
 
+/** The byte string `lex` hands the scanner for a piece of UTF-8 source text. */
+function utf8(text: string): string {
+  return Buffer.from(text, "utf8").toString("latin1");
+}
+
 describe("scanner string literals", () => {
   it("decodes the simple control escapes", () => {
     expect(decoded('"a\\nb"')).toBe("a\nb");
@@ -55,6 +60,36 @@ describe("scanner string literals", () => {
 
   it("keeps surrogate pairs and non-ASCII characters intact", () => {
     expect(decoded('"héllo→"')).toBe(Buffer.from("héllo→", "utf8").toString("latin1"));
+  });
+
+  it("keeps Chinese text and its unicode escapes as the same bytes", () => {
+    const expected = utf8("你好世界！");
+    // A literal is read from the file as UTF-8 bytes; an escape names code
+    // points and spells the same bytes. Both must reach codegen unchanged, or
+    // the program prints mojibake while its English lines stay readable.
+    expect(decoded('"你好世界！"')).toBe(expected);
+    expect(decoded('"\\u4f60\\u597d\\u4e16\\u754c\\uff01"')).toBe(expected);
+    expect(decoded('"\\u{4F60}\\u{597D}"')).toBe(utf8("你好"));
+  });
+
+  it("keeps a Chinese literal token's source and range intact", () => {
+    const { tokens, diagnostics } = lex('const s = "中文";\nconst t = 1;');
+    expect(diagnostics).toHaveLength(0);
+    const literal = tokens.find((token) => token.kind === TokenKind.StringLiteral)!;
+    const source = utf8('"中文"');
+    expect(literal.text).toBe(source);
+    expect(literal.start).toBe(utf8("const s = ").length);
+    expect(literal.end).toBe(literal.start + source.length);
+  });
+
+  it("keeps Chinese text in template literals and template heads", () => {
+    const plain = lex("`你好世界！`").tokens[0]!;
+    expect(plain.kind).toBe(TokenKind.NoSubstitutionTemplateLiteral);
+    expect(plain.value).toBe(utf8("你好世界！"));
+
+    const head = lex("`你好，${name}！`").tokens[0]!;
+    expect(head.kind).toBe(TokenKind.TemplateHead);
+    expect(head.value).toBe(utf8("你好，"));
   });
 
   it("reports an unterminated string when a line break is reached", () => {

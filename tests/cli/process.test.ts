@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { hasClang } from "../helpers.js";
 
 const projectRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const cliEntry = join(projectRoot, "src", "cli", "main.ts");
@@ -61,4 +62,16 @@ describe("cli process entry point", () => {
     expect(status).toBe(1);
     expect(stderr).toContain("error TS");
   });
+
+  it.skipIf(!hasClang())("runs a program whose output is Chinese", () => {
+    const directory = temporaryDirectory();
+    const entry = join(directory, "chinese.ts");
+    writeFileSync(entry, "console.log('你好世界！');\nconsole.log('Hello World!');\n");
+    const { status, stdout, stderr } = runCli(["run", entry, "--out", join(directory, "out")]);
+    expect(status).toBe(0);
+    expect(stderr).toBe("");
+    // `run` spawns the compiled binary with inherited stdio, so this is the
+    // same byte path a terminal sees, captured through the CLI's own pipe.
+    expect(stdout).toBe("你好世界！\nHello World!\n");
+  }, 120000);
 });

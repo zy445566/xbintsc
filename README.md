@@ -435,7 +435,7 @@ Check your environment with `xbintsc doctor`.
 - [Implemented features](./doc/implemented.md)
 - [Unimplemented features](./doc/unimplemented.md)
 - [Support matrix](./doc/support-matrix.md) — generated from the executable
-  conformance corpus (compiled and compared with Node)
+  test262 corpus (unmodified test262 cases, compiled and run)
 - [Application icons & project config](./doc/icon.md)
 
 ## Using xbintsc with an AI agent

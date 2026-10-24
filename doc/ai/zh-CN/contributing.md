@@ -44,10 +44,12 @@ npm test                 # 单元测试 + 端到端测试
 （[tests/helpers.ts](../../../tests/helpers.ts) 里的 `hasClang()`）——不要把这种跳过
 变成静默通过。
 
-`tests/conformance/` 是“支持子集”的可执行定义。功能可用时加一个受支持用例
-（编译后与 Node 对比输出），记录边界时加一个不支持用例（预期诊断码）；
-然后运行 `npm run docs:matrix` 重新生成[支持矩阵](../../support-matrix.md)，
-提交的表格过期时测试会失败。
+`tests/conformance/` 是“支持子集”的可执行定义，运行固定版本 test262 中的原始
+文件（见 [`tests/conformance/test262/SOURCE.md`](../../../tests/conformance/test262/SOURCE.md)）。
+功能可用时，复制一个覆盖该功能的 test262 用例并登记为受支持；记录边界时，
+固定一个 xbintsc 仍会拒绝的合法 test262 用例及其诊断码。然后运行
+`npm run docs:matrix` 重新生成[支持矩阵](../../support-matrix.md)，提交的表格
+过期时测试会失败。
 
 ### 保持测试跨平台
 

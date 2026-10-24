@@ -52,7 +52,7 @@
   - [doc/implemented/extensions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/extensions.md): the extension registry and the `node` extension
   - [doc/implemented/driver.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/driver.md): incremental cache, clang, LTO/PGO, config, icons
   - [doc/implemented/cli.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/cli.md): CLI and the embedder API
-  - [doc/implemented/tests.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/tests.md): unit, e2e, differential harness and the executable conformance corpus
+  - [doc/implemented/tests.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/tests.md): unit, e2e, differential harness and the executable test262 corpus
 - [doc/unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented.md): index of unsupported syntax, missing semantics and known deviations
   - [doc/unimplemented/statements.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/statements.md): statement gaps
   - [doc/unimplemented/expressions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/expressions.md): expression and operator gaps

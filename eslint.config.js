@@ -21,6 +21,8 @@ export default tseslint.config(
       "scratch/**",
       "vendor/**",
       "examples/**",
+      /* Vendored test262 files are upstream data, kept verbatim. */
+      "tests/conformance/test262/cases/**",
       "**/*.d.ts",
     ],
   },

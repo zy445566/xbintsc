@@ -15,7 +15,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 describe("support matrix", () => {
   for (const language of ["en", "zh"] as const) {
     it(`matches the corpus (${language})`, () => {
-      const committed = readFileSync(resolve(root, MATRIX_FILES[language]), "utf8");
+      // Git may check the file out with CRLF on Windows. The renderer always
+      // produces LF, so compare on a normalised copy rather than failing on a
+      // platform-specific line ending.
+      const committed = readFileSync(resolve(root, MATRIX_FILES[language]), "utf8").replace(/\r\n/g, "\n");
       const expected = renderSupportMatrix(language);
       expect(
         committed,

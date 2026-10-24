@@ -1,0 +1,4 @@
+# Keep documentation byte-identical across platforms. Git may otherwise check
+# Markdown out with CRLF on Windows (core.autocrlf), which makes generated files
+# differ from the LF output of `npm run docs:matrix`.
+*.md text eol=lf

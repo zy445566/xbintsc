@@ -7,8 +7,8 @@
 `src/driver/app-artifacts.ts`、`src/driver/cache.ts`、`src/driver/toolchain.ts`、
 `src/driver/paths.ts`、`src/driver/version.ts`。
 
-- 编译流水线：读源 → 模块打包（`src/driver/modules.ts`，当入口含 `import`/`export` 时）→ 解析 → 绑定/检查 → IR → 目标文件 → 链接。
-- 增量缓存：以「编译器版本 + 源码哈希 + emit 类型 + 优化级别 + LTO/PGO 模式 + 平台 + 扩展指纹（名称、链接参数、原生对象内容）」为键，产物存在且新鲜则跳过构建。`--pgo-use` 总是重新构建，因为 profile 数据可能变化而源码不变。缓存键在 `src/driver/build-key.ts` 中组装。
+- 编译流水线：读源 → 模块打包（`src/driver/modules.ts`，当入口含 `import`/`export` 时）→ 解析 → 绑定 → [语义检查](./checker.md) → IR → 目标文件 → 链接。
+- 增量缓存：以「编译器版本 + 源码哈希 + emit 类型 + 优化级别 + LTO/PGO 模式 + 平台 + `check`/`no-check` + 扩展指纹（名称、链接参数、原生对象内容）」为键，产物存在且新鲜则跳过构建。`--pgo-use` 总是重新构建，因为 profile 数据可能变化而源码不变。缓存键在 `src/driver/build-key.ts` 中组装。
 - C 运行时与扩展源按内容哈希缓存目标文件，只编译一次（缓存键包含 LTO/PGO 参数）。核心翻译单元列表 `RUNTIME_SOURCES` 位于 `src/driver/runtime-objects.ts`。
 - 工具链封装：查找 `clang`（可用 `xbintsc_CLANG` 覆盖）、编译 IR、编译 C、链接。
 - LTO（`--lto` / `"lto": true`）：程序与运行时都编译为 LLVM bitcode（`-flto`），并用 `-fuse-ld=lld` 链接；需要 lld。

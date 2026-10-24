@@ -150,6 +150,15 @@ export const referenceMethods: ReferenceMethods = {
       case SyntaxKind.TypeAliasDeclaration:
         // Type-only: skip the body entirely.
         return;
+      case SyntaxKind.EnumDeclaration: {
+        /* Member names are keys of the generated object, not bindings; only an
+         * initializer (`A = foo()`) contains runtime references. */
+        const members = (node as unknown as { members: { initializer?: Expression }[] }).members;
+        for (const member of members) {
+          if (member.initializer) this.bindNode(member.initializer, scope);
+        }
+        return;
+      }
       case SyntaxKind.ImportDeclaration:
         return;
       case SyntaxKind.ExportDeclaration: {
@@ -202,6 +211,22 @@ export const referenceMethods: ReferenceMethods = {
         this.scopes.set(clause, catchScope);
         if (clause.variable) this.declare(clause.variable.text, SymbolKind.Let, clause.variable, catchScope, true);
         this.bindBlock(clause.block, catchScope);
+        return;
+      }
+      /* Type positions are erased, so their identifiers are not runtime
+       * references. Walking them would put `Foo` from `x as Foo` or the type
+       * arguments of `f<Foo>()` into `unresolved`, and the checker would then
+       * report a value that never exists. */
+      case SyntaxKind.AsExpression:
+      case SyntaxKind.SatisfiesExpression:
+      case SyntaxKind.NonNullExpression:
+        this.bindNode((node as unknown as { expression: Expression }).expression, scope);
+        return;
+      case SyntaxKind.CallExpression:
+      case SyntaxKind.NewExpression: {
+        const call = node as unknown as { expression: Expression; arguments: Expression[] };
+        this.bindNode(call.expression, scope);
+        for (const argument of call.arguments) this.bindNode(argument, scope);
         return;
       }
       default:

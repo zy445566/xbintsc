@@ -173,7 +173,8 @@ export function documentationFor(diagnostic: Diagnostic): DocumentationPointer |
         path: "doc/unimplemented/modules.md",
       };
 
-    // The checker codes are defined but never emitted today.
+    /* TS3001/TS3002 also reach here through the generic subset hint above;
+     * every checker code is emitted now, so they all share this pointer. */
     case DiagnosticCode.TypeMismatch:
     case DiagnosticCode.NotCallable:
     case DiagnosticCode.PropertyNotFound:

@@ -37,8 +37,9 @@ created by `release.yml`, never by the hook.
 | `npm run bench` | build and time the fixed benchmark suite (optionally vs Node) |
 
 Unit tests live one directory per module under `tests/` (`lexer`, `parser`,
-`binder`, `codegen`, `driver`, `extensions`, `cli`, `e2e`) and mirror the source
-tree. Edge-case tests belong next to the module they cover.
+`binder`, `checker`, `codegen`, `driver`, `extensions`, `cli`, `conformance`,
+`e2e`) and mirror the source tree. Edge-case tests belong next to the module they
+cover.
 
 `tests/e2e/` compiles real programs and runs the resulting binaries, including a
 **differential harness** (`tests/e2e/differential-*.test.ts`) that executes the
@@ -48,6 +49,13 @@ case there rather than asserting a hand-written expected string. Tests that need
 clang skip themselves when it is unavailable (`hasClang()` in
 [tests/helpers.ts](../../tests/helpers.ts)) — do not turn that into a silent
 pass.
+
+`tests/conformance/` is the executable definition of the supported subset. Add
+a supported case (compiled and compared with Node) when a feature becomes
+usable, and an unsupported case (expected diagnostic code) when you document a
+boundary. Then run `npm run docs:matrix` to regenerate
+[the support matrix](../../support-matrix.md); a test fails when the committed
+table is stale.
 
 ## Two invariants you must not break
 

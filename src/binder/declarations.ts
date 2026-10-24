@@ -20,6 +20,71 @@ import { SymbolKind, type MutableFunction, type Scope, type SymbolInfo } from ".
 import { childNodes } from "./helpers.js";
 import type { Binder } from "./binder.js";
 
+/** Kinds that only introduce a type name, never a runtime binding. */
+const TYPE_ONLY_KINDS: ReadonlySet<SymbolKind> = new Set([
+  SymbolKind.Interface,
+  SymbolKind.TypeAlias,
+]);
+
+function isVarLike(kind: SymbolKind): boolean {
+  return kind === SymbolKind.Var || kind === SymbolKind.Function;
+}
+
+/**
+ * Whether a declaration of `next` may legally share a scope with `existing`.
+ *
+ * This is JavaScript's redeclaration rules plus TypeScript's declaration
+ * merging, kept deliberately explicit: a wrong `true` would hide a real bug, a
+ * wrong `false` would make valid code fail to compile. Only the cases this
+ * compiler can actually see are covered; anything unknown is treated as legal.
+ */
+export function declarationsCanMerge(existing: SymbolKind, next: SymbolKind): boolean {
+  if (existing === next) {
+    /* Repeated `var` / `function` / `interface` / `enum` declarations merge.
+     * Two imports may also share a name: bundling merges every module into one
+     * scope, and separate modules routinely import the same builtin
+     * (`readFileSync` from `node:fs`, `dirname` from `node:path`). The import
+     * map is keyed by symbol id, so keeping the first declaration is enough.
+     * `let`, `const`, `class` and parameters do not merge. */
+    return (
+      existing === SymbolKind.Var ||
+      existing === SymbolKind.Function ||
+      existing === SymbolKind.Interface ||
+      existing === SymbolKind.Namespace ||
+      existing === SymbolKind.Enum ||
+      existing === SymbolKind.Import
+    );
+  }
+  // `var` and `function` are both function-scoped and may coexist in any order.
+  if (isVarLike(existing) && isVarLike(next)) return true;
+  // `var` may redeclare a parameter; `let`/`const` may not.
+  if (
+    (existing === SymbolKind.Parameter && next === SymbolKind.Var) ||
+    (existing === SymbolKind.Var && next === SymbolKind.Parameter)
+  ) {
+    return true;
+  }
+  // Namespaces merge with classes, functions, enums and each other.
+  if (existing === SymbolKind.Namespace || next === SymbolKind.Namespace) return true;
+  // A class and an interface merge their instance shape.
+  if (
+    (existing === SymbolKind.Class && next === SymbolKind.Interface) ||
+    (existing === SymbolKind.Interface && next === SymbolKind.Class)
+  ) {
+    return true;
+  }
+  // An import binds both a value and a type name, so it conflicts with any
+  // same-name local declaration.
+  if (existing === SymbolKind.Import || next === SymbolKind.Import) return false;
+  // Value and type names live in separate declaration spaces, except classes
+  // and enums, which declare a type as well as a value.
+  if (TYPE_ONLY_KINDS.has(existing) !== TYPE_ONLY_KINDS.has(next)) {
+    const valueKind = TYPE_ONLY_KINDS.has(existing) ? next : existing;
+    return valueKind !== SymbolKind.Class && valueKind !== SymbolKind.Enum;
+  }
+  return false;
+}
+
 export interface DeclarationMethods {
   declareBinding(this: Binder, name: BindingName, kind: SymbolKind, declaration: Node, scope: Scope, mutable: boolean): SymbolInfo | undefined;
   declare(this: Binder, name: string, kind: SymbolKind, node: Node, scope: Scope, mutable: boolean): SymbolInfo;
@@ -60,6 +125,11 @@ export const declarationMethods: DeclarationMethods = {
   ): SymbolInfo {
     const existing = scope.symbols.get(name);
     if (existing) {
+      // `(anonymous)` is the binder's placeholder for `export default
+      // function () {}`; those have no user-visible name to collide.
+      if (name !== "(anonymous)" && !declarationsCanMerge(existing.kind, kind)) {
+        this.conflicts.push({ name, existing, kind, node });
+      }
       // `var` redeclarations and duplicate functions merge into one symbol.
       if (
         (kind === SymbolKind.Var && existing.kind === SymbolKind.Var) ||

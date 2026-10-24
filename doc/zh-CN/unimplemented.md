@@ -20,7 +20,7 @@
 - [模块系统](./unimplemented/modules.md) —— 循环依赖、实时绑定、CommonJS 边界
 - [函数](./unimplemented/functions.md) —— 缺失的函数语义
 - [类与面向对象](./unimplemented/classes.md) —— 访问控制、`abstract`/`implements`、私有名冲突
-- [类型系统](./unimplemented/types.md) —— 仅解析、从不检查
+- [类型系统](./unimplemented/types.md) —— 解析后擦除，只检查无需类型推断的事实
 - [运行时偏差](./unimplemented/deviations.md) —— 能编译能运行，但与 ECMAScript 不同
 - [工具链与平台](./unimplemented/toolchain.md) —— 类型检查器、异步 I/O、GC 模式、平台缺口
 - [Node 扩展](./unimplemented/node.md) —— Node 模块缺口，按领域分页

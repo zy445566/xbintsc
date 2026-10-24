@@ -16,6 +16,7 @@
 - [词法分析](./implemented/lexer.md) —— token、字面量、关键字、词法诊断
 - [语法分析](./implemented/parser.md) —— 语句、表达式、类型语法、ASI
 - [名字绑定与作用域](./implemented/binder.md) —— 作用域、符号、闭包捕获
+- [语义检查](./implemented/checker.md) —— 可关闭的未定义名、重复声明与实参个数检查
 
 ### 语义与代码生成
 
@@ -51,6 +52,7 @@
 | 分词器、字面量、关键字 | [词法分析](./implemented/lexer.md) |
 | 语句 / 表达式 / 类型语法 | [语法分析](./implemented/parser.md) |
 | 作用域、符号、捕获 | [名字绑定](./implemented/binder.md) |
+| 检查器诊断（未定义名、重复声明、实参个数） | [语义检查](./implemented/checker.md) |
 | 运算符、赋值降级 | [运算符与赋值](./implemented/operators.md) |
 | 值表示、函数 ABI | [值模型](./implemented/value-model.md) |
 | 控制流、表达式降级、类、`main` | [代码生成](./implemented/codegen.md) |

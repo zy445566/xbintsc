@@ -20,6 +20,7 @@ import type { Identifier, Node, SourceFileNode } from "../ast/nodes.js";
 import {
   ScopeKind,
   type ClassInfo,
+  type DeclarationConflict,
   type FunctionInfo,
   type MutableFunction,
   type Scope,
@@ -45,6 +46,7 @@ export class Binder {
   readonly symbolOfIdentifier = new Map<Identifier, SymbolInfo>();
   readonly scopes = new Map<Node, Scope>();
   readonly unresolved: Identifier[] = [];
+  readonly conflicts: DeclarationConflict[] = [];
   nextSymbolId = 1;
   nextFunctionId = 1;
   nextClassId = 1;
@@ -83,6 +85,7 @@ export class Binder {
       symbolOfIdentifier: this.symbolOfIdentifier,
       scopes: this.scopes,
       unresolved: this.unresolved,
+      conflicts: this.conflicts,
     };
   }
 

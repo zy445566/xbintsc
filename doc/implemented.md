@@ -22,6 +22,7 @@ small file instead of a single monolithic document.
 - [Lexer](./implemented/lexer.md) — tokens, literals, keywords, lexical diagnostics
 - [Parser](./implemented/parser.md) — statements, expressions, type syntax, ASI
 - [Name binding and scopes](./implemented/binder.md) — scopes, symbols, closure capture
+- [Semantic checker](./implemented/checker.md) — opt-out names, redeclarations and call arity
 
 ### Semantics and code generation
 
@@ -58,6 +59,7 @@ same file.
 | tokenizer, literals, keywords | [Lexer](./implemented/lexer.md) |
 | statement/expression/type syntax | [Parser](./implemented/parser.md) |
 | scopes, symbols, captures | [Name binding](./implemented/binder.md) |
+| checker diagnostics (names, redeclarations, arity) | [Semantic checker](./implemented/checker.md) |
 | operators, assignment lowering | [Operators](./implemented/operators.md) |
 | value representation, function ABI | [Value model](./implemented/value-model.md) |
 | control flow, expression lowering, classes, `main` | [Codegen](./implemented/codegen.md) |

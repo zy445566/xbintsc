@@ -43,6 +43,24 @@ export interface SymbolInfo {
   boxed: boolean;
 }
 
+/**
+ * A same-scope declaration that cannot legally merge with the symbol already
+ * bound to that name (`let x` twice, `function f` then `const f`, ...).
+ *
+ * The binder records the conflict instead of reporting it: whether it is an
+ * error is checker policy (`--no-check` keeps the old, permissive behaviour),
+ * while the fact itself is cheap to capture during the one declaration pass.
+ */
+export interface DeclarationConflict {
+  readonly name: string;
+  /** The symbol the name was already bound to. */
+  readonly existing: SymbolInfo;
+  /** The kind of the offending declaration. */
+  readonly kind: SymbolKind;
+  /** The offending declaration node (the second one to use the name). */
+  readonly node: Node;
+}
+
 export type FunctionNode = SourceFileNode | FunctionDeclaration | FunctionExpression | ArrowFunction;
 
 export interface FunctionInfo {
@@ -129,6 +147,8 @@ export interface BindResult {
   readonly scopes: Map<Node, Scope>;
   /** Identifier references that could not be resolved in user code. */
   readonly unresolved: Identifier[];
+  /** Same-scope declarations that cannot merge (see {@link DeclarationConflict}). */
+  readonly conflicts: readonly DeclarationConflict[];
 }
 
 export interface MutableFunction extends FunctionInfo {

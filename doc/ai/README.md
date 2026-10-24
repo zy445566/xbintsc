@@ -30,9 +30,12 @@ the rules for changing the compiler.
 
 1. **Only a subset of TypeScript compiles.** Unsupported syntax is rejected, not
    approximated. Check before you write a lot of code.
-2. **Types are erased, never checked.** Annotations, interfaces, generics,
-   `as`/`satisfies` and non-null `!` have no runtime effect, and no type checker
-   runs. Only real runtime behaviour matters.
+2. **Types are erased after a structural check.** Annotations, interfaces,
+   generics, `as`/`satisfies` and non-null `!` have no runtime effect. The
+   default checker resolves a small structural subset and rejects definite
+   mismatches (`const x: number = "hello"`), missing properties on known shapes
+   and calls to non-callable values (disable it with `--no-check`). Anything it
+   cannot model is `any`; there is no full inference or strict-null mode.
 3. **Node compatibility is opt-in and incomplete.** Node built-ins come from the
    `node` extension (`--ext node`). Packages under `node_modules` are resolved
    and bundled at build time (ESM and CommonJS); there is no runtime package

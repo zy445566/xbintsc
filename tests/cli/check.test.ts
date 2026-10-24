@@ -54,6 +54,28 @@ describe("cli check", () => {
     expect(run(["check", entry], io)).toBe(0);
   });
 
+  it("runs the semantic checker by default", () => {
+    for (const source of [
+      "let value = 1; let value = 2; console.log(value);", // TS3001
+      "function f(a: number) { return a; } f(1, 2);", // TS4004
+      "console.log(missing);", // TS3002
+      'const value: number = "hello"; console.log(value);', // TS4001
+      "const value = { a: 1 }; console.log(value.b);", // TS4003
+      "const value: number = 1; value();", // TS4002
+    ]) {
+      const entry = writeProgram(source);
+      const { io, err } = capture();
+      expect(run(["check", entry], io), source).toBe(1);
+      expect(err.join(""), source).toContain("error TS");
+    }
+  });
+
+  it("lets --no-check restore the permissive pipeline", () => {
+    const entry = writeProgram("let value = 1; let value = 2; console.log(value);");
+    const { io } = capture();
+    expect(run(["check", entry, "--no-check"], io)).toBe(0);
+  });
+
   it("reports syntax and unsupported-feature diagnostics", () => {
     for (const source of ["const value = ;", "namespace N { export const x = 1; }"]) {
       const entry = writeProgram(source);

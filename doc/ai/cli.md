@@ -12,15 +12,25 @@ the help text leaves implicit.
 | `xbintsc run <file.ts> [-- args]` | Compile to an executable and execute it | yes (`--emit exe` only) |
 | `xbintsc watch <file.ts>` | Rebuild whenever the source tree changes (Ctrl+C to stop) | yes |
 | `xbintsc emit <file.ts>` | Print LLVM IR to stdout, write nothing | no |
-| `xbintsc check <file.ts>` | Front-end check (syntax, imports, supported subset); writes nothing | no |
+| `xbintsc check <file.ts>` | Front-end check (syntax, imports, semantic checks, supported subset); writes nothing | no |
 | `xbintsc doctor` | Report the resolved toolchain, runtime and icon tools | only for the probe |
 | `xbintsc version` | Print the version | no |
 | `xbintsc help` | Print the help text | no |
 
-`check` is not a type checker: annotations are erased, so a program that passes
-`check` can still fail at runtime. It catches syntax errors, unresolved imports
-and constructs outside the supported subset, which makes it a fast pre-commit
-or editor gate.
+`check` is not a full type checker: annotations are erased after checking, so a
+program that passes `check` can still fail at runtime. It catches syntax errors,
+unresolved imports, constructs outside the supported subset, and the semantic
+checker's diagnostics: unresolved names (TS3002), same-scope redeclarations
+(TS3001), call-arity mismatches (TS4004), missing properties on known shapes
+(TS4003), definite assignability mismatches (TS4001) and calls to non-callable
+values (TS4002). That makes it a fast pre-commit or editor gate. `--no-check`
+skips the semantic part; see [the checker page](../implemented/checker.md).
+
+The checker is on by default for **every** command (`build`, `run`, `emit`,
+`watch` and `check`). The flag is part of the incremental cache key, so a
+`--no-check` build never reuses a checked artifact. Errors are reported before
+clang runs, which is what makes `xbintsc check` cheap in an editor or a
+pre-commit hook.
 
 Any command also accepts `--help`, which prints the help text and exits 0. An
 unknown command prints an error plus the help text and exits 1.
@@ -50,6 +60,8 @@ so restart it after installing a dependency.
     --verbose         Print progress information
     --time            Print per-phase build timings
     --debug           Emit debug info (DWARF/CodeView) and keep frame pointers
+    --check           Run the semantic checker (default)
+    --no-check        Skip the semantic checker; only erase type syntax
     --lto             Compile program and runtime to LTO bitcode; link with lld
     --pgo-generate [dir]  Build an instrumented binary writing profiles to dir
     --pgo-use [dir]   Build with the profiles collected from --pgo-generate

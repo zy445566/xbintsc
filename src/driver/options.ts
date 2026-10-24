@@ -35,6 +35,12 @@ export interface BuildOptions {
   readonly app?: AppConfig;
   /** Emit LLVM debug metadata so `-g` produces DWARF/CodeView (default false). */
   readonly debug?: boolean;
+  /**
+   * Run the semantic checker before lowering (default true). `--no-check`
+   * disables it; the incremental cache keys on this flag, so a checked and an
+   * unchecked build of the same source cannot reuse each other's artifacts.
+   */
+  readonly check?: boolean;
   /** Compile the program and runtime to LTO bitcode and link with lld. */
   readonly lto?: boolean;
   /**

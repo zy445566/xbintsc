@@ -13,7 +13,7 @@
 | `for...in` | 枚举对象 / 数组 / 字符串的自身键；不含原型链属性 |
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | 非移动标记-清扫回收器（在 `xt_alloc` 之后）：显式根、子系统根提供者与保守 C 栈扫描。单线程、stop-the-world；无移动/压缩与分代 |
-| 函数 `arity` / 调用参数个数 | 无参数个数校验；`fn.length` 报告声明的 arity，但调用不做校验 |
+| 函数 `arity` / 调用参数个数 | 对本地可见函数的直接调用由默认[语义检查](../implemented/checker.md)校验（`TS4004`）；通过属性、导入、展开实参或重新赋值后的绑定发起的调用不校验。`fn.length` 报告声明的 arity |
 | `async` / `await` | 已在栈式协程上真实挂起；`await` 总会排入一次微任务（非 Promise 与已 settle 的 Promise 也一样），因此与 pending `.then` 回调的交错顺序符合规范。顶层 `await` 会阻塞事件循环等待，而不是让出模块主体。`fs/promises` 与 `fetch` 把阻塞工作 offload 到 4 线程池并在 reactor 上 settle。异步生成器可在 `await` 与 `yield` 处挂起，`for await...of` 每次迭代等待一步 |
 | 异步生成器清理 | `for await...of` 提前退出时不会调用迭代器的 `return()`。异步生成器中的 `yield*` 只委托同步可迭代对象。在挂起的 `yield` 处调用 `.return()` 会直接完成而不执行 `finally`（与同步生成器相同的限制） |
 | `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |

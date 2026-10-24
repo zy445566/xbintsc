@@ -27,6 +27,8 @@ export interface CacheKeyInput {
   readonly app: AppConfig;
   readonly debug: boolean;
   readonly lto: boolean;
+  /** Whether the semantic checker ran (default true). */
+  readonly check?: boolean;
   readonly pgo?: PgoMode;
   readonly pgoDir: string;
 }
@@ -49,6 +51,7 @@ export function buildCacheKey(input: CacheKeyInput): string {
     app.bundleId ?? "",
     String(input.debug),
     String(input.lto),
+    String(input.check !== false),
     pgo ?? "",
     pgo ? input.pgoDir : "",
   ]);

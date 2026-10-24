@@ -39,7 +39,7 @@ export function compileToIr(
   text: string,
   extensions?: ExtensionRegistry,
   target?: { platform: string; arch: string },
-  options: { readonly debug?: boolean } = {},
+  options: { readonly debug?: boolean; readonly check?: boolean } = {},
 ) {
   const { file, diagnostics: parseDiagnostics } = parse(text);
   const diagnostics = new DiagnosticBag();
@@ -48,6 +48,7 @@ export function compileToIr(
   const { ir, binding } = generate(file, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
+    check: options.check !== false,
     ...(target ? { target } : {}),
     debug: options.debug === true,
   });

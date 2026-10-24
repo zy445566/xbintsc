@@ -80,25 +80,28 @@ Canonical detail (always current, much longer):
 | Worker threads | 🚫 | workers are child processes |
 | `async` generators | ✅ | suspend at `await` and `yield`; every `.next()` returns a promise; `for await...of` supported |
 
-## Types: parsed, then erased
+## Types: structurally checked, then erased
 
-**No assignability check happens.** Type syntax is parsed into the AST and
-erased during binding/codegen. A default, inference-free
-[semantic checker](../implemented/checker.md) catches only the mistakes that do
-not need type information:
+The default [semantic checker](../implemented/checker.md) resolves a small
+structural subset of TypeScript types and checks it; code generation then
+erases all type syntax. The checker catches:
 
 | Construct | Status |
 | --- | --- |
-| Type annotations, return types, type aliases, interfaces | — parsed, erased, not assignability-checked |
-| Generic type parameters and constraints | — no runtime instantiation |
-| `as`, `satisfies`, non-null `!` | — erased, no assertion semantics |
-| Optional-chaining type narrowing | 🚫 |
-| Unresolved names (`TS3002`), same-scope redeclarations (`TS3001`) | ✅ checked by default; `--no-check` disables |
-| Call arity for locally visible functions (`TS4004`) | ✅ checked by default |
-| `TypeMismatch` (`TS4001`), `NotCallable` (`TS4002`), `PropertyNotFound` (`TS4003`) | 🚫 defined but never emitted |
+| Type annotations, interfaces, type aliases, object/array/function types | ✅ parsed and structurally checked, then erased |
+| Assignability of initializers, assignments, returns and arguments | ✅ definite mismatches only (`TS4001`); no full inference |
+| Property existence on `const` literals / class instances / interfaces | ✅ checked by default; dynamic shapes are left alone (`TS4003`) |
+| Calling a definitely non-callable value | ✅ (`TS4002`) |
+| Unresolved names (`TS3002`), same-scope redeclarations (`TS3001`), call arity (`TS4004`) | ✅ checked by default; `--no-check` disables everything |
+| Simple generics (`T`, `T[]`, explicit type arguments) | ✅ inferred at the call site |
+| Flow narrowing (`typeof`, `!== null`, `instanceof`, truthiness) | ✅ inside `if`/`else` and conditional expressions |
+| Generic constraints, mapped/conditional types, overloads, full inference | 🚫 resolve to `any` |
+| Strict-null and excess-property checks | 🚫 |
+| `as`, `satisfies`, non-null `!` | — erased assertions, not validated |
 
-A type error such as `const x: number = "hello"` is therefore not a compile
-error — only runtime behaviour is checked. Write the runtime code you mean.
+`const x: number = "hello"` is now a compile error (`TS4001`). The checker is
+deliberately conservative: anything it cannot model is `any`, so an unsupported
+construct can hide a bug but never reject working code.
 
 ## Standard library
 

@@ -17,13 +17,14 @@ the help text leaves implicit.
 | `xbintsc version` | Print the version | no |
 | `xbintsc help` | Print the help text | no |
 
-`check` is not a full type checker: annotations are erased, so a program that
-passes `check` can still fail at runtime. It catches syntax errors, unresolved
-imports, constructs outside the supported subset, and the semantic checker's
-inference-free errors: unresolved names (TS3002), same-scope redeclarations
-(TS3001) and call-arity mismatches (TS4004). That makes it a fast pre-commit or
-editor gate. `--no-check` skips the semantic part; see
-[the checker page](../implemented/checker.md).
+`check` is not a full type checker: annotations are erased after checking, so a
+program that passes `check` can still fail at runtime. It catches syntax errors,
+unresolved imports, constructs outside the supported subset, and the semantic
+checker's diagnostics: unresolved names (TS3002), same-scope redeclarations
+(TS3001), call-arity mismatches (TS4004), missing properties on known shapes
+(TS4003), definite assignability mismatches (TS4001) and calls to non-callable
+values (TS4002). That makes it a fast pre-commit or editor gate. `--no-check`
+skips the semantic part; see [the checker page](../implemented/checker.md).
 
 The checker is on by default for **every** command (`build`, `run`, `emit`,
 `watch` and `check`). The flag is part of the incremental cache key, so a

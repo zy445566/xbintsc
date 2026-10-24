@@ -98,6 +98,129 @@ describe("checker: bundled dependencies", () => {
   });
 });
 
+describe("checker: types", () => {
+  const mismatches = (source: string): readonly Diagnostic[] =>
+    codes(check(source), DiagnosticCode.TypeMismatch);
+
+  it("checks initializers, assignments, returns and arguments", () => {
+    expect(mismatches('const value: number = "hello";')).toHaveLength(1);
+    expect(mismatches('let value: number = 1; value = "hello";')).toHaveLength(1);
+    expect(mismatches('function f(): number { return "hello"; }')).toHaveLength(1);
+    expect(mismatches('function f(value: number) {} f("hello");')).toHaveLength(1);
+  });
+
+  it("checks interface and class shapes structurally", () => {
+    const good = [
+      "interface Point { x: number; y: number }",
+      "const point: Point = { x: 1, y: 2 };",
+      "class Box { value = 1; }",
+      "const box: Box = new Box();",
+      "console.log(point.x, box.value);",
+    ].join("\n");
+    expect(mismatches(good)).toHaveLength(0);
+    expect(mismatches("interface Point { x: number } const point: Point = { y: 1 };")).toHaveLength(1);
+    expect(mismatches("interface Point { x: number } const point: Point = { x: 's' };")).toHaveLength(1);
+  });
+
+  it("infers a simple generic return type", () => {
+    const source = [
+      "function identity<T>(value: T): T { return value; }",
+      "const good: number = identity(1);",
+      "const bad: string = identity(1);",
+      "console.log(good, bad);",
+    ].join("\n");
+    expect(mismatches(source)).toHaveLength(1);
+  });
+
+  it("narrows nullish unions inside an if block", () => {
+    const source = [
+      "interface Box { value: number }",
+      "const box: Box | null = null;",
+      "if (box !== null) { console.log(box.value); }",
+    ].join("\n");
+    expect(codes(check(source), DiagnosticCode.PropertyNotFound)).toHaveLength(0);
+    const missing = [
+      "interface Box { value: number }",
+      "const box: Box | null = null;",
+      "if (box !== null) { console.log(box.missing); }",
+    ].join("\n");
+    expect(codes(check(missing), DiagnosticCode.PropertyNotFound)).toHaveLength(1);
+  });
+
+  it("reports calls to a definitely non-callable value", () => {
+    const diagnostics = codes(check("const value: number = 1; value();"), DiagnosticCode.NotCallable);
+    expect(diagnostics).toHaveLength(1);
+  });
+
+  it("widens let literals and treats any as compatible with everything", () => {
+    expect(mismatches("let value = 1; value = 2;")).toHaveLength(0);
+    expect(mismatches('const anything: any = "s"; const n: number = anything;')).toHaveLength(0);
+    expect(codes(check("const anything: any = {}; anything.missing.deep;"), DiagnosticCode.PropertyNotFound)).toHaveLength(0);
+    expect(codes(check("const anything: any = {}; anything();"), DiagnosticCode.NotCallable)).toHaveLength(0);
+  });
+});
+
+describe("checker: property existence", () => {
+  const missing = (source: string): readonly Diagnostic[] =>
+    codes(check(source), DiagnosticCode.PropertyNotFound);
+
+  it("reports a missing property on a const object literal", () => {
+    expect(missing("const object = { a: 1 }; console.log(object.b);")).toHaveLength(1);
+    expect(missing("const object = { a: 1 }; console.log(object!.b);")).toHaveLength(1);
+  });
+
+  it("allows declared keys and Object.prototype members", () => {
+    const source = "const object = { a: 1 }; console.log(object.a, object.toString(), object.hasOwnProperty('a'));";
+    expect(missing(source)).toHaveLength(0);
+  });
+
+  it("stops checking once the shape can change", () => {
+    expect(missing("const object = { a: 1 }; object.b = 2; console.log(object.b);")).toHaveLength(0);
+    expect(missing("const object = { a: 1 }; Object.assign(object, { b: 2 }); console.log(object.b);")).toHaveLength(0);
+    expect(missing("const object = { a: 1 }; mutate(object); console.log(object.b);")).toHaveLength(0);
+    expect(missing("const object = { a: 1 }; const alias = object; alias.b = 2; console.log(object.b);")).toHaveLength(0);
+  });
+
+  it("skips spread and computed keys", () => {
+    expect(missing("const key = 'b'; const object = { a: 1, [key]: 2 }; console.log(object.c);")).toHaveLength(0);
+    expect(missing("const base = { b: 2 }; const object = { a: 1, ...base }; console.log(object.c);")).toHaveLength(0);
+  });
+
+  it("checks class instances, inherited members and parameter properties", () => {
+    const source = [
+      "class Base { a = 1; m() { return this.a; } }",
+      "class Child extends Base { b = 2; constructor(public c: number) { super(); } }",
+      "const instance = new Child(3);",
+      "console.log(instance.a, instance.b, instance.c, instance.m());",
+    ].join("\n");
+    expect(missing(source)).toHaveLength(0);
+    expect(missing("class A { a = 1; } const instance = new A(); console.log(instance.nope);")).toHaveLength(1);
+  });
+
+  it("does not treat static members as instance members", () => {
+    expect(missing("class A { static kind = 'a'; } const instance = new A(); console.log(instance.kind);")).toHaveLength(1);
+  });
+
+  it("tracks this.x assignments but gives up on a dynamic shape", () => {
+    expect(missing("class A { constructor() { this.x = 1; } } const a = new A(); console.log(a.x);")).toHaveLength(0);
+    expect(missing("class A { constructor(opts: any) { Object.assign(this, opts); } } const a = new A({ y: 1 }); console.log(a.y);")).toHaveLength(0);
+    expect(missing("class A { fill(key: string) { (this as any)[key] = 1; } } const a = new A(); console.log(a.y);")).toHaveLength(0);
+  });
+
+  it("gives up when the prototype is extended outside the class body", () => {
+    expect(missing("class A {} Object.assign(A.prototype, { m() { return 1; } }); const a = new A(); console.log(a.m());")).toHaveLength(0);
+    expect(missing("class A {} A.prototype.m = function () { return 1; }; const a = new A(); console.log(a.m());")).toHaveLength(0);
+  });
+
+  it("skips classes with an unknown base", () => {
+    expect(missing("class A extends Error {} const a = new A(); console.log(a.anything);")).toHaveLength(0);
+  });
+
+  it("only trusts const bindings", () => {
+    expect(missing("let object: any = { a: 1 }; console.log(object.b);")).toHaveLength(0);
+  });
+});
+
 describe("checker: call arity", () => {
   const arity = (source: string): readonly Diagnostic[] =>
     codes(check(source), DiagnosticCode.ArgumentCountMismatch);

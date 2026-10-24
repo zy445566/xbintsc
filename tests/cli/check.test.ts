@@ -59,6 +59,9 @@ describe("cli check", () => {
       "let value = 1; let value = 2; console.log(value);", // TS3001
       "function f(a: number) { return a; } f(1, 2);", // TS4004
       "console.log(missing);", // TS3002
+      'const value: number = "hello"; console.log(value);', // TS4001
+      "const value = { a: 1 }; console.log(value.b);", // TS4003
+      "const value: number = 1; value();", // TS4002
     ]) {
       const entry = writeProgram(source);
       const { io, err } = capture();

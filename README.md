@@ -440,12 +440,13 @@ Check your environment with `xbintsc doctor`.
 
 ## Using xbintsc with an AI agent
 
-The compiler is strict about its language subset — types are erased and only
-inference-free facts are checked (a default checker catches unresolved names,
-redeclarations and call arity, but not assignability), Node built-ins need
-`--ext node`, packages from `node_modules` are bundled at build time, strings
-follow UTF-16 length/indexing over UTF-8 storage, and `await` only
-suspends on a pending promise. An agent that assumes "TypeScript" means "what
+The compiler is strict about its language subset — types are structurally
+checked by a default checker and then erased (definite mismatches, missing
+properties and non-callable calls are rejected, but there is no full inference
+or strict-null mode), Node built-ins need `--ext node`, packages from
+`node_modules` are bundled at build time, strings follow UTF-16
+length/indexing over UTF-8 storage, and `await` only suspends on a pending
+promise. An agent that assumes "TypeScript" means "what
 Node accepts" will write code that does not compile, so the documentation is
 layered for exactly that reader:
 

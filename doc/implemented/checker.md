@@ -3,69 +3,110 @@
 > Part of [Implemented syntax and features](../implemented.md) · [简体中文](../zh-CN/implemented/checker.md)
 
 Location: `src/checker/` (`checker.ts`, `undefined.ts`, `declarations.ts`,
-`calls.ts`), invoked by `generate()` between binding and LLVM lowering.
+`calls.ts`, `type-system.ts`, `assignability.ts`, `flow.ts`, `typecheck.ts`),
+invoked by `generate()` between binding and LLVM lowering.
 
 The checker runs **by default**; `--no-check` (or `check: false` in the
-programmatic API) turns it off. It reports only facts that need no type
-inference, so every diagnostic it produces is a real error rather than a guess:
+programmatic API) turns it off. It combines inference-free checks with a small
+structural type model:
 
 | Diagnostic | Code | What is checked |
 | --- | --- | --- |
 | `Cannot find name` | TS3002 | An identifier that resolves to no declaration and no runtime global |
 | `Duplicate identifier` | TS3001 | Same-scope declarations that cannot merge (`let x` twice, `function f` then `const f`, `let` colliding with a parameter, ...) |
 | `Argument count mismatch` | TS4004 | A direct call to a locally visible function or `const`-bound arrow/function expression with too few or too many arguments |
+| `Property not found` | TS4003 | A property read on a shape that is statically known |
+| `Type mismatch` | TS4001 | An initializer, assignment, return value or call argument that is definitely not assignable |
+| `Not callable` | TS4002 | Calling a value whose type is a primitive (number, string, boolean, ...) |
 
-## What counts as a global
+## What the type model knows
 
-The known-global set is built from the same tables code generation uses
-(`src/codegen/generator/tables.ts`): `console`, `Math`, `JSON`, `parseInt`,
-timers, `fetch`, the constructors, typed arrays, Node namespaces such as
-`Buffer`/`process`, and the globals registered by enabled extensions (`print`,
-`__registerScript`, native manifests). A name added to a table becomes legal in
-the checker in the same commit, so the two cannot drift apart.
+The checker resolves the type syntax it can understand and treats everything
+else as `any`:
 
-Type-only positions are not value references: `x as Foo`, `x satisfies Foo` and
-the type arguments of `f<Foo>()` are erased and never reported as unresolved.
+- keyword types, literal types, `A | B` unions and object type literals;
+- interfaces and type aliases (including generic aliases and `extends`);
+- classes: instance fields, methods, accessors, parameter properties,
+  `this.x = ...` members and local ancestor classes. Static members are not
+  instance members;
+- arrays, tuples, function types, object literals and `new LocalClass()`;
+- simple generics: a type parameter is `any` at its declaration, and a call
+  infers it from an argument (`T`, `T[]`, `Array<T>`) or takes it from an
+  explicit type argument list.
 
-Bundled sources under `node_modules` are not checked. The checker is a gate for
-the code you wrote; a dependency may legitimately use a host global or a call
-pattern the heuristic cannot see, and failing the build on its internals would
-make the default-on checker unusable with packages.
+Anything the model cannot name — mapped/conditional types, `keyof`,
+`typeof` queries, indexed access, utility types, imported type names that
+bundling renamed, an unknown base class — becomes `any`. `any` is compatible
+with everything, which is the central safety property: unsupported syntax can
+hide a bug, but it cannot reject working code.
+
+## Assignability
+
+Checked at variable initializers, `=` assignments, `return` statements and call
+arguments:
+
+- primitives and literal types;
+- object/interface/class shapes: every required target property must exist and
+  be assignable; extra source properties are allowed;
+- arrays and tuples element-wise;
+- functions: parameter count and return type (conservatively);
+- unions: every source member must fit a target member, or some target member
+  must accept the source.
+
+`let`/`var` infer widened types (`let x = 1` is `number`), `const` keeps the
+literal. `null` and `undefined` are accepted wherever a value is expected
+(there is no strict-null mode). Functional return types are not inferred: an
+unannotated function returns `any`, so its callers are never rejected.
+
+## Property existence
+
+Shapes come from an explicit annotation or from a `const` initialized with an
+object literal / `new LocalClass(...)`. Optional properties, `Object.prototype`
+members (`toString`, `hasOwnProperty`, ...), index signatures and inherited
+class members are all accepted.
+
+A shape becomes untrusted — and its variable is left alone — when it can change
+after the declaration: a property write/delete/update, a call that may mutate
+it (`mutate(object)`, `Object.assign(object, ...)`), aliasing (`const p =
+object`), a dynamic constructor (`Object.assign(this, ...)`, `this[key] = ...`)
+or prototype augmentation (`Object.assign(C.prototype, ...)`). Writes to a
+missing property are allowed (xbintsc programs legitimately grow objects after
+their literal); the write opens the shape instead of reporting.
+
+Not checked: `object["x"]` element access, destructuring, shapes reached
+through a function return, or aliasing through array/object containers.
+
+## Narrowing
+
+Inside a branch the checker refines a variable when the condition is one of:
+
+- `value !== null` / `!== undefined` / `!= null` (and the `===` forms);
+- `typeof value === "string" | "number" | "boolean" | "bigint" | "symbol" | "undefined"`;
+- `value instanceof LocalClass`;
+- truthiness (`if (value)`, `value &&`, `value ||`);
+- combinations through `&&`, `||`, `??` and `!`.
+
+`if`/`else` and conditional expressions (`cond ? a : b`) apply the refinement;
+other control flow does not.
 
 ## What is deliberately not checked
 
-This is not a type checker. It performs no assignability, narrowing, generics
-instantiation or flow analysis, and it does not validate the erased type
-syntax:
-
-- `const x: number = "hello"` still compiles; annotations are documentation.
-- `as` / `satisfies` / non-null `!` remain runtime no-ops.
-- `TypeMismatch` (TS4001), `NotCallable` (TS4002) and `PropertyNotFound`
-  (TS4003) are still unused.
-- Calls through a property (`object.method()`), an import, a `let`/`var`
-  binding that is reassigned, or a spread argument are skipped: their signature
-  is not a static fact.
-
-## Arity details
-
-The required count is the number of parameters before the first optional,
-defaulted or rest parameter; `this:` parameters do not occupy an argument slot.
-A rest parameter removes the upper bound. Overloaded/merged declarations are
-skipped because no single signature is authoritative, and a function whose body
-references `arguments` is exempt because its parameter list is not the whole
-signature.
-
-Two same-name imports are allowed: bundling merges every module into one scope,
-and separate modules routinely import `readFileSync` or `dirname` from the same
-builtin. A local declaration still cannot collide with an import.
+- Full inference: unannotated function returns, complex generic constraints and
+  higher-order inference are treated as `any`.
+- Excess-property checks on fresh object literals.
+- `as`/`satisfies` assertions may narrow or widen freely (they are erased).
+- Overload resolution, mapped types, conditional types and template-literal
+  types are not modeled.
+- Bundled sources under `node_modules` are not checked at all: the checker is a
+  gate for the code you wrote, and failing on a dependency's internals would
+  make the default-on checker unusable with packages.
 
 ## Behaviour without the checker
 
 `--no-check` restores the previous permissive pipeline: type syntax is erased
-and lowering continues, which is useful for compatibility with code that
-intentionally calls functions with a different arity. It also restores the
-silent `Duplicate identifier` behaviour: `let value = 1; let value = 2;`
-compiles and the first value wins. Prefer keeping the checker on.
+and lowering continues. It also restores the silent `Duplicate identifier`
+behaviour (`let value = 1; let value = 2;` compiles and the first value wins).
+Prefer keeping the checker on.
 
 ## Cache and diagnostics
 

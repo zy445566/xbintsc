@@ -37,7 +37,7 @@
   - [doc/implemented/lexer.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/lexer.md): tokens, literals and lexical diagnostics
   - [doc/implemented/parser.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/parser.md): statement, expression and type syntax
   - [doc/implemented/binder.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/binder.md): scopes, symbols and capture
-  - [doc/implemented/checker.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/checker.md): the opt-out checker — unresolved names, redeclarations and call arity, and what it deliberately does not check
+  - [doc/implemented/checker.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/checker.md): the opt-out checker — names, redeclarations, arity, structural assignability, property shapes, simple generics and flow narrowing, and what it deliberately does not check
   - [doc/implemented/operators.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/operators.md): operators and assignment
   - [doc/implemented/value-model.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/value-model.md): NaN-boxing and the function ABI
   - [doc/implemented/codegen.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/codegen.md): LLVM IR lowering

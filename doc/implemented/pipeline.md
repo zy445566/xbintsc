@@ -22,7 +22,7 @@ source.ts
 
 - Front end, back end, runtime and extensions are fully decoupled.
 - The flow is orchestrated by `src/driver/compiler.ts`: `read → parse → bind → check → IR → object file → link`. The front end lives in `src/driver/frontend.ts`, the cache key in `src/driver/build-key.ts`, runtime compilation in `src/driver/runtime-objects.ts`, and platform artifacts in `src/driver/app-artifacts.ts`.
-- The [semantic checker](./checker.md) (`src/checker/`) runs between binding and code generation unless `--no-check` is passed. It reports only inference-free facts (unresolved names, redeclarations, call arity); the type syntax itself is still erased.
+- The [semantic checker](./checker.md) (`src/checker/`) runs between binding and code generation unless `--no-check` is passed. It combines inference-free checks (unresolved names, redeclarations, call arity) with a small structural type model (definite assignability, property shapes, simple generics and flow narrowing); the type syntax itself is still erased afterwards.
 - **Self-hosting**: `xbintsc` compiles its own front end. Building `src/cli/main.ts`
   with the compiler yields a working `xbintsc` binary, and that binary rebuilds
   itself with byte-identical LLVM IR (source ≡ generation 1 ≡ generation 2 ≡

@@ -31,6 +31,19 @@ extern "C" {
 
 typedef uint64_t xt_value;
 
+/* Separator for paths the runtime renders into program-visible artifacts: the
+ * `path` module's results and `file://` URLs. This is deliberately NOT selected
+ * by `#if defined(_WIN32)`: every host must emit the same bytes (Windows
+ * accepts `/` everywhere), which is what keeps output comparable across
+ * platforms and reproducible in the self-hosting fixpoint. Native filesystem
+ * paths — diagnostics, `import.meta.filename`, `process.cwd()` — keep the host
+ * separator and never use this constant. */
+#define XT_ARTIFACT_PATH_SEPARATOR '/'
+
+#if XT_ARTIFACT_PATH_SEPARATOR != '/'
+#error "XT_ARTIFACT_PATH_SEPARATOR is the canonical artifact separator; it must not vary by platform"
+#endif
+
 /* Tag layout (top 16 bits). Values whose tag bits are not 0xFFF8.. are
  * doubles, so ordinary numbers travel unboxed. */
 #define XT_TAG_MASK 0xFFFF000000000000ULL

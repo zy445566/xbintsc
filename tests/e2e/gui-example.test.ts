@@ -12,7 +12,7 @@
  * native side: it compiles, it links against the gui archive, and it runs.
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -22,6 +22,7 @@ import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { guiAvailable } from "./gui-helpers.js";
+import { readTextFile } from "../platform.js";
 
 /** The example lives at <repo>/examples/gui/pelican-bike. */
 const exampleDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "examples", "gui", "pelican-bike");
@@ -42,8 +43,8 @@ describe.skipIf(!guiAvailable)("gui example — pelican bike", () => {
     workdir = mkdtempSync(join(tmpdir(), "xbintsc-pelican-"));
     /* The example's sources verbatim: `main.ts` imports `./index.html`, so both
        have to sit together for the loader to find the document. */
-    writeFileSync(join(workdir, "index.html"), readFileSync(join(exampleDir, "index.html"), "utf8"));
-    writeFileSync(join(workdir, "pelican.ts"), readFileSync(join(exampleDir, "main.ts"), "utf8"));
+    writeFileSync(join(workdir, "index.html"), readTextFile(join(exampleDir, "index.html")));
+    writeFileSync(join(workdir, "pelican.ts"), readTextFile(join(exampleDir, "main.ts")));
   });
   afterAll(() => {
     rmSync(workdir, { recursive: true, force: true });

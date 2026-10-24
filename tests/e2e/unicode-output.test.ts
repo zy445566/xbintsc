@@ -27,8 +27,10 @@ console.log('Hello World!');
 `;
 
 describeE2E("non-ASCII console output", (harness) => {
+  // These cases pin the exact bytes, so they opt out of the harness's CRLF
+  // normalisation: a text-mode translation on Windows would be a real failure.
   it("prints the issue's Chinese and English lines as exact UTF-8", () => {
-    const result = harness.runProgramFull(issueProgram, { name: "chinese_issue" });
+    const result = harness.runProgramFull(issueProgram, { name: "chinese_issue", raw: true });
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(result.stdout).toBe("你好世界！\nHello World!\n");
@@ -45,7 +47,7 @@ describeE2E("non-ASCII console output", (harness) => {
       console.log(["中文", { 键: "值" }]);
       console.log(JSON.stringify({ 你好: "世界" }));
       `,
-      { name: "chinese_values" },
+      { name: "chinese_values", raw: true },
     );
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
@@ -69,7 +71,7 @@ describeE2E("non-ASCII console output", (harness) => {
       console.warn("警告：中文");
       console.error("错误：中文");
       `,
-      { name: "chinese_console_levels" },
+      { name: "chinese_console_levels", raw: true },
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toBe("日志：中文\n信息：中文\n");

@@ -58,9 +58,11 @@ xt_value xt_url_path_to_file_url(int32_t argc, xt_value *argv) {
   const char *prefix = "file://";
   for (; *prefix && j < sizeof(href) - 1; prefix++) href[j++] = *prefix;
 #if defined(_WIN32)
-  if (j < sizeof(href) - 1) href[j++] = '/';
+  if (j < sizeof(href) - 1) href[j++] = XT_ARTIFACT_PATH_SEPARATOR;
 #endif
-  for (const char *p = path; *p && j < sizeof(href) - 1; p++) href[j++] = (*p == '\\') ? '/' : *p;
+  for (const char *p = path; *p && j < sizeof(href) - 1; p++) {
+    href[j++] = (*p == '\\') ? XT_ARTIFACT_PATH_SEPARATOR : *p;
+  }
   href[j] = 0;
 
   xt_value url = xt_object_new();

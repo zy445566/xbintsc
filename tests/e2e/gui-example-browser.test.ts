@@ -10,13 +10,13 @@
  * exists in the engine, a typo in the browser branch, an undeclared global).
  */
 
-import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readTextFile } from "../platform.js";
 
 const exampleDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "examples", "gui", "pelican-bike");
-const page = readFileSync(join(exampleDir, "index.html"), "utf8");
+const page = readTextFile(join(exampleDir, "index.html"));
 
 /** The inline script body (the only `<script lang="ts">` in the document). */
 function inlineScript(): string {

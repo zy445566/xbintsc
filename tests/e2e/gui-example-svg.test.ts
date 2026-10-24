@@ -19,7 +19,7 @@
  * timestamps), so the test matches their *shape*, not their numbers.
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -30,6 +30,7 @@ import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
 import { guiAvailable } from "./gui-helpers.js";
+import { readTextFile } from "../platform.js";
 
 /** The example lives at <repo>/examples/gui/pelican-svg. */
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -46,8 +47,8 @@ let workdir = "";
 describe.skipIf(!guiAvailable)("gui example — pelican svg", () => {
   beforeAll(() => {
     workdir = mkdtempSync(join(tmpdir(), "xbintsc-pelican-svg-"));
-    writeFileSync(join(workdir, "index.html"), readFileSync(join(exampleDir, "index.html"), "utf8"));
-    writeFileSync(join(workdir, "pelican-svg.ts"), readFileSync(join(exampleDir, "main.ts"), "utf8"));
+    writeFileSync(join(workdir, "index.html"), readTextFile(join(exampleDir, "index.html")));
+    writeFileSync(join(workdir, "pelican-svg.ts"), readTextFile(join(exampleDir, "main.ts")));
   });
   afterAll(() => {
     rmSync(workdir, { recursive: true, force: true });

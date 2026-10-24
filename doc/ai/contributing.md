@@ -57,6 +57,53 @@ boundary. Then run `npm run docs:matrix` to regenerate
 [the support matrix](../../support-matrix.md); a test fails when the committed
 table is stale.
 
+### Keeping tests portable
+
+The suite runs natively on Linux, macOS and Windows (x64 and arm64), so a test
+that passes on one host must pass on all of them. Three rules cover every
+difference the compiler intentionally has:
+
+- **Text is LF.** `.gitattributes` checks every text file out with LF, and
+  `.editorconfig` makes editors write LF by default. Read repository files
+  through `readTextFile()` in [tests/platform.ts](../../tests/platform.ts),
+  which also normalises a stale CRLF checkout; never compare a generated
+  document against a raw `readFileSync(..., "utf8")` copy. `runProgram()`
+  normalises captured stdout/stderr too, so a CRLF from a child process cannot
+  fail a comparison; pass `raw: true` when a case pins exact bytes (the UTF-8
+  output tests do).
+- **Paths are built, not spelled.** Use `node:path` (`join`, `resolve`,
+  `relative`) for native expectations. The compiler emits `/` in its
+  host-independent artifacts (LLVM IR, cache manifests, fingerprints and the
+  `path` module); `toPosixPath()` converts a temp directory or a
+  `fileURLToPath()` result to that form when asserting on one. On the compiler
+  side that representation lives in
+  [src/canonical.ts](../../src/canonical.ts) (`ARTIFACT_PATH_SEPARATOR`,
+  `ARTIFACT_LINE_ENDING`, `artifactPath()`), mirrored by `XT_ARTIFACT_PATH_SEPARATOR` in
+  [runtime/rt.h](../../runtime/rt.h) — do not spell `"/"` or `"\n"` in code
+  that emits an artifact.
+- **Native output stays native.** Diagnostics print the path the driver
+  resolved, so a Windows diagnostic contains `\`; stack frames are part of the
+  emitted artifact and use the canonical `/`. Assert both structurally
+  (`toContain("helper.ts:1:")`, `includes("at inner")`) or against a
+  `node:path`-built value, never against a hardcoded `/` or `\`.
+
+Do not normalise arbitrary program output: a backslash there can be an escape
+sequence, JSON, or a Windows path the program printed on purpose. A genuinely
+platform-specific feature (drive letters, `os.platform()`, timers, fonts) is
+gated with `it.runIf(...)`/`it.skipIf(...)` so the skip is visible instead of
+being hidden by a broad string replacement.
+
+`tests/platform.test.ts` enforces both ends: the `.gitattributes` policy and an
+LF working tree. If it reports CRLF on a Windows checkout, renormalise once —
+**only in a clean checkout**, because `git checkout -- .` discards local edits:
+
+```bash
+git stash         # or commit your work first
+git add --renormalize .
+git checkout -- .
+git stash pop
+```
+
 ## Two invariants you must not break
 
 ### 1. The self-hosting fixpoint

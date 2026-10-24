@@ -12,6 +12,7 @@
 
 import type { Node } from "../../ast/nodes.js";
 import type { FunctionInfo } from "../../binder/binder.js";
+import { artifactPath } from "../../canonical.js";
 import { escapeBytes, utf8Bytes } from "./tables.js";
 import type { Generator } from "./generator.js";
 
@@ -71,7 +72,7 @@ export const debugMethods: DebugMethods = {
   },
 
   debugFileFor(fileName) {
-    const normalized = fileName.split("\\").join("/");
+    const normalized = artifactPath(fileName);
     const existing = this.debugFiles.get(normalized);
     if (existing) return existing;
     const slash = normalized.lastIndexOf("/");

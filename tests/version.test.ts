@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COMPILER_VERSION } from "../src/driver/compiler.js";
+import { readTextFile } from "./platform.js";
 
-const packageJson = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-) as { version: string };
+const packageJson = JSON.parse(readTextFile(new URL("../package.json", import.meta.url))) as {
+  version: string;
+};
 
 describe("compiler version", () => {
   it("matches package.json", () => {
@@ -12,12 +12,12 @@ describe("compiler version", () => {
   });
 
   it("is part of the incremental cache key", () => {
-    const source = readFileSync(new URL("../src/driver/build-key.ts", import.meta.url), "utf8");
+    const source = readTextFile(new URL("../src/driver/build-key.ts", import.meta.url));
     expect(source).toMatch(/hashParts\(\[\s*COMPILER_VERSION,/);
   });
 
   it("keeps the version declaration out of compiler.ts", () => {
-    const source = readFileSync(new URL("../src/driver/compiler.ts", import.meta.url), "utf8");
+    const source = readTextFile(new URL("../src/driver/compiler.ts", import.meta.url));
     expect(source).not.toMatch(/export const COMPILER_VERSION =/);
   });
 

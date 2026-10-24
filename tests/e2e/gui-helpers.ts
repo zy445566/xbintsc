@@ -28,6 +28,7 @@ import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry, type Extension } from "../../src/extensions/registry.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { findRuntimeDir, platformSlug } from "../../src/driver/paths.js";
+import { normalizeEol, toPosixPath } from "../platform.js";
 
 const archivePath = join(findRuntimeDir(), "lib", platformSlug(), "gui.a");
 
@@ -100,7 +101,7 @@ const LOGO_PNG_BASE64 =
  * the engine's image loader expects a local path to arrive.
  */
 function toImageSrc(absolutePath: string): string {
-  return encodeURI(absolutePath.split("\\").join("/"));
+  return encodeURI(toPosixPath(absolutePath));
 }
 
 export function createGuiHarness(): GuiHarness {
@@ -134,8 +135,8 @@ export function createGuiHarness(): GuiHarness {
       },
     });
     expect(executed.status, executed.stderr).toBe(0);
-    const stdout = executed.stdout;
-    const stderr = executed.stderr;
+    const stdout = normalizeEol(executed.stdout ?? "");
+    const stderr = normalizeEol(executed.stderr ?? "");
     const value = (label: string): string => {
       const line = stdout.split("\n").find((entry) => entry.startsWith(`${label}=`));
       expect(line, `missing ${label} in stdout:\n${stdout}\nstderr:\n${stderr}`).toBeDefined();

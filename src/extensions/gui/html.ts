@@ -35,6 +35,7 @@ import {
 import { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import { SourceFile } from "../../diagnostics/source.js";
 import { Parser } from "../../parser/parser.js";
+import { artifactPath } from "../../canonical.js";
 import { hashString } from "../../driver/cache.js";
 import type { AssetLoadResult } from "../registry.js";
 
@@ -80,7 +81,7 @@ function isExecutable(type: string | undefined, lang: string | undefined): boole
 function rewriteSpecifier(htmlPath: string, scriptPath: string, specifier: string): string {
   if (!specifier.startsWith(".")) return specifier;
   const absolute = resolve(dirname(scriptPath), specifier);
-  let rel = relative(dirname(htmlPath), absolute).split("\\").join("/");
+  let rel = artifactPath(relative(dirname(htmlPath), absolute));
   if (!rel.startsWith(".")) rel = `./${rel}`;
   return rel;
 }

@@ -9,7 +9,7 @@
  * gradients, paths and text really rasterised.
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -20,6 +20,7 @@ import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { guiAvailable } from "./gui-helpers.js";
+import { readTextFile } from "../platform.js";
 
 /** The example lives at <repo>/examples/gui/pelican-canvas. */
 const exampleDir = resolve(
@@ -35,9 +36,9 @@ let workdir = "";
 
 describe("pelican canvas example — browser entry", () => {
   it("loads the shared scene as a classic script", () => {
-    const html = readFileSync(join(exampleDir, "index.html"), "utf8");
+    const html = readTextFile(join(exampleDir, "index.html"));
     expect(html).toContain('<script src="./scene.js"></script>');
-    const script = readFileSync(join(exampleDir, "scene.js"), "utf8");
+    const script = readTextFile(join(exampleDir, "scene.js"));
     // A browser compiles this as a classic script: no ESM, no TypeScript.
     expect(() => new Script(script)).not.toThrow();
   });
@@ -47,7 +48,7 @@ describe.skipIf(!guiAvailable)("gui example — pelican canvas", () => {
   beforeAll(() => {
     workdir = mkdtempSync(join(tmpdir(), "xbintsc-pelican-canvas-"));
     for (const file of ["index.html", "main.ts", "scene.js"]) {
-      writeFileSync(join(workdir, file), readFileSync(join(exampleDir, file), "utf8"));
+      writeFileSync(join(workdir, file), readTextFile(join(exampleDir, file)));
     }
   });
   afterAll(() => {

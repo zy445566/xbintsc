@@ -11,6 +11,7 @@
 import { execFileSync } from "node:child_process";
 import { expect, it } from "vitest";
 import { resolveToolchain } from "../../src/driver/toolchain-provider.js";
+import { toPosixPath } from "../platform.js";
 import { describeE2E } from "./harness.js";
 
 /** The resolved clang absolute path, or a `where clang` hit, when it has a space. */
@@ -37,8 +38,8 @@ const spacedClang = clangPathWithSpace();
 
 describeE2E("child_process.spawnSync", (harness) => {
   it.skipIf(spacedClang === undefined)("runs a command whose path contains spaces", () => {
-    const directory = harness.workdir.replace(/\\/g, "/");
-    const clang = spacedClang!.replace(/\\/g, "/");
+    const directory = toPosixPath(harness.workdir);
+    const clang = toPosixPath(spacedClang!);
     const source = `
 import { existsSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";

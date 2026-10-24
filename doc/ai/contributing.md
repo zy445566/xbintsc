@@ -50,12 +50,14 @@ clang skip themselves when it is unavailable (`hasClang()` in
 [tests/helpers.ts](../../tests/helpers.ts)) — do not turn that into a silent
 pass.
 
-`tests/conformance/` is the executable definition of the supported subset. Add
-a supported case (compiled and compared with Node) when a feature becomes
-usable, and an unsupported case (expected diagnostic code) when you document a
-boundary. Then run `npm run docs:matrix` to regenerate
-[the support matrix](../../support-matrix.md); a test fails when the committed
-table is stale.
+`tests/conformance/` is the executable definition of the supported subset. It
+runs unmodified test262 files from a pinned checkout (see
+[`tests/conformance/test262/SOURCE.md`](../../tests/conformance/test262/SOURCE.md)).
+When a feature becomes usable, copy a test262 case that exercises it and add a
+supported entry; when you document a boundary, pin a valid test262 case that
+xbintsc still rejects with its diagnostic code. Then run `npm run docs:matrix`
+to regenerate [the support matrix](../../support-matrix.md); a test fails when
+the committed table is stale.
 
 ### Keeping tests portable
 

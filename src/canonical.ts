@@ -30,5 +30,8 @@ export const ARTIFACT_LINE_ENDING = "\n";
  * runtime and Node treat Windows paths.
  */
 export function artifactPath(path: string): string {
-  return path.replaceAll("\\", ARTIFACT_PATH_SEPARATOR);
+  // `split`/`join` is measurably faster than a regex or `replaceAll` for the
+  // short paths this sees (it runs once per emitted stack frame), and it is the
+  // exact transform the compiler used before it was centralised.
+  return path.split("\\").join(ARTIFACT_PATH_SEPARATOR);
 }

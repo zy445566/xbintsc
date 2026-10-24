@@ -173,7 +173,9 @@ export function documentationFor(diagnostic: Diagnostic): DocumentationPointer |
         path: "doc/unimplemented/modules.md",
       };
 
-    // The checker codes are defined but never emitted today.
+    /* TS3001/TS3002 also reach here through the generic subset hint above.
+     * Of the checker codes, only arity is emitted today; the three type-level
+     * ones stay defined for a future assignability pass. */
     case DiagnosticCode.TypeMismatch:
     case DiagnosticCode.NotCallable:
     case DiagnosticCode.PropertyNotFound:

@@ -249,12 +249,17 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
          * error has already been reported; "Cannot find name '<error>'" is
          * pure noise on top of it. */
         if (identifier.text === "<error>") return i64(XT_UNDEFINED);
-        this.diagnostics.error(
-          DiagnosticCode.CannotFindName,
-          `Cannot find name '${identifier.text}'`,
-          identifier,
-          this.fileNameOf(identifier),
-        );
+        /* The checker runs before code generation and owns this diagnostic
+         * (including the "is it a runtime global?" decision). Keeping the
+         * fallback for `--no-check` avoids reporting the same name twice. */
+        if (!this.check) {
+          this.diagnostics.error(
+            DiagnosticCode.CannotFindName,
+            `Cannot find name '${identifier.text}'`,
+            identifier,
+            this.fileNameOf(identifier),
+          );
+        }
         return i64(XT_UNDEFINED);
       }
     }

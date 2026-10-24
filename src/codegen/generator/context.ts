@@ -85,17 +85,30 @@ export class GeneratorContext {
   debugUnit?: string;
   debugFlags: string[] = [];
   debugSubroutineType?: string;
+  /** True when the checker already reported unresolved names (see `generate`). */
+  readonly check: boolean;
   current!: FunctionState;
 
-  constructor(sourceFile: SourceFileNode, diagnostics: DiagnosticBag, options: CodegenOptions = {}) {
+  /**
+   * `binding` is passed by `generate`, which binds once and runs the checker on
+   * the same symbol table. It stays optional so a direct construction still
+   * works for tests and embedders.
+   */
+  constructor(
+    sourceFile: SourceFileNode,
+    diagnostics: DiagnosticBag,
+    options: CodegenOptions = {},
+    binding?: BindResult,
+  ) {
     this.sourceFile = sourceFile;
     this.diagnostics = diagnostics;
-    this.binding = bind(sourceFile);
+    this.binding = binding ?? bind(sourceFile);
     this.builtins = options.builtins ?? {};
     this.modules = options.modules ?? {};
     this.moduleHints = options.moduleHints ?? {};
     this.target = options.target ?? { platform: process.platform, arch: process.arch };
     this.debug = options.debug === true;
+    this.check = options.check !== false;
     this.resolveImports();
   }
 

@@ -7,8 +7,8 @@ Location: `src/driver/compiler.ts` (orchestration), `src/driver/frontend.ts`,
 `src/driver/app-artifacts.ts`, `src/driver/cache.ts`, `src/driver/toolchain.ts`,
 `src/driver/paths.ts`, `src/driver/version.ts`.
 
-- Compilation pipeline: read source → module bundling (`src/driver/modules.ts`, when the entry contains `import`/`export`) → parse → bind/check → IR → object file → link.
-- Incremental cache: keyed on "compiler version + source hash + emit kind + optimization level + LTO/PGO mode + platform + extension fingerprint (names, linker flags, native object contents)"; if the artifacts exist and are fresh, the build is skipped. `--pgo-use` always rebuilds because the profile data can change without the source. The key is assembled in `src/driver/build-key.ts`.
+- Compilation pipeline: read source → module bundling (`src/driver/modules.ts`, when the entry contains `import`/`export`) → parse → bind → [semantic check](./checker.md) → IR → object file → link.
+- Incremental cache: keyed on "compiler version + source hash + emit kind + optimization level + LTO/PGO mode + platform + `check`/`no-check` + extension fingerprint (names, linker flags, native object contents)"; if the artifacts exist and are fresh, the build is skipped. `--pgo-use` always rebuilds because the profile data can change without the source. The key is assembled in `src/driver/build-key.ts`.
 - C runtime and extension sources are cached as object files by content hash and compiled only once (the cache key includes the LTO/PGO flags). `RUNTIME_SOURCES` in `src/driver/runtime-objects.ts` lists the core translation units.
 - Toolchain wrapper: locates `clang` (overridable with `xbintsc_CLANG`), compiles IR, compiles C, links.
 - LTO (`--lto` / `"lto": true`): the program and runtime compile to LLVM bitcode (`-flto`) and link with `-fuse-ld=lld`; lld is required.

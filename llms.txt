@@ -22,6 +22,7 @@
 - [doc/ai/build-recipe.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/build-recipe.md): exact commands to run, build, inspect IR and configure a project, with the program shape that compiles
 - [doc/ai/cli.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/cli.md): every CLI flag and its parsing quirks, project config fields, environment variables, incremental-cache behaviour, diagnostic codes, programmatic API
 - [doc/ai/language-support.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/language-support.md): the supported TypeScript subset as tables — statements, expressions, classes, async, the erased type system, standard library gaps, modules, runtime deviations
+- [doc/support-matrix.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/support-matrix.md): generated support matrix — every row is backed by a corpus case that is compiled and compared with Node, or must fail with a documented diagnostic
 - [doc/ai/extensions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/extensions.md): Node built-in modules and the `--ext node` rule, the GUI extension, bundling third-party packages, C++/Rust native extensions via manifest
 - [doc/ai/troubleshooting.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/troubleshooting.md): the clang version requirement and every frequent error message with its cause and fix
 - [doc/requirements.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/requirements.md): per-platform toolchain prerequisites
@@ -36,6 +37,7 @@
   - [doc/implemented/lexer.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/lexer.md): tokens, literals and lexical diagnostics
   - [doc/implemented/parser.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/parser.md): statement, expression and type syntax
   - [doc/implemented/binder.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/binder.md): scopes, symbols and capture
+  - [doc/implemented/checker.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/checker.md): the opt-out checker — unresolved names, redeclarations and call arity, and what it deliberately does not check
   - [doc/implemented/operators.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/operators.md): operators and assignment
   - [doc/implemented/value-model.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/value-model.md): NaN-boxing and the function ABI
   - [doc/implemented/codegen.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/codegen.md): LLVM IR lowering
@@ -50,7 +52,7 @@
   - [doc/implemented/extensions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/extensions.md): the extension registry and the `node` extension
   - [doc/implemented/driver.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/driver.md): incremental cache, clang, LTO/PGO, config, icons
   - [doc/implemented/cli.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/cli.md): CLI and the embedder API
-  - [doc/implemented/tests.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/tests.md): test suites and the differential harness
+  - [doc/implemented/tests.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/tests.md): unit, e2e, differential harness and the executable conformance corpus
 - [doc/unimplemented.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented.md): index of unsupported syntax, missing semantics and known deviations
   - [doc/unimplemented/statements.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/statements.md): statement gaps
   - [doc/unimplemented/expressions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/unimplemented/expressions.md): expression and operator gaps

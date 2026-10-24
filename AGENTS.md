@@ -49,8 +49,10 @@ in [doc/ai/language-support.md](./doc/ai/language-support.md).
 
 - **It is a subset.** Syntax outside the subset fails with `UnsupportedFeature`
   or a parse error. Never assume "TypeScript" means "what Node accepts".
-- **Types are erased, never checked.** Annotations, interfaces, generics and
-  `as` do nothing at runtime — a type error in the source is not caught for you.
+- **Types are erased; only inference-free facts are checked.** Annotations,
+  interfaces, generics and `as` do nothing at runtime, and `const x: number =
+  "hello"` still compiles. The default checker catches unresolved names,
+  same-scope redeclarations and call arity (`--no-check` disables it).
 - **Node built-ins need `--ext node`; npm packages are bundled at build time.**
   A bare import is resolved from `node_modules` and its sources (ESM or
   CommonJS) are merged into the binary. There is no runtime package lookup, and
@@ -77,6 +79,7 @@ in [doc/ai/language-support.md](./doc/ai/language-support.md).
 ```
 src/lexer, src/parser, src/ast     source text -> tokens -> AST
 src/binder                         scopes, symbols, closures
+src/checker                        opt-out names, redeclarations, arity checks
 src/codegen                        AST -> LLVM IR text (values.ts defines the value model)
 src/driver                         build orchestration, clang invocation, incremental cache
 src/extensions                     optional compile modules (node/, gui/, media/, native C++/Rust)

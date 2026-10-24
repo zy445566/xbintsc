@@ -33,9 +33,9 @@ npm test                 # 单元测试 + 端到端测试
 | `npm run coverage:runtime` | C 运行时（`runtime/`）的 LLVM 覆盖率 |
 | `npm run bench` | 构建并计时固定基准套件（可与 Node 对比） |
 
-单元测试在 `tests/` 下按模块一个目录（`lexer`、`parser`、`binder`、`codegen`、
-`driver`、`extensions`、`cli`、`e2e`），与源码树镜像对应。边界用例放在它覆盖的模块
-旁边。
+单元测试在 `tests/` 下按模块一个目录（`lexer`、`parser`、`binder`、`checker`、
+`codegen`、`driver`、`extensions`、`cli`、`conformance`、`e2e`），与源码树镜像对应。
+边界用例放在它覆盖的模块旁边。
 
 `tests/e2e/` 会编译真实程序并运行产出的二进制，其中包含一个**差分测试框架**
 （`tests/e2e/differential-*.test.ts`）：把同一份源码分别交给 xbintsc 和 Node 执行，
@@ -43,6 +43,11 @@ npm test                 # 单元测试 + 端到端测试
 手写的期望字符串。需要 clang 的测试在 clang 缺失时会自动跳过
 （[tests/helpers.ts](../../../tests/helpers.ts) 里的 `hasClang()`）——不要把这种跳过
 变成静默通过。
+
+`tests/conformance/` 是“支持子集”的可执行定义。功能可用时加一个受支持用例
+（编译后与 Node 对比输出），记录边界时加一个不支持用例（预期诊断码）；
+然后运行 `npm run docs:matrix` 重新生成[支持矩阵](../../support-matrix.md)，
+提交的表格过期时测试会失败。
 
 ## 两条不能破坏的不变量
 

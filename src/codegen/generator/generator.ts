@@ -9,6 +9,8 @@
 
 import type { SourceFileNode } from "../../ast/nodes.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
+import { bind } from "../../binder/binder.js";
+import { checkProgram } from "../../checker/checker.js";
 import { GeneratorContext } from "./context.js";
 import { moduleMethods, type ModuleMethods } from "./module.js";
 import { statementMethods, type StatementMethods } from "./statements.js";
@@ -45,6 +47,11 @@ export function generate(
   diagnostics: DiagnosticBag,
   options: CodegenOptions = {},
 ): CodegenResult {
-  const generator = new Generator(sourceFile, diagnostics, options);
+  // Bind once: the checker and the generator must see the same symbol table.
+  const binding = bind(sourceFile);
+  if (options.check !== false) {
+    checkProgram(sourceFile, binding, diagnostics, { builtins: options.builtins ?? {} });
+  }
+  const generator = new Generator(sourceFile, diagnostics, options, binding);
   return { ir: generator.run(), binding: generator.binding };
 }

@@ -19,6 +19,7 @@ export { TokenKind, KEYWORDS, type Token } from "./lexer/token.js";
 export * from "./ast/nodes.js";
 export { Parser } from "./parser/parser.js";
 export { bind, SymbolKind, ScopeKind, type BindResult, type FunctionInfo, type SymbolInfo } from "./binder/binder.js";
+export { checkProgram, type CheckOptions } from "./checker/checker.js";
 export { generate, type CodegenResult, type CodegenOptions } from "./codegen/llvm.js";
 export {
   XT_UNDEFINED,

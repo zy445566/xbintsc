@@ -138,7 +138,13 @@ xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv) {
     tm.tm_year = xt_to_int32(xt_arg_at(argc, argv, 0)) - 1900;
     tm.tm_mon = xt_to_int32(xt_arg_at(argc, argv, 1));
     tm.tm_mday = argc > 2 ? xt_to_int32(xt_arg_at(argc, argv, 2)) : 1;
-    return xt_number((double)xt_timegm(&tm) * 1000.0);
+    /* Date.UTC(year, month[, day[, hour[, minute[, second[, ms]]]]]). The time
+     * fields used to be dropped, so every UTC date came back at midnight. */
+    tm.tm_hour = argc > 3 ? xt_to_int32(xt_arg_at(argc, argv, 3)) : 0;
+    tm.tm_min = argc > 4 ? xt_to_int32(xt_arg_at(argc, argv, 4)) : 0;
+    tm.tm_sec = argc > 5 ? xt_to_int32(xt_arg_at(argc, argv, 5)) : 0;
+    double millis = argc > 6 ? xt_to_int32(xt_arg_at(argc, argv, 6)) : 0;
+    return xt_number((double)xt_timegm(&tm) * 1000.0 + millis);
   }
   return XT_UNDEFINED;
 }

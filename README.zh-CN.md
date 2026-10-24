@@ -180,6 +180,8 @@ CLI 选项：
     --verbose         打印进度信息
     --time            打印各构建阶段耗时
     --debug           生成调试信息（DWARF/CodeView）并保留帧指针
+    --check           运行语义检查（默认）
+    --no-check        跳过语义检查，只擦除类型语法
 ```
 
 ### 编程接口
@@ -368,10 +370,12 @@ V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改�
 
 - [已实现特性](./doc/zh-CN/implemented.md)
 - [未实现特性](./doc/zh-CN/unimplemented.md)
+- [支持矩阵](./doc/zh-CN/support-matrix.md)（由可执行语料生成）
 
 ## 让 AI 使用 xbintsc
 
-这个编译器对语言子集很严格——类型只被擦除而从不检查、Node 内置模块需要
+这个编译器对语言子集很严格——类型只被擦除，只检查无需类型推断的事实
+（默认检查器会报未定义名、重复声明和实参个数，但不检查可赋值性）、Node 内置模块需要
 `--ext node`、`node_modules` 里的 npm 包在构建期打包进二进制、字符串在 UTF-8 存储上按 UTF-16 语义计数、`await`
 只在 Promise 未 settle 时才真正挂起。如果 AI 把"TypeScript"当成"Node 能跑的 TypeScript"，写出来的
 代码就编译不过，因此文档正是按这类读者分层组织的：

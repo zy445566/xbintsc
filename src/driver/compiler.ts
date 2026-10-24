@@ -31,7 +31,7 @@ import { buildCacheKey } from "./build-key.js";
 import type { BuildOptions, BuildResult, EmitKind, PhaseTiming } from "./options.js";
 
 export { COMPILER_VERSION } from "./version.js";
-export { compileString, compileEntry, parseEntry, type ParsedEntry } from "./frontend.js";
+export { compileString, compileEntry, parseEntry, type FrontendOptions, type ParsedEntry } from "./frontend.js";
 export { RUNTIME_SOURCES, type RuntimeObjects } from "./runtime-objects.js";
 export type { BuildOptions, BuildResult, CompileStringResult, EmitKind, PhaseTiming } from "./options.js";
 
@@ -128,6 +128,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     app,
     debug: options.debug === true,
     lto,
+    check: options.check !== false,
     pgo,
     pgoDir,
   });
@@ -152,6 +153,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
     debug: options.debug === true,
+    check: options.check !== false,
   });
   timings.push({ phase: "codegen", ms: Date.now() - codegenStarted });
 

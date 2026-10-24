@@ -43,6 +43,7 @@
     "xbintsc": "tsx src/cli/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check:version": "tsx scripts/check-version.ts",
+    "docs:matrix": "tsx scripts/support-matrix.ts",
     "bench": "tsx scripts/bench.ts",
     "lint": "eslint . && tsx scripts/check-file-length.ts",
     "test": "vitest run",

@@ -32,6 +32,13 @@ function externalModuleSpecifiers(registry: ExtensionRegistry): Set<string> {
   ]);
 }
 
+/** Front-end switches shared by `compileString` and `compileEntry`. */
+export interface FrontendOptions {
+  readonly debug?: boolean;
+  /** Run the semantic checker (default true; `--no-check` disables it). */
+  readonly check?: boolean;
+}
+
 /** A parsed (and, for module entries, already bundled) entry file. */
 export interface ParsedEntry {
   readonly absoluteEntry: string;
@@ -78,7 +85,7 @@ export function compileString(
   source: string,
   fileName = "input.ts",
   extensions?: ExtensionRegistry,
-  options: { readonly debug?: boolean } = {},
+  options: FrontendOptions = {},
 ): CompileStringResult {
   const file = new SourceFile(fileName, source);
   const diagnostics = new DiagnosticBag();
@@ -93,6 +100,7 @@ export function compileString(
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
     debug: options.debug === true,
+    check: options.check !== false,
   });
   return { ir, diagnostics: diagnostics.diagnostics };
 }
@@ -104,7 +112,7 @@ export function compileString(
 export function compileEntry(
   entryPath: string,
   extensions?: ExtensionRegistry,
-  options: { readonly debug?: boolean } = {},
+  options: FrontendOptions = {},
 ): CompileStringResult {
   const registry = extensions ?? createDefaultRegistry();
   const diagnostics = new DiagnosticBag();
@@ -115,6 +123,7 @@ export function compileEntry(
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
     debug: options.debug === true,
+    check: options.check !== false,
   });
   return { ir, diagnostics: diagnostics.diagnostics };
 }

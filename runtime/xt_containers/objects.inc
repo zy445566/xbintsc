@@ -301,6 +301,15 @@ xt_value xt_object_get(xt_value value, xt_value key) {
       if (prop->getter != XT_UNDEFINED) return XT_UNDEFINED;
       return prop->value;
     }
+    /* `class Dog extends Animal` links Dog's property bag to the Animal
+       *constructor*, not to an object prototype, so a lookup of `Dog.kind`
+       must be able to continue through a function value. */
+    if (XT_IS_FUNCTION(cur->prototype)) {
+      xt_object *next = xt_as_object(cur->prototype);
+      if (!next || next == cur) break;
+      cur = next;
+      continue;
+    }
     if (!XT_IS_OBJECT(cur->prototype)) break;
     cur = (xt_object *)XT_GET_PTR(cur->prototype);
   }

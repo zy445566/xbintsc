@@ -65,7 +65,7 @@ Canonical detail (always current, much longer):
 | `private` / `protected` / `public` / `readonly` / `abstract` / `implements` | — | erased, no access control |
 | Generators `function*`, `yield`, `yield*` | ✅ | sync and `async function*`; `for await...of` and `Symbol.asyncIterator` |
 | `arguments` object | ✅ | implicit; arrows see their own parameters |
-| Argument-count validation | 🚫 | never checked, though `fn.length` reports declared arity |
+| Argument-count validation | ⚠️ | direct calls to locally visible functions / `const` arrows are checked (`TS4004`); methods, imports, spread arguments and reassigned bindings are not. `--no-check` disables |
 
 ## Async, Promises, event loop
 
@@ -82,19 +82,23 @@ Canonical detail (always current, much longer):
 
 ## Types: parsed, then erased
 
-**No type checking happens.** Type syntax is parsed into the AST and erased
-during binding/codegen:
+**No assignability check happens.** Type syntax is parsed into the AST and
+erased during binding/codegen. A default, inference-free
+[semantic checker](../implemented/checker.md) catches only the mistakes that do
+not need type information:
 
 | Construct | Status |
 | --- | --- |
-| Type annotations, return types, type aliases, interfaces | — parsed, erased, never checked |
+| Type annotations, return types, type aliases, interfaces | — parsed, erased, not assignability-checked |
 | Generic type parameters and constraints | — no runtime instantiation |
 | `as`, `satisfies`, non-null `!` | — erased, no assertion semantics |
 | Optional-chaining type narrowing | 🚫 |
-| Diagnostics `TS4001`–`TS4004` (`TypeMismatch`, `NotCallable`, `PropertyNotFound`, `ArgumentCountMismatch`) | 🚫 defined but never emitted |
+| Unresolved names (`TS3002`), same-scope redeclarations (`TS3001`) | ✅ checked by default; `--no-check` disables |
+| Call arity for locally visible functions (`TS4004`) | ✅ checked by default |
+| `TypeMismatch` (`TS4001`), `NotCallable` (`TS4002`), `PropertyNotFound` (`TS4003`) | 🚫 defined but never emitted |
 
-A type error in your source is therefore not a compile error — only runtime
-behaviour is checked. Write the runtime code you mean.
+A type error such as `const x: number = "hello"` is therefore not a compile
+error — only runtime behaviour is checked. Write the runtime code you mean.
 
 ## Standard library
 

@@ -9,10 +9,17 @@ Location: `src/cli/main.ts`, `src/index.ts`, `bin/xbintsc.js`
 ```
 xbintsc build <file.ts> [options]   compile to a native binary
 xbintsc run   <file.ts> [-- args]   compile and run
+xbintsc check <file.ts>             parse, bind and check without linking
+xbintsc watch <file.ts>             rebuild on source-tree changes
 xbintsc emit  <file.ts>             print LLVM IR
+xbintsc doctor                      report the resolved toolchain
 xbintsc version                     print the version
 xbintsc help                        help
 ```
+
+`check`, `emit`, `build`, `run` and `watch` all run the semantic checker by
+default; `--no-check` skips it (and is part of the cache key). See
+[the checker page](./checker.md).
 
 ## CLI options
 
@@ -31,6 +38,9 @@ xbintsc help                        help
     --app-id <id>     macOS bundle identifier (e.g. com.example.demo)
     --force           Ignore the incremental cache
     --verbose         Print progress information
+    --debug           Emit DWARF/CodeView debug info
+    --check           Run the semantic checker (default)
+    --no-check        Skip the semantic checker
 ```
 
 ## Programmatic API
@@ -38,8 +48,10 @@ xbintsc help                        help
 ```ts
 import { build, compileString } from "xbintsc";
 
-const { ir } = compileString("console.log(1 + 1);");
+const { ir, diagnostics } = compileString("console.log(1 + 1);");
 const result = build("program.ts", { emit: "exe", outDir: "build" });
+// The checker can be disabled per call, exactly like `--no-check`:
+build("program.ts", { check: false });
 ```
 
 The option and result types (`BuildOptions`, `BuildResult`, `EmitKind`,

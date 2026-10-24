@@ -346,18 +346,23 @@ export const moduleMethods: ModuleMethods = {
     const globalName = this.classGlobal(classInfo);
     const proto = this.reg();
     this.emit(`  ${proto} = call i64 @xt_object_new()`);
+    /* The parent constructor value, emitted once: it is used both for the
+     * instance prototype and for static inheritance (`Dog.kind` sees
+     * `Animal.kind`), and evaluating `extends mixin()` twice would run the
+     * expression twice. */
+    let parentValue: string | undefined;
     if (classInfo.parentExpression) {
       // `extends Error` / `extends TypeError` / other host builtins: chain the
       // subclass prototype onto the builtin's prototype so `instanceof` works.
       const parent = classInfo.parentExpression;
       const errorName = this.errorFamilyName(parent);
+      parentValue = this.emitExpression(parent);
       if (errorName) {
         const nameValue = this.stringValue(errorName);
         const parentProto = this.reg();
         this.emit(`  ${parentProto} = call i64 @xt_error_prototype(i64 ${nameValue})`);
         this.emit(`  call i64 @xt_object_set_prototype(i64 ${proto}, i64 ${parentProto})`);
       } else {
-        const parentValue = this.emitExpression(parent);
         const parentProto = this.reg();
         this.emit(`  ${parentProto} = call i64 @xt_function_get_prototype(i64 ${parentValue})`);
         this.emit(`  call i64 @xt_object_set_prototype(i64 ${proto}, i64 ${parentProto})`);
@@ -379,6 +384,10 @@ export const moduleMethods: ModuleMethods = {
     }
     const ctor = this.emitClosureValue(classInfo.ctor!);
     this.emit(`  call i64 @xt_function_set_prototype(i64 ${ctor}, i64 ${proto})`);
+    /* Static members are inherited through the constructor's property bag. */
+    if (parentValue) {
+      this.emit(`  call i64 @xt_object_set_prototype(i64 ${ctor}, i64 ${parentValue})`);
+    }
     const ctorKey = this.stringValue("__ctor");
     this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${ctorKey}, i64 ${ctor})`);
     for (const method of classInfo.statics) {

@@ -21,5 +21,6 @@ source.ts
 ```
 
 - 前端与后端、运行时、扩展完全解耦。
-- 流程由 `src/driver/compiler.ts` 串起：`读取 → 解析 → 绑定 → IR → 目标文件 → 链接`。前端位于 `src/driver/frontend.ts`，缓存键位于 `src/driver/build-key.ts`，运行时编译位于 `src/driver/runtime-objects.ts`，平台产物位于 `src/driver/app-artifacts.ts`。
+- 流程由 `src/driver/compiler.ts` 串起：`读取 → 解析 → 绑定 → 检查 → IR → 目标文件 → 链接`。前端位于 `src/driver/frontend.ts`，缓存键位于 `src/driver/build-key.ts`，运行时编译位于 `src/driver/runtime-objects.ts`，平台产物位于 `src/driver/app-artifacts.ts`。
+- [语义检查](./checker.md)（`src/checker/`）在绑定与代码生成之间运行，`--no-check` 可跳过。它只报告无需类型推断的事实（未定义名、重复声明、实参个数）；类型语法本身仍然被擦除。
 - **自举**：`xbintsc` 可编译自身前端。用编译器构建 `src/cli/main.ts` 可得到可用的 `xbintsc` 二进制，且该二进制再自编译时产出的 LLVM IR 逐字节一致（源码 ≡ 第 1 代 ≡ 第 2 代 ≡ 第 3 代）。运行时仍为手写 C。

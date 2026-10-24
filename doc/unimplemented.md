@@ -25,7 +25,7 @@ under [implemented](./implemented.md); git history records when it changed.
 - [Module system](./unimplemented/modules.md) — circular dependencies, live bindings, CommonJS boundaries
 - [Functions](./unimplemented/functions.md) — missing function semantics
 - [Classes and OO](./unimplemented/classes.md) — access control, `abstract`/`implements`, private-name collisions
-- [Type system](./unimplemented/types.md) — parsed but never checked
+- [Type system](./unimplemented/types.md) — parsed and erased; only inference-free facts are checked
 - [Runtime deviations](./unimplemented/deviations.md) — compiles and runs, but differs from ECMAScript
 - [Toolchain and platform](./unimplemented/toolchain.md) — type checker, async I/O, GC modes, platform gaps
 - [Node extension](./unimplemented/node.md) — Node module gaps, one page per area

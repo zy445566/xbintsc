@@ -62,7 +62,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `private`/`protected`/`public`/`readonly`/`abstract`/`implements` | — | 被擦除，无访问控制 |
 | 生成器 `function*`、`yield`、`yield*` | ✅ | 同步与 `async function*`；支持 `for await...of` 与 `Symbol.asyncIterator` |
 | `arguments` 对象 | ✅ | 隐式提供；箭头函数看到的是自己的参数 |
-| 参数个数校验 | 🚫 | 从不校验，虽然 `fn.length` 会报声明元数 |
+| 参数个数校验 | ⚠️ | 对本地可见函数 / `const` 箭头函数的直接调用会检查（`TS4004`）；方法、导入、展开实参与重新赋值后的绑定不检查。`--no-check` 可关闭 |
 
 ## 异步、Promise 与事件循环
 
@@ -79,18 +79,21 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 ## 类型：解析后擦除
 
-**不做任何类型检查。** 类型语法被解析进 AST，随后在绑定/代码生成阶段擦除：
+**不做可赋值性检查。** 类型语法被解析进 AST，随后在绑定/代码生成阶段擦除。
+默认开启的、无类型推断的[语义检查](../implemented/checker.md)只捕获不需要类型信息的错误：
 
 | 构造 | 状态 |
 | --- | --- |
-| 类型注解、返回类型、类型别名、接口 | — 解析后擦除，从不检查 |
+| 类型注解、返回类型、类型别名、接口 | — 解析后擦除，不做可赋值性检查 |
 | 泛型参数与约束 | — 运行时无实例化 |
 | `as`、`satisfies`、非空断言 `!` | — 擦除，无断言语义 |
 | 可选链的类型收窄 | 🚫 |
-| 诊断码 `TS4001`–`TS4004`（`TypeMismatch`、`NotCallable`、`PropertyNotFound`、`ArgumentCountMismatch`） | 🚫 有定义但从不发出 |
+| 未定义名（`TS3002`）、同作用域重复声明（`TS3001`） | ✅ 默认检查；`--no-check` 可关闭 |
+| 本地可见函数的实参个数（`TS4004`） | ✅ 默认检查 |
+| `TypeMismatch`（`TS4001`）、`NotCallable`（`TS4002`）、`PropertyNotFound`（`TS4003`） | 🚫 有定义但从不发出 |
 
-因此源码里的类型错误**不是**编译错误——只有运行时行为会被检查。你想跑出什么行为，
-就写什么代码。
+因此像 `const x: number = "hello"` 这样的类型错误**不是**编译错误——
+只有运行时行为会被检查。你想跑出什么行为，就写什么代码。
 
 ## 标准库
 

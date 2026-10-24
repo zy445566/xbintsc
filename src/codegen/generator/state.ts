@@ -91,6 +91,14 @@ export interface CodegenOptions {
    * debugging; `xbintsc build --debug` turns it on.
    */
   readonly debug?: boolean;
+  /**
+   * Run the semantic checker before lowering (default **true**). It reports
+   * unresolved names, redeclarations and call-arity mismatches; `--no-check`
+   * (or `check: false` programmatically) restores the previous permissive
+   * behaviour. Code generation skips its own unresolved-name diagnostic while
+   * the checker is on, so the error is reported exactly once.
+   */
+  readonly check?: boolean;
 }
 
 export const RUNTIME_DECLARATIONS: readonly string[] = [

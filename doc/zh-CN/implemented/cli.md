@@ -9,10 +9,16 @@
 ```
 xbintsc build <file.ts> [options]   编译为原生二进制
 xbintsc run   <file.ts> [-- args]   编译并执行
+xbintsc check <file.ts>             解析、绑定并检查，不链接
+xbintsc watch <file.ts>             源码树变化时重新构建
 xbintsc emit  <file.ts>             打印 LLVM IR
+xbintsc doctor                      报告解析到的工具链
 xbintsc version                     打印版本
 xbintsc help                        帮助
 ```
+
+`check`、`emit`、`build`、`run` 与 `watch` 默认都会运行语义检查；
+`--no-check` 可跳过（该开关也进入缓存 key）。详见[语义检查](./checker.md)。
 
 ## CLI 选项
 
@@ -31,6 +37,9 @@ xbintsc help                        帮助
     --app-id <id>     macOS bundle 标识符（如 com.example.demo）
     --force           忽略增量缓存
     --verbose         打印进度信息
+    --debug           生成 DWARF/CodeView 调试信息
+    --check           运行语义检查（默认）
+    --no-check        跳过语义检查
 ```
 
 ## 编程接口
@@ -38,8 +47,10 @@ xbintsc help                        帮助
 ```ts
 import { build, compileString } from "xbintsc";
 
-const { ir } = compileString("console.log(1 + 1);");
+const { ir, diagnostics } = compileString("console.log(1 + 1);");
 const result = build("program.ts", { emit: "exe", outDir: "build" });
+// 检查器可以按调用关闭，等价于 `--no-check`：
+build("program.ts", { check: false });
 ```
 
 选项与结果类型（`BuildOptions`、`BuildResult`、`EmitKind`、`PhaseTiming`）位于

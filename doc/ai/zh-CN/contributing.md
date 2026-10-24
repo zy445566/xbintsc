@@ -49,6 +49,45 @@ npm test                 # 单元测试 + 端到端测试
 然后运行 `npm run docs:matrix` 重新生成[支持矩阵](../../support-matrix.md)，
 提交的表格过期时测试会失败。
 
+### 保持测试跨平台
+
+测试套件在 Linux、macOS 和 Windows（x64 与 arm64）上原生运行，因此在一个平台通过的
+用例必须在所有平台通过。三条规则覆盖了编译器有意保留的全部差异：
+
+- **文本统一 LF。** `.gitattributes` 保证所有文本文件以 LF 检出，
+  `.editorconfig` 让编辑器默认写入 LF。读取仓库文件一律
+  走 [tests/platform.ts](../../../tests/platform.ts) 的 `readTextFile()`——它也会
+  归一化陈旧的 CRLF 检出；不要用裸的 `readFileSync(..., "utf8")` 去比对生成文档。
+  `runProgram()` 也会归一化捕获到的 stdout/stderr，子进程带出的 CRLF 不会让比较失败；
+  需要逐字节断言的用例传 `raw: true`（UTF-8 输出测试就是这么做的）。
+- **路径要构造，不要手写。** 原生期望值用 `node:path`（`join`、`resolve`、
+  `relative`）构造。编译器在其与宿主无关的产物（LLVM IR、缓存清单、指纹、
+  `path` 模块）里统一输出 `/`；断言这类值时用 `toPosixPath()` 把临时目录或
+  `fileURLToPath()` 的结果转成该形式。编译器侧的唯一来源是
+  [src/canonical.ts](../../../src/canonical.ts)（`ARTIFACT_PATH_SEPARATOR`、
+  `ARTIFACT_LINE_ENDING`、`artifactPath()`），运行时对应
+  [runtime/rt.h](../../../runtime/rt.h) 的 `XT_ARTIFACT_PATH_SEPARATOR`——生成产物的代码
+  不要直接写 `"/"` 或 `"\n"`。
+- **原生输出保持原生。** 诊断按驱动解析到的路径打印，因此 Windows 上含 `\`；
+  堆栈帧属于生成产物，统一用 `/`。两者都用结构性断言
+  （`toContain("helper.ts:1:")`、`includes("at inner")`）或与 `node:path`
+  构造的值比较，不要写死 `/` 或 `\`。
+
+不要归一化任意程序输出：其中的反斜杠可能是转义序列、JSON，或程序有意打印的 Windows
+路径。真正与平台相关的特性（盘符、`os.platform()`、定时器、字体）用
+`it.runIf(...)`/`it.skipIf(...)` 显式跳过，而不是用大范围字符串替换掩盖。
+
+`tests/platform.test.ts` 同时守住两端：`.gitattributes` 策略与工作区的 LF 状态。
+Windows 检出报告 CRLF 时，重新归一化一次——**只对干净的工作区执行**，因为
+`git checkout -- .` 会丢弃本地改动：
+
+```bash
+git stash         # 或先提交
+git add --renormalize .
+git checkout -- .
+git stash pop
+```
+
 ## 两条不能破坏的不变量
 
 ### 1. 自举不动点

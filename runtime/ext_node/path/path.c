@@ -32,9 +32,9 @@
 /** True when `c` separates path segments on this platform. */
 static int xt_path_is_sep(char c) {
 #if defined(_WIN32)
-  return c == '/' || c == '\\';
+  return c == XT_ARTIFACT_PATH_SEPARATOR || c == '\\';
 #else
-  return c == '/';
+  return c == XT_ARTIFACT_PATH_SEPARATOR;
 #endif
 }
 
@@ -57,7 +57,7 @@ static int xt_path_is_absolute(const char *path) {
   if (path[0] != '\0' && path[1] == ':') return root == 3;
   return xt_path_is_sep(path[0]) ? 1 : 0;
 #else
-  return path[0] == '/';
+  return path[0] == XT_ARTIFACT_PATH_SEPARATOR;
 #endif
 }
 
@@ -129,11 +129,11 @@ static void xt_path_normalize(const char *input, char *out, size_t size) {
 
   size_t position = 0;
   for (size_t p = 0; p < prefixLen && position + 1 < size; p++) out[position++] = prefix[p];
-  if (absolute && position + 1 < size) out[position++] = '/';
+  if (absolute && position + 1 < size) out[position++] = XT_ARTIFACT_PATH_SEPARATOR;
   for (size_t s = 0; s < count; s++) {
     size_t segmentLength = strlen(segments[s]);
     if (position + segmentLength + 2 > size) break;
-    if (s > 0) out[position++] = '/';
+    if (s > 0) out[position++] = XT_ARTIFACT_PATH_SEPARATOR;
     memcpy(out + position, segments[s], segmentLength);
     position += segmentLength;
   }
@@ -325,14 +325,14 @@ static xt_value xt_path_relative(const char *from, const char *to) {
   result[0] = '\0';
   size_t position = 0;
   for (size_t i = common; i < fromParts.count && position + 3 < sizeof(result); i++) {
-    if (position > 0) result[position++] = '/';
+    if (position > 0) result[position++] = XT_ARTIFACT_PATH_SEPARATOR;
     result[position++] = '.';
     result[position++] = '.';
   }
   for (size_t i = common; i < toParts.count; i++) {
     size_t segmentLength = strlen(toParts.segments[i]);
     if (position + segmentLength + 2 > sizeof(result)) break;
-    if (position > 0) result[position++] = '/';
+    if (position > 0) result[position++] = XT_ARTIFACT_PATH_SEPARATOR;
     memcpy(result + position, toParts.segments[i], segmentLength);
     position += segmentLength;
   }

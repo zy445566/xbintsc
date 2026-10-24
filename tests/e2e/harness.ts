@@ -13,6 +13,7 @@ import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
 import { hasClang } from "../helpers.js";
+import { normalizeEol } from "../platform.js";
 
 const describeWithClang = hasClang() ? describe : describe.skip;
 
@@ -29,6 +30,13 @@ export interface RunOptions {
   files?: Record<string, string>;
   /** Extra environment variables for the compiled binary (e.g. XT_GC_THRESHOLD). */
   env?: Record<string, string>;
+  /**
+   * Return stdout/stderr exactly as captured. By default CRLF is normalised to
+   * LF: the runtime opens stdout in binary mode on Windows, so a CRLF a test
+   * sees normally came from a child process or another host text layer, not
+   * from the language. Byte-level assertions (the UTF-8 output tests) opt out.
+   */
+  raw?: boolean;
 }
 
 export interface RunResult {
@@ -44,6 +52,8 @@ export interface NodeRunOptions {
   timeout?: number;
   /** Extra modules written next to the entry file, keyed by relative path. */
   files?: Record<string, string>;
+  /** See {@link RunOptions.raw}. */
+  raw?: boolean;
 }
 
 export interface E2EHarness {
@@ -97,6 +107,13 @@ export function describeE2E(
       }
     };
 
+    /** Host text-mode translation is not part of the language; drop it unless
+     *  the test explicitly asked for the captured bytes. */
+    const capture = (text: string | null, raw: boolean | undefined): string => {
+      const value = text ?? "";
+      return raw === true ? value : normalizeEol(value);
+    };
+
     const runProgramFull = (source: string, runOptions: RunOptions = {}): RunResult => {
       const entry = join(workdir, `${runOptions.name ?? `program_${Math.random().toString(36).slice(2)}`}.ts`);
       writeProgramFiles(runOptions.files ?? {});
@@ -115,7 +132,11 @@ export function describeE2E(
         ...(runOptions.env ? { env: { ...process.env, ...runOptions.env } } : {}),
         ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
       });
-      return { stdout: executed.stdout ?? "", stderr: executed.stderr ?? "", status: executed.status };
+      return {
+        stdout: capture(executed.stdout, runOptions.raw),
+        stderr: capture(executed.stderr, runOptions.raw),
+        status: executed.status,
+      };
     };
 
     const runNodeProgram = (source: string, runOptions: NodeRunOptions = {}): string => {
@@ -127,7 +148,7 @@ export function describeE2E(
         ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
       });
       expect(executed.status).toBe(0);
-      return (executed.stdout ?? "").trim();
+      return capture(executed.stdout, runOptions.raw).trim();
     };
 
     const harness: E2EHarness = {
@@ -147,6 +168,7 @@ export function describeE2E(
           ...(runOptions.name ? { name: runOptions.name } : {}),
           ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
           ...(runOptions.files ? { files: runOptions.files } : {}),
+          ...(runOptions.raw ? { raw: true } : {}),
         });
         expect(ours).toBe(theirs);
       },

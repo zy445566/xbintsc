@@ -1,0 +1,16 @@
+# Editors on Windows default to CRLF; the repository stores and checks text out
+# with LF (see .gitattributes), and tests/platform.test.ts fails a working tree
+# that has CRLF text. Make the default explicit instead of relying on every
+# editor's own setting.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Markdown uses two trailing spaces as a hard line break.
+trim_trailing_whitespace = false

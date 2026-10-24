@@ -14,6 +14,7 @@ import {
 import type { ClassInfo, FunctionInfo, SymbolInfo } from "../../binder/binder.js";
 import { SymbolKind } from "../../binder/binder.js";
 import { i64, XT_UNDEFINED } from "../values.js";
+import { ARTIFACT_LINE_ENDING, artifactPath } from "../../canonical.js";
 import { RUNTIME_DECLARATIONS, type FunctionState } from "./state.js";
 import { propertyNameText } from "./tables.js";
 import type { Generator } from "./generator.js";
@@ -75,7 +76,7 @@ export const moduleMethods: ModuleMethods = {
     // the self-hosting fixpoint) is identical whether the compiler runs on
     // Node (which uses `\` on Windows) or as a compiled binary (which always
     // produces `/`).
-    const sourceName = this.sourceFile.fileName.split("\\").join("/");
+    const sourceName = artifactPath(this.sourceFile.fileName);
     const header = [
       "; ModuleID = 'xbintsc'",
       "source_filename = \"" + sourceName + "\"",
@@ -93,7 +94,7 @@ export const moduleMethods: ModuleMethods = {
       ...this.functions,
       "",
       ...this.debugMetadataLines(),
-    ].join("\n");
+    ].join(ARTIFACT_LINE_ENDING);
   },
 
   // -- module level --------------------------------------------------------
@@ -149,7 +150,7 @@ export const moduleMethods: ModuleMethods = {
       /* Normalise separators like `source_filename`: the compiler may run under
        * Node (`\`) or as a self-hosted binary (`/`), and the IR must stay
        * byte-identical across the two. */
-      const filePointer = this.internStatic(this.fileNameOf(fn.node).split("\\").join("/"));
+      const filePointer = this.internStatic(artifactPath(this.fileNameOf(fn.node)));
       this.emit(
         `  call void @xt_stack_push(i8* ${namePointer}, i8* ${filePointer}, i32 ${this.lineOf(fn.node)})`,
       );
@@ -267,7 +268,7 @@ export const moduleMethods: ModuleMethods = {
       ? state.escapePointers.map((ptr) => `  call void asm sideeffect "", "r"(i64* ${ptr})`)
       : [];
     const lines = [...state.allocas.map((a) => `  ${a}`), ...escapes, ...state.buffer];
-    this.functions.push([header, ...lines, "}", ""].join("\n"));
+    this.functions.push([header, ...lines, "}", ""].join(ARTIFACT_LINE_ENDING));
   },
 
   emitMain(): void {
@@ -307,7 +308,7 @@ export const moduleMethods: ModuleMethods = {
         "  ret i32 0",
         "}",
         "",
-      ].join("\n"),
+      ].join(ARTIFACT_LINE_ENDING),
     );
   },
 

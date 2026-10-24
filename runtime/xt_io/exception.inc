@@ -217,9 +217,11 @@ static xt_value xt_file_url(const char *path) {
   const char *prefix = "file://";
   for (; *prefix; prefix++) url[j++] = *prefix;
 #if defined(_WIN32)
-  url[j++] = '/';
+  url[j++] = XT_ARTIFACT_PATH_SEPARATOR;
 #endif
-  for (const char *p = path; *p && j < sizeof(url) - 1; p++) url[j++] = (*p == '\\') ? '/' : *p;
+  for (const char *p = path; *p && j < sizeof(url) - 1; p++) {
+    url[j++] = (*p == '\\') ? XT_ARTIFACT_PATH_SEPARATOR : *p;
+  }
   url[j] = 0;
   return xt_string_from_cstr(url);
 }

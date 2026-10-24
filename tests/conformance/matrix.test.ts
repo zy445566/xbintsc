@@ -4,21 +4,20 @@
  * that fixes it.
  */
 
-import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { MATRIX_FILES, renderSupportMatrix } from "../../scripts/support-matrix.js";
+import { readTextFile } from "../platform.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 describe("support matrix", () => {
   for (const language of ["en", "zh"] as const) {
     it(`matches the corpus (${language})`, () => {
-      // Git may check the file out with CRLF on Windows. The renderer always
-      // produces LF, so compare on a normalised copy rather than failing on a
-      // platform-specific line ending.
-      const committed = readFileSync(resolve(root, MATRIX_FILES[language]), "utf8").replace(/\r\n/g, "\n");
+      // The renderer always produces LF; read through the helper so a Windows
+      // checkout with CRLF cannot fail the comparison.
+      const committed = readTextFile(resolve(root, MATRIX_FILES[language]));
       const expected = renderSupportMatrix(language);
       expect(
         committed,

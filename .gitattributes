@@ -1,4 +1,20 @@
-# Keep documentation byte-identical across platforms. Git may otherwise check
-# Markdown out with CRLF on Windows (core.autocrlf), which makes generated files
-# differ from the LF output of `npm run docs:matrix`.
-*.md text eol=lf
+# Canonical line endings: text is stored and checked out with LF on every host.
+#
+# Windows defaults to `core.autocrlf=true`, which rewrites text files to CRLF on
+# checkout. That leaks into the suite as CRLF fixtures, generated documents that
+# no longer match their LF renderer, and source text that differs per host. The
+# attribute applies to every path Git detects as text; the binary assets this
+# repository tracks are listed explicitly so the classification cannot drift.
+* text=auto eol=lf
+
+# Never normalise or diff these as text.
+*.a binary
+*.lib binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.mp3 binary
+*.mp4 binary

@@ -11,6 +11,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionRegistry } from "../extensions/registry.js";
+import { artifactPath } from "../canonical.js";
 import { hashParts } from "./cache.js";
 
 /** Runtime sources, headers and `#include`d `.inc` fragments, plus prebuilt archives. */
@@ -56,7 +57,7 @@ export function compilerFingerprint(): string {
         if (entry.isDirectory()) {
           walk(full);
         } else if (entry.name.endsWith(".ts")) {
-          parts.push(relative(sourceRoot, full).replace(/\\/g, "/"), readFileSync(full, "utf8"));
+          parts.push(artifactPath(relative(sourceRoot, full)), readFileSync(full, "utf8"));
         }
       }
     };

@@ -27,3 +27,9 @@ source.ts
   with the compiler yields a working `xbintsc` binary, and that binary rebuilds
   itself with byte-identical LLVM IR (source ≡ generation 1 ≡ generation 2 ≡
   generation 3). The runtime is still hand-written C.
+- **Canonical artifacts**: anything byte-compared uses one encoding on every
+  host. `src/canonical.ts` defines the IR/debug/fingerprint path separator (`/`)
+  and line ending (LF), with `artifactPath()` for native paths entering an
+  artifact; the runtime uses `XT_ARTIFACT_PATH_SEPARATOR` (`runtime/rt.h`) when it renders
+  `path` results and `file://` URLs. User-facing native paths — diagnostics,
+  `import.meta.filename`, `process.cwd()` — keep the host separator, like Node.

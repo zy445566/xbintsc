@@ -8,7 +8,7 @@
  * they are absent (a trim checkout) the suite is skipped rather than failing.
  */
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -20,6 +20,7 @@ import { guiExtension } from "../../src/extensions/gui/index.js";
 import { mediaExtension } from "../../src/extensions/media/index.js";
 import { findRuntimeLibrary } from "../../src/driver/runtime-lib.js";
 import { createGuiHarness, guiAvailable } from "./gui-helpers.js";
+import { readTextFile, toPosixPath } from "../platform.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const resourceDir = join(root, "examples", "resources");
@@ -30,7 +31,7 @@ const exampleDir = join(root, "examples", "gui");
 /** A local path safe to embed in an HTML attribute (no percent-encoding: the
  * media loader hands the string straight to FFmpeg). */
 function mediaSrc(absolutePath: string): string {
-  return absolutePath.split("\\").join("/");
+  return toPosixPath(absolutePath);
 }
 
 const resourcesAvailable = existsSync(moviePath) && existsSync(soundPath);
@@ -112,8 +113,8 @@ describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui + 
   it("runs the media example from the repository root", () => {
     const workdir = mkdtempSync(join(tmpdir(), "xbintsc-media-"));
     try {
-      writeFileSync(join(workdir, "media.html"), readFileSync(join(exampleDir, "media.html"), "utf8"));
-      writeFileSync(join(workdir, "media.ts"), readFileSync(join(exampleDir, "media.ts"), "utf8"));
+      writeFileSync(join(workdir, "media.html"), readTextFile(join(exampleDir, "media.html")));
+      writeFileSync(join(workdir, "media.ts"), readTextFile(join(exampleDir, "media.ts")));
       const extensions = createDefaultRegistry().register(guiExtension).register(mediaExtension);
       const result = build(join(workdir, "media.ts"), {
         emit: "exe",

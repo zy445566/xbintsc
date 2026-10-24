@@ -19,6 +19,7 @@ import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { nativeExtensionFromManifest } from "../../src/extensions/native.js";
 import { findRuntimeDir } from "../../src/driver/paths.js";
+import { toPosixPath } from "../platform.js";
 
 function firstAvailable(candidates: readonly (string | undefined)[]): string | undefined {
   for (const candidate of candidates) {
@@ -162,7 +163,7 @@ opt-level = 3
     writeFileSync(
       join(sourceDir, "lib.rs"),
       `
-      include!("${resolve(findRuntimeDir(), "xt_ext.rs").replace(/\\/g, "/")}");
+      include!("${toPosixPath(resolve(findRuntimeDir(), "xt_ext.rs"))}");
 
       #[no_mangle]
       pub extern "C" fn mathx_add(argc: i32, argv: *const XtValue) -> XtValue {

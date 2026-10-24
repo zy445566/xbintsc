@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readTextFile, toPosixPath } from "../platform.js";
 
 /**
  * The canonical language documentation is split into one page per compiler
@@ -30,12 +31,8 @@ function pagesUnder(dir: string, prefix = ""): string[] {
   return pages.sort();
 }
 
-function toPosix(path: string): string {
-  return path.replaceAll("\\", "/");
-}
-
 function linkBetween(from: string, to: string): string {
-  return toPosix(relative(dirname(from), to));
+  return toPosixPath(relative(dirname(from), to));
 }
 
 function indexLink(area: string, language: "en" | "zh", page: string): string {
@@ -64,17 +61,15 @@ describe.each(AREAS)("%s documentation", (area) => {
 
   it("links every page from its index", () => {
     for (const page of englishPages) {
-      const englishIndex = readFileSync(
+      const englishIndex = readTextFile(
         page.includes("/")
           ? join(englishBase, `${page.slice(0, page.lastIndexOf("/"))}.md`)
           : join(root, "doc", `${area}.md`),
-        "utf8",
       );
-      const chineseIndex = readFileSync(
+      const chineseIndex = readTextFile(
         page.includes("/")
           ? join(chineseBase, `${page.slice(0, page.lastIndexOf("/"))}.md`)
           : join(root, "doc", "zh-CN", `${area}.md`),
-        "utf8",
       );
       expect(englishIndex).toContain(`./${indexLink(area, "en", page)}`);
       expect(chineseIndex).toContain(`./${indexLink(area, "zh", page)}`);
@@ -85,8 +80,8 @@ describe.each(AREAS)("%s documentation", (area) => {
     for (const page of englishPages) {
       const englishPath = join(englishBase, page);
       const chinesePath = join(chineseBase, page);
-      const english = readFileSync(englishPath, "utf8");
-      const chinese = readFileSync(chinesePath, "utf8");
+      const english = readTextFile(englishPath);
+      const chinese = readTextFile(chinesePath);
 
       expect(english.startsWith("# ")).toBe(true);
       expect(chinese.startsWith("# ")).toBe(true);

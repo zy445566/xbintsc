@@ -14,7 +14,7 @@ import { Parser } from "../../parser/parser.js";
 import type { AssetLoader } from "../../extensions/registry.js";
 import { classifyDependency } from "./resolve.js";
 import { collectRequireSites, isNodeModulesPath, usesCommonJS } from "./commonjs.js";
-import type { ModuleRecord } from "./types.js";
+import type { ModuleRecord, OriginRange } from "./types.js";
 
 /**
  * True when an import has no runtime binding, so it is not a module edge:
@@ -109,9 +109,12 @@ export function loadGraph(
      * module before it is parsed. The core only sees the transformed text. */
     const loader = assetLoaders[extname(path).toLowerCase()];
     let text = raw;
+    let originRanges: readonly OriginRange[] | undefined;
     if (loader) {
       try {
-        text = loader(path, raw).moduleSource;
+        const loaded = loader(path, raw);
+        text = loaded.moduleSource;
+        originRanges = loaded.sourceRanges;
       } catch (error) {
         diagnostics.error(
           DiagnosticCode.CodegenError,
@@ -136,6 +139,7 @@ export function loadGraph(
       originalNames: new Map(),
       finalNames: new Map(),
       commonjs: false,
+      originRanges,
     };
     // `require` / `module` / `exports` are only honoured inside `node_modules`,
     // so user code keeps its ESM-only diagnostic.

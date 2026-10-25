@@ -29,12 +29,20 @@ import {
 import { SymbolKind, type SymbolInfo } from "../../../binder/binder.js";
 import { DiagnosticCode } from "../../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_FALSE, XT_NULL, XT_TRUE, XT_UNDEFINED } from "../../values.js";
-import { BUILTIN_FUNCTION_VALUES, CTOR_FUNCTIONS, ERROR_CONSTRUCTORS, FIRST_CLASS_CONSTRUCTORS } from "../tables.js";
+import {
+  BUILTIN_FUNCTION_VALUES,
+  CTOR_FUNCTIONS,
+  ERROR_CONSTRUCTORS,
+  FIRST_CLASS_CONSTRUCTORS,
+  NAMESPACE_VALUES,
+} from "../tables.js";
+import type { GlobalValue } from "../../../extensions/registry.js";
 import type { Generator } from "../generator.js";
 
 export interface PrimaryExpressionMethods {
   emitExpression(this: Generator, node: Expression): string;
   emitIdentifier(this: Generator, identifier: Identifier): string;
+  emitGlobalValue(this: Generator, value: GlobalValue): string;
   emitFunctionValue(this: Generator, symbol: SymbolInfo): string;
   emitTemplate(this: Generator, node: TemplateLiteral): string;
   emitTaggedTemplate(this: Generator, node: TaggedTemplateExpression): string;
@@ -222,6 +230,21 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return rest;
       }
       default: {
+        const namespaceValue = NAMESPACE_VALUES[identifier.text];
+        if (namespaceValue) {
+          /* `Math` is a namespace at call sites (`Math.max(a, b)` becomes
+           * `xt_math_call`) and an object as a value: `const cos = Math.cos`,
+           * `const { sqrt, PI } = Math`. */
+          this.extraDeclarations.add(`declare i64 @${namespaceValue}(i32, i64*)`);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @${namespaceValue}(i32 0, i64* null)`);
+          return result;
+        }
+        const extensionGlobal = this.globalValues[identifier.text];
+        if (extensionGlobal) {
+          // `window`, `document`, `AudioContext`: a host-provided global value.
+          return this.emitGlobalValue(extensionGlobal);
+        }
         if (FIRST_CLASS_CONSTRUCTORS.has(identifier.text)) {
           // `const A = Array`, `arr.filter(Boolean)`, `new (Map)()`: the
           // constructor is an ordinary function value backed by the runtime.
@@ -269,16 +292,40 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
     }
   },
 
+  /**
+   * Read an extension-provided global (`window`, `document`, `new Image()`).
+   * The getter is a normal runtime call with the uniform ABI; the optional
+   * argument is how one getter serves a whole family of host types.
+   */
+  emitGlobalValue(value: GlobalValue): string {
+    this.extraDeclarations.add(`declare i64 @${value.symbol}(i32, i64*)`);
+    let argc = "0";
+    let pointer = "i64* null";
+    if (value.argument !== undefined) {
+      const argument = this.stringValue(value.argument);
+      const slot = `%gval${this.current.allocas.length}`;
+      this.current.allocas.push(`${slot} = alloca i64, i32 1`);
+      const cell = this.reg();
+      this.emit(`  ${cell} = getelementptr i64, i64* ${slot}, i32 0`);
+      this.emit(`  store i64 ${argument}, i64* ${cell}`);
+      argc = "1";
+      pointer = `i64* ${slot}`;
+    }
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @${value.symbol}(i32 ${argc}, ${pointer})`);
+    return result;
+  },
+
   emitFunctionValue(symbol: SymbolInfo): string {
     const declaration = symbol.declarations[0];
     const fn = declaration ? this.binding.functionOfNode.get(declaration) : undefined;
     if (!fn) return i64(XT_UNDEFINED);
-    const cast = this.reg();
-    this.emit(`  ${cast} = bitcast i64 (i64, i64, i32, i64*)* @${this.functionName(fn)} to i8*`);
-    const closure = this.reg();
-    this.emit(`  ${closure} = call i64 @xt_closure_new(i8* ${cast}, i32 0, i64* null)`);
-    this.emitFunctionMetadata(closure, fn);
-    return closure;
+    /* A declared function is a value like any closure: it captures the outer
+     * bindings its body mentions, so build the environment instead of calling
+     * `xt_closure_new` with a null one. A null environment silently turns every
+     * free variable into `undefined` and drops the writes back to the box
+     * (`function bump() { count += 1 }` never advanced `count`). */
+    return this.emitClosureValue(fn);
   },
 
   emitThis(): string {
@@ -340,6 +387,14 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           const args = this.emitArguments(node.arguments);
           const result = this.reg();
           this.emit(`  ${result} = call i64 @${ctor}(i32 ${args.argc}, i64* ${args.ptr})`);
+          return result;
+        }
+        const extensionConstructor = this.globalValues[identifier.text];
+        if (extensionConstructor) {
+          const ctorValue = this.emitGlobalValue(extensionConstructor);
+          const args = this.emitArguments(node.arguments);
+          const result = this.reg();
+          this.emit(`  ${result} = call i64 @xt_new(i64 ${ctorValue}, i32 ${args.argc}, i64* ${args.ptr})`);
           return result;
         }
         if (identifier.text === "Object") {

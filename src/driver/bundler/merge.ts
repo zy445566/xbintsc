@@ -176,9 +176,22 @@ export function bundleModules(
    * diagnostic can name the right file and line instead of pointing into the
    * entry module (whose text happens to start at the same offsets). */
   const origins = new Map<object, string>();
+  /* A synthesized module (an extension asset loader such as the `gui` `.html`
+   * transform) may contain spans copied from another file — a `<script
+   * src="app.js">` body, say. Nodes inside such a span keep that file, so a
+   * diagnostic points at real source and a plain-`.js` script stays exempt
+   * from the type checker. */
+  const originOf = (record: ModuleRecord, node: Node): string => {
+    const ranges = record.originRanges;
+    if (ranges === undefined) return record.path;
+    for (const range of ranges) {
+      if (node.start >= range.start && node.end <= range.end) return range.file;
+    }
+    return record.path;
+  };
   const trackOrigin = (record: ModuleRecord, root: Node): void => {
     const visit = (node: Node): void => {
-      origins.set(node, record.path);
+      origins.set(node, originOf(record, node));
       const fields = node as unknown as Record<string, unknown>;
       for (const key of Object.keys(fields)) {
         if (key === "kind" || key === "start" || key === "end" || key === "text" || key === "value" || key === "raw") {

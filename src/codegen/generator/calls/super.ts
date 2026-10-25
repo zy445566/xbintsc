@@ -43,8 +43,16 @@ export const superCallMethods: SuperCallMethods = {
       );
       return result;
     }
+    /* The parent prototype is decided by the *class* whose constructor is
+     * running, never by walking `this`: an instance of a subclass sits at the
+     * bottom of a longer chain, so `getPrototype(getPrototype(this))` from a
+     * base constructor resolves to that very class again (`C extends B extends
+     * A`: inside `B`, the walk answers `B.prototype`) and `super()` recurses
+     * forever. `getPrototype(getPrototype(C))` is `C.prototype`'s parent, which
+     * is what the heritage clause installed. */
+    const owner = classInfo ? this.emitClassReference(classInfo) : thisValue;
     const proto = this.reg();
-    this.emit(`  ${proto} = call i64 @xt_object_get_prototype(i64 ${thisValue})`);
+    this.emit(`  ${proto} = call i64 @xt_function_get_prototype(i64 ${owner})`);
     const parentProto = this.reg();
     this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${proto})`);
     const key = this.stringValue("__ctor");
@@ -81,12 +89,29 @@ export const superCallMethods: SuperCallMethods = {
   },
 
   emitSuperHolder(): string {
+    /* Same reasoning as `emitSuperConstructor`: the holder is a property of the
+     * *class*, not of the receiver. Walking `this` would resolve `super.foo()`
+     * inside a base method to the receiver's own prototype, so a subclass
+     * instance would call the override it was trying to bypass. */
+    const classInfo = this.current.fn.classInfo;
+    if (classInfo) {
+      const owner = this.emitClassReference(classInfo);
+      /* A static context has the constructor as `this`, and its own prototype
+       * already is the parent constructor (static inheritance). */
+      if (this.current.fn.isStatic) {
+        const parentCtor = this.reg();
+        this.emit(`  ${parentCtor} = call i64 @xt_object_get_prototype(i64 ${owner})`);
+        return parentCtor;
+      }
+      const ownProto = this.reg();
+      this.emit(`  ${ownProto} = call i64 @xt_function_get_prototype(i64 ${owner})`);
+      const parentProto = this.reg();
+      this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${ownProto})`);
+      return parentProto;
+    }
     const thisValue = this.emitThis();
     const holder = this.reg();
     this.emit(`  ${holder} = call i64 @xt_object_get_prototype(i64 ${thisValue})`);
-    /* For an instance `this` is the object, so the parent prototype is one
-     * more hop away. A static context has `this` bound to the constructor,
-     * whose own prototype already is the parent constructor. */
     if (this.current.fn.isStatic) return holder;
     const parentProto = this.reg();
     this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${holder})`);

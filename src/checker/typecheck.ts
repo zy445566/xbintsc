@@ -42,7 +42,7 @@ import { Flow, narrow, withoutNullish } from "./flow.js";
 import { ANY, printType, primitive, unionOf, unwrap, widenType, type Type } from "./type-model.js";
 import { TypeResolver } from "./type-system.js";
 import { typeCheckerMembers, type TypeCheckerMembers } from "./typecheck-types.js";
-import { fileNameOf, isDependencyNode } from "./source.js";
+import { fileNameOf, isUntypedNode } from "./source.js";
 
 export interface CheckContext {
   readonly returnType: Type;
@@ -84,7 +84,7 @@ export class TypeChecker {
   }
 
   private checkStatement(statement: Statement, flow: Flow, context: CheckContext): void {
-    if (isDependencyNode(this.sourceFile, statement)) return;
+    if (isUntypedNode(this.sourceFile, statement)) return;
     switch (statement.kind) {
       case SyntaxKind.VariableStatement:
         this.checkVariableList((statement as VariableStatement).declarationList, flow, context);
@@ -285,7 +285,7 @@ export class TypeChecker {
   private checkAssignable(expression: Expression, target: Type, flow: Flow, context: CheckContext): Type {
     if (target.kind === "any") return this.checkExpression(expression, flow, context);
     const source = this.checkExpression(expression, flow, context);
-    if (!isAssignable(source, target) && !isDependencyNode(this.sourceFile, expression)) {
+    if (!isAssignable(source, target) && !isUntypedNode(this.sourceFile, expression)) {
       this.report(
         DiagnosticCode.TypeMismatch,
         `Type '${printType(source)}' is not assignable to type '${printType(target)}'.`,
@@ -300,7 +300,7 @@ export class TypeChecker {
   }
 
   checkExpression(expression: Expression, flow: Flow, context: CheckContext): Type {
-    if (isDependencyNode(this.sourceFile, expression)) return ANY;
+    if (isUntypedNode(this.sourceFile, expression)) return ANY;
     switch (expression.kind) {
       case SyntaxKind.NumericLiteral:
       case SyntaxKind.StringLiteral:
@@ -462,7 +462,7 @@ export class TypeChecker {
       }
       const target = this.checkAssignmentTarget(binary.left, flow, context);
       const value = this.checkExpression(binary.right, flow, context);
-      if (!isAssignable(value, target) && !isDependencyNode(this.sourceFile, binary.right)) {
+      if (!isAssignable(value, target) && !isUntypedNode(this.sourceFile, binary.right)) {
         this.report(DiagnosticCode.TypeMismatch, `Type '${printType(value)}' is not assignable to type '${printType(target)}'.`, binary.right);
       }
       return value;
@@ -541,7 +541,7 @@ export class TypeChecker {
       if (!parameter) continue;
       const restElement = parameter.rest && parameter.type.kind === "array" ? parameter.type.element : parameter.type;
       const expected = this.substitute(restElement, substitutions);
-      if (!isAssignable(argumentType, expected) && !isDependencyNode(this.sourceFile, argument)) {
+      if (!isAssignable(argumentType, expected) && !isUntypedNode(this.sourceFile, argument)) {
         this.report(
           DiagnosticCode.TypeMismatch,
           `Argument of type '${printType(argumentType)}' is not assignable to parameter of type '${printType(expected)}'.`,

@@ -20,7 +20,7 @@ import {
 import { SymbolKind, type BindResult, type FunctionInfo } from "../binder/binder.js";
 import { DiagnosticCode, type DiagnosticBag } from "../diagnostics/diagnostic.js";
 import { ASSIGNMENT_OPERATORS } from "../codegen/generator/tables.js";
-import { fileNameOf, isDependencyNode } from "./source.js";
+import { fileNameOf, isUntypedNode } from "./source.js";
 import { walk } from "./walk.js";
 
 interface Arity {
@@ -115,7 +115,7 @@ export function checkCallArity(
   };
   walk(sourceFile, (node) => {
     if (node.kind !== SyntaxKind.CallExpression) return;
-    if (isDependencyNode(sourceFile, node)) return;
+    if (isUntypedNode(sourceFile, node)) return;
     const call = node as CallExpression;
     if (call.optional) return;
     if (call.arguments.some((argument) => argument.kind === SyntaxKind.SpreadElement)) return;

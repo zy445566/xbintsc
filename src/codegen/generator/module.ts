@@ -382,8 +382,15 @@ export const moduleMethods: ModuleMethods = {
     if (parentValue) {
       this.emit(`  call i64 @xt_object_set_prototype(i64 ${ctor}, i64 ${parentValue})`);
     }
+    /* `A.prototype.constructor === A`: the standard property, and what
+     * `new this.constructor()` (Three.js `Matrix3.clone`, …) relies on. The
+     * hidden `__ctor` beside it is the internal hook `super(...)` and the
+     * implicit derived constructor read; keeping both means `constructor` can
+     * be overwritten by user code without breaking inheritance. */
     const ctorKey = this.stringValue("__ctor");
     this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${ctorKey}, i64 ${ctor})`);
+    const constructorKey = this.stringValue("constructor");
+    this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${constructorKey}, i64 ${ctor})`);
     /* Publish the constructor before static fields and blocks run: they may
      * refer to the class by name (`static { A.count = 1 }`), and by then the
      * class binding is already initialised in JavaScript. */

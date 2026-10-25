@@ -72,6 +72,12 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
    * styles are available now (see `computedStyle`). */
   xt_gui_emit(win, "DOMContentLoaded");
   xt_gui_emit(win, "load");
+  /* A page that renders itself must start painting *before* its first
+   * animation frame is requested — the `ready` event it waits for is fired by
+   * the first presented frame, so waiting for a callback to start the pump
+   * would deadlock. Programs that call `run()` keep their own loop; the pump
+   * steps aside for it. */
+  xt_browser_schedule_frame();
   return XT_UNDEFINED;
 }
 
@@ -573,6 +579,9 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "hitTest", (void *)win_hit_test);
   define_method(proto, "sendEvent", (void *)win_send_event);
   define_method(proto, "stats", (void *)win_stats);
+  /* The browser surface a page written for a real page expects (`innerWidth`,
+   * `setTimeout`, `navigator`, `matchMedia`, …) lives in `browser.cpp`. */
+  xt_browser_install_window(proto);
   g_window_proto = proto;
   return proto;
 }

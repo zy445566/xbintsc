@@ -15,7 +15,7 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 ## Objects
 
 - `Object.keys` / `values` / `entries` / `assign` / `getOwnPropertyNames` / `groupBy`, object spread `{...obj}`.
-- `Object.defineProperty` / `getOwnPropertyDescriptor(s)` — data and accessor descriptors; the attribute flags are reported but not enforced on later writes/enumeration.
+- `Object.defineProperty` / `defineProperties` / `getOwnPropertyDescriptor(s)` — data and accessor descriptors, one at a time or in bulk; the attribute flags are reported but not enforced on later writes/enumeration.
 - `Object.freeze` / `is_frozen` / `from_entries`, `Object.getPrototypeOf`.
 - `Object.prototype`: `hasOwnProperty` / `toString` / `valueOf` / `isPrototypeOf` / `propertyIsEnumerable` / `__proto__`; `Object.getPrototypeOf({}) === Object.prototype`.
 - First-class built-in constructors (`const A = Array`, `new A(...)`, `A.isArray`, `x instanceof A`) are covered in [Codegen](./codegen.md#llvm-ir-code-generation-codegen).
@@ -32,6 +32,7 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 - Number formatting and coercion match Node: `toFixed` / `toPrecision` / `toExponential`, hex / octal / binary parsing, and the full `+` / relational `ToPrimitive` rules. These are covered by the differential tests.
 - `BigInt` literals and values: arbitrary precision arithmetic, bitwise and shift operators, comparisons, `toString(radix)`, `BigInt()`, `BigInt.asIntN` / `BigInt.asUintN`.
 - `Math`: the full function set and constants.
+- `Math` is also a first-class object: `const cos = Math.cos`, `[1, 2].map(Math.max)` and `const { sqrt, PI } = Math` read members as values (`xt_math_object()` caches one native closure per function, so reads stay cheap).
 - `Number` statics and `Number()` conversion; `parseInt` / `parseFloat` / `isNaN` / `isFinite`.
 
 ## JSON

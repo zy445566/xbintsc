@@ -14,6 +14,7 @@ import { i64, XT_UNDEFINED } from "../values.js";
 import type {
   BuiltinFunction,
   ExtensionModule,
+  GlobalValue,
   ModuleExport,
   ModuleExports,
 } from "../../extensions/registry.js";
@@ -25,6 +26,8 @@ export class GeneratorContext {
   readonly sourceFile: SourceFileNode;
   readonly diagnostics: DiagnosticBag;
   readonly builtins: Readonly<Record<string, BuiltinFunction>>;
+  /** Extension-provided global values, read through a nullary runtime getter. */
+  readonly globalValues: Readonly<Record<string, GlobalValue>>;
   readonly modules: Readonly<Record<string, ExtensionModule>>;
   /** Module specifier -> extension name for known but unregistered extensions. */
   readonly moduleHints: Readonly<Record<string, string>>;
@@ -104,6 +107,7 @@ export class GeneratorContext {
     this.diagnostics = diagnostics;
     this.binding = binding ?? bind(sourceFile);
     this.builtins = options.builtins ?? {};
+    this.globalValues = options.globalValues ?? {};
     this.modules = options.modules ?? {};
     this.moduleHints = options.moduleHints ?? {};
     this.target = options.target ?? { platform: process.platform, arch: process.arch };
@@ -359,31 +363,30 @@ export class GeneratorContext {
   declareSlot(symbol: SymbolInfo, initial: string): void {
     const globalName = this.moduleGlobals.get(symbol.id);
     if (globalName) {
+      let boxed = initial;
       if (symbol.boxed) {
-        const box = this.reg();
-        this.emit(`  ${box} = call i64 @xt_box_new(i64 ${initial})`);
-        this.emit(`  store i64 ${box}, i64* ${globalName}`);
-      } else {
-        this.emit(`  store i64 ${initial}, i64* ${globalName}`);
+        boxed = this.reg();
+        this.emit(`  ${boxed} = call i64 @xt_box_new(i64 ${initial})`);
       }
+      this.emit(`  store i64 ${boxed}, i64* ${globalName}`);
       this.current.slots.set(symbol.id, { ptr: globalName, boxed: symbol.boxed });
       return;
     }
     const ptr = this.alloca();
+    let stored = initial;
     if (symbol.boxed) {
-      const box = this.reg();
-      this.emit(`  ${box} = call i64 @xt_box_new(i64 ${initial})`);
-      this.emit(`  store i64 ${box}, i64* ${ptr}`);
-    } else {
-      this.emit(`  store i64 ${initial}, i64* ${ptr}`);
+      stored = this.reg();
+      this.emit(`  ${stored} = call i64 @xt_box_new(i64 ${initial})`);
     }
+    this.emit(`  store i64 ${stored}, i64* ${ptr}`);
     this.current.slots.set(symbol.id, { ptr, boxed: symbol.boxed });
   }
 
+  /** Bind a capture: the environment carries the symbol's box, so reads and
+   *  writes inside the closure see the enclosing binding. */
   defineCaptureSlot(symbol: SymbolInfo, box: string): void {
     const ptr = this.alloca();
     this.emit(`  store i64 ${box}, i64* ${ptr}`);
-    // A captured symbol is always boxed; the environment holds the box.
     this.current.slots.set(symbol.id, { ptr, boxed: true });
   }
 
@@ -590,10 +593,6 @@ function requireSpecifier(node: Node): string | undefined {
 
 /** A bare module specifier (`fs`, `node:fs`, `@scope/pkg`), not a file path. */
 function isBareSpecifier(specifier: string): boolean {
-  return (
-    !specifier.startsWith(".") &&
-    !specifier.startsWith("/") &&
-    !specifier.startsWith("\\") &&
-    !/^[A-Za-z]:[\\/]/.test(specifier)
-  );
+  const relative = [".", "/", "\\"].some((prefix) => specifier.startsWith(prefix));
+  return !relative && !/^[A-Za-z]:[\\/]/.test(specifier);
 }

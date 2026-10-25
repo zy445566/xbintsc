@@ -26,3 +26,28 @@ export function isDependencyNode(sourceFile: SourceFileNode, node: Node): boolea
   const origin = sourceFile.origins?.get(node);
   return origin !== undefined && /(^|[\\/])node_modules[\\/]/.test(origin);
 }
+
+/**
+ * True when a node came from a plain JavaScript file (`.js`, `.mjs`, `.cjs`,
+ * `.jsx`).
+ *
+ * A JavaScript program is untyped by definition: TypeScript only infers and
+ * reports on such files with `checkJs`, and xbintsc honours the same boundary.
+ * Inferring types from unannotated JavaScript rejects valid code — a flag
+ * assigned `false` then `true` narrows to `false`, a method installed on a
+ * state object after its literal (`Game.foo = …`) is not a property of the
+ * literal, a closure variable initialized to `null` is "not callable", a call
+ * that relies on default parameters looks like an arity error. Names are still
+ * resolved (that is what code generation needs), and redeclarations are still
+ * reported, but no type, arity or property diagnostic is produced.
+ */
+export function isPlainJavaScriptNode(sourceFile: SourceFileNode, node: Node): boolean {
+  const origin = sourceFile.origins?.get(node) ?? sourceFile.fileName;
+  return /\.(js|mjs|cjs|jsx)$/i.test(origin);
+}
+
+/** True when a node is exempt from type checking: plain JavaScript or a
+ * bundled dependency (see {@link isDependencyNode}). */
+export function isUntypedNode(sourceFile: SourceFileNode, node: Node): boolean {
+  return isDependencyNode(sourceFile, node) || isPlainJavaScriptNode(sourceFile, node);
+}

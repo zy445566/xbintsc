@@ -111,8 +111,11 @@ export const invocationCallMethods: InvocationCallMethods = {
         const fn = declaration ? this.binding.functionOfNode.get(declaration) : undefined;
         /* Generator and `async` functions are not called directly: the call
          * must create a suspended generator / start a coroutine, so fall
-         * through to the closure-call path. */
-        if (fn && !fn.isGenerator && !fn.isAsync) {
+         * through to the closure-call path. The same applies to a function that
+         * captures outer bindings (or `this`): the direct call passes no
+         * environment, so its free variables would read `undefined` and writes
+         * to them would be lost. */
+        if (fn && !fn.isGenerator && !fn.isAsync && fn.captures.length === 0 && !fn.capturesThis) {
           const args = this.emitArguments(node.arguments);
           const result = this.reg();
           this.emit(

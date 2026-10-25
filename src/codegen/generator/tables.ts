@@ -283,6 +283,11 @@ export const SYMBOL_WELL_KNOWN = new Set<string>([
   "unscopables",
 ]);
 
+/** Namespaces that also exist as a first-class object value (`Math.cos`). */
+export const NAMESPACE_VALUES: Record<string, string> = {
+  Math: "xt_math_object",
+};
+
 /** Namespace identifiers whose property access maps to a runtime getter. */
 export const NAMESPACE_PROPERTIES: Record<string, string> = {
   process: "xt_process_get",

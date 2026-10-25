@@ -117,6 +117,12 @@ xt_value document_proto() {
   define_method(proto, "querySelectorAll", (void *)doc_query_selector_all);
   define_method(proto, "getElementById", (void *)doc_get_element_by_id);
   define_method(proto, "createElement", (void *)doc_create_element);
+  define_method(proto, "createElementNS", (void *)doc_create_element_ns);
+  define_getter(proto, "hidden", (void *)doc_hidden_get);
+  define_getter(proto, "visibilityState", (void *)doc_visibility_state_get);
+  define_getter(proto, "readyState", (void *)doc_ready_state_get);
+  define_getter(proto, "title", (void *)doc_title_get);
+  define_getter(proto, "defaultView", (void *)doc_default_view_get);
   define_method(proto, "createTextNode", (void *)doc_create_text_node);
   /* `document.addEventListener` / element listener plumbing come from the node
    * prototype and operate on the document root node. */

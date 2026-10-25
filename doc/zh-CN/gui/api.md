@@ -34,6 +34,47 @@ API 编写的文档可以原样运行。
 `ready`（首个呈现帧之后）、`load`、`close`、`resize`，以及输入事件
 `mousemove`、`mousedown`、`mouseup`、`click`、`wheel`、`keydown`、`keyup`。
 
+## 浏览器全局
+
+从 Web 迁移过来的页面很少只用到 `createWindow`。启用 `--ext gui` 后，运行时同样提供
+这类移植需要的那一层浏览器接口，程序不必自己声明：
+
+```ts
+const ctx = new AudioContext();            // 也可 window.AudioContext
+ctx.createGain().connect(ctx.destination);
+document.querySelector("#start").addEventListener("click", () => {});
+console.log(navigator.userAgent, window.innerWidth, location.href);
+requestAnimationFrame(frame);
+```
+
+| 全局 | 取值 |
+| --- | --- |
+| `window`、`self` | 最近打开的窗口句柄（若程序尚未创建窗口，会隐式打开一个），因此 `window.innerWidth`、`window.addEventListener`、`window.setTimeout`、`window.localStorage`、`window.location`、`window.devicePixelRatio`、`window.matchMedia` 都可用 |
+| `document` | 该窗口的 document 句柄 |
+| `navigator` | `userAgent`（以 `xbintsc` 结尾的桌面 Chrome 字符串）、`platform`、`vendor`、`language(s)`、`hardwareConcurrency`、`maxTouchPoints`、`onLine`、`vibrate()` |
+| `localStorage` | 内存中的 `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` |
+| `AudioContext`、`webkitAudioContext` | Web Audio 图构建器（见下） |
+| `Event`、`CustomEvent`、`ProgressEvent` 等 | 事件构造器 |
+| `HTMLCanvasElement`、`HTMLImageElement`、`ImageBitmap`、`ImageData`、`OffscreenCanvas`、`WebGL*`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（引擎没有 WebGL、XR、fetch 或流式后端），让页面走自己的“不支持”分支，而不是调用空壳 |
+| `requestAnimationFrame` / `cancelAnimationFrame` | 排入窗口的动画帧列表，见[运行时集成](./runtime.md) |
+| `alert` / `confirm` / `prompt`、`matchMedia`、`getComputedStyle`、`escape` | 宿主实现（Annex B `escape` 按 UTF-16 码元编码，与 `decodeURIComponent(escape(bytes))` 一致） |
+
+`getElementById` / `querySelector` 在 `loadHTML` 之前也能回答：此时得到的是**挂起**句柄，
+首次使用时才绑定到真实节点，因此在模块初始化阶段缓存 `document.querySelector("#id")`
+的页面依然可用。页面解析完成后未命中则回答 `undefined`，与浏览器一致。
+
+### Web Audio
+
+`new AudioContext()` 会构建音频图，但**不做混音也不渲染音频**：背后没有后端。已实现的是
+页面运行与自检所需的接口 —— `createGain` / `createOscillator` / `createBufferSource` /
+`createBiquadFilter` / `createDynamicsCompressor` / `createBuffer`（真实的
+`Float32Array` 声道）/ `decodeAudioData`（以空缓冲区兑现）/ `resume` / `suspend` /
+`close`，`AudioParam` 的 `value` 与 `setValueAtTime` / `linearRampToValueAtTime` /
+`exponentialRampToValueAtTime` / `setTargetAtTime` / `cancelScheduledValues` /
+`cancelAndHoldAtTime`，节点 `connect`（返回目标节点，因此可链式连接）/ `disconnect` /
+`start` / `stop`。`sampleRate` 为 48000、`state` 为 `"running"`，`currentTime` 仅随
+事件循环推进。
+
 输入处理器接收单个负载对象（生命周期处理器不接收任何参数）：
 
 ```ts

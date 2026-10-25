@@ -70,3 +70,51 @@ xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
   return xt_number(NAN);
 }
 
+
+/* -- first-class Math ------------------------------------------------------ */
+
+/* `Math` is lowered to `xt_math_call` at call sites, but it is also an object
+ * in JavaScript: `const cos = Math.cos`, `[1, 2].map(Math.max)` and
+ * `const { sqrt, PI } = Math` all read members as values. The singleton below
+ * holds one native closure per function, plus the constants. */
+
+static const char *const XT_MATH_FUNCTIONS[] = {
+    "abs",    "floor",  "ceil",    "round", "trunc", "sqrt",  "cbrt",  "pow",
+    "exp",    "log",    "log2",    "log10", "log1p", "expm1", "sinh",  "cosh",
+    "tanh",   "asinh",  "acosh",   "atanh", "fround", "imul", "clz32", "sin",
+    "cos",    "tan",    "asin",    "acos",  "atan",  "atan2", "hypot", "sign",
+    "random", "min",    "max",
+};
+
+static xt_value g_math_object;
+
+static xt_value xt_math_bridge(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)thisValue;
+  return xt_math_call(xt_closure_env(env, 0), argc, argv);
+}
+
+xt_value xt_math_object(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  if (g_math_object != 0) return g_math_object;
+  xt_value object = xt_object_new();
+  for (size_t i = 0; i < sizeof(XT_MATH_FUNCTIONS) / sizeof(XT_MATH_FUNCTIONS[0]); i++) {
+    /* The closure environment owns its own copy: the string is stored by the
+     * object, but a rooted value is cheap and keeps the lifetime obvious. */
+    xt_value name = xt_string_from_cstr(XT_MATH_FUNCTIONS[i]);
+    xt_value closure = xt_closure_new((void *)xt_math_bridge, 1, &name);
+    xt_function_set_metadata(closure, name, 1);
+    xt_object_set(object, name, closure);
+  }
+  xt_object_set(object, xt_string_from_cstr("PI"), xt_number(M_PI));
+  xt_object_set(object, xt_string_from_cstr("E"), xt_number(M_E));
+  xt_object_set(object, xt_string_from_cstr("LN2"), xt_number(M_LN2));
+  xt_object_set(object, xt_string_from_cstr("LN10"), xt_number(M_LN10));
+  xt_object_set(object, xt_string_from_cstr("LOG2E"), xt_number(M_LOG2E));
+  xt_object_set(object, xt_string_from_cstr("LOG10E"), xt_number(M_LOG10E));
+  xt_object_set(object, xt_string_from_cstr("SQRT2"), xt_number(M_SQRT2));
+  xt_object_set(object, xt_string_from_cstr("SQRT1_2"), xt_number(M_SQRT1_2));
+  g_math_object = object;
+  xt_gc_add_root(&g_math_object);
+  return object;
+}

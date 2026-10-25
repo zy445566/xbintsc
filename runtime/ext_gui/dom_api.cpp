@@ -52,11 +52,38 @@ XtGuiWindow *resolve_window(xt_value self) {
   return xt_gui_window_from_this(xt_object_get_cstr(self, "__xt_gui_win"));
 }
 
+/** Bind a pending handle to the node its key now finds: copy the slot
+ * bookkeeping of the canonical handle, then drop the pending marker so later
+ * resolutions take the normal path. */
+static xtgui::Node *bind_pending(XtGuiWindow *win, xt_value self, xtgui::Node *node) {
+  xt_value canonical = xt_gui_node_handle(win, node);
+  if (!XT_IS_OBJECT(canonical)) return nullptr;
+  xt_object_set(self, xt_string_from_cstr("__xt_gui_node"),
+                xt_object_get_cstr(canonical, "__xt_gui_node"));
+  xt_object_set(self, xt_string_from_cstr("__xt_gui_slot_gen"),
+                xt_object_get_cstr(canonical, "__xt_gui_slot_gen"));
+  xt_object_set(self, xt_string_from_cstr("__xt_gui_gen"),
+                xt_object_get_cstr(canonical, "__xt_gui_gen"));
+  xt_object_set(self, xt_string_from_cstr("__xt_gui_pending"), XT_UNDEFINED);
+  return node;
+}
+
 /** Resolve a node handle to its node, or NULL when it is stale/foreign. */
 xtgui::Node *resolve_node(xt_value self, XtGuiWindow **winOut) {
   XtGuiWindow *win = resolve_window(self);
   if (winOut != nullptr) *winOut = win;
   if (win == nullptr || win->document == nullptr) return nullptr;
+  /* A pending handle names its node indirectly so that a module which queried
+   * `#id` before `loadHTML` ran still works: look the key up now and bind. */
+  xt_value pending = xt_object_get_cstr(self, "__xt_gui_pending");
+  if (XT_IS_NUMBER(pending)) {
+    std::string key = to_string_value(xt_object_get_cstr(self, "__xt_gui_pending_key"));
+    xtgui::Node *node = (int)xt_to_number(pending) == domapi::pending_by_id
+                            ? domapi::document_find_by_id(win, key)
+                            : domapi::document_query_selector(win, key);
+    if (node == nullptr) return nullptr;
+    return bind_pending(win, self, node);
+  }
   xt_value gen = xt_object_get_cstr(self, "__xt_gui_gen");
   if (!XT_IS_NUMBER(gen) || xt_to_number(gen) != win->doc_generation) return nullptr;
   if (value_truthy(xt_object_get_cstr(self, "__xt_gui_doc"))) {
@@ -119,6 +146,15 @@ void set_class_name(XtGuiWindow *win, xtgui::Node *node, const std::string &valu
   } else {
     set_attribute(win, node, "class", value);
   }
+}
+
+xt_value pending_handle(XtGuiWindow *win, int kind, const std::string &key) {
+  xt_value handle = xt_object_new_with_proto(node_proto());
+  if (win != nullptr) xt_object_set(handle, xt_string_from_cstr("__xt_gui_win"), win->object);
+  xt_object_set(handle, xt_string_from_cstr("__xt_gui_pending"), xt_number((double)kind));
+  xt_object_set(handle, xt_string_from_cstr("__xt_gui_pending_key"),
+                xt_string_from_cstr(key.c_str()));
+  return handle;
 }
 
 }  // namespace domapi

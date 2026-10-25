@@ -34,6 +34,51 @@ launching it does not flash a console window. That also means stdout/stderr go
 nowhere when it is started from Explorer; set `app.console: true` in
 `xbintsc.config.json` to keep the console subsystem (useful while debugging).
 
+## Browser globals
+
+A document ported from the web rarely stops at `createWindow`. With `--ext gui`
+the runtime also serves the small browser surface such ports touch, without the
+program declaring any of it:
+
+```ts
+const ctx = new AudioContext();            // also window.AudioContext
+ctx.createGain().connect(ctx.destination);
+document.querySelector("#start").addEventListener("click", () => {});
+console.log(navigator.userAgent, window.innerWidth, location.href);
+requestAnimationFrame(frame);
+```
+
+| Global | Value |
+| --- | --- |
+| `window`, `self` | the most recently opened window handle (one is opened implicitly if the program has not created one yet), so `window.innerWidth`, `window.addEventListener`, `window.setTimeout`, `window.localStorage`, `window.location`, `window.devicePixelRatio` and `window.matchMedia` all work |
+| `document` | that window's document handle |
+| `navigator` | `userAgent` (a desktop Chrome string ending in `xbintsc`), `platform`, `vendor`, `language(s)`, `hardwareConcurrency`, `maxTouchPoints`, `onLine`, `vibrate()` |
+| `localStorage` | an in-memory `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` store |
+| `AudioContext`, `webkitAudioContext` | a Web Audio graph builder (see below) |
+| `Event`, `CustomEvent`, `ProgressEvent`, … | event constructors |
+| `HTMLCanvasElement`, `HTMLImageElement`, `ImageBitmap`, `ImageData`, `OffscreenCanvas`, `WebGL*`, `XRWebGL*`, `Request`, `Headers`, `Response`, `ReadableStream`, `DOMParser` | `typeof` probes answer `"undefined"` (the engine has no WebGL, XR, fetch or streaming backend), which lets a page take its "unsupported" branch instead of calling a no-op stub |
+| `requestAnimationFrame` / `cancelAnimationFrame` | queued on the window's frame list; see [Runtime integration](./runtime.md) |
+| `alert` / `confirm` / `prompt`, `matchMedia`, `getComputedStyle`, `escape` | host implementations (Annex B `escape` encodes per UTF-16 code unit, matching `decodeURIComponent(escape(bytes))`) |
+
+`getElementById` / `querySelector` are answered even before `loadHTML` runs: the
+handle is *pending* and binds to the real node the first time it is used, so a
+module that caches `document.querySelector("#id")` at import time keeps working.
+Once the page is parsed a miss answers `undefined`, like the browser.
+
+### Web Audio
+
+`new AudioContext()` builds a graph but **does not mix or render audio**: there
+is no backend behind it. What is implemented is the surface a page needs to run
+and to read back its own state — `createGain` / `createOscillator` /
+`createBufferSource` / `createBiquadFilter` / `createDynamicsCompressor` /
+`createBuffer` (real `Float32Array` channels) / `decodeAudioData` (resolves with
+an empty buffer) / `resume` / `suspend` / `close`, `AudioParam` `value` plus
+`setValueAtTime` / `linearRampToValueAtTime` / `exponentialRampToValueAtTime` /
+`setTargetAtTime` / `cancelScheduledValues` / `cancelAndHoldAtTime`, and node
+`connect` (returns the destination, so chains chain) / `disconnect` / `start` /
+`stop`. `sampleRate` is 48000, `state` `"running"`, and `currentTime` advances
+only through the event loop.
+
 Input handlers receive a single payload object (lifecycle handlers receive none):
 
 ```ts

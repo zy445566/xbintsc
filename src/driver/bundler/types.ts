@@ -5,6 +5,13 @@
 import type { SourceFileNode } from "../../ast/nodes.js";
 import type { BindResult } from "../../binder/binder.js";
 
+/** A `[start, end)` span of a synthesized module that came from `file`. */
+export interface OriginRange {
+  readonly start: number;
+  readonly end: number;
+  readonly file: string;
+}
+
 export interface ModuleRecord {
   readonly path: string;
   readonly text: string;
@@ -25,6 +32,12 @@ export interface ModuleRecord {
   commonjs: boolean;
   /** Synthetic `module` object for a CommonJS module (`<prefix>$cjs_module`). */
   cjsModule?: string;
+  /**
+   * Spans of a *synthesized* module text that were copied from another file
+   * (an extension asset loader's `sourceRanges`). Nodes inside one keep that
+   * file as their origin instead of `path`.
+   */
+  originRanges?: readonly OriginRange[];
 }
 
 export interface BundleResult {

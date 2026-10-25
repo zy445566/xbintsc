@@ -28,6 +28,48 @@ xt_value xt_register_script(int32_t argc, xt_value *argv);
  * `"metal"`, …), or `""` before the device exists. */
 const char *xt_gui_driver(void);
 
+/** The window handle the browser globals (`window`, `document`) refer to: the
+ * most recent live one, opened on demand. `createWindow` adopts that implicit
+ * window instead of opening a second one. */
+xt_value xt_gui_ensure_window(void);
+
+/* The browser globals a page reaches by bare name. Code generation lowers each
+ * identifier (or bare call) to one of these; nothing is declared in the source.
+ * See `src/extensions/gui/index.ts` (`globalValues` / `builtins`) and
+ * `runtime/ext_gui/browser.cpp`. */
+xt_value xt_browser_window(int32_t argc, xt_value *argv);
+xt_value xt_browser_document(int32_t argc, xt_value *argv);
+xt_value xt_browser_navigator(int32_t argc, xt_value *argv);
+xt_value xt_browser_local_storage(int32_t argc, xt_value *argv);
+/** A global the host deliberately does not provide: `undefined`. */
+xt_value xt_browser_missing(int32_t argc, xt_value *argv);
+/** A DOM type name (`Image`, `HTMLCanvasElement`, …) as a constructor value. */
+xt_value xt_browser_type(int32_t argc, xt_value *argv);
+xt_value xt_browser_request_animation_frame(int32_t argc, xt_value *argv);
+xt_value xt_browser_cancel_animation_frame(int32_t argc, xt_value *argv);
+xt_value xt_browser_match_media(int32_t argc, xt_value *argv);
+xt_value xt_browser_computed_style(int32_t argc, xt_value *argv);
+xt_value xt_browser_escape(int32_t argc, xt_value *argv);
+xt_value xt_browser_alert(int32_t argc, xt_value *argv);
+xt_value xt_browser_prompt(int32_t argc, xt_value *argv);
+/** Install `innerWidth`, `setTimeout`, `navigator`, … on the window prototype. */
+void xt_browser_install_window(xt_value proto);
+/** Poll and dispatch pending SDL input events once (the browser frame pump in
+ * `browser.cpp` calls it; `run()` has its own loop). */
+void xt_gui_pump_events(void);
+/** Arm the frame pump for a page that drives itself from
+ * `requestAnimationFrame` instead of calling `run()` (see `browser_loop.cpp`). */
+void xt_browser_schedule_frame(void);
+/** Whether `run()` currently owns the frame loop (the pump then stays idle). */
+int xt_gui_run_active(void);
+
+/* Web Audio objects (`audio.cpp`). */
+/** `AudioContext.prototype` — also the `instanceof AudioContext` target. */
+xt_value xt_gui_audio_proto(void);
+/** `new AudioContext(...)`: it has no mixer backend yet, so the graph records
+ * its shape and parameters but nothing is rendered to the sound device. */
+xt_value xt_gui_audio_create(int32_t argc, xt_value *argv);
+
 #ifdef __cplusplus
 } /* extern "C" */
 
@@ -130,6 +172,8 @@ struct XtGuiWindow {
 
 /** Resolve a window handle (`this`) to its record, or NULL for a foreign value. */
 XtGuiWindow *xt_gui_window_from_this(xt_value thisValue);
+
+
 /** The `document` handle for `win` (created on first use). */
 xt_value xt_gui_document_handle(XtGuiWindow *win);
 /** Node handle for `node` (created and cached on first use). */

@@ -31,6 +31,26 @@ static xt_value make_dom_event(XtGuiWindow *win, const char *type, const xtgui::
   return event;
 }
 
+/** A detached event object, as `new Event(type)` / `new CustomEvent(type, init)`
+ * builds: no target yet, but the standard fields and `detail`. */
+xt_value event_construct(xt_value type, xt_value init) {
+  std::string name = to_string_value(type);
+  xt_value event = xt_object_new_with_proto(event_proto());
+  xt_object_set(event, xt_string_from_cstr("type"), xt_string_from_cstr(name.c_str()));
+  xt_object_set(event, xt_string_from_cstr("target"), XT_NULL);
+  xt_object_set(event, xt_string_from_cstr("currentTarget"), XT_NULL);
+  xt_object_set(event, xt_string_from_cstr("defaultPrevented"), XT_FALSE);
+  xt_value bubbles = xt_object_get_cstr(init, "bubbles");
+  xt_object_set(event, xt_string_from_cstr("bubbles"), XT_IS_UNDEFINED(bubbles) ? XT_FALSE : bubbles);
+  xt_value cancelable = xt_object_get_cstr(init, "cancelable");
+  xt_object_set(event, xt_string_from_cstr("cancelable"),
+                XT_IS_UNDEFINED(cancelable) ? XT_FALSE : cancelable);
+  xt_value detail = xt_object_get_cstr(init, "detail");
+  xt_object_set(event, xt_string_from_cstr("detail"),
+                XT_IS_UNDEFINED(detail) ? XT_NULL : detail);
+  return event;
+}
+
 void remove_listener(XtGuiWindow *win, xtgui::Node *node, const std::string &type, xt_value fn,
                      bool capture) {
   auto found = win->node_listeners.find(node);

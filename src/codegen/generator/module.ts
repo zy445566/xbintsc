@@ -45,6 +45,8 @@ export interface ModuleMethods {
   classGlobal(this: Generator, classInfo: ClassInfo): string;
   emitClassReference(this: Generator, classInfo: ClassInfo): string;
   emitClassSetup(this: Generator, classInfo: ClassInfo): void;
+  memberKey(this: Generator, method: FunctionInfo): string;
+  emitMemberDefine(this: Generator, target: string, method: FunctionInfo, key: string, fnValue: string): void;
   emitDefaultParameter(this: Generator, symbol: SymbolInfo, value: string, initializer: Expression): void;
 }
 
@@ -371,17 +373,8 @@ export const moduleMethods: ModuleMethods = {
     }
     for (const method of classInfo.methods) {
       const fnValue = this.emitClosureValue(method);
-      const key = method.computedKey
-        ? this.emitExpression(method.computedKey)
-        : this.stringValue(method.name);
-      const accessor = (method.node as { accessor?: "get" | "set" }).accessor;
-      if (accessor === "get") {
-        this.emit(`  call i64 @xt_object_define_getter(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
-      } else if (accessor === "set") {
-        this.emit(`  call i64 @xt_object_define_setter(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
-      } else {
-        this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${key}, i64 ${fnValue})`);
-      }
+      const key = this.memberKey(method);
+      this.emitMemberDefine(proto, method, key, fnValue);
     }
     const ctor = this.emitClosureValue(classInfo.ctor!);
     this.emit(`  call i64 @xt_function_set_prototype(i64 ${ctor}, i64 ${proto})`);
@@ -391,20 +384,51 @@ export const moduleMethods: ModuleMethods = {
     }
     const ctorKey = this.stringValue("__ctor");
     this.emit(`  call i64 @xt_set(i64 ${proto}, i64 ${ctorKey}, i64 ${ctor})`);
+    /* Publish the constructor before static fields and blocks run: they may
+     * refer to the class by name (`static { A.count = 1 }`), and by then the
+     * class binding is already initialised in JavaScript. */
+    this.emit(`  store i64 ${ctor}, i64* ${globalName}`);
     for (const method of classInfo.statics) {
       const fnValue = this.emitClosureValue(method);
-      const key = method.computedKey
-        ? this.emitExpression(method.computedKey)
-        : this.stringValue(method.name);
-      this.emit(`  call i64 @xt_set(i64 ${ctor}, i64 ${key}, i64 ${fnValue})`);
+      const key = this.memberKey(method);
+      /* `static get x()` / `static set x(v)` are accessors on the constructor
+       * value, not plain data properties. */
+      this.emitMemberDefine(ctor, method, key, fnValue);
     }
-    for (const field of classInfo.fields) {
-      if (!field.isStatic) continue;
+    for (const entry of classInfo.staticInit) {
+      if (entry.kind === "block") {
+        /* `static { ... }` blocks run once, in order, with `this` bound to the
+         * class constructor. They are compiled as static methods and called
+         * immediately, which gives them their own scope and a normal `this`. */
+        const fnValue = this.emitClosureValue(entry.fn);
+        this.emit(`  call i64 @xt_call_with_this(i64 ${fnValue}, i64 ${ctor}, i32 0, i64* null)`);
+        continue;
+      }
+      const field = entry.field;
       const key = this.stringValue(field.name);
       const value = field.initializer ? this.emitExpression(field.initializer) : i64(XT_UNDEFINED);
       this.emit(`  call i64 @xt_set(i64 ${ctor}, i64 ${key}, i64 ${value})`);
     }
-    this.emit(`  store i64 ${ctor}, i64* ${globalName}`);
+  },
+
+  /** The property key of a class member: evaluated when computed. */
+  memberKey(method: FunctionInfo): string {
+    return method.computedKey
+      ? this.emitExpression(method.computedKey)
+      : this.stringValue(method.name);
+  },
+
+  /** Install a class member as a data property, or as an accessor when it was
+   *  declared with `get` / `set`. */
+  emitMemberDefine(target: string, method: FunctionInfo, key: string, fnValue: string): void {
+    const accessor = (method.node as { accessor?: "get" | "set" }).accessor;
+    if (accessor === "get") {
+      this.emit(`  call i64 @xt_object_define_getter(i64 ${target}, i64 ${key}, i64 ${fnValue})`);
+    } else if (accessor === "set") {
+      this.emit(`  call i64 @xt_object_define_setter(i64 ${target}, i64 ${key}, i64 ${fnValue})`);
+    } else {
+      this.emit(`  call i64 @xt_set(i64 ${target}, i64 ${key}, i64 ${fnValue})`);
+    }
   },
 
   emitDefaultParameter(symbol: SymbolInfo, value: string, initializer: Expression): void {

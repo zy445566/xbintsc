@@ -14,6 +14,7 @@ import {
 } from "../../../ast/nodes.js";
 import { i64, numberLiteral, XT_TRUE, XT_UNDEFINED } from "../../values.js";
 import { MATH_CONSTANTS, NAMESPACE_PROPERTIES, NUMBER_CONSTANTS, SYMBOL_WELL_KNOWN, TYPED_ARRAYS } from "../tables.js";
+import { isSuperKeyword } from "./super.js";
 import type { Generator } from "../generator.js";
 
 export interface AccessCallMethods {
@@ -50,12 +51,8 @@ export const accessCallMethods: AccessCallMethods = {
   },
 
   emitPropertyAccess(node: PropertyAccessExpression): string {
-    if (node.expression.kind === SyntaxKind.Identifier && (node.expression as Identifier).text === "super") {
-      const thisValue = this.emitThis();
-      const proto = this.reg();
-      this.emit(`  ${proto} = call i64 @xt_object_get_prototype(i64 ${thisValue})`);
-      const parentProto = this.reg();
-      this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${proto})`);
+    if (isSuperKeyword(node.expression)) {
+      const parentProto = this.emitSuperHolder();
       const key = this.stringValue(node.name.text);
       const value = this.reg();
       this.emit(`  ${value} = call i64 @xt_get(i64 ${parentProto}, i64 ${key})`);
@@ -139,13 +136,16 @@ export const accessCallMethods: AccessCallMethods = {
   },
 
   emitElementAccess(node: ElementAccessExpression): string {
-    const object = this.emitExpression(node.expression);
+    /* `super[key]` reads from the parent prototype (or the parent constructor
+     * inside a `static` method), not from the `super` keyword itself. */
+    const isSuper = isSuperKeyword(node.expression);
+    const object = isSuper ? this.emitSuperHolder() : this.emitExpression(node.expression);
     const access = (): string => {
       const key = this.emitExpression(node.argumentExpression);
       const result = this.reg();
       /* Array-index reads are not object property layouts, so skip the IC for
        * a numeric literal; every other key may benefit from it. */
-      if (node.argumentExpression.kind === SyntaxKind.NumericLiteral) {
+      if (isSuper || node.argumentExpression.kind === SyntaxKind.NumericLiteral) {
         this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
       } else {
         const cache = this.icCachePointer();

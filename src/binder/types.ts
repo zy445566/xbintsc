@@ -106,9 +106,19 @@ export interface ClassInfo {
   readonly fields: ClassFieldInfo[];
   readonly methods: FunctionInfo[];
   readonly statics: FunctionInfo[];
+  /** `static { ... }` blocks, in declaration order. */
+  readonly staticBlocks: FunctionInfo[];
+  /** Static fields and static blocks, interleaved in declaration order: they
+   *  run in source order, while static methods are installed before both. */
+  readonly staticInit: ClassStaticInit[];
   ctor?: FunctionInfo;
   /** The symbol the class name binds to, when there is one. */
 }
+
+/** One static element evaluated at class-definition time, in source order. */
+export type ClassStaticInit =
+  | { readonly kind: "field"; readonly field: ClassFieldInfo }
+  | { readonly kind: "block"; readonly fn: FunctionInfo };
 
 export interface ClassFieldInfo {
   readonly name: string;

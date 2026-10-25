@@ -20,6 +20,7 @@ import {
   type PostfixUnaryExpression,
   type PrefixUnaryExpression,
   type PropertyAccessExpression,
+  type SequenceExpression,
   type TaggedTemplateExpression,
   type TemplateLiteral,
   type YieldExpression,
@@ -41,6 +42,7 @@ export interface PrimaryExpressionMethods {
   emitNew(this: Generator, node: NewExpression): string;
   emitAwait(this: Generator, node: AwaitExpression): string;
   emitYield(this: Generator, node: YieldExpression): string;
+  emitSequence(this: Generator, node: SequenceExpression): string;
 }
 
 export const primaryExpressionMethods: PrimaryExpressionMethods = {
@@ -135,6 +137,8 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return this.emitPostfix(node as PostfixUnaryExpression);
       case SyntaxKind.ConditionalExpression:
         return this.emitConditional(node as ConditionalExpression);
+      case SyntaxKind.SequenceExpression:
+        return this.emitSequence(node as SequenceExpression);
       case SyntaxKind.CallExpression:
         return this.emitCall(node as CallExpression);
       case SyntaxKind.PropertyAccessExpression:
@@ -302,6 +306,13 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
     const result = this.reg();
     this.emit(`  ${result} = call i64 @xt_yield(i64 ${value})`);
     return result;
+  },
+
+  /** `a, b, c`: evaluate in order for their side effects, yield the last. */
+  emitSequence(node: SequenceExpression): string {
+    let value = i64(XT_UNDEFINED);
+    for (const expression of node.expressions) value = this.emitExpression(expression);
+    return value;
   },
 
   emitNew(node: NewExpression): string {

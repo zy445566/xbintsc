@@ -100,6 +100,10 @@ export function inferTypeOfExpression(
         const conditional = expression as ConditionalExpression;
         return unionOf([inferTypeOfExpression(context, conditional.whenTrue, lookup), inferTypeOfExpression(context, conditional.whenFalse, lookup)]);
       }
+      case SyntaxKind.SequenceExpression: {
+        const expressions = (expression as unknown as { expressions: Expression[] }).expressions;
+        return inferTypeOfExpression(context, expressions[expressions.length - 1]!, lookup);
+      }
       case SyntaxKind.BinaryExpression: {
         const binary = expression as BinaryExpression;
         if (binary.operator === "+") {

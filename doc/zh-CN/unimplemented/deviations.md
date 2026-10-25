@@ -16,7 +16,7 @@
 | 函数 `arity` / 调用参数个数 | 对本地可见函数的直接调用由默认[语义检查](../implemented/checker.md)校验（`TS4004`）；通过属性、导入、展开实参或重新赋值后的绑定发起的调用不校验。`fn.length` 报告声明的 arity |
 | `async` / `await` | 已在栈式协程上真实挂起；`await` 总会排入一次微任务（非 Promise 与已 settle 的 Promise 也一样），因此与 pending `.then` 回调的交错顺序符合规范。顶层 `await` 会阻塞事件循环等待，而不是让出模块主体。`fs/promises` 与 `fetch` 把阻塞工作 offload 到 4 线程池并在 reactor 上 settle。异步生成器可在 `await` 与 `yield` 处挂起，`for await...of` 每次迭代等待一步 |
 | 异步生成器清理 | `for await...of` 提前退出时不会调用迭代器的 `return()`。异步生成器中的 `yield*` 只委托同步可迭代对象。在挂起的 `yield` 处调用 `.return()` 会直接完成而不执行 `finally`（与同步生成器相同的限制） |
-| `super` | `super.x` / `super(...)` 取 `this` 原型的原型；单级继承正确，继承深度 > 1 时可能不准确 |
+| `super` | `super.x` / `super[x]` 从父级持有者读取：实例方法中是 `this` 原型的原型，`static` 方法或静态块中是 `this` 的原型（即父构造函数）。单级继承正确，继承深度 > 1 时可能不准确 |
 | `Error.stack` | 仅函数级帧：每帧为 `at 名称 (文件:行)`，行号取自函数声明（最内层帧会更新为错误构造处）；没有列号，生成器 / `async` 函数体不产生帧（它们会切换栈） |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见[模块系统](./modules.md)） |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`，由可执行文件路径解析 |

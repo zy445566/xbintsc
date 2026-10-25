@@ -206,6 +206,12 @@ export interface ParenthesizedExpression extends Node {
   readonly expression: Expression;
 }
 
+/** `a, b, c`: evaluates every operand left to right, yields the last value. */
+export interface SequenceExpression extends Node {
+  readonly kind: SyntaxKind.SequenceExpression;
+  readonly expressions: Expression[];
+}
+
 export interface PrefixUnaryExpression extends Node {
   readonly kind: SyntaxKind.PrefixUnaryExpression;
   readonly operator: PrefixUnaryOperator;

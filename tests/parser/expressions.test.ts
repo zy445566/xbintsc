@@ -59,3 +59,44 @@ describe("unsupported syntax", () => {
     expect(diagnostics.map((d) => d.code)).not.toContain(DiagnosticCode.UnexpectedToken);
   });
 });
+
+describe("sequence expressions", () => {
+  it("parses a comma expression into one SequenceExpression", () => {
+    const expr = initializer("const v = (a, b, c);");
+    expect(expr.kind).toBe(SyntaxKind.ParenthesizedExpression);
+    const sequence = expr.expression;
+    expect(sequence.kind).toBe(SyntaxKind.SequenceExpression);
+    expect(sequence.expressions.map((item: any) => item.text)).toEqual(["a", "b", "c"]);
+  });
+
+  it("parses comma-separated for-update clauses", () => {
+    const { file, diagnostics } = parse("for (let i = 0, j = 1; i < 3; i++, j += 2) {}");
+    expect(diagnostics).toHaveLength(0);
+    const loop = file.statements[0] as any;
+    expect(loop.incrementor.kind).toBe(SyntaxKind.SequenceExpression);
+    expect(loop.incrementor.expressions).toHaveLength(2);
+  });
+
+  it("keeps declarator commas separate from the comma operator", () => {
+    const { file, diagnostics } = parse("let a = 1, b = 2;");
+    expect(diagnostics).toHaveLength(0);
+    const statement = file.statements[0] as any;
+    expect(statement.declarationList.declarations).toHaveLength(2);
+  });
+});
+
+describe("async function expressions", () => {
+  it("parses `async function` as an expression with the async flag", () => {
+    const expr = initializer("const f = async function (v) { return v; };");
+    expect(expr.kind).toBe(SyntaxKind.FunctionExpression);
+    expect(expr.flags).toBe(NodeFlags.Async);
+    expect(expr.name).toBeUndefined();
+  });
+
+  it("parses named async generator function expressions", () => {
+    const expr = initializer("const f = async function* gen() { yield 1; };");
+    expect(expr.kind).toBe(SyntaxKind.FunctionExpression);
+    expect(expr.flags).toBe(NodeFlags.Async | NodeFlags.Generator);
+    expect(expr.name.text).toBe("gen");
+  });
+});

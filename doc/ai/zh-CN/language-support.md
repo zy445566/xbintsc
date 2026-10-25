@@ -55,7 +55,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `call`/`apply`/`bind`、`fn.name`/`fn.length` | ✅ | bind 出的闭包不跟踪部分应用后的 `length` |
 | 一等内置方法（把 `arr.map` 当值用） | ✅ | 暴露为*未绑定*方法值；脱离接收者调用时与 JS 一样抛错 |
 | `fn.toString()` | ⚠️ | 返回 `function name() { [native code] }`，不是源码 |
-| 类：字段、方法、静态成员、getter/setter、`extends`/`super`、`instanceof` | ✅ | |
+| 类：字段、方法、静态成员、`static { ... }` 静态块、getter/setter、`extends`/`super`、`instanceof` | ✅ | 静态块编译为一个静态方法，在类定义时调用 |
 | 构造器参数属性 `constructor(public x: T)` | ✅ | |
 | `#private` 字段/方法/静态成员 | ⚠️ | 以字面量 `#x` 键存储；不做访问控制；父子类同名可能互相覆盖 |
 | `enum`/`const enum` | ✅ | 正向 + 反向映射 |

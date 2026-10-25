@@ -78,5 +78,5 @@ harness 的适配说明见 [`SOURCE.md`](../../tests/conformance/test262/SOURCE.
 | --- | --- | ---: | --- |
 | `language/statements/with/12.10-0-1.js` | 可选链与模板字符串 | TS2001 | `with` 语句尚未实现 |
 | `language/expressions/new.target/value-via-call.js` | 闭包与函数 | TS4005 | `new.target` 尚未实现 |
-| `language/expressions/comma/S11.14_A2.1_T3.js` | 值与运算符 | TS2001 | 逗号表达式在声明符列表之外尚未实现 |
+| `language/expressions/comma/S11.14_A2.1_T3.js` | 值与运算符 | TS3002 | 未绑定的名字是编译期错误，而不是运行时 `ReferenceError` |
 | `language/expressions/dynamic-import/always-create-new-promise.js` | 模块 | TS2001 | 动态 `import()` 尚未实现 |

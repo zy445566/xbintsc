@@ -10,7 +10,7 @@ Module syntax (`import` / `export`, import attributes) and the driver-level bund
 
 - Variable declarations: `var` / `let` / `const`, with multiple declarators `const a = 1, b = 2;`
 - Function declarations, function expressions and methods, including the `async` modifier, generators (`function*`, `yield`, `yield*`, `.next`/`.throw`/`.return`) and async generators (`async function*`, `for await...of`)
-- `class` declarations / class expressions (constructor, fields, methods, `static`, `extends`)
+- `class` declarations / class expressions (constructor, fields, methods, `static`, `static { ... }` blocks, `extends`)
 - `if` / `else`
 - `while`, `do...while`
 - `for` (init, condition and increment may all be omitted)
@@ -27,8 +27,9 @@ Module syntax (`import` / `export`, import attributes) and the driver-level bund
 - All common operators with precedence / associativity (see [Operators](./operators.md))
 - Assignment expressions and all compound assignments (see [Operators](./operators.md))
 - Conditional (ternary) expressions `a ? b : c`
+- Comma / sequence expressions `a, b, c` (in `for` headers, parenthesized groups and expression statements)
 - Arrow functions `() => expr` / `() => { ... }` (including type parameters and return type annotations)
-- Function expressions `function () {}` and named function expressions `function g() {}`
+- Function expressions `function () {}` and named function expressions `function g() {}` (also `async function` expressions)
 - Call expressions `f(...)`, member access `a.b`, element access `a[i]`
 - Array literals `[1, 2]`, sparse array elision, spread `[...a]` (also over strings, `Map` and `Set`)
 - Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`, getter / setter shorthand `{ get x() {} }` / `{ set x(v) {} }`, computed keys `{ [expr]: 1 }`, object spread `{ ...obj }`

@@ -33,6 +33,7 @@ import type {
   PropertyAccessExpression,
   RegularExpressionLiteral,
   SatisfiesExpression,
+  SequenceExpression,
   SpreadElement,
   StringLiteral,
   TaggedTemplateExpression,
@@ -143,6 +144,7 @@ export type Expression =
   | ConditionalExpression
   | AsExpression
   | SatisfiesExpression
+  | SequenceExpression
   | NonNullExpression
   | TypeOfExpression
   | VoidExpression

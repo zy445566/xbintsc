@@ -24,6 +24,7 @@ import {
   MATH_FUNCTIONS,
   NAMESPACE_STATICS,
 } from "../tables.js";
+import { isSuperKeyword } from "./super.js";
 import type { Generator } from "../generator.js";
 
 export interface InvocationCallMethods {
@@ -72,9 +73,7 @@ export const invocationCallMethods: InvocationCallMethods = {
       const access = callee as PropertyAccessExpression;
       const special = this.tryEmitBuiltinCall(node, access);
       if (special) return special;
-      if (access.expression.kind === SyntaxKind.Identifier && (access.expression as Identifier).text === "super") {
-        return this.emitSuperCall(node, access);
-      }
+      if (isSuperKeyword(access.expression)) return this.emitSuperCall(node, access);
       const object = this.emitExpression(access.expression);
       const name = this.stringValue(access.name.text);
       const args = this.emitArguments(node.arguments);
@@ -84,6 +83,7 @@ export const invocationCallMethods: InvocationCallMethods = {
     }
     if (callee.kind === SyntaxKind.ElementAccessExpression) {
       const access = callee as ElementAccessExpression;
+      if (isSuperKeyword(access.expression)) return this.emitSuperElementCall(node, access);
       const object = this.emitExpression(access.expression);
       const name = this.emitExpression(access.argumentExpression);
       const args = this.emitArguments(node.arguments);

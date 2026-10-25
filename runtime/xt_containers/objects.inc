@@ -316,6 +316,17 @@ xt_value xt_object_get(xt_value value, xt_value key) {
   return XT_UNDEFINED;
 }
 
+/* The next link of a prototype chain, or NULL at the end. `class B extends A`
+ * links B's property bag to the *constructor value* A, so the walk has to
+ * continue through a function just like through a plain object. */
+static xt_object *xt_object_prototype_of(xt_value prototype, xt_object *current) {
+  xt_object *next = xt_as_object(prototype);
+  if (!next || next == current) return NULL;
+  if (next->header.kind != XT_OBJECT_KIND_OBJECT && next->header.kind != XT_OBJECT_KIND_ERROR)
+    return NULL;
+  return next;
+}
+
 xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
   if (XT_IS_FUNCTION(value) && xt_key_is_prototype(key)) {
     return xt_function_set_prototype(value, newValue);
@@ -341,7 +352,7 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
   }
   /* No own property: an inherited accessor still intercepts the assignment
      (JavaScript assigns through prototype setters instead of shadowing). */
-  xt_object *ancestor = XT_IS_OBJECT(obj->prototype) ? (xt_object *)XT_GET_PTR(obj->prototype) : NULL;
+  xt_object *ancestor = xt_object_prototype_of(obj->prototype, obj);
   while (ancestor) {
     xt_property *inherited = xt_object_find(ancestor, k);
     if (inherited) {
@@ -355,7 +366,7 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
       if (inherited->getter != XT_UNDEFINED) return newValue; /* getter-only accessor */
       break; /* plain inherited data property: create an own shadowing property */
     }
-    ancestor = XT_IS_OBJECT(ancestor->prototype) ? (xt_object *)XT_GET_PTR(ancestor->prototype) : NULL;
+    ancestor = xt_object_prototype_of(ancestor->prototype, ancestor);
   }
   xt_property *inserted = xt_object_insert_property(obj, k);
   inserted->value = newValue;

@@ -85,6 +85,13 @@ export const declarationClassMethods: DeclarationClassMethods = {
       this.nextToken();
       return undefined;
     }
+    /* `static { ... }`: a block that runs once while the class is defined. The
+     * `static` keyword was already consumed by `tryParseModifiers`, so the
+     * initializer position is the only way to tell it apart from a member. */
+    if (this.at(TokenKind.OpenBrace) && this.hasModifier(modifiers, ModifierKind.Static)) {
+      const body = this.parseBlock();
+      return { kind: SyntaxKind.ClassStaticBlockDeclaration, modifiers, body, start, end: body.end };
+    }
     if (
       (this.at(TokenKind.GetKeyword) || this.at(TokenKind.SetKeyword)) &&
       !this.atAhead(1, TokenKind.OpenParen) &&

@@ -84,7 +84,9 @@ export class TypeResolver {
   ) {
     this.collectDeclarations();
     this.collectDynamicClasses();
-    for (const symbol of binding.symbolOfDeclaration.values()) this.symbolsById.set(symbol.id, symbol);
+    for (const symbol of binding.symbolOfDeclaration.values()) {
+      if (symbol) this.symbolsById.set(symbol.id, symbol);
+    }
   }
 
   typeOfSymbolId(id: number): Type | undefined {

@@ -269,6 +269,66 @@ void draw_image(std::vector<unsigned char> &pixels, int width, int height, const
   }
 }
 
+
+void draw_image_affine(std::vector<unsigned char> &pixels, int width, int height,
+                       const Image &source, float dx, float dy, float dw, float dh, float sx,
+                       float sy, float sw, float sh, const CanvasTransform &transform,
+                       float alpha) {
+  if (source.width <= 0 || source.height <= 0 || dw <= 0.0f || dh <= 0.0f || sw <= 0.0f ||
+      sh <= 0.0f)
+    return;
+  CanvasTransform inverse = transform.inverted();
+  float cornersX[4];
+  float cornersY[4];
+  const float corners[4][2] = {{dx, dy}, {dx + dw, dy}, {dx + dw, dy + dh}, {dx, dy + dh}};
+  float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
+  for (int i = 0; i < 4; i++) {
+    transform.apply(corners[i][0], corners[i][1], &cornersX[i], &cornersY[i]);
+    if (i == 0) {
+      minX = maxX = cornersX[i];
+      minY = maxY = cornersY[i];
+    } else {
+      minX = std::min(minX, cornersX[i]);
+      maxX = std::max(maxX, cornersX[i]);
+      minY = std::min(minY, cornersY[i]);
+      maxY = std::max(maxY, cornersY[i]);
+    }
+  }
+  int ix0 = std::max(0, (int)std::floor(minX));
+  int ix1 = std::min(width, (int)std::ceil(maxX));
+  int iy0 = std::max(0, (int)std::floor(minY));
+  int iy1 = std::min(height, (int)std::ceil(maxY));
+  for (int py = iy0; py < iy1; py++) {
+    for (int px = ix0; px < ix1; px++) {
+      float ux = 0.0f;
+      float uy = 0.0f;
+      inverse.apply((float)px + 0.5f, (float)py + 0.5f, &ux, &uy);
+      float u = (ux - dx) / dw;
+      float v = (uy - dy) / dh;
+      if (u < 0.0f || u >= 1.0f || v < 0.0f || v >= 1.0f) continue;
+      int sxi = (int)(sx + u * sw);
+      int syi = (int)(sy + v * sh);
+      if (sxi < 0) sxi = 0;
+      if (syi < 0) syi = 0;
+      if (sxi >= source.width) sxi = source.width - 1;
+      if (syi >= source.height) syi = source.height - 1;
+      const unsigned char *texel =
+          source.pixels.data() + ((size_t)syi * (size_t)source.width + (size_t)sxi) * 4;
+      unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4;
+      if (alpha >= 0.999f) {
+        const unsigned char ta = texel[3];
+        if (ta == 255) {
+          dst[0] = texel[0]; dst[1] = texel[1]; dst[2] = texel[2]; dst[3] = 255;
+          continue;
+        }
+        if (ta == 0) continue;
+      }
+      float color[4] = {texel[0] / 255.0f, texel[1] / 255.0f, texel[2] / 255.0f, texel[3] / 255.0f};
+      blend_pixel(dst, color, 1.0f, alpha);
+    }
+  }
+}
+
 void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<unsigned char> &glyph, int glyphWidth, int glyphHeight, int left,
                 int top, float x, float baselineY, const CanvasPaint &paint, float alpha) {

@@ -498,4 +498,28 @@ describeE2E("end-to-end objects, functions and classes", (harness) => {
         "true true",
     );
   });
+
+  it("captures constructor parameters in a hoisted nested function called by a sibling", () => {
+    // Regression: a nested function declaration's closure used to be rebuilt at
+    // the call site (inside its sibling), where the constructor's captured
+    // parameters were not in scope, so it read `undefined`. The declaring
+    // function now builds and boxes the closure in its own frame.
+    const source = `
+      class Base { constructor() {} }
+      class Poly extends Base {
+        constructor(vertices: any = [], indices: any = []) {
+          super();
+          function subdivide() {
+            for (let i = 0; i < indices.length; i += 1) getVertexByIndex(indices[i]);
+          }
+          function getVertexByIndex(index: number) {
+            console.log(String(vertices[index * 3]) + "," + String(vertices[index * 3 + 1]));
+          }
+          subdivide();
+        }
+      }
+      new Poly([1, 2, 3, 4, 5, 6], [0, 1]);
+    `;
+    expect(runProgram(source)).toBe("1,2\n4,5");
+  });
 });

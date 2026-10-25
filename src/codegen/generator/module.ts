@@ -9,6 +9,7 @@ import {
   type ArrowFunction,
   type Block,
   type Expression,
+  type FunctionDeclaration,
   type Parameter,
 } from "../../ast/nodes.js";
 import type { ClassInfo, FunctionInfo, SymbolInfo } from "../../binder/binder.js";
@@ -39,6 +40,7 @@ function symbolSuffix(name: string): string {
 export interface ModuleMethods {
   run(this: Generator): string;
   emitFunction(this: Generator, fn: FunctionInfo): void;
+  emitHoistedFunctions(this: Generator, fn: FunctionInfo): void;
   emitFunctionReturn(this: Generator, value: string): void;
   emitMain(this: Generator): void;
   functionName(this: Generator, fn: FunctionInfo): string;
@@ -192,6 +194,14 @@ export const moduleMethods: ModuleMethods = {
       this.defineCaptureSlot(symbol, value);
     }
 
+    // Hoisted function declarations: create their closure values in this
+    // frame (before the body runs) so a nested function that references one
+    // gets the closure built against the declaring frame, not against the
+    // caller's slots. Captured function symbols are boxed by the binder, so
+    // the second pass publishes the closures into those boxes and mutual
+    // recursion sees the same values.
+    this.emitHoistedFunctions(fn);
+
     // Arrow functions inherit `this` lexically; it travels as an extra capture.
     if (fn.isArrow && fn.capturesThis) {
       const inherited = this.reg();
@@ -335,6 +345,46 @@ export const moduleMethods: ModuleMethods = {
     this.classGlobals.set(classInfo.id, name);
     this.globals.push(`${name} = internal global i64 0`);
     return name;
+  },
+
+  emitHoistedFunctions(fn: FunctionInfo): void {
+    if (fn.isModule) return;
+    const body = (fn.node as { body?: Block }).body;
+    if (!body || body.kind !== SyntaxKind.Block) return;
+    const declarations: FunctionDeclaration[] = [];
+    for (const statement of body.statements) {
+      if (statement.kind === SyntaxKind.FunctionDeclaration) {
+        declarations.push(statement as FunctionDeclaration);
+      }
+    }
+    if (declarations.length === 0) return;
+    /* Captured locals of this frame may be declared textually after the
+     * function that uses them. Function declarations are hoisted, so create
+     * their boxes now; the `let`/`const`/`var` statement fills the box when it
+     * runs (emitVariableStatement writes into an existing slot). */
+    for (const declaration of declarations) {
+      const child = this.binding.functionOfNode.get(declaration);
+      if (!child) continue;
+      for (const captured of child.captures) {
+        if (captured.fn !== fn) continue;
+        if (!this.current.slots.has(captured.id)) this.declareSlot(captured, i64(XT_UNDEFINED));
+      }
+    }
+    /* First pass: a slot (and a box, when captured) exists for every name
+     * before any closure is built, so sibling references cannot observe an
+     * uninitialised slot. */
+    const ready: Array<{ symbol: SymbolInfo; child: FunctionInfo }> = [];
+    for (const declaration of declarations) {
+      const symbol = this.binding.symbolOfDeclaration.get(declaration);
+      const child = this.binding.functionOfNode.get(declaration);
+      if (!symbol || !child) continue;
+      if (!this.current.slots.has(symbol.id)) this.declareSlot(symbol, i64(XT_UNDEFINED));
+      ready.push({ symbol, child });
+    }
+    /* Second pass: build and store the closures. */
+    for (const entry of ready) {
+      this.writeSlot(entry.symbol, this.emitClosureValue(entry.child));
+    }
   },
 
   emitClassReference(classInfo: ClassInfo): string {

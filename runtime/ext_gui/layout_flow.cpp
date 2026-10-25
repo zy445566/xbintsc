@@ -46,6 +46,24 @@ float Layouter::preferredContentWidth(const LayoutBox *box, float available) con
   if (!isAuto(style.width)) return px(style.width, available, style.font_size, 0.0f);
   if ((box->is_image || box->is_canvas || box->is_inline_svg) && box->intrinsic_width > 0)
     return box->intrinsic_width;
+  if (box->is_text) return textWidth(box->text, style);
+  /* A row flex container's intrinsic width is the sum of its items (and gaps);
+   * taking the widest child would make a shrink-to-fit toolbar narrower than
+   * its buttons and then shrink every button to zero. */
+  if (style.display == Display::Flex &&
+      (style.flex_direction == FlexDirection::Row ||
+       style.flex_direction == FlexDirection::RowReverse)) {
+    float total = 0;
+    int count = 0;
+    for (const std::unique_ptr<LayoutBox> &child : box->children) {
+      if (child->display == Display::None || isAbsoluteChild(child.get())) continue;
+      if (isCollapsibleText(child.get())) continue;
+      total += preferredContentWidth(child.get(), available) + horizontalEdges(child.get());
+      count++;
+    }
+    if (count > 1) total += px(style.column_gap, available, style.font_size, 0.0f) * (float)(count - 1);
+    return total;
+  }
   float best = 0;
   for (const std::unique_ptr<LayoutBox> &child : box->children) {
     if (child->display == Display::None) continue;
@@ -165,10 +183,41 @@ void Layouter::applyPosition(LayoutBox *box) const {
   translate(box, x - box->x, y - box->y);
 }
 
+namespace {
+void clearTextFragments(LayoutBox *box) {
+  if (box == nullptr) return;
+  box->fragments.clear();
+  for (const std::unique_ptr<LayoutBox> &child : box->children) clearTextFragments(child.get());
+}
+}  // namespace
+
 float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWidth,
                             float availableHeight, float forcedContentWidth,
                             float forcedContentHeight, bool inFlow) const {
   const XtStyle &style = *box->style;
+  /* Flex and grid measure an item before placing it; inline runs append to the
+   * text boxes' fragment lists, so drop the previous pass's fragments first. */
+  clearTextFragments(box);
+
+  /* A text box is normally laid out by its parent's inline formatting context.
+   * Flex/grid items can be text boxes themselves (`<kbd>W</kbd>` with
+   * `display:grid`), and `layoutChildren` would otherwise give them no geometry
+   * or fragment at all — the glyph then silently disappears from paint. */
+  if (box->is_text) {
+    float textW = textWidth(box->text, style);
+    float textH = lineHeightOf(style);
+    box->x = x;
+    box->y = y;
+    box->content_x = x;
+    box->content_y = y;
+    box->width = textW;
+    box->content_width = textW;
+    box->height = textH;
+    box->content_height = textH;
+    box->baseline = textH;
+    box->fragments.push_back({x, y, textW, textH, box->text});
+    return textH;
+  }
   float em = style.font_size;
   resolveEdges(box, availableWidth);
 
@@ -197,6 +246,9 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
     }
   } else {
     contentWidth = px(style.width, availableWidth, em);
+    if (style.box_sizing == BoxSizing::BorderBox) {
+      contentWidth -= box->border_left + box->border_right + box->padding_left + box->padding_right;
+    }
   }
   contentWidth = clampSize(contentWidth, style.min_width, style.max_width, availableWidth, em);
   if (contentWidth < 0) contentWidth = 0;
@@ -212,6 +264,19 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
   float definiteHeight = -1;
   if (!isAuto(style.height) && !(style.height.unit == Unit::Percent && availableHeight < 0)) {
     definiteHeight = px(style.height, availableHeight, em, -1);
+    if (style.box_sizing == BoxSizing::BorderBox && definiteHeight >= 0) {
+      definiteHeight -= box->border_top + box->border_bottom + box->padding_top + box->padding_bottom;
+      if (definiteHeight < 0) definiteHeight = 0;
+    }
+  } else if (outOfFlow && !isAuto(style.top) && !isAuto(style.bottom)) {
+    /* An absolutely positioned box with both vertical insets set and `height:
+     * auto` fills the containing block (the full-screen overlays rely on
+     * `inset: 0`). `layoutBlock` otherwise only knows definite heights from
+     * `height`, so derive it here. */
+    float top = px(style.top, box->cb_height, em);
+    float bottom = px(style.bottom, box->cb_height, em);
+    definiteHeight = box->cb_height - top - bottom - verticalEdges(box);
+    if (definiteHeight < 0) definiteHeight = 0;
   }
 
   float contentHeight;
@@ -225,9 +290,15 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
                               availableHeight < 0 ? contentHeight : availableHeight, em);
     if (contentHeight < 0) contentHeight = 0;
   }
-  /* Replaced elements keep their aspect ratio when only one axis is set. */
+  /* Replaced elements keep their aspect ratio when only one axis is set. A
+   * percentage height in an indefinite containing block behaves like `auto`
+   * (CSS 10.5), so it must take this path too: the portrait canvases are
+   * `height: 100%` inside a shrink-to-fit frame and were otherwise zero-height
+   * and invisible. */
+  bool replacedHeightAuto =
+      isAuto(style.height) || (style.height.unit == Unit::Percent && availableHeight < 0);
   if ((box->is_image || box->is_canvas || box->is_inline_svg) && forcedContentHeight < 0 &&
-      isAuto(style.height) && box->intrinsic_width > 0 && box->intrinsic_height > 0) {
+      replacedHeightAuto && box->intrinsic_width > 0 && box->intrinsic_height > 0) {
     contentHeight = contentWidth * box->intrinsic_height / box->intrinsic_width;
   }
   box->content_height = contentHeight;
@@ -255,7 +326,11 @@ void Layouter::layoutAbsoluteChildren(LayoutBox *block, float contentWidth,
                                       float availableHeight) const {
   for (const std::unique_ptr<LayoutBox> &child : block->children) {
     if (child->display == Display::None || !isAbsoluteChild(child.get())) continue;
-    setContainingBlock(child.get(), block);
+    /* An absolute box resolves against the nearest *positioned* ancestor, not
+     * necessarily its parent: under a static <body> the containing block is the
+     * initial containing block (the viewport). Passing the parent directly made
+     * `inset:0` hug the body's content height instead of filling the window. */
+    setContainingBlock(child.get(), containingBlockAncestor(block));
     layoutBlock(child.get(), block->content_x, block->content_y, contentWidth, availableHeight, -1,
                 -1, false);
   }
@@ -265,6 +340,8 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
                                float definiteHeight) const {
   if (block->style->display == Display::Flex)
     return layoutFlex(block, contentWidth, definiteHeight);
+  if (block->style->display == Display::Grid)
+    return layoutGrid(block, contentWidth, definiteHeight);
 
   float y = block->content_y;
   float startY = y;
@@ -345,7 +422,7 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
       continue;
     }
     if (display == Display::Block || display == Display::ListItem || display == Display::Flex ||
-        child->style == nullptr) {
+        display == Display::Grid || child->style == nullptr) {
       flush();
       resolveEdges(child.get(), contentWidth);
       /* Adjacent vertical margins collapse: the gap is the collapsed value of

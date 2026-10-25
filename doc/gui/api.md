@@ -56,7 +56,7 @@ requestAnimationFrame(frame);
 | `localStorage` | an in-memory `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` store |
 | `AudioContext`, `webkitAudioContext` | a Web Audio graph builder (see below) |
 | `Event`, `CustomEvent`, `ProgressEvent`, … | event constructors |
-| `HTMLCanvasElement`, `HTMLImageElement`, `ImageBitmap`, `ImageData`, `OffscreenCanvas`, `WebGL*`, `XRWebGL*`, `Request`, `Headers`, `Response`, `ReadableStream`, `DOMParser` | `typeof` probes answer `"undefined"` (the engine has no WebGL, XR, fetch or streaming backend), which lets a page take its "unsupported" branch instead of calling a no-op stub |
+| `HTMLCanvasElement`, `HTMLImageElement`, `ImageBitmap`, `ImageData`, `OffscreenCanvas`, `WebGL*`, `XRWebGL*`, `Request`, `Headers`, `Response`, `ReadableStream`, `DOMParser` | `typeof` probes answer `"undefined"` (the engine has no general WebGL/XR/fetch/streaming backend), which lets a page take its "unsupported" branch instead of calling a no-op stub. Three.js is the exception: the compiler's `.js` asset loader swaps its `WebGLRenderer` for a Canvas2D scene renderer (see [Known issues](./known-issues.md)). |
 | `requestAnimationFrame` / `cancelAnimationFrame` | queued on the window's frame list; see [Runtime integration](./runtime.md) |
 | `alert` / `confirm` / `prompt`, `matchMedia`, `getComputedStyle`, `escape` | host implementations (Annex B `escape` encodes per UTF-16 code unit, matching `decodeURIComponent(escape(bytes))`) |
 

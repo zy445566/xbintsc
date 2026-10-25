@@ -55,7 +55,7 @@ requestAnimationFrame(frame);
 | `localStorage` | 内存中的 `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` |
 | `AudioContext`、`webkitAudioContext` | Web Audio 图构建器（见下） |
 | `Event`、`CustomEvent`、`ProgressEvent` 等 | 事件构造器 |
-| `HTMLCanvasElement`、`HTMLImageElement`、`ImageBitmap`、`ImageData`、`OffscreenCanvas`、`WebGL*`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（引擎没有 WebGL、XR、fetch 或流式后端），让页面走自己的“不支持”分支，而不是调用空壳 |
+| `HTMLCanvasElement`、`HTMLImageElement`、`ImageBitmap`、`ImageData`、`OffscreenCanvas`、`WebGL*`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（引擎没有通用 WebGL/XR/fetch/流式后端），让页面走自己的“不支持”分支，而不是调用空壳。Three.js 是例外：编译器的 `.js` 资源加载器会把它的 `WebGLRenderer` 换成 Canvas2D 场景渲染器（见[已知问题](./known-issues.md)）。 |
 | `requestAnimationFrame` / `cancelAnimationFrame` | 排入窗口的动画帧列表，见[运行时集成](./runtime.md) |
 | `alert` / `confirm` / `prompt`、`matchMedia`、`getComputedStyle`、`escape` | 宿主实现（Annex B `escape` 按 UTF-16 码元编码，与 `decodeURIComponent(escape(bytes))` 一致） |
 

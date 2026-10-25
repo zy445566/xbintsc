@@ -20,7 +20,8 @@
 
 namespace xtgui {
 
-enum class Display { None, Block, Inline, InlineBlock, Flex, ListItem };
+enum class Display { None, Block, Inline, InlineBlock, Flex, Grid, ListItem };
+enum class BoxSizing { ContentBox, BorderBox };
 enum class Position { Static, Relative, Absolute, Fixed };
 enum class FlexDirection { Row, RowReverse, Column, ColumnReverse };
 enum class FlexWrap { NoWrap, Wrap, WrapReverse };
@@ -44,6 +45,30 @@ struct TransitionSpec {
   TimingFunction timing = TimingFunction::Ease;
 };
 
+/** One track of a `grid-template-columns` / `grid-template-rows` list.
+ * `min`/`max` keep their CSS unit (`auto` for an intrinsic bound); `fr` is the
+ * flex fraction of a `minmax(..., <n>fr)` or `<n>fr` track. */
+struct GridTrack {
+  Length min{0.0f, Unit::Auto};
+  Length max{0.0f, Unit::Auto};
+  float fr = 0.0f;
+};
+
+struct BackgroundGradientStop {
+  float offset = 0.0f;
+  Color color;
+};
+
+/** A linear `background-image` gradient. Multiple background layers and radial
+ * gradients are not modelled (the first linear layer is the base colour of
+ * every panel/bar in an application shell; decorative radial layers are
+ * skipped). Painted as a small number of solid strips. */
+struct BackgroundGradient {
+  bool active = false;
+  float angle = 180.0f;  // CSS degrees: 0 = to top, 90 = to right, 180 = to bottom
+  std::vector<BackgroundGradientStop> stops;
+};
+
 struct Edges {
   Length top;
   Length right;
@@ -55,6 +80,10 @@ struct Edges {
 
 struct XtStyle {
   Display display = Display::Inline;
+  BoxSizing box_sizing = BoxSizing::ContentBox;
+  /* CSS custom properties (`--name`) are inherited and substituted into the
+   * values of the other declarations during the cascade. */
+  std::unordered_map<std::string, std::string> variables;
   Position position = Position::Static;
   Edges margin;
   Edges padding;
@@ -75,9 +104,12 @@ struct XtStyle {
   Length bottom;
   Length left;
 
+  bool visible = true;           // inherited `visibility`
+  bool pointer_events = true;    // inherited `pointer-events`
   Color color;             // inherited; defaults to black
   Color background;        // transparent by default
   bool has_background = false;
+  BackgroundGradient background_gradient;
 
   float font_size = 16.0f;             // inherited
   int font_weight = 400;               // inherited
@@ -93,6 +125,19 @@ struct XtStyle {
   JustifyContent justify_content = JustifyContent::FlexStart;
   AlignItems align_items = AlignItems::Stretch;
   AlignContent align_content = AlignContent::Stretch;
+  /* Grid (a focused subset: explicit/implicit rows and columns, gap, item
+   * alignment and simple line placement). */
+  std::vector<GridTrack> grid_columns;
+  std::vector<GridTrack> grid_rows;
+  AlignItems justify_items = AlignItems::Stretch;
+  bool has_justify_self = false;
+  AlignItems justify_self = AlignItems::Stretch;
+  bool has_align_self = false;
+  AlignItems align_self = AlignItems::Stretch;
+  int grid_column_start = 0;
+  int grid_column_end = 0;
+  int grid_row_start = 0;
+  int grid_row_end = 0;
   Length gap;
   Length row_gap;
   Length column_gap;

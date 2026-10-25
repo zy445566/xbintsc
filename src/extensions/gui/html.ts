@@ -38,6 +38,7 @@ import { Parser } from "../../parser/parser.js";
 import { artifactPath } from "../../canonical.js";
 import { hashString } from "../../driver/cache.js";
 import type { AssetLoadResult, AssetSourceRange } from "../registry.js";
+import { inlineStylesheets } from "./css.js";
 
 /** Matches an inline `<script …>body</script>` element, attributes included. */
 const SCRIPT_RE = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
@@ -191,7 +192,10 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
   const importedText = new Set<string>();
   const bound = new Set<string>();
 
-  const html = source.replace(SCRIPT_RE, (match, attributes: string, inlineBody: string) => {
+  /* The engine's cascade only reads `<style>` elements, so a linked stylesheet
+   * would be dropped at runtime. Inline it (and its `@import`s) now. */
+  const styles = inlineStylesheets(path, source);
+  const html = styles.html.replace(SCRIPT_RE, (match, attributes: string, inlineBody: string) => {
     if (!isExecutable(attribute(attributes, "type"), attribute(attributes, "lang"))) return match;
     const src = attribute(attributes, "src");
 
@@ -244,6 +248,9 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
     offset += part.length + 1;
   }
   parts.push(`export default ${JSON.stringify(html)};`);
-  const result: AssetLoadResult = { moduleSource: parts.join("\n") };
+  const result: AssetLoadResult = {
+    moduleSource: parts.join("\n"),
+    ...(styles.dependencies.length > 0 ? { dependencies: styles.dependencies } : {}),
+  };
   return sourceRanges.length > 0 ? { ...result, sourceRanges } : result;
 }

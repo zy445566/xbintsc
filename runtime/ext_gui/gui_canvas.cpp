@@ -88,8 +88,37 @@ void xt_gui_canvas_sync(XtGuiWindow *win) {
   }
 }
 
+void xt_gui_canvas_bind_pending(XtGuiWindow *win, const xtgui::Node *node, xt_value handle) {
+  if (win == nullptr || node == nullptr) return;
+  xt_value pending = xt_object_get_cstr(handle, "__xt_gui_pending_canvas");
+  if (!XT_IS_NUMBER(pending)) return;
+  uint64_t id = (uint64_t)xt_to_number(pending);
+  xt_object_set(handle, xt_string_from_cstr("__xt_gui_pending_canvas"), XT_UNDEFINED);
+  auto found = win->pending_canvases.find(id);
+  if (found == win->pending_canvases.end()) return;
+  if (!isCanvasElement(node)) {
+    win->pending_canvases.erase(found);
+    return;
+  }
+  xtgui::Canvas2D *canvas = found->second.get();
+  /* The parsed element's width/height attributes win over the default 300x150
+   * a pre-load context started with. */
+  int width = canvasAttributeSize(node, "width", canvas->width());
+  int height = canvasAttributeSize(node, "height", canvas->height());
+  if (width != canvas->width() || height != canvas->height()) canvas->resize(width, height);
+  win->canvases[node] = std::move(found->second);
+  win->pending_canvases.erase(found);
+  if (win->document != nullptr) {
+    win->document->setCanvasInfo(node, (float)canvas->width(), (float)canvas->height(),
+                                 canvas->id());
+  }
+}
+
 void xt_gui_canvas_shutdown(XtGuiWindow *win) {
   if (win == nullptr) return;
   for (auto &entry : win->canvases) releaseCanvasTexture(entry.second.get());
   win->canvases.clear();
+  /* `pending_canvases` survives `loadHTML`: a module that asked for a context
+   * before the page existed still needs its bitmap when the parsed element
+   * binds. They are released with the window record. */
 }

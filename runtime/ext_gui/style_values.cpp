@@ -4,6 +4,7 @@
  */
 
 #include "style_internal.h"
+#include "style_values_internal.h"
 
 #include <cstdlib>
 #include <vector>
@@ -19,8 +20,30 @@ static void setEdge(Edges *edges, const std::string &side, Length value) {
   else if (side == "left") edges->left = value;
 }
 
+/* Split on whitespace outside function parentheses, so
+ * `clamp(26px, 5.4vw, 84px)` is one edge value rather than three tokens. */
+static std::vector<std::string> splitEdgeTokens(const std::string &text) {
+  std::vector<std::string> parts;
+  std::string current;
+  int depth = 0;
+  for (char c : text) {
+    if (c == '(') depth++;
+    if (c == ')') depth--;
+    if ((c == ' ' || c == '\t' || c == '\n' || c == '\r') && depth == 0) {
+      if (!current.empty()) {
+        parts.push_back(current);
+        current.clear();
+      }
+    } else {
+      current.push_back(c);
+    }
+  }
+  if (!current.empty()) parts.push_back(current);
+  return parts;
+}
+
 static bool parseEdgeLengths(const std::string &value, Edges *edges) {
-  std::vector<std::string> parts = xt_css_split_whitespace(value);
+  std::vector<std::string> parts = splitEdgeTokens(value);
   if (parts.empty() || parts.size() > 4) return false;
   Length values[4];
   for (size_t i = 0; i < parts.size(); i++) {
@@ -57,6 +80,41 @@ static bool parseEdgeLengths(const std::string &value, Edges *edges) {
   return true;
 }
 
+
+/** `inset: <top> <right> <bottom> <left>` (1-4 values, like margin). */
+static bool parseInsetLengths(const std::string &value, Length *top, Length *right, Length *bottom,
+                              Length *left) {
+  std::vector<std::string> parts = splitEdgeTokens(value);
+  if (parts.empty() || parts.size() > 4) return false;
+  Length values[4];
+  for (size_t i = 0; i < parts.size(); i++) {
+    Length length = xt_css_parse_length(parts[i]);
+    if (length.unit == Unit::Invalid) return false;
+    values[i] = length;
+  }
+  switch (parts.size()) {
+    case 1:
+      *top = *right = *bottom = *left = values[0];
+      break;
+    case 2:
+      *top = *bottom = values[0];
+      *right = *left = values[1];
+      break;
+    case 3:
+      *top = values[0];
+      *right = *left = values[1];
+      *bottom = values[2];
+      break;
+    default:
+      *top = values[0];
+      *right = values[1];
+      *bottom = values[2];
+      *left = values[3];
+      break;
+  }
+  return true;
+}
+
 static bool assignLength(Length *target, const std::string &value) {
   Length length = xt_css_parse_length(value);
   if (length.unit == Unit::Invalid) return false;
@@ -64,17 +122,37 @@ static bool assignLength(Length *target, const std::string &value) {
   return true;
 }
 
-static bool assignColor(Color *target, bool *has, const std::string &value) {
-  Color color = xt_css_parse_color(value);
-  if (!color.valid) return false;
-  *target = color;
-  *has = true;
-  return true;
-}
 
 float xt_style_resolve_absolute(const Length &length, float base, float em, float root, float vw,
                                 float vh) {
   switch (length.unit) {
+    case Unit::Clamp: {
+      if (length.args.size() < 3) return 0.0f;
+      float low = xt_style_resolve_absolute(length.args[0], base, em, root, vw, vh);
+      float value = xt_style_resolve_absolute(length.args[1], base, em, root, vw, vh);
+      float high = xt_style_resolve_absolute(length.args[2], base, em, root, vw, vh);
+      return value < low ? low : (value > high ? high : value);
+    }
+    case Unit::Min: {
+      float best = 0.0f;
+      bool first = true;
+      for (const Length &arg : length.args) {
+        float value = xt_style_resolve_absolute(arg, base, em, root, vw, vh);
+        if (first || value < best) best = value;
+        first = false;
+      }
+      return best;
+    }
+    case Unit::Max: {
+      float best = 0.0f;
+      bool first = true;
+      for (const Length &arg : length.args) {
+        float value = xt_style_resolve_absolute(arg, base, em, root, vw, vh);
+        if (first || value > best) best = value;
+        first = false;
+      }
+      return best;
+    }
     case Unit::Px:
     case Unit::Number:
       return length.value;
@@ -104,82 +182,12 @@ static bool parseEnum(const std::string &value, const char *const *names, int co
   return false;
 }
 
-/* -- transitions ---------------------------------------------------------- */
-
-static bool parseTimeSeconds(const std::string &text, float *out) {
-  std::string token = xt_css_trim(text);
-  if (token.empty()) return false;
-  const char *begin = token.c_str();
-  char *end = nullptr;
-  double value = std::strtod(begin, &end);
-  if (end == begin) return false;
-  std::string unit = xt_css_lower(xt_css_trim(std::string(end)));
-  if (unit == "ms") {
-    *out = (float)(value / 1000.0);
-  } else if (unit.empty() || unit == "s") {
-    *out = (float)value;
-  } else {
-    return false;
-  }
+static bool assignColor(Color *target, bool *has, const std::string &value) {
+  Color color = xt_css_parse_color(value);
+  if (!color.valid) return false;
+  *target = color;
+  *has = true;
   return true;
-}
-
-static bool parseTimingFunction(const std::string &text, TimingFunction *out) {
-  std::string token = xt_css_lower(xt_css_trim(text));
-  if (token == "linear") {
-    *out = TimingFunction::Linear;
-  } else if (token == "ease") {
-    *out = TimingFunction::Ease;
-  } else if (token == "ease-in") {
-    *out = TimingFunction::EaseIn;
-  } else if (token == "ease-out") {
-    *out = TimingFunction::EaseOut;
-  } else if (token == "ease-in-out") {
-    *out = TimingFunction::EaseInOut;
-  } else {
-    return false;
-  }
-  return true;
-}
-
-static std::vector<std::string> splitCommas(const std::string &text) {
-  std::vector<std::string> parts;
-  size_t start = 0;
-  for (size_t i = 0; i <= text.size(); i++) {
-    if (i == text.size() || text[i] == ',') {
-      std::string part = xt_css_trim(text.substr(start, i - start));
-      if (!part.empty()) parts.push_back(part);
-      start = i + 1;
-    }
-  }
-  return parts;
-}
-
-static void parseTransitionShorthand(const std::string &value, std::vector<TransitionSpec> *out) {
-  out->clear();
-  for (const std::string &group : splitCommas(value)) {
-    std::vector<std::string> tokens = xt_css_split_whitespace(group);
-    if (tokens.empty()) continue;
-    TransitionSpec spec;
-    int time_seen = 0;
-    for (const std::string &token : tokens) {
-      float seconds = 0;
-      TimingFunction timing = TimingFunction::Ease;
-      if (parseTimeSeconds(token, &seconds)) {
-        if (time_seen == 0) {
-          spec.duration = seconds;
-        } else {
-          spec.delay = seconds;
-        }
-        time_seen++;
-      } else if (parseTimingFunction(token, &timing)) {
-        spec.timing = timing;
-      } else {
-        spec.property = xt_css_lower(token);
-      }
-    }
-    out->push_back(spec);
-  }
 }
 
 /* -- declaration application ---------------------------------------------- */
@@ -189,9 +197,30 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   std::string value = xt_css_trim(rawValue);
 
   if (property == "display") {
-    static const char *const names[] = {"none", "block", "inline", "inline-block", "flex", "list-item"};
+    static const char *const names[] = {"none", "block", "inline", "inline-block", "flex", "grid",
+                                        "list-item"};
     int index = 0;
-    if (parseEnum(value, names, 6, &index)) style->display = (Display)index;
+    if (parseEnum(value, names, 7, &index)) style->display = (Display)index;
+    return;
+  }
+  if (property == "visibility") {
+    std::string text = xt_css_lower(xt_css_trim(value));
+    if (text == "hidden" || text == "collapse") style->visible = false;
+    else if (text == "visible") style->visible = true;
+    return;
+  }
+  if (property == "pointer-events") {
+    std::string text = xt_css_lower(xt_css_trim(value));
+    if (text == "none") style->pointer_events = false;
+    else if (text == "auto" || text == "all" || text == "visiblepainted" ||
+             text == "visiblefill" || text == "visiblestroke")
+      style->pointer_events = true;
+    return;
+  }
+  if (property == "box-sizing") {
+    std::string text = xt_css_lower(xt_css_trim(value));
+    if (text == "border-box") style->box_sizing = BoxSizing::BorderBox;
+    else if (text == "content-box") style->box_sizing = BoxSizing::ContentBox;
     return;
   }
   if (property == "position") {
@@ -210,6 +239,10 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   if (property == "right") { assignLength(&style->right, value); return; }
   if (property == "bottom") { assignLength(&style->bottom, value); return; }
   if (property == "left") { assignLength(&style->left, value); return; }
+  if (property == "inset") {
+    parseInsetLengths(value, &style->top, &style->right, &style->bottom, &style->left);
+    return;
+  }
 
   if (property == "margin") { parseEdgeLengths(value, &style->margin); return; }
   if (property == "padding") { parseEdgeLengths(value, &style->padding); return; }
@@ -274,7 +307,12 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     return;
   }
   if (property == "background-color") { assignColor(&style->background, &style->has_background, value); return; }
+  if (property == "background-image") {
+    xt_style_apply_gradient(style, value);
+    return;
+  }
   if (property == "background") {
+    if (xt_style_apply_gradient(style, value)) return;
     Color color = xt_css_parse_color(value);
     if (color.valid) {
       style->background = color;
@@ -319,6 +357,25 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
       style->line_height = {};
       return;
     }
+    /* A unitless `line-height` is a multiplier, not a length in pixels. The
+     * generic length parser maps a bare number to `px`, which collapsed
+     * `line-height: 0.76` / `1.9` to sub-pixel leading and made consecutive
+     * lines overlap. */
+    bool hasUnit = false;
+    for (const char *suffix : {"px", "%", "em", "rem", "vw", "vh", "pt", "pc", "in", "cm", "mm", "q"}) {
+      size_t length = std::strlen(suffix);
+      if (text.size() >= length && text.compare(text.size() - length, length, suffix) == 0) {
+        hasUnit = true;
+        break;
+      }
+    }
+    if (!hasUnit) {
+      float number = 0;
+      if (xt_css_parse_number(text, &number)) {
+        style->line_height = {number, Unit::Number};
+        return;
+      }
+    }
     Length length = xt_css_parse_length(text);
     if (length.unit == Unit::Invalid) return;
     /* Relative units are resolved in `finalizeStyle`, once the element's own
@@ -340,6 +397,8 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     if (parseEnum(value, names, 5, &index)) style->white_space = (WhiteSpace)index;
     return;
   }
+
+  if (xt_style_apply_grid_property(style, property, value)) return;
 
   if (property == "flex-direction") {
     static const char *const names[] = {"row", "row-reverse", "column", "column-reverse"};
@@ -369,12 +428,6 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
                                         "space-around", "space-evenly"};
     int index = 0;
     if (parseEnum(value, names, 6, &index)) style->justify_content = (JustifyContent)index;
-    return;
-  }
-  if (property == "align-items") {
-    static const char *const names[] = {"stretch", "flex-start", "flex-end", "center", "baseline"};
-    int index = 0;
-    if (parseEnum(value, names, 5, &index)) style->align_items = (AlignItems)index;
     return;
   }
   if (property == "align-content") {
@@ -515,36 +568,8 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     if (parseEnum(value, names, 4, &index)) style->clear = (Clear)index;
     return;
   }
-  if (property == "transition") {
-    parseTransitionShorthand(value, &style->transitions);
-    return;
-  }
-  if (property == "transition-property") {
-    std::vector<std::string> parts = splitCommas(value);
-    style->transitions.resize(parts.size());
-    for (size_t i = 0; i < parts.size(); i++) style->transitions[i].property = xt_css_lower(parts[i]);
-    return;
-  }
-  if (property == "transition-duration" || property == "transition-delay") {
-    std::vector<std::string> parts = splitCommas(value);
-    style->transitions.resize(parts.size());
-    for (size_t i = 0; i < parts.size(); i++) {
-      float seconds = 0;
-      if (!parseTimeSeconds(parts[i], &seconds)) continue;
-      if (property == "transition-duration") style->transitions[i].duration = seconds;
-      else style->transitions[i].delay = seconds;
-    }
-    return;
-  }
-  if (property == "transition-timing-function") {
-    std::vector<std::string> parts = splitCommas(value);
-    style->transitions.resize(parts.size());
-    for (size_t i = 0; i < parts.size(); i++) {
-      TimingFunction timing = TimingFunction::Ease;
-      if (parseTimingFunction(parts[i], &timing)) style->transitions[i].timing = timing;
-    }
-    return;
-  }
+  if (xt_style_apply_transition(style, property, value)) return;
+
 }
 
 }  // namespace xtgui

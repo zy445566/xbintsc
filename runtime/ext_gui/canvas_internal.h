@@ -48,6 +48,16 @@ void draw_image(std::vector<unsigned char> &pixels, int width, int height, const
                 float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh,
                 float alpha);
 
+/** Blit an RGBA8 source through a full affine transform. The destination
+ * rectangle is mapped to a parallelogram by `transform`; each device pixel is
+ * inverse-mapped and sampled from the source rectangle. This is the path that
+ * makes rotated/skewed `drawImage` (and perspective-grid canvas textures) draw
+ * the image instead of squashing it into the bounding box. */
+void draw_image_affine(std::vector<unsigned char> &pixels, int width, int height,
+                       const Image &source, float dx, float dy, float dw, float dh, float sx,
+                       float sy, float sw, float sh, const CanvasTransform &transform,
+                       float alpha);
+
 /** Composite one grayscale glyph bitmap at `(x, baselineY)` with `paint`. */
 void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<unsigned char> &glyph, int glyphWidth, int glyphHeight, int left,

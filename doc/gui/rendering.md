@@ -73,7 +73,14 @@ divided back into logical units, exactly the way HiDPI scaling already worked.
 
 The window background (`setBackground`) is the render-pass clear colour.
 
-Still to do in M4: gradients.
+Linear-gradient `background` / `background-image` values are painted as a base
+layer: the last `linear-gradient(...)` in the shorthand is sampled at 18 points
+and emitted as solid rectangles (the renderer has no gradient shader). A
+translucent gloss layer and radial gradients are not composited, so a panel that
+stacks several decorative layers keeps only its base colour. Multi-stop colours,
+angles and percentage stops are supported.
+Still to do in M4: radial gradients, multiple background layers and
+`background-clip`.
 
 ## Text stack (M4b)
 

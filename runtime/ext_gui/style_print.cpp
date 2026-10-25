@@ -38,6 +38,18 @@ static std::string formatLength(const Length &length) {
       return formatNumber(length.value) + "vw";
     case Unit::Vh:
       return formatNumber(length.value) + "vh";
+    case Unit::Clamp:
+    case Unit::Min:
+    case Unit::Max: {
+      const char *name = length.unit == Unit::Clamp ? "clamp" : (length.unit == Unit::Min ? "min" : "max");
+      std::string text = std::string(name) + "(";
+      for (size_t i = 0; i < length.args.size(); i++) {
+        if (i > 0) text += ", ";
+        text += xt_style_length_to_string(length.args[i]);
+      }
+      text += ")";
+      return text;
+    }
     default:
       return "";
   }
@@ -58,7 +70,8 @@ static std::string formatColor(const Color &color) {
 
 std::string xt_style_property_to_string(const XtStyle &style, const std::string &rawProperty) {
   std::string property = xt_css_lower(xt_css_trim(rawProperty));
-  static const char *const displayNames[] = {"none", "block", "inline", "inline-block", "flex", "list-item"};
+  static const char *const displayNames[] = {"none", "block", "inline", "inline-block", "flex",
+                                             "grid", "list-item"};
   static const char *const positionNames[] = {"static", "relative", "absolute", "fixed"};
   static const char *const flexNames[] = {"row", "row-reverse", "column", "column-reverse"};
   static const char *const wrapNames[] = {"nowrap", "wrap", "wrap-reverse"};

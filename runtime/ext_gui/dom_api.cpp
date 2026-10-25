@@ -65,6 +65,7 @@ static xtgui::Node *bind_pending(XtGuiWindow *win, xt_value self, xtgui::Node *n
   xt_object_set(self, xt_string_from_cstr("__xt_gui_gen"),
                 xt_object_get_cstr(canonical, "__xt_gui_gen"));
   xt_object_set(self, xt_string_from_cstr("__xt_gui_pending"), XT_UNDEFINED);
+  xt_gui_canvas_bind_pending(win, node, self);
   return node;
 }
 

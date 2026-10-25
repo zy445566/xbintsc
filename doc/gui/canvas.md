@@ -101,8 +101,11 @@ rotate the glyph bitmaps. `strokeText` currently fills with the stroke style
 rather than producing an outline.
 
 Images: `drawImage(source, …)` in the 3-argument (`dx, dy`), 5-argument
-(`dx, dy, dw, dh`) and 9-argument (`dx, dy, dw, dh, sx, sy, sw, sh`) forms.
-`source` may be an `<img>` element (decoded through the image module) or another
+(`dx, dy, dw, dh`) and 9-argument (`dx, dy, dw, dh, sx, sy, sw, sh`; this
+engine's 9-argument form is destination-first) forms. A full affine transform
+(rotation/skew/scale) is honoured: the destination rectangle becomes a
+parallelogram and every device pixel is inverse-mapped to the source rectangle
+(nearest-neighbour). `source` may be an `<img>` element (decoded through the image module) or another
 `<canvas>` element (its current bitmap). Sampling is nearest-neighbour, so a
 large upscale of a small source is blocky — fine for icons and pixel art, not a
 photo pipeline.

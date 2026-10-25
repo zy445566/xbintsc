@@ -6,12 +6,16 @@
 
 ## 已知问题
 
-- **没有 WebGL。** `getContext("webgl")` / `getContext("webgl2")` 返回 `null`，
-  `WebGL*` / `WebGL2RenderingContext` / `XRWebGL*` 全局为 `undefined`，因此像 Three.js
-  场景这样的 WebGL 页面会以库自身的 “Error creating WebGL context” 失败，应当显示自己的
-  降级面板。只有 `getContext("2d")` 由光栅器支撑（见[画布](./canvas.md)）。移植页面
-  的其余部分——模块图、DOM 句柄、事件、[API](./api.md) 中的浏览器全局、帧泵——都能工作，
-  所以 Three.js 程序**可以编译并启动**，只是无法绘制。
+- **没有通用 WebGL，但 Three.js 有 Canvas2D 回退。** `getContext("webgl")` /
+  `getContext("webgl2")` 仍然返回 `null`，`WebGL*` / `WebGL2RenderingContext` /
+  `XRWebGL*` 全局仍然为 `undefined`。变化在于 gui 扩展的 `.js` 资源加载器会识别
+  Three.js 模块，并把它的 `WebGLRenderer` 导出替换为 Canvas2D 场景渲染器
+  （`runtime/ext_gui/three_compat.js`，由 `src/extensions/gui/three.ts` 载入）。
+  因此 Three.js 页面现在**既能编译也能绘制**：标准/基础材质、各类灯光、雾、
+  tone mapping、CanvasTexture、Sprite、Points 与实例化剪影都受支持。它是场景渲染器，
+  不是 GL 实现，所以自定义 shader、蒙皮/变形目标、真实阴影贴图与渲染目标不会执行；
+  快速路径之外的几何会退化为平面着色三角形。其他 WebGL 库仍然看到未定义的上下文，
+  需要走自己的降级分支。
 
 - **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生
   访问违例（`0xC0000005`）退出，其余运行与正常退出无异。该问题只在**动画帧循环运行中**复现
@@ -30,6 +34,13 @@
   `tests/e2e/gui-example-browser.test.ts` 中。
 - **`display: none -> flex` 的重排。** 通过类名切换让隐藏元素显示在 flex 容器上时，也曾观察
   到同样的崩溃；`examples/gui/pelican-bike` 改用 `opacity` 显示游戏结束遮罩。
+- **CSS 覆盖范围是有意为之的子集。** 已实现 Grid、`clamp()`/`min()`/`max()`/`env()`、
+  `var()` 自定义属性、`inset` 简写、`box-sizing`、`visibility`/`pointer-events`
+  以及线性渐变背景。仍未实现：伪元素（`::before`/`::after`）、`clip-path`、
+  `filter`/`backdrop-filter`、`mix-blend-mode`、`text-shadow`、径向/多层背景，
+  以及 `@media` 块（解析器会跳过 at-rule）。这些属性会被忽略而不是近似实现，
+  因此装饰效果可能缺失，但布局与文字仍然正确。Canvas 纹理使用最近邻采样，
+  多层 `background` 只绘制一层基础线性渐变（18 条纯色带），不是完整的合成栈。
 - **SVG 是 NanoSVG 的子集。** SVG *文件*（`<img src="logo.svg">`）与内联
   `<svg>` 子树共用 vendored 的 NanoSVG 解析/光栅化器（`runtime/ext_gui/svg.cpp`、
   `inline_svg.cpp`），它会渲染 `path`/`rect`/`circle`/`ellipse`/`line`/

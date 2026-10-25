@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadHtmlAsset } from "../../src/extensions/gui/html.js";
+import { loadScriptAsset } from "../../src/extensions/gui/three.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { DiagnosticBag } from "../../src/diagnostics/diagnostic.js";
 import { SourceFile } from "../../src/diagnostics/source.js";
@@ -200,5 +201,56 @@ describe("gui .html asset loader", () => {
       expect(moduleSource, src).toContain("__registerScript");
       expect(parseDiagnostics(moduleSource), src).toBe(0);
     }
+  });
+
+  it("inlines linked stylesheets and their @imports into the HTML", () => {
+    const directory = writeFiles({
+      "styles/main.css": '@import "./base.css";\n.a { color: red; }',
+      "styles/base.css": "body { background: #000; }",
+      "page.html": "",
+    });
+    const htmlPath = join(directory, "page.html");
+    const html = '<link rel="stylesheet" href="styles/main.css"><div class="a">x</div>';
+    const { moduleSource, dependencies } = loadHtmlAsset(htmlPath, html);
+    expect(htmlOf(moduleSource)).toContain("body { background: #000; }");
+    expect(htmlOf(moduleSource)).toContain(".a { color: red; }");
+    expect(htmlOf(moduleSource)).not.toContain("<link");
+    expect(moduleSource).not.toContain("@import");
+    expect(dependencies).toContain(join(directory, "styles/main.css"));
+    expect(dependencies).toContain(join(directory, "styles/base.css"));
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("does not inline remote stylesheet links", () => {
+    const { moduleSource } = loadHtmlAsset(
+      "page.html",
+      '<link rel="stylesheet" href="https://example.com/x.css">',
+    );
+    expect(htmlOf(moduleSource)).toContain('href="https://example.com/x.css"');
+  });
+
+  it("replaces three.js's WebGLRenderer with the Canvas2D fallback", () => {
+    const source =
+      "class WebGLRenderer {\n  constructor() {}\n}\n" +
+      "class WebGL1Renderer extends WebGLRenderer {}\n" +
+      "export { WebGL1Renderer, WebGLRenderer };\n";
+    const { moduleSource, dependencies } = loadScriptAsset("three.module.js", source);
+    expect(moduleSource).toContain("class WebGLRendererWebGL {");
+    expect(moduleSource).toContain("class WebGL1Renderer extends WebGLRendererWebGL {}");
+    // The new class is inserted before the export list, which still names the
+    // public `WebGLRenderer` binding.
+    expect(moduleSource).toContain("__xtSwTAU");
+    expect(moduleSource.lastIndexOf("class WebGLRenderer {")).toBeLessThan(
+      moduleSource.lastIndexOf("export {"),
+    );
+    expect(moduleSource).toContain("export { WebGL1Renderer, WebGLRenderer };");
+    expect(dependencies?.[0]).toMatch(/three_compat\.js$/);
+  });
+
+  it("leaves non-three JavaScript assets untouched", () => {
+    const source = "export const answer = 42;\n";
+    const result = loadScriptAsset("app.js", source);
+    expect(result.moduleSource).toBe(source);
+    expect(result.dependencies).toBeUndefined();
   });
 });

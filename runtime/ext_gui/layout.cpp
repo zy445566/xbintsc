@@ -211,10 +211,12 @@ namespace {
 
 const LayoutBox *hitTestBox(const LayoutBox *box, float x, float y) {
   if (box == nullptr || box->display == Display::None) return nullptr;
+  if (box->style != nullptr && !box->style->visible) return nullptr;
   /* Later siblings paint on top, so probe them first. */
   for (auto it = box->children.rbegin(); it != box->children.rend(); ++it) {
     if (const LayoutBox *hit = hitTestBox(it->get(), x, y)) return hit;
   }
+  if (box->style != nullptr && !box->style->pointer_events) return nullptr;
   float local_x = x;
   float local_y = y;
   if (box->has_transform) box->inverse.apply(x, y, &local_x, &local_y);

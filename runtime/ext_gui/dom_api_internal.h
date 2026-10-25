@@ -38,6 +38,9 @@ xt_value style_proto();
 xt_value canvas_proto();
 xt_value canvas_gradient_proto();
 
+/** Create/return the 2D context for a pending `<canvas>` handle (before load). */
+xt_value xt_canvas_pending_context(xt_value self, XtGuiWindow *win);
+
 /* -- canvas helpers shared by `dom_api_canvas*.cpp` ----------------------- */
 
 /** The engine canvas behind a 2D context handle, or null when stale/foreign. */

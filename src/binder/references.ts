@@ -510,7 +510,19 @@ export const referenceMethods: ReferenceMethods = {
         this.symbolOfIdentifier.set(identifier, symbol);
         // Functions, classes and type-only names are resolved to their
         // declaration sites by codegen; they are never captured as values.
-        if (symbol.fn !== this.current && isCapturable(symbol.kind)) this.markCaptured(symbol);
+        // A *function declaration* reached from a nested function is the
+        // exception: the closure value belongs to the declaring function's
+        // frame (it may itself capture parameters), so thread it through the
+        // environment instead of rebuilding it at the call site with the
+        // caller's slots. Module-scope functions keep their global handling.
+        if (symbol.kind === SymbolKind.Function) {
+          /* Module-scope functions are reached through their globals; a
+           * function declared inside a function travels with the closure
+           * environment because its own captures belong to that frame. */
+          if (symbol.fn !== this.current && !symbol.fn.isModule) this.markCaptured(symbol);
+        } else if (symbol.fn !== this.current && isCapturable(symbol.kind)) {
+          this.markCaptured(symbol);
+        }
         return;
       }
       current = current.parent;

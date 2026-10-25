@@ -28,6 +28,20 @@
   flex 项的外边距参与其外框尺寸，因此
   负的 `margin-top` 会把该项上移，而不是被忽略。项之间的纯空白文本
   （源码缩进）不会成为 flex 项。
+- **Grid** —— `display: grid`，支持 `grid-template-columns` /
+  `grid-template-rows`（固定长度、`auto`、`<n>fr`、`minmax(...)`、
+  `repeat(...)`）、`gap`/`row-gap`/`column-gap`、按行自动放置、简单的
+  `grid-column`/`grid-row` 线定位，以及 `align/justify-items` 与
+  `align/justify-self`（含 `place-items`/`place-self`）。隐式行/列由项目撑开；
+  单单元格网格配合 `place-items: center` 可把卡片居中到整个覆盖层。项目测量是
+  两遍布局（先固有尺寸、再最终放置），因此两遍之间会清空文本片段。
+- **CSS 值函数与自定义属性** —— `clamp(min, value, max)`、`min(...)` 与
+  `max(...)` 在计算样式中保留参数，布局时结合元素字号与视口（`vw`/`vh`）求值；
+  桌面窗口中 `env(safe-area-inset-*)` 解析为 0。`var(--name[, fallback])` 在
+  层叠期间从继承的自定义属性替换。`inset` 是四值 `top/right/bottom/left`
+  简写；`box-sizing: border-box` 会从显式宽高里扣除 padding 与边框；
+  `visibility: hidden` 跳过绘制与命中测试；`pointer-events: none` 使盒子不接收输入
+  （后代可用 `auto` 重新启用）。
 - **定位** —— `position: relative` 会按 `top`/`right`/`bottom`/`left` 偏移该盒子
   及其子树，但不改变它在流中占用的空间；`position: absolute`（以及针对视口解析
   的 `fixed`）使其脱离文档流，并相对最近的已定位祖先的 padding box 定位（没有

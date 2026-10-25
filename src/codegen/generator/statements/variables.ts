@@ -33,9 +33,12 @@ export const variableStatementMethods: VariableStatementMethods = {
           continue;
         }
         if (this.current.slots.has(symbol.id)) {
-          // Hoisted `var` (or an already-declared slot): keep evaluating the
-          // initializer for its side effects, but do not redeclare the slot.
-          if (declaration.initializer) this.emitExpression(declaration.initializer);
+          // Hoisted `var`, or a box created early for a captured binding
+          // declared textually after a hoisted function: do not redeclare the
+          // slot, but assigning an initializer is still part of the statement.
+          if (declaration.initializer) {
+            this.writeSlot(symbol, this.emitExpression(declaration.initializer));
+          }
           continue;
         }
         if (symbol.boxed) {

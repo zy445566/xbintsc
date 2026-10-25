@@ -58,8 +58,9 @@ METHOD(node_get_context) {
   std::string mode = string_arg(argc, argv, 0);
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement() || !node->isTag("canvas")) return XT_NULL;
   if (mode != "2d") return XT_NULL;
+  if (node == nullptr) return xt_canvas_pending_context(self, win);
+  if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
   xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
   if (canvas == nullptr) return XT_NULL;
   xt_value cached = xt_object_get_cstr(self, "__xt_gui_ctx");

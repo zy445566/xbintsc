@@ -352,4 +352,57 @@ ${measurements.join("\n")}
       expect(first).not.toBe(second);
     }
   });
+
+  it("lays out grid tracks and resolves clamp()/min()/var()/inset/box-sizing", () => {
+    const { stdout, value } = harness.compileAndRun(
+      "grid",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        :root { --pad: 10px; --ink: #123456; }
+        body { margin: 0; }
+        #grid { position: absolute; inset: 0; display: grid;
+                grid-template-columns: 100px 1fr 100px; gap: 10px;
+                padding: 0 var(--pad); box-sizing: border-box; align-items: center; }
+        #a { height: 20px; }
+        #b { height: 30px; }
+        #c { width: 40px; height: 20px; justify-self: end; }
+        #g { width: min(100%, 200px); height: clamp(10px, 5vw, 40px);
+             background: linear-gradient(90deg, #ff0000, #0000ff); }
+      </style></head><body>
+        <div id="grid"><div id="a"></div><div id="b"></div><div id="c"></div></div>
+        <div id="g"></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "grid", width: 800, height: 600 });
+      win.on("ready", () => {
+        const rect = (selector) => {
+          const r = win.getBoundingClientRect(selector);
+          return r.x + "," + r.y + "," + r.width + "," + r.height;
+        };
+        for (const id of ["grid", "a", "b", "c", "g"]) console.log(id + "=" + rect("#" + id));
+        console.log("paint=" + win.paintCount());
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    // Columns: 100px | 1fr (560px) | 100px with two 10px gaps inside the
+    // 800px box (inset:0, 10px horizontal padding, border-box).
+    expect(value("grid")).toBe("0,0,800,600");
+    expect(value("a")).toBe("10,290,100,20");
+    expect(value("b")).toBe("120,285,560,30");
+    // `justify-self: end` pushes the 40px item to the right edge of its track.
+    expect(value("c")).toBe("750,290,40,20");
+    // min(100%, 200px) and clamp(10px, 5vw, 40px) at an 800px viewport.
+    expect(value("g")).toBe("0,0,200,40");
+    // The linear-gradient background is painted as a run of solid strips.
+    expect(Number(value("paint"))).toBeGreaterThan(10);
+    expect(stdout).toContain("paint=");
+  });
 });

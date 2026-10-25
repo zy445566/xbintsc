@@ -7,11 +7,6 @@ It parses TypeScript itself, binds names, lowers the program to **LLVM IR text**
 and hands the IR to **clang**, which produces a standalone executable linked
 against a small C runtime.
 
-> **Using xbintsc in an existing Node project?** Install the npm package and
-> follow [Using xbintsc from npm](./doc/npm-package.md). An agent can start with
-> `npx xbintsc doctor` and `npx xbintsc build <entry.ts> --out build`; the
-> installed copy of the guide is `node_modules/xbintsc/doc/npm-package.md`.
-
 The design goals are:
 
 1. **Incremental compilation** — builds are content-addressed and skipped when nothing changed.

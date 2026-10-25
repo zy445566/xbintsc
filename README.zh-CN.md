@@ -6,11 +6,6 @@
 它自身解析 TypeScript，进行名字绑定，把程序下降为 **LLVM IR 文本**，
 再把 IR 交给 **clang**，链接一个小型 C 运行时，产出独立可执行文件。
 
-> **在现有 Node 项目里使用？** 安装 npm 包并阅读
-> [通过 npm 包使用 xbintsc](./doc/zh-CN/npm-package.md)。代理可以先运行
-> `npx xbintsc doctor` 与 `npx xbintsc build <entry.ts> --out build`；安装后的
-> 指南位于 `node_modules/xbintsc/doc/zh-CN/npm-package.md`。
-
 设计目标是：
 
 1. **增量编译** —— 构建以内容寻址，没有变化时直接跳过。

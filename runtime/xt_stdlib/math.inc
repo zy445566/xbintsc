@@ -78,6 +78,20 @@ xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
  * `const { sqrt, PI } = Math` all read members as values. The singleton below
  * holds one native closure per function, plus the constants. */
 
+/* `M_PI` and friends are not portable: MSVC's `<math.h>` only defines them
+ * when `_USE_MATH_DEFINES` is set before the include, and strict-ANSI libcs
+ * hide them as well. Each literal below is the correctly rounded double of the
+ * mathematical constant, so it is bit-identical to the `M_*` macro on hosts
+ * that do provide one. */
+static const double XT_MATH_PI = 3.14159265358979323846;
+static const double XT_MATH_E = 2.71828182845904523536;
+static const double XT_MATH_LN2 = 0.69314718055994530942;
+static const double XT_MATH_LN10 = 2.30258509299404568402;
+static const double XT_MATH_LOG2E = 1.44269504088896340736;
+static const double XT_MATH_LOG10E = 0.43429448190325182765;
+static const double XT_MATH_SQRT2 = 1.41421356237309504880;
+static const double XT_MATH_SQRT1_2 = 0.70710678118654752440;
+
 static const char *const XT_MATH_FUNCTIONS[] = {
     "abs",    "floor",  "ceil",    "round", "trunc", "sqrt",  "cbrt",  "pow",
     "exp",    "log",    "log2",    "log10", "log1p", "expm1", "sinh",  "cosh",
@@ -106,14 +120,14 @@ xt_value xt_math_object(int32_t argc, xt_value *argv) {
     xt_function_set_metadata(closure, name, 1);
     xt_object_set(object, name, closure);
   }
-  xt_object_set(object, xt_string_from_cstr("PI"), xt_number(M_PI));
-  xt_object_set(object, xt_string_from_cstr("E"), xt_number(M_E));
-  xt_object_set(object, xt_string_from_cstr("LN2"), xt_number(M_LN2));
-  xt_object_set(object, xt_string_from_cstr("LN10"), xt_number(M_LN10));
-  xt_object_set(object, xt_string_from_cstr("LOG2E"), xt_number(M_LOG2E));
-  xt_object_set(object, xt_string_from_cstr("LOG10E"), xt_number(M_LOG10E));
-  xt_object_set(object, xt_string_from_cstr("SQRT2"), xt_number(M_SQRT2));
-  xt_object_set(object, xt_string_from_cstr("SQRT1_2"), xt_number(M_SQRT1_2));
+  xt_object_set(object, xt_string_from_cstr("PI"), xt_number(XT_MATH_PI));
+  xt_object_set(object, xt_string_from_cstr("E"), xt_number(XT_MATH_E));
+  xt_object_set(object, xt_string_from_cstr("LN2"), xt_number(XT_MATH_LN2));
+  xt_object_set(object, xt_string_from_cstr("LN10"), xt_number(XT_MATH_LN10));
+  xt_object_set(object, xt_string_from_cstr("LOG2E"), xt_number(XT_MATH_LOG2E));
+  xt_object_set(object, xt_string_from_cstr("LOG10E"), xt_number(XT_MATH_LOG10E));
+  xt_object_set(object, xt_string_from_cstr("SQRT2"), xt_number(XT_MATH_SQRT2));
+  xt_object_set(object, xt_string_from_cstr("SQRT1_2"), xt_number(XT_MATH_SQRT1_2));
   g_math_object = object;
   xt_gc_add_root(&g_math_object);
   return object;

@@ -66,8 +66,18 @@ describeE2E("end-to-end built-in library", (harness) => {
       console.log([3, 1, 2].map(Math.abs).join(","), [1, 5, 3].sort((a, b) => b - a).join(","));
       const hypot = Math.hypot;
       console.log(hypot(3, 4), typeof Math.random);
+      /* The constants are spelled out in the runtime rather than taken from the
+       * CRT's M_* macros, which MSVC's <math.h> hides by default. */
+      console.log(
+        Math.PI === 3.141592653589793, Math.E === 2.718281828459045,
+        Math.LN2 === 0.6931471805599453, Math.LN10 === 2.302585092994046,
+        Math.LOG2E === 1.4426950408889634, Math.LOG10E === 0.4342944819032518,
+        Math.SQRT2 === 1.4142135623730951, Math.SQRT1_2 === 0.7071067811865476
+      );
     `;
-    expect(runProgram(source)).toBe("1 7 9 true\n3,1,2 5,3,1\n5 function");
+    expect(runProgram(source)).toBe(
+      "1 7 9 true\n3,1,2 5,3,1\n5 function\ntrue true true true true true true true",
+    );
   });
 
   it("encodes and decodes URIs like the specification", () => {

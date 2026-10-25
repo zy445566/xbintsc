@@ -53,6 +53,15 @@ void paint_color_at(const CanvasPaint &paint, float x, float y, float out[4]) {
 }  // namespace
 
 void blend_pixel(unsigned char *pixel, const float color[4], float coverage, float alpha) {
+  /* Fully opaque source-over is a plain copy; this is the hot path for paper
+     textures, terrain and the opaque parts of every sprite. */
+  if (alpha >= 0.999f && coverage >= 0.999f && color[3] >= 0.999f) {
+    pixel[0] = (unsigned char)clamp_byte(color[0] * 255.0f);
+    pixel[1] = (unsigned char)clamp_byte(color[1] * 255.0f);
+    pixel[2] = (unsigned char)clamp_byte(color[2] * 255.0f);
+    pixel[3] = 255;
+    return;
+  }
   float sa = color[3] * coverage * alpha;
   if (sa <= 0.0f) return;
   if (sa > 1.0f) sa = 1.0f;
@@ -245,8 +254,17 @@ void draw_image(std::vector<unsigned char> &pixels, int width, int height, const
       if (syi >= source.height) syi = source.height - 1;
       const unsigned char *texel =
           source.pixels.data() + ((size_t)syi * (size_t)source.width + (size_t)sxi) * 4;
+      unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4;
+      if (alpha >= 0.999f) {
+        const unsigned char ta = texel[3];
+        if (ta == 255) {
+          dst[0] = texel[0]; dst[1] = texel[1]; dst[2] = texel[2]; dst[3] = 255;
+          continue;
+        }
+        if (ta == 0) continue;
+      }
       float color[4] = {texel[0] / 255.0f, texel[1] / 255.0f, texel[2] / 255.0f, texel[3] / 255.0f};
-      blend_pixel(pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4, color, 1.0f, alpha);
+      blend_pixel(dst, color, 1.0f, alpha);
     }
   }
 }

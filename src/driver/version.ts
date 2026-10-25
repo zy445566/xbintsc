@@ -9,4 +9,4 @@
  * `main`/`master` only (see `.githooks/pre-commit`), so feature branches never
  * change this line and merging two of them cannot conflict here.
  */
-export const COMPILER_VERSION = "0.5.27";
+export const COMPILER_VERSION = "0.5.28";

@@ -289,6 +289,15 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
     XtGuiWindow *record = &g_windows[0];
     SDL_SetWindowTitle(record->window, title);
     SDL_SetWindowSize(record->window, width, height);
+    /* `SDL_SetWindowSize` only *requests* the new size. The X11 and Wayland
+     * backends send the request and learn the result from the server's resize
+     * event, so until that event is pumped `SDL_GetWindowSize` still reports
+     * the implicit window's 800x600 — which is what `innerWidth`/`innerHeight`
+     * (and `loadHTML`'s initial layout) read. A page that asks for its viewport
+     * in the first frame would then race the server and see the old size, a
+     * flake that CI saw under Xvfb. Settle the request here; the call is
+     * bounded by the backend's own timeout (100 ms on X11). */
+    SDL_SyncWindow(record->window);
     record->width = width;
     record->height = height;
     return record->object;

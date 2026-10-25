@@ -58,7 +58,7 @@ Canonical detail (always current, much longer):
 | `call` / `apply` / `bind`, `fn.name` / `fn.length` | ✅ | a bound closure does not track partial-argument `length` |
 | First-class built-in methods (`arr.map` as a value) | ✅ | exposed as *unbound* method values; a detached call throws like JS |
 | `fn.toString()` | ⚠️ | returns `function name() { [native code] }`, not the source text |
-| Classes: fields, methods, statics, getters/setters, `extends`/`super`, `instanceof` | ✅ | |
+| Classes: fields, methods, statics, `static { ... }` blocks, getters/setters, `extends`/`super`, `instanceof` | ✅ | a static block is compiled as a static method called at class-definition time |
 | Constructor parameter properties `constructor(public x: T)` | ✅ | |
 | `#private` fields / methods / statics | ⚠️ | stored under a literal `#x` key; no access enforcement; parent/child name collisions may alias |
 | `enum` / `const enum` | ✅ | forward + reverse mapping |

@@ -10,7 +10,7 @@
 
 - 变量声明：`var` / `let` / `const`，支持多声明符 `const a = 1, b = 2;`
 - 函数声明、函数表达式和方法，含 `async` 修饰、生成器（`function*`、`yield`、`yield*`、`.next`/`.throw`/`.return`）与异步生成器（`async function*`、`for await...of`）
-- `class` 声明 / 类表达式（构造函数、字段、方法、`static`、`extends`）
+- `class` 声明 / 类表达式（构造函数、字段、方法、`static`、`static { ... }` 静态块、`extends`）
 - `if` / `else`
 - `while`、`do...while`
 - `for`（初始化、条件、增量均可省略）
@@ -27,8 +27,9 @@
 - 全部常见运算符及优先级 / 结合性（见[运算符](./operators.md)）
 - 赋值表达式与全部复合赋值（见[运算符](./operators.md)）
 - 条件（三元）表达式 `a ? b : c`
+- 逗号（序列）表达式 `a, b, c`（可用于 `for` 头、括号组与表达式语句）
 - 箭头函数 `() => expr` / `() => { ... }`（含类型参数、返回类型注解）
-- 函数表达式 `function () {}` 与命名函数表达式 `function g() {}`
+- 函数表达式 `function () {}` 与命名函数表达式 `function g() {}`（也支持 `async function` 表达式）
 - 调用表达式 `f(...)`、成员访问 `a.b`、元素访问 `a[i]`
 - 数组字面量 `[1, 2]`、稀疏数组 elision、展开 `[...a]`（也支持字符串、`Map`、`Set`）
 - 对象字面量 `{ a: 1 }`、简写属性 `{ a }`、方法简写 `{ m() {} }`、getter/setter 简写 `{ get x() {} }` / `{ set x(v) {} }`、计算属性名 `{ [expr]: 1 }`、对象展开 `{ ...obj }`

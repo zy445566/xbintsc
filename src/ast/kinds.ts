@@ -63,6 +63,7 @@ export const enum SyntaxKind {
   ObjectBindingPattern = 47,
   BindingElement = 48,
   ComputedPropertyName = 49,
+  SequenceExpression = 50,
 
   // Statements
   ExpressionStatement = 60,
@@ -112,6 +113,7 @@ export const enum SyntaxKind {
   ExportAssignment = 119,
   NamedExports = 120,
   ExportSpecifier = 121,
+  ClassStaticBlockDeclaration = 122,
 
   // Types
   TypeReference = 200,

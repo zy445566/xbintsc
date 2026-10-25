@@ -9,6 +9,9 @@
 | 实例字段 / 属性声明 | ✓ |
 | 方法 | ✓ |
 | `static` 字段 / 方法 | ✓ |
+| `static { ... }` 静态块 | ✓ 已实现（类定义时执行一次；静态字段与静态块按声明顺序执行，静态方法先安装；`this` 为类本身，`super.x` 读父构造函数） |
+| `static get` / `static set` 访问器 | ✓（定义在构造函数值上；继承的静态 setter 会被调用） |
+| `super[key]` / `super[key](...)` | ✓ |
 | 继承 `extends` / `super` | ✓（单级正确；`super` 取 `this` 原型的原型，理论缺陷见[运行时偏差](./deviations.md)） |
 | 原型链 / 方法查找 | ✓ |
 | `instanceof` | ✓ |

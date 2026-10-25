@@ -75,7 +75,11 @@ export interface ExpressionWithTypeArguments extends Node {
   readonly typeArguments: TypeNode[];
 }
 
-export type ClassElement = PropertyDeclaration | MethodDeclaration | ConstructorDeclaration;
+export type ClassElement =
+  | PropertyDeclaration
+  | MethodDeclaration
+  | ConstructorDeclaration
+  | ClassStaticBlockDeclaration;
 
 export interface PropertyDeclaration extends Node {
   readonly kind: SyntaxKind.PropertyDeclaration;
@@ -106,6 +110,13 @@ export interface ConstructorDeclaration extends Node {
   readonly modifiers: Modifier[];
   readonly parameters: Parameter[];
   readonly body?: Block;
+}
+
+/** `static { ... }`: runs once, while the class is being defined. */
+export interface ClassStaticBlockDeclaration extends Node {
+  readonly kind: SyntaxKind.ClassStaticBlockDeclaration;
+  readonly modifiers: Modifier[];
+  readonly body: Block;
 }
 
 export interface ClassDeclaration extends Node {

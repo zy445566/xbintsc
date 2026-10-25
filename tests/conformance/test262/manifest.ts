@@ -268,9 +268,9 @@ export const UNSUPPORTED_CASES: readonly UnsupportedCase[] = [
   {
     path: "language/expressions/comma/S11.14_A2.1_T3.js",
     area: "values",
-    claim: "the comma operator is not implemented outside declarator lists",
-    claimZh: "逗号表达式在声明符列表之外尚未实现",
-    code: DiagnosticCode.UnexpectedToken,
+    claim: "an unbound name is a compile-time error, not a runtime `ReferenceError`",
+    claimZh: "未绑定的名字是编译期错误，而不是运行时 `ReferenceError`",
+    code: DiagnosticCode.CannotFindName,
   },
   {
     path: "language/expressions/dynamic-import/always-create-new-promise.js",

@@ -79,5 +79,5 @@ the compiler does.
 | --- | --- | ---: | --- |
 | `language/statements/with/12.10-0-1.js` | Optional chaining and templates | TS2001 | `with` statements are not implemented |
 | `language/expressions/new.target/value-via-call.js` | Closures and functions | TS4005 | `new.target` has no lowering |
-| `language/expressions/comma/S11.14_A2.1_T3.js` | Values and operators | TS2001 | the comma operator is not implemented outside declarator lists |
+| `language/expressions/comma/S11.14_A2.1_T3.js` | Values and operators | TS3002 | an unbound name is a compile-time error, not a runtime `ReferenceError` |
 | `language/expressions/dynamic-import/always-create-new-promise.js` | Modules | TS2001 | dynamic `import()` is not implemented |

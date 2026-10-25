@@ -246,6 +246,11 @@ export class TypeChecker {
   private checkClass(node: ClassDeclaration, flow: Flow): void {
     const thisType = this.resolver.classInstanceType(node);
     for (const member of node.members) {
+      if (member.kind === SyntaxKind.ClassStaticBlockDeclaration) {
+        const block = member as unknown as { body: Block };
+        this.checkStatements(block.body.statements, new Flow(flow), { returnType: ANY });
+        continue;
+      }
       if (member.kind === SyntaxKind.PropertyDeclaration) {
         const property = member as unknown as { type?: import("../ast/nodes.js").TypeNode; initializer?: Expression };
         if (!property.initializer) continue;
@@ -349,6 +354,12 @@ export class TypeChecker {
         const whenTrue = this.checkExpression(conditional.whenTrue, narrow(conditional.condition, true, flow, this.resolver), context);
         const whenFalse = this.checkExpression(conditional.whenFalse, narrow(conditional.condition, false, flow, this.resolver), context);
         return unionOf([whenTrue, whenFalse]);
+      }
+      case SyntaxKind.SequenceExpression: {
+        const sequence = expression as unknown as { expressions: Expression[] };
+        let type: Type = ANY;
+        for (const item of sequence.expressions) type = this.checkExpression(item, flow, context);
+        return type;
       }
       case SyntaxKind.ObjectLiteralExpression:
         return this.checkObjectLiteral(expression as ObjectLiteralExpression, flow, context);

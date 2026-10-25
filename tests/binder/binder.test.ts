@@ -103,3 +103,34 @@ describe("binder", () => {
     expect(result.unresolved.map((identifier) => identifier.text)).toContain("missingName");
   });
 });
+
+describe("binder: switch clauses and static blocks", () => {
+  it("pre-declares names declared directly in a case clause", () => {
+    const { result } = bindSource(`
+      switch (1) {
+        case 1: const inCase = 1; break;
+        default: let inDefault = 2;
+      }
+    `);
+    const moduleScope = result.moduleFunction.scope;
+    expect(moduleScope.symbols.get("inCase")?.kind).toBe(SymbolKind.Const);
+    expect(moduleScope.symbols.get("inDefault")?.kind).toBe(SymbolKind.Let);
+  });
+
+  it("binds every `static { }` block as a function of the class", () => {
+    const { result } = bindSource(`
+      class A {
+        static x = 1;
+        static { A.x = 2; }
+        static { A.x = 3; }
+      }
+    `);
+    const info = result.classes.find((entry) => entry.name === "A")!;
+    expect(info.staticBlocks).toHaveLength(2);
+    for (const block of info.staticBlocks) {
+      expect(block.isStatic).toBe(true);
+      expect(block.classInfo).toBe(info);
+      expect(result.functions).toContain(block);
+    }
+  });
+});

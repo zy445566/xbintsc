@@ -9,6 +9,9 @@
 | Instance fields / property declarations | ✓ |
 | Methods | ✓ |
 | `static` fields / methods | ✓ |
+| `static { ... }` blocks | ✓ implemented (runs once at class definition; static fields and blocks run in declaration order, static methods are installed first; `this` is the class, `super.x` reads the parent constructor) |
+| `static get` / `static set` accessors | ✓ (accessors on the constructor value; inherited static setters are honoured) |
+| `super[key]` / `super[key](...)` | ✓ |
 | Inheritance `extends` / `super` | ✓ (single level correct; `super` takes the prototype of `this`'s prototype — see [Runtime deviations](./deviations.md)) |
 | Prototype chain / method lookup | ✓ |
 | `instanceof` | ✓ |

@@ -93,3 +93,27 @@ describe("function declarations", () => {
     expect(typed.returnType.type.kind).toBe(SyntaxKind.StringKeywordType);
   });
 });
+
+describe("class static blocks", () => {
+  it("parses `static { ... }` as a class element with a block body", () => {
+    const { decl, diagnostics } = firstDeclaration("class A { static { A.ready = true; } }");
+    expect(diagnostics).toHaveLength(0);
+    const member = decl.members[0];
+    expect(member.kind).toBe(SyntaxKind.ClassStaticBlockDeclaration);
+    expect(member.body.kind).toBe(SyntaxKind.Block);
+    expect(member.body.statements).toHaveLength(1);
+  });
+
+  it("keeps static blocks in declaration order with other members", () => {
+    const { decl, diagnostics } = firstDeclaration(
+      "class A { static x = 1; static { } static { } static y = 2; }",
+    );
+    expect(diagnostics).toHaveLength(0);
+    expect(decl.members.map((member: any) => member.kind)).toEqual([
+      SyntaxKind.PropertyDeclaration,
+      SyntaxKind.ClassStaticBlockDeclaration,
+      SyntaxKind.ClassStaticBlockDeclaration,
+      SyntaxKind.PropertyDeclaration,
+    ]);
+  });
+});

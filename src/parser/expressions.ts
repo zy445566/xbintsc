@@ -61,7 +61,19 @@ export interface ExpressionMethods {
 
 export const expressionMethods: ExpressionMethods = {
   parseExpression(this: Parser, noIn = false): Expression {
-    return this.parseAssignmentExpression(noIn);
+    const first = this.parseAssignmentExpression(noIn);
+    if (!this.at(TokenKind.Comma)) return first;
+    const expressions: Expression[] = [first];
+    while (this.at(TokenKind.Comma)) {
+      this.nextToken();
+      expressions.push(this.parseAssignmentExpression(noIn));
+    }
+    return {
+      kind: SyntaxKind.SequenceExpression,
+      expressions,
+      start: first.start,
+      end: expressions[expressions.length - 1]!.end,
+    };
   },
 
   parseAssignmentExpression(this: Parser, noIn = false): Expression {

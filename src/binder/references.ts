@@ -33,7 +33,9 @@ import type { ArrayBindingPattern, ObjectBindingPattern, Parameter } from "../as
 import {
   ScopeKind,
   SymbolKind,
+  type ClassFieldInfo,
   type ClassInfo,
+  type ClassStaticInit,
   type FunctionInfo,
   type FunctionNode,
   type MutableFunction,
@@ -136,6 +138,23 @@ export const referenceMethods: ReferenceMethods = {
       case SyntaxKind.LabeledStatement:
         this.bindNode((node as unknown as { statement: Node }).statement, scope);
         return;
+      case SyntaxKind.SwitchStatement: {
+        const statement = node as unknown as {
+          expression: Expression;
+          clauses: { expression?: Expression; statements: Statement[] }[];
+        };
+        this.bindNode(statement.expression, scope);
+        /* Every `case` body shares the switch's block scope, so the
+         * declarations they contain have to be pre-declared before any clause
+         * is bound. Without this a `const` declared directly in a `case`
+         * clause had no symbol and later phases crashed on it. */
+        for (const clause of statement.clauses) {
+          this.bindNode(clause.expression, scope);
+          this.predeclareStatements(clause.statements, scope);
+        }
+        for (const clause of statement.clauses) this.bindStatements(clause.statements, scope);
+        return;
+      }
       case SyntaxKind.BreakStatement:
       case SyntaxKind.ContinueStatement:
         return;
@@ -236,10 +255,24 @@ export const referenceMethods: ReferenceMethods = {
   },
 
   bindVariableList(list: VariableDeclarationList, scope: Scope): void {
+    const declarationKind =
+      list.declarationKind === "const"
+        ? SymbolKind.Const
+        : list.declarationKind === "var"
+          ? SymbolKind.Var
+          : SymbolKind.Let;
     for (const declaration of list.declarations) {
-      const symbol = this.symbolOfDeclaration.get(declaration);
       if (declaration.name.kind === SyntaxKind.Identifier) {
-        this.symbolOfDeclaration.set(declaration.name, symbol ?? this.symbolOfDeclaration.get(declaration) as SymbolInfo);
+        /* Normally the declaration was pre-declared; if it was not (a code
+         * path that binds statements without pre-declaring them), declare it
+         * here rather than storing an empty entry that later phases would
+         * dereference. */
+        const name = declaration.name as Identifier;
+        const symbol =
+          this.symbolOfDeclaration.get(declaration) ??
+          this.symbolOfDeclaration.get(name) ??
+          this.declareBinding(name, declarationKind, declaration, scope, declarationKind !== SymbolKind.Const);
+        if (symbol) this.symbolOfDeclaration.set(name, symbol);
       } else {
         this.bindBindingPattern(declaration.name, scope);
       }
@@ -354,6 +387,8 @@ export const referenceMethods: ReferenceMethods = {
       fields: [],
       methods: [],
       statics: [],
+      staticBlocks: [],
+      staticInit: [],
     };
     this.classes.push(info);
     this.classOfNode.set(node, info);
@@ -362,6 +397,9 @@ export const referenceMethods: ReferenceMethods = {
     this.scopes.set(node, classScope);
 
     let constructor: FunctionInfo | undefined;
+    /* `static { ... }` functions, so the field pass below can interleave them
+     * with static fields in declaration order. */
+    const staticBlockFns = new Map<Node, FunctionInfo>();
     for (const member of node.members) {
       if (member.kind === SyntaxKind.ConstructorDeclaration) {
         const ctor = member as ConstructorDeclaration;
@@ -379,6 +417,14 @@ export const referenceMethods: ReferenceMethods = {
         }
         if (isStatic) (info.statics as FunctionInfo[]).push(fn);
         else (info.methods as FunctionInfo[]).push(fn);
+      } else if (member.kind === SyntaxKind.ClassStaticBlockDeclaration) {
+        /* A static block is a function-like body: it runs once with `this`
+         * bound to the class, so it is bound like a static method and called
+         * right after the class value is built. */
+        const block = member as unknown as { body: Block };
+        const fn = this.createClassFunction(member, "static", [], block.body, classScope, info, true, false);
+        (info.staticBlocks as FunctionInfo[]).push(fn);
+        staticBlockFns.set(member, fn);
       }
     }
     if (!constructor) {
@@ -396,7 +442,17 @@ export const referenceMethods: ReferenceMethods = {
         this.current = constructor as MutableFunction;
         if (property.initializer) this.bindNode(property.initializer, classScope);
         this.current = owner;
-        info.fields.push({ name: classMemberName(property.name), initializer: property.initializer, fn: constructor, isStatic });
+        const field: ClassFieldInfo = {
+          name: classMemberName(property.name),
+          initializer: property.initializer,
+          fn: constructor,
+          isStatic,
+        };
+        (info.fields as ClassFieldInfo[]).push(field);
+        if (isStatic) (info.staticInit as ClassStaticInit[]).push({ kind: "field", field });
+      } else if (member.kind === SyntaxKind.ClassStaticBlockDeclaration) {
+        const fn = staticBlockFns.get(member);
+        if (fn) (info.staticInit as ClassStaticInit[]).push({ kind: "block", fn });
       }
     }
 

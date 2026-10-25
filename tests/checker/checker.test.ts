@@ -253,3 +253,36 @@ describe("checker: call arity", () => {
     expect(arity(source)).toHaveLength(0);
   });
 });
+
+describe("checker: declarations inside switch clauses", () => {
+  it("binds a lexical declaration written directly in a `case` clause", () => {
+    const diagnostics = check(`
+      const x = 1;
+      switch (x) {
+        case 1: {
+          const wrapped = 10;
+          console.log(wrapped);
+          break;
+        }
+        case 2:
+          const direct = 20;
+          console.log(direct);
+          break;
+        default:
+          let fallback = 30;
+          console.log(fallback);
+      }
+    `);
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("resolves a `case`-clause declaration used from another clause", () => {
+    const diagnostics = check(`
+      switch (1) {
+        case 1: var shared = 1; break;
+        default: console.log(shared);
+      }
+    `);
+    expect(diagnostics).toEqual([]);
+  });
+});

@@ -159,8 +159,12 @@ export const literalMethods: LiteralMethods = {
   },
 
   parseFunctionExpression(this: Parser): FunctionExpression {
-    const start = this.parseExpected(TokenKind.FunctionKeyword).start;
-    let flags = NodeFlags.None;
+    /* `async function (...) {}` is an expression too; the `async` keyword is
+     * part of this node rather than a modifier list. */
+    const asyncToken = this.at(TokenKind.AsyncKeyword) ? this.nextToken() : undefined;
+    const functionToken = this.parseExpected(TokenKind.FunctionKeyword);
+    const start = asyncToken ? asyncToken.start : functionToken.start;
+    let flags = asyncToken ? NodeFlags.Async : NodeFlags.None;
     if (this.at(TokenKind.Asterisk)) {
       this.nextToken();
       flags |= NodeFlags.Generator;

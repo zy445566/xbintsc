@@ -13,7 +13,7 @@
 ## 对象
 
 - `Object.keys` / `values` / `entries` / `assign` / `getOwnPropertyNames` / `groupBy`，对象展开 `{...obj}`。
-- `Object.defineProperty` / `getOwnPropertyDescriptor(s)` —— 数据属性与访问器属性；属性标志会被报告，但后续写入/枚举尚未强制执行。
+- `Object.defineProperty` / `defineProperties` / `getOwnPropertyDescriptor(s)` —— 数据属性与访问器属性，可单个也可批量定义；属性标志会被报告，但后续写入/枚举尚未强制执行。
 - `Object.freeze` / `is_frozen` / `from_entries`、`Object.getPrototypeOf`。
 - `Object.prototype`：`hasOwnProperty` / `toString` / `valueOf` / `isPrototypeOf` / `propertyIsEnumerable` / `__proto__`；`Object.getPrototypeOf({}) === Object.prototype`。
 - 一等公民内建构造器（`const A = Array`、`new A(...)`、`A.isArray`、`x instanceof A`）见[代码生成](./codegen.md)。
@@ -30,6 +30,7 @@
 - 数字格式化与强制转换与 Node 一致：`toFixed` / `toPrecision` / `toExponential`、十六 / 八 / 二进制解析，以及完整的 `+` / 关系运算 `ToPrimitive` 规则。这些由差分测试覆盖。
 - `BigInt` 字面量与值：任意精度算术、位运算与移位、比较、`toString(radix)`、`BigInt()`、`BigInt.asIntN` / `BigInt.asUintN`。
 - `Math`：完整函数与常量。
+- `Math` 同时是一等对象：`const cos = Math.cos`、`[1, 2].map(Math.max)`、`const { sqrt, PI } = Math` 都能按值读取成员（`xt_math_object()` 为每个函数缓存一个原生闭包，读取开销仍然很低）。
 - `Number` 静态与 `Number()` 转换；`parseInt` / `parseFloat` / `isNaN` / `isFinite`。
 
 ## JSON

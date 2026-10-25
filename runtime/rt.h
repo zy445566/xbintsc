@@ -234,6 +234,8 @@ xt_value xt_object_ctor(int32_t argc, xt_value *argv);
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv);
 /** Implements `Math.<name>(...)`; the name is interned by the compiler. */
 xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv);
+/* The first-class `Math` object (function members as native closures). */
+xt_value xt_math_object(int32_t argc, xt_value *argv);
 /** Implements `JSON.parse` / `JSON.stringify`. */
 xt_value xt_json_parse(int32_t argc, xt_value *argv);
 xt_value xt_json_stringify(int32_t argc, xt_value *argv);

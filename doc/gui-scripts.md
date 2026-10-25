@@ -170,6 +170,13 @@ Two limitations are enforced with clear errors rather than silent breakage:
 `src` URLs (`https://…`, `data:…`, `//host`) are left untouched — they are not
 compile-time assets and never run.
 
+A wrapped body keeps its own file as the origin of every statement in it (the
+loader reports the body's span in the generated module as a *source range*), so
+a diagnostic points at `app.js:12` rather than at a column of `index.html`, and
+a **plain-JavaScript** script stays untyped exactly like a `.js` module imported
+directly: `state.update = …` on an object literal is not a `TS4003`. A page can
+therefore ship its existing scripts unchanged.
+
 ```html
 <button id="b">0</button>
 <script src="./counter.ts"></script>

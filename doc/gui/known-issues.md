@@ -5,6 +5,16 @@
 
 ## Known issues
 
+- **No WebGL.** `getContext("webgl")` / `getContext("webgl2")` answer `null` and
+  the `WebGL*` / `WebGL2RenderingContext` / `XRWebGL*` globals are `undefined`,
+  so a WebGL page such as a Three.js scene fails with the library's own
+  "Error creating WebGL context" and is expected to show its fallback panel.
+  Only `getContext("2d")` is backed by a rasteriser (see
+  [Canvas](./canvas.md)). Everything else about a ported page — module graph,
+  DOM handles, events, the browser globals in [API](./api.md#browser-globals),
+  the frame pump — works, so a Three.js program *compiles and starts*; it just
+  cannot draw.
+
 - **Intermittent crash at auto-close.** `XT_GUI_AUTOCLOSE_MS` can end a run
   with a native access violation in roughly two runs out of five; a clean exit
   looks identical otherwise. Windows reports it as the NTSTATUS exit code

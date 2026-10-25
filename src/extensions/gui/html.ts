@@ -37,7 +37,7 @@ import { SourceFile } from "../../diagnostics/source.js";
 import { Parser } from "../../parser/parser.js";
 import { artifactPath } from "../../canonical.js";
 import { hashString } from "../../driver/cache.js";
-import type { AssetLoadResult } from "../registry.js";
+import type { AssetLoadResult, AssetSourceRange } from "../registry.js";
 
 /** Matches an inline `<script …>body</script>` element, attributes included. */
 const SCRIPT_RE = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
@@ -183,7 +183,10 @@ function resolveScriptPath(htmlPath: string, src: string): string {
 
 /** Rewrite `<script>` bodies into registered AOT functions + an HTML string. */
 export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
-  const scripts: Array<{ id: string; body: string }> = [];
+  /* `file` is set for an external `<script src>`: its body keeps that file as
+   * the origin of every node, so a `.js` script stays untyped and diagnostics
+   * name the script, not the HTML page. */
+  const scripts: Array<{ id: string; body: string; file?: string }> = [];
   const imports: string[] = [];
   const importedText = new Set<string>();
   const bound = new Set<string>();
@@ -213,7 +216,7 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
         bound.add(name);
       }
       const id = hashString(compiled.body);
-      scripts.push({ id, body: compiled.body });
+      scripts.push({ id, body: compiled.body, file: scriptPath });
       return `<script data-xt-id="${id}"></script>`;
     }
 
@@ -226,12 +229,21 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
   });
 
   const parts: string[] = [...imports];
-  for (const { id, body } of scripts) {
-    parts.push(
-      `function __xt_script_${id}(window: any, document: any): void {\n${body}\n}\n` +
-        `__registerScript(${JSON.stringify(id)}, __xt_script_${id});`,
-    );
+  const sourceRanges: AssetSourceRange[] = [];
+  /* Offset of the next part once joined with "\n", so a body's span in the
+   * generated module can be reported back as the file it was copied from. */
+  let offset = parts.reduce((total, part) => total + part.length + 1, 0);
+  for (const { id, body, file } of scripts) {
+    const header = `function __xt_script_${id}(window: any, document: any): void {\n`;
+    const part =
+      `${header}${body}\n}\n` + `__registerScript(${JSON.stringify(id)}, __xt_script_${id});`;
+    if (file !== undefined) {
+      sourceRanges.push({ start: offset + header.length, end: offset + header.length + body.length, file });
+    }
+    parts.push(part);
+    offset += part.length + 1;
   }
   parts.push(`export default ${JSON.stringify(html)};`);
-  return { moduleSource: parts.join("\n") };
+  const result: AssetLoadResult = { moduleSource: parts.join("\n") };
+  return sourceRanges.length > 0 ? { ...result, sourceRanges } : result;
 }

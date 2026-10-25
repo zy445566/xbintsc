@@ -18,6 +18,23 @@ export interface BuiltinFunction {
 }
 
 /**
+ * A global *value* rather than a function: the name resolves to whatever a
+ * runtime getter returns, so `window`, `document` or a host constructor
+ * (`new AudioContext()`) can be reached without declaring them in the source.
+ *
+ * `symbol` has the usual `(int32_t argc, xt_value *argv)` ABI and is called
+ * with no arguments, or with one argument when `argument` is set (that is how
+ * a host hands a single getter a type name such as `"HTMLCanvasElement"`).
+ * `new Name(...)` lowers to the getter followed by an ordinary `xt_new`, so a
+ * host constructor is just a global value that returns a function.
+ */
+export interface GlobalValue {
+  readonly symbol: string;
+  /** Passed as the only argument; omit to call the getter with none. */
+  readonly argument?: string;
+}
+
+/**
  * One binding a Node-style module exports. It is either a direct runtime
  * function with the uniform `(argc, argv)` ABI (`symbol`), or a named method
  * dispatched through a namespace table (`namespace` + `method`), e.g.
@@ -60,11 +77,26 @@ export interface AssetLoadResult {
    */
   readonly moduleSource: string;
   /**
+   * Ranges of `moduleSource` that were copied verbatim from *another* file —
+   * for instance the body of `<script src="app.js">` wrapped by the `gui`
+   * `.html` loader. Nodes inside a range keep that file as their origin, so
+   * diagnostics name the file the user actually wrote and the checker's
+   * plain-JavaScript exemption still applies to a `.js` script.
+   */
+  readonly sourceRanges?: readonly AssetSourceRange[];
+  /**
    * Extra files the transformed module depends on that are *not* reached
    * through imports (for cache invalidation). Imported files are already
    * tracked by the bundler.
    */
   readonly dependencies?: readonly string[];
+}
+
+/** A `[start, end)` span of a generated module copied from `file`. */
+export interface AssetSourceRange {
+  readonly start: number;
+  readonly end: number;
+  readonly file: string;
 }
 
 /** Rewrites an imported file (selected by extension) into a TS module. */
@@ -97,6 +129,12 @@ export interface Extension {
   linkerFlags?(): readonly string[];
   /** Global identifiers that resolve to runtime symbols when called. */
   builtins?(): Readonly<Record<string, BuiltinFunction>>;
+  /**
+   * Global identifiers that resolve to a runtime *value* (`window`,
+   * `document`, a host constructor). They need no declaration in the source
+   * and are not callable-by-name: reading the identifier calls the getter.
+   */
+  globalValues?(): Readonly<Record<string, GlobalValue>>;
   /** Modules importable as `import ... from "<specifier>"`. */
   modules?(): Readonly<Record<string, ExtensionModule>>;
   /**
@@ -187,6 +225,16 @@ export class ExtensionRegistry {
     for (const extension of this.extensions.values()) {
       const builtins = extension.builtins?.();
       if (builtins) Object.assign(merged, builtins);
+    }
+    return merged;
+  }
+
+  /** Flatten every registered extension's global values into one lookup. */
+  globalValues(): Readonly<Record<string, GlobalValue>> {
+    const merged: Record<string, GlobalValue> = {};
+    for (const extension of this.extensions.values()) {
+      const values = extension.globalValues?.();
+      if (values) Object.assign(merged, values);
     }
     return merged;
   }

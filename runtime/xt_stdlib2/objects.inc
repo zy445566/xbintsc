@@ -135,6 +135,17 @@ static xt_value xt_object_define_property(xt_value target, xt_value key, xt_valu
   return target;
 }
 
+static xt_value xt_object_define_properties(xt_value target, xt_value descriptors) {
+  xt_value names = xt_object_own_property_names(descriptors);
+  xt_array *keys = xt_as_array(names);
+  if (!keys) return target;
+  for (uint32_t i = 0; i < keys->length; i++) {
+    xt_value key = keys->items[i];
+    xt_object_define_property(target, key, xt_object_get(descriptors, key));
+  }
+  return target;
+}
+
 static xt_value xt_object_get_own_property_descriptors(xt_value target) {
   xt_value result = xt_object_new();
   xt_value names = xt_object_own_property_names(target);
@@ -159,6 +170,9 @@ xt_value xt_object_static(xt_value name, int32_t argc, xt_value *argv) {
   if (strcmp(fn, "defineProperty") == 0) {
     return xt_object_define_property(xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1),
                                       xt_arg_at(argc, argv, 2));
+  }
+  if (strcmp(fn, "defineProperties") == 0) {
+    return xt_object_define_properties(xt_arg_at(argc, argv, 0), xt_arg_at(argc, argv, 1));
   }
   if (strcmp(fn, "keys") == 0) return xt_object_keys(xt_arg_at(argc, argv, 0));
   if (strcmp(fn, "getOwnPropertyNames") == 0) return xt_object_own_property_names(xt_arg_at(argc, argv, 0));

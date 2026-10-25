@@ -4,7 +4,7 @@
 
 import type { FunctionInfo } from "../../binder/binder.js";
 import type { BindResult } from "../../binder/binder.js";
-import type { BuiltinFunction, ExtensionModule } from "../../extensions/registry.js";
+import type { BuiltinFunction, ExtensionModule, GlobalValue } from "../../extensions/registry.js";
 import type { Block } from "../../ast/nodes.js";
 
 export interface Slot {
@@ -70,6 +70,8 @@ export interface CodegenResult {
 export interface CodegenOptions {
   /** Global names supplied by registered extensions. */
   readonly builtins?: Readonly<Record<string, BuiltinFunction>>;
+  /** Global *values* supplied by registered extensions (`window`, `document`). */
+  readonly globalValues?: Readonly<Record<string, GlobalValue>>;
   /** Importable modules supplied by registered extensions. */
   readonly modules?: Readonly<Record<string, ExtensionModule>>;
   /**

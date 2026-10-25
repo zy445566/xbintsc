@@ -270,7 +270,8 @@ static const char *const XT_OBJECT_STATICS[] = {
     "keys", "values", "entries", "assign", "getOwnPropertyNames",
     "getOwnPropertySymbols", "groupBy", "freeze", "isFrozen", "fromEntries",
     "getPrototypeOf", "setPrototypeOf", "hasOwn", "is", "create",
-    "defineProperty", "getOwnPropertyDescriptor", "getOwnPropertyDescriptors",
+    "defineProperty", "defineProperties", "getOwnPropertyDescriptor",
+    "getOwnPropertyDescriptors",
 };
 static const char *const XT_NUMBER_STATICS[] = {
     "isInteger", "isSafeInteger", "isFinite", "isNaN", "parseFloat", "parseInt",

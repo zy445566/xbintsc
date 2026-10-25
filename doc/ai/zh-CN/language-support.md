@@ -44,13 +44,13 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 逗号运算符、`void` | ✅ | |
 | `new.target` | 🚫 | 能解析，但会给出明确的 `UnsupportedFeature` |
 | `import.meta` | ✅ | `url`、`dirname`、`filename`（由可执行文件路径解析） |
-| `super` | ⚠️ | 单层继承正确；继承深度 > 1 可能不准 |
+| `super` | ✅ | `super()` 与 `super.x` 由当前定义的类解析，任意继承深度都正确 |
 
 ## 函数、类与对象
 
 | 特性 | 状态 | 说明 |
 | --- | --- | --- |
-| 闭包（通过 box 按引用捕获） | ✅ | 直接调用与闭包调用共用一条 ABI |
+| 闭包（通过 box 按引用捕获） | ✅ | 直接调用与闭包调用共用一条 ABI；函数**声明**同样会捕获，因此具名函数能读写外层状态 |
 | `this`、方法调用、箭头函数词法 `this` | ✅ | 与 JS 不同：箭头函数有自己的 `arguments` |
 | `call`/`apply`/`bind`、`fn.name`/`fn.length` | ✅ | bind 出的闭包不跟踪部分应用后的 `length` |
 | 一等内置方法（把 `arr.map` 当值用） | ✅ | 暴露为*未绑定*方法值；脱离接收者调用时与 JS 一样抛错 |
@@ -107,6 +107,8 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 （`toReversed`、`toSorted`、`toSpliced`、`with`）、全局 URI 函数、
 一等公民内建构造器（`const A = Array; new A(...)`、`A.isArray`、`x instanceof A`）
 与 `Object.prototype`（`Object.getPrototypeOf({}) === Object.prototype`）。
+`Math` 既是命名空间也是一等对象（`const cos = Math.cos`、`const { sqrt, PI } = Math`），
+`Object.defineProperties` 可一次安装多个属性描述符。
 
 | 缺失或行为不同 | 状态 |
 | --- | --- |

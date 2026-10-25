@@ -204,6 +204,25 @@ describeE2E("differential vs Node: values", (harness) => {
   );
 
   diff(
+    "binding-pattern defaults are evaluated only when the property is missing",
+    `let calls = 0;
+const make = () => { calls += 1; return "default"; };
+const present = { a: "given" };
+const { a = make() } = present;
+const { b = make() } = present;
+const [first = make(), second = make()] = ["given"];
+const nested = { inner: { x: undefined } };
+const { inner: { x = make() } } = nested;
+const asAny: any = {};
+const { c: renamed = make() } = asAny;
+console.log([a, b, first, second, x, renamed, calls].join(","));
+const fallback = { get value() { return "getter"; } };
+const { value = make() } = fallback;
+console.log(value, calls);
+`,
+  );
+
+  diff(
     "objects, key order and JSON",
     `const o = { b: 2, a: 1, "10": "ten", "2": "two", c: 3 };
 ${printAll([

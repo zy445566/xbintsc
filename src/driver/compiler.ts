@@ -150,6 +150,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const codegenStarted = Date.now();
   const { ir } = generate(parsed.sourceFile, diagnostics, {
     builtins: registry.builtins(),
+    globalValues: registry.globalValues(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
     debug: options.debug === true,

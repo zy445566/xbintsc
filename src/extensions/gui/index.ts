@@ -38,6 +38,62 @@ const guiModule: ExtensionModule = {
   },
 };
 
+/**
+ * Browser globals a script written for a real page expects to find.
+ *
+ * Every entry is a *value*, not a function: reading the identifier calls a
+ * runtime getter that returns the live host object, so `document.getElementById`
+ * or `new Image()` work without a `declare` in the source. The host objects are
+ * installed on the current window by `runtime/ext_gui/browser.cpp`.
+ *
+ * `xt_browser_type` carries the name as its argument, which is how one getter
+ * serves the whole family of DOM types, and `xt_browser_missing` is deliberately
+ * `undefined` so feature probes such as `typeof OffscreenCanvas === "undefined"`
+ * take the fallback path instead of calling a stub that does nothing.
+ */
+const hostTypes = [
+  "Image",
+  "Audio",
+  "AudioContext",
+  "webkitAudioContext",
+  "OffscreenCanvas",
+  "ImageBitmap",
+  "ImageData",
+  "HTMLCanvasElement",
+  "HTMLImageElement",
+  "HTMLVideoElement",
+  "HTMLAudioElement",
+  "HTMLElement",
+  "Element",
+  "Node",
+  "Event",
+  "CustomEvent",
+  "ProgressEvent",
+  "EventTarget",
+  "DOMParser",
+  "Request",
+  "Headers",
+  "Response",
+  "ReadableStream",
+  "WebGLRenderingContext",
+  "WebGL2RenderingContext",
+  "XRWebGLLayer",
+  "XRWebGLBinding",
+] as const;
+
+const browserGlobals: Record<string, { symbol: string; argument?: string }> = {
+  window: { symbol: "xt_browser_window" },
+  self: { symbol: "xt_browser_window" },
+  document: { symbol: "xt_browser_document" },
+  navigator: { symbol: "xt_browser_navigator" },
+  localStorage: { symbol: "xt_browser_local_storage" },
+  __THREE_DEVTOOLS__: { symbol: "xt_browser_missing" },
+  createImageBitmap: { symbol: "xt_browser_missing" },
+};
+for (const type of hostTypes) {
+  browserGlobals[type] = { symbol: "xt_browser_type", argument: type };
+}
+
 /** Absolute path to the per-platform prebuilt GUI archive (`gui.a`, or
  * `gui.lib` with the MSVC ABI on Windows). */
 function guiArchive(): string {
@@ -120,7 +176,16 @@ export const guiExtension: Extension = {
    */
   builtins: () => ({
     __registerScript: { symbol: "xt_register_script" },
+    requestAnimationFrame: { symbol: "xt_browser_request_animation_frame" },
+    cancelAnimationFrame: { symbol: "xt_browser_cancel_animation_frame" },
+    matchMedia: { symbol: "xt_browser_match_media" },
+    getComputedStyle: { symbol: "xt_browser_computed_style" },
+    escape: { symbol: "xt_browser_escape" },
+    alert: { symbol: "xt_browser_alert" },
+    prompt: { symbol: "xt_browser_prompt" },
   }),
+  /** Browser globals (`window`, `document`, the DOM type names). */
+  globalValues: () => browserGlobals,
   /** Rewrite imported `.html` assets (see `html.ts`). */
   assetLoaders: () => ({ ".html": loadHtmlAsset }),
 };

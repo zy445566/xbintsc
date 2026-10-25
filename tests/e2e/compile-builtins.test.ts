@@ -56,6 +56,20 @@ describeE2E("end-to-end built-in library", (harness) => {
     expect(result.stderr.trim()).toBe("warned\nfailed");
   });
 
+  it("exposes Math members as first-class values", () => {
+    /* `Math` is lowered to `xt_math_call` at call sites; reading a member
+     * (`const cos = Math.cos`) or destructuring it needs the object value. */
+    const source = `
+      const cos = Math.cos;
+      const { max, sqrt, PI } = Math;
+      console.log(cos(0), max(2, 7), sqrt(81), PI > 3.14);
+      console.log([3, 1, 2].map(Math.abs).join(","), [1, 5, 3].sort((a, b) => b - a).join(","));
+      const hypot = Math.hypot;
+      console.log(hypot(3, 4), typeof Math.random);
+    `;
+    expect(runProgram(source)).toBe("1 7 9 true\n3,1,2 5,3,1\n5 function");
+  });
+
   it("encodes and decodes URIs like the specification", () => {
     const source = `
       console.log(encodeURI("a/b?c=d&e#f"), encodeURIComponent("a/b?c=d&e#f"));

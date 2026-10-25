@@ -47,13 +47,13 @@ Canonical detail (always current, much longer):
 | Comma operator, `void` | ✅ | |
 | `new.target` | 🚫 | parsed, then rejected with a clear `UnsupportedFeature` |
 | `import.meta` | ✅ | `url`, `dirname`, `filename` (resolved from the executable path) |
-| `super` | ⚠️ | single-level inheritance correct; depth > 1 may be inaccurate |
+| `super` | ✅ | `super()` and `super.x` resolve from the class being defined, so any inheritance depth works |
 
 ## Functions, classes, objects
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| Closures (capture by reference through boxes) | ✅ | one ABI for direct and closure calls |
+| Closures (capture by reference through boxes) | ✅ | one ABI for direct and closure calls; function *declarations* capture too, so a named function can read and update outer state |
 | `this`, method calls, arrow lexical `this` | ✅ | arrow functions get their own `arguments`, unlike JS |
 | `call` / `apply` / `bind`, `fn.name` / `fn.length` | ✅ | a bound closure does not track partial-argument `length` |
 | First-class built-in methods (`arr.map` as a value) | ✅ | exposed as *unbound* method values; a detached call throws like JS |
@@ -111,7 +111,9 @@ typed arrays, `String.prototype.match`/`split`/`replace` with capture groups,
 immutable array helpers (`toReversed`, `toSorted`, `toSpliced`, `with`), global
 URI functions, first-class built-in constructors (`const A = Array; new A(...)`,
 `A.isArray`, `x instanceof A`) and `Object.prototype`
-(`Object.getPrototypeOf({}) === Object.prototype`).
+(`Object.getPrototypeOf({}) === Object.prototype`). `Math` is a first-class
+object as well as a namespace (`const cos = Math.cos`, `const { sqrt, PI } =
+Math`), and `Object.defineProperties` installs several descriptors at once.
 
 | Missing or different | Status |
 | --- | --- |

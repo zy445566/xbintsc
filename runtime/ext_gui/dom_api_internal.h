@@ -51,6 +51,16 @@ xt_value canvas_gradient_handle(xt_value context, const xtgui::Canvas2D *canvas,
  * `canvas` (stale or created by another canvas). */
 uint64_t canvas_gradient_id(xt_value handle, const xtgui::Canvas2D *canvas);
 
+/** How a pending handle names the node it will bind to. */
+enum PendingKind { pending_by_id = 1, pending_by_selector = 2 };
+
+/** A handle for a node the document does not have yet: it binds on first use
+ * after `loadHTML` has parsed the page (`resolve_node` does the lookup). */
+xt_value pending_handle(XtGuiWindow *win, int kind, const std::string &key);
+/** The first element with `id` / matching `selector`, or null. */
+xtgui::Node *document_find_by_id(XtGuiWindow *win, const std::string &id);
+xtgui::Node *document_query_selector(XtGuiWindow *win, const std::string &selector);
+
 /* -- cross-unit helpers --------------------------------------------------- */
 
 std::string to_string_value(xt_value value);
@@ -82,6 +92,12 @@ METHOD(doc_query_selector);
 METHOD(doc_query_selector_all);
 METHOD(doc_get_element_by_id);
 METHOD(doc_create_element);
+METHOD(doc_create_element_ns);
+METHOD(doc_hidden_get);
+METHOD(doc_visibility_state_get);
+METHOD(doc_ready_state_get);
+METHOD(doc_title_get);
+METHOD(doc_default_view_get);
 METHOD(doc_create_text_node);
 METHOD(doc_body_get);
 METHOD(doc_document_element_get);
@@ -134,6 +150,9 @@ METHOD(node_click);
 METHOD(node_add_event_listener);
 METHOD(node_remove_event_listener);
 METHOD(node_dispatch_event);
+
+/* event construction (a detached `Event`/`CustomEvent` handle) */
+xt_value event_construct(xt_value type, xt_value init);
 
 /* event methods */
 METHOD(event_prevent_default);

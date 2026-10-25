@@ -51,6 +51,62 @@ describeE2E("end-to-end objects, functions and classes", (harness) => {
     expect(runProgram(source)).toBe("10 0 2\nsub:5");
   });
 
+  it("gives declared functions the environment they capture", () => {
+    /* A function declaration called by name used to be invoked with a null
+     * environment: its free variables read `undefined` and writes to them were
+     * dropped, so `function bump() { count += 1 }` never advanced `count`. */
+    const source = `
+      function make(): any {
+        function read(): any { return value; }
+        const value = 42;
+        return read();
+      }
+      console.log("late=" + make());
+      function counter(): any {
+        let count = 0;
+        function bump(): number { count += 1; return count; }
+        function get(): number { return count; }
+        bump();
+        bump();
+        return get() + ":" + count;
+      }
+      console.log("counter=" + counter());
+      function shadow(): string {
+        const name = "outer";
+        function inner(): string { const name = "inner"; return name; }
+        return name + "/" + inner();
+      }
+      console.log("shadow=" + shadow());
+    `;
+    expect(runProgram(source)).toBe("late=42\ncounter=2:2\nshadow=outer/inner");
+  });
+
+  it("walks the parent chain once per level in a deep super chain", () => {
+    /* `super()` and `super.method()` resolve the parent of the class whose body
+     * is running, not the parent of the receiver's prototype: a three-level
+     * chain used to recurse into the same constructor forever (the receiver of
+     * a `D` instance walks `D → C → B → …`), overflowing the stack. */
+    const source = `
+      class A {
+        x: number;
+        constructor(x: number) { this.x = x; }
+        greet(): string { return "A"; }
+      }
+      class B extends A {
+        constructor(x: number) { super(x); this.x += 1; }
+        greet(): string { return "B" + super.greet(); }
+      }
+      class C extends B {
+        constructor() { super(10); }
+        greet(): string { return "C" + super.greet(); }
+      }
+      class D extends C {}
+      const d = new D();
+      console.log(d.x, d.greet(), d instanceof A, d.constructor.name);
+    `;
+    expect(runProgram(source)).toBe("11 CBA true D");
+  });
+
   it("supports classes with new, this, statics, inheritance and instanceof", () => {
     const source = `
       class Animal {

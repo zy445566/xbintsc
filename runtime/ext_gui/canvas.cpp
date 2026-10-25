@@ -24,10 +24,16 @@ namespace {
 std::atomic<uint64_t> g_next_canvas_id{1};
 
 /** Process-wide id -> canvas table. The engine is single-threaded; the table
- * lives for the process while the objects are owned by the window. */
+ * lives for the process while the objects are owned by the window.
+ *
+ * Deliberately leaked: `g_windows` is a global array, so the canvases it owns
+ * are destroyed *after* this function-local static would have been, and
+ * `~Canvas2D` has to remove itself from the table. Ordering that destruction by
+ * hand is not worth it — the table is one map for the whole process. */
 std::unordered_map<uint64_t, Canvas2D *> &canvas_registry() {
-  static std::unordered_map<uint64_t, Canvas2D *> registry;
-  return registry;
+  static std::unordered_map<uint64_t, Canvas2D *> *registry =
+      new std::unordered_map<uint64_t, Canvas2D *>();
+  return *registry;
 }
 
 CanvasPoint lerp(const CanvasPoint &a, const CanvasPoint &b, float t) {

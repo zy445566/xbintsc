@@ -6,6 +6,13 @@
 
 ## 已知问题
 
+- **没有 WebGL。** `getContext("webgl")` / `getContext("webgl2")` 返回 `null`，
+  `WebGL*` / `WebGL2RenderingContext` / `XRWebGL*` 全局为 `undefined`，因此像 Three.js
+  场景这样的 WebGL 页面会以库自身的 “Error creating WebGL context” 失败，应当显示自己的
+  降级面板。只有 `getContext("2d")` 由光栅器支撑（见[画布](./canvas.md)）。移植页面
+  的其余部分——模块图、DOM 句柄、事件、[API](./api.md) 中的浏览器全局、帧泵——都能工作，
+  所以 Three.js 程序**可以编译并启动**，只是无法绘制。
+
 - **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生
   访问违例（`0xC0000005`）退出，其余运行与正常退出无异。该问题只在**动画帧循环运行中**复现
   （静态文档可以正常关闭），且**不是示例游戏自身**的代码：没有任何异常信息，崩溃多发生在

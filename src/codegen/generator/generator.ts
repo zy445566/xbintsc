@@ -50,7 +50,10 @@ export function generate(
   // Bind once: the checker and the generator must see the same symbol table.
   const binding = bind(sourceFile);
   if (options.check !== false) {
-    checkProgram(sourceFile, binding, diagnostics, { builtins: options.builtins ?? {} });
+    checkProgram(sourceFile, binding, diagnostics, {
+      builtins: options.builtins ?? {},
+      globalValues: options.globalValues ?? {},
+    });
   }
   const generator = new Generator(sourceFile, diagnostics, options, binding);
   return { ir: generator.run(), binding: generator.binding };

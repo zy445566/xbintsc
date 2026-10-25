@@ -26,6 +26,8 @@ import { checkUnresolvedNames } from "./undefined.js";
 export interface CheckOptions {
   /** Globals supplied by the registered extensions (`print`, `__registerScript`, ...). */
   readonly builtins?: Readonly<Record<string, unknown>>;
+  /** Global values supplied by the registered extensions (`window`, `document`). */
+  readonly globalValues?: Readonly<Record<string, unknown>>;
 }
 
 export function checkProgram(
@@ -34,7 +36,10 @@ export function checkProgram(
   diagnostics: DiagnosticBag,
   options: CheckOptions = {},
 ): void {
-  const builtinNames = options.builtins ? new Set(Object.keys(options.builtins)) : undefined;
+  const builtinNames = new Set<string>([
+    ...Object.keys(options.builtins ?? {}),
+    ...Object.keys(options.globalValues ?? {}),
+  ]);
   checkUnresolvedNames(sourceFile, binding, diagnostics, builtinNames);
   reportDeclarationConflicts(sourceFile, binding, diagnostics);
   checkCallArity(sourceFile, binding, diagnostics);

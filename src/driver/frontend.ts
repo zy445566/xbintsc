@@ -97,6 +97,7 @@ export function compileString(
   if (diagnostics.hasErrors) return { ir: "", diagnostics: diagnostics.diagnostics };
   const { ir } = generate(sourceFile, diagnostics, {
     builtins: registry.builtins(),
+    globalValues: registry.globalValues(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
     debug: options.debug === true,
@@ -120,6 +121,7 @@ export function compileEntry(
   if (diagnostics.hasErrors) return { ir: "", diagnostics: diagnostics.diagnostics };
   const { ir } = generate(parsed.sourceFile, diagnostics, {
     builtins: registry.builtins(),
+    globalValues: registry.globalValues(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
     debug: options.debug === true,

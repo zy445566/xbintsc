@@ -159,6 +159,11 @@ export default __html;
 `src` URL（`https://…`、`data:…`、`//host`）保持原样 —— 它们不是编译期资产，
 永不运行。
 
+被包装的脚本体以**它自己的文件**作为其中每条语句的来源（loader 会把该脚本体在生成模块中的
+区间作为 source range 上报），因此诊断会指向 `app.js:12`，而不是 `index.html` 的某一列；
+同时**纯 JavaScript** 脚本与直接 import 的 `.js` 模块一样不做类型检查：在对象字面量上写
+`state.update = …` 不会再报 `TS4003`。页面因此可以原样携带已有的脚本。
+
 ```html
 <button id="b">0</button>
 <script src="./counter.ts"></script>

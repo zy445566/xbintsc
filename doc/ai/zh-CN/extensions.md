@@ -79,6 +79,15 @@ import { createWindow, run } from "gui";
 脚本接口见 [../../zh-CN/gui-scripts.md](../../zh-CN/gui-scripts.md)。Canvas API
 及其限制见 [../../zh-CN/gui/canvas.md](../../zh-CN/gui/canvas.md)。
 
+为浏览器编写的页面还能直接使用它们依赖的浏览器全局 —— `window`/`self`、`document`、
+`navigator`、`location`、`localStorage`、`requestAnimationFrame`、`matchMedia`、
+`getComputedStyle`、`alert`/`prompt`、`escape`、`Event` 家族，以及一层 Web Audio
+**接口**（`AudioContext` 及其节点、参数与缓冲区，但没有混音后端）—— 另外还有帧泵：
+它在 `loadHTML` 时启动，仅在仍有动画帧回调时重新排程，因此从不调用 `run()` 的页面
+也能绘制并最终退出。WebGL、WebXR、未启用 `media` 时的 `<video>`/`<audio>`、`fetch`
+与流式接口**尚未实现**：`typeof` 会回答 `"undefined"`，让页面走自己的降级分支。
+见 [../../zh-CN/gui/api.md](../../zh-CN/gui/api.md)。
+
 ### `media` —— 视频/音频解码
 
 用 `--ext media` **与 `gui` 一起**开启（`--ext gui,media`；注册表会拒绝单独启用

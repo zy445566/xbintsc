@@ -23,8 +23,9 @@
   - 可选链 `?.` / `?.[]` / `?.()`：以空值判断短路到 `undefined`
   - `delete`、`in`、`instanceof`
   - `this`（保存到函数 `%saved.this`；箭头函数从环境槽读）、`super`（`super.x` / `super(...)`）、`new`、`await`
-  - 闭包（箭头函数 / 函数表达式）与捕获环境构建
-- 类：构造器闭包 + 原型对象，存入 LLVM 全局（`@class.<id>`）；实例字段在构造器体前初始化；`static` 成员存于构造器属性包；`extends` 设置原型链；`super(...)` 通过原型上的隐藏 `__ctor` 调用。
+  - 解构：绑定模式中的默认值（`const { a = f() } = o`）按分支生成，`f()` 只在属性为 `undefined` 时求值，绝不会提前执行
+  - 闭包（箭头函数 / 函数表达式 / 函数声明）与捕获环境构建：捕获的是符号的**盒子**，因此闭包内的写入会作用到外层绑定。按名调用的函数声明会在调用点构建环境（`fn.captures` / `fn.capturesThis` 为真时不再走直接调用快路径），否则它会以空环境运行，把所有自由变量都读成 `undefined`。
+- 类：构造器闭包 + 原型对象，存入 LLVM 全局（`@class.<id>`）；实例字段在构造器体前初始化；`static` 成员存于构造器属性包；`extends` 设置原型链；`super(...)` 通过**父类**原型上的隐藏 `__ctor` 调用。父类由当前定义的类决定（`getPrototype(getPrototype(@class.N))`），绝不由接收者推导：子类实例调用基类构造器时，沿着 `this` 走会解析到错的类，导致超过两层的继承链无限递归。
 - `async` / `async function*`：闭包分别用 `xt_function_set_async` / `xt_function_set_async_generator` 标记，并在栈式协程上运行——见[异步、Promise 与生成器](./async.md)。
 - 标准库调用统一走 `xt_call_method` / `xt_math_call` / `xt_object_*` 与各构造器的 `xt_*` 入口；完整表面见[标准库](./stdlib.md)。
 - 全局字符串池（`@.str.N` 私有常量，UTF-8 转义）。

@@ -27,6 +27,24 @@ plain native call the TypeScript program controls. Each tick it:
 The `xt_loop_set_main` hook remains available for hosts that want to own the
 loop themselves.
 
+### The frame pump (pages that never call `run()`)
+
+A page written for the browser does not call `run()`; it calls
+`requestAnimationFrame` and expects the host to paint. `browser_loop.cpp` covers
+that case with a single 16 ms `xt_set_timeout` tick:
+
+- it starts at `loadHTML`, not at the first `requestAnimationFrame` — `ready` is
+  emitted by the first *presented* frame, so waiting for the page's callback
+  would deadlock;
+- each tick dispatches pending input, renders every open window (which drains
+  queued animation-frame callbacks before layout, so a page can stop itself),
+- it re-arms **only while callbacks remain**, so an idle page lets the event
+  loop drain and the process exit — the browser-tab lifecycle;
+- it stands aside while `xt_gui_run_active()` is set (the program called
+  `run()`), so the same window is not rendered twice per tick;
+- `XT_GUI_AUTOCLOSE_MS=n` makes the pump quit after `n` milliseconds, which is
+  how the tests run a page that never closes itself.
+
 This keeps network I/O, timers and `await` working inside a GUI program.
 
 ## Native ↔ TS bridge

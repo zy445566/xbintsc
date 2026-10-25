@@ -23,4 +23,25 @@ describeE2E("property descriptors", (harness) => {
       console.log(JSON.stringify(Object.getOwnPropertyDescriptor([1, 2], "length")));
     `);
   });
+
+  it("defines several properties at once with defineProperties", () => {
+    /* `Object.defineProperties` used to be a silent no-op, which broke every
+     * class whose fields are installed that way (Three.js `Object3D` assigns
+     * `position`/`rotation`/`scale` through it). */
+    harness.expectSameOutputAsNode(`
+      const object: any = {};
+      Object.defineProperties(object, {
+        first: { value: 1, enumerable: true, writable: true },
+        second: { value: 2, enumerable: true },
+        third: { get: () => 3, enumerable: true },
+      });
+      console.log(object.first, object.second, object.third);
+      console.log(Object.keys(object).join(","));
+      object.first = 10;
+      console.log(object.first);
+      console.log(Object.getOwnPropertyDescriptor(object, "third") !== undefined);
+      const chained: any = Object.defineProperties({}, { a: { value: "a" } });
+      console.log(chained.a);
+    `);
+  });
 });

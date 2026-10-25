@@ -107,17 +107,34 @@ export const variableStatementMethods: VariableStatementMethods = {
     }
   },
 
-  /** `x = fallback` in a binding pattern: only apply when `x` is `undefined`. */
+  /**
+   * `x = fallback` in a binding pattern: only apply when `x` is `undefined`.
+   *
+   * The initializer is emitted inside its own block, so it is evaluated *only*
+   * when the property is missing — the specification's order. A `select` cannot
+   * do that: it would evaluate the fallback unconditionally, which runs side
+   * effects and throws for defaults like `canvas = createCanvasElement()` that
+   * assume they are only reached when the caller passed nothing.
+   */
   emitBindingDefault(value: string, initializer: Expression): string {
-    const fallback = this.emitExpression(initializer);
+    const slot = this.alloca();
+    this.emit(`  store i64 ${value}, i64* ${slot}`);
     const isUndefined = this.reg();
     this.emit(`  ${isUndefined} = call i64 @xt_seq(i64 ${value}, i64 ${i64(XT_UNDEFINED)})`);
     const truthy = this.reg();
     this.emit(`  ${truthy} = call i32 @xt_truthy(i64 ${isUndefined})`);
     const condition = this.reg();
     this.emit(`  ${condition} = icmp ne i32 ${truthy}, 0`);
+    const defaultLabel = this.label("bind.default");
+    const endLabel = this.label("bind.end");
+    this.terminate(`br i1 ${condition}, label %${defaultLabel}, label %${endLabel}`);
+    this.startBlock(defaultLabel);
+    const fallback = this.emitExpression(initializer);
+    this.emit(`  store i64 ${fallback}, i64* ${slot}`);
+    this.terminate(`br label %${endLabel}`);
+    this.startBlock(endLabel);
     const result = this.reg();
-    this.emit(`  ${result} = select i1 ${condition}, i64 ${fallback}, i64 ${value}`);
+    this.emit(`  ${result} = load i64, i64* ${slot}`);
     return result;
   },
 

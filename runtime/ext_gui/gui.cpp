@@ -26,8 +26,14 @@ namespace guidev {
 SDL_GPUDevice *g_device = NULL;
 int g_sdl_initialized = 0;
 int g_quit = 0;
+/** Set while `run()` owns the frame loop, so the browser frame pump in
+ * `browser_loop.cpp` does not render the same window twice per tick. */
+int g_run_active = 0;
 XtGuiWindow g_windows[XT_GUI_MAX_WINDOWS];
 int g_window_count = 0;
+/** Set when a window was opened implicitly (a browser global was read before
+ * `createWindow`), so the next `createWindow` adopts it. */
+int g_implicit_window = 0;
 
 /* Optional application icon embedded at compile time by the driver (`--icon` /
  * `app.icon`). The symbols live in a small object the driver links into every
@@ -181,37 +187,25 @@ static int xt_gui_int_or(xt_value value, int fallback) {
   return (int)xt_to_number(value);
 }
 
-extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
-  if (!ensure_init()) return XT_UNDEFINED;
+/* Build (and record) one window. Shared by `createWindow` and the implicit
+ * window a page written against `window`/`document` gets on first access. */
+static XtGuiWindow *create_window_record(const char *title, int width, int height,
+                                         bool high_density) {
   if (g_window_count >= XT_GUI_MAX_WINDOWS) {
     fprintf(stderr, "xt_gui: too many windows (max %d)\n", XT_GUI_MAX_WINDOWS);
-    return XT_UNDEFINED;
+    return NULL;
   }
-
-  const char *title = "xbintsc gui";
-  int width = 800;
-  int height = 600;
-  xt_value options = xt_arg(argc, argv, 0);
-  if (XT_IS_OBJECT(options)) {
-    title = xt_gui_string_or(xt_object_get_cstr(options, "title"), title);
-    width = xt_gui_int_or(xt_object_get_cstr(options, "width"), width);
-    height = xt_gui_int_or(xt_object_get_cstr(options, "height"), height);
-  } else if (XT_IS_STRING(options)) {
-    title = xt_string_data(options);
-    width = xt_gui_int_or(xt_arg(argc, argv, 1), width);
-    height = xt_gui_int_or(xt_arg(argc, argv, 2), height);
-  }
-
-  SDL_Window *window = SDL_CreateWindow(
-      title, width, height, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+  SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
+  if (high_density) flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+  SDL_Window *window = SDL_CreateWindow(title, width, height, flags);
   if (window == NULL) {
     fprintf(stderr, "xt_gui: SDL_CreateWindow failed: %s\n", SDL_GetError());
-    return XT_UNDEFINED;
+    return NULL;
   }
   if (!SDL_ClaimWindowForGPUDevice(g_device, window)) {
     fprintf(stderr, "xt_gui: SDL_ClaimWindowForGPUDevice failed: %s\n", SDL_GetError());
     SDL_DestroyWindow(window);
-    return XT_UNDEFINED;
+    return NULL;
   }
   xt_gui_apply_icon(window);
 
@@ -249,11 +243,73 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
    * still uses it, which is a use-after-free. Rooting the window object makes
    * everything hanging off it reachable. */
   xt_gc_add_root(&record->object);
+  return record;
+}
 
-  return object;
+/** The window `window`/`document` refer to: the most recent live one, created
+ * on demand. A page that reads `window.innerWidth` while its modules
+ * initialize therefore has a real window before `createWindow` runs — and
+ * `createWindow` then *adopts* it (see below) instead of opening a second one. */
+xt_value xt_gui_ensure_window(void) {
+  for (int i = g_window_count - 1; i >= 0; i--) {
+    if (g_windows[i].open) return g_windows[i].object;
+  }
+  if (!ensure_init()) return XT_UNDEFINED;
+  XtGuiWindow *record = create_window_record("xbintsc gui", 800, 600, true);
+  if (record == NULL) return XT_UNDEFINED;
+  g_implicit_window = 1;
+  return record->object;
+}
+
+extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
+  if (!ensure_init()) return XT_UNDEFINED;
+
+  const char *title = "xbintsc gui";
+  int width = 800;
+  int height = 600;
+  bool high_density = true;
+  xt_value options = xt_arg(argc, argv, 0);
+  if (XT_IS_OBJECT(options)) {
+    title = xt_gui_string_or(xt_object_get_cstr(options, "title"), title);
+    width = xt_gui_int_or(xt_object_get_cstr(options, "width"), width);
+    height = xt_gui_int_or(xt_object_get_cstr(options, "height"), height);
+    xt_value density = xt_object_get_cstr(options, "highDensity");
+    if (!XT_IS_UNDEFINED(density)) high_density = xt_truthy(density);
+  } else if (XT_IS_STRING(options)) {
+    title = xt_string_data(options);
+    width = xt_gui_int_or(xt_arg(argc, argv, 1), width);
+    height = xt_gui_int_or(xt_arg(argc, argv, 2), height);
+  }
+
+  /* A global (`window.innerWidth` while the page's modules initialize) already
+   * opened a window for this program; make it *the* window instead of leaving
+   * an invisible one behind. */
+  if (g_implicit_window != 0) {
+    g_implicit_window = 0;
+    XtGuiWindow *record = &g_windows[0];
+    SDL_SetWindowTitle(record->window, title);
+    SDL_SetWindowSize(record->window, width, height);
+    record->width = width;
+    record->height = height;
+    return record->object;
+  }
+
+  XtGuiWindow *record = create_window_record(title, width, height, high_density);
+  return record != NULL ? record->object : XT_UNDEFINED;
 }
 
 /* -- run() / quit() ------------------------------------------------------- */
+
+/* Poll and dispatch pending SDL events once. `run()` owns the loop for a program
+ * that calls it; a *browser-style* page (one that drives itself from
+ * `requestAnimationFrame` and never calls `run`) is pumped from the runtime's
+ * timer queue instead, and needs the same input dispatch per frame. */
+extern "C" int xt_gui_run_active(void) { return g_run_active; }
+
+extern "C" void xt_gui_pump_events(void) {
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) handle_event(&event);
+}
 
 extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
   (void)argc;
@@ -264,6 +320,7 @@ extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
   if (autoclose != NULL && autoclose[0] != '\0') {
     deadline = SDL_GetTicks() + (Uint64)SDL_atoi(autoclose);
   }
+  g_run_active = 1;
   while (!g_quit) {
     SDL_Event event;
     int had_event = 0;
@@ -289,6 +346,7 @@ extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
     if (!had_event) SDL_Delay(1);
   }
 
+  g_run_active = 0;
   SDL_GPUDevice *device = g_device;
   if (device != NULL) {
     SDL_WaitForGPUIdle(device);

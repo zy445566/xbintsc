@@ -52,6 +52,14 @@ only inference-free facts (names, redeclarations, call arity) are checked.
 Node built-ins need --ext node, packages in node_modules are bundled at build
 time, and clang 16+ is required to link.
 
+Installed as a project dependency (npm):
+  npx xbintsc doctor
+  npx xbintsc build <entry.ts> --out build
+  npx xbintsc run <entry.ts>
+The first build compiles the C runtime; later builds reuse the cache.
+
 Docs: doc/ai/README.md (task guide) - doc/ai/language-support.md (subset) -
-doc/ai/troubleshooting.md (failures) - llms.txt (index of every document)
+doc/ai/troubleshooting.md (failures) - llms.txt (index of every document).
+When installed from npm, these live under node_modules/xbintsc/doc/ and
+node_modules/xbintsc/doc/npm-package.md is the project guide.
 `;

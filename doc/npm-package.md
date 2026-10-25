@@ -22,6 +22,27 @@ npx xbintsc build src/main.ts --out build
 The rest of this page explains the requirements, the first-build cost, CI and
 the differences from a normal Node build.
 
+## For AI agents
+
+If you are an agent asked to build a project that already depends on `xbintsc`:
+
+1. Run `npx xbintsc doctor`. If it exits non-zero, report the toolchain problem;
+   do not edit the program to work around a missing or old clang.
+2. Find the entry file: `entry` in `xbintsc.config.json`, a package script that
+   invokes `xbintsc`, or the project's main TypeScript file (often
+   `src/main.ts`). When a config exists, `npx xbintsc build` needs no arguments.
+3. Build with `npx xbintsc build <entry> --out build`. If the program imports
+   Node built-ins, add `--ext node`; the diagnostic names the missing extension.
+4. Run the artifact (`./build/<name>`, `.exe` on Windows) and report its path.
+5. If the build reports unsupported syntax, read the installed subset guide at
+   `node_modules/xbintsc/doc/ai/language-support.md`; do not assume
+   Node-compatible TypeScript. The first build also compiles the C runtime, so
+   allow more time than for an incremental build.
+
+Do not run `npm install` inside `node_modules/xbintsc`, and do not substitute
+`tsc`/`esbuild` for xbintsc: the native artifact must come from `npx xbintsc`.
+`xbintsc` does not read `tsconfig.json`; use relative imports or package imports.
+
 ## What the npm package is
 
 The package contains:
@@ -375,6 +396,10 @@ development).
   the platform you will run it on.
 
 ## Troubleshooting
+
+Diagnostic hints end with a repository-relative path such as
+`doc/ai/troubleshooting.md`. In a project that installed xbintsc from npm, read
+the same file under `node_modules/xbintsc/doc/ai/`.
 
 | Symptom | Cause / fix |
 | --- | --- |

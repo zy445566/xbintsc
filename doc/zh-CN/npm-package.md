@@ -20,6 +20,27 @@ npx xbintsc build src/main.ts --out build
 
 后文会解释环境要求、首次构建成本、CI 用法以及与普通 Node 构建的差异。
 
+## 给 AI 代理的说明
+
+如果你是被要求构建一个已经依赖 `xbintsc` 的项目的 AI 代理：
+
+1. 运行 `npx xbintsc doctor`。如果退出码非零，报告工具链问题；不要为了绕过
+   缺失或过旧的 clang 去修改程序。
+2. 找入口文件：`xbintsc.config.json` 里的 `entry`、调用 `xbintsc` 的 package
+   脚本，或项目的主 TypeScript 文件（通常是 `src/main.ts`）。有配置文件时，
+   `npx xbintsc build` 不需要位置参数。
+3. 用 `npx xbintsc build <entry> --out build` 构建。如果程序导入了 Node 内置
+   模块，加 `--ext node`；诊断信息会指出缺失的扩展。
+4. 运行产物（`./build/<name>`，Windows 上是 `.exe`），并报告其路径。
+5. 如果构建报不支持的语法，阅读安装包里的子集指南
+   `node_modules/xbintsc/doc/ai/language-support.md`；不要假设 Node 能跑的
+   TypeScript 就一定能编译。首次构建还会编译 C 运行时，请预留比增量构建更多的
+   时间。
+
+不要在 `node_modules/xbintsc` 里运行 `npm install`，也不要用 `tsc`/`esbuild`
+代替 xbintsc：原生产物必须由 `npx xbintsc` 生成。`xbintsc` 不读取
+`tsconfig.json`；请使用相对导入或包导入。
+
 ## npm 包里有什么
 
 这个包包含：
@@ -350,6 +371,9 @@ jobs:
 - **产物与平台、架构绑定。** 请在最终运行它的平台上构建。
 
 ## 排错
+
+诊断信息末尾的提示使用仓库相对路径，例如 `doc/ai/troubleshooting.md`。如果项目是
+通过 npm 安装的 xbintsc，请到 `node_modules/xbintsc/doc/ai/` 下读同一个文件。
 
 | 现象 | 原因 / 处理 |
 | --- | --- |

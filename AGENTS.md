@@ -1,5 +1,10 @@
 # AGENTS.md — working in the xbintsc repository
 
+> **Using the installed npm package in another project?** This file is for
+> working *in* this repository. Read the project guide instead:
+> [doc/npm-package.md](./doc/npm-package.md) — the installed copy is at
+> `node_modules/xbintsc/doc/npm-package.md`.
+
 **xbintsc is a compiler: it turns a subset of TypeScript into standalone native
 binaries.** It lexes and parses TypeScript itself, binds names, lowers the
 program to **LLVM IR text**, and hands that text to **clang**, which produces an

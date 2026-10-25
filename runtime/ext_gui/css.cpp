@@ -59,6 +59,60 @@ bool xt_css_parse_number(const std::string &value, float *out) {
   return true;
 }
 
+
+/** Split a CSS function's argument list at top-level commas. */
+static std::vector<std::string> splitFunctionArgs(const std::string &text) {
+  std::vector<std::string> args;
+  std::string current;
+  int depth = 0;
+  for (char c : text) {
+    if (c == '(') depth++;
+    if (c == ')') depth--;
+    if (c == ',' && depth == 0) {
+      args.push_back(xt_css_trim(current));
+      current.clear();
+    } else {
+      current.push_back(c);
+    }
+  }
+  if (!current.empty() || !args.empty()) args.push_back(xt_css_trim(current));
+  return args;
+}
+
+/** `clamp(min, value, max)`, `min(...)` and `max(...)` over lengths. The
+ * arguments stay unresolved; layout resolves them against the element's em and
+ * the viewport. `env(safe-area-inset-*)` has no notch information in a desktop
+ * window, so it resolves to zero (its fallback is ignored, matching the
+ * browser's value without insets). */
+static Length parseFunctionLength(const std::string &name, const std::string &inner) {
+  Length result;
+  if (name == "env") {
+    result.unit = Unit::Px;
+    return result;
+  }
+  if (name != "clamp" && name != "min" && name != "max") {
+    result.unit = Unit::Invalid;
+    return result;
+  }
+  std::vector<std::string> args = splitFunctionArgs(inner);
+  size_t expected = name == "clamp" ? 3 : 1;
+  if (args.size() < expected) {
+    result.unit = Unit::Invalid;
+    return result;
+  }
+  result.unit = name == "clamp" ? Unit::Clamp : (name == "min" ? Unit::Min : Unit::Max);
+  for (const std::string &arg : args) {
+    Length value = xt_css_parse_length(arg);
+    if (value.unit == Unit::Invalid) {
+      result.unit = Unit::Invalid;
+      result.args.clear();
+      return result;
+    }
+    result.args.push_back(value);
+  }
+  return result;
+}
+
 Length xt_css_parse_length(const std::string &value) {
   Length length;
   std::string text = xt_css_lower(xt_css_trim(value));
@@ -73,6 +127,13 @@ Length xt_css_parse_length(const std::string &value) {
   if (text == "none") {
     length.unit = Unit::None;
     return length;
+  }
+  size_t open = text.find('(');
+  if (open != std::string::npos && !text.empty() && text.back() == ')') {
+    std::string name = text.substr(0, open);
+    if (name == "clamp" || name == "min" || name == "max" || name == "env") {
+      return parseFunctionLength(name, text.substr(open + 1, text.size() - open - 2));
+    }
   }
   char *end = nullptr;
   float number = strtof(text.c_str(), &end);

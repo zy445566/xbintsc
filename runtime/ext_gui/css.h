@@ -17,11 +17,15 @@
 
 namespace xtgui {
 
-enum class Unit { Auto, None, Px, Percent, Em, Rem, Vw, Vh, Number, Invalid };
+enum class Unit { Auto, None, Px, Percent, Em, Rem, Vw, Vh, Number, Clamp, Min, Max, Invalid };
 
 struct Length {
   float value = 0.0f;
   Unit unit = Unit::Auto;
+  /* Arguments of `clamp(...)`, `min(...)` and `max(...)`; empty for a scalar
+   * length. Kept unresolved so vw/vh/em are resolved against the element that
+   * uses the length, not the viewport at parse time. */
+  std::vector<Length> args;
 };
 
 struct Color {

@@ -26,6 +26,7 @@ import type { Extension, ExtensionModule } from "../registry.js";
 import { findRuntimeDir, platformSlug } from "../../driver/paths.js";
 import { findRuntimeLibrary } from "../../driver/runtime-lib.js";
 import { loadHtmlAsset } from "./html.js";
+import { loadScriptAsset } from "./three.js";
 
 /** Top-level `gui` module bindings. */
 const guiModule: ExtensionModule = {
@@ -186,6 +187,6 @@ export const guiExtension: Extension = {
   }),
   /** Browser globals (`window`, `document`, the DOM type names). */
   globalValues: () => browserGlobals,
-  /** Rewrite imported `.html` assets (see `html.ts`). */
-  assetLoaders: () => ({ ".html": loadHtmlAsset }),
+  /** Rewrite imported `.html` assets and give three.js a Canvas2D renderer. */
+  assetLoaders: () => ({ ".html": loadHtmlAsset, ".js": loadScriptAsset, ".mjs": loadScriptAsset }),
 };

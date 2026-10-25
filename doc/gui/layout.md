@@ -32,6 +32,24 @@ with absolute (viewport-relative) geometry:
   Item margins are part of the item's outer size on both axes, so a negative
   `margin-top` pulls an item up instead of being ignored. Whitespace-only text
   between items (source indentation) does not become a flex item.
+- **Grid** — `display: grid` with `grid-template-columns` / `grid-template-rows`
+  (fixed lengths, `auto`, `<n>fr`, `minmax(...)`, `repeat(...)`), `gap` /
+  `row-gap` / `column-gap`, row-major auto-placement, simple `grid-column` /
+  `grid-row` line placement, and `align/justify-items` plus
+  `align/justify-self` (including `place-items` / `place-self`). Implicit rows
+  and columns grow from the items; a single-cell grid with `place-items: center` centres a card in the whole overlay. Item measurement is a two-pass
+  layout (intrinsic size, then final placement), so text fragments are cleared
+  between passes.
+- **CSS value functions and custom properties** — `clamp(min, value, max)`,
+  `min(...)` and `max(...)` keep their arguments unresolved in the computed style
+  and are evaluated at layout time against the element's font size and the
+  viewport (`vw`/`vh`); `env(safe-area-inset-*)` resolves to zero in a desktop
+  window. `var(--name[, fallback])` is substituted from inherited custom
+  properties during the cascade. `inset` is the four-value
+  `top/right/bottom/left` shorthand, `box-sizing: border-box` subtracts padding
+  and borders from an explicit width/height, `visibility: hidden` skips painting
+  and hit testing, and `pointer-events: none` makes a box transparent to input
+  (its descendants can opt back in with `auto`).
 - **Positioning** — `position: relative` offsets a box (and its subtree) by
   `top`/`right`/`bottom`/`left` without changing the space it reserved;
   `position: absolute` (and `fixed`, which resolves against the viewport) takes

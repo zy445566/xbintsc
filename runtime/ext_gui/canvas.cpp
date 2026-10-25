@@ -457,24 +457,9 @@ void Canvas2D::draw_image(const Image &source, float dx, float dy, float dw, flo
     canvas_detail::draw_image(image_.pixels, image_.width, image_.height, source, x0, y0, x1 - x0,
                               y1 - y0, sx, sy, sw, sh, state_.global_alpha);
   } else {
-    float cornersX[4], cornersY[4];
-    const float corners[4][2] = {
-        {dx, dy}, {dx + dw, dy}, {dx + dw, dy + dh}, {dx, dy + dh}};
-    float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
-    for (int i = 0; i < 4; i++) {
-      to_device(corners[i][0], corners[i][1], &cornersX[i], &cornersY[i]);
-      if (i == 0) {
-        minX = maxX = cornersX[i];
-        minY = maxY = cornersY[i];
-      } else {
-        minX = std::min(minX, cornersX[i]);
-        maxX = std::max(maxX, cornersX[i]);
-        minY = std::min(minY, cornersY[i]);
-        maxY = std::max(maxY, cornersY[i]);
-      }
-    }
-    canvas_detail::draw_image(image_.pixels, image_.width, image_.height, source, minX, minY,
-                              maxX - minX, maxY - minY, sx, sy, sw, sh, state_.global_alpha);
+    canvas_detail::draw_image_affine(image_.pixels, image_.width, image_.height, source, dx, dy,
+                                     dw, dh, sx, sy, sw, sh, state_.transform,
+                                     state_.global_alpha);
   }
   generation_++;
 }

@@ -5,15 +5,19 @@
 
 ## Known issues
 
-- **No WebGL.** `getContext("webgl")` / `getContext("webgl2")` answer `null` and
-  the `WebGL*` / `WebGL2RenderingContext` / `XRWebGL*` globals are `undefined`,
-  so a WebGL page such as a Three.js scene fails with the library's own
-  "Error creating WebGL context" and is expected to show its fallback panel.
-  Only `getContext("2d")` is backed by a rasteriser (see
-  [Canvas](./canvas.md)). Everything else about a ported page — module graph,
-  DOM handles, events, the browser globals in [API](./api.md#browser-globals),
-  the frame pump — works, so a Three.js program *compiles and starts*; it just
-  cannot draw.
+- **No general WebGL — but three.js has a Canvas2D fallback.** `getContext("webgl")` /
+  `getContext("webgl2")` still answer `null` and the `WebGL*` /
+  `WebGL2RenderingContext` / `XRWebGL*` globals are still `undefined`. What changed
+  is that the gui extension's `.js` asset loader recognises a three.js module and
+  replaces its `WebGLRenderer` export with a Canvas2D scene renderer
+  (`runtime/ext_gui/three_compat.js`, loaded by
+  `src/extensions/gui/three.ts`). A Three.js page therefore compiles **and draws**:
+  standard/basic materials, the light types, fog, tone mapping, CanvasTextures,
+  sprites, points and instanced silhouettes are supported. It is a scene renderer,
+  not a GL implementation, so custom shaders, skinning/morph targets, real shadow
+  maps and render targets are not executed; geometry outside the fast paths falls
+  back to flat-shaded triangles. Any *other* WebGL library still sees an undefined
+  context and must take its own fallback branch.
 
 - **Intermittent crash at auto-close.** `XT_GUI_AUTOCLOSE_MS` can end a run
   with a native access violation in roughly two runs out of five; a clean exit
@@ -44,6 +48,16 @@
   *class change* on a flex container has also been observed to crash the same
   way; `examples/gui/pelican-bike` reveals its game-over overlay with `opacity`
   instead.
+- **CSS coverage is a deliberate subset.** Grid, `clamp()`/`min()`/`max()`/`env()`,
+  `var()` custom properties, the `inset` shorthand, `box-sizing`, `visibility` and
+  `pointer-events`, and linear-gradient backgrounds are implemented. Still absent:
+  pseudo-elements (`::before`/`::after`), `clip-path`, `filter`/`backdrop-filter`,
+  `mix-blend-mode`, `text-shadow`, radial/multiple background layers, and `@media`
+  blocks (the parser skips at-rules). Those properties are ignored rather than
+  approximated, so decorative effects can be missing while layout and text remain
+  correct. Canvas textures are sampled nearest-neighbour, and a multi-layer
+  `background` paints one base linear gradient (18 solid strips), not a full
+  compositing stack.
 - **SVG is NanoSVG's subset.** SVG *files* (`<img src="logo.svg">`) and inline
   `<svg>` trees share the vendored NanoSVG parser/rasteriser
   (`runtime/ext_gui/svg.cpp`, `inline_svg.cpp`), which renders

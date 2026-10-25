@@ -66,7 +66,10 @@ import { createWindow, run } from "gui";
 ```
 
 它是自带渲染引擎的 GPU 加速实现（自己的 HTML 解析器、CSS 级联、布局与合成器），不是
-系统 WebView。`<img>` 由引擎自身解码；而 `<video>`/`<audio>` 在只启用 `gui` 时**不可用**
+系统 WebView。编译器一侧还会把本地 `<link rel="stylesheet">` 及其 `@import` 内联为
+`<style>` 块（运行时解析器只读取内联 `<style>`）；并把随包引入的 Three.js 的
+`WebGLRenderer` 替换为 Canvas2D 场景渲染器（`runtime/ext_gui/three_compat.js`），
+让 Three.js 页面无需 WebGL 也能绘制。`<img>` 由引擎自身解码；而 `<video>`/`<audio>` 在只启用 `gui` 时**不可用**
 ——它们需要单独的 [`media`](#media--视频音频解码) 扩展。也支持 `<canvas>`：
 `getContext("2d")` 返回的上下文，其填充、路径、
 渐变、文本与 `drawImage` 由自研 CPU 光栅器处理（另有线段端点/连接、虚线描边、
@@ -84,7 +87,7 @@ import { createWindow, run } from "gui";
 `getComputedStyle`、`alert`/`prompt`、`escape`、`Event` 家族，以及一层 Web Audio
 **接口**（`AudioContext` 及其节点、参数与缓冲区，但没有混音后端）—— 另外还有帧泵：
 它在 `loadHTML` 时启动，仅在仍有动画帧回调时重新排程，因此从不调用 `run()` 的页面
-也能绘制并最终退出。WebGL、WebXR、未启用 `media` 时的 `<video>`/`<audio>`、`fetch`
+也能绘制并最终退出。通用 WebGL/WebXR（Three.js 走上述 Canvas2D 回退）、未启用 `media` 时的 `<video>`/`<audio>`、`fetch`
 与流式接口**尚未实现**：`typeof` 会回答 `"undefined"`，让页面走自己的降级分支。
 见 [../../zh-CN/gui/api.md](../../zh-CN/gui/api.md)。
 

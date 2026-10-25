@@ -34,6 +34,82 @@ bool candidateBefore(const Candidate &a, const Candidate &b) {
   return a.order < b.order;
 }
 
+
+/* -- custom properties (var()) ------------------------------------------- */
+
+static bool isCustomProperty(const std::string &property) {
+  return property.size() > 2 && property[0] == '-' && property[1] == '-';
+}
+
+/** Find the `)` matching the `(` at `open`, respecting nested functions. */
+static size_t matchingParen(const std::string &text, size_t open) {
+  int depth = 0;
+  for (size_t i = open; i < text.size(); i++) {
+    if (text[i] == '(') depth++;
+    else if (text[i] == ')') {
+      depth--;
+      if (depth == 0) return i;
+    }
+  }
+  return std::string::npos;
+}
+
+/** Split a `var(...)` body at the first top-level comma. */
+static void splitVarBody(const std::string &body, std::string *name, std::string *fallback,
+                         bool *hasFallback) {
+  int depth = 0;
+  for (size_t i = 0; i < body.size(); i++) {
+    if (body[i] == '(') depth++;
+    else if (body[i] == ')') depth--;
+    else if (body[i] == ',' && depth == 0) {
+      *name = xt_css_trim(body.substr(0, i));
+      *fallback = xt_css_trim(body.substr(i + 1));
+      *hasFallback = true;
+      return;
+    }
+  }
+  *name = xt_css_trim(body);
+  *fallback = "";
+  *hasFallback = false;
+}
+
+/** Substitute every `var(--name[, fallback])` in `value`. Returns false when a
+ * referenced property is undefined and no fallback exists, which makes the
+ * declaration invalid (the browser rule). */
+static bool substituteVariables(const std::string &value,
+                                const std::unordered_map<std::string, std::string> &variables,
+                                int depth, std::string *out) {
+  if (depth > 16) return false;
+  out->clear();
+  size_t i = 0;
+  while (i < value.size()) {
+    if ((value[i] == 'v' || value[i] == 'V') && i + 4 <= value.size() &&
+        value.compare(i, 4, "var(") == 0) {
+      size_t close = matchingParen(value, i + 3);
+      if (close == std::string::npos) return false;
+      std::string body = value.substr(i + 4, close - i - 4);
+      std::string name, fallback;
+      bool hasFallback = false;
+      splitVarBody(body, &name, &fallback, &hasFallback);
+      auto found = variables.find(name);
+      std::string replacement;
+      if (found != variables.end()) {
+        if (!substituteVariables(found->second, variables, depth + 1, &replacement)) return false;
+      } else if (hasFallback) {
+        if (!substituteVariables(fallback, variables, depth + 1, &replacement)) return false;
+      } else {
+        return false;
+      }
+      *out += replacement;
+      i = close + 1;
+      continue;
+    }
+    *out += value[i];
+    i += 1;
+  }
+  return true;
+}
+
 void finalizeStyle(XtStyle *style, const ApplyContext &context) {
   switch (style->line_height.unit) {
     case Unit::Em:
@@ -41,6 +117,9 @@ void finalizeStyle(XtStyle *style, const ApplyContext &context) {
     case Unit::Rem:
     case Unit::Vw:
     case Unit::Vh:
+    case Unit::Clamp:
+    case Unit::Min:
+    case Unit::Max:
       style->line_height.value = xt_style_resolve_absolute(
           style->line_height, style->font_size, style->font_size, context.rootFontSize,
           context.viewportWidth, context.viewportHeight);
@@ -61,6 +140,9 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
       /* Inherited properties start from the parent; everything else keeps its
        * initial value until a declaration overrides it. */
       style.color = parent->color;
+      style.visible = parent->visible;
+      style.pointer_events = parent->pointer_events;
+      style.variables = parent->variables;
       style.font_size = parent->font_size;
       style.font_weight = parent->font_weight;
       style.font_family = parent->font_family;
@@ -94,9 +176,22 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
       }
     }
     std::stable_sort(candidates.begin(), candidates.end(), candidateBefore);
+    /* Custom properties participate in the cascade first; their final values
+     * are then available to every normal declaration on this element. */
     for (const Candidate &candidate : candidates) {
-      xt_style_apply_declaration(&style, candidate.declaration->property, candidate.declaration->value,
-                                 nodeContext);
+      if (isCustomProperty(candidate.declaration->property)) {
+        style.variables[candidate.declaration->property] = candidate.declaration->value;
+      }
+    }
+    for (const Candidate &candidate : candidates) {
+      if (isCustomProperty(candidate.declaration->property)) continue;
+      std::string value = candidate.declaration->value;
+      if (value.find("var(") != std::string::npos) {
+        std::string resolved;
+        if (!substituteVariables(value, style.variables, 0, &resolved)) continue;
+        value = resolved;
+      }
+      xt_style_apply_declaration(&style, candidate.declaration->property, value, nodeContext);
     }
     finalizeStyle(&style, nodeContext);
 

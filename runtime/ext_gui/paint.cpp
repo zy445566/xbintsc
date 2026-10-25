@@ -58,6 +58,62 @@ void addRect(DisplayList &out, float x, float y, float width, float height, floa
   out.ops.push_back(PaintOp{PaintKind::Rect, (uint32_t)(out.rects.size() - 1), clip});
 }
 
+
+/* Sample a linear gradient at `t` (0..1). Stops are sorted by the parser. */
+static Color gradientColorAt(const BackgroundGradient &gradient, float t) {
+  const std::vector<BackgroundGradientStop> &stops = gradient.stops;
+  if (stops.empty()) {
+    Color none;
+    return none;
+  }
+  if (t <= stops.front().offset) return stops.front().color;
+  if (t >= stops.back().offset) return stops.back().color;
+  for (size_t i = 1; i < stops.size(); i++) {
+    if (t > stops[i].offset) continue;
+    float span = stops[i].offset - stops[i - 1].offset;
+    float u = span > 0.00001f ? (t - stops[i - 1].offset) / span : 0.0f;
+    Color a = stops[i - 1].color;
+    Color b = stops[i].color;
+    Color out;
+    out.r = a.r + (b.r - a.r) * u;
+    out.g = a.g + (b.g - a.g) * u;
+    out.b = a.b + (b.b - a.b) * u;
+    out.a = a.a + (b.a - a.a) * u;
+    out.valid = true;
+    return out;
+  }
+  return stops.back().color;
+}
+
+/* A linear background gradient is painted as solid strips through the existing
+ * rectangle pipeline (the renderer has no gradient shader). 18 bands are enough
+ * to hide banding on the dark, low-contrast surfaces this engine targets. */
+static void addGradientBackground(const XtStyle &style, const LayoutBox &box, DisplayList &out,
+                                  const PaintClip &clip, const Matrix2D &matrix) {
+  const BackgroundGradient &gradient = style.background_gradient;
+  if (!gradient.active || gradient.stops.size() < 2) return;
+  float width = box.width;
+  float height = box.height;
+  if (width <= 0 || height <= 0) return;
+  const int strips = 18;
+  bool alongX = gradient.angle > 80.0f && gradient.angle < 100.0f;
+  bool alongX2 = gradient.angle > 260.0f && gradient.angle < 280.0f;
+  bool horizontal = alongX || alongX2;
+  bool reverse = alongX2 || gradient.angle < 10.0f || gradient.angle > 350.0f;
+  for (int i = 0; i < strips; i++) {
+    float t = ((float)i + 0.5f) / (float)strips;
+    Color color = gradientColorAt(gradient, reverse ? 1.0f - t : t);
+    if (color.a <= 0.0f) continue;
+    if (horizontal) {
+      addRect(out, box.x + width * (float)i / (float)strips, box.y, width / (float)strips + 0.4f,
+              height, 0.0f, color, clip, matrix);
+    } else {
+      addRect(out, box.x, box.y + height * (float)i / (float)strips, width,
+              height / (float)strips + 0.4f, 0.0f, color, clip, matrix);
+    }
+  }
+}
+
 void addTextRuns(const LayoutBox *box, const XtStyle &style, DisplayList &out,
                  const PaintClip &clip) {
   if (box->fragments.empty() || style.color.a <= 0.0f) return;
@@ -138,8 +194,9 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
   if (box == nullptr) return;
   const XtStyle *style = box->style;
 
-  /* A fully transparent box paints nothing — not itself, and not its subtree. */
-  if (style != nullptr && style->opacity <= 0.0f) return;
+  /* A fully transparent or hidden box paints nothing — not itself, and not its
+   * subtree. */
+  if (style != nullptr && (style->opacity <= 0.0f || !style->visible)) return;
 
   if (style != nullptr && box->display != Display::None) {
     if (box->is_text) {
@@ -152,6 +209,9 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
       if (style->has_background) {
         addRect(out, box->x, box->y, box->width, box->height, style->border_radius,
                 style->background, clip, matrix);
+      }
+      if (style->background_gradient.active) {
+        addGradientBackground(*style, *box, out, clip, matrix);
       }
       if (style->border_style != BorderStyle::None && style->has_border_color) {
         const Color bc = style->border_color;

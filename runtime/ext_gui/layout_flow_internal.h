@@ -105,6 +105,33 @@ struct FloatContext {
 inline float toPx(const Length &length, float base, float em, float root, float vw, float vh,
                   float fallback) {
   switch (length.unit) {
+    case Unit::Clamp: {
+      if (length.args.size() < 3) return fallback;
+      float low = toPx(length.args[0], base, em, root, vw, vh, fallback);
+      float value = toPx(length.args[1], base, em, root, vw, vh, fallback);
+      float high = toPx(length.args[2], base, em, root, vw, vh, fallback);
+      return value < low ? low : (value > high ? high : value);
+    }
+    case Unit::Min: {
+      float best = fallback;
+      bool first = true;
+      for (const Length &arg : length.args) {
+        float value = toPx(arg, base, em, root, vw, vh, fallback);
+        if (first || value < best) best = value;
+        first = false;
+      }
+      return first ? fallback : best;
+    }
+    case Unit::Max: {
+      float best = fallback;
+      bool first = true;
+      for (const Length &arg : length.args) {
+        float value = toPx(arg, base, em, root, vw, vh, fallback);
+        if (first || value > best) best = value;
+        first = false;
+      }
+      return first ? fallback : best;
+    }
     case Unit::Px:
     case Unit::Number:
       return length.value;
@@ -241,6 +268,10 @@ struct Layouter {
                         float contentWidth, float y, const FloatContext *floats = nullptr) const;
 
   float layoutFlex(LayoutBox *container, float contentWidth, float definiteHeight) const;
+
+  /** Grid formatting context (explicit/implicit tracks, gaps, auto-placement
+   * and item alignment). Returns the used content height. */
+  float layoutGrid(LayoutBox *container, float contentWidth, float definiteHeight) const;
 
   /** Flex row main-axis layout, wrapping items into lines when `flex-wrap`
    * allows it. Returns the used cross size. */

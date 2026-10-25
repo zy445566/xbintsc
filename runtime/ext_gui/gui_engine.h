@@ -162,6 +162,11 @@ struct XtGuiWindow {
    * lazily by `getContext("2d")` (or by `xt_gui_canvas_sync` for a live canvas),
    * released when the node is forgotten or the document reloads. */
   std::unordered_map<const xtgui::Node *, std::unique_ptr<xtgui::Canvas2D>> canvases;
+  /** Canvases whose element handle was created before `loadHTML` (a module
+   * that calls `getElementById("scene").getContext("2d")` while it
+   * initialises). Keyed by canvas id; moved into `canvases` when the pending
+   * handle binds to the parsed element. */
+  std::unordered_map<uint64_t, std::unique_ptr<xtgui::Canvas2D>> pending_canvases;
   /** The batch currently running: its callbacks have been swapped out of
    * `animation_frames`, and a collection triggered by one of them must still
    * see the rest. Kept on the record (not a local) so the GC root provider can
@@ -243,6 +248,10 @@ xtgui::Canvas2D *xt_gui_canvas_get(XtGuiWindow *win, const xtgui::Node *node);
 xtgui::Canvas2D *xt_gui_canvas_find(XtGuiWindow *win, const xtgui::Node *node);
 /** Drop a node's canvas (called when its handle is forgotten). */
 void xt_gui_canvas_forget(XtGuiWindow *win, const xtgui::Node *node);
+/** Move a pre-load canvas into the live table when its pending element handle
+ * binds. `handle` is the DOM handle that was used for `getContext("2d")`. */
+void xt_gui_canvas_bind_pending(XtGuiWindow *win, const xtgui::Node *node, xt_value handle);
+
 /** Publish live canvases to the document (sizes + render ids) so layout and
  * paint see them; creates a context for a canvas that has none yet. */
 void xt_gui_canvas_sync(XtGuiWindow *win);

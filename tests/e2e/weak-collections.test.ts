@@ -59,13 +59,27 @@ describeE2E("weak collections and weak references", (harness) => {
       harness.runProgram(
         `
         const map = new WeakMap<object, object>();
-        function make() {
+        // The stack scan is conservative, so a word a *returned* frame left
+        // behind still counts as a root until something overwrites it. A key
+        // created at the same depth as the churn loop can therefore read as
+        // reachable for the whole loop, which made this test depend on the
+        // frame layout of the host compiler (it failed on Windows ARM64 while
+        // passing elsewhere). Creating the keys this many frames down puts the
+        // frame that held them below every frame a collection runs in, so the
+        // scan cannot see it at all.
+        function make(depth: number) {
+          if (depth > 0) {
+            const pad = { depth };
+            const refs = make(depth - 1);
+            void pad;
+            return refs;
+          }
           const key = { id: "key" };
           const value = { id: "value" };
           map.set(key, value);
           return [new WeakRef(key), new WeakRef(value)];
         }
-        const refs = make();
+        const refs = make(32);
         for (let i = 0; i < 40000; i++) {
           const garbage = { i, s: "g" + i };
           void garbage;

@@ -8,6 +8,7 @@
 | 场景 | 调用方式 |
 | --- | --- |
 | 已发布的独立压缩包 | `xbintsc …`（`bin/xbintsc[.exe]` 在 `PATH` 上） |
+| 已安装的 npm 包（Node 22+） | `npx xbintsc …`；见 [npm-package.md](../../npm-package.md) |
 | 源码检出，已编译 | `node dist/src/cli/main.js …` |
 | 源码检出，直接跑 TypeScript | `npx tsx src/cli/main.ts …` |
 | 源码检出，npm 脚本 | `npm run xbintsc -- …` |

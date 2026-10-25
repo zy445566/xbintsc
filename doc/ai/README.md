@@ -17,6 +17,7 @@ documents it points at. Read the page for your task, not the whole directory.
 | Page | Use it when |
 | --- | --- |
 | [build-recipe.md](./build-recipe.md) | You need to compile or run a program, and want the exact command shape |
+| [../npm-package.md](../npm-package.md) | You want to install xbintsc from npm and build from a Node project or CI |
 | [cli.md](./cli.md) | You need the full flag list, project config, or the programmatic API |
 | [language-support.md](./language-support.md) | You must know whether a syntax feature or API exists, or behaves like Node |
 | [extensions.md](./extensions.md) | You need `fs`/`http`/…, a GUI, or a C++/Rust library |
@@ -58,7 +59,9 @@ xbintsc doctor
 ```
 
 In a source checkout, replace `xbintsc` with `npx tsx src/cli/main.ts` (or run
-`npm run xbintsc --`). A released archive needs no Node.js.
+`npm run xbintsc --`). A released archive needs no Node.js. Installed the npm
+package instead? Prefix commands with `npx` (for example
+`npx xbintsc build app.ts`); see [../npm-package.md](../npm-package.md).
 
 Next: [build-recipe.md](./build-recipe.md) for the working commands,
 [language-support.md](./language-support.md) before writing a nontrivial

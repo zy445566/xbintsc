@@ -142,6 +142,21 @@ console.log("Hello from xbintsc!");
 
 提示：把 `xbintsc-win32-x64\bin` 加入 `PATH`，即可直接用 `xbintsc` 命令。
 
+### 通过 npm 使用
+
+编译器也发布为 npm 包 `xbintsc`。对 Node 项目来说这是最短的路径：装成开发依赖，
+然后通过 `npx` 或 npm 脚本调用。
+
+```bash
+npm install --save-dev --save-exact xbintsc
+npx xbintsc doctor
+npx xbintsc build src/main.ts --out build
+```
+
+它需要 Node.js 22+ 与 clang 16+ 工具链。npm 包在首次构建时会从源码编译 C 运行时
+（后续构建复用 `.xbintsc/`），并且不包含 GUI/media 归档。完整指南、CI 配置与注意
+事项见[通过 npm 包使用 xbintsc](./doc/zh-CN/npm-package.md)。
+
 ### 作为开发者（从源码）
 
 在源码检出中，通过 `tsx` 直接运行 TypeScript 源码（或使用 `npm run xbintsc`）。
@@ -358,7 +373,7 @@ V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改�
 独立二进制，见
 [使用前置要求](./doc/zh-CN/requirements.md)。
 
-- Node.js 22+ —— 仅从源码运行/构建时需要；发布版二进制是独立的
+- Node.js 22+ —— 从 npm 或源码运行编译器时需要；发布版二进制是独立的
 - macOS：Xcode Command Line Tools（`xcode-select --install`）
 - Windows：LLVM + Visual Studio C++ 生成工具（MSVC ABI）
 - Linux：发行版提供的 `clang` 与 `lld`

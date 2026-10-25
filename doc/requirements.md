@@ -10,7 +10,10 @@ no requirements on any platform.
 | Requirement | Minimum | Notes |
 | --- | --- | --- |
 | clang / LLVM | **16** | The emitted IR uses opaque pointers, which LLVM 16 made the only pointer representation. |
-| Node.js | **22** | Only to run or build the compiler from source; released binaries are standalone and need no Node. |
+| Node.js | **22** | Required to run the compiler from npm or from source; released binaries are standalone and need no Node. |
+
+Installing the compiler from npm instead of using a release archive? Node.js 22+
+then runs the compiler itself; see [Using xbintsc from npm](./npm-package.md).
 
 clang 15 and older fail on the first string literal in any program, with:
 

@@ -20,6 +20,7 @@
 ## Using the compiler
 
 - [doc/ai/build-recipe.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/build-recipe.md): exact commands to run, build, inspect IR and configure a project, with the program shape that compiles
+- [doc/npm-package.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/npm-package.md): install the published npm package in another Node project and build artifacts — devDependency/npx setup, first-build runtime compilation, cache, CI, programmatic API and limitations
 - [doc/ai/cli.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/cli.md): every CLI flag and its parsing quirks, project config fields, environment variables, incremental-cache behaviour, diagnostic codes, programmatic API
 - [doc/ai/language-support.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/ai/language-support.md): the supported TypeScript subset as tables — statements, expressions, classes, async, the erased type system, standard library gaps, modules, runtime deviations
 - [doc/support-matrix.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/support-matrix.md): generated support matrix — every row is backed by a corpus case that is compiled and compared with Node, or must fail with a documented diagnostic

@@ -159,6 +159,24 @@ console.log("Hello from xbintsc!");
 
 Tip: add `xbintsc-win32-x64\bin` to `PATH` to call `xbintsc` instead of the full path.
 
+### From npm
+
+The compiler is also published as the `xbintsc` npm package. This is the
+shortest path for a Node project: install it as a dev dependency, then run it
+through `npx` or an npm script.
+
+```bash
+npm install --save-dev --save-exact xbintsc
+npx xbintsc doctor
+npx xbintsc build src/main.ts --out build
+```
+
+It needs Node.js 22+ and a clang 16+ toolchain. The npm package compiles the C
+runtime from source on the first build (later builds reuse `.xbintsc/`), and it
+does not include the GUI/media archives. See
+[Using xbintsc from npm](./doc/npm-package.md) for a complete guide, CI setup
+and caveats.
+
 ### As a developer (from source)
 
 In a source checkout, run the TypeScript sources directly through `tsx` (or use
@@ -421,7 +439,8 @@ skips with a warning when they are missing.
 
 See [Requirements](./doc/requirements.md) for the full, per-platform list.
 
-- Node.js 22+ — only to run/build from source; released binaries are standalone
+- Node.js 22+ — to run the compiler from npm or from source; released binaries
+  are standalone
 - macOS: the Xcode Command Line Tools (`xcode-select --install`)
 - Windows: LLVM + the Visual Studio C++ build tools (MSVC ABI)
 - Linux: `clang` and `lld` from your distribution

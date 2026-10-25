@@ -9,6 +9,7 @@ succeed. For every flag see [cli.md](./cli.md); when a command fails see
 | Situation | Invocation |
 | --- | --- |
 | Released standalone archive | `xbintsc …` (`bin/xbintsc[.exe]` on `PATH`) |
+| Installed npm package (Node 22+) | `npx xbintsc …`; see [npm-package.md](../npm-package.md) |
 | Source checkout, compiled | `node dist/src/cli/main.js …` |
 | Source checkout, TypeScript sources | `npx tsx src/cli/main.ts …` |
 | Source checkout, npm script | `npm run xbintsc -- …` |

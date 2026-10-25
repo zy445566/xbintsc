@@ -15,6 +15,7 @@ source.ts --词法分析--> tokens --语法分析--> AST --绑定--> 绑定后�
 | 页面 | 什么时候读 |
 | --- | --- |
 | [build-recipe.md](./build-recipe.md) | 要编译或运行一个程序，需要确切的命令形状 |
+| [../../npm-package.md](../../npm-package.md) | 要通过 npm 在 Node 项目或 CI 中安装并构建 |
 | [cli.md](./cli.md) | 需要完整参数表、项目配置或编程 API |
 | [language-support.md](./language-support.md) | 必须确认某个语法/API 是否存在，或是否与 Node 一致 |
 | [extensions.md](./extensions.md) | 需要 `fs`/`http`/…、GUI，或 C++/Rust 库 |
@@ -53,7 +54,9 @@ xbintsc doctor
 ```
 
 在源码检出里，把 `xbintsc` 换成 `npx tsx src/cli/main.ts`（或
-`npm run xbintsc --`）。发布压缩包里的二进制不需要 Node.js。
+`npm run xbintsc --`）。发布压缩包里的二进制不需要 Node.js。如果是通过 npm
+安装的，请在命令前加 `npx`（例如 `npx xbintsc build app.ts`）；见
+[../../npm-package.md](../../npm-package.md)。
 
 下一步：要命令就[build-recipe.md](./build-recipe.md)，要写正经程序就先看
 [language-support.md](./language-support.md)。

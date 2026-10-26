@@ -14,7 +14,7 @@
 namespace domapi {
 namespace {
 
-xtgui::WebGLContext *context_of(xt_value self) { return webgl_from_context(self); }
+xtgui::WebGLContext *context_of(xt_value self) { return webgl_live_context(self); }
 
 uint32_t buffer_argument(xt_value value) { return webgl_object_id(value, "__xt_gl_buffer"); }
 
@@ -85,6 +85,10 @@ METHOD(webgl_get_buffer_parameter) {
   const int pname = webgl_int(argc, argv, 1, 0);
   const uint32_t buffer = context->bound_buffer(target);
   if (pname == GL_BUFFER_SIZE) return xt_number((double)context->buffer_size(buffer));
+  if (pname == 0x8765) {  // GL_BUFFER_USAGE
+    xtgui::WebGLBuffer *record = context->buffer(buffer);
+    return xt_number(record != nullptr ? (double)record->usage : 0.0);
+  }
   return xt_number(0);
 }
 
@@ -116,7 +120,7 @@ METHOD(webgl_vertex_attrib_pointer) {
 namespace {
 
 void attrib_value(xt_value self, int32_t argc, xt_value *argv, int components) {
-  xtgui::WebGLContext *context = webgl_from_context(self);
+  xtgui::WebGLContext *context = webgl_live_context(self);
   if (context == nullptr) return;
   float values[4] = {0.0f, 0.0f, 0.0f, 1.0f};
   for (int i = 0; i < components; i++) values[i] = (float)webgl_number(argc, argv, i + 1, 0.0);

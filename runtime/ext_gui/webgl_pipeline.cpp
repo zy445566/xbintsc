@@ -87,6 +87,46 @@ SDL_GPUCompareOp compare_op(int func) {
   }
 }
 
+SDL_GPUStencilOp stencil_op(int op) {
+  switch (op) {
+    case GL_ZERO:
+      return SDL_GPU_STENCILOP_ZERO;
+    case GL_REPLACE:
+      return SDL_GPU_STENCILOP_REPLACE;
+    case GL_INCR:
+      return SDL_GPU_STENCILOP_INCREMENT_AND_CLAMP;
+    case GL_INCR_WRAP:
+      return SDL_GPU_STENCILOP_INCREMENT_AND_WRAP;
+    case GL_DECR:
+      return SDL_GPU_STENCILOP_DECREMENT_AND_CLAMP;
+    case GL_DECR_WRAP:
+      return SDL_GPU_STENCILOP_DECREMENT_AND_WRAP;
+    case GL_INVERT:
+      return SDL_GPU_STENCILOP_INVERT;
+    default:
+      return SDL_GPU_STENCILOP_KEEP;
+  }
+}
+
+/** SDL 3.2 has no per-pipeline stencil write mask. A mask of 0 means "write
+ * nothing", which every op can express as KEEP; a partial mask cannot be
+ * represented, so the op applies to all bits. */
+SDL_GPUStencilOpState stencil_face_state(const WebGLStencilFace &face) {
+  SDL_GPUStencilOpState state;
+  memset(&state, 0, sizeof(state));
+  if (face.write_mask == 0) {
+    state.fail_op = SDL_GPU_STENCILOP_KEEP;
+    state.pass_op = SDL_GPU_STENCILOP_KEEP;
+    state.depth_fail_op = SDL_GPU_STENCILOP_KEEP;
+  } else {
+    state.fail_op = stencil_op(face.fail);
+    state.pass_op = stencil_op(face.zpass);
+    state.depth_fail_op = stencil_op(face.zfail);
+  }
+  state.compare_op = compare_op(face.func);
+  return state;
+}
+
 SDL_GPUPrimitiveType primitive_of(int mode) {
   switch (mode) {
     case GL_POINTS:
@@ -215,22 +255,27 @@ SDL_GPUGraphicsPipeline *WebGLContext::create_pipeline(
     const SDL_GPUVertexAttribute *attrs, const SDL_GPUVertexBufferDescription *buffers,
     const std::string &key) {
   (void)index_size;
-  SDL_GPUColorTargetDescription color_target;
-  memset(&color_target, 0, sizeof(color_target));
-  color_target.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-  color_target.blend_state.enable_blend = state_.blend;
-  color_target.blend_state.src_color_blendfactor = blend_factor(state_.blend_src_rgb);
-  color_target.blend_state.dst_color_blendfactor = blend_factor(state_.blend_dst_rgb);
-  color_target.blend_state.color_blend_op = blend_op(state_.blend_eq_rgb);
-  color_target.blend_state.src_alpha_blendfactor = blend_factor(state_.blend_src_alpha);
-  color_target.blend_state.dst_alpha_blendfactor = blend_factor(state_.blend_dst_alpha);
-  color_target.blend_state.alpha_blend_op = blend_op(state_.blend_eq_alpha);
-  color_target.blend_state.enable_color_write_mask = true;
-  color_target.blend_state.color_write_mask =
-      (state_.color_mask[0] ? SDL_GPU_COLORCOMPONENT_R : 0) |
-      (state_.color_mask[1] ? SDL_GPU_COLORCOMPONENT_G : 0) |
-      (state_.color_mask[2] ? SDL_GPU_COLORCOMPONENT_B : 0) |
-      (state_.color_mask[3] ? SDL_GPU_COLORCOMPONENT_A : 0);
+  SDL_GPUColorTargetDescription color_targets[kWebGLMaxDrawBuffers];
+  const int color_target_count =
+      state_.color_target_count > 0 ? state_.color_target_count : 1;
+  for (int i = 0; i < color_target_count; i++) {
+    SDL_GPUColorTargetDescription &color_target = color_targets[i];
+    memset(&color_target, 0, sizeof(color_target));
+    color_target.format = (SDL_GPUTextureFormat)state_.color_formats[i];
+    color_target.blend_state.enable_blend = state_.blend;
+    color_target.blend_state.src_color_blendfactor = blend_factor(state_.blend_src_rgb);
+    color_target.blend_state.dst_color_blendfactor = blend_factor(state_.blend_dst_rgb);
+    color_target.blend_state.color_blend_op = blend_op(state_.blend_eq_rgb);
+    color_target.blend_state.src_alpha_blendfactor = blend_factor(state_.blend_src_alpha);
+    color_target.blend_state.dst_alpha_blendfactor = blend_factor(state_.blend_dst_alpha);
+    color_target.blend_state.alpha_blend_op = blend_op(state_.blend_eq_alpha);
+    color_target.blend_state.enable_color_write_mask = true;
+    color_target.blend_state.color_write_mask =
+        (state_.color_mask[0] ? SDL_GPU_COLORCOMPONENT_R : 0) |
+        (state_.color_mask[1] ? SDL_GPU_COLORCOMPONENT_G : 0) |
+        (state_.color_mask[2] ? SDL_GPU_COLORCOMPONENT_B : 0) |
+        (state_.color_mask[3] ? SDL_GPU_COLORCOMPONENT_A : 0);
+  }
 
   SDL_GPUGraphicsPipelineCreateInfo info;
   memset(&info, 0, sizeof(info));
@@ -255,9 +300,16 @@ SDL_GPUGraphicsPipeline *WebGLContext::create_pipeline(
   info.depth_stencil_state.enable_depth_test = state_.depth_test;
   info.depth_stencil_state.enable_depth_write = state_.depth_write;
   info.depth_stencil_state.compare_op = compare_op(state_.depth_func);
-  info.target_info.color_target_descriptions = &color_target;
-  info.target_info.num_color_targets = 1;
-  info.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+  info.depth_stencil_state.enable_stencil_test = state_.stencil;
+  info.depth_stencil_state.front_stencil_state = stencil_face_state(state_.stencil_front);
+  info.depth_stencil_state.back_stencil_state = stencil_face_state(state_.stencil_back);
+  /* SDL_GPU has one compare/write mask for both faces; use the front-face
+   * values (WebGL's default sets both faces alike). */
+  info.depth_stencil_state.compare_mask = (Uint8)(state_.stencil_front.value_mask & 0xFF);
+  info.depth_stencil_state.write_mask = (Uint8)(state_.stencil_front.write_mask & 0xFF);
+  info.target_info.color_target_descriptions = color_targets;
+  info.target_info.num_color_targets = (Uint32)color_target_count;
+  info.target_info.depth_stencil_format = (SDL_GPUTextureFormat)state_.depth_format;
   info.target_info.has_depth_stencil_target = true;
 
   SDL_GPUGraphicsPipeline *pipeline = SDL_CreateGPUGraphicsPipeline(guidev::g_device, &info);

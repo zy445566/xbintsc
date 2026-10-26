@@ -81,12 +81,13 @@ const MethodEntry kMethods[] = {
     {"getActiveUniformBlockParameter", (void *)webgl2_get_active_uniform_block_parameter},
     {"getActiveUniformBlockName", (void *)webgl2_get_active_uniform_block_name},
     {"uniformBlockBinding", (void *)webgl2_uniform_block_binding},
+    {"drawingBufferStorage", (void *)webgl2_drawing_buffer_storage},
     {"texStorage2D", (void *)webgl2_tex_storage_2d},
     {"texStorage3D", (void *)webgl2_tex_storage_3d},
     {"texImage3D", (void *)webgl2_tex_image_3d},
     {"texSubImage3D", (void *)webgl2_tex_sub_image_3d},
-    {"compressedTexImage2D", (void *)webgl2_compressed_tex_image2d},
-    {"compressedTexSubImage2D", (void *)webgl2_compressed_tex_sub_image2d},
+    {"compressedTexImage2D", (void *)webgl_compressed_tex_image_2d},
+    {"compressedTexSubImage2D", (void *)webgl_compressed_tex_sub_image_2d},
     {"compressedTexImage3D", (void *)webgl2_compressed_tex_image3d},
     {"compressedTexSubImage3D", (void *)webgl2_compressed_tex_sub_image3d},
     {"clearBufferfi", (void *)webgl2_clear_buffer_fi},
@@ -107,7 +108,7 @@ void define_method(xt_value proto, const char *name, void *fn) {
   xt_object_set(proto, xt_string_from_cstr(name), xt_closure_new(fn, 0, NULL));
 }
 
-xtgui::WebGLContext *context_of(xt_value self) { return webgl_from_context(self); }
+xtgui::WebGLContext *context_of(xt_value self) { return webgl_live_context(self); }
 
 xt_value uint_array(const unsigned int *values, int count) {
   xt_value array = xt_array_new(0, nullptr);
@@ -202,14 +203,66 @@ WEBGL2_NOOP(webgl2_end_transform_feedback)
 WEBGL2_NOOP(webgl2_pause_transform_feedback)
 WEBGL2_NOOP(webgl2_resume_transform_feedback)
 WEBGL2_NOOP(webgl2_transform_feedback_varyings)
-WEBGL2_NOOP(webgl2_bind_buffer_base)
-WEBGL2_NOOP(webgl2_bind_buffer_range)
-WEBGL2_NOOP(webgl2_uniform_block_binding)
-WEBGL2_NOOP(webgl2_blit_framebuffer)
-WEBGL2_NOOP(webgl2_framebuffer_texture_layer)
 WEBGL2_NOOP(webgl2_invalidate_framebuffer)
 WEBGL2_NOOP(webgl2_invalidate_sub_framebuffer)
-WEBGL2_NOOP(webgl2_read_buffer)
+
+METHOD(webgl2_blit_framebuffer) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const int source[4] = {webgl_int(argc, argv, 0, 0), webgl_int(argc, argv, 1, 0),
+                         webgl_int(argc, argv, 2, 0), webgl_int(argc, argv, 3, 0)};
+  const int destination[4] = {webgl_int(argc, argv, 4, 0), webgl_int(argc, argv, 5, 0),
+                              webgl_int(argc, argv, 6, 0), webgl_int(argc, argv, 7, 0)};
+  context->blit_framebuffer(source, destination, webgl_int(argc, argv, 8, GL_COLOR_BUFFER_BIT),
+                            webgl_int(argc, argv, 9, GL_NEAREST));
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl2_tex_sub_image_3d) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const uint32_t texture = context->bound_texture(0);
+  if (texture == 0 || webgl_int(argc, argv, 1, 0) != 0) return XT_UNDEFINED;
+  const int x = webgl_int(argc, argv, 2, 0);
+  const int y = webgl_int(argc, argv, 3, 0);
+  const int z = webgl_int(argc, argv, 4, 0);
+  const int width = webgl_int(argc, argv, 5, 0);
+  const int height = webgl_int(argc, argv, 6, 0);
+  const int depth = webgl_int(argc, argv, 7, 0);
+  const int format = webgl_int(argc, argv, 8, GL_RGBA);
+  const int type = webgl_int(argc, argv, 9, GL_UNSIGNED_BYTE);
+  if (type != GL_UNSIGNED_BYTE) {
+    context->set_error(GL_INVALID_ENUM);
+    return XT_UNDEFINED;
+  }
+  int channels = 1;
+  if (format == GL_RGBA) channels = 4;
+  else if (format == GL_RGB) channels = 3;
+  else if (format == GL_LUMINANCE_ALPHA) channels = 2;
+  const std::vector<uint8_t> bytes = webgl_bytes(xt_arg(argc, argv, 10));
+  const size_t count = (size_t)width * height * depth;
+  if (bytes.size() < count * (size_t)channels) {
+    context->set_error(GL_INVALID_VALUE);
+    return XT_UNDEFINED;
+  }
+  std::vector<uint8_t> rgba;
+  webgl_convert_pixels(bytes.data(), (int)count, format, false, &rgba);
+  context->tex_sub_image_3d(texture, x, y, z, width, height, depth, rgba.data());
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl2_framebuffer_texture_layer) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  context->framebuffer_texture_layer(
+      context->bound_framebuffer_id(),
+      webgl_object_id(xt_arg(argc, argv, 2), "__xt_gl_texture"),
+      webgl_int(argc, argv, 1, GL_COLOR_ATTACHMENT0), webgl_int(argc, argv, 4, 0));
+  return XT_UNDEFINED;
+}
 
 METHOD(webgl2_get_transform_feedback_varying) {
   (void)env;
@@ -259,12 +312,6 @@ METHOD(webgl2_get_sync_parameter) {
 
 /* -- uniform blocks and indexed queries ---------------------------------- */
 
-METHOD(webgl2_get_indexed_parameter) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  return XT_NULL;
-}
 
 METHOD(webgl2_get_uniform_indices) {
   (void)env;
@@ -290,19 +337,7 @@ METHOD(webgl2_get_uniform_block_index) {
   return xt_number((double)index);
 }
 
-METHOD(webgl2_get_active_uniform_block_parameter) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  return xt_number(0);
-}
 
-METHOD(webgl2_get_active_uniform_block_name) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  return XT_NULL;
-}
 
 /* -- buffers ------------------------------------------------------------- */
 
@@ -340,22 +375,80 @@ METHOD(webgl2_get_buffer_sub_data) {
 
 /* -- textures ------------------------------------------------------------ */
 
+METHOD(webgl2_drawing_buffer_storage) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    context->drawing_buffer_storage(webgl_int(argc, argv, 0, 0),
+                                    webgl_int(argc, argv, 1, 0));
+  }
+  return XT_UNDEFINED;
+}
+
 METHOD(webgl2_tex_storage_2d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
     const uint32_t texture = context->bound_texture(0);
-    context->tex_storage_2d(texture, webgl_int(argc, argv, 1, 1),
-                            webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0));
+    const int internalformat = webgl_int(argc, argv, 2, 0x8058);  // GL_RGBA8
+    context->tex_storage_format(texture, webgl_int(argc, argv, 1, 1),
+                                webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0),
+                                xtgui::webgl_storage_format(internalformat));
   }
   return XT_UNDEFINED;
 }
 
-WEBGL2_NOOP(webgl2_tex_storage_3d)
-WEBGL2_NOOP(webgl2_tex_image_3d)
-WEBGL2_NOOP(webgl2_tex_sub_image_3d)
-WEBGL2_NOOP(webgl2_compressed_tex_image2d)
-WEBGL2_NOOP(webgl2_compressed_tex_sub_image2d)
+METHOD(webgl2_tex_storage_3d) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const int internalformat = webgl_int(argc, argv, 2, 0x8058);  // GL_RGBA8
+  context->tex_storage_3d(context->bound_texture(0), webgl_int(argc, argv, 1, 1),
+                          webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0),
+                          webgl_int(argc, argv, 5, 0),
+                          xtgui::webgl_storage_format(internalformat),
+                          webgl_int(argc, argv, 0, GL_TEXTURE_2D_ARRAY));
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl2_tex_image_3d) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const uint32_t texture = context->bound_texture(0);
+  if (texture == 0) return XT_UNDEFINED;
+  if (webgl_int(argc, argv, 1, 0) != 0) return XT_UNDEFINED;
+  const int internalformat = webgl_int(argc, argv, 2, GL_RGBA);
+  const int width = webgl_int(argc, argv, 3, 0);
+  const int height = webgl_int(argc, argv, 4, 0);
+  const int depth = webgl_int(argc, argv, 5, 0);
+  const int format = webgl_int(argc, argv, 7, GL_RGBA);
+  const int type = webgl_int(argc, argv, 8, GL_UNSIGNED_BYTE);
+  if (type != GL_UNSIGNED_BYTE || width <= 0 || height <= 0 || depth <= 0) {
+    context->set_error(GL_INVALID_VALUE);
+    return XT_UNDEFINED;
+  }
+  int channels = 1;
+  if (format == GL_RGBA) channels = 4;
+  else if (format == GL_RGB) channels = 3;
+  else if (format == GL_LUMINANCE_ALPHA) channels = 2;
+  const std::vector<uint8_t> bytes = webgl_bytes(xt_arg(argc, argv, 9));
+  const size_t count = (size_t)width * height * depth;
+  std::vector<uint8_t> rgba;
+  if (bytes.empty()) {
+    rgba.assign(count * 4, 0);
+  } else if (bytes.size() < count * (size_t)channels) {
+    context->set_error(GL_INVALID_VALUE);
+    return XT_UNDEFINED;
+  } else {
+    webgl_convert_pixels(bytes.data(), (int)count, format, false, &rgba);
+  }
+  context->tex_image_3d(texture, width, height, depth,
+                        xtgui::webgl_storage_format(internalformat), rgba.data(),
+                        webgl_int(argc, argv, 0, GL_TEXTURE_2D_ARRAY));
+  return XT_UNDEFINED;
+}
+
 WEBGL2_NOOP(webgl2_compressed_tex_image3d)
 WEBGL2_NOOP(webgl2_compressed_tex_sub_image3d)
 
@@ -410,8 +503,30 @@ METHOD(webgl2_clear_buffer_fi) {
 
 METHOD(webgl2_draw_buffers) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const xt_value list = xt_arg(argc, argv, 0);
+  std::vector<double> values = webgl_numbers(list);
+  if (values.empty()) {
+    /* `webgl_numbers` only walks typed arrays; plain WebGL argument arrays
+     * (`drawBuffers([gl.COLOR_ATTACHMENT0, ...])`) need the element accessor. */
+    const double length = xt_to_number(xt_get(list, xt_string_from_cstr("length")));
+    if (length > 0.0 && length <= 16.0) {
+      for (int i = 0; i < (int)length; i++) {
+        values.push_back(xt_to_number(xt_get(list, xt_number((double)i))));
+      }
+    }
+  }
+  std::vector<int> buffers(values.size());
+  for (size_t i = 0; i < values.size(); i++) buffers[i] = (int)values[i];
+  context->draw_buffers((int)buffers.size(), buffers.data());
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl2_read_buffer) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) context->read_buffer(webgl_int(argc, argv, 0, GL_BACK));
   return XT_UNDEFINED;
 }
 

@@ -40,6 +40,8 @@ int gl_type_of(const std::string &type) {
   if (type == "mat4") return GL_FLOAT_MAT4;
   if (type == "sampler2D") return GL_SAMPLER_2D;
   if (type == "samplerCube") return GL_SAMPLER_CUBE;
+  if (type == "sampler3D") return GL_SAMPLER_3D;
+  if (type == "sampler2DArray") return GL_SAMPLER_2D_ARRAY;
   return 0;
 }
 
@@ -380,7 +382,15 @@ bool WebGLContext::link_program(uint32_t id) {
   reflect_uniform_block(vs_spirv, &members);
   std::vector<GlslBlockMember> fragment_members;
   reflect_uniform_block(fs_spirv, &fragment_members);
-  if (members.empty()) members = fragment_members;
+  /* Keep members declared by either stage: a uniform block may only be read by
+   * the fragment shader while the vertex stage contributes other uniforms. */
+  for (const GlslBlockMember &member : fragment_members) {
+    bool present = false;
+    for (const GlslBlockMember &existing : members) {
+      if (existing.name == member.name) present = true;
+    }
+    if (!present) members.push_back(member);
+  }
 
   record->uniforms.clear();
   record->uniform_index.clear();
@@ -444,6 +454,8 @@ bool WebGLContext::link_program(uint32_t id) {
   };
   for (const GlslUniformDecl &decl : vs_info.samplers) add_sampler(record, &record->vs_sampler_uniforms, decl);
   for (const GlslUniformDecl &decl : fs_info.samplers) add_sampler(record, &record->fs_sampler_uniforms, decl);
+
+  webgl_detail::build_uniform_blocks(record, vs_info.blocks, fs_info.blocks, members);
 
   /* (Re)create the SDL shaders. */
   if (guidev::g_device == nullptr) {

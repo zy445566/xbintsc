@@ -357,6 +357,16 @@ xt_value type_proto(const std::string &name) {
   if (name == "WebGLQuery") return domapi::webgl_object_proto("query");
   if (name == "WebGLSync") return domapi::webgl_object_proto("sync");
   if (name == "WebGLTransformFeedback") return domapi::webgl_object_proto("transformfeedback");
+  if (name == "ImageBitmap") {
+    /* A bitmap is a plain immutable object, not a DOM node: a node proto would
+     * expose the element width/height accessors and answer 0. */
+    static xt_value bitmap_proto = XT_UNDEFINED;
+    if (!XT_IS_OBJECT(bitmap_proto)) {
+      bitmap_proto = xt_object_new();
+      xt_gc_add_root(&bitmap_proto);
+    }
+    return bitmap_proto;
+  }
   return domapi::node_proto();
 }
 
@@ -528,7 +538,7 @@ xt_value xt_browser_type(int32_t argc, xt_value *argv) {
   if (argc < 1) return XT_UNDEFINED;
   std::string name = cstr(xt_arg(argc, argv, 0));
   if (name == "XRWebGLLayer" || name == "XRWebGLBinding" || name == "OffscreenCanvas" ||
-      name == "ImageBitmap" || name == "ImageData" || name == "Response" ||
+      name == "ImageData" || name == "Response" ||
       name == "ReadableStream" || name == "Request" || name == "Headers" ||
       name == "DOMParser") {
     return XT_UNDEFINED;

@@ -77,6 +77,9 @@ uint64_t canvas_gradient_id(xt_value handle, const xtgui::Canvas2D *canvas);
 
 /** The engine WebGL context behind a context handle, or null. */
 xtgui::WebGLContext *webgl_from_context(xt_value self);
+/** Like `webgl_from_context`, but null while the context is lost: every GL
+ * entry point except `getError`/`isContextLost` is a no-op in that state. */
+xtgui::WebGLContext *webgl_live_context(xt_value self);
 /** The numeric context id stored on a context handle (0 when absent). */
 uint64_t webgl_context_id(xt_value self);
 /** Create the JavaScript handle for a canvas's WebGL context. */
@@ -95,9 +98,19 @@ std::vector<double> webgl_numbers(xt_value value);
 std::vector<uint8_t> webgl_bytes(xt_value value);
 /** Store `count` bytes into a typed array / array handle. */
 void webgl_write_bytes(xt_value target, const uint8_t *bytes, size_t count);
+/** Convert a source pixel array (RGBA/RGB/LUMINANCE/…) to RGBA8. */
+void webgl_convert_pixels(const uint8_t *source, int count, int format, bool premultiply,
+                          std::vector<uint8_t> *out);
+/** Decode a `texImage2D` source (`<img>`, `<canvas>`, `<video>`, `ImageData`,
+ * `ImageBitmap`) into top-down RGBA8. */
+bool webgl_read_source(xt_value source, int *width, int *height,
+                       std::vector<uint8_t> *rgba, bool premultiply);
 /** Read the `UNPACK_FLIP_Y_WEBGL` / `UNPACK_PREMULTIPLY_ALPHA_WEBGL` flags set
  * through `pixelStorei`. */
 void webgl_unpack_flags(xt_value context, bool *flip_y, bool *premultiply);
+/** Extension object for a compressed-texture family (null when unsupported,
+ * undefined when the name is not one of those extensions). */
+xt_value webgl_compressed_extension(const std::string &name, xtgui::WebGLContext *context);
 
 /** How a pending handle names the node it will bind to. */
 enum PendingKind { pending_by_id = 1, pending_by_selector = 2 };
@@ -426,6 +439,8 @@ METHOD(webgl_tex_parameterf);
 METHOD(webgl_get_tex_parameter);
 METHOD(webgl_tex_image_2d);
 METHOD(webgl_tex_sub_image_2d);
+METHOD(webgl_compressed_tex_image_2d);
+METHOD(webgl_compressed_tex_sub_image_2d);
 METHOD(webgl_generate_mipmap);
 METHOD(webgl_create_framebuffer);
 METHOD(webgl_delete_framebuffer);
@@ -495,6 +510,7 @@ METHOD(webgl2_get_uniform_block_index);
 METHOD(webgl2_get_active_uniform_block_parameter);
 METHOD(webgl2_get_active_uniform_block_name);
 METHOD(webgl2_uniform_block_binding);
+METHOD(webgl2_drawing_buffer_storage);
 METHOD(webgl2_tex_storage_2d);
 METHOD(webgl2_tex_storage_3d);
 METHOD(webgl2_tex_image_3d);

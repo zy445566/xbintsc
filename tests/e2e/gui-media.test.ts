@@ -111,6 +111,90 @@ describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui + 
     expect(value("advanced")).toBe("true");
   });
 
+  it("uploads the latest decoded video frame with texImage2D", () => {
+    const movie = mediaSrc(moviePath);
+    const { value, stdout } = harness.compileAndRun(
+      "media-texture",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "media-texture", width: 320, height: 240 });
+      win.on("ready", () => {
+        win.loadHTML(\`<html><body style="margin:0">
+          <video id="v" src="${movie}" autoplay muted></video>
+          <canvas id="c" width="64" height="64"></canvas>
+        </body></html>\`);
+
+        const v: any = win.document.getElementById("v");
+        const canvas: any = win.document.getElementById("c");
+        const gl: any = canvas.getContext("webgl2");
+        const label = (name: string, value: any): void => console.log(name + "=" + value);
+        let done = false;
+
+        v.addEventListener("loadedmetadata", () => {
+          label("dims", v.videoWidth > 0 && v.videoHeight > 0);
+        });
+        v.addEventListener("timeupdate", () => {
+          if (done || v.videoWidth <= 0) return;
+          done = true;
+          const vs: any = gl.createShader(gl.VERTEX_SHADER);
+          gl.shaderSource(vs, "#version 300 es\\n" +
+            "in vec2 a_pos; out vec2 v_uv;" +
+            "void main() { v_uv = a_pos * 0.5 + 0.5;" +
+            "  gl_Position = vec4(a_pos, 0.0, 1.0); }");
+          gl.compileShader(vs);
+          const fs: any = gl.createShader(gl.FRAGMENT_SHADER);
+          gl.shaderSource(fs, "#version 300 es\\n" +
+            "precision highp float; in vec2 v_uv; uniform sampler2D u_tex;" +
+            "out vec4 fragColor;" +
+            "void main() { fragColor = texture(u_tex, v_uv); }");
+          gl.compileShader(fs);
+          const program: any = gl.createProgram();
+          gl.attachShader(program, vs);
+          gl.attachShader(program, fs);
+          gl.linkProgram(program);
+          gl.useProgram(program);
+          const texture: any = gl.createTexture();
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.uniform1i(gl.getUniformLocation(program, "u_tex"), 0);
+          label("tex-error", gl.getError());
+          const quad = gl.createBuffer();
+          gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            -1, -1,  3, -1,  -1, 3,
+          ]), gl.STATIC_DRAW);
+          const pos: any = gl.getAttribLocation(program, "a_pos");
+          gl.enableVertexAttribArray(pos);
+          gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 8, 0);
+          gl.viewport(0, 0, 64, 64);
+          gl.clearColor(0, 0, 0, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          const px = new Uint8Array(4);
+          gl.readPixels(32, 32, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          label("pixel", px[0] + "," + px[1] + "," + px[2] + "," + px[3]);
+          win.close();
+        });
+        v.addEventListener("error", () => {
+          console.log("video-error");
+          win.close();
+        });
+      });
+
+      run();
+      `,
+      { autocloseMs: 10000, extensions: [mediaExtension] },
+    );
+
+    expect(stdout).not.toContain("video-error");
+    expect(value("dims")).toBe("true");
+    expect(value("tex-error")).toBe("0");
+    expect(value("pixel")).toMatch(/^\d+,\d+,\d+,255$/);
+  });
+
   it("runs the media example from the repository root", () => {
     const workdir = mkdtempSync(join(tmpdir(), "xbintsc-media-"));
     try {

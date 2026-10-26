@@ -96,8 +96,7 @@ reflected offsets; `uniform1i` on a sampler stores the texture unit. The block
 is pushed with the dynamic uniform-buffer API on every draw.
 
 Limits of the translator: struct-typed uniforms, user uniform blocks, uniform
-arrays whose size is not resolved by the preprocessor, sampler arrays and cube
-maps are rejected (the link/shader info log says so). Shader code inside
+arrays whose size is not resolved by the preprocessor, sampler arrays are rejected (the link/shader info log says so). Shader code inside
 `#ifdef` is fine; non-sampler uniform declarations are moved to the enclosing
 top-level position so the block stays unconditional.
 
@@ -115,8 +114,11 @@ available from GLSL ES 3.00, which is what the instanced example uses.
 
 - **Context**: `getContext("webgl")`, `canvas`, `drawingBufferWidth/Height`,
   `getParameter`, `getError`, `getSupportedExtensions`, `getExtension`,
-  `getContextAttributes`, `isContextLost`, `getShaderPrecisionFormat`, and the
-  stencil entry points (accepted; the depth target has no stencil attachment).
+  `getContextAttributes`, `isContextLost`, `getShaderPrecisionFormat`, and an
+  8-bit stencil buffer (`getContextAttributes().stencil` is `true`,
+  `STENCIL_BITS` is 8). `WEBGL_lose_context`'s `loseContext`/`restoreContext`
+  really drop and rebuild the context (every object becomes invalid) and
+  dispatch `webglcontextlost`/`webglcontextrestored`.
 - **Shaders and programs**: `createShader`, `shaderSource`, `compileShader`,
   `getShaderParameter`, `getShaderInfoLog`, `getShaderSource`, `deleteShader`,
   `createProgram`, `attachShader`, `detachShader`, `linkProgram`,
@@ -131,7 +133,9 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   `bufferSubData`, `deleteBuffer`, `getBufferParameter`,
   `enableVertexAttribArray`, `disableVertexAttribArray`,
   `vertexAttribPointer`, `vertexAttrib1f`…`4f` / `1fv`…`4fv`,
-  `getVertexAttrib`.
+  `getVertexAttrib`. The `usage` hint from `bufferData`
+  (`STREAM_DRAW`/`STATIC_DRAW`/`DYNAMIC_DRAW`) is recorded and reported by
+  `getBufferParameter(…, BUFFER_USAGE)`.
 - **Drawing**: `drawArrays`, `drawElements` (UNSIGNED_BYTE, UNSIGNED_SHORT,
   UNSIGNED_INT; `TRIANGLE_FAN` and `LINE_LOOP` are expanded to lists).
   `POINTS`, `LINES`, `LINE_STRIP`, `TRIANGLES` and `TRIANGLE_STRIP` map to the
@@ -140,22 +144,50 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   `texParameteri`/`texParameterf`, `getTexParameter`, `texImage2D` (raw pixels,
   `<img>`, `<canvas>` and `ImageData` sources), `texSubImage2D`,
   `generateMipmap`, `deleteTexture`. `UNPACK_FLIP_Y_WEBGL` and
-  `UNPACK_PREMULTIPLY_ALPHA_WEBGL` are honoured. Everything is converted to
-  RGBA8; `RGBA`, `RGB`, `LUMINANCE`, `ALPHA` and `LUMINANCE_ALPHA` with
-  `UNSIGNED_BYTE` are accepted.
-- **Framebuffers**: `createFramebuffer`, `bindFramebuffer`,
-  `framebufferTexture2D` (colour attachment), `checkFramebufferStatus`,
-  `createRenderbuffer`, `bindRenderbuffer`, `renderbufferStorage` (depth),
-  `framebufferRenderbuffer`, `delete*`. This is enough for render-to-texture,
-  shadow maps and post-processing passes.
+  `UNPACK_PREMULTIPLY_ALPHA_WEBGL` are honoured. By default source data is
+  converted to RGBA8; `RGBA`, `RGB`, `LUMINANCE`, `ALPHA` and
+  `LUMINANCE_ALPHA` with `UNSIGNED_BYTE` are accepted. Float textures
+  (`RGBA32F`, `RGBA16F`, `RGB32F`, `RGB16F`, `RG32F`/`RG16F`, `R32F`/`R16F`
+  with `FLOAT` or `HALF_FLOAT` data, plus WebGL 1's
+  `OES_texture_float`/`OES_texture_half_float`) map to SDL's RGBA32F/RGBA16F,
+  and depth textures (`DEPTH_COMPONENT16/24/32F`, `DEPTH_STENCIL`,
+  `DEPTH24_STENCIL8`) map to `D32_FLOAT`/`D32_FLOAT_S8_UINT` and can be sampled
+  or used as depth attachments. Compressed textures upload through
+  `compressedTexImage2D`/`compressedTexSubImage2D` with
+  `WEBGL_compressed_texture_s3tc` (BC1/BC2/BC3),
+  `WEBGL_compressed_texture_s3tc_srgb` and `WEBGL_compressed_texture_astc`;
+  each extension is published only when the device can sample its formats.
+  `texImage2D` also accepts the latest decoded `<video>` frame and an
+  `ImageBitmap` produced by `createImageBitmap`. Cube maps
+  (`bindTexture(TEXTURE_CUBE_MAP)` plus six `texImage2D` faces) and 3D/array
+  textures (`texImage3D`/`texStorage3D`) are sampled through `samplerCube`,
+  `sampler3D` and `sampler2DArray`; `texSubImage3D` updates a sub-volume and
+  `framebufferTextureLayer` renders one array/cube layer as a colour
+  attachment.
+- **Framebuffers**: `createFramebuffer`, `bindFramebuffer`
+  (`FRAMEBUFFER`/`READ_FRAMEBUFFER`/`DRAW_FRAMEBUFFER`),
+  `framebufferTexture2D` (`COLOR_ATTACHMENT0`, `DEPTH_ATTACHMENT`,
+  `DEPTH_STENCIL_ATTACHMENT`), `checkFramebufferStatus`, `createRenderbuffer`,
+  `bindRenderbuffer`, `renderbufferStorage` (depth or depth-stencil),
+  `framebufferRenderbuffer`, `delete*`, and `blitFramebuffer` (colour
+  attachment; depth/stencil bits are accepted but not copied). This is enough
+  for render-to-texture, shadow maps and post-processing passes.
 - **State**: `enable`/`disable`/`isEnabled` for `BLEND`, `DEPTH_TEST`,
-  `CULL_FACE`, `SCISSOR_TEST` (stencil accepted but not applied),
-  `clearColor`/`clearDepth`/`clearStencil`, `clear`, `blendFunc`/
-  `blendFuncSeparate`, `blendEquation`/`blendEquationSeparate`, `depthFunc`,
-  `depthMask`, `colorMask`, `cullFace`, `frontFace`, `viewport`, `scissor`,
-  `pixelStorei`, `finish`.
+  `CULL_FACE`, `SCISSOR_TEST` and `STENCIL_TEST`,
+  `clearColor`/`clearDepth`/`clearStencil`, `clear` (with `SCISSOR_TEST` it
+  clears only the scissor rectangle, for colour, depth and stencil), `blendColor`,
+  `blendFunc`/`blendFuncSeparate`,
+  `blendEquation`/`blendEquationSeparate`, `depthFunc`,
+  `depthMask`, `colorMask`, `stencilFunc`/`stencilFuncSeparate`,
+  `stencilOp`/`stencilOpSeparate`, `stencilMask`/`stencilMaskSeparate`,
+  `cullFace`, `frontFace`, `viewport`, `scissor`,
+  `pixelStorei`, `finish`. The stencil test takes part in rasterisation and
+  `clear(STENCIL_BUFFER_BIT)` clears the stencil attachment; SDL_GPU exposes
+  one reference and one compare/write mask for both faces, so a front/back
+  pair that differs uses the front value.
 - **Readback**: `readPixels` (RGBA/UNSIGNED_BYTE) from the default framebuffer
-  or a bound framebuffer. It blocks until the GPU finishes; use it for tests and
+  or a bound RGBA8 framebuffer; a float/depth attachment is sampled into an
+  RGBA8 target first. It blocks until the GPU finishes; use it for tests and
   screenshots, not per frame.
 
 WebGL 2 adds:
@@ -174,38 +206,46 @@ WebGL 2 adds:
   texture's own filter/wrap state for that unit.
 - **Immutable textures and buffer copies**: `texStorage2D` (the backend always
   allocates the full mip chain), `copyBufferSubData`, `getBufferSubData`.
+- **Drawing buffer**: `drawingBufferStorage(width, height)` fixes the drawing
+  buffer size; `canvas.width`/`canvas.height` no longer rebuild it afterwards.
 - **Clears**: `clearBufferfv`, `clearBufferiv`, `clearBufferuiv`,
   `clearBufferfi`.
+- **Multiple render targets**: `drawBuffers` addresses up to four colour
+  attachments and `readBuffer` selects the attachment `readPixels` reads;
+  `framebufferTexture2D` accepts `COLOR_ATTACHMENT0`…`3`, and a fragment
+  shader's multiple `out` variables are written in order.
 - **Queries and fences**: the objects and entry points exist
   (`createQuery`/`beginQuery`/`endQuery`/`getQueryParameter`,
   `fenceSync`/`clientWaitSync`/`waitSync`/`getSyncParameter`) and degrade
   gracefully: a fence reports `ALREADY_SIGNALED` and query results are 0.
-- **Uniform blocks**: `getUniformBlockIndex` answers `INVALID_INDEX` so a
-  library falls back to individual uniforms; the block entry points are no-ops.
-- **Transform feedback, 3D textures and compressed formats**: the entry points
-  are present as no-ops so feature-probing libraries do not throw.
+- **Uniform blocks**: `getUniformBlockIndex`,
+  `getActiveUniformBlockParameter`, `getActiveUniformBlockName`,
+  `uniformBlockBinding`, `bindBufferBase`/`bindBufferRange` and
+  `getIndexedParameter`. Members are merged into the engine's single std140
+  block and copied from the bound buffer at draw time; scalars, vectors,
+  matrices and fixed-size arrays work, nested structs, sampler members and
+  blocks without an instance name are rejected.
+- **Transform feedback**: the entry points are present as no-ops so
+  feature-probing libraries do not throw.
 
 Textures are created with a full mip chain; sampling clamps to level 0 until
 `generateMipmap` runs. Matrix vertex attributes consume the right number of
 consecutive locations and read one column per location. A disabled attribute
 is supplied from the last `vertexAttrib*f` value through a small constant
-buffer.
+buffer. A vertex shader can sample textures just like a fragment shader:
+`MAX_VERTEX_TEXTURE_IMAGE_UNITS` reports 16, vertex samplers live in set 0 and
+are bound with `SDL_BindGPUVertexSamplers` on every draw. Depth values use the
+backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
+`gl_Position.z = 0.5` stores depth `0.5` (real WebGL stores `0.75`).
 
 ## Not implemented
 
-Uniform buffer objects in shader source, transform feedback (the entry points
-are no-ops), cube maps, 3D/array textures, float/half textures, depth textures,
-compressed textures, multiple render targets (only the first fragment output is
-written), `blitFramebuffer`, MSAA/sample buffers, stencil operations (state is
-accepted, the stencil buffer is not written), constant blend colours,
-`drawingBufferStorage`, context loss, `bufferData` with a `usage` other than
-static/dynamic (the hint is ignored), `texImage2D` for
-`HTMLVideoElement`/`ImageBitmap` and scissored `clear` (a clear clears the whole
-attachment). Shaders that use built-in blocks, user uniform blocks or
-`gl_FragDepth` beyond the supported subset are rejected with a compile/link log.
-
-The engine advertises zero vertex texture units, so a well-behaved WebGL 1
-program will not try to sample a texture in a vertex shader.
+Transform feedback (the entry points are no-ops) and MSAA/sample buffers
+(SDL_GPU's Metal multisample resolve returns undefined pixels with scissor
+tests and instanced draws, so contexts stay single-sampled). `blitFramebuffer`
+copies the colour attachment only; depth/stencil bits are accepted but not
+copied. Shaders that use built-in blocks or `gl_FragDepth` are rejected with a
+compile/link log.
 
 ## Platform
 
@@ -225,10 +265,25 @@ uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
 ## Testing
 
 - `tests/e2e/gui-webgl.test.ts` compiles GLSL, draws a textured and a
-  depth-tested quad, checks face culling and reads the pixels back.
+  depth-tested quad, checks face culling and reads the pixels back; it also
+  covers blend constants, dynamic buffer usage, vertex-shader texture sampling,
+  `gl_FragDepth` diagnostics, context loss/restore and cube maps.
 - `tests/e2e/gui-webgl2.test.ts` covers the WebGL 2 additions: `#version 300 es`
   shaders, a VAO round trip, instanced draws with a divisor, `texStorage2D`,
-  `clearBufferfv`, buffer copies, sampler objects and struct-uniform fields.
+  `clearBufferfv`, buffer copies, sampler objects, struct-uniform fields,
+  `drawingBufferStorage`, stencil tests, float and depth textures, scissored
+  clears, framebuffer blits, compressed textures and `ImageBitmap`.
+- `tests/e2e/gui-webgl2-formats.test.ts` covers stencil, float/depth textures,
+  scissored clears, framebuffer blits, compressed textures and `ImageBitmap`.
+- `tests/e2e/gui-media.test.ts` also uploads the latest decoded `<video>` frame
+  as a texture and reads it back.
+- `tests/e2e/gui-webgl2-3d.test.ts` covers 2D-array and 3D texture layer
+  sampling, `texSubImage3D` sub-volume updates and rendering to a colour
+  attachment layer.
+- `tests/e2e/gui-webgl2-mrt.test.ts` writes two fragment outputs to two
+  colour attachments and reads each back.
+- `tests/e2e/gui-webgl2-ubo.test.ts` binds a std140 block, updates its members
+  and verifies the drawn colour.
 - `examples/gui/webgl-cube` is a spinning, lit, textured cube; it runs in a
   browser unchanged and is covered by
   `tests/e2e/gui-example-webgl.test.ts`.
@@ -249,8 +304,10 @@ is bundled any more**. Verified with three.js r160 through SDL_GPU:
 `CanvasTexture`, linear fog, ambient/directional/point/spot/hemisphere lights,
 `Sprite`, `Line`, `Points` and `InstancedMesh`.
 
-Features outside this engine's subset still cannot be emulated: shadow maps
-(depth textures), cube textures/environment maps, HDR/float render targets,
-multiple render targets, transform feedback and compressed textures. A scene
-that needs one of those will not render correctly; everything the previous
-Canvas2D fallback could show now goes through the GPU.
+Features outside this engine's subset still cannot be emulated: transform
+feedback and MSAA.
+Depth textures, float render targets and compressed textures are available, but
+three.js shadow maps still need comparative `sampler2DShadow` sampling, which
+is not translated yet. A scene that needs one of those will not render
+correctly; everything the previous Canvas2D fallback could show now goes
+through the GPU.

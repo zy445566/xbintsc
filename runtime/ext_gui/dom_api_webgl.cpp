@@ -159,6 +159,8 @@ const MethodEntry kMethods[] = {
     {"getTexParameter", (void *)webgl_get_tex_parameter},
     {"texImage2D", (void *)webgl_tex_image_2d},
     {"texSubImage2D", (void *)webgl_tex_sub_image_2d},
+    {"compressedTexImage2D", (void *)webgl_compressed_tex_image_2d},
+    {"compressedTexSubImage2D", (void *)webgl_compressed_tex_sub_image_2d},
     {"generateMipmap", (void *)webgl_generate_mipmap},
     {"createFramebuffer", (void *)webgl_create_framebuffer},
     {"deleteFramebuffer", (void *)webgl_delete_framebuffer},
@@ -236,6 +238,11 @@ uint64_t webgl_context_id(xt_value self) {
 xtgui::WebGLContext *webgl_from_context(xt_value self) {
   const uint64_t id = webgl_context_id(self);
   return id != 0 ? xtgui::xt_webgl_by_id(id) : nullptr;
+}
+
+xtgui::WebGLContext *webgl_live_context(xt_value self) {
+  xtgui::WebGLContext *context = webgl_from_context(self);
+  return context != nullptr && !context->lost() ? context : nullptr;
 }
 
 xt_value webgl_context_handle(xt_value element, xtgui::WebGLContext *context) {

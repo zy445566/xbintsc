@@ -14,7 +14,16 @@
 namespace domapi {
 namespace {
 
-xtgui::WebGLContext *context_of(xt_value self) { return webgl_from_context(self); }
+xtgui::WebGLContext *context_of(xt_value self) { return webgl_live_context(self); }
+
+/** Fire a `webglcontextlost`/`webglcontextrestored` event on the canvas that
+ * owns the context. `self` is the context or extension handle. */
+void dispatch_context_event(xt_value self, const char *type) {
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node =
+      resolve_node(xt_object_get_cstr(self, "__xt_gl_node"), &win);
+  if (win != nullptr && node != nullptr) xt_gui_dispatch_to_node(win, node, type);
+}
 
 xt_value number_array(const double *values, int count) {
   xt_value array = xt_array_new(0, nullptr);
@@ -27,6 +36,9 @@ xt_value object_for(xt_value self, uint32_t id, const char *key, const char *kin
 }
 
 }  // namespace
+
+METHOD(webgl_lose_context);
+METHOD(webgl_restore_context);
 
 void webgl_unpack_flags(xt_value context, bool *flip_y, bool *premultiply) {
   *flip_y = value_truthy(xt_object_get_cstr(context, "__xt_unpack_flip_y"));
@@ -121,8 +133,13 @@ METHOD(webgl_depth_range) {
 
 METHOD(webgl_blend_color) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    context->blend_color((float)webgl_number(argc, argv, 0, 0.0),
+                         (float)webgl_number(argc, argv, 1, 0.0),
+                         (float)webgl_number(argc, argv, 2, 0.0),
+                         (float)webgl_number(argc, argv, 3, 0.0));
+  }
   return XT_UNDEFINED;
 }
 
@@ -258,7 +275,8 @@ METHOD(webgl_get_error) {
   (void)env;
   (void)argc;
   (void)argv;
-  xtgui::WebGLContext *context = context_of(self);
+  xtgui::WebGLContext *context = webgl_from_context(self);
+  if (context != nullptr && context->lost()) return xt_number(GL_CONTEXT_LOST_WEBGL);
   return xt_number(context != nullptr ? context->error() : GL_NO_ERROR);
 }
 
@@ -280,6 +298,34 @@ METHOD(webgl_get_parameter) {
       const double values[4] = {(double)box[0], (double)box[1], (double)box[2], (double)box[3]};
       return number_array(values, 4);
     }
+    case GL_STENCIL_FUNC:
+      return xt_number(context->stencil_face(GL_FRONT).func);
+    case GL_STENCIL_REF:
+      return xt_number(context->stencil_face(GL_FRONT).ref);
+    case GL_STENCIL_VALUE_MASK:
+      return xt_number((double)context->stencil_face(GL_FRONT).value_mask);
+    case GL_STENCIL_WRITEMASK:
+      return xt_number((double)context->stencil_face(GL_FRONT).write_mask);
+    case GL_STENCIL_FAIL:
+      return xt_number(context->stencil_face(GL_FRONT).fail);
+    case GL_STENCIL_PASS_DEPTH_FAIL:
+      return xt_number(context->stencil_face(GL_FRONT).zfail);
+    case GL_STENCIL_PASS_DEPTH_PASS:
+      return xt_number(context->stencil_face(GL_FRONT).zpass);
+    case GL_STENCIL_BACK_FUNC:
+      return xt_number(context->stencil_face(GL_BACK).func);
+    case GL_STENCIL_BACK_REF:
+      return xt_number(context->stencil_face(GL_BACK).ref);
+    case GL_STENCIL_BACK_VALUE_MASK:
+      return xt_number((double)context->stencil_face(GL_BACK).value_mask);
+    case GL_STENCIL_BACK_WRITEMASK:
+      return xt_number((double)context->stencil_face(GL_BACK).write_mask);
+    case GL_STENCIL_BACK_FAIL:
+      return xt_number(context->stencil_face(GL_BACK).fail);
+    case GL_STENCIL_BACK_PASS_DEPTH_FAIL:
+      return xt_number(context->stencil_face(GL_BACK).zfail);
+    case GL_STENCIL_BACK_PASS_DEPTH_PASS:
+      return xt_number(context->stencil_face(GL_BACK).zpass);
     case GL_COLOR_CLEAR_VALUE: {
       const double values[4] = {0, 0, 0, 0};
       return number_array(values, 4);
@@ -289,8 +335,10 @@ METHOD(webgl_get_parameter) {
       return number_array(values, 2);
     }
     case GL_BLEND_COLOR: {
-      const double values[4] = {0, 0, 0, 0};
-      return number_array(values, 4);
+      float values[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+      context->blend_color_value(values);
+      const double out[4] = {values[0], values[1], values[2], values[3]};
+      return number_array(out, 4);
     }
     case GL_ALIASED_LINE_WIDTH_RANGE:
     case GL_ALIASED_POINT_SIZE_RANGE: {
@@ -318,8 +366,32 @@ METHOD(webgl_get_parameter) {
                  ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
                  : XT_NULL;
     }
+    case GL_TEXTURE_BINDING_CUBE_MAP: {
+      const uint32_t texture = context->bound_cube_texture(0);
+      return texture != 0
+                 ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
+                 : XT_NULL;
+    }
+    case GL_TEXTURE_BINDING_2D_ARRAY: {
+      const uint32_t texture = context->bound_array_texture(0);
+      return texture != 0
+                 ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
+                 : XT_NULL;
+    }
+    case GL_TEXTURE_BINDING_3D: {
+      const uint32_t texture = context->bound_3d_texture(0);
+      return texture != 0
+                 ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
+                 : XT_NULL;
+    }
     case GL_FRAMEBUFFER_BINDING: {
       const uint32_t framebuffer = context->bound_framebuffer_id();
+      return framebuffer != 0
+                 ? webgl_make_object(self, "__xt_gl_framebuffer", framebuffer, "framebuffer")
+                 : XT_NULL;
+    }
+    case GL_READ_FRAMEBUFFER_BINDING: {
+      const uint32_t framebuffer = context->bound_read_framebuffer_id();
       return framebuffer != 0
                  ? webgl_make_object(self, "__xt_gl_framebuffer", framebuffer, "framebuffer")
                  : XT_NULL;
@@ -351,22 +423,50 @@ METHOD(webgl_get_supported_extensions) {
   xt_value list = xt_array_new(0, nullptr);
   xt_array_push(list, xt_string_from_cstr("OES_element_index_uint"));
   xt_array_push(list, xt_string_from_cstr("OES_standard_derivatives"));
+  xt_array_push(list, xt_string_from_cstr("OES_texture_float"));
+  xt_array_push(list, xt_string_from_cstr("OES_texture_half_float"));
+  xt_array_push(list, xt_string_from_cstr("WEBGL_depth_texture"));
+  xt_array_push(list, xt_string_from_cstr("EXT_color_buffer_float"));
+  xt_array_push(list, xt_string_from_cstr("EXT_color_buffer_half_float"));
   xt_array_push(list, xt_string_from_cstr("WEBGL_lose_context"));
+  xtgui::WebGLContext *context = webgl_from_context(self);
+  if (context != nullptr && context->supports_texture_format(0x83F1)) {
+    xt_array_push(list, xt_string_from_cstr("WEBGL_compressed_texture_s3tc"));
+  }
+  if (context != nullptr && context->supports_texture_format(0x8C4D)) {
+    xt_array_push(list, xt_string_from_cstr("WEBGL_compressed_texture_s3tc_srgb"));
+  }
+  if (context != nullptr && context->supports_texture_format(0x93B0)) {
+    xt_array_push(list, xt_string_from_cstr("WEBGL_compressed_texture_astc"));
+  }
   return list;
 }
 
 METHOD(webgl_get_extension) {
   (void)env;
   const std::string name = webgl_string(argc, argv, 0);
-  if (name == "OES_element_index_uint" || name == "OES_standard_derivatives") {
+  if (name.rfind("WEBGL_compressed_texture_", 0) == 0) {
+    xt_value extension = webgl_compressed_extension(name, webgl_from_context(self));
+    if (!XT_IS_UNDEFINED(extension)) return extension;
+  }
+  if (name == "OES_element_index_uint" || name == "OES_standard_derivatives" ||
+      name == "OES_texture_float" || name == "OES_texture_half_float" ||
+      name == "WEBGL_depth_texture" || name == "EXT_color_buffer_float" ||
+      name == "EXT_color_buffer_half_float") {
     return xt_object_new();
   }
   if (name == "WEBGL_lose_context") {
     xt_value object = xt_object_new();
+    /* The closures receive this object as `this`, so carry the context id and
+     * the canvas handle over from the context that produced the extension. */
+    xt_object_set(object, xt_string_from_cstr("__xt_gl_context"),
+                  xt_object_get_cstr(self, "__xt_gl_context"));
+    xt_object_set(object, xt_string_from_cstr("__xt_gl_node"),
+                  xt_object_get_cstr(self, "__xt_gl_node"));
     xt_object_set(object, xt_string_from_cstr("loseContext"),
-                  xt_closure_new((void *)webgl_flush, 0, nullptr));
+                  xt_closure_new((void *)webgl_lose_context, 0, nullptr));
     xt_object_set(object, xt_string_from_cstr("restoreContext"),
-                  xt_closure_new((void *)webgl_flush, 0, nullptr));
+                  xt_closure_new((void *)webgl_restore_context, 0, nullptr));
     return object;
   }
   return XT_NULL;
@@ -379,7 +479,7 @@ METHOD(webgl_get_context_attributes) {
   xt_value attributes = xt_object_new();
   xt_object_set(attributes, xt_string_from_cstr("alpha"), XT_TRUE);
   xt_object_set(attributes, xt_string_from_cstr("depth"), XT_TRUE);
-  xt_object_set(attributes, xt_string_from_cstr("stencil"), XT_FALSE);
+  xt_object_set(attributes, xt_string_from_cstr("stencil"), XT_TRUE);
   xt_object_set(attributes, xt_string_from_cstr("antialias"), XT_FALSE);
   xt_object_set(attributes, xt_string_from_cstr("premultipliedAlpha"), XT_TRUE);
   xt_object_set(attributes, xt_string_from_cstr("preserveDrawingBuffer"), XT_TRUE);
@@ -393,51 +493,97 @@ METHOD(webgl_is_context_lost) {
   (void)env;
   (void)argc;
   (void)argv;
-  xtgui::WebGLContext *context = context_of(self);
+  xtgui::WebGLContext *context = webgl_from_context(self);
   return xt_bool(context == nullptr || context->lost());
 }
 
-/* Stencil operations are accepted for API completeness; the depth target has
- * no stencil attachment, so they do not change rendering. */
-METHOD(webgl_stencil_func) {
+/* `WEBGL_lose_context.loseContext()` / `restoreContext()`: the simulator drops
+ * every object and reports `CONTEXT_LOST_WEBGL` until the restore, so a page
+ * exercises the same loss/restore path it would take on a real GPU reset. */
+METHOD(webgl_lose_context) {
   (void)env;
   (void)argc;
   (void)argv;
+  xtgui::WebGLContext *context = webgl_from_context(self);
+  if (context == nullptr || context->lost()) return XT_UNDEFINED;
+  context->lose_context();
+  dispatch_context_event(self, "webglcontextlost");
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl_restore_context) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xtgui::WebGLContext *context = webgl_from_context(self);
+  if (context == nullptr || !context->lost()) return XT_UNDEFINED;
+  context->restore_context();
+  if (!context->lost()) dispatch_context_event(self, "webglcontextrestored");
+  return XT_UNDEFINED;
+}
+
+/* Stencil test/update state. SDL_GPU has one stencil reference per draw and no
+ * per-pipeline compare/write masks; the entry points store WebGL's state, the
+ * pipeline carries the compare function and ops, and `SDL_SetGPUStencilReference`
+ * supplies the reference. A write mask of 0 is emulated as KEEP. */
+METHOD(webgl_stencil_func) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    context->stencil_func(webgl_int(argc, argv, 0, GL_ALWAYS), webgl_int(argc, argv, 1, 0),
+                          (uint32_t)webgl_number(argc, argv, 2, 0xFFFFFFFF));
+  }
   return XT_UNDEFINED;
 }
 
 METHOD(webgl_stencil_func_separate) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    const int face = webgl_int(argc, argv, 0, GL_FRONT_AND_BACK);
+    context->stencil_func_separate(face, webgl_int(argc, argv, 1, GL_ALWAYS),
+                                   webgl_int(argc, argv, 2, 0),
+                                   (uint32_t)webgl_number(argc, argv, 3, 0xFFFFFFFF));
+  }
   return XT_UNDEFINED;
 }
 
 METHOD(webgl_stencil_op) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    context->stencil_op(webgl_int(argc, argv, 0, GL_KEEP), webgl_int(argc, argv, 1, GL_KEEP),
+                        webgl_int(argc, argv, 2, GL_KEEP));
+  }
   return XT_UNDEFINED;
 }
 
 METHOD(webgl_stencil_op_separate) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    const int face = webgl_int(argc, argv, 0, GL_FRONT_AND_BACK);
+    context->stencil_op_separate(face, webgl_int(argc, argv, 1, GL_KEEP),
+                                 webgl_int(argc, argv, 2, GL_KEEP),
+                                 webgl_int(argc, argv, 3, GL_KEEP));
+  }
   return XT_UNDEFINED;
 }
 
 METHOD(webgl_stencil_mask) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) context->stencil_mask((uint32_t)webgl_number(argc, argv, 0, 0xFFFFFFFF));
   return XT_UNDEFINED;
 }
 
 METHOD(webgl_stencil_mask_separate) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    context->stencil_mask_separate(webgl_int(argc, argv, 0, GL_FRONT_AND_BACK),
+                                   (uint32_t)webgl_number(argc, argv, 1, 0xFFFFFFFF));
+  }
   return XT_UNDEFINED;
 }
 

@@ -144,6 +144,11 @@ std::string pipeline_key(int mode, int index_size,
                          const std::vector<SDL_GPUVertexBufferDescription> &buffers,
                          const WebGLDrawState &state) {
   std::string key = std::to_string(mode) + "/" + std::to_string(index_size);
+  key += "/f" + std::to_string(state.color_target_count) + ":";
+  for (int i = 0; i < state.color_target_count; i++) {
+    key += std::to_string(state.color_formats[i]) + ",";
+  }
+  key += ":" + std::to_string(state.depth_format);
   for (const SDL_GPUVertexAttribute &attr : attrs) {
     key += "/" + std::to_string(attr.location) + ":" + std::to_string(attr.buffer_slot) + ":" +
            std::to_string((int)attr.format) + ":" + std::to_string(attr.offset);
@@ -152,7 +157,7 @@ std::string pipeline_key(int mode, int index_size,
     key += "|" + std::to_string(buffer.slot) + ":" + std::to_string(buffer.pitch) + ":" +
            std::to_string((int)buffer.input_rate);
   }
-  char state_key[160];
+  char state_key[256];
   snprintf(state_key, sizeof(state_key), "|%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
            (int)state.blend, state.blend_src_rgb, state.blend_dst_rgb, state.blend_src_alpha,
            state.blend_dst_alpha, state.blend_eq_rgb, state.blend_eq_alpha, (int)state.depth_test,
@@ -162,6 +167,16 @@ std::string pipeline_key(int mode, int index_size,
   key += std::to_string((int)state.color_mask[1]);
   key += std::to_string((int)state.color_mask[2]);
   key += std::to_string((int)state.color_mask[3]);
+  char stencil_key[224];
+  snprintf(stencil_key, sizeof(stencil_key), "|s%d,%d,%d,%d,%d,%u,%d,%d,%d,%d,%u,%u,%u",
+           (int)state.stencil, state.stencil_front.func, state.stencil_front.fail,
+           state.stencil_front.zfail, state.stencil_front.zpass,
+           (unsigned)state.stencil_front.write_mask, state.stencil_back.func,
+           state.stencil_back.fail, state.stencil_back.zfail, state.stencil_back.zpass,
+           (unsigned)state.stencil_back.write_mask,
+           (unsigned)state.stencil_front.value_mask,
+           (unsigned)state.stencil_front.write_mask);
+  key += stencil_key;
   return key;
 }
 
@@ -308,6 +323,15 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       bound_framebuffer_ != 0 ? framebuffer(bound_framebuffer_) : nullptr;
   const int target_width = framebuffer_ != nullptr ? framebuffer_->width : width_;
   const int target_height = framebuffer_ != nullptr ? framebuffer_->height : height_;
+  /* A pipeline bakes in the attachment formats; float colour targets, MRT
+   * layouts and depth textures therefore need their own pipeline variants. */
+  state_.color_target_count = 0;
+  for (int slot = 0; slot < kWebGLMaxDrawBuffers; slot++) {
+    if (draw_color_texture(slot) == nullptr) continue;
+    state_.color_formats[state_.color_target_count++] = draw_color_format(slot);
+  }
+  if (state_.color_target_count == 0) state_.color_target_count = 1;
+  state_.depth_format = target_depth_format();
 
   std::vector<SDL_GPUVertexAttribute> attributes;
   std::vector<SDL_GPUVertexBufferDescription> buffers;
@@ -381,7 +405,7 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     bindings.push_back(binding);
   }
 
-  begin_pass(false, false);
+  begin_pass(false, false, false);
   if (pass_ == nullptr) return;
 
   SDL_GPUViewport viewport;
@@ -431,6 +455,17 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   if (pipeline == nullptr) return;
 
   SDL_BindGPUGraphicsPipeline(pass_, pipeline);
+  if (state_.stencil) {
+    SDL_SetGPUStencilReference(pass_, (Uint8)(stencil_reference() & 0xFF));
+  }
+  if (state_.blend) {
+    SDL_FColor constants;
+    constants.r = blend_color_[0];
+    constants.g = blend_color_[1];
+    constants.b = blend_color_[2];
+    constants.a = blend_color_[3];
+    SDL_SetGPUBlendConstants(pass_, constants);
+  }
   if (!bindings.empty()) {
     SDL_BindGPUVertexBuffers(pass_, 0, bindings.data(), (Uint32)bindings.size());
   }
@@ -442,6 +477,28 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
                            index_size == 4 ? SDL_GPU_INDEXELEMENTSIZE_32BIT
                                            : SDL_GPU_INDEXELEMENTSIZE_16BIT);
   }
+  /* User uniform blocks live in the same std140 block; refresh their members
+   * from the CPU-side buffer bound to each block's binding point. */
+  for (const WebGLUniformBlock &block : program_->blocks) {
+    if (block.binding < 0 || block.binding >= 16) continue;
+    const WebGLUniformBinding &binding = uniform_bindings_[block.binding];
+    if (binding.buffer == 0) continue;
+    WebGLBuffer *uniform_buffer = buffer(binding.buffer);
+    if (uniform_buffer == nullptr) continue;
+    size_t offset = binding.offset;
+    size_t length = (size_t)block.data_size;
+    if (binding.size > 0 && length > binding.size) length = binding.size;
+    if (offset > uniform_buffer->data.size()) continue;
+    if (length > uniform_buffer->data.size() - offset) {
+      length = uniform_buffer->data.size() - offset;
+    }
+    if (block.base_offset >= 0 &&
+        block.base_offset + (int)length <= program_->block_size) {
+      memcpy(program_->block.data() + block.base_offset,
+             uniform_buffer->data.data() + offset, length);
+    }
+  }
+
   if (program_->vs_has_block && program_->block_size > 0) {
     SDL_PushGPUVertexUniformData(cmd_, 0, program_->block.data(), (Uint32)program_->block.size());
   }
@@ -457,7 +514,15 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       const WebGLUniform &uniform = program_->uniforms[(size_t)uniform_index];
       const int unit =
           uniform.unit >= 0 && uniform.unit < kWebGLMaxTextureUnits ? uniform.unit : 0;
-      WebGLTexture *sampled = texture(bound_textures_[unit]);
+      uint32_t texture_id = bound_textures_[unit];
+      if (uniform.layout.gl_type == GL_SAMPLER_CUBE) {
+        texture_id = bound_cube_textures_[unit];
+      } else if (uniform.layout.gl_type == GL_SAMPLER_3D) {
+        texture_id = bound_3d_textures_[unit];
+      } else if (uniform.layout.gl_type == GL_SAMPLER_2D_ARRAY) {
+        texture_id = bound_array_textures_[unit];
+      }
+      WebGLTexture *sampled = texture(texture_id);
       SDL_GPUTexture *gpu = sampled != nullptr ? ensure_texture_gpu(sampled, sampled->as_target)
                                                : nullptr;
       WebGLSampler *sampler_object = this->sampler(bound_samplers_[unit]);

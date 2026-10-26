@@ -14,7 +14,7 @@
 namespace domapi {
 namespace {
 
-xtgui::WebGLContext *context_of(xt_value self) { return webgl_from_context(self); }
+xtgui::WebGLContext *context_of(xt_value self) { return webgl_live_context(self); }
 
 xt_value shader_argument(xt_value value) {
   return webgl_object_id(value, "__xt_gl_shader");
@@ -295,7 +295,7 @@ METHOD(webgl_get_uniform) {
 namespace {
 
 void uniform_scalars(xt_value self, int32_t argc, xt_value *argv, int components, bool integer) {
-  xtgui::WebGLContext *context = webgl_from_context(self);
+  xtgui::WebGLContext *context = webgl_live_context(self);
   if (context == nullptr) return;
   uint32_t program = 0;
   int location = 0;
@@ -312,7 +312,7 @@ void uniform_scalars(xt_value self, int32_t argc, xt_value *argv, int components
 }
 
 void uniform_vectors(xt_value self, int32_t argc, xt_value *argv, int components, bool integer) {
-  xtgui::WebGLContext *context = webgl_from_context(self);
+  xtgui::WebGLContext *context = webgl_live_context(self);
   if (context == nullptr) return;
   uint32_t program = 0;
   int location = 0;
@@ -400,7 +400,7 @@ METHOD(webgl_uniform4iv) {
 namespace {
 
 void uniform_matrix(xt_value self, int32_t argc, xt_value *argv, int dimensions) {
-  xtgui::WebGLContext *context = webgl_from_context(self);
+  xtgui::WebGLContext *context = webgl_live_context(self);
   if (context == nullptr) return;
   uint32_t program = 0;
   int location = 0;

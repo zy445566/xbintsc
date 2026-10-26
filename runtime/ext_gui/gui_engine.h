@@ -45,6 +45,9 @@ xt_value xt_browser_local_storage(int32_t argc, xt_value *argv);
 xt_value xt_browser_missing(int32_t argc, xt_value *argv);
 /** A DOM type name (`Image`, `HTMLCanvasElement`, …) as a constructor value. */
 xt_value xt_browser_type(int32_t argc, xt_value *argv);
+/** `createImageBitmap(source)`, exposed as a global *value*: returns the
+ * closure the compiler stores for the bare identifier. */
+xt_value xt_browser_create_image_bitmap(int32_t argc, xt_value *argv);
 xt_value xt_browser_request_animation_frame(int32_t argc, xt_value *argv);
 xt_value xt_browser_cancel_animation_frame(int32_t argc, xt_value *argv);
 xt_value xt_browser_match_media(int32_t argc, xt_value *argv);

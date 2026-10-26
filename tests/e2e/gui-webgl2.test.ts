@@ -152,7 +152,7 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2", () => {
     expect(value("webgl2")).toBe("true");
     expect(value("webgl1-after")).toBe("true");
     expect(value("version")).toContain("WebGL 2.0");
-    expect(value("draw-buffers")).toBe("1");
+    expect(value("draw-buffers")).toBe("4");
     expect(value("clear-red")).toBe("255,0,0,255");
     expect(value("clear-buffer")).toBe("0,255,0,255");
     expect(value("vs")).toBe("true");
@@ -249,5 +249,55 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2", () => {
     expect(value("locations")).toBe("true,true,true,true");
     expect(value("pixel")).toBe("255,255,0,255");
     expect(value("error")).toBe("0");
+  });
+
+  it("keeps a drawingBufferStorage size across canvas resizes", () => {
+    const { value, stderr } = harness.compileAndRun(
+      "webgl2-storage",
+      `
+      import { createWindow } from "gui";
+      import page from "./page.html";
+
+      const win = createWindow({ title: "storage", width: 320, height: 240 });
+      const label = (name: string, value: any): void => console.log(name + "=" + value);
+
+      win.on("ready", () => {
+        const canvas: any = document.getElementById("c");
+        const gl: any = canvas.getContext("webgl2");
+        if (gl == null) {
+          console.log("webgl2=false");
+          win.close();
+          return;
+        }
+        gl.drawingBufferStorage(48, 40);
+        label("size", gl.drawingBufferWidth + "x" + gl.drawingBufferHeight);
+        gl.viewport(0, 0, 48, 40);
+        gl.clearColor(0, 1, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        const px = new Uint8Array(4);
+        const probe = (): string => {
+          gl.readPixels(24, 20, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          return px[0] + "," + px[1] + "," + px[2] + "," + px[3];
+        };
+        label("green", probe());
+        canvas.width = 16;
+        canvas.height = 16;
+        label("after-resize", gl.drawingBufferWidth + "x" + gl.drawingBufferHeight);
+        label("still-green", probe());
+        label("error", gl.getError());
+        win.close();
+      });
+
+      win.loadHTML(page);
+      `,
+      { files: { "page.html": PAGE }, autocloseMs: 8000 },
+    );
+
+    expect(value("size")).toBe("48x40");
+    expect(value("green")).toBe("0,255,0,255");
+    expect(value("after-resize")).toBe("48x40");
+    expect(value("still-green")).toBe("0,255,0,255");
+    expect(value("error")).toBe("0");
+    expect(stderr).not.toContain("pipeline creation failed");
   });
 });

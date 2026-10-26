@@ -56,7 +56,8 @@ requestAnimationFrame(frame);
 | `AudioContext`、`webkitAudioContext` | Web Audio 图构建器（见下） |
 | `Event`、`CustomEvent`、`ProgressEvent` 等 | 事件构造器 |
 | `HTMLCanvasElement`、`HTMLImageElement`、`WebGLRenderingContext`、`WebGL2RenderingContext`、`WebGLBuffer`/`WebGLTexture`/`WebGLShader`/`WebGLProgram`/`WebGLFramebuffer`/`WebGLRenderbuffer`/`WebGLUniformLocation`/`WebGLActiveInfo`/`WebGLVertexArrayObject`/`WebGLSampler`/`WebGLQuery`/`WebGLSync`/`WebGLTransformFeedback` | 真实的构造函数值。`canvas.getContext("webgl")` 与 `getContext("webgl2")` 返回 GPU 上下文（见 [WebGL](./webgl.md)）。 |
-| `ImageBitmap`、`ImageData`、`OffscreenCanvas`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（没有 XR/fetch/流式后端），让页面走自己的“不支持”分支，而不是调用空壳。Three.js 页面在本后端上使用真实渲染器（见[已知问题](./known-issues.md)）。 |
+| `ImageBitmap`、`createImageBitmap(source)` | 由已解码像素支撑的不可变位图（`<img>`、`<canvas>`、`<video>` 帧与 `ImageData` 形状）；promise 立即 settle，`texImage2D` 可直接接受该对象 |
+| `ImageData`、`OffscreenCanvas`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（没有 XR/fetch/流式后端），让页面走自己的“不支持”分支，而不是调用空壳。Three.js 页面在本后端上使用真实渲染器（见[已知问题](./known-issues.md)）。 |
 | `requestAnimationFrame` / `cancelAnimationFrame` | 排入窗口的动画帧列表，见[运行时集成](./runtime.md) |
 | `alert` / `confirm` / `prompt`、`matchMedia`、`getComputedStyle`、`escape` | 宿主实现（Annex B `escape` 按 UTF-16 码元编码，与 `decodeURIComponent(escape(bytes))` 一致） |
 

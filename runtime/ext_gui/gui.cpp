@@ -88,6 +88,7 @@ static void xt_gui_gc_scan_roots(void) {
     xt_gc_mark_value(win.object);
     xt_gc_mark_value(win.document_object);
     for (const auto &entry : win.node_handles) xt_gc_mark_value(entry.second);
+    for (xt_value handle : win.pending_canvas_handles) xt_gc_mark_value(handle);
     for (const auto &entry : win.node_listeners) {
       for (const XtGuiNodeListener &listener : entry.second) xt_gc_mark_value(listener.fn);
     }
@@ -217,7 +218,13 @@ static XtGuiWindow *create_window_record(const char *title, int width, int heigh
   record->width = width;
   record->height = height;
   record->html.clear();
-  record->document.reset();
+  record->document = std::make_unique<xtgui::XtDocument>();
+  record->loaded = 0;
+  record->pending_canvases.clear();
+  record->pending_webgl.clear();
+  record->pending_canvas_handles.clear();
+  record->webgl_canvases.clear();
+  record->canvases.clear();
   record->geometry = XtGuiGeometry();
   record->text_geometry = XtGuiGeometry();
   record->image_geometry = XtGuiGeometry();

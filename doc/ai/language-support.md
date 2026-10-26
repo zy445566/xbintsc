@@ -109,7 +109,8 @@ Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`
 `Symbol`, `Error` family, `BigInt`, `Array`/`String`/`Number`/`Object` methods,
 typed arrays, `String.prototype.match`/`split`/`replace` with capture groups,
 immutable array helpers (`toReversed`, `toSorted`, `toSpliced`, `with`), global
-URI functions, first-class built-in constructors (`const A = Array; new A(...)`,
+URI functions, `URL` / `URLSearchParams`,
+first-class built-in constructors (`const A = Array; new A(...)`,
 `A.isArray`, `x instanceof A`) and `Object.prototype`
 (`Object.getPrototypeOf({}) === Object.prototype`). `Math` is a first-class
 object as well as a namespace (`const cos = Math.cos`, `const { sqrt, PI } =

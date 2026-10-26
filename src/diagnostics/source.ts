@@ -24,6 +24,20 @@ export interface TextRange {
   readonly end: number;
 }
 
+/**
+ * Normalize a source text the way every parsed file is stored: no BOM and only
+ * `"\n"` line endings.
+ *
+ * Offsets produced by the parser are offsets into this normalized text, so any
+ * caller that parses a string and then slices the *original* text (asset
+ * loaders that rewrite imports, for example) must use the same normalization or
+ * its ranges drift by one per CRLF line.
+ */
+export function normalizeSourceText(text: string): string {
+  const withoutBom = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  return withoutBom.replace(/\r\n?/g, "\n");
+}
+
 export class SourceFile {
   readonly fileName: string;
   readonly text: string;
@@ -34,8 +48,7 @@ export class SourceFile {
   constructor(fileName: string, text: string) {
     this.fileName = fileName;
     // Normalize BOM and line endings so downstream stages only deal with "\n".
-    const normalized = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
-    this.text = normalized.replace(/\r\n?/g, "\n");
+    this.text = normalizeSourceText(text);
     this.hash = hashText(this.text);
   }
 

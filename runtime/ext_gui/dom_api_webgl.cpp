@@ -213,6 +213,14 @@ xt_value webgl_proto() {
   xt_gc_add_root(&g_webgl_proto);
   if (XT_IS_OBJECT(g_webgl_proto)) return g_webgl_proto;
   xt_value proto = xt_object_new();
+  /* Libraries detect WebGL 2 from `gl.constructor.name` (three.js does), so
+   * expose the host type name instead of leaving it as "Object". */
+  {
+    xt_value constructor = xt_object_new();
+    xt_object_set(constructor, xt_string_from_cstr("name"),
+                  xt_string_from_cstr("WebGLRenderingContext"));
+    xt_object_set(proto, xt_string_from_cstr("constructor"), constructor);
+  }
 #define XT_WEBGL_CONSTANT(name, value) \
   xt_object_set(proto, xt_string_from_cstr(#name), xt_number((double)(value)));
   XT_WEBGL_CONSTANTS(XT_WEBGL_CONSTANT)

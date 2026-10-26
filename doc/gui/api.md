@@ -66,6 +66,11 @@ handle is *pending* and binds to the real node the first time it is used, so a
 module that caches `document.querySelector("#id")` at import time keeps working.
 Once the page is parsed a miss answers `undefined`, like the browser.
 
+`document.createElement` / `createTextNode` work in that same pre-load window and
+return handles to detached nodes, which can be appended after `loadHTML`; their
+`dataset` and 2D/WebGL contexts are usable immediately. `querySelectorAll` before
+the page exists still answers an empty array (there is no tree to enumerate).
+
 ### Web Audio
 
 `new AudioContext()` builds a graph but **does not mix or render audio**: there

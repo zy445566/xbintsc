@@ -11,6 +11,7 @@
 namespace domapi {
 
 static const xtgui::Node *find_by_tag(const xtgui::Node *node, const std::string &tag) {
+  if (node == nullptr) return nullptr;
   if (node->isElement() && node->tag == tag) return node;
   for (const std::unique_ptr<xtgui::Node> &child : node->children) {
     if (const xtgui::Node *found = find_by_tag(child.get(), tag)) return found;
@@ -19,6 +20,7 @@ static const xtgui::Node *find_by_tag(const xtgui::Node *node, const std::string
 }
 
 static const xtgui::Node *find_by_id(const xtgui::Node *node, const std::string &id) {
+  if (node == nullptr) return nullptr;
   if (node->isElement()) {
     const std::string *value = node->attr("id");
     if (value != nullptr && *value == id) return node;

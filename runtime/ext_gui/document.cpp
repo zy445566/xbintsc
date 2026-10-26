@@ -24,7 +24,10 @@ void XtDocument::collectStyleText(const Node *node, std::string *out) const {
 
 void XtDocument::load(const std::string &html, float viewportWidth, float viewportHeight) {
   root_ = xt_html_parse(html);
-  detached_.clear();
+  /* `detached_` is deliberately kept: on the first load it holds elements a
+   * module created before `loadHTML` (and may append to the parsed tree). A
+   * reload uses a fresh `XtDocument`, so old detached nodes are released
+   * together with their handles. */
   dirty_ = false;
   hover_ = nullptr;
   focus_ = nullptr;

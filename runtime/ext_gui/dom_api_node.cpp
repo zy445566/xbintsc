@@ -147,6 +147,21 @@ METHOD(node_append_child) {
   return xt_gui_node_handle(win, win->document->appendChild(node, child));
 }
 
+METHOD(node_append) {
+  (void)env;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || win == nullptr) return XT_UNDEFINED;
+  for (int32_t i = 0; i < argc; i++) {
+    xt_value value = xt_arg(argc, argv, i);
+    xtgui::Node *child = XT_IS_STRING(value) ? win->document->createTextNode(to_string_value(value))
+                                             : resolve_node(value, nullptr);
+    if (child != nullptr) win->document->appendChild(node, child);
+  }
+  mark_dirty(win);
+  return XT_UNDEFINED;
+}
+
 METHOD(node_insert_before) {
   (void)env;
   XtGuiWindow *win = nullptr;

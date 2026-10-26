@@ -50,17 +50,31 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
   }
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win != nullptr) {
+    const bool first = win->loaded == 0;
     win->html = html;
-    /* Fresh document: invalidate every previously handed-out handle, and drop
-     * the decoders that belonged to the old tree. */
-    xt_gui_handles_reset(win);
-    xt_gui_media_shutdown(win);
-    xt_gui_canvas_shutdown(win);
-    win->document = std::make_unique<xtgui::XtDocument>();
+    if (!first) {
+      /* Fresh document: invalidate every previously handed-out handle, and drop
+       * the decoders that belonged to the old tree. */
+      xt_gui_handles_reset(win);
+      xt_gui_media_shutdown(win);
+      xt_gui_canvas_shutdown(win);
+      win->document = std::make_unique<xtgui::XtDocument>();
+    } else if (win->document == nullptr) {
+      win->document = std::make_unique<xtgui::XtDocument>();
+    }
+    /* On the first load the document already exists (created with the window):
+     * nodes a module built before `loadHTML` are sitting in its detached pool,
+     * and their handles must keep resolving so they can be appended to the
+     * parsed tree. `XtDocument::load` therefore preserves the detached pool. */
     float width = 0;
     float height = 0;
     xt_gui_window_viewport(win, &width, &height);
     win->document->load(html, width, height);
+    win->loaded = 1;
+    /* Canvas handles created before the page existed now have their element:
+     * bind them before scripts run so each context is attached and published to
+     * the document (otherwise the compositor never paints the WebGL texture). */
+    xt_gui_bind_pending_canvases(win);
     win->geometry.dirty = 1;
     /* Run the AOT-compiled `<script>` bodies now that the tree is parsed, so
      * `document.getElementById(...)` resolves, then settle the first layout. */
@@ -87,7 +101,6 @@ static xt_value win_get_html(xt_value self, xt_value env, int32_t argc, xt_value
   (void)argv;
   return xt_object_get_cstr(self, "__xt_gui_html");
 }
-
 /** The `document` handle for this window (created on first access). */
 static xt_value win_document_get(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;

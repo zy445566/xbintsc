@@ -18,6 +18,8 @@ if (gl == null) {
 
 同时提供 **WebGL 1.0** 与 **WebGL 2.0**。一个 canvas 会固定为它第一次申请的上下文类型：先调用 `getContext("webgl2")` 之后，`getContext("webgl")` 返回 `null`，反之亦然。WebGL 2 上下文也满足 `instanceof WebGLRenderingContext`（其原型继承 WebGL 1 原型），并在其上增加 WebGL 2 的常量与方法。
 
+模块可以在 canvas 句柄仍为 pending（`loadHTML` 之前）时就调用 `getContext`。上下文会立即创建，`canvas.width`/`height` 会调整其绘图缓冲大小；句柄首次绑定到解析后的 `<canvas>` 时上下文随之迁移，之后的 `drawingBufferWidth/Height` 与 GL 调用都作用于真实元素。`gl.constructor.name` 报告 `WebGL2RenderingContext`（或 `WebGLRenderingContext`），three.js 等库依赖它识别 WebGL 2。
+
 ## 一帧如何到达屏幕
 
 - 每个上下文拥有一张离屏 `R8G8B8A8_UNORM` 颜色纹理（绘图缓冲）和一张 `D32_FLOAT` 深度纹理，尺寸取自 canvas 的 `width` / `height` 属性。`canvas.width = …` 会重建它们并丢弃内容，与 DOM 规则一致。
@@ -103,6 +105,6 @@ WebGL 2 额外提供：
 
 ## three.js
 
-`.js` 资源加载器现在只修补 three.js 的着色器循环展开；`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
+`.js` 资源加载器会改写 three.js 着色器循环展开中的一个正则字符类，使其 `#pragma unroll_loop` 循环展开为常量下标（引擎的正则引擎是 POSIX ERE，不支持 `\s`）；`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
 
 本引擎子集之外的能力仍无法模拟：阴影贴图（深度纹理）、立方体贴图/环境贴图、HDR/浮点渲染目标、多渲染目标、transform feedback 与压缩纹理。需要这些能力的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。

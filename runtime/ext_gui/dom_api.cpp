@@ -21,6 +21,8 @@
 
 #include "dom_api_internal.h"
 
+#include <algorithm>
+
 #include <cctype>
 #include <string>
 #include <vector>
@@ -66,6 +68,7 @@ static xtgui::Node *bind_pending(XtGuiWindow *win, xt_value self, xtgui::Node *n
                 xt_object_get_cstr(canonical, "__xt_gui_gen"));
   xt_object_set(self, xt_string_from_cstr("__xt_gui_pending"), XT_UNDEFINED);
   xt_gui_canvas_bind_pending(win, node, self);
+  xt_gui_webgl_bind_pending(win, node, self);
   return node;
 }
 
@@ -252,9 +255,28 @@ void xt_gui_handles_reset(XtGuiWindow *win) {
   win->node_index.clear();
   win->node_handles.clear();
   win->node_listeners.clear();
+  win->pending_canvas_handles.clear();
   win->struct_dirty = 0;
   if (XT_IS_OBJECT(win->document_object)) {
     xt_object_set(win->document_object, xt_string_from_cstr("__xt_gui_gen"),
                   xt_number(win->doc_generation));
   }
+}
+
+void xt_gui_track_pending_canvas(XtGuiWindow *win, xt_value handle) {
+  if (win == nullptr || !XT_IS_OBJECT(handle)) return;
+  if (std::find(win->pending_canvas_handles.begin(), win->pending_canvas_handles.end(), handle) ==
+      win->pending_canvas_handles.end()) {
+    win->pending_canvas_handles.push_back(handle);
+  }
+}
+
+void xt_gui_bind_pending_canvases(XtGuiWindow *win) {
+  if (win == nullptr) return;
+  for (xt_value handle : win->pending_canvas_handles) {
+    /* `resolve_node` binds the pending handle and moves its 2D/WebGL context
+     * into the live table; `setCanvasInfo` has marked the document dirty. */
+    domapi::resolve_node(handle, nullptr);
+  }
+  win->pending_canvas_handles.clear();
 }

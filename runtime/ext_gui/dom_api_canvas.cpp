@@ -60,7 +60,7 @@ METHOD(node_get_context) {
   xtgui::Node *node = resolve_node(self, &win);
   if (mode == "webgl" || mode == "experimental-webgl" || mode == "webgl2") {
     const bool webgl2 = mode == "webgl2";
-    if (node == nullptr) return XT_NULL;
+    if (node == nullptr) return xt_webgl_pending_context(self, win, webgl2);
     if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
     if (xt_gui_canvas_find(win, node) != nullptr) return XT_NULL;  // already a 2D canvas
     xt_value cached = xt_object_get_cstr(self, "__xt_gui_gl");

@@ -78,6 +78,16 @@ console.log(box.contains(inner));                 // 后代判断
 旧式 `win.on(type, fn)` 负载保留其**字符串** `e.target`（`div#id.class`）；
 元素 `Event.target` 是一个句柄，其描述符与同一字符串匹配。
 
+`element.dataset` 通过实时访问器把 `data-*` 特性映射为驼峰键（`data-key-item` →
+`keyItem`）；没有对应特性的键（例如 `el.dataset.chord = "F+D"`）存放在该元素的
+dataset 对象上。`append()` 与 DOM 一样接受元素和字符串；`appendChild`、
+`insertBefore`、`removeChild`、`remove`、`replaceChild` 也都可用。
+
+在 `loadHTML` 之前运行的打包模块已经可以创建 DOM：`document.createElement` /
+`createTextNode` 返回分离节点的句柄，这些节点在页面解析完成后可以直接插入树中。
+此时通过 `getElementById`/`querySelector` 得到的句柄会保持 pending，并在解析后
+首次使用时绑定；`dataset` 以及 2D/WebGL 上下文对分离节点和 pending 元素都可用。
+
 ### 节点生命周期
 
 一次变更会决定它移除的节点是否仍可到达，引擎只释放那些确实不可到达的节点：

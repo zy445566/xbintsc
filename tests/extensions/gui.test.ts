@@ -107,6 +107,21 @@ describe("gui .html asset loader", () => {
     expect(parseDiagnostics(moduleSource)).toBe(0);
   });
 
+  it("normalizes CRLF in an external script before slicing import ranges", () => {
+    /* `SourceFile` stores LF; the loader slices the script it parsed. Slicing
+     * the raw CRLF text shifted every import by one character per line. */
+    const directory = writeFiles({
+      "app.ts": "import { size } from './util';\r\nconst total = size + 1;\r\n",
+      "util.ts": "export const size = 1;\r\n",
+    });
+    const htmlPath = join(directory, "page.html");
+    const { moduleSource } = loadHtmlAsset(htmlPath, `<script src="./app.ts"></script>`);
+    expect(moduleSource).toContain('import { size } from "./util"');
+    expect(moduleSource).toContain("const total = size + 1;");
+    expect(moduleSource).not.toContain("\r");
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
   it("strips export modifiers from an external script", () => {
     const directory = writeFiles({
       "app.ts": "export const a = 1;\nexport function f() { return a; }",
@@ -229,14 +244,16 @@ describe("gui .html asset loader", () => {
     expect(htmlOf(moduleSource)).toContain('href="https://example.com/x.css"');
   });
 
-  it("disables three.js's regex unroller but keeps the renderer untouched", () => {
+  it("makes three.js's loop-unroller regex POSIX-ERE friendly", () => {
     const source =
       "const unrollLoopPattern = /#pragma unroll_loop_start/g;\n" +
+      "string.replace( /\\[\\s*i\\s*\\]/g, '[ ' + i + ' ]' );\n" +
       "class WebGLRenderer {\n  constructor() {}\n}\n" +
       "class WebGL1Renderer extends WebGLRenderer {}\n" +
       "export { WebGL1Renderer, WebGLRenderer };\n";
     const { moduleSource, dependencies } = loadScriptAsset("three.module.js", source);
-    expect(moduleSource).toContain("const unrollLoopPattern = /__xt_never_match__/;");
+    expect(moduleSource).toContain("\\[[ \\t\\r\\n]*i[ \\t\\r\\n]*\\]");
+    expect(moduleSource).not.toContain("\\s*i\\s*");
     expect(moduleSource).toContain("class WebGLRenderer {");
     expect(moduleSource).toContain("class WebGL1Renderer extends WebGLRenderer {}");
     expect(moduleSource).not.toContain("WebGLRendererWebGL");

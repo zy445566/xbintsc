@@ -21,6 +21,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | `let` in a `for` loop header | One binding per loop, not one per iteration: closures created inside the body all observe the final value (`for (let i = 0; i < 3; i++) fns.push(() => i)` gives `3,3,3`) |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see [Module system](./modules.md)) |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`, resolved from the executable path |
+| `URL` | Resolves relative references and exposes read-only components; absolute URLs are kept verbatim (dot segments are not normalized), the path is not percent-encoded, and the setters / `searchParams` are not implemented |
 
 > Number formatting, loose equality, `+` / relational `ToPrimitive`, whole-chain
 > optional chaining, `finally` on early exit and object-key ordering have all

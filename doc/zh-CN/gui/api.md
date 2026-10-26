@@ -64,6 +64,10 @@ requestAnimationFrame(frame);
 首次使用时才绑定到真实节点，因此在模块初始化阶段缓存 `document.querySelector("#id")`
 的页面依然可用。页面解析完成后未命中则回答 `undefined`，与浏览器一致。
 
+在同一段预加载窗口里，`document.createElement` / `createTextNode` 会返回分离节点的句柄，
+`loadHTML` 之后可以直接插入树中；它们的 `dataset` 与 2D/WebGL 上下文立即可用。
+页面尚不存在时 `querySelectorAll` 仍返回空数组（没有可枚举的树）。
+
 ### Web Audio
 
 `new AudioContext()` 会构建音频图，但**不做混音也不渲染音频**：背后没有后端。已实现的是

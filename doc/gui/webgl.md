@@ -25,6 +25,13 @@ context kind it asks for: after `getContext("webgl2")` a later
 also satisfies `instanceof WebGLRenderingContext` (its prototype inherits the
 WebGL 1 one) and adds the WebGL 2 constants and methods.
 
+A module may call `getContext` while its canvas handle is still pending (before
+`loadHTML`). The context is created immediately, `canvas.width`/`height` resize
+its drawing buffer, and it moves to the parsed `<canvas>` the first time the
+handle binds; `drawingBufferWidth/Height` and later GL calls then address the
+real element. `gl.constructor.name` reports `WebGL2RenderingContext` (or
+`WebGLRenderingContext`), which libraries such as three.js use to detect WebGL 2.
+
 ## How a frame reaches the screen
 
 - Each context owns one offscreen `R8G8B8A8_UNORM` colour texture (the drawing
@@ -223,7 +230,9 @@ or the DOM pays no run-time cost beyond the archive size.
 
 ## three.js
 
-The `.js` asset loader only patches three.js's shader unroller; `WebGLRenderer`
+The `.js` asset loader rewrites one regex character class in three.js's shader
+unroller so its `#pragma unroll_loop` loops expand to constant indices (the
+engine's regexp engine is POSIX ERE and does not understand `\s`); `WebGLRenderer`
 runs unchanged on this engine's real WebGL 2 backend, so **no Canvas2D fallback
 is bundled any more**. Verified with three.js r160 through SDL_GPU:
 `MeshBasicMaterial`, `MeshStandardMaterial` and `MeshPhongMaterial`,

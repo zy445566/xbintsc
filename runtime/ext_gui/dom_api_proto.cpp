@@ -43,6 +43,7 @@ xt_value node_proto() {
   define_getter(proto, "previousElementSibling", (void *)node_previous_element_sibling_get);
   define_getter(proto, "isConnected", (void *)node_is_connected_get);
   define_getter(proto, "classList", (void *)node_class_list_get);
+  define_getter(proto, "dataset", (void *)node_dataset_get);
   define_getter(proto, "style", (void *)node_style_get);
   define_getter(proto, "offsetWidth", (void *)node_offset_width_get);
   define_getter(proto, "offsetHeight", (void *)node_offset_height_get);
@@ -85,6 +86,7 @@ xt_value node_proto() {
   define_method(proto, "querySelector", (void *)node_query_selector);
   define_method(proto, "querySelectorAll", (void *)node_query_selector_all);
   define_method(proto, "matches", (void *)node_matches);
+  define_method(proto, "append", (void *)node_append);
   define_method(proto, "appendChild", (void *)node_append_child);
   define_method(proto, "insertBefore", (void *)node_insert_before);
   define_method(proto, "removeChild", (void *)node_remove_child);

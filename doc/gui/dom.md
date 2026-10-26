@@ -82,6 +82,19 @@ bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps it
 **string** `e.target` (`div#id.class`); the element `Event.target` is a handle
 whose descriptor matches the same string.
 
+`element.dataset` maps `data-*` attributes to camel-case keys (`data-key-item` →
+`keyItem`) through live accessors; a key without an attribute (for example
+`el.dataset.chord = "F+D"`) is stored on the element's dataset object. `append()`
+accepts elements and strings, like the DOM method; `appendChild`, `insertBefore`,
+`removeChild`, `remove` and `replaceChild` are available too.
+
+A module bundled *before* `loadHTML` runs can already build DOM nodes:
+`document.createElement`/`createTextNode` return handles to detached nodes held
+by the window's document, and those nodes can be appended to the parsed tree once
+the page exists. Handles for `getElementById`/`querySelector` made at that point
+stay pending and bind on first use after parsing; `dataset` and 2D/WebGL contexts
+work on both detached and pending elements.
+
 ### Node lifetime
 
 A mutation decides whether the nodes it removes can still be reached, and the

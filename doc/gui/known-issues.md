@@ -15,10 +15,16 @@
   compressed textures, multiple render targets, `blitFramebuffer`, MSAA and
   stencil operations are not implemented; `clear` ignores the scissor rectangle.
   On an SDL_GPU backend that cannot consume SPIR-V (Metal, Direct3D 12) both
-  context kinds are `null`. The `.js` asset loader now patches only three.js's
-  shader unroller; `WebGLRenderer` runs on the real backend and there is no
+  context kinds are `null`. The `.js` asset loader rewrites one regex character
+  class in three.js's shader unroller so its `#pragma unroll_loop` loops expand
+  to constant indices (the runtime regexp engine is POSIX ERE and lacks `\s`);
+  `WebGLRenderer` runs on the real backend and there is no
   Canvas2D fallback. Shadow maps (depth textures), cube textures/environment
   maps and HDR render targets remain unsupported.
+- **`querySelectorAll` before `loadHTML`** answers an empty array: there is no
+  tree to enumerate yet. A module that caches `Array.from(document.querySelectorAll(...))`
+  at import time sees no elements; re-query after `loadHTML`/`ready` instead.
+  `getElementById`/`querySelector` do hand out pending handles.
 
 
 

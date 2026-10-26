@@ -124,6 +124,21 @@ describe("parser", () => {
     expect(template.spans[1].isTail).toBe(true);
   });
 
+  it("looks ahead across a template literal inside a parenthesized arrow", () => {
+    /* `tryParseArrowFunction` has to scan the whole parenthesized expression
+     * before it knows it is an arrow. Raw lookahead used to lex the template
+     * tail as source and report a bogus `Unterminated template literal`. */
+    const statement = first("const run = (async () => { const s = `x ${id}-${n}`; })();");
+    const call = statement.declarationList.declarations[0].initializer;
+    expect(call.kind).toBe(SyntaxKind.CallExpression);
+    const arrow = call.expression;
+    expect(arrow.kind).toBe(SyntaxKind.ParenthesizedExpression);
+    expect(arrow.expression.kind).toBe(SyntaxKind.ArrowFunction);
+    expect(arrow.expression.body.statements[0].declarationList.declarations[0].initializer.kind).toBe(
+      SyntaxKind.TemplateLiteral,
+    );
+  });
+
   it("parses type-only declarations", () => {
     expect(kindsOf("interface Point { x: number; y: number; }")).toEqual([SyntaxKind.InterfaceDeclaration]);
     expect(kindsOf("type Id = string | number;")).toEqual([SyntaxKind.TypeAliasDeclaration]);

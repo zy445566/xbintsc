@@ -60,6 +60,9 @@ xt_value webgl_object_proto(const std::string &kind);
 /** Create/return the 2D context for a pending `<canvas>` handle (before load). */
 xt_value xt_canvas_pending_context(xt_value self, XtGuiWindow *win);
 
+/** Create/return the WebGL context for a pending `<canvas>` handle (before load). */
+xt_value xt_webgl_pending_context(xt_value self, XtGuiWindow *win, bool webgl2);
+
 /* -- canvas helpers shared by `dom_api_canvas*.cpp` ----------------------- */
 
 /** The engine canvas behind a 2D context handle, or null when stale/foreign. */
@@ -155,6 +158,7 @@ METHOD(node_tag_name_get);
 METHOD(node_node_type_get);
 METHOD(node_id_get);
 METHOD(node_id_set);
+METHOD(node_dataset_get);
 METHOD(node_class_name_get);
 METHOD(node_class_name_set);
 METHOD(node_text_content_get);
@@ -182,6 +186,7 @@ METHOD(node_has_attribute);
 METHOD(node_query_selector);
 METHOD(node_query_selector_all);
 METHOD(node_matches);
+METHOD(node_append);
 METHOD(node_append_child);
 METHOD(node_insert_before);
 METHOD(node_remove_child);

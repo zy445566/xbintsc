@@ -104,7 +104,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 已实现：`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`/`WeakSet`/`WeakRef`、
 `Symbol`、`Error` 家族、`BigInt`、`Array`/`String`/`Number`/`Object` 方法、TypedArray、
 带捕获组的 `String.prototype.match`/`split`/`replace`、不可变数组方法
-（`toReversed`、`toSorted`、`toSpliced`、`with`）、全局 URI 函数、
+（`toReversed`、`toSorted`、`toSpliced`、`with`）、全局 URI 函数、`URL` / `URLSearchParams`、
 一等公民内建构造器（`const A = Array; new A(...)`、`A.isArray`、`x instanceof A`）
 与 `Object.prototype`（`Object.getPrototypeOf({}) === Object.prototype`）。
 `Math` 既是命名空间也是一等对象（`const cos = Math.cos`、`const { sqrt, PI } = Math`），

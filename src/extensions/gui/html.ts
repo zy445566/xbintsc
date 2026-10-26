@@ -33,7 +33,8 @@ import {
   type StringLiteral,
 } from "../../ast/nodes.js";
 import { DiagnosticBag } from "../../diagnostics/diagnostic.js";
-import { SourceFile } from "../../diagnostics/source.js";
+import { normalizeSourceText, SourceFile } from "../../diagnostics/source.js";
+import { sourceTextBytes } from "../../diagnostics/source-text.js";
 import { Parser } from "../../parser/parser.js";
 import { artifactPath } from "../../canonical.js";
 import { hashString } from "../../driver/cache.js";
@@ -127,7 +128,12 @@ interface CompiledModule {
 
 /** Split an external script module into hoisted imports and a body. */
 function compileModuleSource(htmlPath: string, scriptPath: string): CompiledModule {
-  const source = readFileSync(scriptPath, "utf8");
+  /* Normalize exactly like `SourceFile` before the parser runs: node offsets are
+   * offsets into that normalized text, so slicing the raw file would drift by
+   * one character per CRLF line and corrupt the hoisted imports. The bytes are
+   * also kept in byte-string form so non-ASCII literals reach codegen the same
+   * way they do from the regular driver path. */
+  const source = normalizeSourceText(sourceTextBytes(readFileSync(scriptPath, "utf8")));
   const bag = new DiagnosticBag();
   const parsed = new Parser(new SourceFile(scriptPath, source), bag).parseSourceFile();
   const chars = source.split("");
@@ -184,6 +190,11 @@ function resolveScriptPath(htmlPath: string, src: string): string {
 
 /** Rewrite `<script>` bodies into registered AOT functions + an HTML string. */
 export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
+  /* The generated module is parsed as a `SourceFile` (which normalizes CRLF),
+   * and `sourceRanges` below measure offsets in the text we build here. Normalize
+   * first so both uses agree; inline script bodies copied from the page keep
+   * accurate diagnostics as well. */
+  source = normalizeSourceText(source);
   /* `file` is set for an external `<script src>`: its body keeps that file as
    * the origin of every node, so a `.js` script stays untyped and diagnostics
    * name the script, not the HTML page. */

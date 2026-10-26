@@ -233,7 +233,13 @@ METHOD(node_width_get) {
   (void)argv;
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement()) return xt_number(0);
+  if (node == nullptr) {
+    double pendingWidth = -1;
+    double pendingHeight = -1;
+    xt_gui_webgl_pending_size(win, self, &pendingWidth, &pendingHeight);
+    return xt_number(pendingWidth >= 0 ? pendingWidth : 0);
+  }
+  if (!node->isElement()) return xt_number(0);
   if (node->isTag("canvas")) {
     if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
       return xt_number(webgl->width());
@@ -252,7 +258,11 @@ METHOD(node_width_set) {
   (void)env;
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
+  if (node == nullptr) {
+    xt_gui_webgl_pending_resize(win, self, canvas_number_arg(argc, argv, 0, 0.0), 0, true, false);
+    return XT_UNDEFINED;
+  }
+  if (!node->isElement()) return XT_UNDEFINED;
   double value = canvas_number_arg(argc, argv, 0, 0.0);
   if (node->isTag("canvas")) {
     if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
@@ -298,7 +308,13 @@ METHOD(node_height_get) {
   (void)argv;
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement()) return xt_number(0);
+  if (node == nullptr) {
+    double pendingWidth = -1;
+    double pendingHeight = -1;
+    xt_gui_webgl_pending_size(win, self, &pendingWidth, &pendingHeight);
+    return xt_number(pendingHeight >= 0 ? pendingHeight : 0);
+  }
+  if (!node->isElement()) return xt_number(0);
   if (node->isTag("canvas")) {
     if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
       return xt_number(webgl->height());
@@ -316,7 +332,11 @@ METHOD(node_height_set) {
   (void)env;
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
+  if (node == nullptr) {
+    xt_gui_webgl_pending_resize(win, self, 0, canvas_number_arg(argc, argv, 0, 0.0), false, true);
+    return XT_UNDEFINED;
+  }
+  if (!node->isElement()) return XT_UNDEFINED;
   double value = canvas_number_arg(argc, argv, 0, 0.0);
   if (node->isTag("canvas")) {
     if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {

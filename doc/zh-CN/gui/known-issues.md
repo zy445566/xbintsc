@@ -14,9 +14,14 @@
   feedback、立方体贴图、3D 纹理、浮点/深度纹理、压缩纹理、多渲染目标、
   `blitFramebuffer`、MSAA 与模板操作尚未实现；`clear` 会忽略 scissor 矩形。
   在无法消费 SPIR-V 的 SDL_GPU 后端（Metal、Direct3D 12）上两种上下文都为
-  `null`。`.js` 资源加载器现在只修补 three.js 的着色器循环展开；
-  `WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。阴影贴图
-  （深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标仍未支持。
+  `null`。`.js` 资源加载器会改写 three.js 着色器循环展开中的一个正则字符类，
+  使 `#pragma unroll_loop` 循环展开为常量下标（运行时正则引擎是 POSIX ERE，
+  不支持 `\s`）；`WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。
+  阴影贴图（深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标仍未支持。
+- **`loadHTML` 之前的 `querySelectorAll`** 返回空数组：此时还没有可枚举的树。
+  在模块顶层缓存 `Array.from(document.querySelectorAll(...))` 的页面会看不到元素，
+  应在 `loadHTML`/`ready` 之后重新查询；`getElementById`/`querySelector` 仍会返回
+  pending 句柄。
 
 
 - **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生

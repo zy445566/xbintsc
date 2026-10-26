@@ -59,6 +59,18 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 
 - `URLSearchParams` is implemented in `runtime/xt_url.c`.
 
+## URL
+
+- `URL` is implemented in `runtime/xt_url_object.c`: `new URL(input)` and
+  `new URL(input, base)` (the base may be another `URL`), resolving relative
+  references against a hierarchical `scheme://authority/path` base.
+- Read-only `href`, `protocol`, `origin`, `host`, `hostname`, `port`,
+  `pathname`, `search`, `hash` and `toString()`; absolute inputs are kept as
+  written.
+- Not a full WHATWG parser: path percent-encoding, IDNA, setters and
+  `searchParams` are not implemented — see
+  [Runtime deviations](../unimplemented/deviations.md).
+
 ## Errors
 
 - The `Error` family: `Error`, `TypeError`, `RangeError`, `SyntaxError`, `ReferenceError`, `EvalError`, `URIError`, `AggregateError` — `new`, `instanceof`, `extends`, `String(err)` / `err.toString()` and `.stack`.

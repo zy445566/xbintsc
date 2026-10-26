@@ -57,6 +57,16 @@
 
 - `URLSearchParams` 实现在 `runtime/xt_url.c`。
 
+## URL
+
+- `URL` 实现在 `runtime/xt_url_object.c`：支持 `new URL(input)` 与
+  `new URL(input, base)`（base 可以是另一个 `URL`），可基于
+  `scheme://authority/path` 形式的 base 解析相对引用。
+- 只读属性 `href`、`protocol`、`origin`、`host`、`hostname`、`port`、
+  `pathname`、`search`、`hash` 与 `toString()`；绝对地址按原样保留。
+- 不是完整的 WHATWG 解析器：路径百分号编码、IDNA、setter 与 `searchParams`
+  未实现 —— 见 [运行时差异](../unimplemented/deviations.md)。
+
 ## 错误
 
 - `Error` 家族：`Error`、`TypeError`、`RangeError`、`SyntaxError`、`ReferenceError`、`EvalError`、`URIError`、`AggregateError` —— 支持 `new`、`instanceof`、`extends`、`String(err)` / `err.toString()` 与 `.stack`。

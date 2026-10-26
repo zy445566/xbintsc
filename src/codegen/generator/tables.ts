@@ -317,6 +317,7 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   Server: "xt_net_server_ctor",
   EventEmitter: "xt_event_emitter_ctor",
   URLSearchParams: "xt_url_search_params_ctor",
+  URL: "xt_url_ctor",
   TextEncoder: "xt_text_encoder_ctor",
   TextDecoder: "xt_text_decoder_ctor",
   ArrayBuffer: "xt_array_buffer_ctor",

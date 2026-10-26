@@ -59,9 +59,50 @@ export class ParserContext {
     return this.lookAhead(k).kind === kind;
   }
 
+  /**
+   * Buffer the rest of a template literal whose `TemplateHead` is the last
+   * token scanned.
+   *
+   * Template literals are not a regular token sequence: after a `TemplateHead`
+   * the substitution expression is lexed normally, but the `}` that closes it
+   * must switch the scanner back into template text (`continueTemplate`).
+   * Raw lookahead has no parser to make that switch, so scanning ahead across
+   * an unparsed template would lex its tail as source and report a bogus
+   * `Unterminated template literal` — e.g. the `(async () => { … })()` wrapper
+   * that `tryParseArrowFunction` must look across. Completing the template as
+   * soon as its head is scanned keeps the token buffer valid for every
+   * consumer; the parser later re-scans only from the closing `}` when it
+   * actually parses the literal.
+   */
+  private completeTemplateLookAhead(): void {
+    /** Brace depth per open substitution, one frame per nested template. */
+    const depths: number[] = [0];
+    while (depths.length > 0) {
+      const token = this.scanner.nextToken();
+      this.tokens.push(token);
+      const top = depths.length - 1;
+      if (token.kind === TokenKind.OpenBrace) {
+        depths[top]! += 1;
+      } else if (token.kind === TokenKind.CloseBrace) {
+        if (depths[top]! > 0) {
+          depths[top]! -= 1;
+        } else {
+          const chunk = this.scanner.continueTemplate(token.start);
+          this.tokens.push(chunk);
+          if (chunk.kind === TokenKind.TemplateHead) depths[top] = 0;
+          else depths.pop();
+        }
+      } else if (token.kind === TokenKind.TemplateHead) {
+        depths.push(0);
+      }
+    }
+  }
+
   lookAhead(k: number): Token {
     while (this.tokens.length <= this.index + k) {
-      this.tokens.push(this.scanner.nextToken());
+      const token = this.scanner.nextToken();
+      this.tokens.push(token);
+      if (token.kind === TokenKind.TemplateHead) this.completeTemplateLookAhead();
     }
     return this.tokens[this.index + k]!;
   }
@@ -72,8 +113,10 @@ export class ParserContext {
     if (this.index + 1 < this.tokens.length) {
       this.index++;
     } else {
-      this.tokens = [this.scanner.nextToken()];
+      const token = this.scanner.nextToken();
+      this.tokens = [token];
       this.index = 0;
+      if (token.kind === TokenKind.TemplateHead) this.completeTemplateLookAhead();
     }
     return current;
   }

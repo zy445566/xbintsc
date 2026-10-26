@@ -57,6 +57,11 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
         created.textContent = "hi";
         box.appendChild(created);
         console.log("created=" + created.isConnected + ":" + doc.querySelector("#new").textContent + ":" + win.computedStyle("#new", "font-size"));
+        const wrap = doc.createElement("div");
+        const bold = doc.createElement("b");
+        bold.textContent = "A";
+        wrap.append(bold, "B");
+        console.log("append=" + wrap.childNodes.length + ":" + wrap.textContent);
         const rect = doc.querySelector("#new").getBoundingClientRect();
         console.log("rect=" + rect.width + "x" + rect.height);
         box.removeChild(created);
@@ -98,6 +103,7 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
     expect(value("offset")).toBe("100x50");
     expect(value("contains")).toBe("true:false");
     expect(value("created")).toBe("true:hi:16px");
+    expect(value("append")).toBe("2:AB");
     expect(value("removed")).toBe("false:true");
     // Element listeners fire target-first, then bubble to the ancestor. The
     // legacy window handler runs last and still receives a descriptor string.

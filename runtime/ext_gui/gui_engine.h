@@ -131,6 +131,10 @@ struct XtGuiWindow {
   int ready;
   std::string html;
   std::unique_ptr<xtgui::XtDocument> document;
+  /** Set by the first `loadHTML`. Nodes created before it (a module that builds
+   * DOM while it initialises) stay in the detached pool and keep their handles;
+   * later loads start a fresh document and invalidate handles as before. */
+  int loaded = 0;
   XtGuiGeometry geometry;
   XtGuiGeometry text_geometry;
   XtGuiGeometry image_geometry;
@@ -171,6 +175,15 @@ struct XtGuiWindow {
    * initialises). Keyed by canvas id; moved into `canvases` when the pending
    * handle binds to the parsed element. */
   std::unordered_map<uint64_t, std::unique_ptr<xtgui::Canvas2D>> pending_canvases;
+  /** WebGL contexts created for a pending `<canvas>` handle before its element
+   * exists. Keyed by context id and moved into `webgl_canvases` when the handle
+   * binds; until then the context can be sized by `canvas.width`/`height`. */
+  std::unordered_map<uint64_t, std::unique_ptr<xtgui::WebGLContext>> pending_webgl;
+  /** Handles whose canvas context was created before `loadHTML`. They are
+   * resolved eagerly after the document is parsed so the canvas gets its
+   * `canvasInfo` and the compositor paints the WebGL/2D texture; without this a
+   * renderer that only holds the handle (three.js) would never bind it. */
+  std::vector<xt_value> pending_canvas_handles;
   /** The batch currently running: its callbacks have been swapped out of
    * `animation_frames`, and a collection triggered by one of them must still
    * see the rest. Kept on the record (not a local) so the GC root provider can
@@ -255,6 +268,20 @@ void xt_gui_canvas_forget(XtGuiWindow *win, const xtgui::Node *node);
 /** Move a pre-load canvas into the live table when its pending element handle
  * binds. `handle` is the DOM handle that was used for `getContext("2d")`. */
 void xt_gui_canvas_bind_pending(XtGuiWindow *win, const xtgui::Node *node, xt_value handle);
+/** Move a pre-load WebGL context into the live table when its pending element
+ * handle binds. `handle` is the DOM handle returned by `getContext("webgl")`. */
+void xt_gui_webgl_bind_pending(XtGuiWindow *win, const xtgui::Node *node, xt_value handle);
+/** Remember a canvas handle whose context was created before `loadHTML`. */
+void xt_gui_track_pending_canvas(XtGuiWindow *win, xt_value handle);
+/** Bind every tracked pre-load canvas handle to its parsed element. */
+void xt_gui_bind_pending_canvases(XtGuiWindow *win);
+/** Allocate a WebGL context for a canvas that does not exist yet. */
+xtgui::WebGLContext *xt_gui_webgl_pending_create(XtGuiWindow *win, bool webgl2, int width,
+                                                  int height);
+/** Resize/read the WebGL context behind a pending canvas handle. */
+void xt_gui_webgl_pending_resize(XtGuiWindow *win, xt_value handle, double width, double height,
+                                 bool hasWidth, bool hasHeight);
+void xt_gui_webgl_pending_size(XtGuiWindow *win, xt_value handle, double *width, double *height);
 
 /** Publish live canvases to the document (sizes + render ids) so layout and
  * paint see them; creates a context for a canvas that has none yet. */

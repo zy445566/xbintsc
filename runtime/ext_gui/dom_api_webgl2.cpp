@@ -121,6 +121,12 @@ xt_value webgl2_proto() {
   xt_gc_add_root(&g_webgl2_proto);
   if (XT_IS_OBJECT(g_webgl2_proto)) return g_webgl2_proto;
   xt_value proto = xt_object_new_with_proto(webgl_proto());
+  {
+    xt_value constructor = xt_object_new();
+    xt_object_set(constructor, xt_string_from_cstr("name"),
+                  xt_string_from_cstr("WebGL2RenderingContext"));
+    xt_object_set(proto, xt_string_from_cstr("constructor"), constructor);
+  }
 #define XT_WEBGL2_CONSTANT(name, value) \
   xt_object_set(proto, xt_string_from_cstr(#name), xt_number((double)(value)));
   XT_WEBGL2_CONSTANTS(XT_WEBGL2_CONSTANT)

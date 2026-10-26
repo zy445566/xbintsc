@@ -103,4 +103,4 @@ WebGL 2 额外提供：
 
 ## three.js
 
-`.js` 资源加载器仍会识别 three.js，但它导出的 `WebGLRenderer` 现在会先探测 WebGL 上下文：有这个后端时页面会得到 three.js 自己的渲染器，只有没有 WebGL 上下文的设备才回退到内置的 Canvas2D 场景渲染器。探测优先请求 `webgl2`，因此较新的 three.js（要求 WebGL 2）会走它的 WebGL 2 路径；本引擎尚未实现的深度纹理、uniform 块、transform feedback 等仍可能让某个具体场景失败，这类页面应保留 Canvas2D 回退。
+`.js` 资源加载器仍会识别 three.js，但它导出的 `WebGLRenderer` 现在会先探测 WebGL 上下文：有这个后端时页面会得到 three.js 自己的渲染器，只有没有 WebGL 上下文的设备才回退到内置的 Canvas2D 场景渲染器。探测优先请求 `webgl2`，因此较新的 three.js（要求 WebGL 2）会走它的 WebGL 2 路径；已实测基础的无光照 `MeshBasicMaterial` 场景（three.js r160）可以在本后端渲染。受光/标准材质目前会暴露 three.js 着色器后处理中的运行时限制；阴影贴图（深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标尚未实现，这类页面应保留 Canvas2D 回退。

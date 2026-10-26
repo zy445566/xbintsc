@@ -228,6 +228,8 @@ The `.js` asset loader still recognises three.js, but its exported
 gets three.js's own renderer, and only a device without a WebGL context falls
 back to the bundled Canvas2D scene renderer. The probe asks for `webgl2` first,
 so recent three.js releases (which require WebGL 2) take their WebGL 2 path;
-the parts of that path this engine does not implement yet — depth textures,
-uniform blocks, transform feedback — can still make a particular scene fail, and
-those pages should keep the Canvas2D fallback.
+A basic unlit `MeshBasicMaterial` scene (three.js r160) has been verified to
+render on this backend. Lit/standard materials currently expose runtime limits
+in three.js's shader post-processing, and shadow maps (depth textures), cube
+textures/environment maps and HDR render targets are not implemented, so those
+pages should keep the Canvas2D fallback.

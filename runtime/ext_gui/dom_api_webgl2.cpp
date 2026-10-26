@@ -81,6 +81,7 @@ const MethodEntry kMethods[] = {
     {"getActiveUniformBlockParameter", (void *)webgl2_get_active_uniform_block_parameter},
     {"getActiveUniformBlockName", (void *)webgl2_get_active_uniform_block_name},
     {"uniformBlockBinding", (void *)webgl2_uniform_block_binding},
+    {"drawingBufferStorage", (void *)webgl2_drawing_buffer_storage},
     {"texStorage2D", (void *)webgl2_tex_storage_2d},
     {"texStorage3D", (void *)webgl2_tex_storage_3d},
     {"texImage3D", (void *)webgl2_tex_image_3d},
@@ -107,7 +108,7 @@ void define_method(xt_value proto, const char *name, void *fn) {
   xt_object_set(proto, xt_string_from_cstr(name), xt_closure_new(fn, 0, NULL));
 }
 
-xtgui::WebGLContext *context_of(xt_value self) { return webgl_from_context(self); }
+xtgui::WebGLContext *context_of(xt_value self) { return webgl_live_context(self); }
 
 xt_value uint_array(const unsigned int *values, int count) {
   xt_value array = xt_array_new(0, nullptr);
@@ -340,13 +341,25 @@ METHOD(webgl2_get_buffer_sub_data) {
 
 /* -- textures ------------------------------------------------------------ */
 
+METHOD(webgl2_drawing_buffer_storage) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    context->drawing_buffer_storage(webgl_int(argc, argv, 0, 0),
+                                    webgl_int(argc, argv, 1, 0));
+  }
+  return XT_UNDEFINED;
+}
+
 METHOD(webgl2_tex_storage_2d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
     const uint32_t texture = context->bound_texture(0);
-    context->tex_storage_2d(texture, webgl_int(argc, argv, 1, 1),
-                            webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0));
+    const int internalformat = webgl_int(argc, argv, 2, 0x8058);  // GL_RGBA8
+    context->tex_storage_format(texture, webgl_int(argc, argv, 1, 1),
+                                webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0),
+                                xtgui::webgl_storage_format(internalformat));
   }
   return XT_UNDEFINED;
 }

@@ -1,11 +1,11 @@
 /*
- * xbintsc GUI engine — WebGL context lifetime, GPU targets and fixed-function
- * state.
+ * xbintsc GUI engine — WebGL context lifetime and GPU targets.
  *
  * Every context records into one SDL_GPU command buffer. A render pass stays
  * open across draws and is ended whenever a copy pass (buffer/texture upload)
  * or a different attachment has to be recorded; the next draw starts a new
  * pass with `LOAD`, so the framebuffer persists like a WebGL drawing buffer.
+ * Fixed-function state lives in `webgl_state.cpp`.
  */
 
 #include "webgl.h"
@@ -46,38 +46,119 @@ WebGLContext::WebGLContext(uint64_t id, int width, int height, bool webgl2)
 
 WebGLContext::~WebGLContext() {
   submit();
-  if (guidev::g_device != nullptr) {
-    SDL_WaitForGPUIdle(guidev::g_device);
-    for (auto &entry : programs_) release_program_pipelines(entry.second.get());
-    for (auto &entry : textures_) {
-      if (entry.second->gpu != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, entry.second->gpu);
-      if (entry.second->sampler != nullptr) {
-        SDL_ReleaseGPUSampler(guidev::g_device, entry.second->sampler);
-      }
-    }
-    for (auto &entry : buffers_) {
-      if (entry.second->gpu != nullptr) SDL_ReleaseGPUBuffer(guidev::g_device, entry.second->gpu);
-    }
-    for (auto &entry : samplers_) {
-      if (entry.second->gpu != nullptr) {
-        SDL_ReleaseGPUSampler(guidev::g_device, entry.second->gpu);
-      }
-    }
-    for (auto &entry : framebuffers_) {
-      if (entry.second->depth != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, entry.second->depth);
-    }
-    for (auto &entry : renderbuffers_) {
-      if (entry.second->depth != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, entry.second->depth);
-    }
-    for (SDL_GPUBuffer *buffer : temp_buffers_) {
-      SDL_ReleaseGPUBuffer(guidev::g_device, buffer);
-    }
-    if (fallback_texture_ != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, fallback_texture_);
-    if (fallback_sampler_ != nullptr) SDL_ReleaseGPUSampler(guidev::g_device, fallback_sampler_);
-    if (color_ != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, color_);
-    if (depth_ != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, depth_);
-  }
+  if (guidev::g_device != nullptr) release_gpu_resources();
   g_contexts.erase(id_);
+}
+
+void WebGLContext::release_gpu_resources() {
+  if (guidev::g_device == nullptr) return;
+  SDL_WaitForGPUIdle(guidev::g_device);
+  for (auto &entry : programs_) release_program_pipelines(entry.second.get());
+  for (auto &entry : textures_) {
+    if (entry.second->gpu != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, entry.second->gpu);
+    if (entry.second->sampler != nullptr) {
+      SDL_ReleaseGPUSampler(guidev::g_device, entry.second->sampler);
+    }
+    entry.second->gpu = nullptr;
+    entry.second->sampler = nullptr;
+  }
+  for (auto &entry : buffers_) {
+    if (entry.second->gpu != nullptr) SDL_ReleaseGPUBuffer(guidev::g_device, entry.second->gpu);
+    entry.second->gpu = nullptr;
+    entry.second->capacity = 0;
+  }
+  for (auto &entry : samplers_) {
+    if (entry.second->gpu != nullptr) {
+      SDL_ReleaseGPUSampler(guidev::g_device, entry.second->gpu);
+      entry.second->gpu = nullptr;
+    }
+  }
+  for (auto &entry : framebuffers_) {
+    if (entry.second->depth != nullptr) {
+      SDL_ReleaseGPUTexture(guidev::g_device, entry.second->depth);
+      entry.second->depth = nullptr;
+    }
+  }
+  for (auto &entry : renderbuffers_) {
+    if (entry.second->depth != nullptr) {
+      SDL_ReleaseGPUTexture(guidev::g_device, entry.second->depth);
+      entry.second->depth = nullptr;
+    }
+  }
+  for (SDL_GPUBuffer *buffer : temp_buffers_) SDL_ReleaseGPUBuffer(guidev::g_device, buffer);
+  temp_buffers_.clear();
+  if (fallback_texture_ != nullptr) {
+    SDL_ReleaseGPUTexture(guidev::g_device, fallback_texture_);
+    fallback_texture_ = nullptr;
+  }
+  if (fallback_sampler_ != nullptr) {
+    SDL_ReleaseGPUSampler(guidev::g_device, fallback_sampler_);
+    fallback_sampler_ = nullptr;
+  }
+  if (color_ != nullptr) {
+    SDL_ReleaseGPUTexture(guidev::g_device, color_);
+    color_ = nullptr;
+  }
+  if (depth_ != nullptr) {
+    SDL_ReleaseGPUTexture(guidev::g_device, depth_);
+    depth_ = nullptr;
+  }
+}
+
+void WebGLContext::lose_context() {
+  if (lost_) return;
+  submit();
+  if (guidev::g_device != nullptr) release_gpu_resources();
+  /* The WebGL spec invalidates every object when the context is lost: a page
+   * that gets `webglcontextlost` must recreate buffers, textures and programs
+   * after the restore. */
+  shaders_.clear();
+  programs_.clear();
+  buffers_.clear();
+  textures_.clear();
+  framebuffers_.clear();
+  renderbuffers_.clear();
+  vertex_arrays_.clear();
+  samplers_.clear();
+  queries_.clear();
+  syncs_.clear();
+  default_vertex_array_ = WebGLVertexArray();
+  for (WebGLAttribState &attrib : attribs_) attrib = WebGLAttribState();
+  current_program_ = 0;
+  bound_array_ = 0;
+  bound_element_ = 0;
+  bound_framebuffer_ = 0;
+  bound_renderbuffer_ = 0;
+  bound_vertex_array_ = 0;
+  copy_read_buffer_ = 0;
+  copy_write_buffer_ = 0;
+  active_unit_ = 0;
+  for (uint32_t &texture : bound_textures_) texture = 0;
+  for (uint32_t &sampler : bound_samplers_) sampler = 0;
+  state_ = WebGLDrawState();
+  scissor_test_ = false;
+  error_ = 0;
+  lost_ = true;
+}
+
+void WebGLContext::restore_context() {
+  if (!lost_) return;
+  if (guidev::g_device == nullptr) return;
+  lost_ = false;
+  error_ = 0;
+  ensure_default_target();
+}
+
+void WebGLContext::drawing_buffer_storage(int width, int height) {
+  if (width <= 0 || height <= 0) {
+    set_error(GL_INVALID_VALUE);
+    return;
+  }
+  fixed_storage_ = true;
+  if (width == width_ && height == height_) return;
+  width_ = width;
+  height_ = height;
+  rebuild_default_target();
 }
 
 /* -- targets ------------------------------------------------------------- */
@@ -105,7 +186,7 @@ void WebGLContext::ensure_default_target() {
   info.num_levels = 1;
   info.sample_count = SDL_GPU_SAMPLECOUNT_1;
   if (color_ == nullptr) color_ = SDL_CreateGPUTexture(guidev::g_device, &info);
-  info.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+  info.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
   info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
   if (depth_ == nullptr) depth_ = SDL_CreateGPUTexture(guidev::g_device, &info);
 }
@@ -129,11 +210,15 @@ void WebGLContext::rebuild_default_target() {
 }
 
 SDL_GPUTexture *WebGLContext::color_texture() {
+  if (lost_) return nullptr;
   ensure_default_target();
   return color_;
 }
 
 void WebGLContext::resize(int width, int height) {
+  /* After `drawingBufferStorage` the drawing buffer has an explicit size and a
+   * canvas resize no longer changes it (WebGL 2). */
+  if (fixed_storage_) return;
   if (width < 0) width = 0;
   if (height < 0) height = 0;
   width_ = width > 0 ? width : 1;
@@ -178,12 +263,18 @@ SDL_GPUTexture *WebGLContext::target_depth() {
   }
   WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
   if (framebuffer == nullptr) return nullptr;
+  if (framebuffer->depth_texture != 0) {
+    WebGLTexture *texture = this->texture(framebuffer->depth_texture);
+    if (texture == nullptr) return nullptr;
+    texture->as_depth_target = true;
+    return ensure_texture_gpu(texture, true);
+  }
   if (framebuffer->depth == nullptr && framebuffer->depth_renderbuffer == 0 &&
       framebuffer->width > 0 && framebuffer->height > 0 && guidev::g_device != nullptr) {
     SDL_GPUTextureCreateInfo info;
     memset(&info, 0, sizeof(info));
     info.type = SDL_GPU_TEXTURETYPE_2D;
-    info.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+    info.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
     info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
     info.width = (Uint32)framebuffer->width;
     info.height = (Uint32)framebuffer->height;
@@ -195,6 +286,27 @@ SDL_GPUTexture *WebGLContext::target_depth() {
   return framebuffer->depth;
 }
 
+int WebGLContext::target_color_format() {
+  if (bound_framebuffer_ == 0) return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
+  if (framebuffer == nullptr || framebuffer->color_texture == 0) {
+    return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  }
+  WebGLTexture *texture = this->texture(framebuffer->color_texture);
+  return texture != nullptr ? (int)texture->format : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+}
+
+int WebGLContext::target_depth_format() {
+  if (bound_framebuffer_ == 0) return SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+  WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
+  if (framebuffer == nullptr) return SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+  if (framebuffer->depth_texture != 0) {
+    WebGLTexture *texture = this->texture(framebuffer->depth_texture);
+    if (texture != nullptr) return (int)texture->format;
+  }
+  return SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+}
+
 void WebGLContext::end_pass() {
   if (pass_ != nullptr && cmd_ != nullptr) {
     SDL_EndGPURenderPass(pass_);
@@ -202,10 +314,11 @@ void WebGLContext::end_pass() {
   }
 }
 
-void WebGLContext::begin_pass(bool clear_color, bool clear_depth) {
+void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_stencil) {
   if (guidev::g_device == nullptr) return;
   if (pass_ != nullptr && pass_targets_default_ == (bound_framebuffer_ == 0) &&
-      pass_framebuffer_ == bound_framebuffer_ && !clear_color && !clear_depth) {
+      pass_framebuffer_ == bound_framebuffer_ && !clear_color && !clear_depth &&
+      !clear_stencil) {
     return;
   }
   end_pass();
@@ -234,109 +347,14 @@ void WebGLContext::begin_pass(bool clear_color, bool clear_depth) {
   depth_info.load_op = (clear_depth && depth != nullptr) ? SDL_GPU_LOADOP_CLEAR
                                                          : SDL_GPU_LOADOP_LOAD;
   depth_info.store_op = SDL_GPU_STOREOP_STORE;
-  depth_info.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
-  depth_info.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+  depth_info.clear_stencil = (Uint8)(clear_stencil_ & 0xFF);
+  depth_info.stencil_load_op = (clear_stencil && depth != nullptr) ? SDL_GPU_LOADOP_CLEAR
+                                                                  : SDL_GPU_LOADOP_LOAD;
+  depth_info.stencil_store_op = SDL_GPU_STOREOP_STORE;
 
   pass_ = SDL_BeginGPURenderPass(cmd_, &color_info, 1, depth != nullptr ? &depth_info : nullptr);
   pass_targets_default_ = bound_framebuffer_ == 0;
   pass_framebuffer_ = bound_framebuffer_;
-}
-
-/* -- state --------------------------------------------------------------- */
-
-void WebGLContext::enable(int cap) {
-  if (cap == GL_BLEND) state_.blend = true;
-  if (cap == GL_DEPTH_TEST) state_.depth_test = true;
-  if (cap == GL_CULL_FACE) state_.cull = true;
-  if (cap == GL_SCISSOR_TEST) scissor_test_ = true;
-  if (cap == GL_STENCIL_TEST) stencil_test_ = true;
-}
-
-void WebGLContext::disable(int cap) {
-  if (cap == GL_BLEND) state_.blend = false;
-  if (cap == GL_DEPTH_TEST) state_.depth_test = false;
-  if (cap == GL_CULL_FACE) state_.cull = false;
-  if (cap == GL_SCISSOR_TEST) scissor_test_ = false;
-  if (cap == GL_STENCIL_TEST) stencil_test_ = false;
-}
-
-bool WebGLContext::is_enabled(int cap) const {
-  if (cap == GL_BLEND) return state_.blend;
-  if (cap == GL_DEPTH_TEST) return state_.depth_test;
-  if (cap == GL_CULL_FACE) return state_.cull;
-  if (cap == GL_SCISSOR_TEST) return scissor_test_;
-  if (cap == GL_STENCIL_TEST) return stencil_test_;
-  return false;
-}
-
-void WebGLContext::clear_color(float r, float g, float b, float a) {
-  clear_color_[0] = r;
-  clear_color_[1] = g;
-  clear_color_[2] = b;
-  clear_color_[3] = a;
-}
-
-void WebGLContext::color_mask(bool r, bool g, bool b, bool a) {
-  state_.color_mask[0] = r;
-  state_.color_mask[1] = g;
-  state_.color_mask[2] = b;
-  state_.color_mask[3] = a;
-}
-
-void WebGLContext::blend_func(int src, int dst) {
-  state_.blend_src_rgb = src;
-  state_.blend_dst_rgb = dst;
-  state_.blend_src_alpha = src;
-  state_.blend_dst_alpha = dst;
-}
-
-void WebGLContext::blend_func_separate(int src_rgb, int dst_rgb, int src_alpha, int dst_alpha) {
-  state_.blend_src_rgb = src_rgb;
-  state_.blend_dst_rgb = dst_rgb;
-  state_.blend_src_alpha = src_alpha;
-  state_.blend_dst_alpha = dst_alpha;
-}
-
-void WebGLContext::blend_equation(int mode) {
-  state_.blend_eq_rgb = mode;
-  state_.blend_eq_alpha = mode;
-}
-
-void WebGLContext::blend_equation_separate(int rgb, int alpha) {
-  state_.blend_eq_rgb = rgb;
-  state_.blend_eq_alpha = alpha;
-}
-
-void WebGLContext::cull_face(int mode) { state_.cull_face = mode; }
-
-void WebGLContext::front_face(int mode) { state_.front_face = mode; }
-
-void WebGLContext::viewport(int x, int y, int w, int h) {
-  viewport_[0] = x;
-  viewport_[1] = y;
-  viewport_[2] = w;
-  viewport_[3] = h;
-}
-
-void WebGLContext::scissor(int x, int y, int w, int h) {
-  scissor_box_[0] = x;
-  scissor_box_[1] = y;
-  scissor_box_[2] = w;
-  scissor_box_[3] = h;
-}
-
-void WebGLContext::clear(int mask) {
-  if (guidev::g_device == nullptr) return;
-  const bool color_bit = (mask & GL_COLOR_BUFFER_BIT) != 0;
-  const bool depth_bit = (mask & GL_DEPTH_BUFFER_BIT) != 0;
-  /* The scissor rectangle is not honoured by a pass-begin clear; WebGL pages
-   * that clear a sub-rectangle are rare and documented as a limitation. */
-  begin_pass(color_bit, depth_bit);
-}
-
-void WebGLContext::finish() {
-  submit();
-  if (guidev::g_device != nullptr) SDL_WaitForGPUIdle(guidev::g_device);
 }
 
 /* -- queries ------------------------------------------------------------- */
@@ -352,7 +370,9 @@ double WebGLContext::parameter(int pname) {
     case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
       return kWebGLMaxTextureUnits * 2;
     case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
-      return 0;
+      /* The vertex stage binds its own sampler set (`SDL_BindGPUVertexSamplers`)
+       * and the translator emits vertex samplers in descriptor set 0. */
+      return kWebGLMaxTextureUnits;
     case GL_MAX_VERTEX_UNIFORM_VECTORS:
     case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
     case GL_MAX_VARYING_VECTORS:
@@ -375,7 +395,7 @@ double WebGLContext::parameter(int pname) {
     case GL_DEPTH_BITS:
       return 8;
     case GL_STENCIL_BITS:
-      return 0;
+      return 8;
     case GL_UNPACK_ALIGNMENT:
     case GL_PACK_ALIGNMENT:
       return 4;

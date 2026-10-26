@@ -18,7 +18,7 @@
 namespace domapi {
 namespace {
 
-xtgui::WebGLContext *context_of(xt_value self) { return webgl_from_context(self); }
+xtgui::WebGLContext *context_of(xt_value self) { return webgl_live_context(self); }
 
 uint32_t vertex_array_argument(xt_value value) {
   return webgl_object_id(value, "__xt_gl_vertex_array");
@@ -81,7 +81,7 @@ METHOD(webgl2_vertex_attrib_ipointer) {
 namespace {
 
 void attrib_integer(xt_value self, int32_t argc, xt_value *argv, bool is_unsigned) {
-  xtgui::WebGLContext *context = webgl_from_context(self);
+  xtgui::WebGLContext *context = webgl_live_context(self);
   if (context == nullptr) return;
   float values[4] = {0.0f, 0.0f, 0.0f, 1.0f};
   const std::vector<double> numbers = webgl_numbers(xt_arg(argc, argv, 1));
@@ -162,7 +162,7 @@ METHOD(webgl2_draw_range_elements) {
 namespace {
 
 void uniform_unsigned(xt_value self, int32_t argc, xt_value *argv, int components, bool vector) {
-  xtgui::WebGLContext *context = webgl_from_context(self);
+  xtgui::WebGLContext *context = webgl_live_context(self);
   if (context == nullptr) return;
   xt_value handle = xt_arg(argc, argv, 0);
   if (!XT_IS_OBJECT(handle)) return;

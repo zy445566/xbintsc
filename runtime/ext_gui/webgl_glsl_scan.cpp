@@ -435,6 +435,14 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
       info->legacy_fragment_output = true;
       continue;
     }
+    /* SDL_GPU render targets carry no writable depth attachment, so there is
+     * no place for a shader-written depth value; reject it with a clear log
+     * instead of failing later inside glslang. */
+    if (inactive == 0 && fragment && token.kind == Token::Ident &&
+        (token.text == "gl_FragDepth" || token.text == "gl_FragDepthEXT")) {
+      info->unsupported = "gl_FragDepth is not supported";
+      continue;
+    }
     /* Declarations inside a definitively false preprocessor branch never reach
      * the compiler; rewriting them would move their types/macros (and array
      * sizes such as `MORPHTARGETS_COUNT`) outside that branch. */

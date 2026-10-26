@@ -238,6 +238,11 @@ xtgui::WebGLContext *webgl_from_context(xt_value self) {
   return id != 0 ? xtgui::xt_webgl_by_id(id) : nullptr;
 }
 
+xtgui::WebGLContext *webgl_live_context(xt_value self) {
+  xtgui::WebGLContext *context = webgl_from_context(self);
+  return context != nullptr && !context->lost() ? context : nullptr;
+}
+
 xt_value webgl_context_handle(xt_value element, xtgui::WebGLContext *context) {
   xt_value cached = xt_object_get_cstr(element, "__xt_gui_gl");
   if (XT_IS_OBJECT(cached)) return cached;

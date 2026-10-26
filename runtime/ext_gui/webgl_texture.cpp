@@ -12,16 +12,30 @@
 namespace xtgui {
 namespace {
 
-/** Upload an RGBA8 rectangle into level 0 of `gpu`. `rgba` may be null, which
- * uploads transparent black. */
+bool depth_texture_format(SDL_GPUTextureFormat format) {
+  return format == SDL_GPU_TEXTUREFORMAT_D16_UNORM ||
+         format == SDL_GPU_TEXTUREFORMAT_D24_UNORM ||
+         format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT ||
+         format == SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT ||
+         format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+}
+
+int texel_bytes(SDL_GPUTextureFormat format) {
+  if (format == SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT) return 8;
+  if (format == SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT) return 16;
+  return 4;
+}
+
+/** Upload a rectangle of tightly packed texels into level 0 of `gpu`. `pixels`
+ * may be null, which uploads zeros. */
 bool upload_region(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *gpu, int x,
-                   int y, int width, int height, const uint8_t *rgba) {
-  const uint32_t bytes = (uint32_t)(width * height * 4);
+                   int y, int width, int height, const uint8_t *pixels, int bytes_per_texel) {
+  const uint32_t bytes = (uint32_t)(width * height * bytes_per_texel);
   if (bytes == 0) return true;
   std::vector<uint8_t> zeros;
-  if (rgba == nullptr) {
+  if (pixels == nullptr) {
     zeros.assign(bytes, 0);
-    rgba = zeros.data();
+    pixels = zeros.data();
   }
   SDL_GPUTransferBufferCreateInfo info;
   memset(&info, 0, sizeof(info));
@@ -34,7 +48,7 @@ bool upload_region(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUText
     SDL_ReleaseGPUTransferBuffer(device, transfer);
     return false;
   }
-  memcpy(mapped, rgba, bytes);
+  memcpy(mapped, pixels, bytes);
   SDL_UnmapGPUTransferBuffer(device, transfer);
   SDL_GPUTextureTransferInfo source;
   memset(&source, 0, sizeof(source));
@@ -58,7 +72,8 @@ bool upload_region(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUText
 
 }  // namespace
 
-bool WebGLContext::tex_image_rgba(uint32_t id, int width, int height, const uint8_t *rgba) {
+bool WebGLContext::tex_image_format(uint32_t id, int width, int height,
+                                    SDL_GPUTextureFormat format, const uint8_t *pixels) {
   WebGLTexture *record = texture(id);
   if (record == nullptr || width <= 0 || height <= 0) {
     set_error(GL_INVALID_VALUE);
@@ -67,27 +82,37 @@ bool WebGLContext::tex_image_rgba(uint32_t id, int width, int height, const uint
   end_pass();
   ensure_command();
   if (cmd_ == nullptr) return false;
-  if (record->width != width || record->height != height) {
+  if (record->width != width || record->height != height || record->format != format) {
     if (record->gpu != nullptr) {
       SDL_WaitForGPUIdle(guidev::g_device);
       SDL_ReleaseGPUTexture(guidev::g_device, record->gpu);
       record->gpu = nullptr;
+      record->usage = 0;
     }
     record->width = width;
     record->height = height;
+    record->format = format;
+    record->depth = depth_texture_format(format);
     record->has_mipmaps = false;
     if (record->sampler != nullptr) {
       SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
       record->sampler = nullptr;
     }
   }
-  if (ensure_texture_gpu(record, record->as_target) == nullptr) return false;
+  if (ensure_texture_gpu(record, record->as_target || record->as_depth_target) == nullptr) {
+    return false;
+  }
   record->defined = true;
-  return upload_region(guidev::g_device, cmd_, record->gpu, 0, 0, width, height, rgba);
+  return upload_region(guidev::g_device, cmd_, record->gpu, 0, 0, width, height, pixels,
+                       texel_bytes(format));
 }
 
-bool WebGLContext::tex_sub_image_rgba(uint32_t id, int x, int y, int width, int height,
-                                      const uint8_t *rgba) {
+bool WebGLContext::tex_image_rgba(uint32_t id, int width, int height, const uint8_t *rgba) {
+  return tex_image_format(id, width, height, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, rgba);
+}
+
+bool WebGLContext::tex_sub_image_format(uint32_t id, int x, int y, int width, int height,
+                                        const uint8_t *pixels) {
   WebGLTexture *record = texture(id);
   if (record == nullptr || !record->defined || record->gpu == nullptr) {
     set_error(GL_INVALID_OPERATION);
@@ -101,12 +126,23 @@ bool WebGLContext::tex_sub_image_rgba(uint32_t id, int x, int y, int width, int 
   end_pass();
   ensure_command();
   if (cmd_ == nullptr) return false;
-  return upload_region(guidev::g_device, cmd_, record->gpu, x, y, width, height, rgba);
+  return upload_region(guidev::g_device, cmd_, record->gpu, x, y, width, height, pixels,
+                       texel_bytes(record->format));
+}
+
+bool WebGLContext::tex_sub_image_rgba(uint32_t id, int x, int y, int width, int height,
+                                      const uint8_t *rgba) {
+  return tex_sub_image_format(id, x, y, width, height, rgba);
 }
 
 bool WebGLContext::generate_mipmap(uint32_t id) {
   WebGLTexture *record = texture(id);
   if (record == nullptr || record->gpu == nullptr) {
+    set_error(GL_INVALID_OPERATION);
+    return false;
+  }
+  if (record->depth) {
+    /* Depth textures have no mip chain in this backend. */
     set_error(GL_INVALID_OPERATION);
     return false;
   }
@@ -124,6 +160,12 @@ bool WebGLContext::generate_mipmap(uint32_t id) {
 
 bool WebGLContext::read_pixels(int x, int y, int width, int height, uint8_t *out) {
   if (out == nullptr || width <= 0 || height <= 0) return false;
+  if (target_color_format() != (int)SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM) {
+    /* The only readback this surface offers is RGBA8; a float/half colour
+     * target is read by rendering it into an RGBA8 target instead. */
+    set_error(GL_INVALID_OPERATION);
+    return false;
+  }
   SDL_GPUTexture *target = target_color();
   int target_width = bound_framebuffer_ == 0 ? width_ : 0;
   int target_height = bound_framebuffer_ == 0 ? height_ : 0;
@@ -196,7 +238,8 @@ bool WebGLContext::read_pixels(int x, int y, int width, int height, uint8_t *out
   return true;
 }
 
-bool WebGLContext::tex_storage_2d(uint32_t id, int levels, int width, int height) {
+bool WebGLContext::tex_storage_format(uint32_t id, int levels, int width, int height,
+                                      SDL_GPUTextureFormat format) {
   (void)levels;  // the backend always allocates the full mip chain
   WebGLTexture *record = texture(id);
   if (record == nullptr || width <= 0 || height <= 0) {
@@ -210,20 +253,27 @@ bool WebGLContext::tex_storage_2d(uint32_t id, int levels, int width, int height
     SDL_WaitForGPUIdle(guidev::g_device);
     SDL_ReleaseGPUTexture(guidev::g_device, record->gpu);
     record->gpu = nullptr;
+    record->usage = 0;
   }
   record->width = width;
   record->height = height;
+  record->format = format;
+  record->depth = depth_texture_format(format);
   record->has_mipmaps = false;
   if (record->sampler != nullptr && guidev::g_device != nullptr) {
     SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
     record->sampler = nullptr;
   }
   record->defined = true;
-  return ensure_texture_gpu(record, record->as_target) != nullptr;
+  return ensure_texture_gpu(record, record->as_target || record->as_depth_target) != nullptr;
+}
+
+bool WebGLContext::tex_storage_2d(uint32_t id, int levels, int width, int height) {
+  return tex_storage_format(id, levels, width, height,
+                            SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
 }
 
 /* -- WebGL 2 clearBuffer* ------------------------------------------------ */
-
 void WebGLContext::clear_buffer_float(int buffer, int drawbuffer, const float *values,
                                       int count) {
   if (buffer == GL_COLOR) {
@@ -288,6 +338,25 @@ void WebGLContext::clear_buffer_fi(int buffer, int drawbuffer, float depth, int 
     clear_stencil(stencil);
     clear(GL_STENCIL_BUFFER_BIT);
   }
+}
+
+SDL_GPUTextureFormat webgl_storage_format(int internalformat) {
+  if (internalformat == GL_DEPTH_COMPONENT16 || internalformat == GL_DEPTH_COMPONENT24 ||
+      internalformat == GL_DEPTH_COMPONENT32F) {
+    return SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+  }
+  if (internalformat == GL_DEPTH_STENCIL || internalformat == GL_DEPTH24_STENCIL8) {
+    return SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+  }
+  if (internalformat == GL_RGBA32F || internalformat == GL_RGB32F ||
+      internalformat == GL_RG32F || internalformat == GL_R32F) {
+    return SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT;
+  }
+  if (internalformat == GL_RGBA16F || internalformat == GL_RGB16F ||
+      internalformat == GL_RG16F || internalformat == GL_R16F) {
+    return SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+  }
+  return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 }
 
 }  // namespace xtgui

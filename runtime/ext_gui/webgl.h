@@ -87,6 +87,10 @@ struct WebGLBuffer {
   SDL_GPUBuffer *gpu = nullptr;
   uint32_t capacity = 0;
   bool dirty = true;
+  /** The `usage` hint from `bufferData` (`STATIC_DRAW`, `DYNAMIC_DRAW`, …).
+   * It is cache behaviour rather than rendering state, but `getBufferParameter`
+   * reports it and dynamic buffers may be rewritten every frame. */
+  int usage = GL_STATIC_DRAW;
 };
 
 struct WebGLTexture {
@@ -96,7 +100,13 @@ struct WebGLTexture {
   int levels = 1;
   SDL_GPUTexture *gpu = nullptr;
   SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-  bool as_target = false;
+  /** True when `format` is a depth(-stencil) format; such a texture can be a
+   * depth attachment but never a colour attachment. */
+  bool depth = false;
+  /** Usage flags the current `gpu` texture was created with. */
+  uint32_t usage = 0;
+  bool as_target = false;        // bound as a colour attachment
+  bool as_depth_target = false;  // bound as a depth attachment
   bool has_mipmaps = false;
   int min_filter = 0;
   int mag_filter = 0;
@@ -118,10 +128,11 @@ struct WebGLRenderbuffer {
 struct WebGLFramebuffer {
   uint32_t id = 0;
   uint32_t color_texture = 0;
+  uint32_t depth_texture = 0;
   uint32_t depth_renderbuffer = 0;
   int width = 0;
   int height = 0;
-  SDL_GPUTexture *depth = nullptr;  // owned when no renderbuffer supplies one
+  SDL_GPUTexture *depth = nullptr;  // owned when no renderbuffer/texture supplies one
 };
 
 /** Per-attribute array state. */
@@ -165,6 +176,17 @@ struct WebGLSync {
   uint32_t id = 0;
 };
 
+/** One face's stencil test and update state. */
+struct WebGLStencilFace {
+  int func = GL_ALWAYS;
+  int ref = 0;
+  uint32_t value_mask = 0xFFFFFFFFu;  // compare mask
+  uint32_t write_mask = 0xFFFFFFFFu;
+  int fail = GL_KEEP;
+  int zfail = GL_KEEP;
+  int zpass = GL_KEEP;
+};
+
 /** The fixed-function state a pipeline depends on. */
 struct WebGLDrawState {
   bool blend = false;
@@ -177,10 +199,16 @@ struct WebGLDrawState {
   bool depth_test = false;
   bool depth_write = true;
   int depth_func = GL_LESS;
+  bool stencil = false;
+  WebGLStencilFace stencil_front;
+  WebGLStencilFace stencil_back;
   bool cull = false;
   int cull_face = GL_BACK;
   int front_face = GL_CCW;
   bool color_mask[4] = {true, true, true, true};
+  /** Attachment formats of the bound target; pipelines are format-specific. */
+  int color_format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  int depth_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
 };
 
 class WebGLContext {
@@ -200,6 +228,14 @@ class WebGLContext {
   void submit();
   SDL_GPUTexture *color_texture();
   bool lost() const { return lost_; }
+  /** Simulate a loss of the GPU device (`WEBGL_lose_context.loseContext`).
+   * Every object is destroyed, as the WebGL spec requires; `restore_context`
+   * brings the context back with an empty object table. */
+  void lose_context();
+  void restore_context();
+  /** WebGL 2 `drawingBufferStorage`: fix the drawing-buffer size so a later
+   * canvas resize no longer changes it. */
+  void drawing_buffer_storage(int width, int height);
 
   /* -- object lookups ---------------------------------------------------- */
   WebGLShader *shader(uint32_t id);
@@ -223,10 +259,20 @@ class WebGLContext {
   void color_mask(bool r, bool g, bool b, bool a);
   void depth_mask(bool write) { state_.depth_write = write; }
   void depth_func(int func) { state_.depth_func = func; }
+  void stencil_func(int func, int ref, uint32_t mask);
+  void stencil_func_separate(int face, int func, int ref, uint32_t mask);
+  void stencil_op(int fail, int zfail, int zpass);
+  void stencil_op_separate(int face, int fail, int zfail, int zpass);
+  void stencil_mask(uint32_t mask);
+  void stencil_mask_separate(int face, uint32_t mask);
+  const WebGLStencilFace &stencil_face(int face) const;
+  int stencil_reference() const;  // the value the GPU test sees
   void blend_func(int src, int dst);
   void blend_func_separate(int src_rgb, int dst_rgb, int src_alpha, int dst_alpha);
   void blend_equation(int mode);
   void blend_equation_separate(int rgb, int alpha);
+  void blend_color(float r, float g, float b, float a);
+  void blend_color_value(float out[4]) const;
   void cull_face(int mode);
   void front_face(int mode);
   void viewport(int x, int y, int w, int h);
@@ -324,17 +370,28 @@ class WebGLContext {
   int tex_parameter_value(uint32_t id, int pname);
   bool tex_image_rgba(uint32_t id, int width, int height, const uint8_t *rgba);
   bool tex_sub_image_rgba(uint32_t id, int x, int y, int width, int height, const uint8_t *rgba);
+  /** Generic level-0 upload: `pixels` is tightly packed in `format` (always
+   * four components; R/RG formats are expanded by the caller). */
+  bool tex_image_format(uint32_t id, int width, int height, SDL_GPUTextureFormat format,
+                        const uint8_t *pixels);
+  bool tex_sub_image_format(uint32_t id, int x, int y, int width, int height,
+                            const uint8_t *pixels);
   bool generate_mipmap(uint32_t id);
   /** WebGL 2 `texStorage2D`: allocate immutable storage at `width`×`height`.
    * The backend always allocates the full mip chain, so `levels` is a hint. */
   bool tex_storage_2d(uint32_t id, int levels, int width, int height);
+  bool tex_storage_format(uint32_t id, int levels, int width, int height,
+                          SDL_GPUTextureFormat format);
   int texture_width(uint32_t id);
+  /** The SDL_GPU format of a texture (RGBA8 before `texImage2D`). */
+  int texture_format(uint32_t id);
 
   /* -- framebuffers ------------------------------------------------------ */
   uint32_t create_framebuffer();
   void delete_framebuffer(uint32_t id);
   void bind_framebuffer(uint32_t id);
-  bool framebuffer_texture(uint32_t framebuffer, uint32_t texture);
+  bool framebuffer_texture(uint32_t framebuffer, uint32_t texture,
+                           int attachment = GL_COLOR_ATTACHMENT0);
   bool framebuffer_status(uint32_t id);
   uint32_t create_renderbuffer();
   void delete_renderbuffer(uint32_t id);
@@ -377,9 +434,14 @@ class WebGLContext {
   void ensure_command();
   void end_pass();
   void flush_uploads();
-  void begin_pass(bool clear_color, bool clear_depth);
+  void begin_pass(bool clear_color, bool clear_depth, bool clear_stencil);
+  /** Release every GPU handle this context owns, keeping the CPU-side object
+   * table. Used by the destructor and by `lose_context`. */
+  void release_gpu_resources();
   SDL_GPUTexture *target_color();
   SDL_GPUTexture *target_depth();
+  int target_color_format();
+  int target_depth_format();
   SDL_GPUTexture *ensure_texture_gpu(WebGLTexture *texture, bool as_target);
   SDL_GPUSampler *sampler_for(WebGLTexture *texture);
   SDL_GPUBuffer *ensure_buffer_gpu(WebGLBuffer *buffer);
@@ -419,11 +481,14 @@ class WebGLContext {
   float clear_color_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float clear_depth_ = 1.0f;
   int clear_stencil_ = 0;
+  float blend_color_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+  /** True once `drawingBufferStorage` fixed the size; canvas resizes then leave
+   * the drawing buffer alone. */
+  bool fixed_storage_ = false;
   WebGLDrawState state_;
   int viewport_[4] = {0, 0, 0, 0};
   int scissor_box_[4] = {0, 0, 0, 0};
   bool scissor_test_ = false;
-  bool stencil_test_ = false;
 
   std::unordered_map<uint32_t, std::unique_ptr<WebGLShader>> shaders_;
   std::unordered_map<uint32_t, std::unique_ptr<WebGLProgram>> programs_;
@@ -460,6 +525,10 @@ class WebGLContext {
 /** Resolve a process-wide WebGL context id (used by the renderer when it paints
  * a `<canvas>`). */
 WebGLContext *xt_webgl_by_id(uint64_t id);
+
+/** Map a WebGL internal format to the SDL_GPU texture format the engine uses
+ * (RGBA8 for formats without a special backend representation). */
+SDL_GPUTextureFormat webgl_storage_format(int internalformat);
 
 }  // namespace xtgui
 

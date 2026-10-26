@@ -77,6 +77,9 @@ uint64_t canvas_gradient_id(xt_value handle, const xtgui::Canvas2D *canvas);
 
 /** The engine WebGL context behind a context handle, or null. */
 xtgui::WebGLContext *webgl_from_context(xt_value self);
+/** Like `webgl_from_context`, but null while the context is lost: every GL
+ * entry point except `getError`/`isContextLost` is a no-op in that state. */
+xtgui::WebGLContext *webgl_live_context(xt_value self);
 /** The numeric context id stored on a context handle (0 when absent). */
 uint64_t webgl_context_id(xt_value self);
 /** Create the JavaScript handle for a canvas's WebGL context. */
@@ -495,6 +498,7 @@ METHOD(webgl2_get_uniform_block_index);
 METHOD(webgl2_get_active_uniform_block_parameter);
 METHOD(webgl2_get_active_uniform_block_name);
 METHOD(webgl2_uniform_block_binding);
+METHOD(webgl2_drawing_buffer_storage);
 METHOD(webgl2_tex_storage_2d);
 METHOD(webgl2_tex_storage_3d);
 METHOD(webgl2_tex_image_3d);

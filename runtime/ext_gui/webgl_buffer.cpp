@@ -1,10 +1,10 @@
 /*
- * xbintsc GUI engine — WebGL buffers, vertex-attribute state, texture objects
- * and framebuffers.
+ * xbintsc GUI engine — WebGL texture objects and framebuffers.
  *
  * Uploads are recorded immediately: a copy pass cannot run inside a render
- * pass, so a buffer/texture update ends the open pass first. The next draw
- * starts a new pass with `LOAD`, so the framebuffer keeps its contents.
+ * pass, so a texture update ends the open pass first. The next draw starts a
+ * new pass with `LOAD`, so the framebuffer keeps its contents. Buffer objects
+ * and vertex-attribute state live in `webgl_buffer_objects.cpp`.
  */
 
 #include "webgl.h"
@@ -39,6 +39,14 @@ bool uses_mipmaps(int gl_filter) {
          gl_filter == GL_NEAREST_MIPMAP_LINEAR || gl_filter == GL_LINEAR_MIPMAP_LINEAR;
 }
 
+bool is_depth_format(SDL_GPUTextureFormat format) {
+  return format == SDL_GPU_TEXTUREFORMAT_D16_UNORM ||
+         format == SDL_GPU_TEXTUREFORMAT_D24_UNORM ||
+         format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT ||
+         format == SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT ||
+         format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+}
+
 SDL_GPUSamplerAddressMode address_of(int wrap) {
   switch (wrap) {
     case GL_CLAMP_TO_EDGE:
@@ -50,247 +58,7 @@ SDL_GPUSamplerAddressMode address_of(int wrap) {
   }
 }
 
-bool upload_transfer(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUBuffer *buffer,
-                     const void *bytes, uint32_t size) {
-  if (size == 0) return true;
-  SDL_GPUTransferBufferCreateInfo info;
-  memset(&info, 0, sizeof(info));
-  info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  info.size = size;
-  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &info);
-  if (transfer == nullptr) return false;
-  void *mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
-  if (mapped == nullptr) {
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
-    return false;
-  }
-  memcpy(mapped, bytes, size);
-  SDL_UnmapGPUTransferBuffer(device, transfer);
-  SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
-  SDL_GPUTransferBufferLocation source;
-  memset(&source, 0, sizeof(source));
-  source.transfer_buffer = transfer;
-  SDL_GPUBufferRegion region;
-  memset(&region, 0, sizeof(region));
-  region.buffer = buffer;
-  region.size = size;
-  SDL_UploadToGPUBuffer(copy, &source, &region, false);
-  SDL_EndGPUCopyPass(copy);
-  SDL_ReleaseGPUTransferBuffer(device, transfer);
-  return true;
-}
-
 }  // namespace
-
-/* -- buffers ------------------------------------------------------------- */
-
-uint32_t WebGLContext::create_buffer() {
-  auto record = std::make_unique<WebGLBuffer>();
-  record->id = next_object_id_++;
-  const uint32_t id = record->id;
-  buffers_[id] = std::move(record);
-  return id;
-}
-
-void WebGLContext::delete_buffer(uint32_t id) {
-  auto found = buffers_.find(id);
-  if (found == buffers_.end()) return;
-  if (bound_array_ == id) bound_array_ = 0;
-  if (bound_element_ == id) bound_element_ = 0;
-  for (WebGLAttribState &attrib : attribs_) {
-    if (attrib.buffer == id) attrib.buffer = 0;
-  }
-  if (found->second->gpu != nullptr && guidev::g_device != nullptr) {
-    submit(); SDL_WaitForGPUIdle(guidev::g_device);
-    SDL_ReleaseGPUBuffer(guidev::g_device, found->second->gpu);
-  }
-  buffers_.erase(found);
-}
-
-void WebGLContext::bind_buffer(int target, uint32_t id) {
-  if (id != 0 && buffers_.find(id) == buffers_.end()) return;
-  if (target == GL_ARRAY_BUFFER) bound_array_ = id;
-  if (target == GL_ELEMENT_ARRAY_BUFFER) bound_element_ = id;
-  if (target == GL_COPY_READ_BUFFER) copy_read_buffer_ = id;
-  if (target == GL_COPY_WRITE_BUFFER) copy_write_buffer_ = id;
-}
-
-uint32_t WebGLContext::buffer_for_target(int target) const {
-  if (target == GL_ELEMENT_ARRAY_BUFFER) return bound_element_;
-  if (target == GL_ARRAY_BUFFER) return bound_array_;
-  if (target == GL_COPY_READ_BUFFER) return copy_read_buffer_;
-  if (target == GL_COPY_WRITE_BUFFER) return copy_write_buffer_;
-  return 0;
-}
-
-bool WebGLContext::copy_buffer_sub_data(int read_target, int write_target, uint32_t read_offset,
-                                        uint32_t write_offset, uint32_t size) {
-  WebGLBuffer *read_buffer = buffer(buffer_for_target(read_target));
-  WebGLBuffer *write_buffer = buffer(buffer_for_target(write_target));
-  if (read_buffer == nullptr || write_buffer == nullptr ||
-      read_offset + size > read_buffer->data.size() ||
-      write_offset + size > write_buffer->data.size()) {
-    set_error(GL_INVALID_VALUE);
-    return false;
-  }
-  if (size > 0) {
-    memmove(write_buffer->data.data() + write_offset,
-            read_buffer->data.data() + read_offset, size);
-  }
-  write_buffer->dirty = true;
-  return ensure_buffer_gpu(write_buffer) != nullptr || size == 0;
-}
-
-bool WebGLContext::get_buffer_sub_data(int target, uint32_t offset, uint8_t *out,
-                                       uint32_t size) {
-  WebGLBuffer *record = buffer(buffer_for_target(target));
-  if (record == nullptr || offset + size > record->data.size()) {
-    set_error(GL_INVALID_VALUE);
-    return false;
-  }
-  if (size > 0) memcpy(out, record->data.data() + offset, size);
-  return true;
-}
-
-SDL_GPUBuffer *WebGLContext::ensure_buffer_gpu(WebGLBuffer *buffer) {
-  if (buffer == nullptr || guidev::g_device == nullptr) return nullptr;
-  if (buffer->data.empty()) return nullptr;
-  end_pass();
-  ensure_command();
-  if (cmd_ == nullptr) return nullptr;
-  const uint32_t size = (uint32_t)buffer->data.size();
-  if (buffer->gpu == nullptr || buffer->capacity < size) {
-    if (buffer->gpu != nullptr) {
-      submit(); SDL_WaitForGPUIdle(guidev::g_device);
-      SDL_ReleaseGPUBuffer(guidev::g_device, buffer->gpu);
-    }
-    SDL_GPUBufferCreateInfo info;
-    memset(&info, 0, sizeof(info));
-    info.usage = SDL_GPU_BUFFERUSAGE_VERTEX | SDL_GPU_BUFFERUSAGE_INDEX;
-    info.size = size;
-    buffer->gpu = SDL_CreateGPUBuffer(guidev::g_device, &info);
-    buffer->capacity = size;
-    if (buffer->gpu == nullptr) {
-      set_error(GL_OUT_OF_MEMORY);
-      return nullptr;
-    }
-  }
-  if (buffer->dirty) {
-    /* Recreating the buffer above submitted the pending command buffer. */
-    ensure_command();
-    if (cmd_ == nullptr) return nullptr;
-    if (!upload_transfer(guidev::g_device, cmd_, buffer->gpu, buffer->data.data(), size)) {
-      set_error(GL_OUT_OF_MEMORY);
-      return nullptr;
-    }
-    buffer->dirty = false;
-  }
-  return buffer->gpu;
-}
-
-bool WebGLContext::buffer_data(uint32_t id, const uint8_t *bytes, uint32_t size, int usage) {
-  (void)usage;
-  WebGLBuffer *record = buffer(id);
-  if (record == nullptr) {
-    set_error(GL_INVALID_OPERATION);
-    return false;
-  }
-  record->data.assign(size, 0);
-  if (bytes != nullptr && size > 0) memcpy(record->data.data(), bytes, size);
-  record->dirty = true;
-  return ensure_buffer_gpu(record) != nullptr || size == 0;
-}
-
-bool WebGLContext::buffer_sub_data(uint32_t id, uint32_t offset, const uint8_t *bytes,
-                                   uint32_t size) {
-  WebGLBuffer *record = buffer(id);
-  if (record == nullptr || offset > record->data.size() ||
-      offset + size > record->data.size()) {
-    set_error(GL_INVALID_VALUE);
-    return false;
-  }
-  memcpy(record->data.data() + offset, bytes, size);
-  record->dirty = true;
-  return ensure_buffer_gpu(record) != nullptr;
-}
-
-uint32_t WebGLContext::buffer_size(uint32_t id) {
-  WebGLBuffer *record = buffer(id);
-  return record != nullptr ? (uint32_t)record->data.size() : 0;
-}
-
-/* -- vertex attributes --------------------------------------------------- */
-
-void WebGLContext::enable_attrib(int index, bool enabled) {
-  if (index < 0 || index >= kWebGLMaxAttribs) {
-    set_error(GL_INVALID_VALUE);
-    return;
-  }
-  attribs_[index].enabled = enabled;
-}
-
-bool WebGLContext::attrib_enabled(int index) const {
-  return index >= 0 && index < kWebGLMaxAttribs && attribs_[index].enabled;
-}
-
-void WebGLContext::attrib_pointer(int index, int size, int type, bool normalized, int stride,
-                                  int offset) {
-  if (index < 0 || index >= kWebGLMaxAttribs) {
-    set_error(GL_INVALID_VALUE);
-    return;
-  }
-  WebGLAttribState &attrib = attribs_[index];
-  attrib.buffer = bound_array_;
-  attrib.size = size;
-  attrib.type = type;
-  attrib.normalized = normalized;
-  attrib.integer = false;
-  attrib.stride = stride > 0 ? stride : 0;
-  attrib.offset = offset;
-}
-
-void WebGLContext::attrib_ipointer(int index, int size, int type, int stride, int offset) {
-  if (index < 0 || index >= kWebGLMaxAttribs) {
-    set_error(GL_INVALID_VALUE);
-    return;
-  }
-  WebGLAttribState &attrib = attribs_[index];
-  attrib.buffer = bound_array_;
-  attrib.size = size;
-  attrib.type = type;
-  attrib.normalized = false;
-  attrib.integer = true;
-  attrib.stride = stride > 0 ? stride : 0;
-  attrib.offset = offset;
-}
-
-void WebGLContext::attrib_divisor(int index, int divisor) {
-  if (index < 0 || index >= kWebGLMaxAttribs) {
-    set_error(GL_INVALID_VALUE);
-    return;
-  }
-  /* SDL 3.2's `instance_step_rate` is reserved and must be 0, so only the two
-   * rates WebGL programs use — per vertex (0) and per instance (1) — map onto
-   * the backend. A larger divisor is clamped. */
-  attribs_[index].divisor = divisor > 0 ? 1 : 0;
-}
-
-void WebGLContext::attrib_value(int index, int components, const float *values) {
-  if (index < 0 || index >= kWebGLMaxAttribs) return;
-  for (int i = 0; i < 4; i++) attribs_[index].current[i] = i < components ? values[i] : 0.0f;
-  if (components < 4) attribs_[index].current[3] = 1.0f;
-}
-
-void WebGLContext::attrib_state(int index, int *size, int *type, int *stride, bool *normalized,
-                                float current[4]) const {
-  if (index < 0 || index >= kWebGLMaxAttribs) return;
-  const WebGLAttribState &attrib = attribs_[index];
-  *size = attrib.size;
-  *type = attrib.type;
-  *stride = attrib.stride;
-  *normalized = attrib.normalized;
-  for (int i = 0; i < 4; i++) current[i] = attrib.current[i];
-}
 
 /* -- textures ------------------------------------------------------------ */
 
@@ -311,6 +79,14 @@ void WebGLContext::delete_texture(uint32_t id) {
   if (found == textures_.end()) return;
   for (uint32_t &bound : bound_textures_) {
     if (bound == id) bound = 0;
+  }
+  for (auto &entry : framebuffers_) {
+    if (entry.second->color_texture == id) {
+      entry.second->color_texture = 0;
+      entry.second->width = 0;
+      entry.second->height = 0;
+    }
+    if (entry.second->depth_texture == id) entry.second->depth_texture = 0;
   }
   if (guidev::g_device != nullptr) {
     if (found->second->gpu != nullptr) {
@@ -369,26 +145,48 @@ int WebGLContext::tex_parameter_value(uint32_t id, int pname) {
 SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_target) {
   if (record == nullptr || guidev::g_device == nullptr) return nullptr;
   if (record->width <= 0 || record->height <= 0) return record->gpu;
-  if (record->gpu != nullptr && (!as_target || record->as_target)) return record->gpu;
+  const bool depth = is_depth_format(record->format);
+  record->depth = depth;
+  /* Allocate sample *and* target usage up front: attaching a texture that was
+   * already uploaded must not recreate it (shadow maps upload or attach in
+   * either order). */
+  const uint32_t wanted =
+      SDL_GPU_TEXTUREUSAGE_SAMPLER |
+      (depth ? SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET : SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
+  if (record->gpu != nullptr && record->usage == wanted) {
+    if (as_target) {
+      if (depth) record->as_depth_target = true;
+      else record->as_target = true;
+    }
+    return record->gpu;
+  }
   if (record->gpu != nullptr) {
     submit(); SDL_WaitForGPUIdle(guidev::g_device);
     SDL_ReleaseGPUTexture(guidev::g_device, record->gpu);
     record->gpu = nullptr;
   }
-  record->as_target = as_target;
-  record->levels = mip_levels_for(record->width, record->height);
+  record->as_target = as_target && !depth;
+  record->as_depth_target = as_target && depth;
+  record->usage = wanted;
+  record->levels = depth ? 1 : mip_levels_for(record->width, record->height);
   SDL_GPUTextureCreateInfo info;
   memset(&info, 0, sizeof(info));
   info.type = SDL_GPU_TEXTURETYPE_2D;
   info.format = record->format;
-  info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-  if (as_target) info.usage |= SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+  info.usage = wanted;
   info.width = (Uint32)record->width;
   info.height = (Uint32)record->height;
   info.layer_count_or_depth = 1;
   info.num_levels = (Uint32)record->levels;
   info.sample_count = SDL_GPU_SAMPLECOUNT_1;
   record->gpu = SDL_CreateGPUTexture(guidev::g_device, &info);
+  if (record->gpu == nullptr && depth) {
+    /* Some backends cannot sample a depth-stencil format; an attachment-only
+     * texture is still useful for depth-only rendering. */
+    info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    record->gpu = SDL_CreateGPUTexture(guidev::g_device, &info);
+    record->usage = info.usage;
+  }
   if (record->gpu == nullptr) set_error(GL_OUT_OF_MEMORY);
   return record->gpu;
 }
@@ -407,6 +205,14 @@ SDL_GPUSampler *WebGLContext::sampler_for(WebGLTexture *record) {
   info.address_mode_w = address_of(record->wrap_t);
   info.min_lod = 0.0f;
   info.max_lod = record->has_mipmaps ? 1000.0f : 0.0f;
+  if (record->depth) {
+    /* Depth formats are sampled unfiltered; a depth value has no meaning once
+     * interpolated across a texel boundary. */
+    info.min_filter = SDL_GPU_FILTER_NEAREST;
+    info.mag_filter = SDL_GPU_FILTER_NEAREST;
+    info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    info.max_lod = 0.0f;
+  }
   record->sampler = SDL_CreateGPUSampler(guidev::g_device, &info);
   return record->sampler;
 }
@@ -414,6 +220,11 @@ SDL_GPUSampler *WebGLContext::sampler_for(WebGLTexture *record) {
 int WebGLContext::texture_width(uint32_t id) {
   WebGLTexture *record = texture(id);
   return record != nullptr ? record->width : 0;
+}
+
+int WebGLContext::texture_format(uint32_t id) {
+  WebGLTexture *record = texture(id);
+  return record != nullptr ? (int)record->format : 0;
 }
 
 /* -- framebuffers -------------------------------------------------------- */
@@ -444,11 +255,31 @@ void WebGLContext::bind_framebuffer(uint32_t id) {
   bound_framebuffer_ = id;
 }
 
-bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture_id) {
+bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture_id,
+                                       int attachment) {
   WebGLFramebuffer *record_framebuffer = framebuffer(framebuffer_id);
   WebGLTexture *record = texture(texture_id);
   if (record_framebuffer == nullptr) return false;
   if (texture_id != 0 && record == nullptr) return false;
+  if (attachment == GL_DEPTH_ATTACHMENT || attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
+    record_framebuffer->depth_texture = texture_id;
+    record_framebuffer->depth_renderbuffer = 0;
+    if (record_framebuffer->depth != nullptr) {
+      submit(); SDL_WaitForGPUIdle(guidev::g_device);
+      SDL_ReleaseGPUTexture(guidev::g_device, record_framebuffer->depth);
+      record_framebuffer->depth = nullptr;
+    }
+    if (record != nullptr) {
+      record->as_depth_target = true;
+      ensure_texture_gpu(record, true);
+      if (record_framebuffer->width <= 0 || record_framebuffer->height <= 0) {
+        record_framebuffer->width = record->width;
+        record_framebuffer->height = record->height;
+      }
+    }
+    return true;
+  }
+  if (attachment != GL_COLOR_ATTACHMENT0) return false;
   record_framebuffer->color_texture = texture_id;
   if (record != nullptr) {
     record_framebuffer->width = record->width;
@@ -508,8 +339,10 @@ bool WebGLContext::renderbuffer_storage(uint32_t id, int width, int height, bool
   SDL_GPUTextureCreateInfo info;
   memset(&info, 0, sizeof(info));
   info.type = SDL_GPU_TEXTURETYPE_2D;
-  info.format = stencil ? SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT
-                        : SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+  /* Every depth target uses the same depth-stencil format so one pipeline
+   * works with the default framebuffer and with render-to-texture targets;
+   * `stencil` only records whether the page asked for a stencil attachment. */
+  info.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
   info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
   info.width = (Uint32)width;
   info.height = (Uint32)height;

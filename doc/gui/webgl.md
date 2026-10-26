@@ -213,7 +213,7 @@ or the DOM pays no run-time cost beyond the archive size.
   depth-tested quad, checks face culling and reads the pixels back.
 - `tests/e2e/gui-webgl2.test.ts` covers the WebGL 2 additions: `#version 300 es`
   shaders, a VAO round trip, instanced draws with a divisor, `texStorage2D`,
-  `clearBufferfv`, buffer copies and sampler objects.
+  `clearBufferfv`, buffer copies, sampler objects and struct-uniform fields.
 - `examples/gui/webgl-cube` is a spinning, lit, textured cube; it runs in a
   browser unchanged and is covered by
   `tests/e2e/gui-example-webgl.test.ts`.
@@ -223,11 +223,15 @@ or the DOM pays no run-time cost beyond the archive size.
 
 ## three.js
 
-The `.js` asset loader still recognises three.js, but its exported
-`WebGLRenderer` now probes for a WebGL context first: with this backend the page
-gets three.js's own renderer, and only a device without a WebGL context falls
-back to the bundled Canvas2D scene renderer. The probe asks for `webgl2` first,
-so recent three.js releases (which require WebGL 2) take their WebGL 2 path;
-the parts of that path this engine does not implement yet — depth textures,
-uniform blocks, transform feedback — can still make a particular scene fail, and
-those pages should keep the Canvas2D fallback.
+The `.js` asset loader only patches three.js's shader unroller; `WebGLRenderer`
+runs unchanged on this engine's real WebGL 2 backend, so **no Canvas2D fallback
+is bundled any more**. Verified with three.js r160 through SDL_GPU:
+`MeshBasicMaterial`, `MeshStandardMaterial` and `MeshPhongMaterial`,
+`CanvasTexture`, linear fog, ambient/directional/point/spot/hemisphere lights,
+`Sprite`, `Line`, `Points` and `InstancedMesh`.
+
+Features outside this engine's subset still cannot be emulated: shadow maps
+(depth textures), cube textures/environment maps, HDR/float render targets,
+multiple render targets, transform feedback and compressed textures. A scene
+that needs one of those will not render correctly; everything the previous
+Canvas2D fallback could show now goes through the GPU.

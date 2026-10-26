@@ -69,7 +69,7 @@ import { createWindow, run } from "gui";
 系统 WebView。编译器一侧还会把本地 `<link rel="stylesheet">` 及其 `@import` 内联为
 `<style>` 块（运行时解析器只读取内联 `<style>`）；并让随包引入的 Three.js 的
 `WebGLRenderer` 先探测 WebGL 上下文：引擎有上下文时使用 Three.js 自己的渲染器，
-否则使用内置的 Canvas2D 场景渲染器（`runtime/ext_gui/three_compat.js`）。
+直接使用真实的 WebGL 2 后端（只修补其着色器循环展开，不再打包 Canvas2D 回退）。
 `<img>` 由引擎自身解码；而 `<video>`/`<audio>` 在只启用 `gui` 时**不可用**
 ——它们需要单独的 [`media`](#media--视频音频解码) 扩展。也支持 `<canvas>`：
 `getContext("2d")` 返回的上下文，其填充、路径、

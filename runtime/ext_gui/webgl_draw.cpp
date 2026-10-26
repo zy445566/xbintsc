@@ -14,7 +14,6 @@
 #include "webgl.h"
 
 #include <algorithm>
-#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>

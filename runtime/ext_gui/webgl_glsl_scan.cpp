@@ -10,6 +10,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -110,14 +111,6 @@ bool is_sampler_type(const std::string &type) {
 }
 
 /** The scalar/vector/matrix types the std140 block reflection understands. */
-bool is_basic_type(const std::string &type) {
-  if (is_sampler_type(type)) return true;
-  return type == "float" || type == "int" || type == "uint" || type == "bool" ||
-         type == "vec2" || type == "vec3" || type == "vec4" || type == "ivec2" ||
-         type == "ivec3" || type == "ivec4" || type == "uvec2" || type == "uvec3" ||
-         type == "uvec4" || type == "bvec2" || type == "bvec3" || type == "bvec4" ||
-         type == "mat2" || type == "mat3" || type == "mat4";
-}
 
 /** The `location = N` inside a `layout(...)` group starting at token `at`. */
 int parse_layout_location(const std::vector<Token> &tokens, size_t at, size_t *after) {
@@ -203,20 +196,235 @@ GlslUniformDecl parse_declarator(const std::vector<Token> &tokens, const Declara
   return decl;
 }
 
+/* -- preprocessor conditions --------------------------------------------- */
+
+/** Every macro a `#define` in the source introduces. A name is treated as
+ * defined even when its `#define` sits in a conditional branch; that only makes
+ * the condition evaluator more conservative (it may keep a declaration that
+ * would be inactive, never drop one that is active). */
+std::set<std::string> collect_defined_names(const std::vector<Token> &tokens) {
+  std::set<std::string> names;
+  for (const Token &token : tokens) {
+    if (token.kind != Token::Directive) continue;
+    size_t at = token.text.find_first_not_of(" \t");
+    if (at == std::string::npos || token.text.compare(at, 7, "#define") != 0) continue;
+    at += 7;
+    while (at < token.text.size() && (token.text[at] == ' ' || token.text[at] == '\t')) at++;
+    size_t end = at;
+    while (end < token.text.size() &&
+           (std::isalnum((unsigned char)token.text[end]) != 0 || token.text[end] == '_')) {
+      end++;
+    }
+    if (end > at && std::isalpha((unsigned char)token.text[at]) != 0) {
+      names.insert(token.text.substr(at, end - at));
+    }
+  }
+  return names;
+}
+
+/** Turns `defined(X)` / `defined X` into 1/0 and leaves the logical operators,
+ * parentheses and literals. An identifier or a numeric macro makes the
+ * expression "unknown" (`?`), which callers treat as active. */
+std::string normalize_condition(const std::string &expression,
+                                const std::set<std::string> &defined) {
+  std::string out;
+  for (size_t i = 0; i < expression.size();) {
+    const char c = expression[i];
+    if (std::isalpha((unsigned char)c) != 0 || c == '_') {
+      size_t end = i;
+      while (end < expression.size() &&
+             (std::isalnum((unsigned char)expression[end]) != 0 || expression[end] == '_')) {
+        end++;
+      }
+      const std::string word = expression.substr(i, end - i);
+      if (word == "defined") {
+        size_t at = end;
+        while (at < expression.size() && std::isspace((unsigned char)expression[at]) != 0) at++;
+        const bool paren = at < expression.size() && expression[at] == '(';
+        if (paren) {
+          at++;
+          while (at < expression.size() && std::isspace((unsigned char)expression[at]) != 0) at++;
+        }
+        const size_t begin = at;
+        while (at < expression.size() &&
+               (std::isalnum((unsigned char)expression[at]) != 0 || expression[at] == '_')) {
+          at++;
+        }
+        const std::string name = expression.substr(begin, at - begin);
+        if (paren) {
+          while (at < expression.size() && std::isspace((unsigned char)expression[at]) != 0) at++;
+          if (at < expression.size() && expression[at] == ')') at++;
+        }
+        out += defined.count(name) != 0 ? '1' : '0';
+        i = at;
+        continue;
+      }
+      out += '?';
+      i = end;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+struct ConditionValue {
+  bool value = true;
+  bool known = true;
+};
+
+class ConditionParser {
+ public:
+  explicit ConditionParser(const std::string &text) : text_(text) {}
+
+  ConditionValue parse() {
+    const bool value = parse_or();
+    return {value, known_};
+  }
+
+ private:
+  void skip() {
+    while (at_ < text_.size() && std::isspace((unsigned char)text_[at_]) != 0) at_++;
+  }
+  bool parse_or() {
+    bool value = parse_and();
+    for (;;) {
+      skip();
+      if (at_ + 1 >= text_.size() || text_[at_] != '|' || text_[at_ + 1] != '|') break;
+      at_ += 2;
+      value = parse_and() || value;
+    }
+    return value;
+  }
+  bool parse_and() {
+    bool value = parse_unary();
+    for (;;) {
+      skip();
+      if (at_ + 1 >= text_.size() || text_[at_] != '&' || text_[at_ + 1] != '&') break;
+      at_ += 2;
+      value = parse_unary() && value;
+    }
+    return value;
+  }
+  bool parse_unary() {
+    skip();
+    if (at_ < text_.size() && text_[at_] == '!') {
+      at_++;
+      return !parse_unary();
+    }
+    return parse_primary();
+  }
+  bool parse_primary() {
+    skip();
+    if (at_ >= text_.size()) {
+      known_ = false;
+      return false;
+    }
+    if (text_[at_] == '(') {
+      at_++;
+      const bool value = parse_or();
+      skip();
+      if (at_ < text_.size() && text_[at_] == ')') at_++;
+      return value;
+    }
+    if (text_[at_] == '1' || text_[at_] == '0') {
+      return text_[at_++] == '1';
+    }
+    known_ = false;
+    at_++;
+    return false;
+  }
+
+  const std::string &text_;
+  size_t at_ = 0;
+  bool known_ = true;
+};
+
+ConditionValue evaluate_condition(const std::string &directive,
+                                  const std::set<std::string> &defined) {
+  std::string text = directive;
+  size_t at = text.find_first_not_of(" \t#");
+  if (at == std::string::npos) return {true, false};
+  const bool is_ifdef = text.compare(at, 5, "ifdef") == 0;
+  const bool is_ifndef = text.compare(at, 6, "ifndef") == 0;
+  if (is_ifdef || is_ifndef) {
+    at += is_ifdef ? 5 : 6;
+    while (at < text.size() && std::isspace((unsigned char)text[at]) != 0) at++;
+    size_t end = at;
+    while (end < text.size() &&
+           (std::isalnum((unsigned char)text[end]) != 0 || text[end] == '_')) {
+      end++;
+    }
+    if (end == at) return {true, false};
+    const std::string name = text.substr(at, end - at);
+    const bool present = defined.count(name) != 0;
+    return {is_ifdef ? present : !present, true};
+  }
+  if (text.compare(at, 2, "if") != 0) return {true, false};
+  const std::string normalized = normalize_condition(text.substr(at + 2), defined);
+  ConditionParser parser(normalized);
+  return parser.parse();
+}
+
 }  // namespace
 
 void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
   *info = GlslShaderInfo();
   const std::vector<Token> tokens = tokenize(source);
+  const std::set<std::string> defined_names = collect_defined_names(tokens);
+  std::vector<bool> condition_stack;
+  int inactive = 0;
   int braces = 0;
+  int parens = 0;
+  size_t first_uniform_any = std::string::npos;
   size_t pending_layout = std::string::npos;
   int pending_location = -1;
 
   for (size_t i = 0; i < tokens.size(); i++) {
     const Token &token = tokens[i];
+    if (token.kind == Token::Directive) {
+      const std::string &directive = token.text;
+      size_t at = directive.find_first_not_of(" \t");
+      if (at == std::string::npos) continue;
+      if (directive.compare(at, 6, "#endif") == 0) {
+        if (!condition_stack.empty()) {
+          if (!condition_stack.back()) inactive--;
+          condition_stack.pop_back();
+        }
+      } else if (directive.compare(at, 5, "#elif") == 0) {
+        if (!condition_stack.empty()) {
+          const ConditionValue cond = evaluate_condition(directive, defined_names);
+          const bool active = !cond.known || cond.value;
+          if (!condition_stack.back()) inactive--;
+          condition_stack.back() = active;
+          if (!active) inactive++;
+        }
+      } else if (directive.compare(at, 5, "#else") == 0) {
+        if (!condition_stack.empty()) {
+          const bool was_active = condition_stack.back();
+          if (was_active) inactive++;
+          else inactive--;
+          condition_stack.back() = !was_active;
+        }
+      } else if (directive.compare(at, 3, "#if") == 0) {
+        const ConditionValue cond = evaluate_condition(directive, defined_names);
+        const bool active = !cond.known || cond.value;
+        condition_stack.push_back(active);
+        if (!active) inactive++;
+      }
+      continue;
+    }
     if (token.kind == Token::Punct) {
-      if (token.text == "{") braces++;
-      if (token.text == "}") braces--;
+      /* Braces inside a false branch are frequently unbalanced with the
+       * active branch (three.js wraps parts of function signatures in
+       * #ifdef), so only track the branch the compiler keeps. */
+      if (inactive == 0) {
+        if (token.text == "{") braces++;
+        if (token.text == "}") braces--;
+        if (token.text == "(") parens++;
+        if (token.text == ")") parens--;
+      }
       continue;
     }
     if (token.kind == Token::Ident && token.text == "gl_FragColor") {
@@ -227,8 +435,40 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
       info->legacy_fragment_output = true;
       continue;
     }
-    if (braces != 0) continue;
+    /* Declarations inside a definitively false preprocessor branch never reach
+     * the compiler; rewriting them would move their types/macros (and array
+     * sizes such as `MORPHTARGETS_COUNT`) outside that branch. */
+    if (inactive > 0) continue;
+    /* Function parameters may use `in`/`out`/`const in` qualifiers; those are
+     * not declarations to rewrite (a layout qualifier there is a compile
+     * error). */
+    if (braces != 0 || parens != 0) continue;
     if (token.kind != Token::Ident) continue;
+    /* Active struct definitions are hoisted to the block insertion point so a
+     * uniform can name a type declared later in the shader (three.js light
+     * structs follow the prefix uniforms). */
+    if (token.text == "struct" && i + 1 < tokens.size()) {
+      size_t brace = i + 1;
+      while (brace < tokens.size() && tokens[brace].text != "{") brace++;
+      if (brace < tokens.size()) {
+        int depth = 0;
+        size_t close = brace;
+        for (; close < tokens.size(); close++) {
+          if (tokens[close].text == "{") depth++;
+          if (tokens[close].text == "}") {
+            depth--;
+            if (depth == 0) break;
+          }
+        }
+        if (close + 1 < tokens.size() && tokens[close + 1].text == ";") {
+          info->structs.push_back({tokens[i].begin, tokens[close + 1].end});
+          info->struct_definitions.push_back(
+              source.substr(tokens[i].begin, tokens[close + 1].end - tokens[i].begin));
+          i = close + 1;
+          continue;
+        }
+      }
+    }
     if (token.text == "layout") {
       pending_layout = i;
       size_t after = i;
@@ -278,7 +518,10 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
         info->unsupported = "uniform blocks are not supported";
       }
     }
-    if (semicolon >= tokens.size()) break;
+    if (semicolon >= tokens.size()) {
+      fprintf(stderr, "DECL_OVERRUN fragment=%d kind=%d start=%zu token=%s\\n", (int)fragment, (int)kind, i, token.text.c_str());
+      break;
+    }
 
     const std::vector<Declarator> parts = split_declarators(tokens, i + 1, semicolon);
     /* The type is the first non-qualifier identifier of the first declarator. */
@@ -294,10 +537,6 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
     for (size_t p = 0; p < parts.size(); p++) {
       GlslUniformDecl decl = parse_declarator(tokens, parts[p], type, p == 0);
       if (decl.name.empty()) continue;
-      if (kind == GlslDeclSite::Uniform && !is_basic_type(decl.type) &&
-          info->unsupported.empty()) {
-        info->unsupported = "uniform type '" + decl.type + "' is not supported";
-      }
       GlslDeclSite site;
       site.kind = decl.sampler && kind == GlslDeclSite::Uniform ? GlslDeclSite::Sampler : kind;
       site.begin = (p == 0 && pending_layout != std::string::npos) ? tokens[pending_layout].begin
@@ -305,11 +544,13 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
       site.end = tokens[semicolon].end;
       site.decl = decl;
       site.existing_location = p == 0 ? pending_location : -1;
+      site.conditional = !condition_stack.empty();
       info->sites.push_back(site);
       switch (site.kind) {
         case GlslDeclSite::Uniform:
           info->uniforms.push_back(decl);
-          if (info->first_uniform_offset == std::string::npos) {
+          if (first_uniform_any == std::string::npos) first_uniform_any = site.begin;
+          if (!site.conditional && info->first_uniform_offset == std::string::npos) {
             info->first_uniform_offset = site.begin;
           }
           break;
@@ -329,6 +570,11 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
     i = semicolon;
     pending_layout = std::string::npos;
     pending_location = -1;
+  }
+  /* Every non-sampler uniform was inside a preprocessor branch; fall back to
+   * the first one so the block still has a home. */
+  if (info->first_uniform_offset == std::string::npos) {
+    info->first_uniform_offset = first_uniform_any;
   }
 }
 

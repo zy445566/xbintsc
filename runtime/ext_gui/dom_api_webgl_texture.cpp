@@ -220,10 +220,7 @@ METHOD(webgl_tex_image_2d) {
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
   const int target = webgl_int(argc, argv, 0, GL_TEXTURE_2D);
-  if (target != GL_TEXTURE_2D) {
-    context->set_error(GL_INVALID_ENUM);
-    return XT_UNDEFINED;
-  }
+  if (target != GL_TEXTURE_2D) return XT_UNDEFINED;
   const uint32_t texture = context->bound_texture(0);
   if (texture == 0) {
     context->set_error(GL_INVALID_OPERATION);
@@ -244,10 +241,7 @@ METHOD(webgl_tex_image_2d) {
     height = webgl_int(argc, argv, 4, 0);
     format = webgl_int(argc, argv, 6, GL_RGBA);
     const int type = webgl_int(argc, argv, 7, GL_UNSIGNED_BYTE);
-    if (type != GL_UNSIGNED_BYTE) {
-      context->set_error(GL_INVALID_ENUM);
-      return XT_UNDEFINED;
-    }
+    if (type != GL_UNSIGNED_BYTE) return XT_UNDEFINED;
     const std::vector<uint8_t> pixels = webgl_bytes(xt_arg(argc, argv, 8));
     if (pixels.empty()) {
       rgba.assign((size_t)width * height * 4, 0);

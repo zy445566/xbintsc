@@ -547,6 +547,7 @@ typedef struct {
   xt_header header;
   xt_value source;
   xt_value flags;
+  double last_index;
 } xt_regexp;
 
 /* Extended method dispatch (xt_stdlib2.c). `*handled` is set when the method

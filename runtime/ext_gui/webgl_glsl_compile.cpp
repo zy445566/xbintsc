@@ -97,6 +97,7 @@ std::string string_at(const std::vector<uint32_t> &words, size_t at) {
 
 struct Module {
   std::unordered_map<uint32_t, TypeInfo> types;
+  std::unordered_map<uint32_t, std::vector<uint32_t>> struct_members;
   std::unordered_map<uint32_t, uint32_t> constants;
   std::unordered_map<uint32_t, std::string> names;
   std::unordered_map<uint64_t, std::string> member_names;
@@ -146,13 +147,18 @@ struct Module {
           info.op = kOpTypeStruct;
           info.a = count >= 2 ? count - 2 : 0;  // member count
           types[operands[0]] = info;
+          std::vector<uint32_t> members;
+          /* operands[0] is the result id; member type ids start at operands[1]. */
+          for (uint16_t m = 1; m + 1 < count; m++) members.push_back(operands[m]);
+          struct_members[operands[0]] = std::move(members);
           break;
         }
         case kOpTypePointer:
           if (count >= 3) types[operands[0]] = {kOpTypePointer, operands[1], operands[2]};
           break;
         case kOpConstant:
-          if (count >= 3) constants[operands[0]] = operands[2];
+          /* operands[1] is the result id, operands[2] the literal value. */
+          if (count >= 3) constants[operands[1]] = operands[2];
           break;
         case kOpVariable:
           if (count >= 3) variables[operands[1]] = operands[0];
@@ -218,6 +224,118 @@ struct Module {
   }
 };
 
+/** Fills one scalar/vector/matrix member (possibly an array of them). */
+bool basic_block_member(const Module &module, uint32_t type_id, int offset,
+                        const std::string &name, bool is_array, int array_size,
+                        int array_stride, int matrix_stride, GlslBlockMember *member) {
+  member->name = name;
+  member->offset = offset;
+  member->is_array = is_array;
+  member->array_size = array_size;
+  member->array_stride = array_stride;
+  member->matrix_stride = matrix_stride;
+  int scalar = 0;
+  auto type = module.types.find(type_id);
+  if (type != module.types.end() && type->second.op == kOpTypeMatrix) {
+    int column_scalar = 0;
+    const int rows = module.vector_components(type->second.a, &column_scalar);
+    member->is_matrix = true;
+    member->columns = (int)type->second.b;
+    member->rows = rows;
+    member->components = rows;
+    member->scalar_type = column_scalar;
+    switch (member->columns) {
+      case 2:
+        member->gl_type = kGlFloatMat2;
+        break;
+      case 3:
+        member->gl_type = kGlFloatMat3;
+        break;
+      default:
+        member->gl_type = kGlFloatMat4;
+        break;
+    }
+    if (member->array_stride == 0 && member->is_array) {
+      member->array_stride = member->columns * member->matrix_stride;
+    }
+    return true;
+  }
+  const int components = module.vector_components(type_id, &scalar);
+  if (components <= 0) return false;
+  member->components = components;
+  member->scalar_type = scalar;
+  if (components == 1) {
+    member->gl_type = scalar;
+  } else if (scalar == kGlFloat) {
+    member->gl_type = components == 2 ? kGlFloatVec2
+                                     : (components == 3 ? kGlFloatVec3 : kGlFloatVec4);
+  } else if (scalar == kGlInt) {
+    member->gl_type = components == 2 ? kGlIntVec2
+                                     : (components == 3 ? kGlIntVec3 : kGlIntVec4);
+  } else {
+    member->gl_type = components == 2 ? 0x8B57 : (components == 3 ? 0x8B58 : 0x8B59);
+  }
+  if (member->array_stride == 0) member->array_stride = components * 4;
+  return true;
+}
+
+void reflect_struct_members(const Module &module, uint32_t struct_id, int base,
+                            const std::string &prefix, std::vector<GlslBlockMember> *out);
+
+/** Walks one block member type, flattening structs/arrays of structs into
+ * individual `name[i].field` entries so three.js can upload each light field. */
+void reflect_block_value(const Module &module, uint32_t type_id, int offset,
+                         const std::string &name, int matrix_stride,
+                         std::vector<GlslBlockMember> *out) {
+  auto type = module.types.find(type_id);
+  if (type == module.types.end()) return;
+  if (type->second.op == kOpTypeArray) {
+    auto length = module.constants.find(type->second.b);
+    const int count = length == module.constants.end() ? 0 : (int)length->second;
+    int stride = 0;
+    auto decor = module.decorations.find(type_id);
+    if (decor != module.decorations.end()) stride = (int)decor->second.array_stride;
+    const uint32_t element = type->second.a;
+    auto element_type = module.types.find(element);
+    if (element_type != module.types.end() && element_type->second.op == kOpTypeStruct) {
+      for (int i = 0; i < count; i++) {
+        reflect_struct_members(module, element, offset + i * stride,
+                               name + "[" + std::to_string(i) + "]", out);
+      }
+      return;
+    }
+    GlslBlockMember member;
+    if (basic_block_member(module, element, offset, name, true, count, stride, matrix_stride,
+                           &member)) {
+      out->push_back(member);
+    }
+    return;
+  }
+  if (type->second.op == kOpTypeStruct) {
+    reflect_struct_members(module, type_id, offset, name, out);
+    return;
+  }
+  GlslBlockMember member;
+  if (basic_block_member(module, type_id, offset, name, false, 1, 0, matrix_stride, &member)) {
+    out->push_back(member);
+  }
+}
+
+void reflect_struct_members(const Module &module, uint32_t struct_id, int base,
+                            const std::string &prefix, std::vector<GlslBlockMember> *out) {
+  auto members = module.struct_members.find(struct_id);
+  if (members == module.struct_members.end()) return;
+  for (size_t index = 0; index < members->second.size(); index++) {
+    const uint64_t key = ((uint64_t)struct_id << 32) | (uint32_t)index;
+    auto name = module.member_names.find(key);
+    auto decor = module.member_decorations.find(key);
+    if (name == module.member_names.end() || decor == module.member_decorations.end()) continue;
+    const std::string child = prefix.empty() ? name->second : prefix + "." + name->second;
+    reflect_block_value(module, members->second[index], base + (int)decor->second.offset, child,
+                        (int)decor->second.matrix_stride, out);
+  }
+}
+
 }  // namespace
 
 bool compile_glsl(const std::string &source, bool fragment, std::vector<uint32_t> *spirv,
@@ -278,93 +396,16 @@ bool reflect_uniform_block(const std::vector<uint32_t> &spirv, std::vector<GlslB
   }
   if (struct_id == 0) return true;  // no uniform block: nothing to reflect
 
-  /* The struct type carries only its member count in `a`; re-scan the
-   * instruction stream for the member type ids. */
-  std::vector<uint32_t> member_types;
-  size_t i = 5;
-  while (i < spirv.size()) {
-    const uint16_t count = (uint16_t)(spirv[i] >> 16);
-    const uint16_t opcode = (uint16_t)(spirv[i] & 0xFFFF);
-    if (count == 0 || i + count > spirv.size()) break;
-    if (opcode == kOpTypeStruct && spirv[i + 1] == struct_id) {
-      for (uint16_t m = 2; m < count; m++) member_types.push_back(spirv[i + m]);
-      break;
+  auto members = module.struct_members.find(struct_id);
+  if (members != module.struct_members.end()) {
+    for (size_t index = 0; index < members->second.size(); index++) {
+      const uint64_t key = ((uint64_t)struct_id << 32) | (uint32_t)index;
+      auto name = module.member_names.find(key);
+      auto decor = module.member_decorations.find(key);
+      if (name == module.member_names.end() || decor == module.member_decorations.end()) continue;
+      reflect_block_value(module, members->second[index], (int)decor->second.offset, name->second,
+                          (int)decor->second.matrix_stride, out);
     }
-    i += count;
-  }
-
-  for (size_t index = 0; index < member_types.size(); index++) {
-    const uint64_t key = ((uint64_t)struct_id << 32) | (uint32_t)index;
-    auto name = module.member_names.find(key);
-    auto decor = module.member_decorations.find(key);
-    if (name == module.member_names.end() || decor == module.member_decorations.end()) continue;
-    GlslBlockMember member;
-    member.name = name->second;
-    member.offset = (int)decor->second.offset;
-    member.matrix_stride = (int)decor->second.matrix_stride;
-
-    uint32_t type_id = member_types[index];
-    auto array = module.types.find(type_id);
-    if (array != module.types.end() && array->second.op == kOpTypeArray) {
-      member.is_array = true;
-      auto length = module.constants.find(array->second.b);
-      member.array_size = length == module.constants.end() ? 0 : (int)length->second;
-      auto array_decor = module.decorations.find(type_id);
-      if (array_decor != module.decorations.end()) {
-        member.array_stride = (int)array_decor->second.array_stride;
-      }
-      type_id = array->second.a;
-    }
-
-    int scalar = 0;
-    auto type = module.types.find(type_id);
-    if (type != module.types.end() && type->second.op == kOpTypeMatrix) {
-      auto column = module.types.find(type->second.a);
-      int column_scalar = 0;
-      const int rows = module.vector_components(type->second.a, &column_scalar);
-      member.is_matrix = true;
-      member.columns = (int)type->second.b;
-      member.rows = rows;
-      member.components = rows;
-      member.scalar_type = column_scalar;
-      (void)column;
-      switch (member.columns) {
-        case 2:
-          member.gl_type = kGlFloatMat2;
-          break;
-        case 3:
-          member.gl_type = kGlFloatMat3;
-          break;
-        default:
-          member.gl_type = kGlFloatMat4;
-          break;
-      }
-      if (member.array_stride == 0 && member.is_array) {
-        member.array_stride = member.columns * member.matrix_stride;
-      }
-      out->push_back(member);
-      continue;
-    }
-
-    const int components = module.vector_components(type_id, &scalar);
-    if (components <= 0) continue;
-    member.components = components;
-    member.scalar_type = scalar;
-    if (components == 1) {
-      member.gl_type = scalar;
-    } else if (scalar == kGlFloat) {
-      member.gl_type = components == 2 ? kGlFloatVec2
-                                       : (components == 3 ? kGlFloatVec3 : kGlFloatVec4);
-    } else if (scalar == kGlInt) {
-      member.gl_type = components == 2 ? kGlIntVec2
-                                       : (components == 3 ? kGlIntVec3 : kGlIntVec4);
-    } else {
-      member.gl_type = components == 2 ? 0x8B57 : (components == 3 ? 0x8B58 : 0x8B59);
-    }
-    if (member.array_stride == 0) {
-      member.array_stride = member.is_array ? components * 4 : components * 4;
-    }
-    out->push_back(member);
   }
   return true;
 }

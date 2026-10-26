@@ -229,28 +229,19 @@ describe("gui .html asset loader", () => {
     expect(htmlOf(moduleSource)).toContain('href="https://example.com/x.css"');
   });
 
-  it("prefers three.js's WebGLRenderer and keeps the Canvas2D fallback", () => {
+  it("disables three.js's regex unroller but keeps the renderer untouched", () => {
     const source =
+      "const unrollLoopPattern = /#pragma unroll_loop_start/g;\n" +
       "class WebGLRenderer {\n  constructor() {}\n}\n" +
       "class WebGL1Renderer extends WebGLRenderer {}\n" +
       "export { WebGL1Renderer, WebGLRenderer };\n";
     const { moduleSource, dependencies } = loadScriptAsset("three.module.js", source);
-    expect(moduleSource).toContain("class WebGLRendererWebGL {");
-    expect(moduleSource).toContain("class WebGL1RendererWebGL extends WebGLRendererWebGL {}");
-    // The fallback keeps its own private name; the public class prefers WebGL
-    // and only constructs the fallback when no context exists.
-    expect(moduleSource).toContain("class __XtCanvas2DRenderer {");
-    expect(moduleSource).toContain("class WebGLRenderer extends WebGLRendererWebGL {");
+    expect(moduleSource).toContain("const unrollLoopPattern = /__xt_never_match__/;");
+    expect(moduleSource).toContain("class WebGLRenderer {");
     expect(moduleSource).toContain("class WebGL1Renderer extends WebGLRenderer {}");
-    expect(moduleSource).toContain("__xtHasWebGL");
-    // The block is inserted before the export list, which still names the
-    // public `WebGLRenderer` binding.
-    expect(moduleSource).toContain("__xtSwTAU");
-    expect(moduleSource.lastIndexOf("class WebGLRenderer {")).toBeLessThan(
-      moduleSource.lastIndexOf("export {"),
-    );
-    expect(moduleSource).toContain("export { WebGL1Renderer, WebGLRenderer };");
-    expect(dependencies?.[0]).toMatch(/three_compat\.js$/);
+    expect(moduleSource).not.toContain("WebGLRendererWebGL");
+    expect(moduleSource).not.toContain("__XtCanvas2DRenderer");
+    expect(dependencies).toBeUndefined();
   });
 
   it("leaves non-three JavaScript assets untouched", () => {

@@ -33,7 +33,7 @@ static xt_re_node *xt_re_new_class(const unsigned char *bits) {
   return n;
 }
 
-static void xt_re_push_piece(xt_re_concat *c, xt_re_node *node, int quant) {
+static void xt_re_push_piece(xt_re_concat *c, xt_re_node *node, int quant, int lazy) {
   if (c->count == c->capacity) {
     int next = c->capacity ? c->capacity * 2 : 4;
     xt_re_piece *grown = (xt_re_piece *)realloc(c->pieces, (size_t)next * sizeof(xt_re_piece));
@@ -43,6 +43,7 @@ static void xt_re_push_piece(xt_re_concat *c, xt_re_node *node, int quant) {
   }
   c->pieces[c->count].node = node;
   c->pieces[c->count].quant = quant;
+  c->pieces[c->count].lazy = lazy;
   c->count++;
 }
 
@@ -191,6 +192,7 @@ static void xt_re_parse_concat(xt_re_parser *p, xt_re_concat *out) {
   while (p->s[p->i] && p->s[p->i] != '|' && p->s[p->i] != ')') {
     xt_re_node *node = xt_re_parse_atom(p);
     int quant = XT_RE_Q_NONE;
+    int lazy = 0;
     if (p->error || !node) {
       p->error = 1;
       return;
@@ -205,7 +207,11 @@ static void xt_re_parse_concat(xt_re_parser *p, xt_re_concat *out) {
       quant = XT_RE_Q_QUEST;
       p->i++;
     }
-    xt_re_push_piece(out, node, quant);
+    if (quant != XT_RE_Q_NONE && p->s[p->i] == '?') {
+      lazy = 1;
+      p->i++;
+    }
+    xt_re_push_piece(out, node, quant, lazy);
   }
 }
 

@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace xtgui {
@@ -47,6 +48,8 @@ struct GlslDeclSite {
   size_t end = 0;    // byte offset just past the `;`
   GlslUniformDecl decl;
   int existing_location = -1;  // from a `layout(location = …)` qualifier
+  /** True when a preprocessor `#if`/`#ifdef` encloses the declaration. */
+  bool conditional = false;
 };
 
 /** The declarations a shader contributes to a program. */
@@ -57,6 +60,11 @@ struct GlslShaderInfo {
   std::vector<GlslUniformDecl> varyings;
   /** Every top-level declaration, in source order, for the rewriter. */
   std::vector<GlslDeclSite> sites;
+  /** Active top-level `struct Name { … };` definitions, hoisted before the
+   * uniform block because the block may name those types (three.js lights). */
+  std::vector<std::pair<size_t, size_t>> structs;
+  /** The text of those definitions, shared across stages at link time. */
+  std::vector<std::string> struct_definitions;
   /** True when the source writes `gl_FragColor` / `gl_FragData[0]`. */
   bool legacy_fragment_output = false;
   /** True when the source declared its own `out` variable (ES 3.00). */

@@ -368,7 +368,9 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
   方法；`webgl_webgl2.cpp` 实现顶点数组对象与采样器/查询/栅栏句柄，
   `webgl_draw.cpp` 增加实例化绘制（由 `vertexAttribDivisor` 决定输入频率）与
   整数属性，`webgl_texture.cpp` 增加 `texStorage2D` 与 `clearBuffer*`。着色器
-  改写器为 `#version 300 es` 输出分配连续 location。示例
-  `examples/gui/webgl2-cubes`（64 个立方体，一次实例化绘制）；e2e 见
+  改写器为 `#version 300 es` 输出分配连续 location，块反射会把结构体字段展开
+  成 three.js 灯光可寻址的成员。three.js r160 已在真实渲染器上跑通基础/标准/
+  Phong 材质、纹理、灯光、雾、精灵、线段、点与实例化；Canvas2D 回退已删除。
+  示例 `examples/gui/webgl2-cubes`（64 个立方体，一次实例化绘制）；e2e 见
   `tests/e2e/gui-webgl2.test.ts` 与 `tests/e2e/gui-example-webgl2.test.ts`。
 

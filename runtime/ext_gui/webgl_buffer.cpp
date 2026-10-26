@@ -326,10 +326,10 @@ void WebGLContext::delete_texture(uint32_t id) {
 
 void WebGLContext::bind_texture(int target, uint32_t id) {
   if (id != 0 && textures_.find(id) == textures_.end()) return;
-  if (target != GL_TEXTURE_2D) {
-    set_error(GL_INVALID_ENUM);
-    return;
-  }
+  /* Cube/array/3D textures are outside the supported subset; ignore the
+   * binding instead of raising an error (three.js binds placeholder cube
+   * textures even for unlit scenes). */
+  if (target != GL_TEXTURE_2D) return;
   bound_textures_[active_unit_] = id;
 }
 

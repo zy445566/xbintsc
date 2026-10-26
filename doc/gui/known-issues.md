@@ -15,12 +15,10 @@
   compressed textures, multiple render targets, `blitFramebuffer`, MSAA and
   stencil operations are not implemented; `clear` ignores the scissor rectangle.
   On an SDL_GPU backend that cannot consume SPIR-V (Metal, Direct3D 12) both
-  context kinds are `null`. The `.js` asset loader keeps three.js working: its
-  `WebGLRenderer` probes for a context (asking `webgl2` first) and uses
-  three.js's own renderer when one exists, falling back to the bundled Canvas2D
-  scene renderer (`runtime/ext_gui/three_compat.js`) only when it does not.
-  three.js features that need depth textures or uniform blocks may still fail
-  on a particular scene; those pages should keep the fallback.
+  context kinds are `null`. The `.js` asset loader now patches only three.js's
+  shader unroller; `WebGLRenderer` runs on the real backend and there is no
+  Canvas2D fallback. Shadow maps (depth textures), cube textures/environment
+  maps and HDR render targets remain unsupported.
 
 
 

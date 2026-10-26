@@ -58,13 +58,17 @@ METHOD(node_get_context) {
   std::string mode = string_arg(argc, argv, 0);
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
-  if (mode == "webgl" || mode == "experimental-webgl") {
+  if (mode == "webgl" || mode == "experimental-webgl" || mode == "webgl2") {
+    const bool webgl2 = mode == "webgl2";
     if (node == nullptr) return XT_NULL;
     if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
     if (xt_gui_canvas_find(win, node) != nullptr) return XT_NULL;  // already a 2D canvas
     xt_value cached = xt_object_get_cstr(self, "__xt_gui_gl");
-    if (XT_IS_OBJECT(cached)) return cached;
-    xtgui::WebGLContext *context = xt_gui_webgl_get(win, node);
+    if (XT_IS_OBJECT(cached)) {
+      const bool cached_webgl2 = value_truthy(xt_object_get_cstr(cached, "__xt_gl_webgl2"));
+      return cached_webgl2 == webgl2 ? cached : XT_NULL;
+    }
+    xtgui::WebGLContext *context = xt_gui_webgl_get(win, node, webgl2);
     return webgl_context_handle(self, context);
   }
   if (mode != "2d") return XT_NULL;

@@ -7,7 +7,7 @@ A `<canvas>` can ask for a WebGL context instead of the 2D one:
 
 ```ts
 const canvas: any = document.getElementById("scene");
-const gl: any = canvas.getContext("webgl"); // or "experimental-webgl"
+const gl: any = canvas.getContext("webgl2"); // or "webgl" / "experimental-webgl"
 if (gl == null) {
   // no GPU backend that can consume WebGL's shaders on this platform
 }
@@ -19,7 +19,11 @@ texture sampling, depth testing and blending all execute in the SDL_GPU
 (Vulkan) pipeline. The page composites the context's colour texture directly, so
 no pixels are read back to the CPU for display.
 
-`getContext("webgl2")` returns `null`; WebGL 2 is not implemented.
+Both **WebGL 1.0** and **WebGL 2.0** are available. A canvas keeps the first
+context kind it asks for: after `getContext("webgl2")` a later
+`getContext("webgl")` answers `null`, and the other way round. A WebGL 2 context
+also satisfies `instanceof WebGLRenderingContext` (its prototype inherits the
+WebGL 1 one) and adds the WebGL 2 constants and methods.
 
 ## How a frame reaches the screen
 
@@ -79,10 +83,20 @@ the texture unit. The block is pushed with the dynamic uniform-buffer API on
 every draw.
 
 Limits of the translator: struct-typed uniforms, user uniform blocks, uniform
-arrays whose size is not resolved by the preprocessor, sampler arrays, cube
-maps and multiple fragment outputs are rejected (the link/shader info log says
-so). Shader code inside `#ifdef` is fine; non-sampler uniform declarations are
-moved to the enclosing top-level position so the block stays unconditional.
+arrays whose size is not resolved by the preprocessor, sampler arrays and cube
+maps are rejected (the link/shader info log says so). Shader code inside
+`#ifdef` is fine; non-sampler uniform declarations are moved to the enclosing
+top-level position so the block stays unconditional.
+
+### GLSL ES 3.00 (WebGL 2)
+
+A `#version 300 es` source is accepted as-is apart from the version bump:
+top-level `in`/`out` declarations become attributes/varyings, a named fragment
+output (`out vec4 fragColor;`) becomes an `xt_FragColor`-style output, and
+`texture()` / `textureLod()` already match the Vulkan dialect. Multiple fragment
+outputs are given sequential locations, but the render pass has one colour
+target, so only the first is written. `gl_VertexID` and `gl_InstanceID` are
+available from GLSL ES 3.00, which is what the instanced example uses.
 
 ## Supported API
 
@@ -131,6 +145,33 @@ moved to the enclosing top-level position so the block stays unconditional.
   or a bound framebuffer. It blocks until the GPU finishes; use it for tests and
   screenshots, not per frame.
 
+WebGL 2 adds:
+
+- **Vertex-array objects**: `createVertexArray`, `bindVertexArray`,
+  `deleteVertexArray`, `isVertexArray`. SDL_GPU has no VAO, so binding one
+  restores a saved copy of the attribute table and its element buffer.
+- **Instancing**: `drawArraysInstanced`, `drawElementsInstanced`,
+  `drawRangeElements`, `vertexAttribDivisor`. A divisor of 1 maps to SDL's
+  per-instance vertex input rate; SDL 3.2 reserves larger step rates, so a
+  divisor above 1 is clamped to 1.
+- **Integer attributes and uniforms**: `vertexAttribIPointer`, the
+  `vertexAttribI4*` family, `uniform1ui`…`uniform4ui`.
+- **Sampler objects**: `createSampler`, `bindSampler`, `deleteSampler`,
+  `samplerParameteri/f`, `getSamplerParameter`; a bound sampler overrides the
+  texture's own filter/wrap state for that unit.
+- **Immutable textures and buffer copies**: `texStorage2D` (the backend always
+  allocates the full mip chain), `copyBufferSubData`, `getBufferSubData`.
+- **Clears**: `clearBufferfv`, `clearBufferiv`, `clearBufferuiv`,
+  `clearBufferfi`.
+- **Queries and fences**: the objects and entry points exist
+  (`createQuery`/`beginQuery`/`endQuery`/`getQueryParameter`,
+  `fenceSync`/`clientWaitSync`/`waitSync`/`getSyncParameter`) and degrade
+  gracefully: a fence reports `ALREADY_SIGNALED` and query results are 0.
+- **Uniform blocks**: `getUniformBlockIndex` answers `INVALID_INDEX` so a
+  library falls back to individual uniforms; the block entry points are no-ops.
+- **Transform feedback, 3D textures and compressed formats**: the entry points
+  are present as no-ops so feature-probing libraries do not throw.
+
 Textures are created with a full mip chain; sampling clamps to level 0 until
 `generateMipmap` runs. Matrix vertex attributes consume the right number of
 consecutive locations and read one column per location. A disabled attribute
@@ -139,16 +180,16 @@ buffer.
 
 ## Not implemented
 
-WebGL 2 (`getContext("webgl2")` is `null`), vertex-array objects, instancing,
-uniform buffer objects in shader source, cube maps, 3D textures, float/half
-textures, depth textures, compressed textures, multiple render targets,
-MSAA/sample buffers, stencil operations (state is accepted, the stencil buffer
-is not written), constant blend colours, `drawingBufferStorage`, context loss,
-`bufferData` with a `usage` other than static/dynamic (the hint is ignored),
-`texImage2D` for `HTMLVideoElement`/`ImageBitmap`, and scissored `clear` (a
-clear clears the whole attachment). Shaders that use built-in blocks, integer
-vertex attributes or `gl_FragDepth` beyond the supported subset are rejected
-with a compile/link log.
+Uniform buffer objects in shader source, transform feedback (the entry points
+are no-ops), cube maps, 3D/array textures, float/half textures, depth textures,
+compressed textures, multiple render targets (only the first fragment output is
+written), `blitFramebuffer`, MSAA/sample buffers, stencil operations (state is
+accepted, the stencil buffer is not written), constant blend colours,
+`drawingBufferStorage`, context loss, `bufferData` with a `usage` other than
+static/dynamic (the hint is ignored), `texImage2D` for
+`HTMLVideoElement`/`ImageBitmap` and scissored `clear` (a clear clears the whole
+attachment). Shaders that use built-in blocks, user uniform blocks or
+`gl_FragDepth` beyond the supported subset are rejected with a compile/link log.
 
 The engine advertises zero vertex texture units, so a well-behaved WebGL 1
 program will not try to sample a texture in a vertex shader.
@@ -157,9 +198,10 @@ program will not try to sample a texture in a vertex shader.
 
 The runtime shader compiler targets **Vulkan SPIR-V**, and the pipeline is
 created with `SDL_GPU_SHADERFORMAT_SPIRV`. On a device whose SDL_GPU backend is
-Metal or Direct3D 12 (and does not accept SPIR-V), `getContext("webgl")`
-answers `null`; the 2D canvas and the rest of the page still work. Windows
-selects Vulkan (`win.driver()` reports it), so that is the validated path.
+Metal or Direct3D 12 (and does not accept SPIR-V), `getContext("webgl")` and
+`getContext("webgl2")` both answer `null`; the 2D canvas and the rest of the page
+still work. Windows selects Vulkan (`win.driver()` reports it), so that is the
+validated path.
 
 glslang is fetched and built by `npm run gui` and merged into `gui.a` / `gui.lib`
 (see [Packaging and build](./build.md)); a program that only uses the 2D canvas
@@ -169,16 +211,23 @@ or the DOM pays no run-time cost beyond the archive size.
 
 - `tests/e2e/gui-webgl.test.ts` compiles GLSL, draws a textured and a
   depth-tested quad, checks face culling and reads the pixels back.
+- `tests/e2e/gui-webgl2.test.ts` covers the WebGL 2 additions: `#version 300 es`
+  shaders, a VAO round trip, instanced draws with a divisor, `texStorage2D`,
+  `clearBufferfv`, buffer copies and sampler objects.
 - `examples/gui/webgl-cube` is a spinning, lit, textured cube; it runs in a
   browser unchanged and is covered by
   `tests/e2e/gui-example-webgl.test.ts`.
+- `examples/gui/webgl2-cubes` draws 64 instanced cubes with one draw call,
+  `#version 300 es` and a VAO; covered by
+  `tests/e2e/gui-example-webgl2.test.ts`.
 
 ## three.js
 
 The `.js` asset loader still recognises three.js, but its exported
 `WebGLRenderer` now probes for a WebGL context first: with this backend the page
 gets three.js's own renderer, and only a device without a WebGL context falls
-back to the bundled Canvas2D scene renderer. Recent three.js releases expect
-**WebGL 2**, so a page pinned to one of those will not run here yet even though
-the probe succeeds; use a WebGL 1 build of three.js (or the fallback) until
-WebGL 2 is implemented.
+back to the bundled Canvas2D scene renderer. The probe asks for `webgl2` first,
+so recent three.js releases (which require WebGL 2) take their WebGL 2 path;
+the parts of that path this engine does not implement yet — depth textures,
+uniform blocks, transform feedback — can still make a particular scene fail, and
+those pages should keep the Canvas2D fallback.

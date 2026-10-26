@@ -93,6 +93,51 @@ SDL_GPUVertexElementFormat format_of(int size, int type, bool normalized) {
   return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
 }
 
+/** `vertexAttribIPointer` formats: integer attributes keep their integer type
+ * in the shader (`in ivec3 …`). SDL has no 1- or 3-component byte/short
+ * integer formats, so only the sizes it can express are accepted. */
+SDL_GPUVertexElementFormat int_format_of(int size, int type) {
+  if (size < 1 || size > 4) return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
+  if (type == GL_INT) {
+    switch (size) {
+      case 1:
+        return SDL_GPU_VERTEXELEMENTFORMAT_INT;
+      case 2:
+        return SDL_GPU_VERTEXELEMENTFORMAT_INT2;
+      case 3:
+        return SDL_GPU_VERTEXELEMENTFORMAT_INT3;
+      default:
+        return SDL_GPU_VERTEXELEMENTFORMAT_INT4;
+    }
+  }
+  if (type == GL_UNSIGNED_INT) {
+    switch (size) {
+      case 1:
+        return SDL_GPU_VERTEXELEMENTFORMAT_UINT;
+      case 2:
+        return SDL_GPU_VERTEXELEMENTFORMAT_UINT2;
+      case 3:
+        return SDL_GPU_VERTEXELEMENTFORMAT_UINT3;
+      default:
+        return SDL_GPU_VERTEXELEMENTFORMAT_UINT4;
+    }
+  }
+  if (type == GL_SHORT && (size == 2 || size == 4)) {
+    return size == 2 ? SDL_GPU_VERTEXELEMENTFORMAT_SHORT2 : SDL_GPU_VERTEXELEMENTFORMAT_SHORT4;
+  }
+  if (type == GL_UNSIGNED_SHORT && (size == 2 || size == 4)) {
+    return size == 2 ? SDL_GPU_VERTEXELEMENTFORMAT_USHORT2
+                     : SDL_GPU_VERTEXELEMENTFORMAT_USHORT4;
+  }
+  if (type == GL_BYTE && (size == 2 || size == 4)) {
+    return size == 2 ? SDL_GPU_VERTEXELEMENTFORMAT_BYTE2 : SDL_GPU_VERTEXELEMENTFORMAT_BYTE4;
+  }
+  if (type == GL_UNSIGNED_BYTE && (size == 2 || size == 4)) {
+    return size == 2 ? SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2 : SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4;
+  }
+  return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
+}
+
 /** A cache key covering everything (other than the program) that a
  * `SDL_GPUGraphicsPipeline` bakes in. */
 std::string pipeline_key(int mode, int index_size,
@@ -105,7 +150,8 @@ std::string pipeline_key(int mode, int index_size,
            std::to_string((int)attr.format) + ":" + std::to_string(attr.offset);
   }
   for (const SDL_GPUVertexBufferDescription &buffer : buffers) {
-    key += "|" + std::to_string(buffer.slot) + ":" + std::to_string(buffer.pitch);
+    key += "|" + std::to_string(buffer.slot) + ":" + std::to_string(buffer.pitch) + ":" +
+           std::to_string((int)buffer.input_rate);
   }
   char state_key[160];
   snprintf(state_key, sizeof(state_key), "|%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
@@ -127,7 +173,7 @@ void WebGLContext::draw_arrays(int mode, int first, int count) {
     set_error(GL_INVALID_VALUE);
     return;
   }
-  draw(mode, first, count, 0, 0);
+  draw(mode, first, count, 0, 0, 1);
 }
 
 void WebGLContext::draw_elements(int mode, int count, int type, int offset) {
@@ -139,10 +185,39 @@ void WebGLContext::draw_elements(int mode, int count, int type, int offset) {
     set_error(GL_INVALID_ENUM);
     return;
   }
-  draw(mode, 0, count, type, offset);
+  draw(mode, 0, count, type, offset, 1);
 }
 
-void WebGLContext::draw(int mode, int first, int count, int index_type, int offset) {
+void WebGLContext::draw_arrays_instanced(int mode, int first, int count, int instances) {
+  if (count < 0 || instances < 0) {
+    set_error(GL_INVALID_VALUE);
+    return;
+  }
+  draw(mode, first, count, 0, 0, instances > 0 ? instances : 1);
+}
+
+void WebGLContext::draw_elements_instanced(int mode, int count, int type, int offset,
+                                           int instances) {
+  if (count < 0 || instances < 0) {
+    set_error(GL_INVALID_VALUE);
+    return;
+  }
+  if (type != GL_UNSIGNED_SHORT && type != GL_UNSIGNED_INT && type != GL_UNSIGNED_BYTE) {
+    set_error(GL_INVALID_ENUM);
+    return;
+  }
+  draw(mode, 0, count, type, offset, instances > 0 ? instances : 1);
+}
+
+void WebGLContext::draw_range_elements(int mode, int start, int end, int count, int type,
+                                       int offset) {
+  (void)start;
+  (void)end;
+  draw_elements(mode, count, type, offset);
+}
+
+void WebGLContext::draw(int mode, int first, int count, int index_type, int offset,
+                        int instances) {
   if (count <= 0) return;
   WebGLProgram *program_ = program(current_program_);
   if (program_ == nullptr || !program_->linked || program_->vs_shader == nullptr) {
@@ -278,11 +353,15 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       set_error(GL_INVALID_OPERATION);
       return;
     }
-    SDL_GPUVertexElementFormat format = format_of(attrib.size, attrib.type, attrib.normalized);
+    SDL_GPUVertexElementFormat format = attrib.integer
+                                            ? int_format_of(attrib.size, attrib.type)
+                                            : format_of(attrib.size, attrib.type, attrib.normalized);
     if (format == SDL_GPU_VERTEXELEMENTFORMAT_INVALID) {
       set_error(GL_INVALID_OPERATION);
       return;
     }
+    description.input_rate = attrib.divisor > 0 ? SDL_GPU_VERTEXINPUTRATE_INSTANCE
+                                                : SDL_GPU_VERTEXINPUTRATE_VERTEX;
     const int stride =
         attrib.stride > 0 ? attrib.stride : components * type_size(attrib.type) * slots;
     description.pitch = (Uint32)stride;
@@ -377,12 +456,15 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     sampler_bindings.reserve(stage.size());
     for (int uniform_index : stage) {
       const WebGLUniform &uniform = program_->uniforms[(size_t)uniform_index];
-      WebGLTexture *sampled = texture(
-          uniform.unit >= 0 && uniform.unit < kWebGLMaxTextureUnits ? bound_textures_[uniform.unit]
-                                                                    : 0);
+      const int unit =
+          uniform.unit >= 0 && uniform.unit < kWebGLMaxTextureUnits ? uniform.unit : 0;
+      WebGLTexture *sampled = texture(bound_textures_[unit]);
       SDL_GPUTexture *gpu = sampled != nullptr ? ensure_texture_gpu(sampled, sampled->as_target)
                                                : nullptr;
-      SDL_GPUSampler *sampler = sampled != nullptr ? sampler_for(sampled) : nullptr;
+      WebGLSampler *sampler_object = this->sampler(bound_samplers_[unit]);
+      SDL_GPUSampler *sampler = sampler_object != nullptr
+                                    ? sampler_gpu(sampler_object)
+                                    : (sampled != nullptr ? sampler_for(sampled) : nullptr);
       if (gpu == nullptr || sampler == nullptr) {
         gpu = fallback_texture_;
         sampler = fallback_sampler_;
@@ -404,9 +486,10 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   bind_samplers(program_->fs_sampler_uniforms, false);
 
   if (index_size > 0) {
-    SDL_DrawGPUIndexedPrimitives(pass_, (Uint32)count, 1, (Uint32)first_index, 0, 0);
+    SDL_DrawGPUIndexedPrimitives(pass_, (Uint32)count, (Uint32)instances, (Uint32)first_index, 0,
+                                 0);
   } else {
-    SDL_DrawGPUPrimitives(pass_, (Uint32)count, 1, (Uint32)first, 0);
+    SDL_DrawGPUPrimitives(pass_, (Uint32)count, (Uint32)instances, (Uint32)first, 0);
   }
 }
 

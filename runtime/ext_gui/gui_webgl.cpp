@@ -33,10 +33,10 @@ xtgui::WebGLContext *xt_gui_webgl_find(XtGuiWindow *win, const xtgui::Node *node
   return found == win->webgl_canvases.end() ? nullptr : found->second.get();
 }
 
-xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node) {
+xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node, bool webgl2) {
   if (win == nullptr || !isCanvasElement(node)) return nullptr;
   xtgui::WebGLContext *existing = xt_gui_webgl_find(win, node);
-  if (existing != nullptr) return existing;
+  if (existing != nullptr) return existing->is_webgl2() == webgl2 ? existing : nullptr;
   if (win->canvases.find(node) != win->canvases.end()) return nullptr;  // already a 2D canvas
   /* The runtime shader compiler targets Vulkan SPIR-V. A device whose backend
    * consumes another format (Metal, Direct3D 12) has no WebGL context in this
@@ -53,7 +53,7 @@ xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node)
   if (width_attr != nullptr) xtgui::xt_css_parse_number(*width_attr, &width);
   if (height_attr != nullptr) xtgui::xt_css_parse_number(*height_attr, &height);
   auto context = std::make_unique<xtgui::WebGLContext>(
-      next_webgl_id(), (int)(width + 0.5f), (int)(height + 0.5f));
+      next_webgl_id(), (int)(width + 0.5f), (int)(height + 0.5f), webgl2);
   xtgui::WebGLContext *raw = context.get();
   win->webgl_canvases[node] = std::move(context);
   if (win->document != nullptr) {

@@ -5,20 +5,23 @@
 
 ## Known issues
 
-- **WebGL is a WebGL 1.0 subset on Vulkan SPIR-V.** `canvas.getContext("webgl")`
-  returns a real GPU context (see [WebGL](./webgl.md)): GLSL ES shaders are
-  translated to SPIR-V by the bundled glslang and the drawing buffer is an
-  offscreen colour texture that the page composites without a readback. WebGL 2,
-  vertex-array objects, instancing, cube maps, float/depth textures, multiple
-  render targets, MSAA and stencil operations are not implemented, `clear`
-  ignores the scissor rectangle, and `getContext("webgl2")` still answers `null`.
-  On an SDL_GPU backend that cannot consume SPIR-V (Metal, Direct3D 12) the
-  context is `null` too. The `.js` asset loader keeps three.js working: its
-  `WebGLRenderer` now probes for a context and uses three.js's own renderer when
-  one exists, falling back to the bundled Canvas2D scene renderer
-  (`runtime/ext_gui/three_compat.js`) only when it does not. Recent three.js
-  releases require WebGL 2, so pin a WebGL 1 build (or expect the Canvas2D path)
-  until WebGL 2 lands.
+- **WebGL 1.0 and 2.0 run on Vulkan SPIR-V, with a subset of each.**
+  `canvas.getContext("webgl")` / `"webgl2"` return real GPU contexts (see
+  [WebGL](./webgl.md)): GLSL ES shaders are translated to SPIR-V by the bundled
+  glslang and the drawing buffer is an offscreen colour texture that the page
+  composites without a readback. WebGL 2 adds VAOs, instancing, integer
+  attributes, sampler objects, `texStorage2D` and buffer copies. Uniform
+  blocks, transform feedback, cube maps, 3D textures, float/depth textures,
+  compressed textures, multiple render targets, `blitFramebuffer`, MSAA and
+  stencil operations are not implemented; `clear` ignores the scissor rectangle.
+  On an SDL_GPU backend that cannot consume SPIR-V (Metal, Direct3D 12) both
+  context kinds are `null`. The `.js` asset loader keeps three.js working: its
+  `WebGLRenderer` probes for a context (asking `webgl2` first) and uses
+  three.js's own renderer when one exists, falling back to the bundled Canvas2D
+  scene renderer (`runtime/ext_gui/three_compat.js`) only when it does not.
+  three.js features that need depth textures or uniform blocks may still fail
+  on a particular scene; those pages should keep the fallback.
+
 
 
 - **Intermittent crash at auto-close.** `XT_GUI_AUTOCLOSE_MS` can end a run

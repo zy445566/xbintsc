@@ -25,6 +25,7 @@
 namespace domapi {
 
 xt_value g_webgl_proto = XT_UNDEFINED;
+xt_value g_webgl2_proto = XT_UNDEFINED;
 xt_value g_webgl_buffer_proto = XT_UNDEFINED;
 xt_value g_webgl_texture_proto = XT_UNDEFINED;
 xt_value g_webgl_shader_proto = XT_UNDEFINED;
@@ -32,6 +33,11 @@ xt_value g_webgl_program_proto = XT_UNDEFINED;
 xt_value g_webgl_framebuffer_proto = XT_UNDEFINED;
 xt_value g_webgl_renderbuffer_proto = XT_UNDEFINED;
 xt_value g_webgl_uniform_proto = XT_UNDEFINED;
+xt_value g_webgl_vertex_array_proto = XT_UNDEFINED;
+xt_value g_webgl_sampler_proto = XT_UNDEFINED;
+xt_value g_webgl_query_proto = XT_UNDEFINED;
+xt_value g_webgl_sync_proto = XT_UNDEFINED;
+xt_value g_webgl_transform_feedback_proto = XT_UNDEFINED;
 xt_value g_webgl_info_proto = XT_UNDEFINED;
 
 namespace {
@@ -184,6 +190,11 @@ xt_value *proto_root(const std::string &kind) {
   if (kind == "framebuffer") return &g_webgl_framebuffer_proto;
   if (kind == "renderbuffer") return &g_webgl_renderbuffer_proto;
   if (kind == "uniform") return &g_webgl_uniform_proto;
+  if (kind == "vertexarray") return &g_webgl_vertex_array_proto;
+  if (kind == "sampler") return &g_webgl_sampler_proto;
+  if (kind == "query") return &g_webgl_query_proto;
+  if (kind == "sync") return &g_webgl_sync_proto;
+  if (kind == "transformfeedback") return &g_webgl_transform_feedback_proto;
   return &g_webgl_info_proto;
 }
 
@@ -231,9 +242,12 @@ xt_value webgl_context_handle(xt_value element, xtgui::WebGLContext *context) {
   xt_value cached = xt_object_get_cstr(element, "__xt_gui_gl");
   if (XT_IS_OBJECT(cached)) return cached;
   if (context == nullptr) return XT_NULL;
-  xt_value handle = xt_object_new_with_proto(webgl_proto());
+  xt_value handle =
+      xt_object_new_with_proto(context->is_webgl2() ? webgl2_proto() : webgl_proto());
   xt_object_set(handle, xt_string_from_cstr("__xt_gl_context"),
                 xt_number((double)context->id()));
+  xt_object_set(handle, xt_string_from_cstr("__xt_gl_webgl2"),
+                xt_bool(context->is_webgl2()));
   xt_object_set(handle, xt_string_from_cstr("__xt_gl_node"), element);
   xt_object_set(element, xt_string_from_cstr("__xt_gui_gl"), handle);
   return handle;

@@ -262,8 +262,10 @@ void xt_gui_canvas_sync(XtGuiWindow *win);
 /** Release every canvas of `win` (window close / `loadHTML`). */
 void xt_gui_canvas_shutdown(XtGuiWindow *win);
 
-/** The WebGL context of a `<canvas>`, creating it on first use. */
-xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node);
+/** The WebGL context of a `<canvas>`, creating it on first use. `webgl2`
+ * selects the WebGL 2 API/prototype; a canvas keeps the first context kind it
+ * asked for, so a later request for the other one answers null. */
+xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node, bool webgl2);
 /** The existing WebGL context of `node`, or null (no side effects). */
 xtgui::WebGLContext *xt_gui_webgl_find(XtGuiWindow *win, const xtgui::Node *node);
 /** Drop a node's WebGL context (called when its handle is forgotten). */

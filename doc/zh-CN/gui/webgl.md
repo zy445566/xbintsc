@@ -8,7 +8,7 @@
 
 ```ts
 const canvas: any = document.getElementById("scene");
-const gl: any = canvas.getContext("webgl"); // 或 "experimental-webgl"
+const gl: any = canvas.getContext("webgl2"); // 或 "webgl" / "experimental-webgl"
 if (gl == null) {
   // 该平台的 GPU 后端无法消费 WebGL 的着色器
 }
@@ -16,7 +16,7 @@ if (gl == null) {
 
 2D 上下文把图形光栅化到 CPU 位图再上传为纹理；WebGL 上下文则**在 GPU 上渲染**：顶点变换、光照、纹理采样、深度测试与混合全部在 SDL_GPU（Vulkan）管线中执行。页面直接合成该上下文的颜色纹理，因此显示时不需要把像素读回 CPU。
 
-`getContext("webgl2")` 返回 `null`；WebGL 2 尚未实现。
+同时提供 **WebGL 1.0** 与 **WebGL 2.0**。一个 canvas 会固定为它第一次申请的上下文类型：先调用 `getContext("webgl2")` 之后，`getContext("webgl")` 返回 `null`，反之亦然。WebGL 2 上下文也满足 `instanceof WebGLRenderingContext`（其原型继承 WebGL 1 原型），并在其上增加 WebGL 2 的常量与方法。
 
 ## 一帧如何到达屏幕
 
@@ -50,7 +50,11 @@ SDL_GPU 不能在运行时编译 GLSL，其 Vulkan 后端消费 SPIR-V，所以�
 
 两个阶段的非采样器 uniform 会合并成同一个块，并在每个阶段各声明一次（顶点 set 1、片元 set 3），与 SDL_GPU 的 Vulkan 描述符布局一致。`uniformMatrix4fv` 按列主序写入反射出的偏移；对采样器调用 `uniform1i` 时记录纹理单元。每次绘制都用动态 uniform 缓冲接口推送该块。
 
-翻译器的限制：结构体 uniform、用户 uniform 块、预处理后仍无法确定长度的 uniform 数组、采样器数组、立方体贴图与多片元输出都会被拒绝（着色器/链接日志会说明）。`#ifdef` 内的代码没问题；非采样器 uniform 声明会被移到外层顶层位置，保证块是无条件的。
+翻译器的限制：结构体 uniform、用户 uniform 块、预处理后仍无法确定长度的 uniform 数组、采样器数组与立方体贴图都会被拒绝（着色器/链接日志会说明）。`#ifdef` 内的代码没问题；非采样器 uniform 声明会被移到外层顶层位置，保证块是无条件的。
+
+### GLSL ES 3.00（WebGL 2）
+
+`#version 300 es` 源码除版本号提升外会被原样接受：顶层 `in`/`out` 声明会变成属性/`varying`，命名片元输出（`out vec4 fragColor;`）会变成 `xt_FragColor` 形式的输出，`texture()` / `textureLod()` 本就与 Vulkan 方言一致。多个片元输出会分配连续 location，但渲染 pass 只有一个颜色目标，因此只写入第一个。GLSL ES 3.00 提供 `gl_VertexID` 与 `gl_InstanceID`，实例化示例正是用它。
 
 ## 支持的 API
 
@@ -64,25 +68,39 @@ SDL_GPU 不能在运行时编译 GLSL，其 Vulkan 后端消费 SPIR-V，所以�
 - **状态**：`enable`/`disable`/`isEnabled`（`BLEND`、`DEPTH_TEST`、`CULL_FACE`、`SCISSOR_TEST`；模板状态接受但不生效）、`clearColor`/`clearDepth`/`clearStencil`、`clear`、`blendFunc`/`blendFuncSeparate`、`blendEquation`/`blendEquationSeparate`、`depthFunc`、`depthMask`、`colorMask`、`cullFace`、`frontFace`、`viewport`、`scissor`、`pixelStorei`、`finish`。
 - **读回**：`readPixels`（RGBA/UNSIGNED_BYTE），可从默认帧缓冲或绑定的 framebuffer 读取。它会阻塞到 GPU 完成；用于测试和截图，不要每帧调用。
 
+WebGL 2 额外提供：
+
+- **顶点数组对象**：`createVertexArray`、`bindVertexArray`、`deleteVertexArray`、`isVertexArray`。SDL_GPU 没有 VAO，绑定一个会恢复保存下来的属性表及其元素缓冲。
+- **实例化**：`drawArraysInstanced`、`drawElementsInstanced`、`drawRangeElements`、`vertexAttribDivisor`。divisor 为 1 映射到 SDL 的按实例输入频率；SDL 3.2 保留更大的步进值，因此大于 1 的 divisor 会被钳制为 1。
+- **整数属性与 uniform**：`vertexAttribIPointer`、`vertexAttribI4*` 系列、`uniform1ui`…`uniform4ui`。
+- **采样器对象**：`createSampler`、`bindSampler`、`deleteSampler`、`samplerParameteri/f`、`getSamplerParameter`；绑定的采样器会覆盖该单元上纹理自身的过滤/环绕状态。
+- **不可变纹理与缓冲拷贝**：`texStorage2D`（后端始终分配完整 mip 链）、`copyBufferSubData`、`getBufferSubData`。
+- **清除**：`clearBufferfv`、`clearBufferiv`、`clearBufferuiv`、`clearBufferfi`。
+- **查询与栅栏**：对象与入口都存在（`createQuery`/`beginQuery`/`endQuery`/`getQueryParameter`、`fenceSync`/`clientWaitSync`/`waitSync`/`getSyncParameter`），行为是优雅降级：栅栏报告 `ALREADY_SIGNALED`，查询结果为 0。
+- **Uniform 块**：`getUniformBlockIndex` 返回 `INVALID_INDEX`，让库回退到独立 uniform；块相关入口为空操作。
+- **Transform feedback、3D 纹理与压缩格式**：入口存在但为空操作，避免特性探测类库抛错。
+
 纹理创建时带完整 mip 链；在 `generateMipmap` 之前采样被钳制到第 0 层。矩阵顶点属性会占用相应数量的连续 location，每个 location 读取一列。未启用的属性由最近一次 `vertexAttrib*f` 的值通过一个小常量缓冲提供。
 
 ## 未实现
 
-WebGL 2（`getContext("webgl2")` 为 `null`）、顶点数组对象、实例化、着色器源码里的 uniform buffer 对象、立方体贴图、3D 纹理、浮点/半浮点纹理、深度纹理、压缩纹理、多渲染目标、MSAA/采样缓冲、模板操作（状态接受，但不写模板缓冲）、常量混合颜色、`drawingBufferStorage`、上下文丢失，以及带 scissor 的 `clear`（clear 会清空整个附件）。使用内建块、整数顶点属性或超出支持范围的 `gl_FragDepth` 的着色器会以编译/链接日志报错。
+着色器源码里的 uniform buffer 对象、transform feedback（入口为空操作）、立方体贴图、3D/数组纹理、浮点/半浮点纹理、深度纹理、压缩纹理、多渲染目标（只写第一个片元输出）、`blitFramebuffer`、MSAA/采样缓冲、模板操作（状态接受，但不写模板缓冲）、常量混合颜色、`drawingBufferStorage`、上下文丢失、`bufferData` 的非 static/dynamic `usage`（提示被忽略）、`texImage2D` 对 `HTMLVideoElement`/`ImageBitmap` 的支持，以及带 scissor 的 `clear`（clear 会清空整个附件）。使用内建块、用户 uniform 块或超出支持范围的 `gl_FragDepth` 的着色器会以编译/链接日志报错。
 
 引擎报告的顶点纹理单元数量为 0，因此行为良好的 WebGL 1 程序不会在顶点着色器里采样纹理。
 
 ## 平台
 
-运行时着色器编译面向 **Vulkan SPIR-V**，管线用 `SDL_GPU_SHADERFORMAT_SPIRV` 创建。如果设备的 SDL_GPU 后端是 Metal 或 Direct3D 12（且不接受 SPIR-V），`getContext("webgl")` 返回 `null`；2D canvas 与页面其余部分仍然正常。Windows 会选择 Vulkan（`win.driver()` 会报告），这是已验证的路径。
+运行时着色器编译面向 **Vulkan SPIR-V**，管线用 `SDL_GPU_SHADERFORMAT_SPIRV` 创建。如果设备的 SDL_GPU 后端是 Metal 或 Direct3D 12（且不接受 SPIR-V），`getContext("webgl")` 与 `getContext("webgl2")` 都会返回 `null`；2D canvas 与页面其余部分仍然正常。Windows 会选择 Vulkan（`win.driver()` 会报告），这是已验证的路径。
 
 `npm run gui` 会拉取并构建 glslang，合并进 `gui.a` / `gui.lib`（见[打包与构建](./build.md)）；只用 2D canvas 或 DOM 的程序除了归档体积之外没有运行时开销。
 
 ## 测试
 
 - `tests/e2e/gui-webgl.test.ts` 编译 GLSL、绘制带纹理和深度测试的四边形、检查面剔除，并读回像素。
+- `tests/e2e/gui-webgl2.test.ts` 覆盖 WebGL 2 的新增能力：`#version 300 es` 着色器、VAO 往返、带 divisor 的实例化绘制、`texStorage2D`、`clearBufferfv`、缓冲拷贝与采样器对象。
 - `examples/gui/webgl-cube` 是一个旋转、受光、带纹理的立方体；它在浏览器中原样运行，并由 `tests/e2e/gui-example-webgl.test.ts` 覆盖。
+- `examples/gui/webgl2-cubes` 用一次绘制调用画出 64 个实例化立方体，使用 `#version 300 es` 与 VAO；由 `tests/e2e/gui-example-webgl2.test.ts` 覆盖。
 
 ## three.js
 
-`.js` 资源加载器仍会识别 three.js，但它导出的 `WebGLRenderer` 现在会先探测 WebGL 上下文：有这个后端时页面会得到 three.js 自己的渲染器，只有没有 WebGL 上下文的设备才回退到内置的 Canvas2D 场景渲染器。较新的 three.js 版本要求 **WebGL 2**，因此固定到这些版本的页面即使探测成功也还不能运行；在实现 WebGL 2 之前，请使用 three.js 的 WebGL 1 构建（或回退渲染器）。
+`.js` 资源加载器仍会识别 three.js，但它导出的 `WebGLRenderer` 现在会先探测 WebGL 上下文：有这个后端时页面会得到 three.js 自己的渲染器，只有没有 WebGL 上下文的设备才回退到内置的 Canvas2D 场景渲染器。探测优先请求 `webgl2`，因此较新的 three.js（要求 WebGL 2）会走它的 WebGL 2 路径；本引擎尚未实现的深度纹理、uniform 块、transform feedback 等仍可能让某个具体场景失败，这类页面应保留 Canvas2D 回退。

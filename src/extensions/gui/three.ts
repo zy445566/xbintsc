@@ -44,7 +44,7 @@ function __xtHasWebGL() {
   let available = false;
   try {
     const probe = document.createElement("canvas");
-    available = probe.getContext("webgl") != null;
+    available = probe.getContext("webgl2") != null || probe.getContext("webgl") != null;
   } catch (error) {
     available = false;
   }

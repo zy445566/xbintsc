@@ -28,7 +28,8 @@ WebGLContext *xt_webgl_by_id(uint64_t id) {
   return found == g_contexts.end() ? nullptr : found->second;
 }
 
-WebGLContext::WebGLContext(uint64_t id, int width, int height) : id_(id) {
+WebGLContext::WebGLContext(uint64_t id, int width, int height, bool webgl2)
+    : id_(id), webgl2_(webgl2) {
   width_ = width > 0 ? width : 1;
   height_ = height > 0 ? height : 1;
   viewport_[0] = 0;
@@ -56,6 +57,11 @@ WebGLContext::~WebGLContext() {
     }
     for (auto &entry : buffers_) {
       if (entry.second->gpu != nullptr) SDL_ReleaseGPUBuffer(guidev::g_device, entry.second->gpu);
+    }
+    for (auto &entry : samplers_) {
+      if (entry.second->gpu != nullptr) {
+        SDL_ReleaseGPUSampler(guidev::g_device, entry.second->gpu);
+      }
     }
     for (auto &entry : framebuffers_) {
       if (entry.second->depth != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, entry.second->depth);
@@ -381,6 +387,41 @@ double WebGLContext::parameter(int pname) {
       return clear_depth_;
     case GL_STENCIL_CLEAR_VALUE:
       return clear_stencil_;
+    /* -- WebGL 2 --------------------------------------------------------- */
+    case GL_MAX_3D_TEXTURE_SIZE:
+      return 2048;
+    case GL_MAX_ARRAY_TEXTURE_LAYERS:
+      return 256;
+    case GL_MAX_DRAW_BUFFERS:
+    case GL_MAX_COLOR_ATTACHMENTS:
+      return 1;
+    case GL_MAX_SAMPLES:
+      return 0;
+    case GL_MAX_UNIFORM_BUFFER_BINDINGS:
+    case GL_MAX_VERTEX_UNIFORM_BLOCKS:
+    case GL_MAX_FRAGMENT_UNIFORM_BLOCKS:
+      return 0;
+    case GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT:
+      return 256;
+    case GL_MAX_ELEMENT_INDEX:
+      return 4294967295.0;
+    case GL_MAX_CLIENT_WAIT_TIMEOUT_WEBGL:
+      return 0;
+    case GL_MAX_VARYING_COMPONENTS:
+    case GL_MAX_FRAGMENT_INPUT_COMPONENTS:
+      return 60;
+    case GL_MAX_VERTEX_OUTPUT_COMPONENTS:
+      return 64;
+    case GL_MAX_VERTEX_UNIFORM_COMPONENTS:
+    case GL_MAX_FRAGMENT_UNIFORM_COMPONENTS:
+    case GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS:
+    case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS:
+      return 1024;
+    case GL_MAX_UNIFORM_BLOCK_SIZE:
+      return 16384;
+    case GL_READ_BUFFER:
+    case GL_DRAW_BUFFER0:
+      return GL_BACK;
     default:
       return 0;
   }
@@ -395,9 +436,9 @@ std::string WebGLContext::string_parameter(int pname) {
       return std::string("xbintsc gui (SDL_GPU ") + (driver_name != nullptr ? driver_name : "?") +
              ")";
     case GL_VERSION:
-      return "WebGL 1.0 (xbintsc)";
+      return webgl2_ ? "WebGL 2.0 (xbintsc)" : "WebGL 1.0 (xbintsc)";
     case GL_SHADING_LANGUAGE_VERSION:
-      return "WebGL GLSL ES 1.0 (xbintsc)";
+      return webgl2_ ? "WebGL GLSL ES 3.00 (xbintsc)" : "WebGL GLSL ES 1.0 (xbintsc)";
     default:
       return std::string();
   }
@@ -407,9 +448,7 @@ const char *WebGLContext::driver() const {
   return xt_gui_driver();
 }
 
-uint32_t WebGLContext::bound_buffer(int target) const {
-  return target == GL_ELEMENT_ARRAY_BUFFER ? bound_element_ : bound_array_;
-}
+uint32_t WebGLContext::bound_buffer(int target) const { return buffer_for_target(target); }
 
 uint32_t WebGLContext::bound_texture(int unit) const {
   if (unit < 0 || unit >= kWebGLMaxTextureUnits) return 0;

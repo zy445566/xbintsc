@@ -86,6 +86,11 @@ const hostTypes = [
   "WebGLRenderbuffer",
   "WebGLUniformLocation",
   "WebGLActiveInfo",
+  "WebGLVertexArrayObject",
+  "WebGLSampler",
+  "WebGLQuery",
+  "WebGLSync",
+  "WebGLTransformFeedback",
   "XRWebGLLayer",
   "XRWebGLBinding",
 ] as const;

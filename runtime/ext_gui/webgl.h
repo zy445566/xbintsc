@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "webgl_constants.h"
+#include "webgl2_constants.h"
 #include "webgl_glsl.h"
 
 namespace xtgui {
@@ -126,13 +127,42 @@ struct WebGLFramebuffer {
 /** Per-attribute array state. */
 struct WebGLAttribState {
   bool enabled = false;
+  bool integer = false;  // `vertexAttribIPointer` rather than `vertexAttribPointer`
   uint32_t buffer = 0;
   int size = 4;
   int type = GL_FLOAT;
   bool normalized = false;
   int stride = 0;
   int offset = 0;
+  int divisor = 0;  // 0 = per vertex, 1 = per instance
   float current[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+};
+
+/** A WebGL 2 vertex-array object: the attribute table plus its element buffer.
+ * SDL_GPU has no VAO concept, so binding one restores this state into the live
+ * `attribs_` array. */
+struct WebGLVertexArray {
+  uint32_t id = 0;
+  WebGLAttribState attribs[kWebGLMaxAttribs];
+  uint32_t element_buffer = 0;
+};
+
+/** A WebGL 2 sampler object, bound to a texture unit with `bindSampler`. */
+struct WebGLSampler {
+  uint32_t id = 0;
+  int min_filter = 0;
+  int mag_filter = 0;
+  int wrap_s = 0;
+  int wrap_t = 0;
+  SDL_GPUSampler *gpu = nullptr;
+};
+
+struct WebGLQuery {
+  uint32_t id = 0;
+};
+
+struct WebGLSync {
+  uint32_t id = 0;
 };
 
 /** The fixed-function state a pipeline depends on. */
@@ -155,10 +185,11 @@ struct WebGLDrawState {
 
 class WebGLContext {
  public:
-  WebGLContext(uint64_t id, int width, int height);
+  WebGLContext(uint64_t id, int width, int height, bool webgl2);
   ~WebGLContext();
 
   uint64_t id() const { return id_; }
+  bool is_webgl2() const { return webgl2_; }
   int width() const { return width_; }
   int height() const { return height_; }
   /** Resize the drawing buffer; GL semantics discard its contents. */
@@ -177,6 +208,10 @@ class WebGLContext {
   WebGLTexture *texture(uint32_t id);
   WebGLFramebuffer *framebuffer(uint32_t id);
   WebGLRenderbuffer *renderbuffer(uint32_t id);
+  WebGLVertexArray *vertex_array(uint32_t id);
+  WebGLSampler *sampler(uint32_t id);
+  WebGLQuery *query(uint32_t id);
+  WebGLSync *sync(uint32_t id);
 
   /* -- state ------------------------------------------------------------- */
   void enable(int cap);
@@ -248,6 +283,37 @@ class WebGLContext {
   void attrib_state(int index, int *size, int *type, int *stride, bool *normalized,
                     float current[4]) const;
   uint32_t attrib_buffer(int index) const { return attribs_[index].buffer; }
+  void attrib_ipointer(int index, int size, int type, int stride, int offset);
+  void attrib_divisor(int index, int divisor);
+
+  /* -- WebGL 2 vertex arrays, instancing and buffer copies --------------- */
+  uint32_t create_vertex_array();
+  void delete_vertex_array(uint32_t id);
+  void bind_vertex_array(uint32_t id);
+  bool is_vertex_array(uint32_t id) const;
+  uint32_t bound_vertex_array() const { return bound_vertex_array_; }
+  void draw_arrays_instanced(int mode, int first, int count, int instances);
+  void draw_elements_instanced(int mode, int count, int type, int offset, int instances);
+  void draw_range_elements(int mode, int start, int end, int count, int type, int offset);
+  bool copy_buffer_sub_data(int read_target, int write_target, uint32_t read_offset,
+                            uint32_t write_offset, uint32_t size);
+  bool get_buffer_sub_data(int target, uint32_t offset, uint8_t *out, uint32_t size);
+
+  /* -- WebGL 2 sampler objects ------------------------------------------- */
+  uint32_t create_sampler();
+  void delete_sampler(uint32_t id);
+  void bind_sampler(int unit, uint32_t id);
+  bool sampler_parameter(uint32_t id, int pname, int value);
+  int sampler_parameter_value(uint32_t id, int pname);
+
+  /* -- WebGL 2 queries, syncs and uniform-block stubs -------------------- */
+  uint32_t create_query();
+  void delete_query(uint32_t id);
+  bool is_query(uint32_t id) const;
+  uint32_t create_sync();
+  void delete_sync(uint32_t id);
+  bool is_sync(uint32_t id) const;
+  uint32_t uniform_block_index(uint32_t program, const std::string &name) const;
 
   /* -- textures ---------------------------------------------------------- */
   uint32_t create_texture();
@@ -259,6 +325,9 @@ class WebGLContext {
   bool tex_image_rgba(uint32_t id, int width, int height, const uint8_t *rgba);
   bool tex_sub_image_rgba(uint32_t id, int x, int y, int width, int height, const uint8_t *rgba);
   bool generate_mipmap(uint32_t id);
+  /** WebGL 2 `texStorage2D`: allocate immutable storage at `width`×`height`.
+   * The backend always allocates the full mip chain, so `levels` is a hint. */
+  bool tex_storage_2d(uint32_t id, int levels, int width, int height);
   int texture_width(uint32_t id);
 
   /* -- framebuffers ------------------------------------------------------ */
@@ -277,6 +346,11 @@ class WebGLContext {
   void draw_arrays(int mode, int first, int count);
   void draw_elements(int mode, int count, int type, int offset);
   bool read_pixels(int x, int y, int width, int height, uint8_t *out);
+  /** WebGL 2 `clearBufferfv` / `clearBufferiv` / `clearBufferuiv`. */
+  void clear_buffer_float(int buffer, int drawbuffer, const float *values, int count);
+  void clear_buffer_int(int buffer, int drawbuffer, const int *values, int count);
+  void clear_buffer_uint(int buffer, int drawbuffer, const unsigned int *values, int count);
+  void clear_buffer_fi(int buffer, int drawbuffer, float depth, int stencil);
 
   /* -- queries ----------------------------------------------------------- */
   double parameter(int pname);
@@ -314,7 +388,11 @@ class WebGLContext {
   bool ensure_fallback();
   SDL_GPUBuffer *upload_temp_buffer(const void *data, uint32_t size,
                                     SDL_GPUBufferUsageFlags usage);
-   void draw(int mode, int first, int count, int index_type, int offset);
+  void draw(int mode, int first, int count, int index_type, int offset, int instances);
+  void save_vertex_array();
+  void load_vertex_array(const WebGLVertexArray *array);
+  SDL_GPUSampler *sampler_gpu(WebGLSampler *sampler);
+  uint32_t buffer_for_target(int target) const;
   void release_program_pipelines(WebGLProgram *program);
   SDL_GPUGraphicsPipeline *create_pipeline(WebGLProgram *program, int mode, int index_type,
                                            int attribute_count, int buffer_count,
@@ -326,6 +404,7 @@ class WebGLContext {
   int width_ = 0;
   int height_ = 0;
   bool lost_ = false;
+  bool webgl2_ = false;
 
   SDL_GPUCommandBuffer *cmd_ = nullptr;
   SDL_GPURenderPass *pass_ = nullptr;
@@ -352,6 +431,10 @@ class WebGLContext {
   std::unordered_map<uint32_t, std::unique_ptr<WebGLTexture>> textures_;
   std::unordered_map<uint32_t, std::unique_ptr<WebGLFramebuffer>> framebuffers_;
   std::unordered_map<uint32_t, std::unique_ptr<WebGLRenderbuffer>> renderbuffers_;
+  std::unordered_map<uint32_t, std::unique_ptr<WebGLVertexArray>> vertex_arrays_;
+  std::unordered_map<uint32_t, std::unique_ptr<WebGLSampler>> samplers_;
+  std::unordered_map<uint32_t, std::unique_ptr<WebGLQuery>> queries_;
+  std::unordered_map<uint32_t, std::unique_ptr<WebGLSync>> syncs_;
   /** GPU buffers created for this context's transient draws (constant vertex
    * attributes, expanded index data); released with the context. */
   std::vector<SDL_GPUBuffer *> temp_buffers_;
@@ -362,6 +445,11 @@ class WebGLContext {
   uint32_t bound_framebuffer_ = 0;
   uint32_t bound_renderbuffer_ = 0;
   uint32_t bound_textures_[kWebGLMaxTextureUnits] = {};
+  uint32_t bound_samplers_[kWebGLMaxTextureUnits] = {};
+  uint32_t bound_vertex_array_ = 0;
+  WebGLVertexArray default_vertex_array_;
+  uint32_t copy_read_buffer_ = 0;
+  uint32_t copy_write_buffer_ = 0;
   int active_unit_ = 0;
   WebGLAttribState attribs_[kWebGLMaxAttribs];
 

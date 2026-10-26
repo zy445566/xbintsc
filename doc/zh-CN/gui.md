@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M17** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
+状态：**M18** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
 `<video>`/`<audio>`——可选的 `media` 扩展用 vendored 的最小 FFmpeg 在主线程解码，
 视频帧走图像纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露
 `play`/`pause`/`currentTime`/… 与媒体事件。只启用 `gui` 不会链接 FFmpeg。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
@@ -12,7 +12,7 @@
 渲染器，因此盒子（以及其中的文本、图像与子元素）可以被平移、缩放与旋转而
 不触发任何重排——再加上 `transition: transform`，这些姿态可以动画（自绘的示例
 `examples/gui/pelican-svg` 正是用它让矢量画动起来）。参见
-[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**：`<canvas>.getContext("webgl")` 用内置的 glslang 把页面的 GLSL ES 编译成 SPIR-V，并通过 SDL_GPU 渲染，因此几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
+[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V 并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
 
 ## 目录
 
@@ -243,6 +243,17 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
       渲染到纹理的 framebuffer 与 `readPixels`。见 [WebGL](./gui/webgl.md)；
       e2e 见 `tests/e2e/gui-webgl.test.ts` 与
       `tests/e2e/gui-example-webgl.test.ts`，示例见 `examples/gui/webgl-cube`。
+18. **M18 — WebGL 2** ✅
+    - `canvas.getContext("webgl2")` 返回的上下文原型继承 WebGL 1 原型，并带有
+      WebGL 2 常量与方法。
+    - GLSL ES 3.00 源码（`#version 300 es`、`in`/`out`、命名片元输出、
+      `gl_InstanceID`）走同一个改写器编译。
+    - 顶点数组对象保存/恢复属性表，实例化绘制使用 SDL 的按实例输入频率，采样器
+      对象覆盖纹理单元的过滤/环绕状态。`texStorage2D`、`copyBufferSubData`、
+      `getBufferSubData` 与 `clearBuffer*` 已实现；查询/栅栏/UBO 与 transform
+      feedback 入口存在并优雅降级。见 [WebGL](./gui/webgl.md)；e2e 见
+      `tests/e2e/gui-webgl2.test.ts` 与 `tests/e2e/gui-example-webgl2.test.ts`，
+      示例见 `examples/gui/webgl2-cubes`。
 
 ## 进度日志
 
@@ -346,4 +357,18 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
   markup 采用有界 LRU）按绘制设备像素尺寸光栅化。`win.inlineSvg` 诊断钩子
   暴露序列化文档，`tests/e2e/gui-inline-svg.test.ts` 固定了尺寸、命中测试、
   渐变、CSS 盒样式与 DOM 变更。
+- **M17** ✅ WebGL。`xtgui::WebGLContext`（`webgl.{h,cpp}`）拥有离屏颜色/深度
+  目标与命令缓冲，`webgl_buffer/texture/draw/shader` 实现 GL 对象模型，
+  `webgl_glsl*.cpp` 用内置 glslang 把 GLSL ES 翻译为 SPIR-V，
+  `dom_api_webgl*.cpp` 绑定 WebGL 1.0 接口。`renderer_image.cpp` 按 canvas id
+  返回上下文的颜色纹理，页面直接合成 GPU 输出。示例
+  `examples/gui/webgl-cube`；e2e 见 `tests/e2e/gui-webgl.test.ts` 与
+  `tests/e2e/gui-example-webgl.test.ts`。
+- **M18** ✅ WebGL 2。`webgl2_proto()` 在 WebGL 1 原型上增加 WebGL 2 常量与
+  方法；`webgl_webgl2.cpp` 实现顶点数组对象与采样器/查询/栅栏句柄，
+  `webgl_draw.cpp` 增加实例化绘制（由 `vertexAttribDivisor` 决定输入频率）与
+  整数属性，`webgl_texture.cpp` 增加 `texStorage2D` 与 `clearBuffer*`。着色器
+  改写器为 `#version 300 es` 输出分配连续 location。示例
+  `examples/gui/webgl2-cubes`（64 个立方体，一次实例化绘制）；e2e 见
+  `tests/e2e/gui-webgl2.test.ts` 与 `tests/e2e/gui-example-webgl2.test.ts`。
 

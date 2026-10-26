@@ -97,11 +97,12 @@ Pages written for the browser also get the browser globals they reach for —
 `escape`, the `Event` family and a Web Audio *surface* (`AudioContext` with
 nodes, params and buffers, but no mixer) — plus a frame pump that starts at
 `loadHTML` and re-arms only while animation-frame callbacks remain, so a page
-that never calls `run()` still paints and then exits. **WebGL 1.0 is
-implemented**: `canvas.getContext("webgl")` returns a GPU context whose GLSL ES
-shaders are compiled to SPIR-V by a bundled glslang and drawn through SDL_GPU;
-the page composites the colour texture without a CPU readback (see
-[../gui/webgl.md](../gui/webgl.md)). WebGL 2, WebXR, `<video>`/`<audio>` without
+that never calls `run()` still paints and then exits. **WebGL 1.0 and 2.0 are implemented**: `canvas.getContext("webgl")` /
+`"webgl2"` return a GPU context whose GLSL ES shaders are compiled to SPIR-V by
+a bundled glslang and drawn through SDL_GPU; the page composites the colour
+texture without a CPU readback, and WebGL 2 adds VAOs, instancing, integer
+attributes, sampler objects, `texStorage2D` and buffer copies (see
+[../gui/webgl.md](../gui/webgl.md)). WebXR, `<video>`/`<audio>` without
 `media`, `fetch` and streaming are **not** implemented:
 `typeof` answers `"undefined"` so a page takes its own fallback branch. See
 [../gui/api.md](../gui/api.md#browser-globals).

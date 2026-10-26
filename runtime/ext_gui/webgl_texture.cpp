@@ -196,4 +196,98 @@ bool WebGLContext::read_pixels(int x, int y, int width, int height, uint8_t *out
   return true;
 }
 
+bool WebGLContext::tex_storage_2d(uint32_t id, int levels, int width, int height) {
+  (void)levels;  // the backend always allocates the full mip chain
+  WebGLTexture *record = texture(id);
+  if (record == nullptr || width <= 0 || height <= 0) {
+    set_error(GL_INVALID_VALUE);
+    return false;
+  }
+  end_pass();
+  ensure_command();
+  if (record->gpu != nullptr) {
+    submit();
+    SDL_WaitForGPUIdle(guidev::g_device);
+    SDL_ReleaseGPUTexture(guidev::g_device, record->gpu);
+    record->gpu = nullptr;
+  }
+  record->width = width;
+  record->height = height;
+  record->has_mipmaps = false;
+  if (record->sampler != nullptr && guidev::g_device != nullptr) {
+    SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
+    record->sampler = nullptr;
+  }
+  record->defined = true;
+  return ensure_texture_gpu(record, record->as_target) != nullptr;
+}
+
+/* -- WebGL 2 clearBuffer* ------------------------------------------------ */
+
+void WebGLContext::clear_buffer_float(int buffer, int drawbuffer, const float *values,
+                                      int count) {
+  if (buffer == GL_COLOR) {
+    if (drawbuffer != 0) return;
+    clear_color(values[0], count > 1 ? values[1] : 0.0f, count > 2 ? values[2] : 0.0f,
+                count > 3 ? values[3] : 1.0f);
+    clear(GL_COLOR_BUFFER_BIT);
+    return;
+  }
+  if (buffer == GL_DEPTH) {
+    clear_depth(values[0]);
+    clear(GL_DEPTH_BUFFER_BIT);
+    return;
+  }
+  if (buffer == GL_STENCIL) {
+    clear_stencil((int)values[0]);
+    clear(GL_STENCIL_BUFFER_BIT);
+  }
+}
+
+void WebGLContext::clear_buffer_int(int buffer, int drawbuffer, const int *values, int count) {
+  if (buffer == GL_STENCIL) {
+    clear_stencil(values[0]);
+    clear(GL_STENCIL_BUFFER_BIT);
+    return;
+  }
+  if (buffer == GL_COLOR) {
+    if (drawbuffer != 0) return;
+    clear_color((float)values[0], count > 1 ? (float)values[1] : 0.0f,
+                count > 2 ? (float)values[2] : 0.0f, count > 3 ? (float)values[3] : 1.0f);
+    clear(GL_COLOR_BUFFER_BIT);
+  }
+}
+
+void WebGLContext::clear_buffer_uint(int buffer, int drawbuffer, const unsigned int *values,
+                                     int count) {
+  if (buffer == GL_STENCIL) {
+    clear_stencil((int)values[0]);
+    clear(GL_STENCIL_BUFFER_BIT);
+    return;
+  }
+  if (buffer == GL_COLOR) {
+    if (drawbuffer != 0) return;
+    clear_color((float)values[0], count > 1 ? (float)values[1] : 0.0f,
+                count > 2 ? (float)values[2] : 0.0f, count > 3 ? (float)values[3] : 1.0f);
+    clear(GL_COLOR_BUFFER_BIT);
+  }
+}
+
+void WebGLContext::clear_buffer_fi(int buffer, int drawbuffer, float depth, int stencil) {
+  (void)drawbuffer;
+  if (buffer == GL_DEPTH_STENCIL) {
+    clear_depth(depth);
+    clear_stencil(stencil);
+    clear(GL_DEPTH_BUFFER_BIT);
+    return;
+  }
+  if (buffer == GL_DEPTH) {
+    clear_depth(depth);
+    clear(GL_DEPTH_BUFFER_BIT);
+  } else if (buffer == GL_STENCIL) {
+    clear_stencil(stencil);
+    clear(GL_STENCIL_BUFFER_BIT);
+  }
+}
+
 }  // namespace xtgui

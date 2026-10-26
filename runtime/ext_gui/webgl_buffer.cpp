@@ -111,6 +111,45 @@ void WebGLContext::bind_buffer(int target, uint32_t id) {
   if (id != 0 && buffers_.find(id) == buffers_.end()) return;
   if (target == GL_ARRAY_BUFFER) bound_array_ = id;
   if (target == GL_ELEMENT_ARRAY_BUFFER) bound_element_ = id;
+  if (target == GL_COPY_READ_BUFFER) copy_read_buffer_ = id;
+  if (target == GL_COPY_WRITE_BUFFER) copy_write_buffer_ = id;
+}
+
+uint32_t WebGLContext::buffer_for_target(int target) const {
+  if (target == GL_ELEMENT_ARRAY_BUFFER) return bound_element_;
+  if (target == GL_ARRAY_BUFFER) return bound_array_;
+  if (target == GL_COPY_READ_BUFFER) return copy_read_buffer_;
+  if (target == GL_COPY_WRITE_BUFFER) return copy_write_buffer_;
+  return 0;
+}
+
+bool WebGLContext::copy_buffer_sub_data(int read_target, int write_target, uint32_t read_offset,
+                                        uint32_t write_offset, uint32_t size) {
+  WebGLBuffer *read_buffer = buffer(buffer_for_target(read_target));
+  WebGLBuffer *write_buffer = buffer(buffer_for_target(write_target));
+  if (read_buffer == nullptr || write_buffer == nullptr ||
+      read_offset + size > read_buffer->data.size() ||
+      write_offset + size > write_buffer->data.size()) {
+    set_error(GL_INVALID_VALUE);
+    return false;
+  }
+  if (size > 0) {
+    memmove(write_buffer->data.data() + write_offset,
+            read_buffer->data.data() + read_offset, size);
+  }
+  write_buffer->dirty = true;
+  return ensure_buffer_gpu(write_buffer) != nullptr || size == 0;
+}
+
+bool WebGLContext::get_buffer_sub_data(int target, uint32_t offset, uint8_t *out,
+                                       uint32_t size) {
+  WebGLBuffer *record = buffer(buffer_for_target(target));
+  if (record == nullptr || offset + size > record->data.size()) {
+    set_error(GL_INVALID_VALUE);
+    return false;
+  }
+  if (size > 0) memcpy(out, record->data.data() + offset, size);
+  return true;
 }
 
 SDL_GPUBuffer *WebGLContext::ensure_buffer_gpu(WebGLBuffer *buffer) {
@@ -205,8 +244,35 @@ void WebGLContext::attrib_pointer(int index, int size, int type, bool normalized
   attrib.size = size;
   attrib.type = type;
   attrib.normalized = normalized;
+  attrib.integer = false;
   attrib.stride = stride > 0 ? stride : 0;
   attrib.offset = offset;
+}
+
+void WebGLContext::attrib_ipointer(int index, int size, int type, int stride, int offset) {
+  if (index < 0 || index >= kWebGLMaxAttribs) {
+    set_error(GL_INVALID_VALUE);
+    return;
+  }
+  WebGLAttribState &attrib = attribs_[index];
+  attrib.buffer = bound_array_;
+  attrib.size = size;
+  attrib.type = type;
+  attrib.normalized = false;
+  attrib.integer = true;
+  attrib.stride = stride > 0 ? stride : 0;
+  attrib.offset = offset;
+}
+
+void WebGLContext::attrib_divisor(int index, int divisor) {
+  if (index < 0 || index >= kWebGLMaxAttribs) {
+    set_error(GL_INVALID_VALUE);
+    return;
+  }
+  /* SDL 3.2's `instance_step_rate` is reserved and must be 0, so only the two
+   * rates WebGL programs use — per vertex (0) and per instance (1) — map onto
+   * the backend. A larger divisor is clamped. */
+  attribs_[index].divisor = divisor > 0 ? 1 : 0;
 }
 
 void WebGLContext::attrib_value(int index, int components, const float *values) {

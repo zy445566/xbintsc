@@ -333,6 +333,7 @@ xt_value type_proto(const std::string &name) {
   }
   if (name == "AudioContext" || name == "webkitAudioContext") return xt_gui_audio_proto();
   if (name == "WebGLRenderingContext") return domapi::webgl_proto();
+  if (name == "WebGL2RenderingContext") return domapi::webgl2_proto();
   if (name == "WebGLBuffer") return domapi::webgl_object_proto("buffer");
   if (name == "WebGLTexture") return domapi::webgl_object_proto("texture");
   if (name == "WebGLShader") return domapi::webgl_object_proto("shader");
@@ -341,6 +342,11 @@ xt_value type_proto(const std::string &name) {
   if (name == "WebGLRenderbuffer") return domapi::webgl_object_proto("renderbuffer");
   if (name == "WebGLUniformLocation") return domapi::webgl_object_proto("uniform");
   if (name == "WebGLActiveInfo") return domapi::webgl_object_proto("info");
+  if (name == "WebGLVertexArrayObject") return domapi::webgl_object_proto("vertexarray");
+  if (name == "WebGLSampler") return domapi::webgl_object_proto("sampler");
+  if (name == "WebGLQuery") return domapi::webgl_object_proto("query");
+  if (name == "WebGLSync") return domapi::webgl_object_proto("sync");
+  if (name == "WebGLTransformFeedback") return domapi::webgl_object_proto("transformfeedback");
   return domapi::node_proto();
 }
 
@@ -392,6 +398,7 @@ void install_window_globals(xt_value win) {
   set_prop(win, "Event", type_value("Event"));
   set_prop(win, "CustomEvent", type_value("CustomEvent"));
   set_prop(win, "WebGLRenderingContext", type_value("WebGLRenderingContext"));
+  set_prop(win, "WebGL2RenderingContext", type_value("WebGL2RenderingContext"));
   set_prop(win, "isSecureContext", XT_TRUE);
   set_number(win, "screenX", 0);
   set_number(win, "screenY", 0);
@@ -510,10 +517,10 @@ xt_value xt_browser_type(int32_t argc, xt_value *argv) {
   (void)argv;
   if (argc < 1) return XT_UNDEFINED;
   std::string name = cstr(xt_arg(argc, argv, 0));
-  if (name == "WebGL2RenderingContext" || name == "XRWebGLLayer" || name == "XRWebGLBinding" ||
-      name == "OffscreenCanvas" || name == "ImageBitmap" || name == "ImageData" ||
-      name == "Response" || name == "ReadableStream" || name == "Request" ||
-      name == "Headers" || name == "DOMParser") {
+  if (name == "XRWebGLLayer" || name == "XRWebGLBinding" || name == "OffscreenCanvas" ||
+      name == "ImageBitmap" || name == "ImageData" || name == "Response" ||
+      name == "ReadableStream" || name == "Request" || name == "Headers" ||
+      name == "DOMParser") {
     return XT_UNDEFINED;
   }
   return type_value(name);

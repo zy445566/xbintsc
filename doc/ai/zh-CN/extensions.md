@@ -88,10 +88,11 @@ import { createWindow, run } from "gui";
 `getComputedStyle`、`alert`/`prompt`、`escape`、`Event` 家族，以及一层 Web Audio
 **接口**（`AudioContext` 及其节点、参数与缓冲区，但没有混音后端）—— 另外还有帧泵：
 它在 `loadHTML` 时启动，仅在仍有动画帧回调时重新排程，因此从不调用 `run()` 的页面
-也能绘制并最终退出。**WebGL 1.0 已实现**：`canvas.getContext("webgl")` 返回一个
-GPU 上下文，其 GLSL ES 着色器由内置的 glslang 编译为 SPIR-V，并通过 SDL_GPU 绘制；
-页面直接合成颜色纹理而无须 CPU 读回（见
-[../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。WebGL 2、WebXR、未启用
+也能绘制并最终退出。**WebGL 1.0 与 2.0 已实现**：`canvas.getContext("webgl")` /
+`"webgl2"` 返回 GPU 上下文，其 GLSL ES 着色器由内置 glslang 编译为 SPIR-V，
+并通过 SDL_GPU 绘制；页面直接合成颜色纹理而无须 CPU 读回，WebGL 2 还增加
+VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷贝（见
+[../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。WebXR、未启用
 `media` 时的 `<video>`/`<audio>`、`fetch` 与流式接口**尚未实现**：`typeof` 会回答
 `"undefined"`，让页面走自己的降级分支。
 见 [../../zh-CN/gui/api.md](../../zh-CN/gui/api.md)。

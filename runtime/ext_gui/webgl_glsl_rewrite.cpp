@@ -179,6 +179,7 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
     edits.push_back(block_edit);
   }
 
+  int fragment_output = 0;
   for (const GlslDeclSite &site : info.sites) {
     Edit edit;
     edit.begin = site.begin;
@@ -212,9 +213,14 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
           } else if (site.kind == GlslDeclSite::Varying) {
             auto found = layout.varyings.find(site.decl.name);
             if (found != layout.varyings.end()) location = found->second;
+          } else if (site.kind == GlslDeclSite::FragmentOut) {
+            location = fragment_output;
           }
         }
         if (location < 0) location = 0;
+        if (site.kind == GlslDeclSite::FragmentOut) {
+          fragment_output = location + 1;
+        }
         const char *direction = "in";
         if (site.kind == GlslDeclSite::Varying) direction = fragment ? "in" : "out";
         if (site.kind == GlslDeclSite::FragmentOut) direction = "out";

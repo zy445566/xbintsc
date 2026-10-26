@@ -19,8 +19,13 @@ CSS 盒中。
 
 ```ts
 const canvas: any = document.getElementById("c");
-const ctx = canvas.getContext("2d"); // 其他上下文类型返回 null
+const ctx = canvas.getContext("2d"); // 或 "webgl" 取得 GPU 上下文
 ```
+
+一个 canvas 只有一种上下文。`getContext("webgl")` 或 `getContext("webgl2")`
+返回 WebGL 上下文（见 [WebGL](./webgl.md)）；一旦 canvas 有了 2D 上下文，
+再申请任一 WebGL 类型都会返回 `null`，反之亦然。从未申请过上下文的 canvas
+保持透明。
 
 `getContext("2d")` 返回一个上下文句柄，其方法与访问器位于共享原型上。该句柄会缓存在
 元素上，因此每次都返回**同一个**对象，绘制状态（变换、样式、路径）按 canvas 而非按调用

@@ -58,9 +58,23 @@ METHOD(node_get_context) {
   std::string mode = string_arg(argc, argv, 0);
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
+  if (mode == "webgl" || mode == "experimental-webgl" || mode == "webgl2") {
+    const bool webgl2 = mode == "webgl2";
+    if (node == nullptr) return XT_NULL;
+    if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
+    if (xt_gui_canvas_find(win, node) != nullptr) return XT_NULL;  // already a 2D canvas
+    xt_value cached = xt_object_get_cstr(self, "__xt_gui_gl");
+    if (XT_IS_OBJECT(cached)) {
+      const bool cached_webgl2 = value_truthy(xt_object_get_cstr(cached, "__xt_gl_webgl2"));
+      return cached_webgl2 == webgl2 ? cached : XT_NULL;
+    }
+    xtgui::WebGLContext *context = xt_gui_webgl_get(win, node, webgl2);
+    return webgl_context_handle(self, context);
+  }
   if (mode != "2d") return XT_NULL;
   if (node == nullptr) return xt_canvas_pending_context(self, win);
   if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
+  if (xt_gui_webgl_find(win, node) != nullptr) return XT_NULL;  // already a WebGL canvas
   xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
   if (canvas == nullptr) return XT_NULL;
   xt_value cached = xt_object_get_cstr(self, "__xt_gui_ctx");
@@ -72,84 +86,6 @@ METHOD(node_get_context) {
   xt_object_set(self, xt_string_from_cstr("__xt_gui_ctx"), ctx);
   return ctx;
 }
-
-METHOD(node_width_get) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  XtGuiWindow *win = nullptr;
-  xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement()) return xt_number(0);
-  if (node->isTag("canvas")) {
-    xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
-    if (canvas != nullptr) return xt_number(canvas->width());
-  }
-  const std::string *attr = node->attr("width");
-  float value = 0.0f;
-  if (attr != nullptr && xtgui::xt_css_parse_number(*attr, &value)) return xt_number(value);
-  return xt_number(0);
-}
-
-METHOD(node_width_set) {
-  (void)env;
-  XtGuiWindow *win = nullptr;
-  xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
-  double value = number_arg(argc, argv, 0, 0.0);
-  if (node->isTag("canvas")) {
-    xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
-    if (canvas != nullptr) {
-      canvas->resize((int)value, canvas->height());
-      if (win != nullptr && win->document != nullptr) {
-        win->document->setCanvasInfo(node, (float)canvas->width(), (float)canvas->height(),
-                                     canvas->id());
-      }
-    }
-    return XT_UNDEFINED;
-  }
-  set_attribute(win, node, "width", std::to_string((long long)value));
-  return XT_UNDEFINED;
-}
-
-METHOD(node_height_get) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  XtGuiWindow *win = nullptr;
-  xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement()) return xt_number(0);
-  if (node->isTag("canvas")) {
-    xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
-    if (canvas != nullptr) return xt_number(canvas->height());
-  }
-  const std::string *attr = node->attr("height");
-  float value = 0.0f;
-  if (attr != nullptr && xtgui::xt_css_parse_number(*attr, &value)) return xt_number(value);
-  return xt_number(0);
-}
-
-METHOD(node_height_set) {
-  (void)env;
-  XtGuiWindow *win = nullptr;
-  xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
-  double value = number_arg(argc, argv, 0, 0.0);
-  if (node->isTag("canvas")) {
-    xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
-    if (canvas != nullptr) {
-      canvas->resize(canvas->width(), (int)value);
-      if (win != nullptr && win->document != nullptr) {
-        win->document->setCanvasInfo(node, (float)canvas->width(), (float)canvas->height(),
-                                     canvas->id());
-      }
-    }
-    return XT_UNDEFINED;
-  }
-  set_attribute(win, node, "height", std::to_string((long long)value));
-  return XT_UNDEFINED;
-}
-
-/* -- state / style getters and setters ------------------------------------ */
 
 METHOD(canvas_get_canvas) {
   (void)env;

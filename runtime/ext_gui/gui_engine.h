@@ -84,6 +84,7 @@ xt_value xt_gui_audio_create(int32_t argc, xt_value *argv);
 #include "document.h"
 #include "media.h"
 #include "renderer.h"
+#include "webgl.h"
 
 /** One element-level event listener registered through `addEventListener`. */
 struct XtGuiNodeListener {
@@ -162,6 +163,9 @@ struct XtGuiWindow {
    * lazily by `getContext("2d")` (or by `xt_gui_canvas_sync` for a live canvas),
    * released when the node is forgotten or the document reloads. */
   std::unordered_map<const xtgui::Node *, std::unique_ptr<xtgui::Canvas2D>> canvases;
+  /** One WebGL context per `<canvas>` that asked for `getContext("webgl")`.
+   * A canvas uses either this map or `canvases`, never both. */
+  std::unordered_map<const xtgui::Node *, std::unique_ptr<xtgui::WebGLContext>> webgl_canvases;
   /** Canvases whose element handle was created before `loadHTML` (a module
    * that calls `getElementById("scene").getContext("2d")` while it
    * initialises). Keyed by canvas id; moved into `canvases` when the pending
@@ -257,6 +261,20 @@ void xt_gui_canvas_bind_pending(XtGuiWindow *win, const xtgui::Node *node, xt_va
 void xt_gui_canvas_sync(XtGuiWindow *win);
 /** Release every canvas of `win` (window close / `loadHTML`). */
 void xt_gui_canvas_shutdown(XtGuiWindow *win);
+
+/** The WebGL context of a `<canvas>`, creating it on first use. `webgl2`
+ * selects the WebGL 2 API/prototype; a canvas keeps the first context kind it
+ * asked for, so a later request for the other one answers null. */
+xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node, bool webgl2);
+/** The existing WebGL context of `node`, or null (no side effects). */
+xtgui::WebGLContext *xt_gui_webgl_find(XtGuiWindow *win, const xtgui::Node *node);
+/** Drop a node's WebGL context (called when its handle is forgotten). */
+void xt_gui_webgl_forget(XtGuiWindow *win, const xtgui::Node *node);
+/** Release every WebGL context of `win`. */
+void xt_gui_webgl_shutdown(XtGuiWindow *win);
+/** Submit every live WebGL context's queued commands. Called once per frame
+ * before the page's own render pass samples a canvas texture. */
+void xt_gui_webgl_submit_all();
 
 #endif /* __cplusplus */
 

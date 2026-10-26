@@ -227,6 +227,135 @@ METHOD(canvas_get_transform) {
   return result;
 }
 
+METHOD(node_width_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement()) return xt_number(0);
+  if (node->isTag("canvas")) {
+    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
+      return xt_number(webgl->width());
+    }
+    xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
+    if (canvas != nullptr) return xt_number(canvas->width());
+  }
+  const std::string *attr = node->attr("width");
+  float value = 0.0f;
+  if (attr != nullptr && xtgui::xt_css_parse_number(*attr, &value)) return xt_number(value);
+  /* A canvas with no context still reports the CSS default bitmap size. */
+  return xt_number(node->isTag("canvas") ? 300 : 0);
+}
+
+METHOD(node_width_set) {
+  (void)env;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
+  double value = canvas_number_arg(argc, argv, 0, 0.0);
+  if (node->isTag("canvas")) {
+    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
+      webgl->resize((int)value, webgl->height());
+      /* A resize replaces the colour texture; the page has to re-upload the
+       * image op even when the box size did not change. */
+      mark_dirty(win);
+      if (win != nullptr && win->document != nullptr) {
+        win->document->setCanvasInfo(node, (float)webgl->width(), (float)webgl->height(),
+                                     webgl->id());
+      }
+      return XT_UNDEFINED;
+    }
+    xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
+    if (canvas != nullptr) {
+      canvas->resize((int)value, canvas->height());
+      if (win != nullptr && win->document != nullptr) {
+        win->document->setCanvasInfo(node, (float)canvas->width(), (float)canvas->height(),
+                                     canvas->id());
+      }
+      return XT_UNDEFINED;
+    }
+    /* No context yet: update the attribute so a later getContext uses it. */
+    int height = 150;
+    const std::string *height_attr = node->attr("height");
+    float parsed = 0.0f;
+    if (height_attr != nullptr && xtgui::xt_css_parse_number(*height_attr, &parsed)) {
+      height = (int)(parsed + 0.5f);
+    }
+    set_attribute(win, node, "width", std::to_string((long long)value));
+    if (win != nullptr && win->document != nullptr) {
+      win->document->setCanvasInfo(node, (float)value, (float)height, 0);
+    }
+    return XT_UNDEFINED;
+  }
+  set_attribute(win, node, "width", std::to_string((long long)value));
+  return XT_UNDEFINED;
+}
+
+METHOD(node_height_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement()) return xt_number(0);
+  if (node->isTag("canvas")) {
+    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
+      return xt_number(webgl->height());
+    }
+    xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
+    if (canvas != nullptr) return xt_number(canvas->height());
+  }
+  const std::string *attr = node->attr("height");
+  float value = 0.0f;
+  if (attr != nullptr && xtgui::xt_css_parse_number(*attr, &value)) return xt_number(value);
+  return xt_number(node->isTag("canvas") ? 150 : 0);
+}
+
+METHOD(node_height_set) {
+  (void)env;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
+  double value = canvas_number_arg(argc, argv, 0, 0.0);
+  if (node->isTag("canvas")) {
+    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
+      webgl->resize(webgl->width(), (int)value);
+      mark_dirty(win);
+      if (win != nullptr && win->document != nullptr) {
+        win->document->setCanvasInfo(node, (float)webgl->width(), (float)webgl->height(),
+                                     webgl->id());
+      }
+      return XT_UNDEFINED;
+    }
+    xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
+    if (canvas != nullptr) {
+      canvas->resize(canvas->width(), (int)value);
+      if (win != nullptr && win->document != nullptr) {
+        win->document->setCanvasInfo(node, (float)canvas->width(), (float)canvas->height(),
+                                     canvas->id());
+      }
+      return XT_UNDEFINED;
+    }
+    int width = 300;
+    const std::string *width_attr = node->attr("width");
+    float parsed = 0.0f;
+    if (width_attr != nullptr && xtgui::xt_css_parse_number(*width_attr, &parsed)) {
+      width = (int)(parsed + 0.5f);
+    }
+    set_attribute(win, node, "height", std::to_string((long long)value));
+    if (win != nullptr && win->document != nullptr) {
+      win->document->setCanvasInfo(node, (float)width, (float)value, 0);
+    }
+    return XT_UNDEFINED;
+  }
+  set_attribute(win, node, "height", std::to_string((long long)value));
+  return XT_UNDEFINED;
+}
+
+/* -- state / style getters and setters ------------------------------------ */
+
+
 }  // namespace domapi
 
 #undef METHOD

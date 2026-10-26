@@ -70,9 +70,10 @@ import { createWindow, run } from "gui";
 It is a self-contained GPU-accelerated renderer (own HTML parser, CSS cascade,
 layout and compositor) — not a system WebView. The compiler side also inlines
 local `<link rel="stylesheet">` files (and their `@import`s) into `<style>`
-blocks, because the runtime parser only reads inline `<style>`; and it replaces
-a bundled three.js module's `WebGLRenderer` with a Canvas2D scene renderer
-(`runtime/ext_gui/three_compat.js`) so Three.js pages draw without WebGL. It ships as a per-platform
+blocks, because the runtime parser only reads inline `<style>`; and it makes a
+bundled three.js module's `WebGLRenderer` probe for a WebGL context, using
+three.js's real renderer when the engine has one and the bundled Canvas2D scene
+renderer (`runtime/ext_gui/three_compat.js`) otherwise. It ships as a per-platform
 prebuilt `gui.a`/`gui.lib` because it is C++. `<img>` decodes through the engine
 itself; `<video>`/`<audio>` do **not** work with `gui` alone — they need the
 separate [`media`](#media--videoaudio-decoding) extension. `<canvas>` is
@@ -96,9 +97,13 @@ Pages written for the browser also get the browser globals they reach for —
 `escape`, the `Event` family and a Web Audio *surface* (`AudioContext` with
 nodes, params and buffers, but no mixer) — plus a frame pump that starts at
 `loadHTML` and re-arms only while animation-frame callbacks remain, so a page
-that never calls `run()` still paints and then exits. General-purpose WebGL/WebXR, `<video>`/
-`<audio>` without `media`, `fetch` and streaming are **not** implemented (Three.js
-gets the Canvas2D fallback described above):
+that never calls `run()` still paints and then exits. **WebGL 1.0 and 2.0 are implemented**: `canvas.getContext("webgl")` /
+`"webgl2"` return a GPU context whose GLSL ES shaders are compiled to SPIR-V by
+a bundled glslang and drawn through SDL_GPU; the page composites the colour
+texture without a CPU readback, and WebGL 2 adds VAOs, instancing, integer
+attributes, sampler objects, `texStorage2D` and buffer copies (see
+[../gui/webgl.md](../gui/webgl.md)). WebXR, `<video>`/`<audio>` without
+`media`, `fetch` and streaming are **not** implemented:
 `typeof` answers `"undefined"` so a page takes its own fallback branch. See
 [../gui/api.md](../gui/api.md#browser-globals).
 

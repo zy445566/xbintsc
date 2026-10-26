@@ -287,6 +287,9 @@ void xt_gui_render_window(XtGuiWindow *win) {
   xt_gui_media_upload_frames(g_device);
   /* Canvases are CPU-drawn: push any new bitmap without a relayout. */
   xt_gui_canvas_upload_frames(g_device);
+  /* WebGL contexts record into their own command buffers; submit them first so
+   * the page's render pass samples this frame's drawing-buffer contents. */
+  xt_gui_webgl_submit_all();
   SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(g_device);
   if (cmd == NULL) return;
   SDL_GPUTexture *swapchain = NULL;

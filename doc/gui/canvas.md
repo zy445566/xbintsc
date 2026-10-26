@@ -23,8 +23,13 @@ state parsing in `canvas_style.cpp`; the DOM bindings live in
 
 ```ts
 const canvas: any = document.getElementById("c");
-const ctx = canvas.getContext("2d"); // or null for any other context kind
+const ctx = canvas.getContext("2d"); // or "webgl" for a GPU context
 ```
+
+A canvas has one context kind. `getContext("webgl")` or `getContext("webgl2")`
+returns a WebGL context (see [WebGL](./webgl.md)); once a canvas has a 2D context,
+asking for either WebGL kind answers `null`, and vice versa. A canvas that never
+asked for a context stays transparent.
 
 `getContext("2d")` returns a context handle whose methods and accessors live on
 a shared prototype. The handle is cached on the element, so every call returns

@@ -229,15 +229,21 @@ describe("gui .html asset loader", () => {
     expect(htmlOf(moduleSource)).toContain('href="https://example.com/x.css"');
   });
 
-  it("replaces three.js's WebGLRenderer with the Canvas2D fallback", () => {
+  it("prefers three.js's WebGLRenderer and keeps the Canvas2D fallback", () => {
     const source =
       "class WebGLRenderer {\n  constructor() {}\n}\n" +
       "class WebGL1Renderer extends WebGLRenderer {}\n" +
       "export { WebGL1Renderer, WebGLRenderer };\n";
     const { moduleSource, dependencies } = loadScriptAsset("three.module.js", source);
     expect(moduleSource).toContain("class WebGLRendererWebGL {");
-    expect(moduleSource).toContain("class WebGL1Renderer extends WebGLRendererWebGL {}");
-    // The new class is inserted before the export list, which still names the
+    expect(moduleSource).toContain("class WebGL1RendererWebGL extends WebGLRendererWebGL {}");
+    // The fallback keeps its own private name; the public class prefers WebGL
+    // and only constructs the fallback when no context exists.
+    expect(moduleSource).toContain("class __XtCanvas2DRenderer {");
+    expect(moduleSource).toContain("class WebGLRenderer extends WebGLRendererWebGL {");
+    expect(moduleSource).toContain("class WebGL1Renderer extends WebGLRenderer {}");
+    expect(moduleSource).toContain("__xtHasWebGL");
+    // The block is inserted before the export list, which still names the
     // public `WebGLRenderer` binding.
     expect(moduleSource).toContain("__xtSwTAU");
     expect(moduleSource.lastIndexOf("class WebGLRenderer {")).toBeLessThan(

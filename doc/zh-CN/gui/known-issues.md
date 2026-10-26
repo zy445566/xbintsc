@@ -6,16 +6,20 @@
 
 ## 已知问题
 
-- **没有通用 WebGL，但 Three.js 有 Canvas2D 回退。** `getContext("webgl")` /
-  `getContext("webgl2")` 仍然返回 `null`，`WebGL*` / `WebGL2RenderingContext` /
-  `XRWebGL*` 全局仍然为 `undefined`。变化在于 gui 扩展的 `.js` 资源加载器会识别
-  Three.js 模块，并把它的 `WebGLRenderer` 导出替换为 Canvas2D 场景渲染器
-  （`runtime/ext_gui/three_compat.js`，由 `src/extensions/gui/three.ts` 载入）。
-  因此 Three.js 页面现在**既能编译也能绘制**：标准/基础材质、各类灯光、雾、
-  tone mapping、CanvasTexture、Sprite、Points 与实例化剪影都受支持。它是场景渲染器，
-  不是 GL 实现，所以自定义 shader、蒙皮/变形目标、真实阴影贴图与渲染目标不会执行；
-  快速路径之外的几何会退化为平面着色三角形。其他 WebGL 库仍然看到未定义的上下文，
-  需要走自己的降级分支。
+- **WebGL 1.0 与 2.0 运行在 Vulkan SPIR-V 上，但只实现了各自的子集。**
+  `canvas.getContext("webgl")` / `"webgl2"` 返回真正的 GPU 上下文（见
+  [WebGL](./webgl.md)）：GLSL ES 着色器由内置 glslang 翻译为 SPIR-V，绘图缓冲
+  是一张离屏颜色纹理，页面直接合成而无须读回。WebGL 2 增加了 VAO、实例化、
+  整数属性、采样器对象、`texStorage2D` 与缓冲拷贝。Uniform 块、transform
+  feedback、立方体贴图、3D 纹理、浮点/深度纹理、压缩纹理、多渲染目标、
+  `blitFramebuffer`、MSAA 与模板操作尚未实现；`clear` 会忽略 scissor 矩形。
+  在无法消费 SPIR-V 的 SDL_GPU 后端（Metal、Direct3D 12）上两种上下文都为
+  `null`。`.js` 资源加载器仍保持 Three.js 可用：它的 `WebGLRenderer` 会探测
+  上下文（优先 `webgl2`），有上下文时使用 Three.js 自己的渲染器，只有没有
+  上下文时才回退到内置 Canvas2D 场景渲染器
+  （`runtime/ext_gui/three_compat.js`）。需要深度纹理或 uniform 块的 three.js
+  场景仍可能失败，这类页面应保留回退。
+
 
 - **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生
   访问违例（`0xC0000005`）退出，其余运行与正常退出无异。该问题只在**动画帧循环运行中**复现

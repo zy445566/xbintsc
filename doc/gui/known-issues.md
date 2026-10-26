@@ -5,19 +5,24 @@
 
 ## Known issues
 
-- **No general WebGL — but three.js has a Canvas2D fallback.** `getContext("webgl")` /
-  `getContext("webgl2")` still answer `null` and the `WebGL*` /
-  `WebGL2RenderingContext` / `XRWebGL*` globals are still `undefined`. What changed
-  is that the gui extension's `.js` asset loader recognises a three.js module and
-  replaces its `WebGLRenderer` export with a Canvas2D scene renderer
-  (`runtime/ext_gui/three_compat.js`, loaded by
-  `src/extensions/gui/three.ts`). A Three.js page therefore compiles **and draws**:
-  standard/basic materials, the light types, fog, tone mapping, CanvasTextures,
-  sprites, points and instanced silhouettes are supported. It is a scene renderer,
-  not a GL implementation, so custom shaders, skinning/morph targets, real shadow
-  maps and render targets are not executed; geometry outside the fast paths falls
-  back to flat-shaded triangles. Any *other* WebGL library still sees an undefined
-  context and must take its own fallback branch.
+- **WebGL 1.0 and 2.0 run on Vulkan SPIR-V, with a subset of each.**
+  `canvas.getContext("webgl")` / `"webgl2"` return real GPU contexts (see
+  [WebGL](./webgl.md)): GLSL ES shaders are translated to SPIR-V by the bundled
+  glslang and the drawing buffer is an offscreen colour texture that the page
+  composites without a readback. WebGL 2 adds VAOs, instancing, integer
+  attributes, sampler objects, `texStorage2D` and buffer copies. Uniform
+  blocks, transform feedback, cube maps, 3D textures, float/depth textures,
+  compressed textures, multiple render targets, `blitFramebuffer`, MSAA and
+  stencil operations are not implemented; `clear` ignores the scissor rectangle.
+  On an SDL_GPU backend that cannot consume SPIR-V (Metal, Direct3D 12) both
+  context kinds are `null`. The `.js` asset loader keeps three.js working: its
+  `WebGLRenderer` probes for a context (asking `webgl2` first) and uses
+  three.js's own renderer when one exists, falling back to the bundled Canvas2D
+  scene renderer (`runtime/ext_gui/three_compat.js`) only when it does not.
+  three.js features that need depth textures or uniform blocks may still fail
+  on a particular scene; those pages should keep the fallback.
+
+
 
 - **Intermittent crash at auto-close.** `XT_GUI_AUTOCLOSE_MS` can end a run
   with a native access violation in roughly two runs out of five; a clean exit

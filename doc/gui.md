@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M16** — features (M1–M15) are complete: HTML parsing, CSS selector
+Status: **M18** — features (M1–M15) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -35,6 +35,7 @@ them) can be translated, scaled and rotated without reflowing anything — and
 `transition: transform`, so those poses animate. See
 [Layout](./gui/layout.md#transforms-m15) and
 [Animation](./gui/animation.md#css-transforms-m15).
+**M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md).
 This overview records the locked decisions, the architecture, the milestone plan
 and the current progress; the engine itself is documented by function in the
 pages above.
@@ -283,6 +284,34 @@ engine were Rust.
       NanoSVG cache as an SVG file (`svg.{h,cpp}`); the markup cache is bounded
       and a DOM mutation re-serializes on the next layout. e2e in
       `tests/e2e/gui-inline-svg.test.ts`.
+17. **M17 — WebGL** ✅
+    - `canvas.getContext("webgl")` creates a real GPU context
+      (`webgl.{h,cpp}`): an offscreen RGBA8 colour texture plus a depth texture,
+      its own SDL_GPU command buffer, and pipelines created lazily from the
+      program, vertex layout and fixed-function state. The page composites the
+      colour texture through the existing image path, with no CPU readback.
+    - `webgl_glsl*.cpp` rewrites GLSL ES 1.00/3.00 to Vulkan GLSL ES 3.10
+      (attribute/varying locations, `gl_FragColor`, `texture2D`, one std140
+      uniform block per stage, explicit sampler bindings), compiles it with a
+      statically bundled glslang, and reflects the SPIR-V for uniform offsets.
+    - `dom_api_webgl*.cpp` exposes the WebGL 1.0 surface, including textures,
+      mipmaps, render-to-texture framebuffers and `readPixels`. See
+      [WebGL](./gui/webgl.md); e2e in `tests/e2e/gui-webgl.test.ts` and
+      `tests/e2e/gui-example-webgl.test.ts`, demo in
+      `examples/gui/webgl-cube`.
+18. **M18 — WebGL 2** ✅
+    - `canvas.getContext("webgl2")` returns a context whose prototype extends
+      the WebGL 1 one, with the WebGL 2 constants and methods.
+    - GLSL ES 3.00 sources (`#version 300 es`, `in`/`out`, named fragment
+      outputs, `gl_InstanceID`) compile through the same rewriter.
+    - Vertex-array objects save/restore the attribute table, instanced draws use
+      SDL's per-instance input rate, and sampler objects override a texture
+      unit's filter/wrap state. `texStorage2D`, `copyBufferSubData`,
+      `getBufferSubData` and `clearBuffer*` are implemented; query/fence/UBO and
+      transform-feedback entry points exist and degrade gracefully. See
+      [WebGL](./gui/webgl.md); e2e in `tests/e2e/gui-webgl2.test.ts` and
+      `tests/e2e/gui-example-webgl2.test.ts`, demo in
+      `examples/gui/webgl2-cubes`.
 
 ## Progress log
 
@@ -401,4 +430,19 @@ engine were Rust.
   NanoSVG cache (`svg.{h,cpp}`, bounded LRU for markup). The `win.inlineSvg`
   diagnostic exposes the serialized document, and `tests/e2e/gui-inline-svg.test.ts`
   pins sizing, hit testing, gradients, CSS box styling and mutation.
+- **M17** ✅ WebGL. `xtgui::WebGLContext` (`webgl.{h,cpp}`) owns the offscreen
+  colour/depth targets and the command buffer, `webgl_buffer/texture/draw/shader`
+  implement the GL object model, `webgl_glsl*.cpp` translate GLSL ES to SPIR-V
+  with the bundled glslang, and `dom_api_webgl*.cpp` bind the WebGL 1.0 API.
+  `renderer_image.cpp` returns the context's colour texture for a canvas id, so
+  the page composites GPU output directly. Demo: `examples/gui/webgl-cube`;
+  e2e: `tests/e2e/gui-webgl.test.ts`, `tests/e2e/gui-example-webgl.test.ts`.
+- **M18** ✅ WebGL 2. `webgl2_proto()` extends the WebGL 1 prototype with the
+  WebGL 2 constants/methods; `webgl_webgl2.cpp` implements vertex-array objects
+  and sampler/query/sync handles, `webgl_draw.cpp` adds instanced draws (input
+  rate from `vertexAttribDivisor`) and integer attributes, and
+  `webgl_texture.cpp` adds `texStorage2D` and `clearBuffer*`. The shader
+  rewriter gives `#version 300 es` outputs sequential locations. Demo:
+  `examples/gui/webgl2-cubes` (64 cubes, one instanced draw call);
+  e2e: `tests/e2e/gui-webgl2.test.ts`, `tests/e2e/gui-example-webgl2.test.ts`.
 

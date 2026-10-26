@@ -103,6 +103,9 @@ struct WebGLTexture {
   /** True when `format` is a depth(-stencil) format; such a texture can be a
    * depth attachment but never a colour attachment. */
   bool depth = false;
+  /** True when `format` is block-compressed; such a texture is sample-only and
+   * has exactly one mip level here. */
+  bool compressed = false;
   /** Usage flags the current `gpu` texture was created with. */
   uint32_t usage = 0;
   bool as_target = false;        // bound as a colour attachment
@@ -382,14 +385,24 @@ class WebGLContext {
   bool tex_storage_2d(uint32_t id, int levels, int width, int height);
   bool tex_storage_format(uint32_t id, int levels, int width, int height,
                           SDL_GPUTextureFormat format);
+  /** Upload a block-compressed region (`data` holds the tightly packed blocks
+   * for the `width`×`height` region). */
+  bool tex_image_compressed(uint32_t id, int width, int height, SDL_GPUTextureFormat format,
+                            int x, int y, int region_width, int region_height,
+                            const uint8_t *data, uint32_t size);
+  /** Whether the device can sample `internalformat` (compressed formats). */
+  bool supports_texture_format(int internalformat);
   int texture_width(uint32_t id);
+  int texture_height(uint32_t id);
   /** The SDL_GPU format of a texture (RGBA8 before `texImage2D`). */
   int texture_format(uint32_t id);
 
   /* -- framebuffers ------------------------------------------------------ */
   uint32_t create_framebuffer();
   void delete_framebuffer(uint32_t id);
-  void bind_framebuffer(uint32_t id);
+  void bind_framebuffer(int target, uint32_t id);
+  uint32_t bound_read_framebuffer_id() const { return read_framebuffer_; }
+  bool blit_framebuffer(const int source[4], const int destination[4], int mask, int filter);
   bool framebuffer_texture(uint32_t framebuffer, uint32_t texture,
                            int attachment = GL_COLOR_ATTACHMENT0);
   bool framebuffer_status(uint32_t id);
@@ -435,6 +448,13 @@ class WebGLContext {
   void end_pass();
   void flush_uploads();
   void begin_pass(bool clear_color, bool clear_depth, bool clear_stencil);
+  /** Clear the depth/stencil parts of a scissored `clear` by drawing a
+   * fullscreen triangle with depth/stencil writes and colour writes masked. */
+  void scissored_clear(int mask);
+  /** The 1×1 texture a scissored colour clear blits from. */
+  SDL_GPUTexture *clear_color_texture();
+  SDL_GPUTexture *framebuffer_color(uint32_t id);
+  void framebuffer_size(uint32_t id, int *width, int *height);
   /** Release every GPU handle this context owns, keeping the CPU-side object
    * table. Used by the destructor and by `lose_context`. */
   void release_gpu_resources();
@@ -477,6 +497,11 @@ class WebGLContext {
   SDL_GPUTexture *depth_ = nullptr;
   SDL_GPUTexture *fallback_texture_ = nullptr;
   SDL_GPUSampler *fallback_sampler_ = nullptr;
+  /** 1×1 RGBA8 source for a scissored colour clear. */
+  SDL_GPUTexture *clear_texture_ = nullptr;
+  /** Internal program/buffer for a scissored depth/stencil clear. */
+  uint32_t clear_program_ = 0;
+  uint32_t clear_buffer_ = 0;
 
   float clear_color_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float clear_depth_ = 1.0f;
@@ -508,6 +533,7 @@ class WebGLContext {
   uint32_t bound_array_ = 0;
   uint32_t bound_element_ = 0;
   uint32_t bound_framebuffer_ = 0;
+  uint32_t read_framebuffer_ = 0;
   uint32_t bound_renderbuffer_ = 0;
   uint32_t bound_textures_[kWebGLMaxTextureUnits] = {};
   uint32_t bound_samplers_[kWebGLMaxTextureUnits] = {};
@@ -529,6 +555,10 @@ WebGLContext *xt_webgl_by_id(uint64_t id);
 /** Map a WebGL internal format to the SDL_GPU texture format the engine uses
  * (RGBA8 for formats without a special backend representation). */
 SDL_GPUTextureFormat webgl_storage_format(int internalformat);
+
+/** Map a WebGL compressed-texture internal format to its SDL_GPU format, or
+ * `SDL_GPU_TEXTUREFORMAT_INVALID` for anything else. */
+SDL_GPUTextureFormat webgl_compressed_format(int internalformat);
 
 }  // namespace xtgui
 

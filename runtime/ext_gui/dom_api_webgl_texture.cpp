@@ -17,6 +17,7 @@
 #include "canvas.h"
 #include "dom_api_webgl_rt.h"
 #include "image.h"
+#include "image_bitmap.h"
 #include "webgl.h"
 
 #define METHOD(name) xt_value name(xt_value self, xt_value env, int32_t argc, xt_value *argv)
@@ -35,64 +36,6 @@ int bytes_per_pixel(int format) {
   return 1;
 }
 
-void convert_pixels(const uint8_t *source, int count, int format, bool premultiply,
-                    std::vector<uint8_t> *out) {
-  out->assign((size_t)count * 4, 255);
-  for (int i = 0; i < count; i++) {
-    uint8_t r = 0;
-    uint8_t g = 0;
-    uint8_t b = 0;
-    uint8_t a = 255;
-    switch (format) {
-      case GL_RGBA:
-        r = source[i * 4 + 0];
-        g = source[i * 4 + 1];
-        b = source[i * 4 + 2];
-        a = source[i * 4 + 3];
-        break;
-      case GL_RGB:
-        r = source[i * 3 + 0];
-        g = source[i * 3 + 1];
-        b = source[i * 3 + 2];
-        break;
-      case GL_LUMINANCE_ALPHA:
-        r = g = b = source[i * 2 + 0];
-        a = source[i * 2 + 1];
-        break;
-      case GL_ALPHA:
-        a = source[i];
-        r = g = b = 0;
-        break;
-      case GL_LUMINANCE:
-      default:
-        r = g = b = source[i];
-        break;
-    }
-    if (premultiply) {
-      r = (uint8_t)((r * a + 127) / 255);
-      g = (uint8_t)((g * a + 127) / 255);
-      b = (uint8_t)((b * a + 127) / 255);
-    }
-    (*out)[(size_t)i * 4 + 0] = r;
-    (*out)[(size_t)i * 4 + 1] = g;
-    (*out)[(size_t)i * 4 + 2] = b;
-    (*out)[(size_t)i * 4 + 3] = a;
-  }
-}
-
-void flip_rows(std::vector<uint8_t> *pixels, int width, int height) {
-  const size_t stride = (size_t)width * 4;
-  std::vector<uint8_t> row(stride);
-  for (int y = 0; y < height / 2; y++) {
-    uint8_t *top = pixels->data() + (size_t)y * stride;
-    uint8_t *bottom = pixels->data() + (size_t)(height - 1 - y) * stride;
-    memcpy(row.data(), top, stride);
-    memcpy(top, bottom, stride);
-    memcpy(bottom, row.data(), stride);
-  }
-}
-
-/** Flip rows for any tightly packed texel size (float/depth uploads). */
 void flip_rows_bpp(std::vector<uint8_t> *pixels, int width, int height, int bpp) {
   const size_t stride = (size_t)width * bpp;
   std::vector<uint8_t> row(stride);
@@ -280,62 +223,6 @@ SDL_GPUTextureFormat storage_format_for(int internalformat) {
   return xtgui::webgl_storage_format(internalformat);
 }
 
-/** Decode a DOM source into top-down RGBA8. */
-bool read_source(xt_value source, int *width, int *height, std::vector<uint8_t> *rgba,
-                 bool premultiply) {
-  XtGuiWindow *win = nullptr;
-  xtgui::Node *node = resolve_node(source, &win);
-  const xtgui::Image *image = nullptr;
-  std::vector<uint8_t> owned;
-  if (node != nullptr && node->isElement() && node->isTag("img")) {
-    const std::string *src = node->attr("src");
-    if (src != nullptr) image = xtgui::xt_image_load(*src);
-  } else if (node != nullptr && node->isElement() && node->isTag("canvas")) {
-    if (xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node)) {
-      image = &canvas->image();
-    } else if (xtgui::WebGLContext *context = xt_gui_webgl_find(win, node)) {
-      owned.resize((size_t)context->width() * context->height() * 4);
-      if (!context->read_pixels(0, 0, context->width(), context->height(), owned.data())) {
-        return false;
-      }
-      /* `readPixels` is GL-ordered (bottom-up); textures are stored top-down. */
-      flip_rows(&owned, context->width(), context->height());
-      *width = context->width();
-      *height = context->height();
-      rgba->swap(owned);
-      return true;
-    }
-  } else if (XT_IS_OBJECT(source) && !xt_is_array_buffer(source)) {
-    xt_value data = xt_object_get_cstr(source, "data");
-    xt_value width_value = xt_object_get_cstr(source, "width");
-    xt_value height_value = xt_object_get_cstr(source, "height");
-    if (XT_IS_OBJECT(data) && XT_IS_NUMBER(width_value) && XT_IS_NUMBER(height_value)) {
-      const int w = (int)xt_to_number(width_value);
-      const int h = (int)xt_to_number(height_value);
-      const std::vector<uint8_t> bytes = webgl_bytes(data);
-      if (w <= 0 || h <= 0 || bytes.size() < (size_t)w * h * 4) return false;
-      convert_pixels(bytes.data(), w * h, GL_RGBA, premultiply, rgba);
-      *width = w;
-      *height = h;
-      return true;
-    }
-    /* `new Image()` is a plain object with a `src`. */
-    xt_value src = xt_object_get_cstr(source, "src");
-    if (XT_IS_STRING(src)) {
-      const char *path = xt_string_data(xt_to_string(src));
-      if (path != nullptr && path[0] != '\0') image = xtgui::xt_image_load(path);
-    }
-  }
-  if (image == nullptr || image->width <= 0 || image->height <= 0) return false;
-  *width = image->width;
-  *height = image->height;
-  if (premultiply) {
-    convert_pixels(image->pixels.data(), image->width * image->height, GL_RGBA, true, rgba);
-  } else {
-    *rgba = image->pixels;
-  }
-  return true;
-}
 
 }  // namespace
 
@@ -488,10 +375,10 @@ METHOD(webgl_tex_image_2d) {
       context->set_error(GL_INVALID_VALUE);
       return XT_UNDEFINED;
     } else {
-      convert_pixels(pixels.data(), width * height, format, premultiply, &rgba);
+      webgl_convert_pixels(pixels.data(), width * height, format, premultiply, &rgba);
     }
   } else {
-    if (!read_source(xt_arg(argc, argv, 5), &width, &height, &rgba, premultiply)) {
+    if (!webgl_read_source(xt_arg(argc, argv, 5), &width, &height, &rgba, premultiply)) {
       context->set_error(GL_INVALID_VALUE);
       return XT_UNDEFINED;
     }
@@ -501,7 +388,7 @@ METHOD(webgl_tex_image_2d) {
     context->set_error(GL_INVALID_VALUE);
     return XT_UNDEFINED;
   }
-  if (flip_y) flip_rows(&rgba, width, height);
+  if (flip_y) flip_rows_bpp(&rgba, width, height, 4);
   context->tex_image_rgba(texture, width, height, rgba.data());
   return XT_UNDEFINED;
 }
@@ -560,17 +447,17 @@ METHOD(webgl_tex_sub_image_2d) {
       return XT_UNDEFINED;
     }
     if (pixels.size() < count * (size_t)bytes_per_pixel(format)) return XT_UNDEFINED;
-    convert_pixels(pixels.data(), width * height, format, premultiply, &rgba);
+    webgl_convert_pixels(pixels.data(), width * height, format, premultiply, &rgba);
   } else {
     int source_width = 0;
     int source_height = 0;
-    if (!read_source(xt_arg(argc, argv, 6), &source_width, &source_height, &rgba, premultiply)) {
+    if (!webgl_read_source(xt_arg(argc, argv, 6), &source_width, &source_height, &rgba, premultiply)) {
       return XT_UNDEFINED;
     }
     width = source_width;
     height = source_height;
   }
-  if (flip_y) flip_rows(&rgba, width, height);
+  if (flip_y) flip_rows_bpp(&rgba, width, height, 4);
   context->tex_sub_image_rgba(texture, x, y, width, height, rgba.data());
   return XT_UNDEFINED;
 }

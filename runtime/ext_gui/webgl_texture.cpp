@@ -72,6 +72,41 @@ bool upload_region(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUText
 
 }  // namespace
 
+SDL_GPUTexture *WebGLContext::clear_color_texture() {
+  if (guidev::g_device == nullptr) return nullptr;
+  if (clear_texture_ == nullptr) {
+    end_pass();
+    ensure_command();
+    SDL_GPUTextureCreateInfo info;
+    memset(&info, 0, sizeof(info));
+    info.type = SDL_GPU_TEXTURETYPE_2D;
+    info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    info.width = 1;
+    info.height = 1;
+    info.layer_count_or_depth = 1;
+    info.num_levels = 1;
+    info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    clear_texture_ = SDL_CreateGPUTexture(guidev::g_device, &info);
+    if (clear_texture_ == nullptr) {
+      set_error(GL_OUT_OF_MEMORY);
+      return nullptr;
+    }
+  }
+  end_pass();
+  ensure_command();
+  if (cmd_ == nullptr) return clear_texture_;
+  uint8_t rgba[4];
+  for (int i = 0; i < 4; i++) {
+    float value = clear_color_[i];
+    if (value < 0.0f) value = 0.0f;
+    if (value > 1.0f) value = 1.0f;
+    rgba[i] = (uint8_t)(value * 255.0f + 0.5f);
+  }
+  upload_region(guidev::g_device, cmd_, clear_texture_, 0, 0, 1, 1, rgba, 4);
+  return clear_texture_;
+}
+
 bool WebGLContext::tex_image_format(uint32_t id, int width, int height,
                                     SDL_GPUTextureFormat format, const uint8_t *pixels) {
   WebGLTexture *record = texture(id);
@@ -93,6 +128,7 @@ bool WebGLContext::tex_image_format(uint32_t id, int width, int height,
     record->height = height;
     record->format = format;
     record->depth = depth_texture_format(format);
+    record->compressed = false;
     record->has_mipmaps = false;
     if (record->sampler != nullptr) {
       SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
@@ -259,6 +295,7 @@ bool WebGLContext::tex_storage_format(uint32_t id, int levels, int width, int he
   record->height = height;
   record->format = format;
   record->depth = depth_texture_format(format);
+  record->compressed = false;
   record->has_mipmaps = false;
   if (record->sampler != nullptr && guidev::g_device != nullptr) {
     SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);

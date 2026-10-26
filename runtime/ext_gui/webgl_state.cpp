@@ -8,6 +8,9 @@
 
 #include "webgl.h"
 
+#include <algorithm>
+#include <cstring>
+
 #include "gui_internal.h"
 
 namespace xtgui {
@@ -164,7 +167,52 @@ void WebGLContext::clear(int mask) {
   const bool color_bit = (mask & GL_COLOR_BUFFER_BIT) != 0;
   const bool depth_bit = (mask & GL_DEPTH_BUFFER_BIT) != 0;
   const bool stencil_bit = (mask & GL_STENCIL_BUFFER_BIT) != 0;
-  begin_pass(color_bit, depth_bit, stencil_bit);
+  const bool scissored = scissor_test_ && scissor_box_[2] > 0 && scissor_box_[3] > 0;
+  if (!scissored) {
+    begin_pass(color_bit, depth_bit, stencil_bit);
+    return;
+  }
+  if (color_bit) {
+    SDL_GPUTexture *source = clear_color_texture();
+    SDL_GPUTexture *destination = target_color();
+    int target_width = 0;
+    int target_height = 0;
+    framebuffer_size(bound_framebuffer_, &target_width, &target_height);
+    if (source != nullptr && destination != nullptr && target_width > 0 && target_height > 0) {
+      end_pass();
+      ensure_command();
+      if (cmd_ != nullptr) {
+        int x = std::max(0, scissor_box_[0]);
+        int y = std::max(0, scissor_box_[1]);
+        int w = scissor_box_[2];
+        int h = scissor_box_[3];
+        if (x + w > target_width) w = target_width - x;
+        if (y + h > target_height) h = target_height - y;
+        if (w > 0 && h > 0) {
+          SDL_GPUBlitRegion source_region;
+          memset(&source_region, 0, sizeof(source_region));
+          source_region.texture = source;
+          source_region.w = 1;
+          source_region.h = 1;
+                  SDL_GPUBlitRegion destination_region;
+          memset(&destination_region, 0, sizeof(destination_region));
+          destination_region.texture = destination;
+          destination_region.x = (Uint32)x;
+          destination_region.y = (Uint32)(target_height - (y + h));
+          destination_region.w = (Uint32)w;
+          destination_region.h = (Uint32)h;
+                  SDL_GPUBlitInfo info;
+          memset(&info, 0, sizeof(info));
+          info.source = source_region;
+          info.destination = destination_region;
+          info.load_op = SDL_GPU_LOADOP_DONT_CARE;
+          info.filter = SDL_GPU_FILTER_NEAREST;
+          SDL_BlitGPUTexture(cmd_, &info);
+        }
+      }
+    }
+  }
+  if (depth_bit || stencil_bit) scissored_clear(mask);
 }
 
 void WebGLContext::finish() {

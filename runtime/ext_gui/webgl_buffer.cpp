@@ -149,14 +149,17 @@ SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_t
   record->depth = depth;
   /* Allocate sample *and* target usage up front: attaching a texture that was
    * already uploaded must not recreate it (shadow maps upload or attach in
-   * either order). */
+   * either order). Compressed textures are sample-only. */
   const uint32_t wanted =
-      SDL_GPU_TEXTUREUSAGE_SAMPLER |
-      (depth ? SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET : SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
+      record->compressed
+          ? SDL_GPU_TEXTUREUSAGE_SAMPLER
+          : (SDL_GPU_TEXTUREUSAGE_SAMPLER |
+             (depth ? SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+                    : SDL_GPU_TEXTUREUSAGE_COLOR_TARGET));
   if (record->gpu != nullptr && record->usage == wanted) {
     if (as_target) {
       if (depth) record->as_depth_target = true;
-      else record->as_target = true;
+      else if (!record->compressed) record->as_target = true;
     }
     return record->gpu;
   }
@@ -165,10 +168,11 @@ SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_t
     SDL_ReleaseGPUTexture(guidev::g_device, record->gpu);
     record->gpu = nullptr;
   }
-  record->as_target = as_target && !depth;
+  record->as_target = as_target && !depth && !record->compressed;
   record->as_depth_target = as_target && depth;
   record->usage = wanted;
-  record->levels = depth ? 1 : mip_levels_for(record->width, record->height);
+  record->levels =
+      (depth || record->compressed) ? 1 : mip_levels_for(record->width, record->height);
   SDL_GPUTextureCreateInfo info;
   memset(&info, 0, sizeof(info));
   info.type = SDL_GPU_TEXTURETYPE_2D;
@@ -222,6 +226,11 @@ int WebGLContext::texture_width(uint32_t id) {
   return record != nullptr ? record->width : 0;
 }
 
+int WebGLContext::texture_height(uint32_t id) {
+  WebGLTexture *record = texture(id);
+  return record != nullptr ? record->height : 0;
+}
+
 int WebGLContext::texture_format(uint32_t id) {
   WebGLTexture *record = texture(id);
   return record != nullptr ? (int)record->format : 0;
@@ -240,7 +249,8 @@ uint32_t WebGLContext::create_framebuffer() {
 void WebGLContext::delete_framebuffer(uint32_t id) {
   auto found = framebuffers_.find(id);
   if (found == framebuffers_.end()) return;
-  if (bound_framebuffer_ == id) bind_framebuffer(0);
+  if (bound_framebuffer_ == id) bind_framebuffer(GL_FRAMEBUFFER, 0);
+  if (read_framebuffer_ == id) read_framebuffer_ = 0;
   if (found->second->depth != nullptr && found->second->depth_renderbuffer == 0 &&
       guidev::g_device != nullptr) {
     submit(); SDL_WaitForGPUIdle(guidev::g_device);
@@ -249,10 +259,16 @@ void WebGLContext::delete_framebuffer(uint32_t id) {
   framebuffers_.erase(found);
 }
 
-void WebGLContext::bind_framebuffer(uint32_t id) {
+void WebGLContext::bind_framebuffer(int target, uint32_t id) {
   if (id != 0 && framebuffers_.find(id) == framebuffers_.end()) return;
+  if (target == GL_READ_FRAMEBUFFER) {
+    read_framebuffer_ = id;
+    return;
+  }
+  if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER) return;
   if (id != bound_framebuffer_) end_pass();
   bound_framebuffer_ = id;
+  if (target == GL_FRAMEBUFFER) read_framebuffer_ = id;
 }
 
 bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture_id,

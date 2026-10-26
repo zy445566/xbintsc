@@ -372,6 +372,12 @@ METHOD(webgl_get_parameter) {
                  ? webgl_make_object(self, "__xt_gl_framebuffer", framebuffer, "framebuffer")
                  : XT_NULL;
     }
+    case GL_READ_FRAMEBUFFER_BINDING: {
+      const uint32_t framebuffer = context->bound_read_framebuffer_id();
+      return framebuffer != 0
+                 ? webgl_make_object(self, "__xt_gl_framebuffer", framebuffer, "framebuffer")
+                 : XT_NULL;
+    }
     case GL_RENDERBUFFER_BINDING: {
       const uint32_t renderbuffer = context->bound_renderbuffer_id();
       return renderbuffer != 0
@@ -405,12 +411,26 @@ METHOD(webgl_get_supported_extensions) {
   xt_array_push(list, xt_string_from_cstr("EXT_color_buffer_float"));
   xt_array_push(list, xt_string_from_cstr("EXT_color_buffer_half_float"));
   xt_array_push(list, xt_string_from_cstr("WEBGL_lose_context"));
+  xtgui::WebGLContext *context = webgl_from_context(self);
+  if (context != nullptr && context->supports_texture_format(0x83F1)) {
+    xt_array_push(list, xt_string_from_cstr("WEBGL_compressed_texture_s3tc"));
+  }
+  if (context != nullptr && context->supports_texture_format(0x8C4D)) {
+    xt_array_push(list, xt_string_from_cstr("WEBGL_compressed_texture_s3tc_srgb"));
+  }
+  if (context != nullptr && context->supports_texture_format(0x93B0)) {
+    xt_array_push(list, xt_string_from_cstr("WEBGL_compressed_texture_astc"));
+  }
   return list;
 }
 
 METHOD(webgl_get_extension) {
   (void)env;
   const std::string name = webgl_string(argc, argv, 0);
+  if (name.rfind("WEBGL_compressed_texture_", 0) == 0) {
+    xt_value extension = webgl_compressed_extension(name, webgl_from_context(self));
+    if (!XT_IS_UNDEFINED(extension)) return extension;
+  }
   if (name == "OES_element_index_uint" || name == "OES_standard_derivatives" ||
       name == "OES_texture_float" || name == "OES_texture_half_float" ||
       name == "WEBGL_depth_texture" || name == "EXT_color_buffer_float" ||

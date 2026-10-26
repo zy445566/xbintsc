@@ -86,8 +86,8 @@ const MethodEntry kMethods[] = {
     {"texStorage3D", (void *)webgl2_tex_storage_3d},
     {"texImage3D", (void *)webgl2_tex_image_3d},
     {"texSubImage3D", (void *)webgl2_tex_sub_image_3d},
-    {"compressedTexImage2D", (void *)webgl2_compressed_tex_image2d},
-    {"compressedTexSubImage2D", (void *)webgl2_compressed_tex_sub_image2d},
+    {"compressedTexImage2D", (void *)webgl_compressed_tex_image_2d},
+    {"compressedTexSubImage2D", (void *)webgl_compressed_tex_sub_image_2d},
     {"compressedTexImage3D", (void *)webgl2_compressed_tex_image3d},
     {"compressedTexSubImage3D", (void *)webgl2_compressed_tex_sub_image3d},
     {"clearBufferfi", (void *)webgl2_clear_buffer_fi},
@@ -206,11 +206,23 @@ WEBGL2_NOOP(webgl2_transform_feedback_varyings)
 WEBGL2_NOOP(webgl2_bind_buffer_base)
 WEBGL2_NOOP(webgl2_bind_buffer_range)
 WEBGL2_NOOP(webgl2_uniform_block_binding)
-WEBGL2_NOOP(webgl2_blit_framebuffer)
 WEBGL2_NOOP(webgl2_framebuffer_texture_layer)
 WEBGL2_NOOP(webgl2_invalidate_framebuffer)
 WEBGL2_NOOP(webgl2_invalidate_sub_framebuffer)
 WEBGL2_NOOP(webgl2_read_buffer)
+
+METHOD(webgl2_blit_framebuffer) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const int source[4] = {webgl_int(argc, argv, 0, 0), webgl_int(argc, argv, 1, 0),
+                         webgl_int(argc, argv, 2, 0), webgl_int(argc, argv, 3, 0)};
+  const int destination[4] = {webgl_int(argc, argv, 4, 0), webgl_int(argc, argv, 5, 0),
+                              webgl_int(argc, argv, 6, 0), webgl_int(argc, argv, 7, 0)};
+  context->blit_framebuffer(source, destination, webgl_int(argc, argv, 8, GL_COLOR_BUFFER_BIT),
+                            webgl_int(argc, argv, 9, GL_NEAREST));
+  return XT_UNDEFINED;
+}
 
 METHOD(webgl2_get_transform_feedback_varying) {
   (void)env;
@@ -367,8 +379,6 @@ METHOD(webgl2_tex_storage_2d) {
 WEBGL2_NOOP(webgl2_tex_storage_3d)
 WEBGL2_NOOP(webgl2_tex_image_3d)
 WEBGL2_NOOP(webgl2_tex_sub_image_3d)
-WEBGL2_NOOP(webgl2_compressed_tex_image2d)
-WEBGL2_NOOP(webgl2_compressed_tex_sub_image2d)
 WEBGL2_NOOP(webgl2_compressed_tex_image3d)
 WEBGL2_NOOP(webgl2_compressed_tex_sub_image3d)
 

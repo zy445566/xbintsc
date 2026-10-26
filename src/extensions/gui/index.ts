@@ -102,7 +102,7 @@ const browserGlobals: Record<string, { symbol: string; argument?: string }> = {
   navigator: { symbol: "xt_browser_navigator" },
   localStorage: { symbol: "xt_browser_local_storage" },
   __THREE_DEVTOOLS__: { symbol: "xt_browser_missing" },
-  createImageBitmap: { symbol: "xt_browser_missing" },
+  createImageBitmap: { symbol: "xt_browser_create_image_bitmap" },
 };
 for (const type of hostTypes) {
   browserGlobals[type] = { symbol: "xt_browser_type", argument: type };

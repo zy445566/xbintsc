@@ -50,7 +50,8 @@ METHOD(webgl_bind_framebuffer) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
-    context->bind_framebuffer(webgl_object_id(xt_arg(argc, argv, 1), "__xt_gl_framebuffer"));
+    context->bind_framebuffer(webgl_int(argc, argv, 0, GL_FRAMEBUFFER),
+                              webgl_object_id(xt_arg(argc, argv, 1), "__xt_gl_framebuffer"));
   }
   return XT_UNDEFINED;
 }

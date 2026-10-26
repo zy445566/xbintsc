@@ -103,6 +103,10 @@ void WebGLContext::release_gpu_resources() {
     SDL_ReleaseGPUTexture(guidev::g_device, depth_);
     depth_ = nullptr;
   }
+  if (clear_texture_ != nullptr) {
+    SDL_ReleaseGPUTexture(guidev::g_device, clear_texture_);
+    clear_texture_ = nullptr;
+  }
 }
 
 void WebGLContext::lose_context() {
@@ -128,6 +132,7 @@ void WebGLContext::lose_context() {
   bound_array_ = 0;
   bound_element_ = 0;
   bound_framebuffer_ = 0;
+  read_framebuffer_ = 0;
   bound_renderbuffer_ = 0;
   bound_vertex_array_ = 0;
   copy_read_buffer_ = 0;
@@ -139,6 +144,8 @@ void WebGLContext::lose_context() {
   scissor_test_ = false;
   error_ = 0;
   lost_ = true;
+  clear_program_ = 0;
+  clear_buffer_ = 0;
 }
 
 void WebGLContext::restore_context() {
@@ -254,6 +261,28 @@ SDL_GPUTexture *WebGLContext::target_color() {
   WebGLTexture *texture = this->texture(framebuffer->color_texture);
   if (texture == nullptr) return nullptr;
   return ensure_texture_gpu(texture, true);
+}
+
+SDL_GPUTexture *WebGLContext::framebuffer_color(uint32_t id) {
+  if (id == 0) {
+    ensure_default_target();
+    return color_;
+  }
+  WebGLFramebuffer *framebuffer_ = framebuffer(id);
+  if (framebuffer_ == nullptr || framebuffer_->color_texture == 0) return nullptr;
+  WebGLTexture *texture_ = texture(framebuffer_->color_texture);
+  return texture_ != nullptr ? ensure_texture_gpu(texture_, true) : nullptr;
+}
+
+void WebGLContext::framebuffer_size(uint32_t id, int *width, int *height) {
+  if (id == 0) {
+    *width = width_;
+    *height = height_;
+    return;
+  }
+  WebGLFramebuffer *framebuffer_ = framebuffer(id);
+  *width = framebuffer_ != nullptr ? framebuffer_->width : 0;
+  *height = framebuffer_ != nullptr ? framebuffer_->height : 0;
 }
 
 SDL_GPUTexture *WebGLContext::target_depth() {

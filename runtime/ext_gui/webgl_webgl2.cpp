@@ -125,12 +125,65 @@ bool WebGLContext::is_sync(uint32_t id) const {
   return syncs_.find(id) != syncs_.end();
 }
 
-uint32_t WebGLContext::uniform_block_index(uint32_t program, const std::string &name) const {
-  (void)program;
-  (void)name;
-  /* Uniform blocks are not exposed; answering INVALID_INDEX makes a library
-   * fall back to individual uniforms. */
+uint32_t WebGLContext::uniform_block_index(uint32_t program_id,
+                                           const std::string &name) const {
+  auto found = programs_.find(program_id);
+  if (found == programs_.end()) return 0xFFFFFFFFu;
+  const std::vector<WebGLUniformBlock> &blocks = found->second->blocks;
+  for (size_t i = 0; i < blocks.size(); i++) {
+    if (blocks[i].name == name) return (uint32_t)i;
+  }
   return 0xFFFFFFFFu;
+}
+
+WebGLUniformBlock *WebGLContext::uniform_block(uint32_t program_id, uint32_t index) {
+  auto found = programs_.find(program_id);
+  if (found == programs_.end() || index >= found->second->blocks.size()) return nullptr;
+  return &found->second->blocks[index];
+}
+
+int WebGLContext::uniform_block_parameter(uint32_t program_id, uint32_t index,
+                                          int pname) const {
+  auto found = programs_.find(program_id);
+  if (found == programs_.end() || index >= found->second->blocks.size()) return 0;
+  const WebGLUniformBlock &block = found->second->blocks[index];
+  switch (pname) {
+    case GL_UNIFORM_BLOCK_BINDING:
+      return block.binding;
+    case GL_UNIFORM_BLOCK_DATA_SIZE:
+      return block.data_size;
+    case GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS:
+      return block.member_count;
+    case GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER:
+    case GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER:
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+std::string WebGLContext::uniform_block_name(uint32_t program_id, uint32_t index) const {
+  auto found = programs_.find(program_id);
+  if (found == programs_.end() || index >= found->second->blocks.size()) return std::string();
+  return found->second->blocks[index].name;
+}
+
+void WebGLContext::uniform_block_binding(uint32_t program_id, uint32_t index, int binding) {
+  WebGLUniformBlock *block = uniform_block(program_id, index);
+  if (block != nullptr) block->binding = binding;
+}
+
+void WebGLContext::bind_buffer_base(int target, int index, uint32_t buffer_id,
+                                    uint32_t offset, uint32_t size) {
+  if (target != 0x8A11 || index < 0 || index >= 16) return;  // GL_UNIFORM_BUFFER
+  uniform_bindings_[index].buffer = buffer_id;
+  uniform_bindings_[index].offset = offset;
+  uniform_bindings_[index].size = size;
+}
+
+uint32_t WebGLContext::uniform_buffer_binding(int index) const {
+  if (index < 0 || index >= 16) return 0;
+  return uniform_bindings_[index].buffer;
 }
 
 /* -- sampler objects ----------------------------------------------------- */

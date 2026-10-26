@@ -33,6 +33,7 @@
 #include "webgl_constants.h"
 #include "webgl2_constants.h"
 #include "webgl_glsl.h"
+#include "webgl_uniform_block.h"
 
 namespace xtgui {
 
@@ -65,6 +66,7 @@ struct WebGLProgram {
   bool linked = false;
   std::string log;
   std::vector<WebGLUniform> uniforms;
+  std::vector<WebGLUniformBlock> blocks;
   std::vector<GlslUniformDecl> attribs;
   std::unordered_map<std::string, int> attrib_locations;  // name -> location
   std::unordered_map<std::string, int> attrib_bindings;   // bindAttribLocation overrides
@@ -88,9 +90,7 @@ struct WebGLBuffer {
   SDL_GPUBuffer *gpu = nullptr;
   uint32_t capacity = 0;
   bool dirty = true;
-  /** The `usage` hint from `bufferData` (`STATIC_DRAW`, `DYNAMIC_DRAW`, …).
-   * It is cache behaviour rather than rendering state, but `getBufferParameter`
-   * reports it and dynamic buffers may be rewritten every frame. */
+  /** `bufferData` usage hint, reported by `getBufferParameter`. */
   int usage = GL_STATIC_DRAW;
 };
 
@@ -234,18 +234,14 @@ class WebGLContext {
   /** Resize the drawing buffer; GL semantics discard its contents. */
   void resize(int width, int height);
 
-  /** End the current pass and submit the queued commands (called once per
-   * frame, before the page's own render pass samples the colour texture). */
+  /** End the pass and submit (once per frame, before sampling). */
   void submit();
   SDL_GPUTexture *color_texture();
   bool lost() const { return lost_; }
-  /** Simulate a loss of the GPU device (`WEBGL_lose_context.loseContext`).
-   * Every object is destroyed, as the WebGL spec requires; `restore_context`
-   * brings the context back with an empty object table. */
+  /** Lose/restore the GPU device, dropping every WebGL object. */
   void lose_context();
   void restore_context();
-  /** WebGL 2 `drawingBufferStorage`: fix the drawing-buffer size so a later
-   * canvas resize no longer changes it. */
+  /** `drawingBufferStorage`: fix the size across canvas resizes. */
   void drawing_buffer_storage(int width, int height);
 
   /* -- object lookups ---------------------------------------------------- */
@@ -318,8 +314,7 @@ class WebGLContext {
   int attrib_location(uint32_t program, const std::string &name);
   void bind_attrib_location(uint32_t program, int index, const std::string &name);
 
-  /* Uniform uploads: `location` is an index into the program's uniform table
-   * (the DOM layer wraps it in the `WebGLUniformLocation` handle). */
+  /* Uniform uploads; `location` indexes the program's uniform table. */
   void uniform_floats(uint32_t program, int location, int components, const double *values,
                       int count);
   void uniform_ints(uint32_t program, int location, int components, const int *values, int count);
@@ -371,6 +366,12 @@ class WebGLContext {
   void delete_sync(uint32_t id);
   bool is_sync(uint32_t id) const;
   uint32_t uniform_block_index(uint32_t program, const std::string &name) const;
+  WebGLUniformBlock *uniform_block(uint32_t program, uint32_t index);
+  int uniform_block_parameter(uint32_t program, uint32_t index, int pname) const;
+  std::string uniform_block_name(uint32_t program, uint32_t index) const;
+  void uniform_block_binding(uint32_t program, uint32_t index, int binding);
+  void bind_buffer_base(int target, int index, uint32_t buffer, uint32_t offset, uint32_t size);
+  uint32_t uniform_buffer_binding(int index) const;
 
   /* -- textures ---------------------------------------------------------- */
   uint32_t create_texture();
@@ -381,15 +382,13 @@ class WebGLContext {
   int tex_parameter_value(uint32_t id, int pname);
   bool tex_image_rgba(uint32_t id, int width, int height, const uint8_t *rgba);
   bool tex_sub_image_rgba(uint32_t id, int x, int y, int width, int height, const uint8_t *rgba);
-  /** Generic level-0 upload: `pixels` is tightly packed in `format` (always
-   * four components; R/RG formats are expanded by the caller). */
+  /** Level-0 upload; `pixels` is tightly packed RGBA or expanded already. */
   bool tex_image_format(uint32_t id, int width, int height, SDL_GPUTextureFormat format,
                         const uint8_t *pixels, int layer = -1);
   bool tex_sub_image_format(uint32_t id, int x, int y, int width, int height,
                             const uint8_t *pixels, int layer = 0);
   bool generate_mipmap(uint32_t id);
-  /** WebGL 2 `texStorage2D`: allocate immutable storage at `width`×`height`.
-   * The backend always allocates the full mip chain, so `levels` is a hint. */
+  /** `texStorage2D`; the backend allocates the full mip chain. */
   bool tex_storage_2d(uint32_t id, int levels, int width, int height);
   bool tex_storage_format(uint32_t id, int levels, int width, int height,
                           SDL_GPUTextureFormat format);
@@ -400,8 +399,7 @@ class WebGLContext {
                     SDL_GPUTextureFormat format, const uint8_t *pixels, int target);
   bool tex_sub_image_3d(uint32_t id, int x, int y, int z, int width, int height, int depth,
                         const uint8_t *pixels);
-  /** Upload a block-compressed region (`data` holds the tightly packed blocks
-   * for the `width`×`height` region). */
+  /** Upload a block-compressed region. */
   bool tex_image_compressed(uint32_t id, int width, int height, SDL_GPUTextureFormat format,
                             int x, int y, int region_width, int region_height,
                             const uint8_t *data, uint32_t size);
@@ -558,11 +556,14 @@ class WebGLContext {
   uint32_t current_program_ = 0;
   uint32_t bound_array_ = 0;
   uint32_t bound_element_ = 0;
+  uint32_t bound_uniform_ = 0;
+  uint32_t bound_transform_feedback_ = 0;
   uint32_t bound_framebuffer_ = 0;
   uint32_t read_framebuffer_ = 0;
   int read_buffer_ = GL_BACK;
   int default_draw_buffers_[kWebGLMaxDrawBuffers] = {GL_BACK, GL_NONE, GL_NONE, GL_NONE};
   uint32_t bound_renderbuffer_ = 0;
+  WebGLUniformBinding uniform_bindings_[16];
   uint32_t bound_textures_[kWebGLMaxTextureUnits] = {};
   uint32_t bound_cube_textures_[kWebGLMaxTextureUnits] = {};
   uint32_t bound_array_textures_[kWebGLMaxTextureUnits] = {};

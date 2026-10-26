@@ -218,8 +218,13 @@ WebGL 2 adds:
   (`createQuery`/`beginQuery`/`endQuery`/`getQueryParameter`,
   `fenceSync`/`clientWaitSync`/`waitSync`/`getSyncParameter`) and degrade
   gracefully: a fence reports `ALREADY_SIGNALED` and query results are 0.
-- **Uniform blocks**: `getUniformBlockIndex` answers `INVALID_INDEX` so a
-  library falls back to individual uniforms; the block entry points are no-ops.
+- **Uniform blocks**: `getUniformBlockIndex`,
+  `getActiveUniformBlockParameter`, `getActiveUniformBlockName`,
+  `uniformBlockBinding`, `bindBufferBase`/`bindBufferRange` and
+  `getIndexedParameter`. Members are merged into the engine's single std140
+  block and copied from the bound buffer at draw time; scalars, vectors,
+  matrices and fixed-size arrays work, nested structs, sampler members and
+  blocks without an instance name are rejected.
 - **Transform feedback**: the entry points are present as no-ops so
   feature-probing libraries do not throw.
 
@@ -235,13 +240,12 @@ backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
 
 ## Not implemented
 
-Uniform buffer objects in shader source, transform feedback (the entry points
-are no-ops) and MSAA/sample buffers (SDL_GPU's Metal multisample resolve
-returns undefined pixels with scissor tests and instanced draws, so contexts
-stay single-sampled). `blitFramebuffer`
+Transform feedback (the entry points are no-ops) and MSAA/sample buffers
+(SDL_GPU's Metal multisample resolve returns undefined pixels with scissor
+tests and instanced draws, so contexts stay single-sampled). `blitFramebuffer`
 copies the colour attachment only; depth/stencil bits are accepted but not
-copied. Shaders that use built-in blocks, user uniform blocks or `gl_FragDepth`
-are rejected with a compile/link log.
+copied. Shaders that use built-in blocks or `gl_FragDepth` are rejected with a
+compile/link log.
 
 ## Platform
 
@@ -278,6 +282,8 @@ uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
   attachment layer.
 - `tests/e2e/gui-webgl2-mrt.test.ts` writes two fragment outputs to two
   colour attachments and reads each back.
+- `tests/e2e/gui-webgl2-ubo.test.ts` binds a std140 block, updates its members
+  and verifies the drawn colour.
 - `examples/gui/webgl-cube` is a spinning, lit, textured cube; it runs in a
   browser unchanged and is covered by
   `tests/e2e/gui-example-webgl.test.ts`.

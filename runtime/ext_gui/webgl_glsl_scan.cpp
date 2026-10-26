@@ -17,12 +17,7 @@
 namespace xtgui {
 namespace {
 
-struct Token {
-  enum Kind { Ident, Number, Punct, Directive } kind = Punct;
-  std::string text;
-  size_t begin = 0;
-  size_t end = 0;
-};
+using Token = GlslToken;
 
 bool is_ident_start(char c) {
   return std::isalpha((unsigned char)c) != 0 || c == '_';
@@ -100,11 +95,6 @@ std::vector<Token> tokenize(const std::string &source) {
   return tokens;
 }
 
-bool is_qualifier(const std::string &text) {
-  return text == "highp" || text == "mediump" || text == "lowp" || text == "flat" ||
-         text == "smooth" || text == "centroid" || text == "invariant" || text == "precise" ||
-         text == "noperspective" || text == "sample" || text == "const";
-}
 
 bool is_sampler_type(const std::string &type) {
   return type.rfind("sampler", 0) == 0 || type == "atomic_uint";
@@ -509,6 +499,17 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
       pending_layout = std::string::npos;
       pending_location = -1;
       continue;
+    }
+
+    if (kind == GlslDeclSite::Uniform) {
+      size_t after = i;
+      if (scan_uniform_block(tokens, i, pending_layout, !condition_stack.empty(), info, &after,
+                             &first_uniform_any)) {
+        pending_layout = std::string::npos;
+        pending_location = -1;
+        i = after;
+        continue;
+      }
     }
 
     /* Find the terminating semicolon at bracket/paren depth 0. */

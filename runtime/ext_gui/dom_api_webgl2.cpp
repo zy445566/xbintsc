@@ -203,9 +203,6 @@ WEBGL2_NOOP(webgl2_end_transform_feedback)
 WEBGL2_NOOP(webgl2_pause_transform_feedback)
 WEBGL2_NOOP(webgl2_resume_transform_feedback)
 WEBGL2_NOOP(webgl2_transform_feedback_varyings)
-WEBGL2_NOOP(webgl2_bind_buffer_base)
-WEBGL2_NOOP(webgl2_bind_buffer_range)
-WEBGL2_NOOP(webgl2_uniform_block_binding)
 WEBGL2_NOOP(webgl2_invalidate_framebuffer)
 WEBGL2_NOOP(webgl2_invalidate_sub_framebuffer)
 
@@ -315,12 +312,6 @@ METHOD(webgl2_get_sync_parameter) {
 
 /* -- uniform blocks and indexed queries ---------------------------------- */
 
-METHOD(webgl2_get_indexed_parameter) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  return XT_NULL;
-}
 
 METHOD(webgl2_get_uniform_indices) {
   (void)env;
@@ -346,19 +337,7 @@ METHOD(webgl2_get_uniform_block_index) {
   return xt_number((double)index);
 }
 
-METHOD(webgl2_get_active_uniform_block_parameter) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  return xt_number(0);
-}
 
-METHOD(webgl2_get_active_uniform_block_name) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  return XT_NULL;
-}
 
 /* -- buffers ------------------------------------------------------------- */
 

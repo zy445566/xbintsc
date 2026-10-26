@@ -477,6 +477,28 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
                            index_size == 4 ? SDL_GPU_INDEXELEMENTSIZE_32BIT
                                            : SDL_GPU_INDEXELEMENTSIZE_16BIT);
   }
+  /* User uniform blocks live in the same std140 block; refresh their members
+   * from the CPU-side buffer bound to each block's binding point. */
+  for (const WebGLUniformBlock &block : program_->blocks) {
+    if (block.binding < 0 || block.binding >= 16) continue;
+    const WebGLUniformBinding &binding = uniform_bindings_[block.binding];
+    if (binding.buffer == 0) continue;
+    WebGLBuffer *uniform_buffer = buffer(binding.buffer);
+    if (uniform_buffer == nullptr) continue;
+    size_t offset = binding.offset;
+    size_t length = (size_t)block.data_size;
+    if (binding.size > 0 && length > binding.size) length = binding.size;
+    if (offset > uniform_buffer->data.size()) continue;
+    if (length > uniform_buffer->data.size() - offset) {
+      length = uniform_buffer->data.size() - offset;
+    }
+    if (block.base_offset >= 0 &&
+        block.base_offset + (int)length <= program_->block_size) {
+      memcpy(program_->block.data() + block.base_offset,
+             uniform_buffer->data.data() + offset, length);
+    }
+  }
+
   if (program_->vs_has_block && program_->block_size > 0) {
     SDL_PushGPUVertexUniformData(cmd_, 0, program_->block.data(), (Uint32)program_->block.size());
   }

@@ -470,7 +470,7 @@ double WebGLContext::parameter(int pname) {
     case GL_MAX_UNIFORM_BUFFER_BINDINGS:
     case GL_MAX_VERTEX_UNIFORM_BLOCKS:
     case GL_MAX_FRAGMENT_UNIFORM_BLOCKS:
-      return 0;
+      return 16;
     case GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT:
       return 256;
     case GL_MAX_ELEMENT_INDEX:
@@ -487,8 +487,6 @@ double WebGLContext::parameter(int pname) {
     case GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS:
     case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS:
       return 1024;
-    case GL_MAX_UNIFORM_BLOCK_SIZE:
-      return 16384;
 
     default:
       return 0;

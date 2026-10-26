@@ -213,6 +213,24 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
     edits.push_back(block_edit);
   }
 
+  /* Drop user uniform-block declarations (their members are already part of
+   * the generated block) and spell `instance.member` with the prefixed name. */
+  for (const GlslUniformBlock &block_decl : info.blocks) {
+    Edit remove;
+    remove.begin = block_decl.begin;
+    remove.end = block_decl.end;
+    remove.order = 1;
+    edits.push_back(remove);
+  }
+  for (const GlslRename &rename : info.renames) {
+    Edit edit;
+    edit.begin = rename.begin;
+    edit.end = rename.end;
+    edit.text = rename.text;
+    edit.order = 1;
+    edits.push_back(edit);
+  }
+
   int fragment_output = 0;
   for (const GlslDeclSite &site : info.sites) {
     Edit edit;

@@ -22,6 +22,8 @@
 
 #include <cstdint>
 #include <string>
+
+#include "webgl_glsl_tokens.h"
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -40,6 +42,32 @@ struct GlslUniformDecl {
   std::string extra;
 };
 
+/** One member of a user-declared uniform block. */
+struct GlslBlockMemberDecl {
+  std::string type;
+  std::string name;
+  std::string array;
+};
+
+/** A user-declared `uniform Block { … } instance;`. The rewriter merges its
+ * members into the engine block under `__ub_<instance>_<member>` names and
+ * rewrites references, because SDL_GPU has no bindable uniform buffers. */
+struct GlslUniformBlock {
+  std::string name;
+  std::string instance;
+  std::vector<GlslBlockMemberDecl> members;
+  size_t begin = 0;
+  size_t end = 0;
+  bool conditional = false;
+};
+
+/** One `instance.member` reference to rename. */
+struct GlslRename {
+  size_t begin = 0;
+  size_t end = 0;
+  std::string text;
+};
+
 /** Where one declaration sits in the source text, and what it declares. */
 struct GlslDeclSite {
   enum Kind { Uniform, Sampler, Attribute, Varying, FragmentOut };
@@ -53,6 +81,14 @@ struct GlslDeclSite {
 };
 
 /** The declarations a shader contributes to a program. */
+struct GlslShaderInfo;
+
+/** Parse a user uniform block at `uniform_index`, merging its members. Returns
+ * true when a block declaration was consumed; `after` is the next token. */
+bool scan_uniform_block(const std::vector<GlslToken> &tokens, size_t uniform_index,
+                        size_t pending_layout, bool conditional, GlslShaderInfo *info,
+                        size_t *after, size_t *first_uniform_any);
+
 struct GlslShaderInfo {
   std::vector<GlslUniformDecl> uniforms;   // non-sampler
   std::vector<GlslUniformDecl> samplers;
@@ -65,6 +101,10 @@ struct GlslShaderInfo {
   std::vector<std::pair<size_t, size_t>> structs;
   /** The text of those definitions, shared across stages at link time. */
   std::vector<std::string> struct_definitions;
+  /** User uniform blocks, merged into the single engine block at link time. */
+  std::vector<GlslUniformBlock> blocks;
+  /** References the rewriter must spell with the prefixed member name. */
+  std::vector<GlslRename> renames;
   /** True when the source writes `gl_FragColor` / `gl_FragData[0]`. */
   bool legacy_fragment_output = false;
   /** True when the source declared its own `out` variable (ES 3.00). */

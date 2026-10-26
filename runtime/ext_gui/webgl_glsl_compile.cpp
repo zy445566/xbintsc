@@ -10,6 +10,8 @@
 
 #include "webgl_glsl.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -347,6 +349,10 @@ bool compile_glsl(const std::string &source, bool fragment, std::vector<uint32_t
   }
   const EShLanguage stage = fragment ? EShLangFragment : EShLangVertex;
   glslang::TShader shader(stage);
+  if (getenv("XT_WEBGL_DUMP_GLSL") != nullptr) {
+    fprintf(stderr, "--- GLSL %s ---\n%s\n---\n", fragment ? "fragment" : "vertex",
+            source.c_str());
+  }
   const char *text = source.c_str();
   shader.setStrings(&text, 1);
   shader.setEntryPoint("main");

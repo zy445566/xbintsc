@@ -79,6 +79,8 @@ void WebGLContext::bind_buffer(int target, uint32_t id) {
   if (target == GL_ELEMENT_ARRAY_BUFFER) bound_element_ = id;
   if (target == GL_COPY_READ_BUFFER) copy_read_buffer_ = id;
   if (target == GL_COPY_WRITE_BUFFER) copy_write_buffer_ = id;
+  if (target == GL_UNIFORM_BUFFER) bound_uniform_ = id;
+  if (target == GL_TRANSFORM_FEEDBACK_BUFFER) bound_transform_feedback_ = id;
 }
 
 uint32_t WebGLContext::buffer_for_target(int target) const {
@@ -86,6 +88,8 @@ uint32_t WebGLContext::buffer_for_target(int target) const {
   if (target == GL_ARRAY_BUFFER) return bound_array_;
   if (target == GL_COPY_READ_BUFFER) return copy_read_buffer_;
   if (target == GL_COPY_WRITE_BUFFER) return copy_write_buffer_;
+  if (target == GL_UNIFORM_BUFFER) return bound_uniform_;
+  if (target == GL_TRANSFORM_FEEDBACK_BUFFER) return bound_transform_feedback_;
   return 0;
 }
 

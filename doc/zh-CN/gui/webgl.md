@@ -84,14 +84,14 @@ WebGL 2 额外提供：
 - **清除**：`clearBufferfv`、`clearBufferiv`、`clearBufferuiv`、`clearBufferfi`。
 - **多渲染目标**：`drawBuffers` 最多 4 个颜色附件，`readBuffer` 选择 `readPixels` 的附件；`framebufferTexture2D` 可挂 `COLOR_ATTACHMENT0`…`3`，片元着色器的多个 `out` 按顺序写入。
 - **查询与栅栏**：对象与入口都存在（`createQuery`/`beginQuery`/`endQuery`/`getQueryParameter`、`fenceSync`/`clientWaitSync`/`waitSync`/`getSyncParameter`），行为是优雅降级：栅栏报告 `ALREADY_SIGNALED`，查询结果为 0。
-- **Uniform 块**：`getUniformBlockIndex` 返回 `INVALID_INDEX`，让库回退到独立 uniform；块相关入口为空操作。
+- **Uniform 块**：`getUniformBlockIndex`、`getActiveUniformBlockParameter`、`getActiveUniformBlockName`、`uniformBlockBinding`、`bindBufferBase`/`bindBufferRange`、`getIndexedParameter`。块成员按 std140 合并进引擎的单一 uniform 块，绘制时从绑定缓冲复制；支持标量/向量/矩阵与定长数组，不支持嵌套结构体、采样器成员和省略实例名的块。
 - **Transform feedback**：入口存在但为空操作，避免特性探测类库抛错。
 
 纹理创建时带完整 mip 链；在 `generateMipmap` 之前采样被钳制到第 0 层。矩阵顶点属性会占用相应数量的连续 location，每个 location 读取一列。未启用的属性由最近一次 `vertexAttrib*f` 的值通过一个小常量缓冲提供。顶点着色器可以像片元着色器一样采样纹理：`MAX_VERTEX_TEXTURE_IMAGE_UNITS` 报告 16，顶点采样器走 set 0，并在每次绘制时通过 `SDL_BindGPUVertexSamplers` 绑定。深度值按后端的 `[0, 1]` 裁剪空间存储，不做 GL 的 `[-1, 1] → [0, 1]` 重映射：`gl_Position.z = 0.5` 写入的深度是 `0.5`（真实 WebGL 为 `0.75`）。
 
 ## 未实现
 
-着色器源码里的 uniform buffer 对象、transform feedback（入口为空操作）与 MSAA/采样缓冲（SDL_GPU 的 Metal 多采样 resolve 在 scissor 与实例化绘制下返回未定义像素，因此上下文保持单采样）。`blitFramebuffer` 只复制颜色附件，深度/模板位被接受但不复制。使用内建块、用户 uniform 块或 `gl_FragDepth` 的着色器会以编译/链接日志报错。
+transform feedback（入口为空操作）与 MSAA/采样缓冲（SDL_GPU 的 Metal 多采样 resolve 在 scissor 与实例化绘制下返回未定义像素，因此上下文保持单采样）。`blitFramebuffer` 只复制颜色附件，深度/模板位被接受但不复制。使用内建块或 `gl_FragDepth` 的着色器会以编译/链接日志报错。
 
 ## 平台
 
@@ -106,6 +106,7 @@ WebGL 2 额外提供：
 - `tests/e2e/gui-webgl2-formats.test.ts` 单独覆盖模板、浮点/深度纹理、scissor 清除、framebuffer blit、压缩纹理与 `ImageBitmap`。
 - `tests/e2e/gui-webgl2-3d.test.ts` 覆盖 2D 数组纹理与 3D 纹理的多层采样、`texSubImage3D` 子区域更新与 `framebufferTextureLayer` 渲染到数组层。
 - `tests/e2e/gui-webgl2-mrt.test.ts` 覆盖两个片元输出分别写入两个颜色附件。
+- `tests/e2e/gui-webgl2-ubo.test.ts` 覆盖 uniform 块的绑定、std140 成员与运行时更新。
 - `tests/e2e/gui-media.test.ts` 还会把 `<video>` 的最新解码帧上传为纹理并读回像素。
 - `examples/gui/webgl-cube` 是一个旋转、受光、带纹理的立方体；它在浏览器中原样运行，并由 `tests/e2e/gui-example-webgl.test.ts` 覆盖。
 - `examples/gui/webgl2-cubes` 用一次绘制调用画出 64 个实例化立方体，使用 `#version 300 es` 与 VAO；由 `tests/e2e/gui-example-webgl2.test.ts` 覆盖。

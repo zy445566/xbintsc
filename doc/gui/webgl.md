@@ -236,7 +236,9 @@ backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
 ## Not implemented
 
 Uniform buffer objects in shader source, transform feedback (the entry points
-are no-ops) and MSAA/sample buffers. `blitFramebuffer`
+are no-ops) and MSAA/sample buffers (SDL_GPU's Metal multisample resolve
+returns undefined pixels with scissor tests and instanced draws, so contexts
+stay single-sampled). `blitFramebuffer`
 copies the colour attachment only; depth/stencil bits are accepted but not
 copied. Shaders that use built-in blocks, user uniform blocks or `gl_FragDepth`
 are rejected with a compile/link log.

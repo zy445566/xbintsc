@@ -91,7 +91,7 @@ WebGL 2 额外提供：
 
 ## 未实现
 
-着色器源码里的 uniform buffer 对象、transform feedback（入口为空操作）与 MSAA/采样缓冲。`blitFramebuffer` 只复制颜色附件，深度/模板位被接受但不复制。使用内建块、用户 uniform 块或 `gl_FragDepth` 的着色器会以编译/链接日志报错。
+着色器源码里的 uniform buffer 对象、transform feedback（入口为空操作）与 MSAA/采样缓冲（SDL_GPU 的 Metal 多采样 resolve 在 scissor 与实例化绘制下返回未定义像素，因此上下文保持单采样）。`blitFramebuffer` 只复制颜色附件，深度/模板位被接受但不复制。使用内建块、用户 uniform 块或 `gl_FragDepth` 的着色器会以编译/链接日志报错。
 
 ## 平台
 

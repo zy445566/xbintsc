@@ -3,9 +3,10 @@
  *
  * The program draws on a `<canvas>` through `getContext("webgl")` and reads the
  * drawing buffer back with `readPixels`, so a pass proves that the shaders were
- * translated to SPIR-V, the pipelines were created, and the draw really
- * executed on the GPU. It also paints the canvas into the page (the engine's
- * image pipeline samples the WebGL colour texture directly).
+ * translated for the platform's backend — SPIR-V on Vulkan, MSL on Metal — the
+ * pipelines were created, and the draw really executed on the GPU. It also
+ * paints the canvas into the page (the engine's image pipeline samples the
+ * WebGL colour texture directly).
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

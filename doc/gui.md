@@ -35,7 +35,7 @@ them) can be translated, scaled and rotated without reflowing anything — and
 `transition: transform`, so those poses animate. See
 [Layout](./gui/layout.md#transforms-m15) and
 [Animation](./gui/animation.md#css-transforms-m15).
-**M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md).
+**M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang (and to MSL by the bundled SPIRV-Cross on Metal) and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md).
 **M19** fills in the decorative CSS layer: `@media` queries, generated content
 (`::before`/`::after`), multi-layer linear/radial backgrounds, `text-shadow`,
 `clip-path` and the `filter` colour/shadow effects. `backdrop-filter` and true
@@ -298,7 +298,9 @@ engine were Rust.
     - `webgl_glsl*.cpp` rewrites GLSL ES 1.00/3.00 to Vulkan GLSL ES 3.10
       (attribute/varying locations, `gl_FragColor`, `texture2D`, one std140
       uniform block per stage, explicit sampler bindings), compiles it with a
-      statically bundled glslang, and reflects the SPIR-V for uniform offsets.
+      statically bundled glslang, reflects the SPIR-V for uniform offsets, and
+      on Metal cross-compiles that same module to MSL with the bundled
+      SPIRV-Cross (`webgl_msl.cpp`).
     - `dom_api_webgl*.cpp` exposes the WebGL 1.0 surface, including textures,
       mipmaps, render-to-texture framebuffers and `readPixels`. See
       [WebGL](./gui/webgl.md); e2e in `tests/e2e/gui-webgl.test.ts` and
@@ -456,7 +458,8 @@ engine were Rust.
 - **M17** ✅ WebGL. `xtgui::WebGLContext` (`webgl.{h,cpp}`) owns the offscreen
   colour/depth targets and the command buffer, `webgl_buffer/texture/draw/shader`
   implement the GL object model, `webgl_glsl*.cpp` translate GLSL ES to SPIR-V
-  with the bundled glslang, and `dom_api_webgl*.cpp` bind the WebGL 1.0 API.
+  with the bundled glslang (`webgl_msl.cpp`/SPIRV-Cross turn that module into
+  MSL on Metal), and `dom_api_webgl*.cpp` bind the WebGL 1.0 API.
   `renderer_image.cpp` returns the context's colour texture for a canvas id, so
   the page composites GPU output directly. Demo: `examples/gui/webgl-cube`;
   e2e: `tests/e2e/gui-webgl.test.ts`, `tests/e2e/gui-example-webgl.test.ts`.

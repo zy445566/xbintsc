@@ -38,12 +38,14 @@ xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node,
   xtgui::WebGLContext *existing = xt_gui_webgl_find(win, node);
   if (existing != nullptr) return existing->is_webgl2() == webgl2 ? existing : nullptr;
   if (win->canvases.find(node) != win->canvases.end()) return nullptr;  // already a 2D canvas
-  /* The runtime shader compiler targets Vulkan SPIR-V. A device whose backend
-   * consumes another format (Metal, Direct3D 12) has no WebGL context in this
-   * build, so `getContext("webgl")` answers null instead of handing out a
-   * context whose draws could never create a pipeline. */
+  /* WebGL shaders reach SDL_GPU as SPIR-V (Vulkan, translated by glslang) or as
+   * MSL (Metal, the same module cross-compiled by SPIRV-Cross). A device whose
+   * backend consumes neither format — Direct3D 12 needs DXIL — has no WebGL
+   * context in this build, so `getContext("webgl")` answers null instead of
+   * handing out a context whose draws could never create a pipeline. */
   if (guidev::g_device == nullptr ||
-      (SDL_GetGPUShaderFormats(guidev::g_device) & SDL_GPU_SHADERFORMAT_SPIRV) == 0) {
+      (SDL_GetGPUShaderFormats(guidev::g_device) &
+       (SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL)) == 0) {
     return nullptr;
   }
   const std::string *width_attr = node->attr("width");

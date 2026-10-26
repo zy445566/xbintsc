@@ -92,7 +92,8 @@ import { createWindow, run } from "gui";
 **接口**（`AudioContext` 及其节点、参数与缓冲区，但没有混音后端）—— 另外还有帧泵：
 它在 `loadHTML` 时启动，仅在仍有动画帧回调时重新排程，因此从不调用 `run()` 的页面
 也能绘制并最终退出。**WebGL 1.0 与 2.0 已实现**：`canvas.getContext("webgl")` /
-`"webgl2"` 返回 GPU 上下文，其 GLSL ES 着色器由内置 glslang 编译为 SPIR-V，
+`"webgl2"` 返回 GPU 上下文，其 GLSL ES 着色器由内置 glslang 编译为 SPIR-V
+（Vulkan 直接消费，Metal 上由内置 SPIRV-Cross 转成 MSL），
 并通过 SDL_GPU 绘制；页面直接合成颜色纹理而无须 CPU 读回，WebGL 2 还增加
 VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷贝（见
 [../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。WebXR、未启用

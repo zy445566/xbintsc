@@ -6,14 +6,15 @@
 
 ## 已知问题
 
-- **WebGL 1.0 与 2.0 运行在 Vulkan SPIR-V 上，但只实现了各自的子集。**
+- **WebGL 1.0 与 2.0 运行在 GPU 上，但只实现了各自的子集。**
   `canvas.getContext("webgl")` / `"webgl2"` 返回真正的 GPU 上下文（见
-  [WebGL](./webgl.md)）：GLSL ES 着色器由内置 glslang 翻译为 SPIR-V，绘图缓冲
+  [WebGL](./webgl.md)）：GLSL ES 着色器由内置 glslang 翻译为 SPIR-V——Vulkan
+  后端直接消费，Metal 上再由内置 SPIRV-Cross 交叉编译为 MSL——绘图缓冲
   是一张离屏颜色纹理，页面直接合成而无须读回。WebGL 2 增加了 VAO、实例化、
   整数属性、采样器对象、`texStorage2D` 与缓冲拷贝。Uniform 块、transform
   feedback、立方体贴图、3D 纹理、浮点/深度纹理、压缩纹理、多渲染目标、
   `blitFramebuffer`、MSAA 与模板操作尚未实现；`clear` 会忽略 scissor 矩形。
-  在无法消费 SPIR-V 的 SDL_GPU 后端（Metal、Direct3D 12）上两种上下文都为
+  在两种格式都不接受的 SDL_GPU 后端（Direct3D 12，需要 DXIL）上两种上下文都为
   `null`。`.js` 资源加载器现在只修补 three.js 的着色器循环展开；
   `WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。阴影贴图
   （深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标仍未支持。

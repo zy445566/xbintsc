@@ -57,17 +57,21 @@ opacity、`display`——与任何其他元素一样。盒子内部的艺术内�
 
 媒体播放横跨两个扩展，因此只做界面的 GUI 程序不必为用不到的解码器付出体积：
 
-- **`gui`**（`gui.a`）负责 `<video>`/`<audio>` 元素、DOM API、渲染器集成与 SDL
-  音频 sink，但**不含 FFmpeg**。`runtime/ext_gui/media.{h,cpp}` 声明播放器接口，
-  并通过媒体后端在启动时安装的函数表分发（`runtime/ext_gui/media_api.h`）。
-- **`media`**（`media.a`、`runtime/ext_media/`）是可选的解码后端：
-  `runtime/ext_media/media.cpp` 封装静态 vendored 的 **FFmpeg** 构建，
-  `runtime/ext_media/media_bridge.c` 把它注册进引擎。用 `--ext media`（或
-  `--ext gui,media`）启用。`media` 依赖 `gui`；注册表会拒绝错误的组合。
+- **`gui`**（`gui.a`/`gui.lib`）负责 `<video>`/`<audio>` 元素、DOM API、渲染器
+  集成与 SDL 音频 sink，但**不含 FFmpeg**。`runtime/ext_gui/media.{h,cpp}`
+  声明播放器接口，并通过媒体后端在启动时安装的函数表分发
+  （`runtime/ext_gui/media_api.h`）。
+- **`media`**（`media.a`，Windows 上 MSVC ABI 则为 `media.lib`；
+  `runtime/ext_media/`）是可选的解码后端：`runtime/ext_media/media.cpp`
+  封装静态 vendored 的 **FFmpeg** 构建，`runtime/ext_media/media_bridge.c`
+  把它注册进引擎。用 `--ext media`（或 `--ext gui,media`）启用。`media`
+  依赖 `gui`；注册表会拒绝错误的组合。
 
 没有 `media` 扩展时，元素仍然存在、DOM API 仍可调用，但打开源会失败并触发
-`error`。Windows 目前也是如此：该归档仅支持 POSIX。两条路径都没有 WebView，也
-没有平台媒体框架。
+`error`。任何没有构建该归档的宿主（先运行 `npm run media`）都是如此；
+Windows 已不再特殊：`media.lib` 是用 clang-cl 为 MSVC ABI 编译的 FFmpeg，
+因此可以和 `gui.lib` 一起链接并正常播放。两条路径都没有 WebView，也没有平台
+媒体框架。
 
 - **解码。** `avformat_open_input` 打开 `src`（是路径——接受 `file://`，但与
   图像不同，媒体路径*不做*百分号解码），为每种媒体选取最佳流，软件解码器
@@ -83,8 +87,8 @@ opacity、`display`——与任何其他元素一样。盒子内部的艺术内�
   `xtgui::AudioSink`。GUI 在 `gui_media.cpp` 中用 push 模式（`NULL` 回调）的
   `SDL_OpenAudioDeviceStream` 实现该 sink，在前方缓冲约 0.25 秒，格式为
   48 kHz 立体声 `SDL_AUDIO_F32`。`volume` 映射到 `SDL_SetAudioStreamGain`；
-  音频是尽力而为，无设备时（无头 CI）跳过。把 sink 留在 `gui.a` 中意味着
-  `media.a` 只依赖 FFmpeg。
+  音频是尽力而为，无设备时（无头 CI）跳过。把 sink 留在 GUI 归档中意味着
+  `media.a`/`media.lib` 只依赖 FFmpeg。
 - **线程。** 引擎是单线程且非线程感知，因此所有解码都在主线程的
   `xt_gui_media_tick` 内完成——没有解码线程，也没有跨线程 GC 暴露。
 - **DOM API。** 元素句柄直接暴露媒体接口（见

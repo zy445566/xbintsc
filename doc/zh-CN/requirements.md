@@ -116,19 +116,21 @@ sudo apk add clang lld                   # Alpine
 用 `clang --version` 验证。如果 xbintsc 用错了链接器，可用 `xbintsc_CLANG` 指定
 clang，并通过 `xbintsc_LINKER_ARGS` 追加参数（例如 `-fuse-ld=lld`）。
 
-## Windows —— 安装 MSVC C++ 生成工具（与 LLVM）
+## Windows —— 安装 MSVC C++ 生成工具（含 LLVM）
 
-Windows 上的 xbintsc 面向 **MSVC ABI**。用 `winget` 安装 Visual Studio C++
-生成工具和 LLVM：
+Windows 上的 xbintsc 面向 **MSVC ABI**。一条 `winget` 命令即可安装 Visual
+Studio C++ 工作负载、MSBuild，以及本地构建脚本与 CI 使用的 Clang 组件：
 
 ```powershell
-winget install -e --id LLVM.LLVM
 winget install -e --id Microsoft.VisualStudio.2022.BuildTools `
-  --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+  --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
 ```
 
 Visual Studio 2022 自带的 LLVM（`VC\Tools\Llvm\x64\bin\clang.exe`，当前版本
-19.1.5）已经够用，独立安装的 LLVM 也可以。但编译器必须以 MSVC ABI 为目标
+19.1.5）就是 `scripts/setup-vs-toolchain.ps1` 选择的工具链。独立安装的 LLVM
+（`winget install -e --id LLVM.LLVM`）对 `xbintsc` 本身也可用，但 GUI/媒体
+归档构建与 CI 都使用 Visual Studio 这一套，从而让运行时、预编译归档与最终
+二进制出自同一条工具链。无论哪种，编译器必须以 MSVC ABI 为目标
 （`Target: *-windows-msvc`）：面向其他 Windows ABI 的 clang 无法与 MSVC
 运行库链接，`xbintsc` 会直接给出明确错误并拒绝使用。
 
@@ -140,6 +142,10 @@ Visual Studio 2022 自带的 LLVM（`VC\Tools\Llvm\x64\bin\clang.exe`，当前�
 ```powershell
 & "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
 ```
+
+在源码检出中，`pwsh -File scripts/setup-vs-toolchain.ps1` 会完成同样的导入，
+并把 `xbintsc_CLANG` 指向该 Visual Studio 安装自带的 LLVM。CI 调用的是同一个
+脚本，因此本地构建、发布归档与 CI 共用一条 Visual Studio 工具链。
 
 用 `xbintsc doctor`（或 `clang --version`）验证；输出会列出解析到的编译器、
 版本与目标。

@@ -73,39 +73,11 @@ jobs:
             libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
             libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
 
-      - name: Install clang (Windows x64)
-        if: runner.os == 'Windows' && runner.arch == 'X64'
-        shell: pwsh
-        run: |
-          choco install llvm --no-progress -y
-          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      # clang on Windows needs the MSVC/SDK environment (INCLUDE, LIB, PATH); the
-      # GUI archive links with the MSVC ABI, so import vcvarsall before building.
-      - name: Set up the MSVC environment (Windows)
+      # The same Visual Studio toolchain (MSVC + its bundled LLVM) a local
+      # build resolves; the GUI archive links with the MSVC ABI.
+      - name: Set up the Visual Studio toolchain (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $arch = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
-          $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.arm64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
-
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (-not (Test-Path $vswhere)) {
-            $vswhere = "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
-          }
-          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
-
-          $vsPath = (& $vswhere -latest -products * -requires $component -property installationPath).Trim()
-          if (-not $vsPath) { throw "Visual Studio C++ build tools ($component) were not found." }
-
-          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
-          if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found at $vcvars" }
-
-          cmd /c "`"$vcvars`" $arch && set" | ForEach-Object {
-            if ($_ -match '^([^=]+)=(.*)$') {
-              "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-            }
-          }
+        uses: ./.github/actions/vs-toolchain
 
       - run: npm ci
 

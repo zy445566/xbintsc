@@ -12,9 +12,12 @@ concurrency:
   cancel-in-progress: true
 
 # xbintsc does not bundle a compiler: every job installs a clang-compatible
-# toolchain and `src/driver/toolchain-provider.ts` resolves it from the system
-# `PATH`. On Windows the target ABI is MSVC, so each Windows job imports the
-# Visual Studio build environment (`vcvarsall`) before running anything.
+# toolchain and `src/driver/toolchain-provider.ts` resolves it. On Windows the
+# target ABI is MSVC, so each Windows job uses `.github/actions/vs-toolchain`:
+# it imports `vcvarsall` from the Visual Studio installation (Build Tools,
+# Community, ...) and uses the LLVM bundled with that same installation. Local
+# builds resolve the same VS toolchain, so CI, the prebuilt archives and a
+# developer machine share one compiler chain.
 #
 # Every host architecture is covered, but these are native builds, not
 # cross-compilation: each runner builds and tests its own architecture.
@@ -107,43 +110,14 @@ jobs:
         # report below needs alongside clang.
         run: sudo apt-get update && sudo apt-get install -y clang llvm
 
-      - name: Install clang (Windows x64)
-        if: runner.os == 'Windows' && runner.arch == 'X64'
-        shell: pwsh
-        run: |
-          choco install llvm --no-progress -y
-          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      # clang on Windows needs the MSVC/SDK environment (INCLUDE, LIB, PATH) to
-      # find the C standard library headers, the import libraries and the
-      # linker. Import the Visual Studio build environment directly instead of
-      # depending on the deprecated ilammy/msvc-dev-cmd action. Windows on ARM
-      # uses the image's clang (its default target is MSVC), plus the ARM64
-      # MSVC tools.
-      - name: Set up the MSVC environment (Windows)
+      # Windows uses the same Visual Studio installation a local build uses:
+      # vcvarsall supplies MSVC, the Windows SDK and MSBuild, and the LLVM
+      # bundled with Visual Studio is the compiler (`xbintsc_CLANG`). No
+      # standalone/Chocolatey LLVM is installed, so the driver, CMake and the
+      # prebuilt archives cannot end up on different compilers.
+      - name: Set up the Visual Studio toolchain (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $arch = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
-          $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.arm64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
-
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (-not (Test-Path $vswhere)) {
-            $vswhere = "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
-          }
-          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
-
-          $vsPath = (& $vswhere -latest -products * -requires $component -property installationPath).Trim()
-          if (-not $vsPath) { throw "Visual Studio C++ build tools ($component) were not found." }
-
-          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
-          if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found at $vcvars" }
-
-          cmd /c "`"$vcvars`" $arch && set" | ForEach-Object {
-            if ($_ -match '^([^=]+)=(.*)$') {
-              "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-            }
-          }
+        uses: ./.github/actions/vs-toolchain
 
       - name: Verify the toolchain
         shell: bash
@@ -215,37 +189,14 @@ jobs:
         # (scripts/install-gui-deps.sh) rather than repeating the list per job.
         run: sudo sh scripts/install-gui-deps.sh
 
-      - name: Install clang (Windows x64)
-        if: runner.os == 'Windows' && runner.arch == 'X64'
-        shell: pwsh
-        run: |
-          choco install llvm --no-progress -y
-          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Set up the MSVC environment (Windows)
+      # The same Visual Studio Build Tools/Community installation a local build
+      # uses: vcvarsall (MSVC, SDK, MSBuild) plus its bundled LLVM. `make: true`
+      # also installs GNU make for FFmpeg's configure on x64.
+      - name: Set up the Visual Studio toolchain (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $arch = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
-          $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.arm64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
-
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (-not (Test-Path $vswhere)) {
-            $vswhere = "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
-          }
-          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
-
-          $vsPath = (& $vswhere -latest -products * -requires $component -property installationPath).Trim()
-          if (-not $vsPath) { throw "Visual Studio C++ build tools ($component) were not found." }
-
-          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
-          if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found at $vcvars" }
-
-          cmd /c "`"$vcvars`" $arch && set" | ForEach-Object {
-            if ($_ -match '^([^=]+)=(.*)$') {
-              "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-            }
-          }
+        uses: ./.github/actions/vs-toolchain
+        with:
+          make: "true"
 
       - run: npm ci
 
@@ -270,6 +221,23 @@ jobs:
             vendor/harfbuzz-build
             vendor/ffmpeg
           key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts', 'scripts/build-media.ts') }}
+
+      # The Windows media build has its own compile tree (MSVC objects cannot be
+      # mixed with the POSIX one), so it gets a separate cache. Sources and the
+      # installed prefix are relocatable; the configure/make tree is not (it
+      # records absolute paths and the compiler from another machine), so it is
+      # deliberately absent.
+      - name: Cache the Windows GUI and media sources
+        if: runner.os == 'Windows' && runner.arch == 'X64'
+        uses: actions/cache@v5
+        with:
+          path: |
+            vendor/SDL
+            vendor/freetype
+            vendor/harfbuzz
+            vendor/ffmpeg
+            vendor/ffmpeg-build-msvc/dist
+          key: windows-vendor-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts', 'scripts/build-media.ts') }}
 
       - name: Build the hello example
         run: npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
@@ -327,6 +295,22 @@ jobs:
         if: runner.os != 'Windows'
         run: npm run media
 
+      # Windows x64 compiles both archives too. Building needs no GPU: gui.lib is
+      # SDL3/FreeType/HarfBuzz for the MSVC ABI, and media.lib adds FFmpeg
+      # compiled with clang-cl. Running them still needs a Vulkan driver, which
+      # the hosted runner lacks, so the example run below stays provisional — but
+      # a GUI+media *link* is checked here, which is what catches an unresolved
+      # FFmpeg symbol or a missing system library.
+      - name: Build the GUI and media archives (Windows x64)
+        if: runner.os == 'Windows' && runner.arch == 'X64'
+        run: |
+          npm run gui
+          if ($LASTEXITCODE -ne 0) { throw "GUI archive build failed" }
+          npm run media
+          if ($LASTEXITCODE -ne 0) { throw "media archive build failed" }
+          npx tsx src/cli/main.ts build examples/gui/media.ts --ext gui,media --out build/examples
+          if ($LASTEXITCODE -ne 0) { throw "GUI+media link failed" }
+
       # Linux runs the example and the GUI e2e suite headlessly under Xvfb with
       # the lavapipe software Vulkan driver; this path is validated.
       - name: Run the GUI example + e2e tests (Linux, Xvfb)
@@ -361,19 +345,22 @@ jobs:
             exit 0
           fi
 
-      # Windows needs MSVC-compatible archives (and D3D12/DXIL) validated in CI
-      # before this can be required, so it is provisional (see doc/gui.md). Keep
-      # the job green and record a failure in the log; `continue-on-error` would
-      # still annotate the run with a red error.
+      # Windows still has no GPU/Vulkan driver on the hosted runner, so *running*
+      # the example stays provisional (see doc/gui.md). The archive itself was
+      # built by the x64 step above; Windows arm64 and a cache miss fall back to
+      # building it here. Keep the job green and record a failure in the log;
+      # `continue-on-error` would still annotate the run with a red error.
       - name: Build and run the GUI example (Windows, provisional)
         if: runner.os == 'Windows'
         env:
           XT_GUI_AUTOCLOSE_MS: "1500"
         run: |
-          npm run gui
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "GUI archive build failed; the Windows build is provisional (see doc/gui.md)."
-            exit 0
+          if (-not (Get-ChildItem runtime/lib/*/gui.lib -ErrorAction SilentlyContinue)) {
+            npm run gui
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "GUI archive build failed; the Windows build is provisional (see doc/gui.md)."
+              exit 0
+            }
           }
           npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui --out build/examples
           if ($LASTEXITCODE -ne 0) {
@@ -406,37 +393,10 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang
 
-      - name: Install clang (Windows x64)
-        if: runner.os == 'Windows' && runner.arch == 'X64'
-        shell: pwsh
-        run: |
-          choco install llvm --no-progress -y
-          "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Set up the MSVC environment (Windows)
+      # Same Visual Studio toolchain as the local build and the archives.
+      - name: Set up the Visual Studio toolchain (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $arch = if ($env:RUNNER_ARCH -eq 'ARM64') { 'arm64' } else { 'x64' }
-          $component = if ($arch -eq 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.arm64' } else { 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64' }
-
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (-not (Test-Path $vswhere)) {
-            $vswhere = "${env:ProgramFiles}\Microsoft Visual Studio\Installer\vswhere.exe"
-          }
-          if (-not (Test-Path $vswhere)) { throw "vswhere.exe not found." }
-
-          $vsPath = (& $vswhere -latest -products * -requires $component -property installationPath).Trim()
-          if (-not $vsPath) { throw "Visual Studio C++ build tools ($component) were not found." }
-
-          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
-          if (-not (Test-Path $vcvars)) { throw "vcvarsall.bat not found at $vcvars" }
-
-          cmd /c "`"$vcvars`" $arch && set" | ForEach-Object {
-            if ($_ -match '^([^=]+)=(.*)$') {
-              "$($matches[1])=$($matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-            }
-          }
+        uses: ./.github/actions/vs-toolchain
 
       - name: Install dependencies
         run: npm ci
@@ -524,6 +484,15 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo sh scripts/install-gui-deps.sh
 
+      # This job builds the GUI/media archives too, so it needs the same Visual
+      # Studio toolchain as compile-examples (vcvarsall + its bundled LLVM) and
+      # GNU make for FFmpeg's configure on x64.
+      - name: Set up the Visual Studio toolchain (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/vs-toolchain
+        with:
+          make: "true"
+
       - run: npm ci
 
       - name: Cache the GUI and media vendored libraries
@@ -539,6 +508,18 @@ jobs:
             vendor/ffmpeg
           key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts', 'scripts/build-media.ts') }}
 
+      - name: Cache the Windows GUI and media sources
+        if: runner.os == 'Windows' && runner.arch == 'X64'
+        uses: actions/cache@v5
+        with:
+          path: |
+            vendor/SDL
+            vendor/freetype
+            vendor/harfbuzz
+            vendor/ffmpeg
+            vendor/ffmpeg-build-msvc/dist
+          key: windows-vendor-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts', 'scripts/build-media.ts') }}
+
       - name: Download the self-hosted compiler
         uses: actions/download-artifact@v8
         with:
@@ -548,15 +529,15 @@ jobs:
       - name: Build the prebuilt runtime archives
         run: npm run runtime
 
-      # `package-release` copies all of `runtime/`, so the `gui.a` and `media.a`
-      # built here ship automatically. Built on Linux/macOS; Windows is skipped
-      # until the MSVC archive is validated (see the compile-examples job).
+      # `package-release` copies all of `runtime/`, so the GUI and media archives
+      # built here ship automatically. Windows x64 is built and shipped; Windows
+      # arm64 still skips (FFmpeg's MSVC arm64 build is not validated yet).
       - name: Build the GUI archive
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' || runner.arch == 'X64'
         run: npm run gui
 
       - name: Build the media archive
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' || runner.arch == 'X64'
         run: npm run media
 
       - name: Assemble the release archive

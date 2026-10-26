@@ -86,8 +86,8 @@ too.
 > **Before you start:** check the per-platform prerequisites in
 > [Requirements](./doc/requirements.md). xbintsc does not bundle a compiler, so
 > every platform needs a clang-compatible toolchain installed (macOS: Xcode
-> Command Line Tools; Linux: clang+lld; Windows: LLVM + Visual Studio C++ build
-> tools).
+> Command Line Tools; Linux: clang+lld; Windows: Visual Studio C++ build tools
+> with their bundled LLVM/MSVC).
 
 ### Prebuilt standalone archives
 
@@ -129,8 +129,9 @@ tar -xf xbintsc-<version>-darwin-arm64.tar.zst
 ./build/hello
 ```
 
-**Windows example** — install LLVM and the Visual Studio C++ build tools (see
-[Requirements](./doc/requirements.md)), then download an archive from the
+**Windows example** — install the Visual Studio C++ build tools (MSVC, MSBuild
+and its bundled LLVM; see [Requirements](./doc/requirements.md)), then download
+an archive from the
 [Releases page](https://github.com/zy445566/xbintsc/releases/latest) (here
 `xbintsc-<version>-win32-x64.tar.zst`; use `-arm64` on Windows on ARM) and run the
 commands below in an **x64 Native Tools Command Prompt for VS 2022** (Windows on
@@ -315,11 +316,15 @@ Platforms and full details: [doc/gui.md](./doc/gui.md) is the engine overview
 [doc/gui/](./doc/gui) — API, DOM/CSS, layout, rendering, media, input, animation,
 runtime, build and known issues. Linux and macOS are built and exercised in CI
 and their release archives ship the engine (`gui.a`) plus the optional media
-archive (`media.a`); the Windows archive
-(`gui.lib`, rendered through SDL_GPU's Vulkan backend) is produced by the same
-script but is still provisional and is not shipped in the release yet. Media
-playback is POSIX-only for now: without `media.a`, or on Windows, `<video>` and
-`<audio>` fire `error`.
+archive (`media.a`). Windows x64 gets the same pair (`gui.lib` through SDL_GPU's
+Vulkan backend, and `media.lib` from FFmpeg compiled with clang-cl for the MSVC
+ABI), built in CI with the Visual Studio MSVC + LLVM toolchain a local build
+uses; Windows arm64 still skips them. Running the examples in CI stays
+provisional because hosted runners have no GPU/Vulkan driver. Building
+`media.lib` on Windows needs a POSIX shell and GNU make for FFmpeg's configure
+step: Git for Windows supplies the shell, and make is a native GNU make
+(Chocolatey). See [doc/gui/build.md](./doc/gui/build.md). Without the media archive
+`<video>` and `<audio>` fire `error`.
 
 ## Incremental compilation
 
@@ -442,7 +447,8 @@ See [Requirements](./doc/requirements.md) for the full, per-platform list.
 - Node.js 22+ — to run the compiler from npm or from source; released binaries
   are standalone
 - macOS: the Xcode Command Line Tools (`xcode-select --install`)
-- Windows: LLVM + the Visual Studio C++ build tools (MSVC ABI)
+- Windows: the Visual Studio C++ build tools (MSVC, MSBuild and the bundled
+  LLVM; `scripts/setup-vs-toolchain.ps1` imports that exact toolchain)
 - Linux: `clang` and `lld` from your distribution
 - To build a binary yourself: a `clang`-compatible compiler on `PATH`
   (override with `xbintsc_CLANG`)

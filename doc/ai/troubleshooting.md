@@ -102,11 +102,13 @@ stderr — read the stderr, not just the first line. Frequent causes:
   `xbintsc doctor` shows the compiler and its target; prefer the LLVM bundled
   with Visual Studio, which locates the SDK itself. If your installation still
   needs the environment imported, run from an **x64 Native Tools Command Prompt
-  for VS 2022** (or **ARM64 Native Tools** on Windows on ARM), or import it
-  first:
+  for VS 2022** (or **ARM64 Native Tools** on Windows on ARM), or import the
+  same Visual Studio setup CI uses:
   ```powershell
-  & "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
+  pwsh -File scripts/setup-vs-toolchain.ps1
   ```
+  That imports `vcvarsall` and pins `xbintsc_CLANG` to the LLVM bundled with
+  Visual Studio. Invoking `vcvarsall.bat x64` directly also works.
 - the linker is wrong on Linux — set `xbintsc_CLANG` and/or pass
   `xbintsc_LINKER_ARGS=-fuse-ld=lld`;
 - `No C compiler found. Set xbintsc_CLANG to a clang binary.` — no clang on
@@ -120,11 +122,13 @@ described in [../gui.md](../gui.md).
 
 ### `media native library not found at …`
 
-`<video>`/`<audio>` playback needs the optional `media` archive (`media.a`),
-built separately with `npm run media`. Build it, or drop `--ext media`; a
-GUI-only build still links and media elements simply fire `error`. The `media`
-extension also requires `gui`, has no Windows archive yet, and `--ext media`
-alone is rejected with the flags to pass. See
+`<video>`/`<audio>` playback needs the optional `media` archive (`media.a`, or
+`media.lib` on Windows), built separately with `npm run media`. Build it, or
+drop `--ext media`; a GUI-only build still links and media elements simply fire
+`error`. The `media` extension also requires `gui`, and `--ext media` alone is
+rejected with the flags to pass. On Windows the FFmpeg build additionally needs
+a POSIX shell (Git for Windows' bash) and a native GNU make (Chocolatey `make`,
+or `xbintsc_MAKE`). The script names whichever is missing. See
 [../gui/build.md](../gui/build.md).
 
 ### `Icon file not found` / icon tools missing

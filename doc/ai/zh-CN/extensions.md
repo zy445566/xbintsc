@@ -94,8 +94,8 @@ import { createWindow, run } from "gui";
 ### `media` —— 视频/音频解码
 
 用 `--ext media` **与 `gui` 一起**开启（`--ext gui,media`；注册表会拒绝单独启用
-`media`）。它链接单独的 FFmpeg 后端 `media.a`，因此加入 `<video>`/`<audio>` 播放
-不会让只做界面的二进制变大。
+`media`）。它链接单独的 FFmpeg 后端 `media.a`/`media.lib`，因此加入
+`<video>`/`<audio>` 播放不会让只做界面的二进制变大。
 
 DOM API 与普通 HTML 媒体元素一致：`play()` / `pause()` / `load()`，以及
 `paused` / `ended` / `duration` / `currentTime` / `volume` / `muted` / `loop` /
@@ -103,8 +103,13 @@ DOM API 与普通 HTML 媒体元素一致：`play()` / `pause()` / `load()`，�
 `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件。没有内置
 控件——用元素和 CSS 自绘控件（见 `examples/gui/media.ts`）。视频帧与音频 PCM
 都在主线程解码；视频走图像纹理路径。没有该扩展时，打开媒体源会失败并触发
-`error`（元素与 API 仍然存在）。该归档目前仅支持 POSIX，因此 Windows 也只会触发
-同样的 `error`；见 [../../zh-CN/gui/known-issues.md](../../zh-CN/gui/known-issues.md)。
+`error`（元素与 API 仍然存在）。归档会为每个宿主平台构建：POSIX 产出
+`media.a`，Windows 则用面向 MSVC 的 `clang-cl` 编译 FFmpeg 并产出 `media.lib`，
+因此可与 `gui.lib` 链接。Windows 上构建它需要 POSIX shell（Git for Windows
+自带的 bash）与原生 GNU make（Chocolatey `make`，或 `xbintsc_MAKE`）。见
+[../../zh-CN/gui/build.md](../../zh-CN/gui/build.md)。
+没有归档、或宿主上还没运行 `npm run media` 时，媒体元素会触发 `error`；见
+[../../zh-CN/gui/known-issues.md](../../zh-CN/gui/known-issues.md)。
 
 ## 第三方 npm 包
 

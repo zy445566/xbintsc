@@ -6,8 +6,9 @@
  * so a program that only needs windows and HTML/CSS does not pay for a media
  * stack it never uses. This extension supplies the decoding half:
  *
- *   - `media.a` (built by `npm run media`) contains the FFmpeg-linked player
- *     from `runtime/ext_media/media.cpp` and the static FFmpeg libraries;
+ *   - `media.a` (`media.lib` with the MSVC ABI on Windows, built by
+ *     `npm run media`) contains the FFmpeg-linked player from
+ *     `runtime/ext_media/media.cpp` and the static FFmpeg libraries;
  *   - `runtime/ext_media/media_bridge.c` is compiled and linked directly. Its
  *     constructor installs the player table into the GUI engine and references
  *     the backend entry points, which makes the linker extract the archive
@@ -19,9 +20,9 @@
  *
  *     xbintsc run app.ts --ext gui,media
  *
- * The archive is POSIX-only for now (the build needs FFmpeg's `configure` and
- * an MSVC-compatible FFmpeg has not been built), so Windows reports an
- * actionable error instead of linking an inert element.
+ * The archive is built for every host platform. On Windows FFmpeg is compiled
+ * with the MSVC-targeting clang-cl so its COFF objects and static CRT match
+ * `gui.lib`; see `doc/gui/build.md`.
  */
 
 import { join } from "node:path";
@@ -31,7 +32,7 @@ import { findRuntimeLibrary } from "../../driver/runtime-lib.js";
 
 /** Absolute path to the per-platform prebuilt media archive. */
 function mediaArchive(): string {
-  return join(findRuntimeDir(), "lib", platformSlug(), "media.a");
+  return join(findRuntimeDir(), "lib", platformSlug(), process.platform === "win32" ? "media.lib" : "media.a");
 }
 
 export const mediaExtension: Extension = {
@@ -45,23 +46,19 @@ export const mediaExtension: Extension = {
    */
   runtimeSources: () => [join(findRuntimeDir(), "ext_media", "media_bridge.c")],
   nativeObjects: () => {
-    if (process.platform === "win32") {
-      throw new Error(
-        "the media extension is not available on Windows yet: it needs an MSVC-compatible " +
-          "FFmpeg build (see doc/gui/known-issues.md). Build without --ext media; media " +
-          "elements then report an 'error' event.",
-      );
-    }
     const archive = findRuntimeLibrary("media");
     if (archive === undefined) {
       throw new Error(
-        `media native library not found at ${mediaArchive()} (or media.lib).\n` +
+        `media native library not found at ${mediaArchive()} (media.a or media.lib).\n` +
           `Build it for ${platformSlug()} first with \`npm run media\` (see doc/gui/build.md).`,
       );
     }
     return [archive];
   },
   /** `media.a` is C++ and FFmpeg itself needs libm; the GUI extension already
-   * contributes the C++ runtime and the OS frameworks. */
-  linkerFlags: () => (process.platform === "win32" ? [] : ["-lm"]),
+   * contributes the C++ runtime and the OS frameworks. On Windows the FFmpeg
+   * objects reference the Win32 crypto/COM services (`bcrypt`, `ole32`) and
+   * `user32`. */
+  linkerFlags: () =>
+    process.platform === "win32" ? ["-lbcrypt", "-lole32", "-luser32"] : ["-lm"],
 };

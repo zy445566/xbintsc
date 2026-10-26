@@ -18,12 +18,13 @@
   backend. It fetches FFmpeg (`FFMPEG_VERSION`, default `7.1`), configures a
   minimal static build with only the demuxers/parsers/decoders the media
   elements need, compiles `runtime/ext_media/media.cpp` against it and merges
-  everything into `runtime/lib/<os>-<arch>/media.a`. `gui.a` does **not** link
-  FFmpeg: a program enables playback explicitly with `--ext media`.
+  everything into `runtime/lib/<os>-<arch>/media.a` (`media.lib` with the MSVC
+  ABI on Windows). `gui.a` does **not** link FFmpeg: a program enables playback
+  explicitly with `--ext media`.
 - `src/extensions/gui/index.ts` exposes the engine archive through
   `nativeObjects()` (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the
   OS frameworks through `linkerFlags()`. `src/extensions/media/index.ts` does
-  the same for `media.a` and compiles the registration bridge
+  the same for `media.a`/`media.lib` and compiles the registration bridge
   (`runtime/ext_media/media_bridge.c`) as a normal runtime source.
 - `scripts/build-gui.ts` compiles with the *same* clang the driver resolves
   (`src/driver/toolchain-provider.ts`); on Windows that is the MSVC-targeting
@@ -32,14 +33,39 @@
   fallbacks, and Windows always uses `llvm-ar`, so the archive cannot mix object
   formats or C++ runtimes. The Visual Studio toolchain is found by absolute
   path, so no developer prompt is required. On Windows SDL_GPU selects the
-  Vulkan backend; no DXIL/`dxc` toolchain is needed. `scripts/build-media.ts`
-  uses the same resolved toolchain for FFmpeg and the player.
-- CI builds `gui.a` and `media.a` before assembling the release archive so they
-  ship inside `runtime/lib/<slug>/` (the release tarball copies the whole
-  `runtime/` tree). The archives are built and the examples are run on Linux
-  (under Xvfb, with the lavapipe software Vulkan driver) and macOS; Windows is
-  provisional because the hosted runners have no GPU/Vulkan driver, and the
-  media archive is POSIX-only.
+  Vulkan backend; no DXIL/`dxc` toolchain is needed.
+- `scripts/build-media.ts` uses the same resolved toolchain. On Windows it
+  drives FFmpeg's own MSVC mode: `configure --toolchain=msvc --cc=clang-cl`
+  compiles static FFmpeg against the static MSVC CRT, `clang++` compiles the
+  player, and `llvm-ar` merges the COFF archives into `media.lib`. The compiler
+  chain is entirely Visual Studio (clang-cl, `cl.exe`, `lib.exe`, `llvm-ar`).
+  FFmpeg's configure is a POSIX shell script and its
+  Makefiles need GNU make, so those two build drivers remain: the shell is Git
+  for Windows' bundled bash (Git is already required to clone SDL3), and make is
+  a native GNU make such as Chocolatey's `make` (or `xbintsc_MAKE`). The script
+  rewrites the generated source path to a drive-letter form and skips dependency
+  extraction, which native make cannot pass through the MSVC `/showIncludes` awk
+  pipeline. The MSVC tools are only needed by configure's toolchain probe; they
+  are resolved from the Visual Studio installation, not from a developer prompt.
+  `xbintsc_SHELL` and `xbintsc_MAKE` override the discovered shell/make. Headers
+  and libraries are copied into `vendor/ffmpeg-build-msvc/dist` by the script
+  rather than through `make install`.
+- CI builds `gui.a`/`gui.lib` and `media.a`/`media.lib` before assembling the
+  release archive so they ship inside `runtime/lib/<slug>/` (the release tarball
+  copies the whole `runtime/` tree). The archives are built and the examples are
+  run on Linux (under Xvfb, with the lavapipe software Vulkan driver) and macOS;
+  the Windows x64 job builds both archives and links a `gui,media` program, so
+  the MSVC build is validated even though *running* the examples there stays
+  provisional (the hosted runner has no GPU/Vulkan driver). Windows arm64 still
+  skips both archives: FFmpeg's MSVC arm64 build is not validated yet.
+- The Windows CI steps call `.github/actions/vs-toolchain` →
+  `scripts/setup-vs-toolchain.ps1`, which imports the same Visual Studio
+  `vcvarsall` environment and bundled LLVM a local build uses (no separate
+  Chocolatey LLVM). For the media build the action also installs GNU make
+  through Chocolatey and points `xbintsc_MAKE` at it; the FFmpeg source and the
+  installed `vendor/ffmpeg-build-msvc/dist` prefix are cached by script hash.
+  The configure/make tree itself is not cached (absolute paths and compiler
+  options from another machine).
 - The existing cache fingerprint already hashes `nativeObjects()` contents and
   `runtimeSources()` content, so rebuilding either archive invalidates cached
   binaries automatically.
@@ -65,6 +91,28 @@ npm run media        # optional: build media.a (fetches and builds FFmpeg once)
 xbintsc run examples/gui/hello.ts --ext gui
 ```
 
+On Windows the same commands produce `gui.lib` and `media.lib` from a normal
+PowerShell — no developer command prompt. The Visual Studio installation
+supplies the MSVC-targeting `clang++`, `clang-cl`, `cl.exe` and `lib.exe`, and
+`npm run media` additionally needs a POSIX shell and GNU make for FFmpeg's
+`configure`: Git for Windows supplies the shell (and is already needed to clone
+SDL3), while GNU make is a native binary — install it with `choco install make`,
+or point `xbintsc_MAKE` at one. The script reports whichever tool is missing and
+accepts `xbintsc_SHELL` / `xbintsc_MAKE` overrides.
+
+To select that toolchain explicitly (useful in a fresh shell or to pin the same
+compiler CI uses), run:
+
+```powershell
+pwsh -File scripts/setup-vs-toolchain.ps1
+```
+
+It imports `vcvarsall` (MSVC, Windows SDK, MSBuild) and points `xbintsc_CLANG`
+at the LLVM bundled with that Visual Studio installation. GitHub Actions uses
+the same script through `.github/actions/vs-toolchain`, so no separate
+Chocolatey/standalone LLVM is installed there and CI, local builds and the
+prebuilt archives share one compiler chain.
+
 Two examples live here: `hello.ts` (HTML/CSS + a reactive counter) and
 [`pelican-bike/`](../../examples/gui/pelican-bike), a playable 2D game that uses
 positioned layers, CSS sprites, `requestAnimationFrame` and keyboard input — see
@@ -82,11 +130,13 @@ which the e2e test (`tests/e2e/gui-*.test.ts`) uses to run headlessly.
 
 Those suites are skipped on Windows by default (the archive is built and runs
 locally through Vulkan, but CI runners have no GPU driver to run it). With a
-`gui.lib` and a working GPU, opt in with `xbintsc_GUI_TESTS=1`:
+`gui.lib` and a working GPU, opt in with `xbintsc_GUI_TESTS=1`; if you also ran
+`npm run media`, the media suite then exercises the real decoder on Windows too:
 
 ```bat
 set xbintsc_GUI_TESTS=1
 npx vitest run tests/e2e/gui-layout.test.ts tests/e2e/gui-example.test.ts
+npx vitest run tests/e2e/gui-media.test.ts
 ```
 
 On a headless Linux box, install the SDL3 build headers and run under Xvfb with a
@@ -101,8 +151,8 @@ xvfb-run -a --server-args="-screen 0 1280x720x24" \
 ```
 
 The media e2e suite (`tests/e2e/gui-media.test.ts`) skips itself unless both
-`gui.a` and `media.a` exist; `tests/e2e/gui-media-disabled.test.ts` covers the
-GUI-only build and runs with `gui.a` alone.
+`gui.a`/`gui.lib` and `media.a`/`media.lib` exist; `tests/e2e/gui-media-disabled.test.ts`
+covers the GUI-only build and runs with the GUI archive alone.
 
 `scripts/install-gui-deps.sh` holds the package list (`apt-get install -y clang
 cmake libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev

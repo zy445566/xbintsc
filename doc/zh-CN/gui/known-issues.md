@@ -66,18 +66,25 @@
   相同的、面向 MSVC 的 clang（`PATH` 上没有更新版本时就是 Visual Studio 自带的
   LLVM）。
 - Windows：`scripts/build-gui.ts` 会生成 MSVC 兼容的 `gui.lib`
-  （COFF 对象 + `ar -M`/`llvm-ar`），但尚未在 CI 中验证，因此 Windows 步骤
-  为试验性（job 保持绿色），`package` 会跳过它；在开发者机器上构建并运行
-  `examples/gui/pelican-svg` 与 `examples/gui/pelican-bike` 是可以的。那里
-  SDL_GPU 会选择 **Vulkan** 后端（`win.driver()` 返回 `"vulkan"`），因此归档
-  不需要 DXIL/`dxc` 工具链；托管 Windows runner 没有 GPU/Vulkan 驱动，这才是
-  CI 运行仍为试验性的原因。
-- **Windows 上的媒体：** `media` 扩展目前仅支持 POSIX。GUI 引擎本身可在
-  Windows 上构建，但没有该扩展时 `<video>`/`<audio>` 为空操作（打开失败并触发
-  `error`），`--ext media` 会给出可操作的错误而不是继续链接。启用它需要
-  MSVC 兼容的 FFmpeg 构建，推迟到 Windows GUI 路径本身验证之后。
-  `<video controls>` 同样推迟——预期模式是 TS + CSS 叠层，如
-  `examples/gui/media.ts`。
+  （COFF 对象 + `ar -M`/`llvm-ar`）。Windows x64 的 CI job 使用 Visual Studio
+  工具链（`.github/actions/vs-toolchain` 导入 `vcvarsall` 并采用 VS 自带的
+  LLVM）构建它、链接一个 `gui,media` 程序，并随 x64 发布归档一起发布。示例在
+  托管 runner 上的*运行*仍为试验性，因为那里没有 GPU/Vulkan 驱动（SDL_GPU 在
+  Windows 上选择 **Vulkan** 后端，因此不需要 DXIL/`dxc` 工具链）。Windows
+  arm64 仍跳过两个归档。在开发者机器上构建并运行
+  `examples/gui/pelican-svg` 与 `examples/gui/pelican-bike` 是可以的。
+- **Windows：x64 在 CI 中构建，arm64 与运行时验证仍为试验性。**
+  `scripts/build-media.ts` 用 FFmpeg 的 MSVC 工具链
+  （`--toolchain=msvc --cc=clang-cl`）生成 `media.lib`，其 COFF 对象与静态 CRT
+  和 `gui.lib` 一致，`--ext media` 在 Windows 上可以正常链接并播放。构建它需要
+  POSIX shell 运行 FFmpeg 的 `configure` 以及 GNU make；shell 来自 Git for
+  Windows（克隆 SDL3 本来就需要 Git），make 是原生 GNU make（Chocolatey 的
+  `make`，或 `xbintsc_MAKE`）。CI 会显式安装 make，在
+  Windows x64 上使用与本地构建相同的 Visual Studio `vcvarsall` + 自带 LLVM
+  构建 `gui.lib` 与 `media.lib`，链接 `gui,media` 程序，并把两个归档放进
+  Windows x64 发布包；示例的*运行*仍因托管 runner 没有 GPU/Vulkan 驱动而保持
+  试验性。Windows arm64 仍跳过两个归档；`<video controls>` 同样推迟——预期模式
+  是 TS + CSS 叠层，如 `examples/gui/media.ts`。
 - **D3D12 着色器：** SPIR-V（Vulkan）与 DXIL（Direct3D 12）二进制块均已构建并
   内嵌，非 Metal 路径不再跳过几何绘制。但在 **SDL 3.2.10** 上 DXIL 仍不可用：
   其 D3D12 后端会拒绝任何着色器中声明了 uniform buffer 的图形管线，而引擎正是

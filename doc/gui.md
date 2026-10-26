@@ -174,21 +174,27 @@ engine were Rust.
    - **M6b — transitions/animations** ✅ `transition` shorthand + longhands,
      animated `background-color`/`color`/`border-color`/`border-radius`, retargeting
      and `win.advance(ms)`. `@keyframes` remain.
-7. **M7 — CI & releases** ✅ (Linux/macOS build) / 🚧 (run + Windows)
+7. **M7 — CI & releases** ✅ (Linux/macOS/Windows x64 build) / 🚧 (run + Windows arm64)
    - `compile-examples` builds `gui.a` and `media.a` on Linux and macOS
      (required), then runs the examples and `tests/e2e/gui-*.test.ts` under
      Xvfb + lavapipe on Linux (required). The macOS run is provisional until a
      WindowServer is confirmed; it is guarded so a failure is logged without
      annotating the run.
-   - The `package` job builds `gui.a` and `media.a` before assembling the
-     release, so both ship inside the existing runtime archive
-     (`package-release` copies all of `runtime/`).
-   - `vendor/` (SDL3/FreeType/HarfBuzz for `gui.a`, FFmpeg for `media.a`) is
-     cached per OS/arch, keyed by `scripts/build-gui.ts` / `scripts/build-media.ts`.
-   - Windows (build + run) stays provisional in CI: the MSVC-compatible
-     `gui.lib` builds and runs locally through SDL_GPU's Vulkan backend, but the
-     hosted runners have no GPU/Vulkan driver. A failure is logged without
-     annotating the run (see [Open questions](./gui/known-issues.md#open-questions)).
+   - The `package` job builds `gui.a`/`gui.lib` and `media.a`/`media.lib` before
+     assembling the release, so both ship inside the existing runtime archive
+     (`package-release` copies all of `runtime/`). Windows x64 is included;
+     Windows arm64 still skips them.
+   - `vendor/` (SDL3/FreeType/HarfBuzz for the GUI archive, FFmpeg for `media`)
+     is cached per OS/arch, keyed by `scripts/build-gui.ts` /
+     `scripts/build-media.ts`. Windows x64 gets its own source cache plus the
+     installed `vendor/ffmpeg-build-msvc/dist` prefix.
+   - Windows x64 builds both archives in CI and links a `gui,media` program,
+     using the same Visual Studio `vcvarsall` + bundled LLVM toolchain as a
+     local build (`.github/actions/vs-toolchain`); the host has no GPU/Vulkan
+     driver, so *running* the GUI/media examples there remains provisional (a
+     failure is logged without annotating the run). The Windows arm64 job still
+     skips both archives (see
+     [Open questions](./gui/known-issues.md#open-questions)).
 8. **M8 — interactive DOM** ✅
    - Element/document handles with stable identity, read/write properties via
      runtime accessors, traversal/attributes/queries, mutation with lazy
@@ -306,11 +312,12 @@ engine were Rust.
   pixel size and cached by that size, so scaling and HiDPI stay crisp.
 - **M6b** ✅ CSS transitions (parsing in `style.*`, an animation clock and
   transition state in `document.*`, `advance`/`advance(ms)` hooks, e2e coverage).
-- **M7** ✅ builds `gui.a` (and the optional `media.a`) in CI on Linux and macOS
-  (required) and runs the example plus the GUI e2e suite under Xvfb on Linux;
-  `package` ships both archives, `vendor/` is cached, and the `ar -M` merge
-  works on GNU/Linux and macOS. macOS runs and all of Windows remain provisional
-  in CI.
+- **M7** ✅ builds `gui.a`/`gui.lib` and `media.a`/`media.lib` in CI on Linux,
+  macOS and Windows x64 (required) and runs the example plus the GUI e2e suite
+  under Xvfb on Linux; `package` ships the archives (Windows x64 included),
+  `vendor/` is cached, and the `ar -M` merge works on GNU/Linux, macOS and
+  COFF/Windows. macOS runs, the Windows example *run* and Windows arm64 remain
+  provisional in CI.
 - **M8** ✅ element/document handles (`dom_api.*`), DOM mutation with lazy
   restyle/relayout (`document.*`, `xt_gui_flush_dom`), element event dispatch
   with capture/bubble and `stopPropagation` (`dom_api.*`, `gui.cpp`), and e2e
@@ -347,7 +354,8 @@ engine were Rust.
   every frame now runs in constant memory (see [Memory & GC](./gui/runtime.md#memory--gc)).
 - **M13** ✅ `<video>` / `<audio>` support. The optional `media` extension
   vendors and builds a minimal static FFmpeg (`scripts/build-media.ts`) and
-  merges it into `media.a`; `runtime/ext_media/media.cpp` decodes video to RGBA
+  merges it into `media.a` (or `media.lib` from clang-cl/MSVC objects on
+  Windows); `runtime/ext_media/media.cpp` decodes video to RGBA
   frames and audio to 48 kHz stereo PCM on the main thread,
   `runtime/ext_gui/gui_media.cpp` owns the players, implements the SDL audio
   sink and pumps the media clock and events each frame,

@@ -57,7 +57,7 @@ requestAnimationFrame(frame);
 | `AudioContext`, `webkitAudioContext` | a Web Audio graph builder (see below) |
 | `Event`, `CustomEvent`, `ProgressEvent`, … | event constructors |
 | `HTMLCanvasElement`, `HTMLImageElement`, `WebGLRenderingContext`, `WebGL2RenderingContext`, `WebGLBuffer`/`WebGLTexture`/`WebGLShader`/`WebGLProgram`/`WebGLFramebuffer`/`WebGLRenderbuffer`/`WebGLUniformLocation`/`WebGLActiveInfo`/`WebGLVertexArrayObject`/`WebGLSampler`/`WebGLQuery`/`WebGLSync`/`WebGLTransformFeedback` | real constructor values. `canvas.getContext("webgl")` and `getContext("webgl2")` return GPU contexts (see [WebGL](./webgl.md)). |
-| `ImageBitmap`, `ImageData`, `OffscreenCanvas`, `XRWebGL*`, `Request`, `Headers`, `Response`, `ReadableStream`, `DOMParser` | `typeof` probes answer `"undefined"` (no XR/fetch/streaming backend), which lets a page take its "unsupported" branch instead of calling a no-op stub. Three.js pages use its real renderer when WebGL is available and the bundled Canvas2D renderer otherwise (see [Known issues](./known-issues.md)). |
+| `ImageBitmap`, `ImageData`, `OffscreenCanvas`, `XRWebGL*`, `Request`, `Headers`, `Response`, `ReadableStream`, `DOMParser` | `typeof` probes answer `"undefined"` (no XR/fetch/streaming backend), which lets a page take its "unsupported" branch instead of calling a no-op stub. Three.js pages use its real renderer on this backend (see [Known issues](./known-issues.md)). |
 | `requestAnimationFrame` / `cancelAnimationFrame` | queued on the window's frame list; see [Runtime integration](./runtime.md) |
 | `alert` / `confirm` / `prompt`, `matchMedia`, `getComputedStyle`, `escape` | host implementations (Annex B `escape` encodes per UTF-16 code unit, matching `decodeURIComponent(escape(bytes))`) |
 

@@ -6,6 +6,7 @@ int xt_is_regexp(xt_value value) {
 
 xt_value xt_regexp_ctor(int32_t argc, xt_value *argv) {
   xt_regexp *regexp = (xt_regexp *)xt_alloc(sizeof(xt_regexp), XT_OBJECT_KIND_REGEXP);
+  regexp->last_index = 0;
   xt_value source = xt_arg_at(argc, argv, 0);
   xt_value flags = xt_arg_at(argc, argv, 1);
   if (XT_IS_OBJECT(source) && ((xt_object *)XT_GET_PTR(source))->header.kind == XT_OBJECT_KIND_REGEXP) {

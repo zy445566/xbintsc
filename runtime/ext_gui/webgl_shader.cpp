@@ -10,6 +10,7 @@
 #include "webgl.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 
 #include "gui_internal.h"
@@ -147,8 +148,6 @@ bool WebGLContext::compile_shader(uint32_t id) {
   const std::string source = rewrite_glsl(record->source, fragment, layout, info);
   std::vector<uint32_t> spirv;
   record->compiled = compile_glsl(source, fragment, &spirv, &record->log);
-  if (!record->compiled) {
-  }
   return record->compiled;
 }
 
@@ -264,6 +263,36 @@ bool WebGLContext::link_program(uint32_t id) {
     record->linked = false;
     return false;
   }
+
+  /* The merged block is emitted in both stages, so a struct declared only in
+   * one of them (three.js light structs are fragment-only) must be hoisted
+   * into the other too. Deduplicate by struct name. */
+  auto struct_name = [](const std::string &definition) {
+    size_t at = definition.find("struct");
+    if (at == std::string::npos) return std::string();
+    at += 6;
+    while (at < definition.size() && std::isspace((unsigned char)definition[at]) != 0) at++;
+    size_t end = at;
+    while (end < definition.size() &&
+           (std::isalnum((unsigned char)definition[end]) != 0 || definition[end] == '_')) {
+      end++;
+    }
+    return definition.substr(at, end - at);
+  };
+  std::vector<std::string> structs = vs_info.struct_definitions;
+  for (const std::string &definition : fs_info.struct_definitions) {
+    const std::string name = struct_name(definition);
+    bool present = false;
+    for (const std::string &existing : structs) {
+      if (!name.empty() && struct_name(existing) == name) {
+        present = true;
+        break;
+      }
+    }
+    if (!present) structs.push_back(definition);
+  }
+  vs_info.struct_definitions = structs;
+  fs_info.struct_definitions = structs;
 
   GlslLinkLayout vs_layout;
   GlslLinkLayout fs_layout;

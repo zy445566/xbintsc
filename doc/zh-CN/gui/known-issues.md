@@ -14,11 +14,9 @@
   feedback、立方体贴图、3D 纹理、浮点/深度纹理、压缩纹理、多渲染目标、
   `blitFramebuffer`、MSAA 与模板操作尚未实现；`clear` 会忽略 scissor 矩形。
   在无法消费 SPIR-V 的 SDL_GPU 后端（Metal、Direct3D 12）上两种上下文都为
-  `null`。`.js` 资源加载器仍保持 Three.js 可用：它的 `WebGLRenderer` 会探测
-  上下文（优先 `webgl2`），有上下文时使用 Three.js 自己的渲染器，只有没有
-  上下文时才回退到内置 Canvas2D 场景渲染器
-  （`runtime/ext_gui/three_compat.js`）。需要深度纹理或 uniform 块的 three.js
-  场景仍可能失败，这类页面应保留回退。
+  `null`。`.js` 资源加载器现在只修补 three.js 的着色器循环展开；
+  `WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。阴影贴图
+  （深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标仍未支持。
 
 
 - **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生

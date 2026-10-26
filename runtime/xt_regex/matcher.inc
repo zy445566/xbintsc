@@ -120,6 +120,7 @@ typedef struct {
   const xt_re_input *in;
   int min;
   int max; /* -1 == unbounded */
+  int lazy;
   xt_re_cont cont;
   void *ctx;
 } xt_re_repeat;
@@ -139,6 +140,12 @@ static int xt_re_repeat_next(void *v, size_t newpos, const xt_re_cap *caps) {
 }
 
 static int xt_re_repeat_try(xt_re_repeat *rep, size_t pos, int count, const xt_re_cap *caps) {
+  /* A lazy quantifier prefers the continuation (i.e. the shortest match) and
+   * only repeats when the rest of the pattern cannot match. This also keeps
+   * `[\s\S]+?` over a long shader from recursing once per byte. */
+  if (rep->lazy && count >= rep->min) {
+    if (rep->cont(rep->ctx, pos, caps)) return 1;
+  }
   if (rep->max < 0 || count < rep->max) {
     xt_re_repeat_step step;
     step.rep = rep;
@@ -146,13 +153,14 @@ static int xt_re_repeat_try(xt_re_repeat *rep, size_t pos, int count, const xt_r
     step.count = count;
     if (xt_re_match_atom(rep->atom, rep->in, pos, xt_re_repeat_next, &step, caps)) return 1;
   }
-  if (count >= rep->min) return rep->cont(rep->ctx, pos, caps);
+  if (!rep->lazy && count >= rep->min) return rep->cont(rep->ctx, pos, caps);
   return 0;
 }
 
 static int xt_re_match_piece(xt_re_piece *piece, const xt_re_input *in, size_t pos,
                              xt_re_cont cont, void *ctx, const xt_re_cap *caps) {
   xt_re_repeat rep;
+  rep.lazy = piece->lazy;
   switch (piece->quant) {
     case XT_RE_Q_STAR:
       rep.atom = piece->node;

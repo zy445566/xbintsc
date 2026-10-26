@@ -200,6 +200,6 @@ export const guiExtension: Extension = {
   }),
   /** Browser globals (`window`, `document`, the DOM type names). */
   globalValues: () => browserGlobals,
-  /** Rewrite imported `.html` assets and give three.js a Canvas2D renderer. */
+  /** Rewrite imported `.html` assets and patch three.js's shader unroller. */
   assetLoaders: () => ({ ".html": loadHtmlAsset, ".js": loadScriptAsset, ".mjs": loadScriptAsset }),
 };

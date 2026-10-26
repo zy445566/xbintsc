@@ -236,6 +236,19 @@ describeE2E("end-to-end built-in library", (harness) => {
     expect(runProgram(source)).toBe("a=1;b=2; 30");
   });
 
+  it("advances lastIndex for global regexp exec", () => {
+    const source = String.raw`
+      const re = /[a-z]+/g;
+      const first = re.exec("ab cd");
+      console.log(first![0], re.lastIndex);
+      const second = re.exec("ab cd");
+      console.log(second![0], re.lastIndex);
+      re.lastIndex = 0;
+      console.log(re.exec("ab cd")![0], re.lastIndex);
+    `;
+    expect(runProgram(source)).toBe("ab 2\ncd 5\nab 2");
+  });
+
   it("supports regex classes and multiline anchors", () => {
     const source = String.raw`
       console.log("ab_1".replace(/[\w]+/, "Y"));

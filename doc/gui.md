@@ -442,7 +442,10 @@ engine were Rust.
   and sampler/query/sync handles, `webgl_draw.cpp` adds instanced draws (input
   rate from `vertexAttribDivisor`) and integer attributes, and
   `webgl_texture.cpp` adds `texStorage2D` and `clearBuffer*`. The shader
-  rewriter gives `#version 300 es` outputs sequential locations. Demo:
-  `examples/gui/webgl2-cubes` (64 cubes, one instanced draw call);
+  rewriter gives `#version 300 es` outputs sequential locations, and the block
+  reflection flattens struct fields for three.js lights. three.js r160 runs on
+  the real renderer (basic/standard/Phong materials, textures, lights, fog,
+  sprites, lines, points and instancing); the Canvas2D fallback was removed.
+  Demo: `examples/gui/webgl2-cubes` (64 cubes, one instanced draw call);
   e2e: `tests/e2e/gui-webgl2.test.ts`, `tests/e2e/gui-example-webgl2.test.ts`.
 

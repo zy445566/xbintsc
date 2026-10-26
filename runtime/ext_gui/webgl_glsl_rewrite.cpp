@@ -91,6 +91,12 @@ std::string version_block(const std::string &source, bool fragment, bool needs_o
     if (!has_float_precision(source)) block += "precision highp float;\nprecision highp int;\n";
     if (needs_output) block += "layout(location = 0) out highp vec4 xt_FragColor;\n";
   }
+  /* three.js keeps its light loops unrolled only when it can pre-evaluate
+   * per-iteration #if blocks. Without shadow maps the index-0 branch is the
+   * correct one for every supported scene. */
+  if (source.find("UNROLLED_LOOP_INDEX") != std::string::npos) {
+    block += "#define UNROLLED_LOOP_INDEX 0\n";
+  }
   return block;
 }
 
@@ -154,8 +160,22 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
   }
 
   /* Insert the uniform block before the first uniform declaration (or before
-   * the `#if` that encloses it, so the members stay unconditional). */
+   * the `#if` that encloses it, so the members stay unconditional). Struct
+   * definitions are hoisted to the same point: a uniform may name a type that
+   * three.js declares after the prefix uniforms (`DirectionalLight`). */
   if (!layout.block_members.empty() && info.first_uniform_offset != std::string::npos) {
+    std::string hoisted;
+    for (const std::string &definition : info.struct_definitions) {
+      hoisted += definition;
+      hoisted += "\n";
+    }
+    for (const auto &range : info.structs) {
+      Edit remove;
+      remove.begin = range.first;
+      remove.end = range.second;
+      remove.order = 1;
+      edits.push_back(remove);
+    }
     size_t insert_at = info.first_uniform_offset;
     int depth = 0;
     std::vector<size_t> starts;
@@ -188,7 +208,7 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
     Edit block_edit;
     block_edit.begin = insert_at;
     block_edit.end = insert_at;
-    block_edit.text = members;
+    block_edit.text = hoisted + members;
     block_edit.order = 2;
     edits.push_back(block_edit);
   }

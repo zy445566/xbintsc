@@ -39,6 +39,7 @@ typedef struct {
 typedef struct {
   xt_re_node *node;
   int quant;
+  int lazy;
 } xt_re_piece;
 
 typedef struct {

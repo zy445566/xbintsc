@@ -111,14 +111,6 @@ bool is_sampler_type(const std::string &type) {
 }
 
 /** The scalar/vector/matrix types the std140 block reflection understands. */
-bool is_basic_type(const std::string &type) {
-  if (is_sampler_type(type)) return true;
-  return type == "float" || type == "int" || type == "uint" || type == "bool" ||
-         type == "vec2" || type == "vec3" || type == "vec4" || type == "ivec2" ||
-         type == "ivec3" || type == "ivec4" || type == "uvec2" || type == "uvec3" ||
-         type == "uvec4" || type == "bvec2" || type == "bvec3" || type == "bvec4" ||
-         type == "mat2" || type == "mat3" || type == "mat4";
-}
 
 /** The `location = N` inside a `layout(...)` group starting at token `at`. */
 int parse_layout_location(const std::vector<Token> &tokens, size_t at, size_t *after) {
@@ -424,10 +416,15 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
       continue;
     }
     if (token.kind == Token::Punct) {
-      if (token.text == "{") braces++;
-      if (token.text == "}") braces--;
-      if (token.text == "(") parens++;
-      if (token.text == ")") parens--;
+      /* Braces inside a false branch are frequently unbalanced with the
+       * active branch (three.js wraps parts of function signatures in
+       * #ifdef), so only track the branch the compiler keeps. */
+      if (inactive == 0) {
+        if (token.text == "{") braces++;
+        if (token.text == "}") braces--;
+        if (token.text == "(") parens++;
+        if (token.text == ")") parens--;
+      }
       continue;
     }
     if (token.kind == Token::Ident && token.text == "gl_FragColor") {
@@ -447,6 +444,31 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
      * error). */
     if (braces != 0 || parens != 0) continue;
     if (token.kind != Token::Ident) continue;
+    /* Active struct definitions are hoisted to the block insertion point so a
+     * uniform can name a type declared later in the shader (three.js light
+     * structs follow the prefix uniforms). */
+    if (token.text == "struct" && i + 1 < tokens.size()) {
+      size_t brace = i + 1;
+      while (brace < tokens.size() && tokens[brace].text != "{") brace++;
+      if (brace < tokens.size()) {
+        int depth = 0;
+        size_t close = brace;
+        for (; close < tokens.size(); close++) {
+          if (tokens[close].text == "{") depth++;
+          if (tokens[close].text == "}") {
+            depth--;
+            if (depth == 0) break;
+          }
+        }
+        if (close + 1 < tokens.size() && tokens[close + 1].text == ";") {
+          info->structs.push_back({tokens[i].begin, tokens[close + 1].end});
+          info->struct_definitions.push_back(
+              source.substr(tokens[i].begin, tokens[close + 1].end - tokens[i].begin));
+          i = close + 1;
+          continue;
+        }
+      }
+    }
     if (token.text == "layout") {
       pending_layout = i;
       size_t after = i;
@@ -496,7 +518,10 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
         info->unsupported = "uniform blocks are not supported";
       }
     }
-    if (semicolon >= tokens.size()) break;
+    if (semicolon >= tokens.size()) {
+      fprintf(stderr, "DECL_OVERRUN fragment=%d kind=%d start=%zu token=%s\\n", (int)fragment, (int)kind, i, token.text.c_str());
+      break;
+    }
 
     const std::vector<Declarator> parts = split_declarators(tokens, i + 1, semicolon);
     /* The type is the first non-qualifier identifier of the first declarator. */
@@ -512,10 +537,6 @@ void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
     for (size_t p = 0; p < parts.size(); p++) {
       GlslUniformDecl decl = parse_declarator(tokens, parts[p], type, p == 0);
       if (decl.name.empty()) continue;
-      if (kind == GlslDeclSite::Uniform && !is_basic_type(decl.type) &&
-          info->unsupported.empty()) {
-        info->unsupported = "uniform type '" + decl.type + "' is not supported";
-      }
       GlslDeclSite site;
       site.kind = decl.sampler && kind == GlslDeclSite::Uniform ? GlslDeclSite::Sampler : kind;
       site.begin = (p == 0 && pending_layout != std::string::npos) ? tokens[pending_layout].begin

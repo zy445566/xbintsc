@@ -97,10 +97,12 @@ WebGL 2 额外提供：
 ## 测试
 
 - `tests/e2e/gui-webgl.test.ts` 编译 GLSL、绘制带纹理和深度测试的四边形、检查面剔除，并读回像素。
-- `tests/e2e/gui-webgl2.test.ts` 覆盖 WebGL 2 的新增能力：`#version 300 es` 着色器、VAO 往返、带 divisor 的实例化绘制、`texStorage2D`、`clearBufferfv`、缓冲拷贝与采样器对象。
+- `tests/e2e/gui-webgl2.test.ts` 覆盖 WebGL 2 的新增能力：`#version 300 es` 着色器、VAO 往返、带 divisor 的实例化绘制、`texStorage2D`、`clearBufferfv`、缓冲拷贝、采样器对象与结构体 uniform 字段。
 - `examples/gui/webgl-cube` 是一个旋转、受光、带纹理的立方体；它在浏览器中原样运行，并由 `tests/e2e/gui-example-webgl.test.ts` 覆盖。
 - `examples/gui/webgl2-cubes` 用一次绘制调用画出 64 个实例化立方体，使用 `#version 300 es` 与 VAO；由 `tests/e2e/gui-example-webgl2.test.ts` 覆盖。
 
 ## three.js
 
-`.js` 资源加载器仍会识别 three.js，但它导出的 `WebGLRenderer` 现在会先探测 WebGL 上下文：有这个后端时页面会得到 three.js 自己的渲染器，只有没有 WebGL 上下文的设备才回退到内置的 Canvas2D 场景渲染器。探测优先请求 `webgl2`，因此较新的 three.js（要求 WebGL 2）会走它的 WebGL 2 路径；已实测基础的无光照 `MeshBasicMaterial` 场景（three.js r160）可以在本后端渲染。受光/标准材质目前会暴露 three.js 着色器后处理中的运行时限制；阴影贴图（深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标尚未实现，这类页面应保留 Canvas2D 回退。
+`.js` 资源加载器现在只修补 three.js 的着色器循环展开；`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
+
+本引擎子集之外的能力仍无法模拟：阴影贴图（深度纹理）、立方体贴图/环境贴图、HDR/浮点渲染目标、多渲染目标、transform feedback 与压缩纹理。需要这些能力的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。

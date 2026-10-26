@@ -375,6 +375,14 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
         return value;
       }
     }
+    if (((xt_object *)XT_GET_PTR(target))->header.kind == XT_OBJECT_KIND_REGEXP &&
+        XT_IS_STRING(key)) {
+      xt_string *k = xt_as_string(key);
+      if (k->length == 9 && memcmp(xt_string_bytes(k), "lastIndex", 9) == 0) {
+        ((xt_regexp *)XT_GET_PTR(target))->last_index = xt_to_number(value);
+        return value;
+      }
+    }
     return xt_object_set(target, key, value);
   }
   return value;

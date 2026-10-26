@@ -170,4 +170,84 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2", () => {
     expect(value("error")).toBe("0");
     expect(stderr).not.toContain("pipeline creation failed");
   });
+
+  it("flattens struct uniforms into addressable fields", () => {
+    const { value } = harness.compileAndRun(
+      "webgl2-struct",
+      `
+      import { createWindow } from "gui";
+      import page from "./page.html";
+
+      const win = createWindow({ title: "struct", width: 320, height: 240 });
+      const label = (name: string, value: any): void => console.log(name + "=" + value);
+
+      win.on("ready", () => {
+        const canvas: any = document.getElementById("c");
+        const gl: any = canvas.getContext("webgl2");
+        label("webgl2", gl != null);
+        if (gl == null) {
+          win.close();
+          return;
+        }
+        const vs: any = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, "#version 300 es\\n" +
+          "in vec2 a_pos; void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }");
+        gl.compileShader(vs);
+        const fs: any = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, "#version 300 es\\n" +
+          "precision highp float;\\n" +
+          "struct Light { vec3 color; float power; };\\n" +
+          "uniform Light lights[2];\\n" +
+          "out vec4 fragColor;\\n" +
+          "void main() { fragColor = vec4(max(lights[0].color, lights[1].color), 1.0); }");
+        gl.compileShader(fs);
+        label("compile", gl.getShaderParameter(vs, gl.COMPILE_STATUS) === true &&
+          gl.getShaderParameter(fs, gl.COMPILE_STATUS) === true);
+        const program: any = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+        label("link", gl.getProgramParameter(program, gl.LINK_STATUS) === true);
+        gl.useProgram(program);
+        const c0: any = gl.getUniformLocation(program, "lights[0].color");
+        const c1: any = gl.getUniformLocation(program, "lights[1].color");
+        const p0: any = gl.getUniformLocation(program, "lights[0].power");
+        const p1: any = gl.getUniformLocation(program, "lights[1].power");
+        label("locations", (c0 != null) + "," + (c1 != null) + "," + (p0 != null) + "," + (p1 != null));
+        gl.uniform3f(c0, 1, 0, 0);
+        gl.uniform3f(c1, 0, 1, 0);
+        gl.uniform1f(p0, 1);
+        gl.uniform1f(p1, 1);
+        const buffer: any = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+          -1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1,
+        ]), gl.STATIC_DRAW);
+        const pos: any = gl.getAttribLocation(program, "a_pos");
+        gl.enableVertexAttribArray(pos);
+        gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+        gl.viewport(0, 0, 64, 64);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        const px = new Uint8Array(4);
+        gl.readPixels(32, 32, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        label("pixel", px[0] + "," + px[1] + "," + px[2] + "," + px[3]);
+        label("error", gl.getError());
+        win.close();
+      });
+
+      win.loadHTML(page);
+      console.log("loaded");
+      `,
+      { files: { "page.html": PAGE }, autocloseMs: 10000 },
+    );
+
+    expect(value("webgl2")).toBe("true");
+    expect(value("compile")).toBe("true");
+    expect(value("link")).toBe("true");
+    expect(value("locations")).toBe("true,true,true,true");
+    expect(value("pixel")).toBe("255,255,0,255");
+    expect(value("error")).toBe("0");
+  });
 });

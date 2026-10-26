@@ -70,11 +70,10 @@ import { createWindow, run } from "gui";
 It is a self-contained GPU-accelerated renderer (own HTML parser, CSS cascade,
 layout and compositor) — not a system WebView. The compiler side also inlines
 local `<link rel="stylesheet">` files (and their `@import`s) into `<style>`
-blocks, because the runtime parser only reads inline `<style>`; and it makes a
-bundled three.js module's `WebGLRenderer` probe for a WebGL context, using
-three.js's real renderer when the engine has one and the bundled Canvas2D scene
-renderer (`runtime/ext_gui/three_compat.js`) otherwise. It ships as a per-platform
-prebuilt `gui.a`/`gui.lib` because it is C++. `<img>` decodes through the engine
+blocks, because the runtime parser only reads inline `<style>`; and it rewrites
+a bundled three.js module's `WebGLRenderer` to use the real WebGL 2 backend:
+only its shader unroller is patched, and no Canvas2D fallback is bundled. It
+ships as a per-platform prebuilt `gui.a`/`gui.lib` because it is C++. `<img>` decodes through the engine
 itself; `<video>`/`<audio>` do **not** work with `gui` alone — they need the
 separate [`media`](#media--videoaudio-decoding) extension. `<canvas>` is
 supported too: `getContext("2d")` returns a context whose fills, paths,

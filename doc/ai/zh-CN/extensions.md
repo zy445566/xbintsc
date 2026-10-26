@@ -78,7 +78,10 @@ import { createWindow, run } from "gui";
 `transform`/`transform-origin` 作为绘制期效果可用，因此一个盒子（以及其中的文本、
 图像与子元素）可以被平移、缩放与旋转而不触发任何重排——可以用
 `requestAnimationFrame` 逐帧驱动，或写成 `transition: transform`（见
-`examples/gui/pelican-svg`）。因为主体是 C++，它以各平台预编译的 `gui.a`/`gui.lib` 形式分发。如果该
+`examples/gui/pelican-svg`）。CSS 子集还覆盖 `@media`、`::before`/`::after`
+生成内容、线性/径向多层背景、`text-shadow`、`clip-path` 与 `filter`
+颜色/阴影效果；`backdrop-filter` 与真正的组模糊是有文档说明的近似或未支持。
+因为主体是 C++，它以各平台预编译的 `gui.a`/`gui.lib` 形式分发。如果该
 平台的归档不存在，构建会以明确的提示失败；设计与路线图见 [../../zh-CN/gui.md](../../zh-CN/gui.md)（总览；引擎按功能拆分在 [`doc/zh-CN/gui/`](../../zh-CN/gui/) 下），
 脚本接口见 [../../zh-CN/gui-scripts.md](../../zh-CN/gui-scripts.md)。Canvas API
 及其限制见 [../../zh-CN/gui/canvas.md](../../zh-CN/gui/canvas.md)。

@@ -132,6 +132,9 @@ bool matchPseudo(const Node *node, const std::string &pseudo, const MatchState &
 
 bool matchCompound(const Node *node, const CompoundSelector &compound, const MatchState &state) {
   if (!node->isElement()) return false;
+  /* A pseudo-element selector matches a generated node, never the origin
+   * element; the cascade matches it separately in `style.cpp`. */
+  if (!compound.pseudo_element.empty()) return false;
   if (!compound.tag.empty() && node->tag != compound.tag) return false;
   if (!compound.id.empty()) {
     const std::string *id = node->attr("id");

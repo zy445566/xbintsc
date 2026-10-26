@@ -10,9 +10,10 @@
 `DisplayList`：一个按画家顺序排列的 `ops` 列表，包含**矩形**（背景与四条实心
 边框，带 `border-radius`）、**文本 run**（每个携带其文本、颜色与已解析的
 `FontSpec`）与**图像**，背后由并列的负载数组支撑。每个 op 还携带当前生效的裁剪
-矩形（最近的 `overflow: hidden` 祖先的 padding box），因此 `overflow` 裁剪与
-`z-index` 顺序都能保留到渲染器。`DisplayList::dump()` 为
-`paintList()`/`paintCount()` 提供数据。
+矩形（最近的 `overflow: hidden` 祖先的 padding box）以及最多两个指向显示列表
+三角化 `clip-path` 多边形的下标，因此 `overflow`/`clip-path` 裁剪与 `z-index`
+顺序都能保留到渲染器。`DisplayList::dump()` 为 `paintList()`/`paintCount()`
+提供数据。
 
 `opacity` 只在两端生效：计算值为 `0` 的盒子（及其整棵子树）不绘制任何内容，
 大于 `0` 的一律按完全不透明绘制。图形只携带其颜色自身的 alpha，因此没有部分
@@ -61,11 +62,43 @@
 
 窗口背景（`setBackground`）是渲染通道的清除色。
 
-`background` / `background-image` 中的线性渐变会作为基础层绘制：取简写中
-最后一个 `linear-gradient(...)`，在 18 个位置采样并输出纯色矩形（渲染器没有渐变
-shader）。半透明高光层与径向渐变不会被合成，因此堆叠了多层装饰背景的面板只保留
-基础色。多色标、角度与百分比位置均受支持。
-M4 仍需完成：径向渐变、多层背景与 `background-clip`。
+### 背景、生成内容与特效（M19）
+
+`background-color` 与每一条 `background-image` 层都会绘制。逗号分隔的层列表按
+从底到上的顺序绘制（声明中的第一层在最上面），两种渐变均受支持：
+
+- **线性**渐变在 18 个位置采样并输出为纯色矩形；支持 `to <side>`、
+  `deg`/`grad`/`rad`/`turn`、百分比与多色标（色带沿最近轴行走，因此斜角会退化为
+  最近的轴向）；
+- **径向**渐变是 32 个同心椭圆。每个都是单位半径的圆角矩形，经图形管线的
+  transform 槽映射，因此圆/椭圆仍保留距离场抗锯齿。支持形状/尺寸关键字
+  （`circle`/`ellipse`、`closest-side`/`farthest-side`/`closest-corner`/
+  `farthest-corner`、显式半径）与 `at <position>`。
+
+背景色位于所有层下方。若渐变色标带透明度，渐变也会半透明；色带近似可能产生
+轻微条带，非常透明的多色标渐变会出现 alpha 叠加。
+
+**生成内容**不需要新的显示列表类型：`::before`/`::after` 是 `style.cpp` 中
+每次重算样式时重建的普通布局盒，因此其背景、边框、文本与 transform 都走同一条
+绘制路径。`content` 支持字符串、`attr()` 与 open/close quote。
+
+**`text-shadow`** 会作为阴影 `PaintText` run 排在真实 run 之前，因此文本管线
+无需新 shader 就能绘制。带模糊的阴影是围绕偏移量展开的九个半透明副本（与
+`filter: blur()` 相同的近似）。
+
+**`clip-path`** 在 `paint_clip.cpp` 中解析为设备空间多边形（每个点都应用盒子的
+transform），用耳切法三角化，并存入 `DisplayList::clip_paths`。每个 op 的
+`PaintClip` 最多携带两个路径下标；`renderer_clip.cpp` 在上传时把每个凸的图形/
+字形/图像四边形与这些三角形求交。即使 `polygon()` 是凹多边形也正确，无需模板或
+shader 改动，但边缘是硬边（没有解析抗锯齿）。支持两层嵌套路径求交；更深时保留
+最外两层。
+
+**`filter`** 的颜色函数（`brightness`、`contrast`、`grayscale`、`sepia`、
+`invert`、`saturate`、`hue-rotate`、`opacity`）会折进每个绘制颜色，因此盒子与
+其后代都会看到滤镜。`blur()` 与 `drop-shadow()` 是显示列表层面的近似：模糊把每个
+图形展开成九个半透明副本，投影用盒子/文字轮廓。这样保持单渲染通道（没有离屏
+渲染目标），代价是组语义：被模糊/滤镜的组内重叠后代可能加深；`backdrop-filter`
+无法采样元素背后的内容，因此会解析并参与层叠，但不绘制。
 
 ## 文本技术栈（M4b）
 

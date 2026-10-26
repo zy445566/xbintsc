@@ -18,6 +18,9 @@ namespace xtgui {
 
 enum class NodeType { Document, Element, Text };
 
+/** Which generated-content box a synthetic pseudo-element node represents. */
+enum class PseudoElement { None, Before, After };
+
 struct Attr {
   std::string name;
   std::string value;
@@ -31,6 +34,19 @@ struct Node {
   std::vector<Attr> attrs;
   Node *parent = nullptr;
   std::vector<std::unique_ptr<Node>> children;
+
+  /* -- generated content (`::before` / `::after`) -------------------------
+   * A pseudo-element is a synthetic node owned by the document's per-restyle
+   * arena, not by the DOM tree: it is never in `children`, so traversal,
+   * queries, serialization and `elementIndex()` do not see it. `pseudo_origin`
+   * is the element the selector matched and whose computed style it inherits.
+   * `pseudo_before`/`pseudo_after` are transient pointers set by the cascade
+   * for the layout pass (the arena is rebuilt on every restyle). */
+  bool is_pseudo = false;
+  PseudoElement pseudo = PseudoElement::None;
+  const Node *pseudo_origin = nullptr;
+  Node *pseudo_before = nullptr;
+  Node *pseudo_after = nullptr;
 
   Node() = default;
   explicit Node(NodeType nodeType) : type(nodeType) {}

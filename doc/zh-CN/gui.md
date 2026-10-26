@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M18** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
+状态：**M19** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
 `<video>`/`<audio>`——可选的 `media` 扩展用 vendored 的最小 FFmpeg 在主线程解码，
 视频帧走图像纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露
 `play`/`pause`/`currentTime`/… 与媒体事件。只启用 `gui` 不会链接 FFmpeg。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
@@ -12,7 +12,7 @@
 渲染器，因此盒子（以及其中的文本、图像与子元素）可以被平移、缩放与旋转而
 不触发任何重排——再加上 `transition: transform`，这些姿态可以动画（自绘的示例
 `examples/gui/pelican-svg` 正是用它让矢量画动起来）。参见
-[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V 并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
+[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V 并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向多层背景、`text-shadow`、`clip-path` 与 `filter` 颜色/阴影效果。`backdrop-filter` 与真正的组模糊需要离屏合成器，仍为有文档说明的近似或未支持——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
 
 ## 目录
 
@@ -254,6 +254,22 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
       feedback 入口存在并优雅降级。见 [WebGL](./gui/webgl.md)；e2e 见
       `tests/e2e/gui-webgl2.test.ts` 与 `tests/e2e/gui-example-webgl2.test.ts`，
       示例见 `examples/gui/webgl2-cubes`。
+19. **M19 — 装饰性 CSS** ✅
+    - `@media` 块递归解析，并按视口求值（宽高范围、朝向、hover/pointer 与偏好
+      特性）；`matchMedia()` 使用同一个求值器。
+    - 生成内容：`::before`/`::after` 选择器、继承的伪样式、`content` 字符串/
+      转义/`attr()`，以及不会泄漏到 DOM 遍历的合成布局盒。
+    - 多层 `background-image` 的线性与径向渐变，自下而上按纯色带绘制
+      （线性 18 条、径向 32 个同心椭圆）。
+    - `text-shadow` 作为阴影文本 run，并带九次采样模糊近似。
+    - `clip-path` 多边形（`inset`/`circle`/`ellipse`/`polygon`）解析到设备空间，
+      用耳切法三角化，并在 `renderer_clip.cpp` 中与图形几何求交——不需要模板/
+      shader 改动。
+    - `filter` 颜色函数、九次采样 `blur()` 与轮廓 `drop-shadow()`；
+      `backdrop-filter` 会解析并参与层叠，但需要离屏背景通道（见
+      [已知问题](./gui/known-issues.md)）。
+    - e2e 覆盖见 `tests/e2e/gui-effects.test.ts`；参见
+      [绘制](./gui/rendering.md#背景生成内容与特效m19)。
 
 ## 进度日志
 
@@ -373,4 +389,13 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
   Phong 材质、纹理、灯光、雾、精灵、线段、点与实例化；Canvas2D 回退已删除。
   示例 `examples/gui/webgl2-cubes`（64 个立方体，一次实例化绘制）；e2e 见
   `tests/e2e/gui-webgl2.test.ts` 与 `tests/e2e/gui-example-webgl2.test.ts`。
+- **M19** ✅ 装饰性 CSS。`css_sheet.cpp` 解析嵌套 `@media` 块，
+  `media_query.cpp` 按视口求值（`matchMedia` 也用它）；`css_selector.cpp`
+  识别 `::before`/`::after`。`style.cpp` 把伪样式算进每次重算样式时重建的
+  arena、解析 `content`，布局在真实子元素前后插入它们的盒子。
+  `gradient_values.cpp` 建模背景层列表（线性/径向、形状/尺寸/位置/色标），
+  `paint_background.cpp` 绘制它，`paint_effects.cpp` 应用滤镜颜色函数与九次
+  采样模糊/投影并生成 `text-shadow` run，`paint_clip.cpp`/`renderer_clip.cpp`
+  对三角化的 `clip-path` 多边形裁剪几何。e2e 见
+  `tests/e2e/gui-effects.test.ts`。
 

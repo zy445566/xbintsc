@@ -156,15 +156,25 @@ xt_value win_location_get(xt_value self, xt_value env, int32_t argc, xt_value *a
   return g_location;
 }
 
-/** `matchMedia(query)` -> a MediaQueryList-shaped object. The engine has no
- * media queries of its own; a coarse-pointer probe is always false because a
- * window is driven by a mouse and a keyboard. */
+xt_value media_list_build(const std::string &query, bool matches);
+
+/** `matchMedia(query)` -> a MediaQueryList-shaped object evaluated against the
+ * current window's viewport, using the same evaluator as `@media` rules. The
+ * list is a snapshot (there is no live change event), which matches the
+ * engine's restyle-on-resize model. */
 xt_value win_match_media(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)self;
   (void)env;
-  (void)argc;
-  (void)argv;
-  return g_media_list;
+  std::string query;
+  if (argc >= 1) query = cstr(xt_arg(argc, argv, 0));
+  XtGuiWindow *win = xt_gui_window_from_this(self);
+  if (win == NULL) {
+    xt_value handle = xt_gui_ensure_window();
+    win = xt_gui_window_from_this(handle);
+  }
+  float width = 0.0f;
+  float height = 0.0f;
+  if (win != NULL) xt_gui_window_viewport(win, &width, &height);
+  return media_list_build(query, xtgui::xt_css_media_matches(query, width, height));
 }
 
 /** `getComputedStyle(el)`: the engine exposes the element's style handle, which
@@ -243,10 +253,10 @@ xt_value location_build(void) {
   return location;
 }
 
-xt_value media_list_build(void) {
+xt_value media_list_build(const std::string &query, bool matches) {
   xt_value list = xt_object_new();
-  set_prop(list, "media", string_of(""));
-  set_prop(list, "matches", XT_FALSE);
+  set_prop(list, "media", xt_string_from_cstr(query.c_str()));
+  set_prop(list, "matches", matches ? XT_TRUE : XT_FALSE);
   set_method(list, "addListener", (void *)noop);
   set_method(list, "removeListener", (void *)noop);
   set_method(list, "addEventListener", (void *)noop);
@@ -419,7 +429,7 @@ void ensure_singletons(void) {
     xt_gc_add_root(&g_location);
   }
   if (!XT_IS_OBJECT(g_media_list)) {
-    g_media_list = media_list_build();
+    g_media_list = media_list_build("", false);
     xt_gc_add_root(&g_media_list);
   }
 }

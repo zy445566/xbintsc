@@ -10,6 +10,7 @@
 #ifndef XT_GUI_STYLE_H
 #define XT_GUI_STYLE_H
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -59,14 +60,77 @@ struct BackgroundGradientStop {
   Color color;
 };
 
-/** A linear `background-image` gradient. Multiple background layers and radial
- * gradients are not modelled (the first linear layer is the base colour of
- * every panel/bar in an application shell; decorative radial layers are
- * skipped). Painted as a small number of solid strips. */
-struct BackgroundGradient {
-  bool active = false;
+enum class BackgroundKind { Linear, Radial };
+
+/** How a radial layer's radii are chosen when it has no explicit lengths. */
+enum class RadialSize { ClosestSide, FarthestSide, ClosestCorner, FarthestCorner, Explicit };
+
+/** One `background-image` layer. Layers are painted bottom-up: the first one in
+ * the declaration is the topmost, as in CSS. A gradient is approximated with
+ * solid bands through the rectangle pipeline (there is no gradient shader). */
+struct BackgroundLayer {
+  BackgroundKind kind = BackgroundKind::Linear;
+  /* linear */
   float angle = 180.0f;  // CSS degrees: 0 = to top, 90 = to right, 180 = to bottom
+  /* radial */
+  bool circle = false;
+  bool has_shape = false;
+  RadialSize size = RadialSize::FarthestCorner;
+  Length center_x{50.0f, Unit::Percent};
+  Length center_y{50.0f, Unit::Percent};
+  Length radius_x{0.0f, Unit::Auto};  // Explicit radii only
+  Length radius_y{0.0f, Unit::Auto};
   std::vector<BackgroundGradientStop> stops;
+};
+
+/** `clip-path` shapes. Lengths stay unresolved until paint knows the box. */
+struct ClipPathSpec {
+  enum class Type { None, Inset, Circle, Ellipse, Polygon } type = Type::None;
+  Length inset_top;
+  Length inset_right;
+  Length inset_bottom;
+  Length inset_left;
+  Length inset_radius{0.0f, Unit::Px};
+  Length center_x{50.0f, Unit::Percent};
+  Length center_y{50.0f, Unit::Percent};
+  Length radius_x{50.0f, Unit::Percent};
+  Length radius_y{50.0f, Unit::Percent};
+  bool radius_explicit = false;
+  /** Flat `x0, y0, x1, y1, …` list, resolved against the border box. */
+  std::vector<Length> polygon;
+};
+
+enum class FilterKind {
+  Blur,
+  Brightness,
+  Contrast,
+  Grayscale,
+  Sepia,
+  Invert,
+  Saturate,
+  HueRotate,
+  Opacity,
+  DropShadow
+};
+
+/** One `filter` / `backdrop-filter` function. */
+struct FilterOp {
+  FilterKind kind = FilterKind::Brightness;
+  float amount = 1.0f;
+  Length dx;
+  Length dy;
+  Length blur;
+  Color color;
+  bool has_color = false;
+};
+
+/** One `text-shadow` entry. */
+struct TextShadow {
+  Length dx;
+  Length dy;
+  Length blur;
+  Color color;  // `has_color == false` means currentColor
+  bool has_color = false;
 };
 
 struct Edges {
@@ -109,7 +173,20 @@ struct XtStyle {
   Color color;             // inherited; defaults to black
   Color background;        // transparent by default
   bool has_background = false;
-  BackgroundGradient background_gradient;
+  /** `background-image` layers, in declaration order (first = topmost). */
+  std::vector<BackgroundLayer> background_layers;
+  /** `clip-path`; `Type::None` leaves the box unclipped. */
+  ClipPathSpec clip_path;
+  /** `filter` / `backdrop-filter` function lists (not inherited). */
+  std::vector<FilterOp> filters;
+  std::vector<FilterOp> backdrop_filters;
+  /** `text-shadow` entries (inherited, as in CSS). */
+  std::vector<TextShadow> text_shadow;
+  /** Generated `content` of a `::before`/`::after` box. The cascade resolves
+   * `attr()` and string escapes before layout; `has_content` distinguishes
+   * `content: ""` from no generated box. */
+  std::string content;
+  bool has_content = false;
 
   float font_size = 16.0f;             // inherited
   int font_weight = 400;               // inherited
@@ -166,11 +243,30 @@ struct XtStyle {
 /** Initial (non-inherited) style; inherited fields are overridden from the parent. */
 XtStyle xt_style_initial();
 
+/** Owns the synthetic `::before`/`::after` nodes of one style computation. The
+ * arena is rebuilt on every restyle, so generated content always reflects the
+ * latest DOM and CSS. */
+class PseudoNodeSet {
+ public:
+  /** Release the previous generation (the caller must already have cleared the
+   * element → pseudo pointers it handed out). */
+  void clear();
+  Node *create(Node *origin, PseudoElement side);
+  size_t size() const { return nodes_.size(); }
+
+ private:
+  std::vector<std::unique_ptr<Node>> nodes_;
+};
+
 /** Cascade UA + author + inline declarations into `out` for the document root.
- * `state` supplies `:hover`/`:focus` for dynamic selector matching. */
+ * `state` supplies `:hover`/`:focus` for dynamic selector matching. When
+ * `pseudos` is non-null, `::before`/`::after` styles are computed too and each
+ * element's transient `pseudo_before`/`pseudo_after` pointers are published for
+ * layout. */
 void xt_style_compute(const Node *root, const StyleSheet &sheet,
                       std::unordered_map<const Node *, XtStyle> &out, float viewportWidth,
-                      float viewportHeight, const MatchState &state = MatchState());
+                      float viewportHeight, const MatchState &state = MatchState(),
+                      PseudoNodeSet *pseudos = nullptr);
 
 /** Format a computed property for diagnostics/tests (`computedStyle(sel, prop)`). */
 std::string xt_style_property_to_string(const XtStyle &style, const std::string &property);

@@ -53,14 +53,21 @@
   instead.
 - **CSS coverage is a deliberate subset.** Grid, `clamp()`/`min()`/`max()`/`env()`,
   `var()` custom properties, the `inset` shorthand, `box-sizing`, `visibility` and
-  `pointer-events`, and linear-gradient backgrounds are implemented. Still absent:
-  pseudo-elements (`::before`/`::after`), `clip-path`, `filter`/`backdrop-filter`,
-  `mix-blend-mode`, `text-shadow`, radial/multiple background layers, and `@media`
-  blocks (the parser skips at-rules). Those properties are ignored rather than
-  approximated, so decorative effects can be missing while layout and text remain
-  correct. Canvas textures are sampled nearest-neighbour, and a multi-layer
-  `background` paints one base linear gradient (18 solid strips), not a full
-  compositing stack.
+  `pointer-events`, `@media` queries, generated content (`::before`/`::after`),
+  multi-layer linear/radial backgrounds, `text-shadow`, `clip-path`
+  (`inset`/`circle`/`ellipse`/`polygon`) and `filter` colour functions are
+  implemented. Known limits: `mix-blend-mode`, `background-clip`,
+  `background-position`/`size`/`repeat`, repeating gradients and `backdrop-filter`
+  compositing are not implemented (`backdrop-filter` parses and cascades, but
+  sampling the backdrop needs an offscreen layer, so it paints nothing);
+  `filter: blur()` is a nine-tap per-shape spread rather than a true group blur,
+  so overlapping descendants can darken; `drop-shadow` is approximated from box
+  silhouettes; at most two nested `clip-path` shapes are intersected (deeper
+  nesting keeps the outer two); and images/canvases are not colour-filtered
+  except for the brightness/opacity tint the image shader can carry. Canvas
+  textures are sampled nearest-neighbour. Background gradients remain solid
+  bands (18 for linear, 32 concentric ellipses for radial), so a soft gradient
+  may show slight banding.
 - **SVG is NanoSVG's subset.** SVG *files* (`<img src="logo.svg">`) and inline
   `<svg>` trees share the vendored NanoSVG parser/rasteriser
   (`runtime/ext_gui/svg.cpp`, `inline_svg.cpp`), which renders

@@ -1,5 +1,9 @@
 /*
  * xbintsc GUI engine — display list construction.
+ *
+ * The tree walk lives here. Background layers are in `paint_background.cpp`,
+ * filter/shadow approximations in `paint_effects.cpp` and `clip-path`
+ * triangulation in `paint_clip.cpp`.
  */
 
 #include "paint.h"
@@ -8,6 +12,7 @@
 #include <cstdio>
 #include <utility>
 
+#include "paint_internal.h"
 #include "style.h"
 
 namespace xtgui {
@@ -43,106 +48,14 @@ FontSpec specOf(const XtStyle &style) {
   return spec;
 }
 
-void addRect(DisplayList &out, float x, float y, float width, float height, float radius,
-             const Color &color, const PaintClip &clip, const Matrix2D &transform) {
-  if (width <= 0.0f || height <= 0.0f || color.a <= 0.0f) return;
-  PaintRect rect;
-  rect.x = x;
-  rect.y = y;
-  rect.width = width;
-  rect.height = height;
-  rect.radius = radius;
-  rect.color = color;
-  rect.transform = transform;
-  out.rects.push_back(rect);
-  out.ops.push_back(PaintOp{PaintKind::Rect, (uint32_t)(out.rects.size() - 1), clip});
+int zIndexOf(const LayoutBox *box) {
+  if (box->style == nullptr || !box->style->has_z_index) return 0;
+  return box->style->z_index;
 }
 
-
-/* Sample a linear gradient at `t` (0..1). Stops are sorted by the parser. */
-static Color gradientColorAt(const BackgroundGradient &gradient, float t) {
-  const std::vector<BackgroundGradientStop> &stops = gradient.stops;
-  if (stops.empty()) {
-    Color none;
-    return none;
-  }
-  if (t <= stops.front().offset) return stops.front().color;
-  if (t >= stops.back().offset) return stops.back().color;
-  for (size_t i = 1; i < stops.size(); i++) {
-    if (t > stops[i].offset) continue;
-    float span = stops[i].offset - stops[i - 1].offset;
-    float u = span > 0.00001f ? (t - stops[i - 1].offset) / span : 0.0f;
-    Color a = stops[i - 1].color;
-    Color b = stops[i].color;
-    Color out;
-    out.r = a.r + (b.r - a.r) * u;
-    out.g = a.g + (b.g - a.g) * u;
-    out.b = a.b + (b.b - a.b) * u;
-    out.a = a.a + (b.a - a.a) * u;
-    out.valid = true;
-    return out;
-  }
-  return stops.back().color;
-}
-
-/* A linear background gradient is painted as solid strips through the existing
- * rectangle pipeline (the renderer has no gradient shader). 18 bands are enough
- * to hide banding on the dark, low-contrast surfaces this engine targets. */
-static void addGradientBackground(const XtStyle &style, const LayoutBox &box, DisplayList &out,
-                                  const PaintClip &clip, const Matrix2D &matrix) {
-  const BackgroundGradient &gradient = style.background_gradient;
-  if (!gradient.active || gradient.stops.size() < 2) return;
-  float width = box.width;
-  float height = box.height;
-  if (width <= 0 || height <= 0) return;
-  const int strips = 18;
-  bool alongX = gradient.angle > 80.0f && gradient.angle < 100.0f;
-  bool alongX2 = gradient.angle > 260.0f && gradient.angle < 280.0f;
-  bool horizontal = alongX || alongX2;
-  bool reverse = alongX2 || gradient.angle < 10.0f || gradient.angle > 350.0f;
-  for (int i = 0; i < strips; i++) {
-    float t = ((float)i + 0.5f) / (float)strips;
-    Color color = gradientColorAt(gradient, reverse ? 1.0f - t : t);
-    if (color.a <= 0.0f) continue;
-    if (horizontal) {
-      addRect(out, box.x + width * (float)i / (float)strips, box.y, width / (float)strips + 0.4f,
-              height, 0.0f, color, clip, matrix);
-    } else {
-      addRect(out, box.x, box.y + height * (float)i / (float)strips, width,
-              height / (float)strips + 0.4f, 0.0f, color, clip, matrix);
-    }
-  }
-}
-
-void addTextRuns(const LayoutBox *box, const XtStyle &style, DisplayList &out,
-                 const PaintClip &clip) {
-  if (box->fragments.empty() || style.color.a <= 0.0f) return;
-  FontSpec spec = specOf(style);
-  float ascent = 0;
-  xt_text_metrics(spec, &ascent, nullptr, nullptr);
-  if (ascent <= 0.0f) ascent = style.font_size * 0.8f;
-  for (const TextFragment &fragment : box->fragments) {
-    if (fragment.text.empty()) continue;
-    PaintText run;
-    run.x = fragment.x;
-    run.baseline = fragment.y + ascent;
-    run.width = fragment.width;
-    run.height = fragment.height;
-    run.color = style.color;
-    run.text = fragment.text;
-    run.font = spec;
-    run.transform = box->world;
-    out.texts.push_back(std::move(run));
-    out.ops.push_back(PaintOp{PaintKind::Text, (uint32_t)(out.texts.size() - 1), clip});
-  }
-}
-
-void addImage(const PaintImage &image, DisplayList &out, const PaintClip &clip) {
-  out.images.push_back(image);
-  out.ops.push_back(PaintOp{PaintKind::Image, (uint32_t)(out.images.size() - 1), clip});
-}
-
-void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip);
+void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
+              const paint_detail::FilterChain &parentChain, float viewportWidth,
+              float viewportHeight);
 
 /** The clip a box imposes on its content: its padding box, intersected with the
  * clip already in effect. Only `overflow: hidden/scroll/auto` clips. A
@@ -162,23 +75,32 @@ PaintClip clipForChildren(const LayoutBox *box, const PaintClip &parent) {
     width = bounds.width;
     height = bounds.height;
   }
-  if (!parent.active) return PaintClip{true, x, y, width, height};
+  PaintClip result = parent;
+  result.active = true;
+  if (!parent.active) {
+    result.x = x;
+    result.y = y;
+    result.width = width;
+    result.height = height;
+    return result;
+  }
   float x0 = std::max(x, parent.x);
   float y0 = std::max(y, parent.y);
   float x1 = std::min(x + width, parent.x + parent.width);
   float y1 = std::min(y + height, parent.y + parent.height);
-  return PaintClip{true, x0, y0, std::max(0.0f, x1 - x0), std::max(0.0f, y1 - y0)};
-}
-
-int zIndexOf(const LayoutBox *box) {
-  if (box->style == nullptr || !box->style->has_z_index) return 0;
-  return box->style->z_index;
+  result.x = x0;
+  result.y = y0;
+  result.width = std::max(0.0f, x1 - x0);
+  result.height = std::max(0.0f, y1 - y0);
+  return result;
 }
 
 /** Paint `box`'s children following z-index: negative z first (ascending), then
  * auto/zero in document order, then positive z (ascending), so higher stacks
  * paint last. */
-void paintChildren(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
+void paintChildren(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
+                   const paint_detail::FilterChain &chain, float viewportWidth,
+                   float viewportHeight) {
   std::vector<const LayoutBox *> children;
   for (const std::unique_ptr<LayoutBox> &child : box->children) {
     if (child->display == Display::None || child->style == nullptr) continue;
@@ -187,10 +109,30 @@ void paintChildren(const LayoutBox *box, DisplayList &out, const PaintClip &clip
   std::stable_sort(children.begin(), children.end(), [](const LayoutBox *a, const LayoutBox *b) {
     return zIndexOf(a) < zIndexOf(b);
   });
-  for (const LayoutBox *child : children) paintBox(child, out, clip);
+  for (const LayoutBox *child : children)
+    paintBox(child, out, clip, chain, viewportWidth, viewportHeight);
 }
 
-void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
+void addTextRuns(const LayoutBox *box, const XtStyle &style, DisplayList &out,
+                 const PaintClip &clip, const paint_detail::FilterChain &chain,
+                 float viewportWidth, float viewportHeight) {
+  if (box->fragments.empty() || style.color.a <= 0.0f) return;
+  FontSpec spec = specOf(style);
+  float ascent = 0;
+  xt_text_metrics(spec, &ascent, nullptr, nullptr);
+  if (ascent <= 0.0f) ascent = style.font_size * 0.8f;
+  Color base = paint_detail::filterColor(chain, style.color);
+  for (const TextFragment &fragment : box->fragments) {
+    if (fragment.text.empty()) continue;
+    paint_detail::addTextRun(out, fragment.x, fragment.y + ascent, fragment.width,
+                             fragment.height, fragment.text, spec, base, box->world, clip, style,
+                             chain, viewportWidth, viewportHeight);
+  }
+}
+
+void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
+              const paint_detail::FilterChain &parentChain, float viewportWidth,
+              float viewportHeight) {
   if (box == nullptr) return;
   const XtStyle *style = box->style;
 
@@ -198,34 +140,47 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
    * subtree. */
   if (style != nullptr && (style->opacity <= 0.0f || !style->visible)) return;
 
+  /* A text box points at its parent element's style; its filters were already
+   * folded into `parentChain`, so applying them again would double them. */
+  paint_detail::FilterChain chain = parentChain;
+  if (style != nullptr && !box->is_text && !style->filters.empty()) {
+    chain = paint_detail::extendFilter(parentChain, style->filters, *style, viewportWidth,
+                                       viewportHeight);
+  }
+
+  PaintClip own = clip;
+  if (style != nullptr && box->display != Display::None && !box->is_text) {
+    if (style->clip_path.type != ClipPathSpec::Type::None) {
+      int index = paint_detail::addClipPathForBox(out, *box, *style, viewportWidth, viewportHeight);
+      own = paint_detail::addClipPath(own, index);
+    }
+  }
+
   if (style != nullptr && box->display != Display::None) {
     if (box->is_text) {
-      addTextRuns(box, *style, out, clip);
+      addTextRuns(box, *style, out, own, chain, viewportWidth, viewportHeight);
     } else {
-      /* Background first, then the border ring, then replaced content. Children
-       * are clipped by this box's padding box when it establishes one. Every
-       * shape carries the box's `transform` matrix for the renderer. */
+      /* Drop shadows sit behind the box's own background but above earlier
+       * siblings. */
+      paint_detail::addBoxDropShadows(out, *box, *style, chain, own);
+      paint_detail::paintBackgrounds(out, *box, *style, chain, own, viewportWidth,
+                                     viewportHeight);
       const Matrix2D &matrix = box->world;
-      if (style->has_background) {
-        addRect(out, box->x, box->y, box->width, box->height, style->border_radius,
-                style->background, clip, matrix);
-      }
-      if (style->background_gradient.active) {
-        addGradientBackground(*style, *box, out, clip, matrix);
-      }
       if (style->border_style != BorderStyle::None && style->has_border_color) {
-        const Color bc = style->border_color;
+        const Color bc = paint_detail::filterColor(chain, style->border_color);
         float top = box->border_top;
         float right = box->border_right;
         float bottom = box->border_bottom;
         float left = box->border_left;
         float inner_height = box->height - top - bottom;
-        addRect(out, box->x, box->y, box->width, top, 0.0f, bc, clip, matrix);
-        addRect(out, box->x, box->y + box->height - bottom, box->width, bottom, 0.0f, bc, clip,
-                matrix);
-        addRect(out, box->x, box->y + top, left, inner_height, 0.0f, bc, clip, matrix);
-        addRect(out, box->x + box->width - right, box->y + top, right, inner_height, 0.0f, bc,
-                clip, matrix);
+        paint_detail::addRectFiltered(out, box->x, box->y, box->width, top, 0.0f, bc, own,
+                                      matrix, chain);
+        paint_detail::addRectFiltered(out, box->x, box->y + box->height - bottom, box->width,
+                                      bottom, 0.0f, bc, own, matrix, chain);
+        paint_detail::addRectFiltered(out, box->x, box->y + top, left, inner_height, 0.0f, bc,
+                                      own, matrix, chain);
+        paint_detail::addRectFiltered(out, box->x + box->width - right, box->y + top, right,
+                                      inner_height, 0.0f, bc, own, matrix, chain);
       }
       if (box->is_canvas && box->canvas_id != 0 && box->content_width > 0.0f &&
           box->content_height > 0.0f) {
@@ -236,7 +191,7 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         image.height = box->content_height;
         image.canvas_id = box->canvas_id;
         image.transform = matrix;
-        addImage(image, out, clip);
+        paint_detail::addImage(out, image, own, chain);
       } else if (box->is_media && box->media_id != 0 && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
         PaintImage image;
@@ -246,7 +201,7 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         image.height = box->content_height;
         image.media_id = box->media_id;
         image.transform = matrix;
-        addImage(image, out, clip);
+        paint_detail::addImage(out, image, own, chain);
       } else if (box->is_inline_svg && !box->svg_markup.empty() && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
         PaintImage image;
@@ -256,7 +211,7 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         image.height = box->content_height;
         image.svg = box->svg_markup;
         image.transform = matrix;
-        addImage(image, out, clip);
+        paint_detail::addImage(out, image, own, chain);
       } else if (box->is_image && !box->image_src.empty() && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
         PaintImage image;
@@ -266,30 +221,48 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip) {
         image.height = box->content_height;
         image.src = box->image_src;
         image.transform = matrix;
-        addImage(image, out, clip);
+        paint_detail::addImage(out, image, own, chain);
       }
     }
   }
 
-  paintChildren(box, out, clipForChildren(box, clip));
+  /* Drop shadows belong to the box that declared them: its silhouette has
+   * already been emitted, so descendants must not repeat it. */
+  paint_detail::FilterChain childChain = chain;
+  childChain.shadows.clear();
+  paintChildren(box, out, clipForChildren(box, own), childChain, viewportWidth, viewportHeight);
 }
 
 }  // namespace
 
-void xt_paint_build(const LayoutBox *root, DisplayList &out) {
+void xt_paint_build(const LayoutBox *root, DisplayList &out, float viewportWidth,
+                    float viewportHeight) {
   PaintClip none;
-  paintBox(root, out, none);
+  paint_detail::FilterChain chain;
+  if (root != nullptr && viewportWidth <= 0.0f) {
+    viewportWidth = root->cb_width;
+    viewportHeight = root->cb_height;
+  }
+  paintBox(root, out, none, chain, viewportWidth, viewportHeight);
 }
 
 std::string DisplayList::dump() const {
   std::string text;
-  char buffer[288];
+  char buffer[320];
   for (const PaintOp &op : ops) {
     std::string prefix;
     if (op.clip.active) {
       std::snprintf(buffer, sizeof(buffer), "clip=%.1f,%.1f,%.1f,%.1f ", op.clip.x, op.clip.y,
                     op.clip.width, op.clip.height);
       prefix = buffer;
+    }
+    if (op.clip.path_count > 0) {
+      prefix += "clip-path=";
+      for (int i = 0; i < op.clip.path_count; i++) {
+        if (i > 0) prefix += ",";
+        prefix += std::to_string(op.clip.paths[i]);
+      }
+      prefix += " ";
     }
     std::string suffix;
     if (op.kind == PaintKind::Rect) {
@@ -306,6 +279,7 @@ std::string DisplayList::dump() const {
                     "text x=%.1f baseline=%.1f size=%.1f color=%s \"%s\"", run.x, run.baseline,
                     run.font.pixel_size, formatColor(run.color).c_str(), run.text.c_str());
       text += prefix + buffer;
+      if (run.shadow) text += " shadow=1";
     } else {
       const PaintImage &image = images[op.index];
       suffix = transformSuffix(image.transform);

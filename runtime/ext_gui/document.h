@@ -118,6 +118,8 @@ class XtDocument {
   std::unique_ptr<Node> root_;
   /** Detached nodes (created or removed) stay alive here so handles remain valid. */
   std::unordered_map<const Node *, std::unique_ptr<Node>> detached_;
+  /** Synthetic `::before`/`::after` nodes for the current style generation. */
+  PseudoNodeSet pseudos_;
   bool dirty_ = false;
   StyleSheet sheet_;
   std::unordered_map<const Node *, XtStyle> styles_;   // target (cascade)

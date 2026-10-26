@@ -123,6 +123,21 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
     if (box->intrinsic_height <= 0.0f) box->intrinsic_height = 150.0f;
   }
   if (box->is_inline_svg) return box;
+
+  /* `::before` / `::after` boxes are emitted around the DOM children. Only a
+   * pseudo-element with `content` generates a box (CSS: a `::before` rule with
+   * no content has no effect). Replaced elements never generate them. */
+  auto appendPseudo = [&](Node *pseudo) {
+    if (pseudo == nullptr || box->is_image || box->is_canvas || box->is_media) return;
+    auto pseudoStyle = styles.find(pseudo);
+    if (pseudoStyle == styles.end() || !pseudoStyle->second.has_content) return;
+    std::unique_ptr<LayoutBox> pseudoBox = buildBoxTree(pseudo, styles, style, media, canvases);
+    if (pseudoBox != nullptr) {
+      pseudoBox->parent = box.get();
+      box->children.push_back(std::move(pseudoBox));
+    }
+  };
+  if (node->isElement() && !node->is_pseudo) appendPseudo(node->pseudo_before);
   for (const std::unique_ptr<Node> &child : node->children) {
     std::unique_ptr<LayoutBox> childBox =
         buildBoxTree(child.get(), styles, style, media, canvases);
@@ -131,6 +146,7 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
       box->children.push_back(std::move(childBox));
     }
   }
+  if (node->isElement() && !node->is_pseudo) appendPseudo(node->pseudo_after);
   return box;
 }
 
@@ -222,6 +238,9 @@ const LayoutBox *hitTestBox(const LayoutBox *box, float x, float y) {
   if (box->has_transform) box->inverse.apply(x, y, &local_x, &local_y);
   if (local_x >= box->x && local_x < box->x + box->width && local_y >= box->y &&
       local_y < box->y + box->height) {
+    /* A generated box is part of its originating element: events must target
+     * the real element handle, not the synthetic node. */
+    if (box->node != nullptr && box->node->is_pseudo && box->parent != nullptr) return box->parent;
     return box;
   }
   return nullptr;

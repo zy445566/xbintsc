@@ -56,6 +56,9 @@ struct CompoundSelector {
   std::vector<std::string> classes;
   std::vector<AttrSelector> attrs;
   std::vector<std::string> pseudoClasses;
+  /** `before`/`after` for a `::before`/`::after` (or legacy `:before`)
+   * pseudo-element; empty for an ordinary selector. */
+  std::string pseudo_element;
 };
 
 enum class Combinator { Descendant, Child, Adjacent, Sibling };
@@ -70,6 +73,10 @@ struct Rule {
   std::vector<ComplexSelector> selectors;
   std::vector<Declaration> declarations;
   int order = 0;
+  /** Raw `@media` prelude this rule came from (empty = unconditional). The
+   * query is evaluated against the current viewport during the cascade, so a
+   * resize restyles with the right rules. */
+  std::string media;
 };
 
 struct StyleSheet {
@@ -88,6 +95,16 @@ std::vector<Declaration> xt_css_parse_declarations(const std::string &text);
 
 bool xt_css_match(const Node *node, const ComplexSelector &selector);
 bool xt_css_match(const Node *node, const ComplexSelector &selector, const MatchState &state);
+
+/** True when a raw `@media` prelude matches a viewport. Supports media types
+ * (`all`/`screen`), comma-separated query lists, `not`/`only`, `and`, and the
+ * width/height/orientation/hover/pointer/colour-scheme features (with
+ * `min-`/`max-` ranges). Unknown features never match, as in a browser. */
+bool xt_css_media_matches(const std::string &query, float viewport_width, float viewport_height);
+
+/** Split `text` at top-level commas (outside `(...)`, `[...]` and quotes),
+ * trimming each part and dropping empty ones. */
+std::vector<std::string> xt_css_split_commas(const std::string &text);
 
 Length xt_css_parse_length(const std::string &value);
 Color xt_css_parse_color(const std::string &value);

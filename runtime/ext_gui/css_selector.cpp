@@ -72,6 +72,13 @@ class SelectorParser {
         }
         std::string name = xt_css_lower(readIdent(text, index));
         if (name.empty()) return false;
+        /* `::before`/`::after` are generated-content elements, not states. The
+         * single-colon spellings (`:before`) are the legacy equivalent. */
+        if (pseudoElement || name == "before" || name == "after") {
+          compound->pseudo_element = name;
+          any = true;
+          continue;
+        }
         if (!pseudoElement && *index < text.size() && text[*index] == '(') {
           int depth = 0;
           size_t start = *index;
@@ -192,6 +199,8 @@ class SelectorParser {
       if (!compound.id.empty()) ids++;
       classes += computeCompoundSpecificity(compound);
       if (!compound.tag.empty()) types++;
+      /* A pseudo-element counts like a type selector (CSS specificity). */
+      if (!compound.pseudo_element.empty()) types++;
     }
     return (ids << 20) | (classes << 10) | types;
   }

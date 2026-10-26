@@ -309,18 +309,18 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   }
   if (property == "background-color") { assignColor(&style->background, &style->has_background, value); return; }
   if (property == "background-image") {
-    xt_style_apply_gradient(style, value);
+    xt_style_apply_background_image(style, value);
     return;
   }
   if (property == "background") {
-    if (xt_style_apply_gradient(style, value)) return;
-    Color color = xt_css_parse_color(value);
-    if (color.valid) {
-      style->background = color;
-      style->has_background = true;
-    }
+    xt_style_apply_background(style, value);
     return;
   }
+  if (property == "clip-path") {
+    xt_style_apply_clip_path(style, property, value);
+    return;
+  }
+  if (xt_style_apply_effect(style, property, value)) return;
 
   if (property == "font-size") {
     Length length = xt_css_parse_length(value);

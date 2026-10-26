@@ -147,6 +147,8 @@ bool WebGLContext::compile_shader(uint32_t id) {
   const std::string source = rewrite_glsl(record->source, fragment, layout, info);
   std::vector<uint32_t> spirv;
   record->compiled = compile_glsl(source, fragment, &spirv, &record->log);
+  if (!record->compiled) {
+  }
   return record->compiled;
 }
 
@@ -274,14 +276,20 @@ bool WebGLContext::link_program(uint32_t id) {
   assign_locations(fs_info.samplers, {}, &fs_layout.samplers);
   assign_locations(vs_info.samplers, {}, &vs_layout.samplers);
 
-  /* A fragment varying must be produced by the vertex stage. */
+  /* A fragment input with no vertex output is undefined in Vulkan, but a
+   * material may declare one conditionally and never read it (three.js does
+   * this for `vNormal` on unlit materials). Give it a location and let the
+   * compiler drop it rather than failing the whole program. */
   for (const GlslUniformDecl &varying : fs_info.varyings) {
     if (vs_layout.varyings.find(varying.name) == vs_layout.varyings.end()) {
-      record->log = "varying '" + varying.name + "' is not declared by the vertex shader";
-      record->linked = false;
-      return false;
+      int next = 0;
+      for (const auto &entry : vs_layout.varyings) {
+        if (entry.second >= next) next = entry.second + 1;
+      }
+      vs_layout.varyings[varying.name] = next;
     }
   }
+  fs_layout.varyings = vs_layout.varyings;
 
   const std::string vs_source = rewrite_glsl(vertex->source, false, vs_layout, vs_info);
   const std::string fs_source = rewrite_glsl(fragment->source, true, fs_layout, fs_info);
@@ -308,8 +316,28 @@ bool WebGLContext::link_program(uint32_t id) {
 
   record->uniforms.clear();
   record->uniform_index.clear();
-  record->attribs = vs_info.attributes;
-  record->attrib_locations = vs_layout.attributes;
+  /* Only attributes that survived preprocessing and reached the SPIR-V are
+   * active. three.js emits many conditional `#ifdef USE_…` attribute
+   * declarations, so the source scan over-reports; use the reflection and keep
+   * the declaration order from the source for stable `getActiveAttrib` order. */
+  std::unordered_map<std::string, int> active_attributes;
+  reflect_attributes(vs_spirv, &active_attributes);
+  if (!active_attributes.empty()) {
+    std::vector<std::pair<int, GlslUniformDecl>> ordered;
+    for (const GlslUniformDecl &decl : vs_info.attributes) {
+      auto found = active_attributes.find(decl.name);
+      if (found != active_attributes.end()) ordered.push_back({found->second, decl});
+    }
+    std::sort(ordered.begin(), ordered.end(),
+              [](const std::pair<int, GlslUniformDecl> &a,
+                 const std::pair<int, GlslUniformDecl> &b) { return a.first < b.first; });
+    record->attribs.clear();
+    for (const auto &entry : ordered) record->attribs.push_back(entry.second);
+    record->attrib_locations = active_attributes;
+  } else {
+    record->attribs = vs_info.attributes;
+    record->attrib_locations = vs_layout.attributes;
+  }
   record->vs_sampler_uniforms.clear();
   record->fs_sampler_uniforms.clear();
 

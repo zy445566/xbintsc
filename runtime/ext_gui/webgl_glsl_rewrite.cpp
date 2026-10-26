@@ -102,7 +102,21 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
   bool found_version = false;
   size_t version_begin = 0;
   size_t version_end = 0;
-  const bool needs_output = fragment && info.legacy_fragment_output;
+  /* A GLSL ES 3.00 source may already declare its own output (three.js emits
+   * `layout(location = 0) out highp vec4 pc_fragColor;` and defines
+   * `gl_FragColor` to it). In that case the legacy name maps to the declared
+   * output instead of adding a second declaration at location 0. */
+  std::string fragment_output_name = "xt_FragColor";
+  if (fragment && info.has_fragment_output) {
+    for (const GlslDeclSite &site : info.sites) {
+      if (site.kind == GlslDeclSite::FragmentOut) {
+        fragment_output_name = site.decl.name;
+        break;
+      }
+    }
+  }
+  const bool needs_output =
+      fragment && info.legacy_fragment_output && !info.has_fragment_output;
   const std::string block =
       version_block(source, fragment, needs_output, &found_version, &version_begin, &version_end);
 
@@ -235,13 +249,15 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
     edits.push_back(edit);
   }
 
-  /* Legacy identifiers. */
+  /* Legacy identifiers. `average` is a built-in in the Vulkan GLSL dialect
+   * (three.js defines its own `average` in `common`), so rename it to avoid a
+   * redeclaration error. */
   const char *const identifiers[] = {"texture2D", "textureCube", "texture2DProj",
                                      "texture2DLodEXT", "textureCubeLodEXT", "gl_FragColor",
-                                     "gl_FragDepthEXT", "gl_FragData"};
-  const char *const replacements[] = {"texture", "texture", "textureProj", "textureLod",
-                                      "textureLod", "xt_FragColor", "gl_FragDepth",
-                                      "xt_FragColor"};
+                                     "gl_FragDepthEXT", "gl_FragData", "average"};
+  const std::string replacements[] = {"texture", "texture", "textureProj", "textureLod",
+                                      "textureLod", fragment_output_name, "gl_FragDepth",
+                                      fragment_output_name, "xt_average"};
   size_t at = 0;
   while (at < source.size()) {
     const char c = source[at];
@@ -273,7 +289,7 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
             Edit edit;
             edit.begin = at;
             edit.end = close + 1;
-            edit.text = "xt_FragColor";
+            edit.text = fragment_output_name;
             edit.order = 4;
             edits.push_back(edit);
           }

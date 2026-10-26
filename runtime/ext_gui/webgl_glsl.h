@@ -47,6 +47,8 @@ struct GlslDeclSite {
   size_t end = 0;    // byte offset just past the `;`
   GlslUniformDecl decl;
   int existing_location = -1;  // from a `layout(location = …)` qualifier
+  /** True when a preprocessor `#if`/`#ifdef` encloses the declaration. */
+  bool conditional = false;
 };
 
 /** The declarations a shader contributes to a program. */

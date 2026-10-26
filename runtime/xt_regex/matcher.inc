@@ -4,6 +4,7 @@ typedef struct {
   const char *text;
   size_t len;
   int icase;
+  int multiline;
 } xt_re_input;
 
 /* One capture on the immutable chain of the current search path. `parent`
@@ -90,9 +91,13 @@ static int xt_re_match_atom(xt_re_node *node, const xt_re_input *in, size_t pos,
         return cont(ctx, pos + 1, caps);
       return 0;
     case XT_RE_BOL:
-      return pos == 0 ? cont(ctx, pos, caps) : 0;
+      return (pos == 0 || (in->multiline && pos > 0 && in->text[pos - 1] == '\n'))
+                 ? cont(ctx, pos, caps)
+                 : 0;
     case XT_RE_EOL:
-      return pos == in->len ? cont(ctx, pos, caps) : 0;
+      return (pos == in->len || (in->multiline && pos < in->len && in->text[pos] == '\n'))
+                 ? cont(ctx, pos, caps)
+                 : 0;
     case XT_RE_GROUP: {
       xt_re_cap frame;
       xt_re_group_state state;

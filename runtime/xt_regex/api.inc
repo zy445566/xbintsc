@@ -16,6 +16,7 @@ static int regcomp(regex_t *preg, const char *pattern, int cflags) {
   }
   preg->root = root;
   preg->icase = (cflags & REG_ICASE) ? 1 : 0;
+  preg->multiline = (cflags & REG_MULTILINE) ? 1 : 0;
   return 0;
 }
 
@@ -35,6 +36,7 @@ static int regexec(const regex_t *preg, const char *string, size_t nmatch,
   in.text = string;
   in.len = strlen(string);
   in.icase = preg->icase;
+  in.multiline = preg->multiline;
   for (start = 0; start <= in.len; start++) {
     xt_re_match_result result;
     result.end = 0;

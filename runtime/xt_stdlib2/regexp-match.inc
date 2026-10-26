@@ -1,3 +1,9 @@
+#if defined(_WIN32)
+#define XT_REG_MULTILINE REG_MULTILINE
+#else
+#define XT_REG_MULTILINE REG_NEWLINE
+#endif
+
 /* RegExp support built on POSIX ERE. JavaScript patterns are translated to
  * their POSIX equivalents, capturing groups are tracked so the JS capture
  * indices stay correct even after `(?:` groups are lowered, and the resulting
@@ -38,25 +44,41 @@ static char *xt_regexp_translate_js(const char *pattern, int *jsGroups, int *gro
     int consume = 0;
     if (c == '\\') {
       char next = (i + 1 < length) ? pattern[i + 1] : '\0';
-      switch (next) {
-        case 'r': literal = '\r'; consume = 1; break;
-        case 'n': literal = '\n'; consume = 1; break;
-        case 't': literal = '\t'; consume = 1; break;
-        case 'f': literal = '\f'; consume = 1; break;
-        case 'v': literal = '\v'; consume = 1; break;
-        case 'd': replacement = "[0-9]"; consume = 1; break;
-        case 'D': replacement = "[^0-9]"; consume = 1; break;
-        case 'w': replacement = "[A-Za-z0-9_]"; consume = 1; break;
-        case 'W': replacement = "[^A-Za-z0-9_]"; consume = 1; break;
-        case 's': replacement = "[ \t\n\r\f\v]"; consume = 1; break;
-        case 'S': replacement = "[^ \t\n\r\f\v]"; consume = 1; break;
-        case 'x': {
-          int hi = (i + 2 < length) ? xt_regex_hex_digit(pattern[i + 2]) : -1;
-          int lo = (i + 3 < length) ? xt_regex_hex_digit(pattern[i + 3]) : -1;
-          if (hi >= 0 && lo >= 0) { literal = (char)(hi * 16 + lo); consume = 3; }
-          break;
+      if (inClass) {
+        /* Inside a class POSIX takes the contents without the brackets; a
+         * replacement like `[0-9]` would turn `[\d]` into `[[0-9]]`. */
+        switch (next) {
+          case 'r': literal = '\r'; consume = 1; break;
+          case 'n': literal = '\n'; consume = 1; break;
+          case 't': literal = '\t'; consume = 1; break;
+          case 'f': literal = '\f'; consume = 1; break;
+          case 'v': literal = '\v'; consume = 1; break;
+          case 'd': replacement = "0-9"; consume = 1; break;
+          case 'w': replacement = "A-Za-z0-9_"; consume = 1; break;
+          case 's': replacement = " \t\n\r\f\v"; consume = 1; break;
+          default: break;
         }
-        default: break;
+      } else {
+        switch (next) {
+          case 'r': literal = '\r'; consume = 1; break;
+          case 'n': literal = '\n'; consume = 1; break;
+          case 't': literal = '\t'; consume = 1; break;
+          case 'f': literal = '\f'; consume = 1; break;
+          case 'v': literal = '\v'; consume = 1; break;
+          case 'd': replacement = "[0-9]"; consume = 1; break;
+          case 'D': replacement = "[^0-9]"; consume = 1; break;
+          case 'w': replacement = "[A-Za-z0-9_]"; consume = 1; break;
+          case 'W': replacement = "[^A-Za-z0-9_]"; consume = 1; break;
+          case 's': replacement = "[ \t\n\r\f\v]"; consume = 1; break;
+          case 'S': replacement = "[^ \t\n\r\f\v]"; consume = 1; break;
+          case 'x': {
+            int hi = (i + 2 < length) ? xt_regex_hex_digit(pattern[i + 2]) : -1;
+            int lo = (i + 3 < length) ? xt_regex_hex_digit(pattern[i + 3]) : -1;
+            if (hi >= 0 && lo >= 0) { literal = (char)(hi * 16 + lo); consume = 3; }
+            break;
+          }
+          default: break;
+        }
       }
     } else if (c == '[') {
       inClass = 1;
@@ -111,7 +133,10 @@ static int xt_regexp_run(xt_value regexpValue, xt_value input, int32_t start,
   xt_string *f = xt_as_string(regexp->flags);
   if (f) {
     const char *flagBytes = xt_string_bytes(f);
-    for (uint32_t i = 0; i < f->length; i++) if (flagBytes[i] == 'i') flags |= REG_ICASE;
+    for (uint32_t i = 0; i < f->length; i++) {
+      if (flagBytes[i] == 'i') flags |= REG_ICASE;
+      if (flagBytes[i] == 'm') flags |= XT_REG_MULTILINE;
+    }
   }
   char *translated = xt_regexp_translate_js(xt_string_bytes(pattern), jsGroups, groupCount);
   if (!translated) return 0;

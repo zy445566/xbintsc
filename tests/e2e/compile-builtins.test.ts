@@ -235,4 +235,19 @@ describeE2E("end-to-end built-in library", (harness) => {
     `;
     expect(runProgram(source)).toBe("a=1;b=2; 30");
   });
+
+  it("supports regex classes and multiline anchors", () => {
+    const source = String.raw`
+      console.log("ab_1".replace(/[\w]+/, "Y"));
+      console.log("123".replace(/[\d]+/, "Y"));
+      const nl = String.fromCharCode(10);
+      console.log(("a" + nl + "#include <common>").replace(/^#include/m, "X").replace(/\n/g, "|"));
+      const include = /^[ \t]*#include +<([\w\d./]+)>/gm;
+      console.log(("a" + nl + "#include <common>" + nl + "b").replace(include,
+        (match: any, name: any) => "[" + name + "]"));
+    `;
+    expect(runProgram(source)).toBe(
+      ["Y", "Y", "a|X <common>", "a", "[common]", "b"].join("\n"),
+    );
+  });
 });

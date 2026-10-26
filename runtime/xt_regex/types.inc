@@ -1,6 +1,7 @@
 #define REG_EXTENDED 1
 #define REG_ICASE 2
 #define REG_NOSUB 4
+#define REG_MULTILINE 8
 
 typedef struct {
   int rm_so;
@@ -55,4 +56,5 @@ struct xt_re_alt {
 typedef struct {
   xt_re_alt *root;
   int icase;
+  int multiline;
 } regex_t;

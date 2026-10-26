@@ -16,8 +16,9 @@ if (gl == null) {
 Unlike the 2D context, which rasterises into a CPU bitmap and uploads it as a
 texture, a WebGL context **renders on the GPU**: vertex transform, lighting,
 texture sampling, depth testing and blending all execute in the SDL_GPU
-(Vulkan) pipeline. The page composites the context's colour texture directly, so
-no pixels are read back to the CPU for display.
+pipeline (Vulkan on Windows/Linux, Metal on macOS). The page composites the
+context's colour texture directly, so no pixels are read back to the CPU for
+display.
 
 Both **WebGL 1.0** and **WebGL 2.0** are available. A canvas keeps the first
 context kind it asks for: after `getContext("webgl2")` a later
@@ -46,19 +47,30 @@ WebGL 1 one) and adds the WebGL 2 constants and methods.
   pipelines are created lazily per (program, vertex layout, state) and cached on
   the program.
 
-## Shaders: GLSL ES to SPIR-V
+## Shaders: GLSL ES to SPIR-V (and on to MSL)
 
-SDL_GPU cannot compile GLSL at run time and its Vulkan backend consumes SPIR-V,
-so the engine ships **glslang** (statically linked into `gui.a`). The path is:
+SDL_GPU cannot compile GLSL at run time, and each backend consumes its own
+format, so the engine ships two statically linked translators:
+
+- **glslang** compiles the rewritten GLSL to SPIR-V, which the Vulkan backend
+  consumes directly;
+- **SPIRV-Cross** cross-compiles that same SPIR-V to Metal Shading Language text,
+  which the Metal backend compiles at run time.
+
+Both live in `gui.a` / `gui.lib`; the Metal path reuses the SPIR-V module rather
+than growing a second GLSL front end, so both backends accept exactly the same
+shader subset. The path is:
 
 1. `shaderSource` stores the GLSL ES text; `compileShader` translates it once
    for `COMPILE_STATUS` / `getShaderInfoLog`.
 2. `linkProgram` translates both stages again with one shared attribute and
-   varying location map, compiles them with glslang, and creates the
-   `SDL_GPUShader` objects.
+   varying location map, compiles them with glslang, and then creates the
+   `SDL_GPUShader` objects: from the SPIR-V on Vulkan, or from the MSL text
+   SPIRV-Cross produced on Metal.
 3. The generated SPIR-V is reflected to obtain the exact std140 offsets, array
    strides and matrix strides of the uniform block — the shader text may size an
-   array with a macro, but glslang has already resolved it.
+   array with a macro, but glslang has already resolved it. SPIRV-Cross keeps
+   those offsets in the MSL struct, so one uniform layout serves both backends.
 
 The translator (`runtime/ext_gui/webgl_glsl*.cpp`) handles GLSL ES 1.00 and
 3.00 sources:
@@ -77,10 +89,11 @@ The translator (`runtime/ext_gui/webgl_glsl*.cpp`) handles GLSL ES 1.00 and
 
 Non-sampler uniforms are merged across both stages and emitted as one block in
 each stage (set 1 for the vertex shader, set 3 for the fragment shader), which
-matches SDL_GPU's Vulkan descriptor layout. `uniformMatrix4fv` writes
-column-major floats into the reflected offsets; `uniform1i` on a sampler stores
-the texture unit. The block is pushed with the dynamic uniform-buffer API on
-every draw.
+matches SDL_GPU's Vulkan descriptor layout. On Metal the same declarations
+become `[[buffer(0)]]` and `[[texture(N)]]`/`[[sampler(N)]]`, the slots SDL_GPU's
+Metal backend binds. `uniformMatrix4fv` writes column-major floats into the
+reflected offsets; `uniform1i` on a sampler stores the texture unit. The block
+is pushed with the dynamic uniform-buffer API on every draw.
 
 Limits of the translator: struct-typed uniforms, user uniform blocks, uniform
 arrays whose size is not resolved by the preprocessor, sampler arrays and cube
@@ -196,16 +209,18 @@ program will not try to sample a texture in a vertex shader.
 
 ## Platform
 
-The runtime shader compiler targets **Vulkan SPIR-V**, and the pipeline is
-created with `SDL_GPU_SHADERFORMAT_SPIRV`. On a device whose SDL_GPU backend is
-Metal or Direct3D 12 (and does not accept SPIR-V), `getContext("webgl")` and
+The pipeline is created with the shader format the SDL_GPU device accepts:
+**SPIR-V** (`SDL_GPU_SHADERFORMAT_SPIRV`) on Vulkan, which is what Windows and
+Linux select, or **MSL** (`SDL_GPU_SHADERFORMAT_MSL`) on Metal, which macOS
+selects. Both backends go through the same GLSL front end, so a shader that
+compiles on one compiles on the other. On a device whose backend accepts neither
+format — Direct3D 12, which would need DXIL — `getContext("webgl")` and
 `getContext("webgl2")` both answer `null`; the 2D canvas and the rest of the page
-still work. Windows selects Vulkan (`win.driver()` reports it), so that is the
-validated path.
+still work.
 
-glslang is fetched and built by `npm run gui` and merged into `gui.a` / `gui.lib`
-(see [Packaging and build](./build.md)); a program that only uses the 2D canvas
-or the DOM pays no run-time cost beyond the archive size.
+glslang and SPIRV-Cross are fetched and built by `npm run gui` and merged into
+`gui.a` / `gui.lib` (see [Packaging and build](./build.md)); a program that only
+uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
 
 ## Testing
 
@@ -220,6 +235,10 @@ or the DOM pays no run-time cost beyond the archive size.
 - `examples/gui/webgl2-cubes` draws 64 instanced cubes with one draw call,
   `#version 300 es` and a VAO; covered by
   `tests/e2e/gui-example-webgl2.test.ts`.
+
+These suites run against whichever backend the host selects: Vulkan on Linux
+(and Windows), Metal on macOS, so the SPIRV-Cross -> MSL path is covered by the
+same assertions as the SPIR-V one.
 
 ## three.js
 

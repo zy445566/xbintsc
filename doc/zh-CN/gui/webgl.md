@@ -14,7 +14,7 @@ if (gl == null) {
 }
 ```
 
-2D 上下文把图形光栅化到 CPU 位图再上传为纹理；WebGL 上下文则**在 GPU 上渲染**：顶点变换、光照、纹理采样、深度测试与混合全部在 SDL_GPU（Vulkan）管线中执行。页面直接合成该上下文的颜色纹理，因此显示时不需要把像素读回 CPU。
+2D 上下文把图形光栅化到 CPU 位图再上传为纹理；WebGL 上下文则**在 GPU 上渲染**：顶点变换、光照、纹理采样、深度测试与混合全部在 SDL_GPU 管线中执行（Windows/Linux 上是 Vulkan，macOS 上是 Metal）。页面直接合成该上下文的颜色纹理，因此显示时不需要把像素读回 CPU。
 
 同时提供 **WebGL 1.0** 与 **WebGL 2.0**。一个 canvas 会固定为它第一次申请的上下文类型：先调用 `getContext("webgl2")` 之后，`getContext("webgl")` 返回 `null`，反之亦然。WebGL 2 上下文也满足 `instanceof WebGLRenderingContext`（其原型继承 WebGL 1 原型），并在其上增加 WebGL 2 的常量与方法。
 
@@ -26,13 +26,18 @@ if (gl == null) {
 - WebGL 原点在左下，SDL_GPU 渲染目标原点在左上，因此帧缓冲按自上而下存储：转换 `viewport`/`scissor`，`readPixels` 再把行翻回去，合成器看到的是正立的纹理。
 - 固定功能状态变化（`blendFunc`、`depthFunc`、`cullFace`、`colorMask` 等）会改变所需的 `SDL_GPUGraphicsPipeline`，因此管线按（程序、顶点布局、状态）惰性创建，并缓存在程序上。
 
-## 着色器：GLSL ES 到 SPIR-V
+## 着色器：GLSL ES 到 SPIR-V（再到 MSL）
 
-SDL_GPU 不能在运行时编译 GLSL，其 Vulkan 后端消费 SPIR-V，所以引擎静态链接了 **glslang**（打进 `gui.a`）。流程是：
+SDL_GPU 不能在运行时编译 GLSL，且每个后端只消费自己的格式，因此引擎静态链接了两个翻译器：
+
+- **glslang** 把改写后的 GLSL 编译为 SPIR-V，Vulkan 后端直接消费；
+- **SPIRV-Cross** 把同一份 SPIR-V 交叉编译为 Metal Shading Language 文本，Metal 后端在运行时编译它。
+
+两者都打进 `gui.a` / `gui.lib`；Metal 路径复用 SPIR-V 模块而不是再写一套 GLSL 前端，因此两个后端接受完全相同的着色器子集。流程是：
 
 1. `shaderSource` 保存 GLSL ES 文本；`compileShader` 先翻译一次，供 `COMPILE_STATUS` / `getShaderInfoLog` 使用。
-2. `linkProgram` 用共享的属性/`varying` 位置表再翻译两个阶段，用 glslang 编译，并创建 `SDL_GPUShader`。
-3. 反射生成的 SPIR-V，取得 uniform 块精确的 std140 偏移、数组步长与矩阵步长——源码里数组长度可以写宏，glslang 已经解析好了。
+2. `linkProgram` 用共享的属性/`varying` 位置表再翻译两个阶段，用 glslang 编译，然后创建 `SDL_GPUShader`：Vulkan 上直接用 SPIR-V，Metal 上用 SPIRV-Cross 产出的 MSL 文本。
+3. 反射生成的 SPIR-V，取得 uniform 块精确的 std140 偏移、数组步长与矩阵步长——源码里数组长度可以写宏，glslang 已经解析好了。SPIRV-Cross 会在 MSL 结构体中保留这些偏移，因此一份 uniform 布局同时服务两个后端。
 
 翻译器（`runtime/ext_gui/webgl_glsl*.cpp`）处理 GLSL ES 1.00 与 3.00：
 
@@ -48,7 +53,7 @@ SDL_GPU 不能在运行时编译 GLSL，其 Vulkan 后端消费 SPIR-V，所以�
 | `gl_FragData[0]` | `xt_FragColor` |
 | 缺少 `#version` / `#version 100` | `#version 310 es` |
 
-两个阶段的非采样器 uniform 会合并成同一个块，并在每个阶段各声明一次（顶点 set 1、片元 set 3），与 SDL_GPU 的 Vulkan 描述符布局一致。`uniformMatrix4fv` 按列主序写入反射出的偏移；对采样器调用 `uniform1i` 时记录纹理单元。每次绘制都用动态 uniform 缓冲接口推送该块。
+两个阶段的非采样器 uniform 会合并成同一个块，并在每个阶段各声明一次（顶点 set 1、片元 set 3），与 SDL_GPU 的 Vulkan 描述符布局一致。在 Metal 上同一批声明会变成 `[[buffer(0)]]` 与 `[[texture(N)]]`/`[[sampler(N)]]`，正是 SDL_GPU Metal 后端绑定的槽位。`uniformMatrix4fv` 按列主序写入反射出的偏移；对采样器调用 `uniform1i` 时记录纹理单元。每次绘制都用动态 uniform 缓冲接口推送该块。
 
 翻译器的限制：结构体 uniform、用户 uniform 块、预处理后仍无法确定长度的 uniform 数组、采样器数组与立方体贴图都会被拒绝（着色器/链接日志会说明）。`#ifdef` 内的代码没问题；非采样器 uniform 声明会被移到外层顶层位置，保证块是无条件的。
 
@@ -90,9 +95,9 @@ WebGL 2 额外提供：
 
 ## 平台
 
-运行时着色器编译面向 **Vulkan SPIR-V**，管线用 `SDL_GPU_SHADERFORMAT_SPIRV` 创建。如果设备的 SDL_GPU 后端是 Metal 或 Direct3D 12（且不接受 SPIR-V），`getContext("webgl")` 与 `getContext("webgl2")` 都会返回 `null`；2D canvas 与页面其余部分仍然正常。Windows 会选择 Vulkan（`win.driver()` 会报告），这是已验证的路径。
+管线按 SDL_GPU 设备接受的着色器格式创建：Vulkan 上用 **SPIR-V**（`SDL_GPU_SHADERFORMAT_SPIRV`，Windows/Linux 选择的后端），macOS 上用 **MSL**（`SDL_GPU_SHADERFORMAT_MSL`，Metal 后端）。两个后端共用同一个 GLSL 前端，因此在一个后端能编译的着色器在另一个上也能编译。如果设备的后端两种格式都不接受——Direct3D 12 需要 DXIL——`getContext("webgl")` 与 `getContext("webgl2")` 都会返回 `null`；2D canvas 与页面其余部分仍然正常。
 
-`npm run gui` 会拉取并构建 glslang，合并进 `gui.a` / `gui.lib`（见[打包与构建](./build.md)）；只用 2D canvas 或 DOM 的程序除了归档体积之外没有运行时开销。
+`npm run gui` 会拉取并构建 glslang 与 SPIRV-Cross，合并进 `gui.a` / `gui.lib`（见[打包与构建](./build.md)）；只用 2D canvas 或 DOM 的程序除了归档体积之外没有运行时开销。
 
 ## 测试
 
@@ -100,6 +105,8 @@ WebGL 2 额外提供：
 - `tests/e2e/gui-webgl2.test.ts` 覆盖 WebGL 2 的新增能力：`#version 300 es` 着色器、VAO 往返、带 divisor 的实例化绘制、`texStorage2D`、`clearBufferfv`、缓冲拷贝、采样器对象与结构体 uniform 字段。
 - `examples/gui/webgl-cube` 是一个旋转、受光、带纹理的立方体；它在浏览器中原样运行，并由 `tests/e2e/gui-example-webgl.test.ts` 覆盖。
 - `examples/gui/webgl2-cubes` 用一次绘制调用画出 64 个实例化立方体，使用 `#version 300 es` 与 VAO；由 `tests/e2e/gui-example-webgl2.test.ts` 覆盖。
+
+这些用例会在宿主选择的后端上运行：Linux（与 Windows）上是 Vulkan，macOS 上是 Metal，因此 SPIRV-Cross → MSL 路径与 SPIR-V 路径受同一组断言保护。
 
 ## three.js
 

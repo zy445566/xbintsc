@@ -9,9 +9,11 @@
 - `npm run gui`（`scripts/build-gui.ts`）获取固定版本的 SDL3（`SDL3_TAG`，
   默认 `release-3.2.10`），构建静态 SDL3，获取并构建静态 FreeType
   （`FREETYPE_VERSION`）与 HarfBuzz（`HARFBUZZ_VERSION`），并获取、构建静态
-  **glslang**（`GLSLANG_VERSION`，默认 `16.6.0`）及固定版本的 SPIR-V 头文件
-  （`SPIRV_HEADERS_VERSION`）。glslang 是 WebGL 背后的运行时 GLSL ES 编译器
-  （见 [WebGL](./webgl.md)），与其他库一样合并进归档。随后编译引擎，并把
+  **glslang**（`GLSLANG_VERSION`，默认 `16.6.0`）、固定版本的 SPIR-V 头文件
+  （`SPIRV_HEADERS_VERSION`）以及 **SPIRV-Cross**（`SPIRV_CROSS_VERSION`，默认
+  `vulkan-sdk-1.4.313.0`）。glslang 是 WebGL 背后的运行时 GLSL ES 编译器，
+  SPIRV-Cross 把它的 SPIR-V 转成 Metal 后端使用的 MSL（见
+  [WebGL](./webgl.md)），两者都与其他库一样合并进归档。随后编译引擎，并把
   所有内容合并到 `runtime/lib/<os>-<arch>/gui.a`（Windows 上 MSVC ABI 则为
   `gui.lib`），与 `core.a` 采用相同约定，静态打包这些库。合并使用 macOS 上的
   `libtool` 与其他平台上的 `ar -M`（GNU/LLVM）；CMake 归档会在构建根目录或

@@ -10,8 +10,10 @@
   default `release-3.2.10`), builds a static SDL3, fetches and builds static
   FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), and fetches
   and builds static **glslang** (`GLSLANG_VERSION`, default `16.6.0`) against
-  the pinned SPIR-V headers (`SPIRV_HEADERS_VERSION`). glslang is the runtime
-  GLSL ES compiler behind WebGL (see [WebGL](./webgl.md)); it is merged into the
+  the pinned SPIR-V headers (`SPIRV_HEADERS_VERSION`), and **SPIRV-Cross**
+  (`SPIRV_CROSS_VERSION`, default `vulkan-sdk-1.4.313.0`). glslang is the
+  runtime GLSL ES compiler behind WebGL and SPIRV-Cross turns its SPIR-V into
+  MSL for the Metal backend (see [WebGL](./webgl.md)); both are merged into the
   archive like the other libraries. The script then compiles the engine and
   merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
   `gui.lib` with the MSVC ABI on Windows), same convention as `core.a`,

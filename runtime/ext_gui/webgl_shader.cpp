@@ -3,8 +3,10 @@
  *
  * `compileShader` performs a standalone translation so `COMPILE_STATUS` and the
  * info log work before linking. `linkProgram` then translates both stages again
- * with one shared attribute/varying location map, compiles them with glslang,
- * reflects the std140 block out of the SPIR-V and creates the SDL_GPU shaders.
+ * with one shared attribute/varying location map, compiles them with glslang
+ * and reflects the std140 block out of the SPIR-V. The SDL_GPU shader then
+ * takes whichever form the device accepts: the SPIR-V module itself on Vulkan,
+ * or the same module cross-compiled to MSL by SPIRV-Cross on Metal.
  */
 
 #include "webgl.h"
@@ -14,6 +16,7 @@
 #include <cstring>
 
 #include "gui_internal.h"
+#include "webgl_msl.h"
 #include "webgl_program_internal.h"
 
 namespace xtgui {
@@ -93,6 +96,42 @@ void assign_locations(const std::vector<GlslUniformDecl> &decls,
   }
 }
 
+/** One SDL_GPU shader stage in the format the device accepts. */
+struct StageCode {
+  SDL_GPUShaderFormat format = SDL_GPU_SHADERFORMAT_SPIRV;
+  const Uint8 *code = nullptr;
+  size_t code_size = 0;
+  std::string entry = "main";
+  /** Owns the text when the backend consumes MSL rather than a binary. */
+  std::string text;
+};
+
+/**
+ * Turn a compiled SPIR-V stage into the form the device consumes.
+ *
+ * Metal has no SPIR-V loader, so the module is cross-compiled to MSL; Vulkan
+ * takes the SPIR-V directly. `code` points into `text` for MSL, so the caller
+ * must keep the `StageCode` alive until `SDL_CreateGPUShader` has run.
+ */
+bool prepare_stage(const std::vector<uint32_t> &spirv, bool fragment,
+                   SDL_GPUShaderFormat formats, StageCode *stage, std::string *log) {
+  if ((formats & SDL_GPU_SHADERFORMAT_MSL) != 0) {
+    if (!cross_compile_msl(spirv, fragment, &stage->text, &stage->entry, log)) return false;
+    stage->format = SDL_GPU_SHADERFORMAT_MSL;
+    stage->code = (const Uint8 *)stage->text.data();
+    stage->code_size = stage->text.size();
+    return true;
+  }
+  if ((formats & SDL_GPU_SHADERFORMAT_SPIRV) != 0) {
+    stage->format = SDL_GPU_SHADERFORMAT_SPIRV;
+    stage->code = (const Uint8 *)spirv.data();
+    stage->code_size = spirv.size() * sizeof(uint32_t);
+    stage->entry = "main";
+    return true;
+  }
+  *log = "this GPU backend consumes neither Metal nor Vulkan shaders";
+  return false;
+}
 
 }  // namespace
 
@@ -415,12 +454,26 @@ bool WebGLContext::link_program(uint32_t id) {
   submit(); SDL_WaitForGPUIdle(guidev::g_device);
   release_program_pipelines(record);
 
+  const SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(guidev::g_device);
+  StageCode vs_code;
+  StageCode fs_code;
+  if (!prepare_stage(vs_spirv, false, formats, &vs_code, &log)) {
+    record->log = "vertex shader:\n" + log;
+    record->linked = false;
+    return false;
+  }
+  if (!prepare_stage(fs_spirv, true, formats, &fs_code, &log)) {
+    record->log = "fragment shader:\n" + log;
+    record->linked = false;
+    return false;
+  }
+
   SDL_GPUShaderCreateInfo vs_create;
   memset(&vs_create, 0, sizeof(vs_create));
-  vs_create.code = (const Uint8 *)vs_spirv.data();
-  vs_create.code_size = vs_spirv.size() * sizeof(uint32_t);
-  vs_create.entrypoint = "main";
-  vs_create.format = SDL_GPU_SHADERFORMAT_SPIRV;
+  vs_create.code = vs_code.code;
+  vs_create.code_size = vs_code.code_size;
+  vs_create.entrypoint = vs_code.entry.c_str();
+  vs_create.format = vs_code.format;
   vs_create.stage = SDL_GPU_SHADERSTAGE_VERTEX;
   record->vs_has_block = !vs_info.uniforms.empty();
   vs_create.num_uniform_buffers = record->vs_has_block ? 1 : 0;
@@ -429,10 +482,10 @@ bool WebGLContext::link_program(uint32_t id) {
 
   SDL_GPUShaderCreateInfo fs_create;
   memset(&fs_create, 0, sizeof(fs_create));
-  fs_create.code = (const Uint8 *)fs_spirv.data();
-  fs_create.code_size = fs_spirv.size() * sizeof(uint32_t);
-  fs_create.entrypoint = "main";
-  fs_create.format = SDL_GPU_SHADERFORMAT_SPIRV;
+  fs_create.code = fs_code.code;
+  fs_create.code_size = fs_code.code_size;
+  fs_create.entrypoint = fs_code.entry.c_str();
+  fs_create.format = fs_code.format;
   fs_create.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
   record->fs_has_block = !fs_info.uniforms.empty();
   fs_create.num_uniform_buffers = record->fs_has_block ? 1 : 0;

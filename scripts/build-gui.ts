@@ -13,6 +13,8 @@
  *   1. fetch the pinned SDL3 source into `vendor/SDL` (gitignored),
  *   2. build `libSDL3.a` with CMake,
  *   2b. fetch + build static FreeType and HarfBuzz for text,
+ *   2c. fetch + build static glslang (GLSL ES -> SPIR-V) and SPIRV-Cross
+ *       (SPIR-V -> Metal Shading Language),
  *   3. compile the engine translation units,
  *   4. merge everything into `gui.a` (libtool on macOS, `ar -M` elsewhere;
  *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
@@ -28,6 +30,7 @@
  *   SDL3_TAG       SDL3 git tag to check out (default: release-3.2.10)
  *   FREETYPE_VERSION  FreeType version (default: 2.13.3)
  *   HARFBUZZ_VERSION  HarfBuzz version (default: 10.1.0)
+ *   SPIRV_CROSS_VERSION  SPIRV-Cross tag (default: vulkan-sdk-1.4.313.0)
  *
  * The C/C++ compiler is the same clang the driver resolves (see
  * `src/driver/toolchain-provider.ts`), so the archive always matches the ABI of
@@ -69,6 +72,11 @@ const harfbuzzBuild = join(vendorDir, "harfbuzz-build");
 const glslangSrc = join(vendorDir, "glslang");
 const glslangBuild = join(vendorDir, "glslang-build");
 const spirvHeadersSrc = join(glslangSrc, "External", "spirv-headers");
+/* SPIRV-Cross turns the same SPIR-V into the Metal Shading Language that
+ * SDL_GPU's Metal backend consumes at run time (macOS). It needs no external
+ * headers: its own parser reads the module that glslang produced. */
+const spirvCrossSrc = join(vendorDir, "spirv-cross");
+const spirvCrossBuild = join(vendorDir, "spirv-cross-build");
 const objDir = join(root, "build", "gui-obj");
 const outDir = join(runtimeDir, "lib", platformSlug());
 
@@ -116,10 +124,12 @@ const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
 const HARFBUZZ_VERSION = process.env.HARFBUZZ_VERSION || "10.1.0";
 const GLSLANG_VERSION = process.env.GLSLANG_VERSION || "16.6.0";
 const SPIRV_HEADERS_VERSION = process.env.SPIRV_HEADERS_VERSION || "vulkan-sdk-1.4.363.0";
+const SPIRV_CROSS_VERSION = process.env.SPIRV_CROSS_VERSION || "vulkan-sdk-1.4.313.0";
 const FREETYPE_URL = `https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.xz`;
 const HARFBUZZ_URL = `https://github.com/harfbuzz/harfbuzz/releases/download/${HARFBUZZ_VERSION}/harfbuzz-${HARFBUZZ_VERSION}.tar.xz`;
 const GLSLANG_URL = `https://codeload.github.com/KhronosGroup/glslang/tar.gz/refs/tags/${GLSLANG_VERSION}`;
 const SPIRV_HEADERS_URL = `https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/refs/tags/${SPIRV_HEADERS_VERSION}`;
+const SPIRV_CROSS_URL = `https://codeload.github.com/KhronosGroup/SPIRV-Cross/tar.gz/refs/tags/${SPIRV_CROSS_VERSION}`;
 
 function fail(message: string): never {
   console.error(`xbintsc: ${message}`);
@@ -343,6 +353,10 @@ function glslangLimitsArchive(): string | undefined {
   return builtLibrary(join(glslangBuild, "glslang"),
     ["libglslang-default-resource-limits.a", "glslang-default-resource-limits.lib"]);
 }
+/* SPIRV-Cross's MSL target pulls in its GLSL base class and the core module. */
+function spirvCrossArchive(name: string): string | undefined {
+  return builtLibrary(spirvCrossBuild, [`lib${name}.a`, `${name}.lib`]);
+}
 
 /* -- 1. SDL3 source ------------------------------------------------------- */
 
@@ -472,6 +486,29 @@ if (!existsSync(glslangArchive() ?? "")) {
   console.log(`xbintsc: reusing existing ${glslangArchive()}`);
 }
 
+/* -- 2d. SPIRV-Cross (SPIR-V -> Metal Shading Language) ------------------- */
+
+ensureTarballSource("spirv-cross", SPIRV_CROSS_URL, `SPIRV-Cross-${SPIRV_CROSS_VERSION}`);
+
+if (!existsSync(spirvCrossArchive("spirv-cross-msl") ?? "")) {
+  const cmake = configureCmake("SPIRV-Cross", spirvCrossSrc, spirvCrossBuild, [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DSPIRV_CROSS_CLI=OFF",
+    "-DSPIRV_CROSS_ENABLE_TESTS=OFF",
+    /* Only the MSL target is used; skip the C++, HLSL, reflection and C APIs
+     * so the archive stays small. MSL links against the GLSL base class. */
+    "-DSPIRV_CROSS_ENABLE_HLSL=OFF",
+    "-DSPIRV_CROSS_ENABLE_CPP=OFF",
+    "-DSPIRV_CROSS_ENABLE_REFLECT=OFF",
+    "-DSPIRV_CROSS_ENABLE_UTIL=OFF",
+    "-DSPIRV_CROSS_ENABLE_C_API=OFF",
+  ]);
+  console.log("xbintsc: building static SPIRV-Cross");
+  run(cmake, ["--build", spirvCrossBuild, "--config", "Release", "--parallel"]);
+} else {
+  console.log(`xbintsc: reusing existing ${spirvCrossArchive("spirv-cross-msl")}`);
+}
+
 /* -- 3. engine objects ---------------------------------------------------- */
 
 mkdirSync(objDir, { recursive: true });
@@ -483,6 +520,7 @@ const includeFlags = [
   "-I", join(harfbuzzSrc, "src"),
   "-I", glslangSrc,
   "-I", join(spirvHeadersSrc, "include"),
+  "-I", spirvCrossSrc,
 ];
 const sources = readdirSync(engineDir)
   .filter((entry) => entry.endsWith(".cpp"))
@@ -512,10 +550,17 @@ const freetype = freetypeArchive();
 const harfbuzz = harfbuzzArchive();
 const glslang = glslangArchive();
 const glslangLimits = glslangLimitsArchive();
-if (!sdl || !freetype || !harfbuzz || !glslang || !glslangLimits) {
-  fail("one of the SDL3/FreeType/HarfBuzz/glslang archives was not found after building");
+const spirvCrossCore = spirvCrossArchive("spirv-cross-core");
+const spirvCrossGlsl = spirvCrossArchive("spirv-cross-glsl");
+const spirvCrossMsl = spirvCrossArchive("spirv-cross-msl");
+if (!sdl || !freetype || !harfbuzz || !glslang || !glslangLimits ||
+    !spirvCrossCore || !spirvCrossGlsl || !spirvCrossMsl) {
+  fail("one of the SDL3/FreeType/HarfBuzz/glslang/SPIRV-Cross archives was not found after building");
 }
-const libraries = [sdl, freetype, harfbuzz, glslang, glslangLimits];
+const libraries = [
+  sdl, freetype, harfbuzz, glslang, glslangLimits,
+  spirvCrossCore, spirvCrossGlsl, spirvCrossMsl,
+];
 
 mkdirSync(outDir, { recursive: true });
 rmSync(output, { force: true });

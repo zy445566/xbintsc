@@ -5,20 +5,22 @@
 
 ## Known issues
 
-- **WebGL 1.0 and 2.0 run on Vulkan SPIR-V, with a subset of each.**
+- **WebGL 1.0 and 2.0 run on the GPU, with a subset of each.**
   `canvas.getContext("webgl")` / `"webgl2"` return real GPU contexts (see
   [WebGL](./webgl.md)): GLSL ES shaders are translated to SPIR-V by the bundled
-  glslang and the drawing buffer is an offscreen colour texture that the page
-  composites without a readback. WebGL 2 adds VAOs, instancing, integer
-  attributes, sampler objects, `texStorage2D` and buffer copies. Uniform
-  blocks, transform feedback, cube maps, 3D textures, float/depth textures,
-  compressed textures, multiple render targets, `blitFramebuffer`, MSAA and
-  stencil operations are not implemented; `clear` ignores the scissor rectangle.
-  On an SDL_GPU backend that cannot consume SPIR-V (Metal, Direct3D 12) both
-  context kinds are `null`. The `.js` asset loader now patches only three.js's
-  shader unroller; `WebGLRenderer` runs on the real backend and there is no
-  Canvas2D fallback. Shadow maps (depth textures), cube textures/environment
-  maps and HDR render targets remain unsupported.
+  glslang — consumed directly by the Vulkan backend, or cross-compiled to MSL by
+  the bundled SPIRV-Cross for Metal — and the drawing buffer is an offscreen
+  colour texture that the page composites without a readback. WebGL 2 adds VAOs,
+  instancing, integer attributes, sampler objects, `texStorage2D` and buffer
+  copies. Uniform blocks, transform feedback, cube maps, 3D textures,
+  float/depth textures, compressed textures, multiple render targets,
+  `blitFramebuffer`, MSAA and stencil operations are not implemented; `clear`
+  ignores the scissor rectangle. On an SDL_GPU backend that accepts neither
+  SPIR-V nor MSL (Direct3D 12, which would need DXIL) both context kinds are
+  `null`. The `.js` asset loader now patches only three.js's shader unroller;
+  `WebGLRenderer` runs on the real backend and there is no Canvas2D fallback.
+  Shadow maps (depth textures), cube textures/environment maps and HDR render
+  targets remain unsupported.
 
 
 

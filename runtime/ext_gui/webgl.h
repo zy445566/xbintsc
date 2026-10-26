@@ -38,6 +38,7 @@ namespace xtgui {
 
 constexpr int kWebGLMaxAttribs = 16;
 constexpr int kWebGLMaxTextureUnits = 16;
+constexpr int kWebGLMaxDrawBuffers = 4;
 
 struct WebGLShader {
   uint32_t id = 0;
@@ -135,7 +136,9 @@ struct WebGLRenderbuffer {
 
 struct WebGLFramebuffer {
   uint32_t id = 0;
-  uint32_t color_texture = 0;
+  uint32_t color_textures[kWebGLMaxDrawBuffers] = {};
+  /** `COLOR_ATTACHMENTi` or `NONE` per draw-buffer slot. */
+  int draw_buffers[kWebGLMaxDrawBuffers] = {GL_COLOR_ATTACHMENT0, GL_NONE, GL_NONE, GL_NONE};
   uint32_t depth_texture = 0;
   uint32_t depth_renderbuffer = 0;
   int width = 0;
@@ -215,7 +218,10 @@ struct WebGLDrawState {
   int front_face = GL_CCW;
   bool color_mask[4] = {true, true, true, true};
   /** Attachment formats of the bound target; pipelines are format-specific. */
-  int color_format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  int color_formats[kWebGLMaxDrawBuffers] = {
+      SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+      SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM};
+  int color_target_count = 1;
   int depth_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
 };
 
@@ -416,6 +422,11 @@ class WebGLContext {
   bool framebuffer_texture(uint32_t framebuffer, uint32_t texture,
                            int attachment = GL_COLOR_ATTACHMENT0);
   bool framebuffer_status(uint32_t id);
+  /** WebGL 2 `drawBuffers` / `readBuffer`. */
+  void draw_buffers(int count, const int *buffers);
+  void read_buffer(int mode) { read_buffer_ = mode; }
+  int read_buffer_value() const { return read_buffer_; }
+  int draw_buffer_value(int index);
   uint32_t create_renderbuffer();
   void delete_renderbuffer(uint32_t id);
   void bind_renderbuffer(uint32_t id) { bound_renderbuffer_ = id; }
@@ -475,6 +486,9 @@ class WebGLContext {
   SDL_GPUTexture *target_depth();
   int target_color_format();
   int target_depth_format();
+  /** The texture rendered to for draw-buffer slot `slot`, or null. */
+  SDL_GPUTexture *draw_color_texture(int slot);
+  int draw_color_format(int slot);
   SDL_GPUTexture *ensure_texture_gpu(WebGLTexture *texture, bool as_target);
   SDL_GPUSampler *sampler_for(WebGLTexture *texture);
   SDL_GPUBuffer *ensure_buffer_gpu(WebGLBuffer *buffer);
@@ -547,6 +561,8 @@ class WebGLContext {
   uint32_t bound_element_ = 0;
   uint32_t bound_framebuffer_ = 0;
   uint32_t read_framebuffer_ = 0;
+  int read_buffer_ = GL_BACK;
+  int default_draw_buffers_[kWebGLMaxDrawBuffers] = {GL_BACK, GL_NONE, GL_NONE, GL_NONE};
   uint32_t bound_renderbuffer_ = 0;
   uint32_t bound_textures_[kWebGLMaxTextureUnits] = {};
   uint32_t bound_cube_textures_[kWebGLMaxTextureUnits] = {};

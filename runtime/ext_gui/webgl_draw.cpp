@@ -144,7 +144,11 @@ std::string pipeline_key(int mode, int index_size,
                          const std::vector<SDL_GPUVertexBufferDescription> &buffers,
                          const WebGLDrawState &state) {
   std::string key = std::to_string(mode) + "/" + std::to_string(index_size);
-  key += "/f" + std::to_string(state.color_format) + ":" + std::to_string(state.depth_format);
+  key += "/f" + std::to_string(state.color_target_count) + ":";
+  for (int i = 0; i < state.color_target_count; i++) {
+    key += std::to_string(state.color_formats[i]) + ",";
+  }
+  key += ":" + std::to_string(state.depth_format);
   for (const SDL_GPUVertexAttribute &attr : attrs) {
     key += "/" + std::to_string(attr.location) + ":" + std::to_string(attr.buffer_slot) + ":" +
            std::to_string((int)attr.format) + ":" + std::to_string(attr.offset);
@@ -319,9 +323,14 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       bound_framebuffer_ != 0 ? framebuffer(bound_framebuffer_) : nullptr;
   const int target_width = framebuffer_ != nullptr ? framebuffer_->width : width_;
   const int target_height = framebuffer_ != nullptr ? framebuffer_->height : height_;
-  /* A pipeline bakes in the attachment formats; float colour targets and depth
-   * textures therefore need their own pipeline variants. */
-  state_.color_format = target_color_format();
+  /* A pipeline bakes in the attachment formats; float colour targets, MRT
+   * layouts and depth textures therefore need their own pipeline variants. */
+  state_.color_target_count = 0;
+  for (int slot = 0; slot < kWebGLMaxDrawBuffers; slot++) {
+    if (draw_color_texture(slot) == nullptr) continue;
+    state_.color_formats[state_.color_target_count++] = draw_color_format(slot);
+  }
+  if (state_.color_target_count == 0) state_.color_target_count = 1;
   state_.depth_format = target_depth_format();
 
   std::vector<SDL_GPUVertexAttribute> attributes;

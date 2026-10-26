@@ -90,8 +90,14 @@ void WebGLContext::delete_texture(uint32_t id) {
     if (bound == id) bound = 0;
   }
   for (auto &entry : framebuffers_) {
-    if (entry.second->color_texture == id) {
-      entry.second->color_texture = 0;
+    bool cleared = false;
+    for (uint32_t &color : entry.second->color_textures) {
+      if (color == id) {
+        color = 0;
+        cleared = true;
+      }
+    }
+    if (cleared) {
       entry.second->width = 0;
       entry.second->height = 0;
     }
@@ -305,12 +311,14 @@ void WebGLContext::bind_framebuffer(int target, uint32_t id) {
   if (id != 0 && framebuffers_.find(id) == framebuffers_.end()) return;
   if (target == GL_READ_FRAMEBUFFER) {
     read_framebuffer_ = id;
+    read_buffer_ = id == 0 ? GL_BACK : GL_COLOR_ATTACHMENT0;
     return;
   }
   if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER) return;
   if (id != bound_framebuffer_) end_pass();
   bound_framebuffer_ = id;
   if (target == GL_FRAMEBUFFER) read_framebuffer_ = id;
+  read_buffer_ = id == 0 ? GL_BACK : GL_COLOR_ATTACHMENT0;
 }
 
 bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture_id,
@@ -337,8 +345,9 @@ bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture
     }
     return true;
   }
-  if (attachment != GL_COLOR_ATTACHMENT0) return false;
-  record_framebuffer->color_texture = texture_id;
+  const int color_index = attachment - GL_COLOR_ATTACHMENT0;
+  if (color_index < 0 || color_index >= kWebGLMaxDrawBuffers) return false;
+  record_framebuffer->color_textures[color_index] = texture_id;
   if (record != nullptr) {
     record_framebuffer->width = record->width;
     record_framebuffer->height = record->height;
@@ -350,7 +359,9 @@ bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture
 bool WebGLContext::framebuffer_status(uint32_t id) {
   WebGLFramebuffer *framebuffer_ = framebuffer(id);
   if (framebuffer_ == nullptr) return false;
-  if (framebuffer_->color_texture == 0) {
+  bool attached = false;
+  for (uint32_t color : framebuffer_->color_textures) attached = attached || color != 0;
+  if (!attached) {
     set_error(GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT);
     return false;
   }

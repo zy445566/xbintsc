@@ -82,6 +82,7 @@ WebGL 2 额外提供：
 - **不可变纹理与缓冲拷贝**：`texStorage2D`（后端始终分配完整 mip 链）、`copyBufferSubData`、`getBufferSubData`。
 - **绘图缓冲**：`drawingBufferStorage(width, height)` 固定绘图缓冲尺寸；此后 `canvas.width` / `canvas.height` 不再重建它。
 - **清除**：`clearBufferfv`、`clearBufferiv`、`clearBufferuiv`、`clearBufferfi`。
+- **多渲染目标**：`drawBuffers` 最多 4 个颜色附件，`readBuffer` 选择 `readPixels` 的附件；`framebufferTexture2D` 可挂 `COLOR_ATTACHMENT0`…`3`，片元着色器的多个 `out` 按顺序写入。
 - **查询与栅栏**：对象与入口都存在（`createQuery`/`beginQuery`/`endQuery`/`getQueryParameter`、`fenceSync`/`clientWaitSync`/`waitSync`/`getSyncParameter`），行为是优雅降级：栅栏报告 `ALREADY_SIGNALED`，查询结果为 0。
 - **Uniform 块**：`getUniformBlockIndex` 返回 `INVALID_INDEX`，让库回退到独立 uniform；块相关入口为空操作。
 - **Transform feedback**：入口存在但为空操作，避免特性探测类库抛错。
@@ -90,7 +91,7 @@ WebGL 2 额外提供：
 
 ## 未实现
 
-着色器源码里的 uniform buffer 对象、transform feedback（入口为空操作）、多渲染目标（只写第一个片元输出）与 MSAA/采样缓冲；`texSubImage3D` 与 `framebufferTextureLayer` 仍为空操作。`blitFramebuffer` 只复制颜色附件，深度/模板位被接受但不复制。使用内建块、用户 uniform 块或 `gl_FragDepth` 的着色器会以编译/链接日志报错。
+着色器源码里的 uniform buffer 对象、transform feedback（入口为空操作）与 MSAA/采样缓冲；`texSubImage3D` 与 `framebufferTextureLayer` 仍为空操作。`blitFramebuffer` 只复制颜色附件，深度/模板位被接受但不复制。使用内建块、用户 uniform 块或 `gl_FragDepth` 的着色器会以编译/链接日志报错。
 
 ## 平台
 
@@ -104,6 +105,7 @@ WebGL 2 额外提供：
 - `tests/e2e/gui-webgl2.test.ts` 覆盖 WebGL 2 的新增能力：`#version 300 es` 着色器、VAO 往返、带 divisor 的实例化绘制、`texStorage2D`、`clearBufferfv`、缓冲拷贝、采样器对象、结构体 uniform 字段、`drawingBufferStorage`，以及模板测试、浮点纹理、深度纹理、带 scissor 的清除、framebuffer blit、压缩纹理、`ImageBitmap`、立方体贴图与 3D/数组纹理。
 - `tests/e2e/gui-webgl2-formats.test.ts` 单独覆盖模板、浮点/深度纹理、scissor 清除、framebuffer blit、压缩纹理与 `ImageBitmap`。
 - `tests/e2e/gui-webgl2-3d.test.ts` 覆盖 2D 数组纹理与 3D 纹理的多层采样。
+- `tests/e2e/gui-webgl2-mrt.test.ts` 覆盖两个片元输出分别写入两个颜色附件。
 - `tests/e2e/gui-media.test.ts` 还会把 `<video>` 的最新解码帧上传为纹理并读回像素。
 - `examples/gui/webgl-cube` 是一个旋转、受光、带纹理的立方体；它在浏览器中原样运行，并由 `tests/e2e/gui-example-webgl.test.ts` 覆盖。
 - `examples/gui/webgl2-cubes` 用一次绘制调用画出 64 个实例化立方体，使用 `#version 300 es` 与 VAO；由 `tests/e2e/gui-example-webgl2.test.ts` 覆盖。
@@ -114,4 +116,4 @@ WebGL 2 额外提供：
 
 `.js` 资源加载器现在只修补 three.js 的着色器循环展开；`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
 
-本引擎子集之外的能力仍无法模拟：多渲染目标与 transform feedback；立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标与压缩纹理已经可用。需要这些能力的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。
+本引擎子集之外的能力仍无法模拟：transform feedback 与 MSAA；立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标与压缩纹理已经可用。需要这些能力的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。

@@ -209,6 +209,10 @@ WebGL 2 adds:
   buffer size; `canvas.width`/`canvas.height` no longer rebuild it afterwards.
 - **Clears**: `clearBufferfv`, `clearBufferiv`, `clearBufferuiv`,
   `clearBufferfi`.
+- **Multiple render targets**: `drawBuffers` addresses up to four colour
+  attachments and `readBuffer` selects the attachment `readPixels` reads;
+  `framebufferTexture2D` accepts `COLOR_ATTACHMENT0`…`3`, and a fragment
+  shader's multiple `out` variables are written in order.
 - **Queries and fences**: the objects and entry points exist
   (`createQuery`/`beginQuery`/`endQuery`/`getQueryParameter`,
   `fenceSync`/`clientWaitSync`/`waitSync`/`getSyncParameter`) and degrade
@@ -231,8 +235,7 @@ backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
 ## Not implemented
 
 Uniform buffer objects in shader source, transform feedback (the entry points
-are no-ops), multiple render targets (only the first fragment output is
-written) and MSAA/sample buffers; `texSubImage3D` and
+are no-ops) and MSAA/sample buffers; `texSubImage3D` and
 `framebufferTextureLayer` are no-ops. `blitFramebuffer`
 copies the colour attachment only; depth/stencil bits are accepted but not
 copied. Shaders that use built-in blocks, user uniform blocks or `gl_FragDepth`
@@ -270,6 +273,8 @@ uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
   as a texture and reads it back.
 - `tests/e2e/gui-webgl2-3d.test.ts` covers 2D-array and 3D texture layer
   sampling.
+- `tests/e2e/gui-webgl2-mrt.test.ts` writes two fragment outputs to two
+  colour attachments and reads each back.
 - `examples/gui/webgl-cube` is a spinning, lit, textured cube; it runs in a
   browser unchanged and is covered by
   `tests/e2e/gui-example-webgl.test.ts`.
@@ -290,8 +295,8 @@ is bundled any more**. Verified with three.js r160 through SDL_GPU:
 `CanvasTexture`, linear fog, ambient/directional/point/spot/hemisphere lights,
 `Sprite`, `Line`, `Points` and `InstancedMesh`.
 
-Features outside this engine's subset still cannot be emulated: multiple render
-targets and transform feedback.
+Features outside this engine's subset still cannot be emulated: transform
+feedback and MSAA.
 Depth textures, float render targets and compressed textures are available, but
 three.js shadow maps still need comparative `sampler2DShadow` sampling, which
 is not translated yet. A scene that needs one of those will not render

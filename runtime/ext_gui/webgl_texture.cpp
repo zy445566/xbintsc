@@ -261,6 +261,18 @@ bool WebGLContext::read_pixels(int x, int y, int width, int height, uint8_t *out
     return false;
   }
   SDL_GPUTexture *target = target_color();
+  if (bound_framebuffer_ != 0) {
+    WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
+    if (framebuffer != nullptr) {
+      int index = read_buffer_ - GL_COLOR_ATTACHMENT0;
+      if (index < 0 || index >= kWebGLMaxDrawBuffers ||
+          framebuffer->color_textures[index] == 0) {
+        index = 0;
+      }
+      WebGLTexture *read_texture = texture(framebuffer->color_textures[index]);
+      target = read_texture != nullptr ? ensure_texture_gpu(read_texture, true) : nullptr;
+    }
+  }
   int target_width = bound_framebuffer_ == 0 ? width_ : 0;
   int target_height = bound_framebuffer_ == 0 ? height_ : 0;
   if (bound_framebuffer_ != 0) {

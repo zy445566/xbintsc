@@ -152,7 +152,7 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2", () => {
     expect(value("webgl2")).toBe("true");
     expect(value("webgl1-after")).toBe("true");
     expect(value("version")).toContain("WebGL 2.0");
-    expect(value("draw-buffers")).toBe("1");
+    expect(value("draw-buffers")).toBe("4");
     expect(value("clear-red")).toBe("255,0,0,255");
     expect(value("clear-buffer")).toBe("0,255,0,255");
     expect(value("vs")).toBe("true");

@@ -261,8 +261,8 @@ SDL_GPUTexture *WebGLContext::target_color() {
     return color_;
   }
   WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
-  if (framebuffer == nullptr || framebuffer->color_texture == 0) return nullptr;
-  WebGLTexture *texture = this->texture(framebuffer->color_texture);
+  if (framebuffer == nullptr || framebuffer->color_textures[0] == 0) return nullptr;
+  WebGLTexture *texture = this->texture(framebuffer->color_textures[0]);
   if (texture == nullptr) return nullptr;
   return ensure_texture_gpu(texture, true);
 }
@@ -273,8 +273,8 @@ SDL_GPUTexture *WebGLContext::framebuffer_color(uint32_t id) {
     return color_;
   }
   WebGLFramebuffer *framebuffer_ = framebuffer(id);
-  if (framebuffer_ == nullptr || framebuffer_->color_texture == 0) return nullptr;
-  WebGLTexture *texture_ = texture(framebuffer_->color_texture);
+  if (framebuffer_ == nullptr || framebuffer_->color_textures[0] == 0) return nullptr;
+  WebGLTexture *texture_ = texture(framebuffer_->color_textures[0]);
   return texture_ != nullptr ? ensure_texture_gpu(texture_, true) : nullptr;
 }
 
@@ -322,10 +322,10 @@ SDL_GPUTexture *WebGLContext::target_depth() {
 int WebGLContext::target_color_format() {
   if (bound_framebuffer_ == 0) return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
   WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
-  if (framebuffer == nullptr || framebuffer->color_texture == 0) {
+  if (framebuffer == nullptr || framebuffer->color_textures[0] == 0) {
     return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
   }
-  WebGLTexture *texture = this->texture(framebuffer->color_texture);
+  WebGLTexture *texture = this->texture(framebuffer->color_textures[0]);
   return texture != nullptr ? (int)texture->format : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 }
 
@@ -357,21 +357,26 @@ void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_ste
   end_pass();
   ensure_command();
   if (cmd_ == nullptr) return;
-  SDL_GPUTexture *color = target_color();
   SDL_GPUTexture *depth = target_depth();
-  if (color == nullptr) {
+  SDL_GPUColorTargetInfo color_infos[kWebGLMaxDrawBuffers];
+  int color_count = 0;
+  for (int slot = 0; slot < kWebGLMaxDrawBuffers; slot++) {
+    SDL_GPUTexture *color = draw_color_texture(slot);
+    if (color == nullptr) continue;
+    SDL_GPUColorTargetInfo &color_info = color_infos[color_count++];
+    memset(&color_info, 0, sizeof(color_info));
+    color_info.texture = color;
+    color_info.clear_color.r = clear_color_[0];
+    color_info.clear_color.g = clear_color_[1];
+    color_info.clear_color.b = clear_color_[2];
+    color_info.clear_color.a = clear_color_[3];
+    color_info.load_op = clear_color ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+    color_info.store_op = SDL_GPU_STOREOP_STORE;
+  }
+  if (color_count == 0) {
     set_error(GL_INVALID_FRAMEBUFFER_OPERATION);
     return;
   }
-  SDL_GPUColorTargetInfo color_info;
-  memset(&color_info, 0, sizeof(color_info));
-  color_info.texture = color;
-  color_info.clear_color.r = clear_color_[0];
-  color_info.clear_color.g = clear_color_[1];
-  color_info.clear_color.b = clear_color_[2];
-  color_info.clear_color.a = clear_color_[3];
-  color_info.load_op = clear_color ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-  color_info.store_op = SDL_GPU_STOREOP_STORE;
 
   SDL_GPUDepthStencilTargetInfo depth_info;
   memset(&depth_info, 0, sizeof(depth_info));
@@ -385,7 +390,8 @@ void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_ste
                                                                   : SDL_GPU_LOADOP_LOAD;
   depth_info.stencil_store_op = SDL_GPU_STOREOP_STORE;
 
-  pass_ = SDL_BeginGPURenderPass(cmd_, &color_info, 1, depth != nullptr ? &depth_info : nullptr);
+  pass_ = SDL_BeginGPURenderPass(cmd_, color_infos, (Uint32)color_count,
+                                 depth != nullptr ? &depth_info : nullptr);
   pass_targets_default_ = bound_framebuffer_ == 0;
   pass_framebuffer_ = bound_framebuffer_;
 }
@@ -447,7 +453,17 @@ double WebGLContext::parameter(int pname) {
       return 256;
     case GL_MAX_DRAW_BUFFERS:
     case GL_MAX_COLOR_ATTACHMENTS:
-      return 1;
+      return kWebGLMaxDrawBuffers;
+    case GL_READ_BUFFER:
+      return read_buffer_;
+    case GL_DRAW_BUFFER0:
+      return draw_buffer_value(0);
+    case GL_DRAW_BUFFER1:
+      return draw_buffer_value(1);
+    case GL_DRAW_BUFFER2:
+      return draw_buffer_value(2);
+    case GL_DRAW_BUFFER3:
+      return draw_buffer_value(3);
     case GL_MAX_SAMPLES:
       return 0;
     case GL_MAX_UNIFORM_BUFFER_BINDINGS:
@@ -472,9 +488,7 @@ double WebGLContext::parameter(int pname) {
       return 1024;
     case GL_MAX_UNIFORM_BLOCK_SIZE:
       return 16384;
-    case GL_READ_BUFFER:
-    case GL_DRAW_BUFFER0:
-      return GL_BACK;
+
     default:
       return 0;
   }

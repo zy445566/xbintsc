@@ -209,7 +209,6 @@ WEBGL2_NOOP(webgl2_uniform_block_binding)
 WEBGL2_NOOP(webgl2_framebuffer_texture_layer)
 WEBGL2_NOOP(webgl2_invalidate_framebuffer)
 WEBGL2_NOOP(webgl2_invalidate_sub_framebuffer)
-WEBGL2_NOOP(webgl2_read_buffer)
 
 METHOD(webgl2_blit_framebuffer) {
   (void)env;
@@ -482,8 +481,30 @@ METHOD(webgl2_clear_buffer_fi) {
 
 METHOD(webgl2_draw_buffers) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const xt_value list = xt_arg(argc, argv, 0);
+  std::vector<double> values = webgl_numbers(list);
+  if (values.empty()) {
+    /* `webgl_numbers` only walks typed arrays; plain WebGL argument arrays
+     * (`drawBuffers([gl.COLOR_ATTACHMENT0, ...])`) need the element accessor. */
+    const double length = xt_to_number(xt_get(list, xt_string_from_cstr("length")));
+    if (length > 0.0 && length <= 16.0) {
+      for (int i = 0; i < (int)length; i++) {
+        values.push_back(xt_to_number(xt_get(list, xt_number((double)i))));
+      }
+    }
+  }
+  std::vector<int> buffers(values.size());
+  for (size_t i = 0; i < values.size(); i++) buffers[i] = (int)values[i];
+  context->draw_buffers((int)buffers.size(), buffers.data());
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl2_read_buffer) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) context->read_buffer(webgl_int(argc, argv, 0, GL_BACK));
   return XT_UNDEFINED;
 }
 

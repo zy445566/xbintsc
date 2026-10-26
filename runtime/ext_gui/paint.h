@@ -46,6 +46,9 @@ struct PaintText {
   std::string text;
   FontSpec font;
   Matrix2D transform;
+  /** Set on a `text-shadow` copy (diagnostics only; the renderer draws it like
+   * any other glyph run). */
+  bool shadow = false;
 };
 
 /** An image to draw, scaled into the given rectangle (viewport-relative).
@@ -65,17 +68,38 @@ struct PaintImage {
   uint64_t media_id = 0;
   uint64_t canvas_id = 0;
   Matrix2D transform;
+  /** Modulating colour for the image shader (white normally; a filter's
+   * multiplicative effect may tint it). */
+  Color tint{1.0f, 1.0f, 1.0f, 1.0f};
+};
+
+/** One triangle of a clip path in device-space logical pixels. The paint pass
+ * triangulates (possibly concave) polygons once so the renderer can clip
+ * convex shape/glyph quads by a simple half-plane test per triangle. */
+struct ClipTriangle {
+  float x[3] = {0, 0, 0};
+  float y[3] = {0, 0, 0};
+};
+
+/** A resolved `clip-path` polygon plus its triangulation. */
+struct ClipPathGeometry {
+  std::vector<float> points;  // x, y pairs (diagnostics)
+  std::vector<ClipTriangle> triangles;
 };
 
 /** The clip rectangle in effect for a painted shape (device-space logical
  * pixels — a transformed subtree contributes the bounding box of its clip).
- * `width <= 0` means "no clip". */
+ * `width <= 0` means "no clip". `paths` index `DisplayList::clip_paths`; at most
+ * two nested `clip-path` shapes are kept (CSS would intersect every ancestor;
+ * deeper nesting is rare and the outermost two are the ones a UI uses). */
 struct PaintClip {
   bool active = false;
   float x = 0;
   float y = 0;
   float width = 0;
   float height = 0;
+  int path_count = 0;
+  int paths[2] = {-1, -1};
 };
 
 enum class PaintKind { Rect, Text, Image };
@@ -95,20 +119,26 @@ struct DisplayList {
   /** Shapes in painter order (backgrounds/borders first, then children, then
    * stacked siblings), each with the clip rectangle that bounds it. */
   std::vector<PaintOp> ops;
+  /** Device-space clip-path polygons shared by an element's ops. */
+  std::vector<ClipPathGeometry> clip_paths;
 
   void clear() {
     rects.clear();
     texts.clear();
     images.clear();
     ops.clear();
+    clip_paths.clear();
   }
   bool empty() const { return rects.empty() && texts.empty() && images.empty(); }
   /** Human-readable dump, one shape per line, in painter order (diagnostics/tests). */
   std::string dump() const;
 };
 
-/** Build the display list for a laid-out tree and append it to `out`. */
-void xt_paint_build(const LayoutBox *root, DisplayList &out);
+/** Build the display list for a laid-out tree and append it to `out`. The
+ * viewport size resolves `vw`/`vh` units inside `clip-path` and shadows; pass 0
+ * to take it from the root box's containing block. */
+void xt_paint_build(const LayoutBox *root, DisplayList &out, float viewportWidth = 0.0f,
+                    float viewportHeight = 0.0f);
 
 }  // namespace xtgui
 

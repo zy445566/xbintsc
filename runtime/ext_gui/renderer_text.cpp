@@ -22,33 +22,6 @@ namespace renderer_detail {
 constexpr float kMinGlyphScale = 0.5f;
 constexpr float kMaxGlyphScale = 4.0f;
 
-void pushQuad(std::vector<TextVertex> &verts, const float corners_x[4], const float corners_y[4],
-              const float u[4], const float v[4], const xtgui::Color &color,
-              const xtgui::Matrix2D &transform) {
-  TextVertex corners[4];
-  for (int i = 0; i < 4; i++) {
-    transform.apply(corners_x[i], corners_y[i], &corners[i].x, &corners[i].y);
-    corners[i].u = u[i];
-    corners[i].v = v[i];
-    corners[i].r = color.r;
-    corners[i].g = color.g;
-    corners[i].b = color.b;
-    corners[i].a = color.a;
-  }
-  static const int order[6] = {0, 1, 2, 0, 2, 3};
-  for (int i = 0; i < 6; i++) verts.push_back(corners[order[i]]);
-}
-
-void pushGlyph(std::vector<TextVertex> &verts, float x, float y, float width, float height,
-               const GlyphEntry &entry, const xtgui::Color &color,
-               const xtgui::Matrix2D &transform) {
-  const float corners_x[4] = {x, x + width, x + width, x};
-  const float corners_y[4] = {y, y, y + height, y + height};
-  const float u[4] = {entry.u0, entry.u1, entry.u1, entry.u0};
-  const float v[4] = {entry.v0, entry.v0, entry.v1, entry.v1};
-  pushQuad(verts, corners_x, corners_y, u, v, color, transform);
-}
-
 bool ensureAtlasTexture(SDL_GPUDevice *device) {
   if (g_atlas_texture != nullptr) return true;
   SDL_GPUTextureCreateInfo info;
@@ -307,8 +280,9 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
 
   std::vector<TextVertex> verts;
   geometry->op_counts.assign(list.texts.size(), 0);
-  for (size_t index = 0; index < list.texts.size(); index++) {
-    const xtgui::PaintText &run = list.texts[index];
+  for (const xtgui::PaintOp &op : list.ops) {
+    if (op.kind != xtgui::PaintKind::Text || op.index >= list.texts.size()) continue;
+    const xtgui::PaintText &run = list.texts[op.index];
     if (run.text.empty() || run.color.a <= 0.0f) continue;
     xtgui::Font *logical = xtgui::xt_text_resolve(run.font);
     if (logical == nullptr) continue;
@@ -341,12 +315,13 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
           float quad_y = run.baseline + glyph.y_offset - (float)entry.top / glyph_scale;
           float quad_w = (float)entry.width / glyph_scale;
           float quad_h = (float)entry.height / glyph_scale;
-          pushGlyph(verts, quad_x, quad_y, quad_w, quad_h, entry, run.color, run.transform);
+          pushGlyph(verts, quad_x, quad_y, quad_w, quad_h, entry, run.color, run.transform,
+                    op.clip, list);
         }
       }
       pen_x += glyph.x_advance;
     }
-    geometry->op_counts[index] = (uint32_t)verts.size() - before;
+    geometry->op_counts[op.index] = (uint32_t)verts.size() - before;
   }
   uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex));
   flushAtlas(device);

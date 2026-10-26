@@ -68,6 +68,112 @@ static std::string formatColor(const Color &color) {
   return buffer;
 }
 
+static std::string quoteText(const std::string &text) {
+  std::string out = "\"";
+  for (char c : text) {
+    if (c == '"' || c == '\\') out.push_back('\\');
+    out.push_back(c);
+  }
+  out.push_back('"');
+  return out;
+}
+
+static std::string formatFilterList(const std::vector<FilterOp> &filters) {
+  if (filters.empty()) return "none";
+  std::string out;
+  for (const FilterOp &filter : filters) {
+    if (!out.empty()) out += " ";
+    switch (filter.kind) {
+      case FilterKind::Blur:
+        out += "blur(" + formatLength(filter.blur) + ")";
+        break;
+      case FilterKind::Brightness:
+        out += "brightness(" + formatNumber(filter.amount) + ")";
+        break;
+      case FilterKind::Contrast:
+        out += "contrast(" + formatNumber(filter.amount) + ")";
+        break;
+      case FilterKind::Grayscale:
+        out += "grayscale(" + formatNumber(filter.amount) + ")";
+        break;
+      case FilterKind::Sepia:
+        out += "sepia(" + formatNumber(filter.amount) + ")";
+        break;
+      case FilterKind::Invert:
+        out += "invert(" + formatNumber(filter.amount) + ")";
+        break;
+      case FilterKind::Saturate:
+        out += "saturate(" + formatNumber(filter.amount) + ")";
+        break;
+      case FilterKind::HueRotate:
+        out += "hue-rotate(" + formatNumber(filter.amount) + "deg)";
+        break;
+      case FilterKind::Opacity:
+        out += "opacity(" + formatNumber(filter.amount) + ")";
+        break;
+      case FilterKind::DropShadow:
+        out += "drop-shadow(" + formatLength(filter.dx) + " " + formatLength(filter.dy);
+        if (filter.blur.unit != Unit::Px || filter.blur.value != 0.0f)
+          out += " " + formatLength(filter.blur);
+        if (filter.has_color) out += " " + formatColor(filter.color);
+        out += ")";
+        break;
+    }
+  }
+  return out;
+}
+
+static std::string formatTextShadows(const std::vector<TextShadow> &shadows) {
+  if (shadows.empty()) return "none";
+  std::string out;
+  for (const TextShadow &shadow : shadows) {
+    if (!out.empty()) out += ", ";
+    out += formatLength(shadow.dx) + " " + formatLength(shadow.dy);
+    if (shadow.blur.unit != Unit::Px || shadow.blur.value != 0.0f)
+      out += " " + formatLength(shadow.blur);
+    if (shadow.has_color) out += " " + formatColor(shadow.color);
+  }
+  return out;
+}
+
+static std::string formatClipPath(const ClipPathSpec &clip) {
+  switch (clip.type) {
+    case ClipPathSpec::Type::None:
+      return "none";
+    case ClipPathSpec::Type::Inset: {
+      std::string out = "inset(" + formatLength(clip.inset_top) + " " +
+                        formatLength(clip.inset_right) + " " + formatLength(clip.inset_bottom) +
+                        " " + formatLength(clip.inset_left);
+      if (clip.inset_radius.unit != Unit::Px || clip.inset_radius.value != 0.0f)
+        out += " round " + formatLength(clip.inset_radius);
+      return out + ")";
+    }
+    case ClipPathSpec::Type::Circle:
+    case ClipPathSpec::Type::Ellipse: {
+      bool circle = clip.type == ClipPathSpec::Type::Circle;
+      std::string out = std::string(circle ? "circle(" : "ellipse(");
+      if (clip.radius_explicit) {
+        if (circle) out += formatLength(clip.radius_x);
+        else out += formatLength(clip.radius_x) + " " + formatLength(clip.radius_y);
+        out += " at ";
+      } else {
+        out += "at ";
+      }
+      out += formatLength(clip.center_x) + " " + formatLength(clip.center_y) + ")";
+      return out;
+    }
+    case ClipPathSpec::Type::Polygon: {
+      std::string out = "polygon(";
+      for (size_t i = 0; i + 1 < clip.polygon.size(); i += 2) {
+        if (i > 0) out += ", ";
+        out += formatLength(clip.polygon[i]) + " " + formatLength(clip.polygon[i + 1]);
+      }
+      return out + ")";
+    }
+  }
+  return "none";
+}
+
 std::string xt_style_property_to_string(const XtStyle &style, const std::string &rawProperty) {
   std::string property = xt_css_lower(xt_css_trim(rawProperty));
   static const char *const displayNames[] = {"none", "block", "inline", "inline-block", "flex",
@@ -131,6 +237,20 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "border-radius") return formatNumber(style.border_radius) + "px";
   if (property == "opacity") return formatNumber(style.opacity);
   if (property == "z-index") return style.has_z_index ? formatNumber((float)style.z_index) : "auto";
+  if (property == "content") return style.has_content ? quoteText(style.content) : "none";
+  if (property == "clip-path") return formatClipPath(style.clip_path);
+  if (property == "filter") return formatFilterList(style.filters);
+  if (property == "backdrop-filter") return formatFilterList(style.backdrop_filters);
+  if (property == "text-shadow") return formatTextShadows(style.text_shadow);
+  if (property == "background-image") {
+    if (style.background_layers.empty()) return "none";
+    std::string out;
+    for (const BackgroundLayer &layer : style.background_layers) {
+      if (!out.empty()) out += ", ";
+      out += layer.kind == BackgroundKind::Linear ? "linear-gradient()" : "radial-gradient()";
+    }
+    return out;
+  }
   if (property == "transform") return xt_transform_to_string(style.transform);
   if (property == "transform-origin") {
     return formatLength(style.transform_origin_x) + " " + formatLength(style.transform_origin_y);

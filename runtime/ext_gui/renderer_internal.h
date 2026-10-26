@@ -79,14 +79,21 @@ extern bool g_atlas_full_logged;
 
 /* -- geometry helpers ----------------------------------------------------- */
 
-void pushRect(std::vector<Vertex> &verts, const xtgui::PaintRect &rect);
-void pushGlyph(std::vector<TextVertex> &verts, float x, float y, float width, float height,
-               const GlyphEntry &entry, const xtgui::Color &color,
-               const xtgui::Matrix2D &transform);
-/** Push a textured quad, applying a `transform` matrix to its four corners. */
-void pushQuad(std::vector<TextVertex> &verts, const float corners_x[4], const float corners_y[4],
-              const float u[4], const float v[4], const xtgui::Color &color,
-              const xtgui::Matrix2D &transform);
+/** Push one rounded rectangle, clipped by the op's `clip-path` polygons (if
+ * any). Returns the number of vertices appended. */
+uint32_t pushShape(std::vector<Vertex> &verts, const xtgui::PaintRect &rect,
+                   const xtgui::PaintClip &clip, const xtgui::DisplayList &list);
+/** Push one glyph quad, clipped by `clip-path`. */
+uint32_t pushGlyph(std::vector<TextVertex> &verts, float x, float y, float width, float height,
+                   const GlyphEntry &entry, const xtgui::Color &color,
+                   const xtgui::Matrix2D &transform, const xtgui::PaintClip &clip,
+                   const xtgui::DisplayList &list);
+/** Push a textured quad, applying a `transform` matrix to its four corners and
+ * clipping it by `clip-path`. */
+uint32_t pushQuad(std::vector<TextVertex> &verts, const float corners_x[4],
+                  const float corners_y[4], const float u[4], const float v[4],
+                  const xtgui::Color &color, const xtgui::Matrix2D &transform,
+                  const xtgui::PaintClip &clip, const xtgui::DisplayList &list);
 void uploadVertices(SDL_GPUDevice *device, XtGuiGeometry *geometry, const void *data,
                     uint32_t count, uint32_t stride);
 

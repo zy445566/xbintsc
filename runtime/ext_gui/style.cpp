@@ -8,14 +8,34 @@
 
 #include "style_internal.h"
 
+#include "css_internal.h"
+
 #include <algorithm>
+#include <cctype>
 #include <climits>
+#include <cstdio>
 #include <unordered_map>
 #include <vector>
 
 namespace xtgui {
 
 XtStyle xt_style_initial() { return XtStyle(); }
+
+/* -- generated-content arena ---------------------------------------------- */
+
+void PseudoNodeSet::clear() { nodes_.clear(); }
+
+Node *PseudoNodeSet::create(Node *origin, PseudoElement side) {
+  auto node = std::make_unique<Node>(NodeType::Element);
+  node->is_pseudo = true;
+  node->pseudo = side;
+  node->pseudo_origin = origin;
+  node->parent = origin;
+  node->tag = side == PseudoElement::Before ? "::before" : "::after";
+  Node *raw = node.get();
+  nodes_.push_back(std::move(node));
+  return raw;
+}
 
 /* -- cascade -------------------------------------------------------------- */
 
@@ -130,26 +150,243 @@ void finalizeStyle(XtStyle *style, const ApplyContext &context) {
   }
 }
 
+void inheritFrom(XtStyle *style, const XtStyle *parent) {
+  /* Inherited properties start from the parent; everything else keeps its
+   * initial value until a declaration overrides it. */
+  style->color = parent->color;
+  style->visible = parent->visible;
+  style->pointer_events = parent->pointer_events;
+  style->variables = parent->variables;
+  style->font_size = parent->font_size;
+  style->font_weight = parent->font_weight;
+  style->font_family = parent->font_family;
+  style->font_style = parent->font_style;
+  style->line_height = parent->line_height;
+  style->text_align = parent->text_align;
+  style->white_space = parent->white_space;
+  style->text_shadow = parent->text_shadow;
+}
+
+bool ruleApplies(const Rule &rule, const ApplyContext &context) {
+  return rule.media.empty() ||
+         xt_css_media_matches(rule.media, context.viewportWidth, context.viewportHeight);
+}
+
+void applyCandidates(XtStyle *style, std::vector<Candidate> *candidates,
+                     const ApplyContext &nodeContext) {
+  std::stable_sort(candidates->begin(), candidates->end(), candidateBefore);
+  /* Custom properties participate in the cascade first; their final values are
+   * then available to every normal declaration on this element. */
+  for (const Candidate &candidate : *candidates) {
+    if (isCustomProperty(candidate.declaration->property)) {
+      style->variables[candidate.declaration->property] = candidate.declaration->value;
+    }
+  }
+  for (const Candidate &candidate : *candidates) {
+    if (isCustomProperty(candidate.declaration->property)) continue;
+    std::string value = candidate.declaration->value;
+    if (value.find("var(") != std::string::npos) {
+      std::string resolved;
+      if (!substituteVariables(value, style->variables, 0, &resolved)) continue;
+      value = resolved;
+    }
+    xt_style_apply_declaration(style, candidate.declaration->property, value, nodeContext);
+  }
+}
+
+/* -- generated content ---------------------------------------------------- */
+
+void appendUtf8(std::string *out, unsigned int codepoint) {
+  if (codepoint <= 0x7f) {
+    out->push_back((char)codepoint);
+  } else if (codepoint <= 0x7ff) {
+    out->push_back((char)(0xc0 | (codepoint >> 6)));
+    out->push_back((char)(0x80 | (codepoint & 0x3f)));
+  } else if (codepoint <= 0xffff) {
+    out->push_back((char)(0xe0 | (codepoint >> 12)));
+    out->push_back((char)(0x80 | ((codepoint >> 6) & 0x3f)));
+    out->push_back((char)(0x80 | (codepoint & 0x3f)));
+  } else {
+    out->push_back((char)(0xf0 | (codepoint >> 18)));
+    out->push_back((char)(0x80 | ((codepoint >> 12) & 0x3f)));
+    out->push_back((char)(0x80 | ((codepoint >> 6) & 0x3f)));
+    out->push_back((char)(0x80 | (codepoint & 0x3f)));
+  }
+}
+
+int hexValue(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+/** Decode a CSS string literal (without its quotes), honouring `\` escapes. */
+std::string decodeCssString(const std::string &text) {
+  std::string out;
+  for (size_t i = 0; i < text.size(); i++) {
+    if (text[i] != '\\' || i + 1 >= text.size()) {
+      out.push_back(text[i]);
+      continue;
+    }
+    i++;
+    int value = hexValue(text[i]);
+    if (value < 0) {
+      if (text[i] != '\n') out.push_back(text[i]);
+      continue;
+    }
+    unsigned int codepoint = (unsigned int)value;
+    size_t digits = 1;
+    while (digits < 6 && i + 1 < text.size() && hexValue(text[i + 1]) >= 0) {
+      i++;
+      digits++;
+      codepoint = codepoint * 16 + (unsigned int)hexValue(text[i]);
+    }
+    if (i + 1 < text.size() && xt_is_css_space(text[i + 1])) i++;
+    appendUtf8(&out, codepoint);
+  }
+  return out;
+}
+
+/** Resolve a `content` value into generated text. `*generated` is false for
+ * `content: none`/`normal`. `attr()` reads the originating element. */
+std::string resolveContent(const Node *origin, const std::string &raw, bool *generated) {
+  *generated = false;
+  std::string text;
+  std::string value = xt_css_trim(raw);
+  std::string lower = xt_css_lower(value);
+  if (lower == "none" || lower == "normal" || value.empty()) return "";
+  *generated = true;
+  size_t i = 0;
+  while (i < value.size()) {
+    char c = value[i];
+    if (xt_is_css_space(c) || c == ',') {
+      i++;
+      continue;
+    }
+    if (c == '"' || c == '\'') {
+      char quote = c;
+      size_t start = ++i;
+      while (i < value.size() && value[i] != quote) {
+        if (value[i] == '\\' && i + 1 < value.size()) i++;
+        i++;
+      }
+      text += decodeCssString(value.substr(start, i - start));
+      if (i < value.size()) i++;
+      continue;
+    }
+    if (c == '/') break;  // alternative text after the slash
+    size_t start = i;
+    while (i < value.size() && (std::isalnum((unsigned char)value[i]) || value[i] == '-' ||
+                                value[i] == '_'))
+      i++;
+    std::string token = xt_css_lower(value.substr(start, i - start));
+    while (i < value.size() && xt_is_css_space(value[i])) i++;
+    if (token == "none" || token == "normal") {
+      *generated = false;
+      return "";
+    }
+    if (token == "open-quote") text += "\"";
+    else if (token == "close-quote") text += "\"";
+    if (token == "attr" && i < value.size() && value[i] == '(') {
+      int depth = 0;
+      size_t open = i;
+      for (; i < value.size(); i++) {
+        if (value[i] == '(') depth++;
+        else if (value[i] == ')') {
+          depth--;
+          if (depth == 0) {
+            i++;
+            break;
+          }
+        }
+      }
+      std::string name = xt_css_trim(value.substr(open + 1, i - open - 2));
+      const std::string *attribute = origin != nullptr ? origin->attr(name) : nullptr;
+      if (attribute != nullptr) text += *attribute;
+      continue;
+    }
+    if (i < value.size() && value[i] == '(') {
+      /* Unsupported function (`counter`, `counters`, `url`, …): skip it. */
+      int depth = 0;
+      for (; i < value.size(); i++) {
+        if (value[i] == '(') depth++;
+        else if (value[i] == ')') {
+          depth--;
+          if (depth == 0) {
+            i++;
+            break;
+          }
+        }
+      }
+    }
+  }
+  return text;
+}
+
+void resetPseudoPointers(const Node *node) {
+  if (node->isElement() && !node->is_pseudo) {
+    const_cast<Node *>(node)->pseudo_before = nullptr;
+    const_cast<Node *>(node)->pseudo_after = nullptr;
+  }
+  for (const std::unique_ptr<Node> &child : node->children) resetPseudoPointers(child.get());
+}
+
+/** Compute one `::before`/`::after` style and attach its generated content. */
+void computePseudo(const Node *origin, PseudoElement side, const XtStyle &originStyle,
+                   const StyleSheet &sheet, std::unordered_map<const Node *, XtStyle> &out,
+                   const ApplyContext &context, const MatchState &state,
+                   PseudoNodeSet *pseudos) {
+  if (pseudos == nullptr || originStyle.display == Display::None) return;
+  Node *pseudo = pseudos->create(const_cast<Node *>(origin), side);
+  if (side == PseudoElement::Before) const_cast<Node *>(origin)->pseudo_before = pseudo;
+  else const_cast<Node *>(origin)->pseudo_after = pseudo;
+
+  XtStyle style = xt_style_initial();
+  inheritFrom(&style, &originStyle);
+  xt_style_apply_user_agent(pseudo, &style);
+
+  ApplyContext nodeContext = context;
+  nodeContext.parentFontSize = originStyle.font_size;
+
+  std::string pseudoName = side == PseudoElement::Before ? "before" : "after";
+  std::vector<Candidate> candidates;
+  for (const Rule &rule : sheet.rules) {
+    if (!ruleApplies(rule, nodeContext)) continue;
+    for (const ComplexSelector &selector : rule.selectors) {
+      if (selector.compounds.empty() || selector.compounds.back().pseudo_element != pseudoName)
+        continue;
+      /* Match the originating element against the selector with its final
+       * pseudo-element suffix removed: `.card.info::before` is `.card.info`. */
+      ComplexSelector copy = selector;
+      copy.compounds.back().pseudo_element.clear();
+      if (!xt_css_match(origin, copy, state)) continue;
+      for (const Declaration &declaration : rule.declarations) {
+        candidates.push_back({declaration.important ? 1 : 0, selector.specificity, rule.order,
+                              &declaration});
+      }
+    }
+  }
+  applyCandidates(&style, &candidates, nodeContext);
+  finalizeStyle(&style, nodeContext);
+
+  bool generated = false;
+  std::string text;
+  if (style.has_content) text = resolveContent(origin, style.content, &generated);
+  style.has_content = generated;
+  style.content = text;
+  out[pseudo] = style;
+  if (generated) pseudo->addText(text);
+}
+
 void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &sheet,
                  std::unordered_map<const Node *, XtStyle> &out, const ApplyContext &context,
-                 const MatchState &state) {
+                 const MatchState &state, PseudoNodeSet *pseudos) {
   const XtStyle *childParent = parent;
-  if (node->isElement()) {
+  if (node->isElement() && !node->is_pseudo) {
     XtStyle style = xt_style_initial();
     if (parent != nullptr) {
-      /* Inherited properties start from the parent; everything else keeps its
-       * initial value until a declaration overrides it. */
-      style.color = parent->color;
-      style.visible = parent->visible;
-      style.pointer_events = parent->pointer_events;
-      style.variables = parent->variables;
-      style.font_size = parent->font_size;
-      style.font_weight = parent->font_weight;
-      style.font_family = parent->font_family;
-      style.font_style = parent->font_style;
-      style.line_height = parent->line_height;
-      style.text_align = parent->text_align;
-      style.white_space = parent->white_space;
+      inheritFrom(&style, parent);
     } else {
       style.color = {0.0f, 0.0f, 0.0f, 1.0f};
     }
@@ -160,6 +397,7 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
 
     std::vector<Candidate> candidates;
     for (const Rule &rule : sheet.rules) {
+      if (!ruleApplies(rule, nodeContext)) continue;
       for (const ComplexSelector &selector : rule.selectors) {
         if (!xt_css_match(node, selector, state)) continue;
         for (const Declaration &declaration : rule.declarations) {
@@ -175,31 +413,17 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
         candidates.push_back({declaration.important ? 1 : 0, 1 << 28, INT_MAX, &declaration});
       }
     }
-    std::stable_sort(candidates.begin(), candidates.end(), candidateBefore);
-    /* Custom properties participate in the cascade first; their final values
-     * are then available to every normal declaration on this element. */
-    for (const Candidate &candidate : candidates) {
-      if (isCustomProperty(candidate.declaration->property)) {
-        style.variables[candidate.declaration->property] = candidate.declaration->value;
-      }
-    }
-    for (const Candidate &candidate : candidates) {
-      if (isCustomProperty(candidate.declaration->property)) continue;
-      std::string value = candidate.declaration->value;
-      if (value.find("var(") != std::string::npos) {
-        std::string resolved;
-        if (!substituteVariables(value, style.variables, 0, &resolved)) continue;
-        value = resolved;
-      }
-      xt_style_apply_declaration(&style, candidate.declaration->property, value, nodeContext);
-    }
+    applyCandidates(&style, &candidates, nodeContext);
     finalizeStyle(&style, nodeContext);
 
     out[node] = style;
     childParent = &out[node];
+    const XtStyle &computed = out[node];
+    computePseudo(node, PseudoElement::Before, computed, sheet, out, context, state, pseudos);
+    computePseudo(node, PseudoElement::After, computed, sheet, out, context, state, pseudos);
   }
   for (const std::unique_ptr<Node> &child : node->children) {
-    computeNode(child.get(), childParent, sheet, out, context, state);
+    computeNode(child.get(), childParent, sheet, out, context, state, pseudos);
   }
 }
 
@@ -207,12 +431,16 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
 
 void xt_style_compute(const Node *root, const StyleSheet &sheet,
                       std::unordered_map<const Node *, XtStyle> &out, float viewportWidth,
-                      float viewportHeight, const MatchState &state) {
+                      float viewportHeight, const MatchState &state, PseudoNodeSet *pseudos) {
   out.clear();
+  if (pseudos != nullptr && root != nullptr) {
+    resetPseudoPointers(root);
+    pseudos->clear();
+  }
   ApplyContext context;
   context.viewportWidth = viewportWidth;
   context.viewportHeight = viewportHeight;
-  computeNode(root, nullptr, sheet, out, context, state);
+  computeNode(root, nullptr, sheet, out, context, state, pseudos);
 }
 
 }  // namespace xtgui

@@ -11,28 +11,43 @@ comments and doctype skipped, entity decoding (named + numeric/hex), void
 elements, raw-text elements (`<style>`/`<script>`), and the common implicit
 close rules (`li`, `dt`/`dd`, `option`, `p`, headings, table cells/rows).
 
-**CSS parser** (`runtime/ext_gui/css.{h,cpp}`): comments and at-rules skipped
-(for now), rules with multiple selectors, and declarations. Selectors: type,
-`.class`, `#id`, attribute (`=`, `~=`, `|=`, `^=`, `$=`, `*=`), the four
-combinators (descendant, child, adjacent and general sibling) and the
-pseudo-classes `:first-child`, `:last-child`, `:only-child`, `:empty`,
-`:root`, `:not(...)`, `:nth-child(an+b)`, `:disabled`, `:checked`, plus the
-stateful `:hover` and `:focus` (see [Input](./input.md)). Values:
-lengths (`px`, `%`, `em`, `rem`, `vw`, `vh`, `pt`, `pc`, `in`, `cm`, `mm`, `q`),
-colors (hex, `rgb()`/`rgba()`, a named subset), numbers, keywords and shorthands
-(`margin`/`padding`/`border`/`flex`). `transform` (`translate`/`translate3d`/
-`translateX`/`translateY`, `scale`/`scale3d`/`scaleX`/`scaleY`, `rotate`/
-`rotateZ`, `matrix`; the `3d` spellings' `z` argument is dropped) and
-`transform-origin` are parsed into the computed style as a list of operations
-plus two (unresolved) origin lengths; an unsupported function invalidates the
-whole declaration ([Layout](./layout.md#transforms-m15)).
+**CSS parser** (`runtime/ext_gui/css.{h,cpp}`): comments are stripped; `@media`
+blocks are parsed recursively (nested queries combine with `and`, and a comma
+list distributes over the inner query) while other at-rules are skipped. Rules
+support multiple selectors and declarations. Selectors: type, `.class`, `#id`,
+attribute (`=`, `~=`, `|=`, `^=`, `$=`, `*=`), the four combinators
+(descendant, child, adjacent and general sibling), the pseudo-classes
+`:first-child`, `:last-child`, `:only-child`, `:empty`, `:root`, `:not(...)`,
+`:nth-child(an+b)`, `:disabled`, `:checked`, plus the stateful `:hover` and
+`:focus` (see [Input](./input.md)), and the pseudo-elements `::before`/`::after`
+(legacy `:before`/`:after` too). Values: lengths (`px`, `%`, `em`, `rem`, `vw`,
+`vh`, `pt`, `pc`, `in`, `cm`, `mm`, `q`), colors (hex, `rgb()`/`rgba()`, a named
+subset), numbers, keywords and shorthands (`margin`/`padding`/`border`/`flex`).
+`transform` (`translate`/`translate3d`/`translateX`/`translateY`, `scale`/
+`scale3d`/`scaleX`/`scaleY`, `rotate`/`rotateZ`, `matrix`; the `3d` spellings'
+`z` argument is dropped) and `transform-origin` are parsed into the computed
+style as a list of operations plus two (unresolved) origin lengths; an
+unsupported function invalidates the whole declaration
+([Layout](./layout.md#transforms-m15)). M19 adds `background-image` layer lists
+(linear/radial), `clip-path` (`inset`/`circle`/`ellipse`/`polygon`), the
+`filter`/`backdrop-filter` function lists, `text-shadow` and `content`.
 
 **Cascade & computed style** (`runtime/ext_gui/style.{h,cpp}`): a small built-in
 UA stylesheet, author rules sorted by `(!important, specificity, source order)`,
 then inline `style=""` (highest specificity, but non-`!important` inline loses to
-`!important`), plus CSS inheritance of the text properties. Relative lengths are
-kept unresolved until layout, except `font-size` (resolved against the *parent*
-font size) and `line-height`.
+`!important`), plus CSS inheritance of the text properties. `@media` rules are
+filtered against the current viewport on every restyle, so a resize switches
+them. Relative lengths are kept unresolved until layout, except `font-size`
+(resolved against the *parent* font size) and `line-height`.
+
+`::before`/`::after` styles are computed after their originating element: the
+selector's last compound must name the pseudo-element, and the rest of the
+selector is matched against the origin (so `.card.info::before` works). The
+pseudo style inherits the origin's computed style, `content` is resolved
+(strings, escapes, `attr()`, quotes), and a synthetic node is placed in a
+per-restyle arena. Layout inserts its box before/after the real children;
+traversal, queries, `innerHTML` and `elementIndex()` never see it, and hit
+testing targets the origin element.
 
 ## Interactive DOM (M8)
 

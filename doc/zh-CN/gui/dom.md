@@ -12,12 +12,14 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 （`<style>`/`<script>`），以及常见的隐式闭合规则（`li`、`dt`/`dd`、`option`、
 `p`、标题、表格单元格/行）。
 
-**CSS 解析器**（`runtime/ext_gui/css.{h,cpp}`）：注释与 at-rule 暂时跳过，
-支持多选择器的规则以及声明。选择器：类型、`.class`、`#id`、属性
+**CSS 解析器**（`runtime/ext_gui/css.{h,cpp}`）：会剥离注释；`@media` 块递归解析
+（嵌套查询用 `and` 合并，逗号列表会分配到内层查询），其他 at-rule 跳过。规则支持
+多选择器与声明。选择器：类型、`.class`、`#id`、属性
 （`=`、`~=`、`|=`、`^=`、`$=`、`*=`）、四种组合器（后代、子、相邻兄弟与
-通用兄弟）以及伪类 `:first-child`、`:last-child`、`:only-child`、`:empty`、
-`:root`、`:not(...)`、`:nth-child(an+b)`、`:disabled`、`:checked`，再加上
-有状态的 `:hover` 与 `:focus`（见[输入](./input.md)）。值：长度
+通用兄弟）、伪类 `:first-child`、`:last-child`、`:only-child`、`:empty`、
+`:root`、`:not(...)`、`:nth-child(an+b)`、`:disabled`、`:checked`、有状态的
+`:hover` 与 `:focus`（见[输入](./input.md)），以及伪元素
+`::before`/`::after`（也接受旧式 `:before`/`:after`）。值：长度
 （`px`、`%`、`em`、`rem`、`vw`、`vh`、`pt`、`pc`、`in`、`cm`、`mm`、`q`）、
 颜色（十六进制、`rgb()`/`rgba()`、一个命名子集）、数字、关键字与简写
 （`margin`/`padding`/`border`/`flex`）。`transform`
@@ -25,13 +27,24 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 `scale`/`scale3d`/`scaleX`/`scaleY`、`rotate`/`rotateZ`、`matrix`；`3d`
 拼写的 `z` 参数会被丢弃）与 `transform-origin`
 会被解析进计算样式：前者是操作列表，后者是两个（未解析的）原点长度；不支持的
-函数会让整条声明失效（见[布局](./layout.md#变换m15)）。
+函数会让整条声明失效（见[布局](./layout.md#变换m15)）。M19 增加了
+`background-image` 层列表（线性/径向）、`clip-path`
+（`inset`/`circle`/`ellipse`/`polygon`）、`filter`/`backdrop-filter` 函数列表、
+`text-shadow` 与 `content`。
 
 **层叠与计算样式**（`runtime/ext_gui/style.{h,cpp}`）：一份小的内置 UA
 样式表，作者规则按 `(!important, 特异性, 源码顺序)` 排序，然后是内联
 `style=""`（特异性最高，但非 `!important` 的内联会输给 `!important`），
-再加上文本属性的 CSS 继承。相对长度保持未解析状态直到布局阶段，`font-size`
+再加上文本属性的 CSS 继承。每次重算样式都会按当前视口过滤 `@media` 规则，
+因此调整窗口大小会切换它们。相对长度保持未解析状态直到布局阶段，`font-size`
 除外（相对*父级*字号解析）以及 `line-height`。
+
+`::before`/`::after` 的样式在原始元素之后计算：选择器最后一个复合选择器必须写
+伪元素，其余部分对原始元素匹配（因此 `.card.info::before` 可用）。伪样式继承
+原始元素的计算样式，`content` 会被解析（字符串、转义、`attr()`、引号），
+生成的合成节点存放在每次重算样式时重建的 arena 中。布局把它的盒子插在真实子元素
+之前/之后；遍历、查询、`innerHTML` 与 `elementIndex()` 永远看不到它，命中测试
+则指向原始元素。
 
 ## 交互式 DOM（M8）
 

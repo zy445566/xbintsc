@@ -45,6 +45,39 @@ std::vector<std::string> xt_css_split_whitespace(const std::string &text) {
   return parts;
 }
 
+std::vector<std::string> xt_css_split_commas(const std::string &text) {
+  std::vector<std::string> parts;
+  std::string current;
+  int depth = 0;
+  char quote = 0;
+  for (char c : text) {
+    if (quote != 0) {
+      current.push_back(c);
+      if (c == quote) quote = 0;
+      continue;
+    }
+    if (c == '"' || c == '\'') {
+      quote = c;
+      current.push_back(c);
+    } else if (c == '(' || c == '[') {
+      depth++;
+      current.push_back(c);
+    } else if (c == ')' || c == ']') {
+      if (depth > 0) depth--;
+      current.push_back(c);
+    } else if (c == ',' && depth == 0) {
+      std::string part = xt_css_trim(current);
+      if (!part.empty()) parts.push_back(part);
+      current.clear();
+    } else {
+      current.push_back(c);
+    }
+  }
+  std::string part = xt_css_trim(current);
+  if (!part.empty()) parts.push_back(part);
+  return parts;
+}
+
 /* -- numbers / lengths / colors ------------------------------------------- */
 
 bool xt_css_parse_number(const std::string &value, float *out) {

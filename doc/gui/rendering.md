@@ -10,8 +10,9 @@ emits a backend-agnostic `DisplayList`: a painter-order `ops` list of
 **rectangles** (backgrounds and four solid border edges, with `border-radius`),
 **text runs** (each carrying its text, colour and resolved `FontSpec`) and
 **images**, backed by parallel payload arrays. Each op also carries the active
-clip rectangle (the padding box of the nearest `overflow: hidden` ancestor), so
-`overflow` clipping and `z-index` ordering survive into the renderer.
+clip rectangle (the padding box of the nearest `overflow: hidden` ancestor) and
+up to two indices into the display list's triangulated `clip-path` polygons, so
+`overflow`/`clip-path` clipping and `z-index` ordering survive into the renderer.
 `DisplayList::dump()` feeds `paintList()`/`paintCount()`.
 
 `opacity` is honoured only at its extremes: a box whose computed `opacity` is
@@ -73,14 +74,53 @@ divided back into logical units, exactly the way HiDPI scaling already worked.
 
 The window background (`setBackground`) is the render-pass clear colour.
 
-Linear-gradient `background` / `background-image` values are painted as a base
-layer: the last `linear-gradient(...)` in the shorthand is sampled at 18 points
-and emitted as solid rectangles (the renderer has no gradient shader). A
-translucent gloss layer and radial gradients are not composited, so a panel that
-stacks several decorative layers keeps only its base colour. Multi-stop colours,
-angles and percentage stops are supported.
-Still to do in M4: radial gradients, multiple background layers and
-`background-clip`.
+### Backgrounds, generated content and effects (M19)
+
+`background-color` and every `background-image` layer are painted. A
+comma-separated layer list is painted bottom-up (the first declaration layer is
+topmost), and both gradient kinds are supported:
+
+- a **linear** gradient is sampled at 18 points and emitted as solid rectangles;
+  `to <side>`, `deg`/`grad`/`rad`/`turn`, percentage and multi-stop colours work
+  (the band walk is axis-aligned, so an oblique angle uses the nearest axis);
+- a **radial** gradient is 32 concentric ellipses. Each is a unit-radius rounded
+  rectangle mapped through the shape pipeline's transform slot, so a circle or
+  ellipse keeps the distance-field antialiasing. Shape/size keywords
+  (`circle`/`ellipse`, `closest-side`/`farthest-side`/`closest-corner`/
+  `farthest-corner`, explicit radii) and `at <position>` are parsed.
+
+The background colour sits under every layer. Gradients are partially
+transparent if their stops are, and the band approximation can show banding and
+alpha stacking on a very translucent multi-stop gradient.
+
+**Generated content** needs no new display-list kind: `::before`/`::after` are
+ordinary layout boxes owned by the per-restyle arena in `style.cpp`, so their
+background, border, text and transforms flow through the same paint walk.
+`content` is resolved from strings, `attr()` and open/close quotes.
+
+**`text-shadow`** is emitted as shadow `PaintText` runs *before* the real run, so
+the text pipeline draws them without a new shader. A blurred shadow is nine
+translucent copies spread around the offset (the same approximation `filter:
+blur()` uses).
+
+**`clip-path`** is resolved in `paint_clip.cpp` to a device-space polygon (the
+box transform is applied to every point), triangulated with ear clipping, and
+stored on `DisplayList::clip_paths`. Ops carry up to two path indices on their
+`PaintClip`; `renderer_clip.cpp` intersects each convex shape/glyph/image quad
+with those triangles at upload time. The result is exact even for concave
+`polygon()` shapes, needs no stencil or shader change, and the edges are hard
+(no analytic antialiasing). Intersecting two nested paths is supported; deeper
+nesting keeps the outermost two.
+
+**`filter`** colour functions (`brightness`, `contrast`, `grayscale`, `sepia`,
+`invert`, `saturate`, `hue-rotate`, `opacity`) are folded into each painted
+colour, so a box and its descendants see the filter. `blur()` and
+`drop-shadow()` are approximations at the display-list level: blur spreads nine
+translucent copies per shape, drop-shadow is a box/text silhouette. This keeps
+the single render pass — there is no offscreen render target — at the cost of
+group semantics: overlapping descendants of a blurred/filtered group can darken,
+and `backdrop-filter` cannot sample what is behind the element, so it parses and
+cascades but paints nothing.
 
 ## Text stack (M4b)
 

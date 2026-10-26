@@ -320,14 +320,14 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   if (scale <= 0.0f) scale = 1.0f;
   std::vector<TextVertex> verts;
   verts.reserve(list.images.size() * 6);
-  xtgui::Color white{1.0f, 1.0f, 1.0f, 1.0f};
   GlyphEntry full;
   full.u0 = 0.0f;
   full.v0 = 0.0f;
   full.u1 = 1.0f;
   full.v1 = 1.0f;
-  for (size_t index = 0; index < list.images.size(); index++) {
-    const xtgui::PaintImage &image = list.images[index];
+  for (const xtgui::PaintOp &op : list.ops) {
+    if (op.kind != xtgui::PaintKind::Image || op.index >= list.images.size()) continue;
+    const xtgui::PaintImage &image = list.images[op.index];
     if (image.width <= 0.0f || image.height <= 0.0f) continue;
     /* Draw-time device pixels: an SVG (file or inline) is rasterised at this
      * size so it stays crisp on HiDPI and when scaled. */
@@ -346,10 +346,10 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
       texture = ensureImageTexture(device, image.src, pixel_width, pixel_height);
     }
     if (texture == nullptr) continue;
-    pushGlyph(verts, image.x, image.y, image.width, image.height, full, white,
-              image.transform);
-    geometry->op_counts[index] = 6;
-    geometry->op_textures[index] = texture;
+    uint32_t count = pushGlyph(verts, image.x, image.y, image.width, image.height, full,
+                               image.tint, image.transform, op.clip, list);
+    geometry->op_counts[op.index] = count;
+    geometry->op_textures[op.index] = texture;
   }
   uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex));
 }

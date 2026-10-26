@@ -272,7 +272,7 @@ void xt_gui_render_window(XtGuiWindow *win) {
   bool can_paint = xt_gui_renderer_ensure(g_device, win->window);
   if (can_paint && win->geometry.dirty && win->document != nullptr) {
     xtgui::DisplayList list;
-    xtgui::xt_paint_build(win->document->layout().root(), list);
+    xtgui::xt_paint_build(win->document->layout().root(), list, viewport_width, viewport_height);
     xt_gui_geometry_upload(g_device, &win->geometry, list);
     float density = SDL_GetWindowPixelDensity(win->window);
     float text_scale = density > 0.0f ? density : 1.0f;

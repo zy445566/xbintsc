@@ -7,9 +7,20 @@ struct XtStyle;
 
 namespace xtgui {
 
-/** Apply the gradient half of `background` / `background-image`; returns false
- * when the value has no linear gradient so the caller can parse a solid colour. */
-bool xt_style_apply_gradient(XtStyle *style, const std::string &value);
+/** Apply `background-image` (a comma-separated layer list). */
+void xt_style_apply_background_image(XtStyle *style, const std::string &value);
+
+/** Apply the `background` shorthand (layers plus an optional final colour). */
+void xt_style_apply_background(XtStyle *style, const std::string &value);
+
+/** Apply `filter` / `backdrop-filter` / `text-shadow` / `content`; returns false
+ * for unrelated properties. */
+bool xt_style_apply_effect(XtStyle *style, const std::string &property,
+                           const std::string &value);
+
+/** Apply `clip-path`; returns false for an unrelated property. */
+bool xt_style_apply_clip_path(XtStyle *style, const std::string &property,
+                              const std::string &value);
 
 /** Apply a grid/alignment declaration; returns false for unrelated properties. */
 bool xt_style_apply_grid_property(XtStyle *style, const std::string &property,

@@ -37,12 +37,17 @@
 - **`display: none -> flex` 的重排。** 通过类名切换让隐藏元素显示在 flex 容器上时，也曾观察
   到同样的崩溃；`examples/gui/pelican-bike` 改用 `opacity` 显示游戏结束遮罩。
 - **CSS 覆盖范围是有意为之的子集。** 已实现 Grid、`clamp()`/`min()`/`max()`/`env()`、
-  `var()` 自定义属性、`inset` 简写、`box-sizing`、`visibility`/`pointer-events`
-  以及线性渐变背景。仍未实现：伪元素（`::before`/`::after`）、`clip-path`、
-  `filter`/`backdrop-filter`、`mix-blend-mode`、`text-shadow`、径向/多层背景，
-  以及 `@media` 块（解析器会跳过 at-rule）。这些属性会被忽略而不是近似实现，
-  因此装饰效果可能缺失，但布局与文字仍然正确。Canvas 纹理使用最近邻采样，
-  多层 `background` 只绘制一层基础线性渐变（18 条纯色带），不是完整的合成栈。
+  `var()` 自定义属性、`inset` 简写、`box-sizing`、`visibility`/`pointer-events`、
+  `@media` 查询、生成内容（`::before`/`::after`）、线性/径向多层背景、
+  `text-shadow`、`clip-path`（`inset`/`circle`/`ellipse`/`polygon`）以及 `filter`
+  的颜色函数。仍有限制：`mix-blend-mode`、`background-clip`、
+  `background-position`/`size`/`repeat`、重复渐变与 `backdrop-filter` 合成都未实现
+  （`backdrop-filter` 会解析并参与层叠，但采样背景需要离屏图层，因此不绘制）；
+  `filter: blur()` 是按图形做九次偏移的近似，而不是真正的组模糊，重叠的子元素会加深；
+  `drop-shadow` 用盒子轮廓近似；最多只交叉两层嵌套 `clip-path`（更深时保留外侧两层）；
+  图像/画布除图像着色器能携带的亮度与透明度染色外不做颜色滤镜。Canvas 纹理使用
+  最近邻采样。背景渐变仍是纯色带（线性 18 条、径向 32 个同心椭圆），柔和渐变可能
+  出现轻微条带。
 - **SVG 是 NanoSVG 的子集。** SVG *文件*（`<img src="logo.svg">`）与内联
   `<svg>` 子树共用 vendored 的 NanoSVG 解析/光栅化器（`runtime/ext_gui/svg.cpp`、
   `inline_svg.cpp`），它会渲染 `path`/`rect`/`circle`/`ellipse`/`line`/

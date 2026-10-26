@@ -47,7 +47,7 @@ void XtDocument::restyle(float viewportWidth, float viewportHeight) {
     MatchState state;
     state.hover = hover_;
     state.focus = focus_;
-    xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight, state);
+    xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight, state, &pseudos_);
     startTransitions();
     updateDisplay();
   }
@@ -124,6 +124,9 @@ void XtDocument::startTransitions() {
   for (auto &entry : styles_) {
     const Node *node = entry.first;
     const XtStyle &target = entry.second;
+    /* Generated boxes are rebuilt on every restyle; a transition keyed by one
+     * would address a node that no longer exists. */
+    if (node->is_pseudo) continue;
     if (target.transitions.empty()) continue;
     auto prev_it = display_.find(node);
     if (prev_it == display_.end()) continue;

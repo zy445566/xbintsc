@@ -83,7 +83,11 @@ handles expose `canvas` drawing plus `width`/`height`. CSS
 `transform`/`transform-origin` work as paint-time effects, so a box (and the
 text, images and children in it) can be translated, scaled and rotated without
 reflowing anything — animate it per frame from `requestAnimationFrame` or with
-`transition: transform` (see `examples/gui/pelican-svg`). If the archive is
+`transition: transform` (see `examples/gui/pelican-svg`). The CSS subset also
+covers `@media`, `::before`/`::after` generated content, multi-layer linear/radial
+backgrounds, `text-shadow`, `clip-path` and `filter` colour/shadow effects;
+`backdrop-filter` and true group blur are documented approximations or
+unsupported. If the archive is
 missing for your platform, the build fails with an actionable message; design
 and roadmap live in [../gui.md](../gui.md) (overview; the engine is documented by
 function under [`doc/gui/`](../gui/)), and the scripting surface in

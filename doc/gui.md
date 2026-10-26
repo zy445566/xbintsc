@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M18** — features (M1–M15) are complete: HTML parsing, CSS selector
+Status: **M19** — features (M1–M15) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -36,6 +36,11 @@ them) can be translated, scaled and rotated without reflowing anything — and
 [Layout](./gui/layout.md#transforms-m15) and
 [Animation](./gui/animation.md#css-transforms-m15).
 **M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md).
+**M19** fills in the decorative CSS layer: `@media` queries, generated content
+(`::before`/`::after`), multi-layer linear/radial backgrounds, `text-shadow`,
+`clip-path` and the `filter` colour/shadow effects. `backdrop-filter` and true
+group blur need an offscreen compositor and remain documented approximations or
+unsupported — see [Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19).
 This overview records the locked decisions, the architecture, the milestone plan
 and the current progress; the engine itself is documented by function in the
 pages above.
@@ -312,6 +317,24 @@ engine were Rust.
       [WebGL](./gui/webgl.md); e2e in `tests/e2e/gui-webgl2.test.ts` and
       `tests/e2e/gui-example-webgl2.test.ts`, demo in
       `examples/gui/webgl2-cubes`.
+19. **M19 — decorative CSS** ✅
+    - `@media` blocks are parsed recursively and evaluated against the viewport
+      (width/height ranges, orientation, hover/pointer and preference features);
+      `matchMedia()` uses the same evaluator.
+    - Generated content: `::before`/`::after` selectors, inherited pseudo styles,
+      `content` strings/escapes/`attr()`, and synthetic layout boxes that never
+      leak into DOM traversal.
+    - Multi-layer `background-image` with linear and radial gradients, painted
+      bottom-up as solid bands (18 strips / 32 concentric ellipses).
+    - `text-shadow` as shadow text runs, including a nine-tap blur approximate.
+    - `clip-path` polygons (`inset`/`circle`/`ellipse`/`polygon`) resolved to
+      device space, ear-clipped and intersected with shape geometry in
+      `renderer_clip.cpp` — no stencil/shader change.
+    - `filter` colour functions, nine-tap `blur()` and silhouette
+      `drop-shadow()`; `backdrop-filter` parses and cascades but needs an
+      offscreen backdrop pass (see [Known issues](./gui/known-issues.md)).
+    - E2E coverage in `tests/e2e/gui-effects.test.ts`; see
+      [Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19).
 
 ## Progress log
 
@@ -448,4 +471,14 @@ engine were Rust.
   sprites, lines, points and instancing); the Canvas2D fallback was removed.
   Demo: `examples/gui/webgl2-cubes` (64 cubes, one instanced draw call);
   e2e: `tests/e2e/gui-webgl2.test.ts`, `tests/e2e/gui-example-webgl2.test.ts`.
+- **M19** ✅ decorative CSS. `css_sheet.cpp` now parses nested `@media` blocks and
+  `media_query.cpp` evaluates them (and `matchMedia`) against the viewport;
+  `css_selector.cpp` understands `::before`/`::after`. `style.cpp` computes
+  pseudo styles into a per-restyle arena, resolves `content`, and layout inserts
+  their boxes before/after the DOM children. `gradient_values.cpp` models a
+  background layer list (linear/radial, shape/size/position/stops),
+  `paint_background.cpp` paints it, `paint_effects.cpp` applies filter colour
+  functions plus nine-tap blur/drop-shadow and emits `text-shadow` runs, and
+  `paint_clip.cpp`/`renderer_clip.cpp` clip geometry against triangulated
+  `clip-path` polygons. E2E: `tests/e2e/gui-effects.test.ts`.
 

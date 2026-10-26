@@ -39,35 +39,6 @@ bool g_atlas_dirty = false;
 int g_atlas_dirty_x0 = 0, g_atlas_dirty_y0 = 0, g_atlas_dirty_x1 = 0, g_atlas_dirty_y1 = 0;
 bool g_atlas_full_logged = false;
 
-void pushRect(std::vector<Vertex> &verts, const xtgui::PaintRect &rect) {
-  float hw = rect.width * 0.5f;
-  float hh = rect.height * 0.5f;
-  float cx = rect.x + hw;
-  float cy = rect.y + hh;
-  float radius = std::min(rect.radius, std::min(hw, hh));
-
-  const float local_x[4] = {-hw, hw, hw, -hw};
-  const float local_y[4] = {-hh, -hh, hh, hh};
-  Vertex corners[4];
-  for (int i = 0; i < 4; i++) {
-    /* `local` keeps the distance-field coordinates in the box's own frame, so
-     * a rotated/scaled shape still gets a rounded rectangle (the radius scales
-     * with the matrix instead of staying circular). */
-    rect.transform.apply(cx + local_x[i], cy + local_y[i], &corners[i].x, &corners[i].y);
-    corners[i].lx = local_x[i];
-    corners[i].ly = local_y[i];
-    corners[i].hx = hw;
-    corners[i].hy = hh;
-    corners[i].radius = radius;
-    corners[i].r = rect.color.r;
-    corners[i].g = rect.color.g;
-    corners[i].b = rect.color.b;
-    corners[i].a = rect.color.a;
-  }
-  static const int order[6] = {0, 1, 2, 0, 2, 3};
-  for (int i = 0; i < 6; i++) verts.push_back(corners[order[i]]);
-}
-
 /** Upload `count` vertices (of `stride` bytes) into `geometry`, reusing or
  * growing its GPU buffer. Does nothing when `count` is zero. */
 void uploadVertices(SDL_GPUDevice *device, XtGuiGeometry *geometry, const void *data,
@@ -277,8 +248,14 @@ void xt_gui_geometry_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   using namespace xtgui::renderer_detail;
   std::vector<Vertex> verts;
   verts.reserve(list.rects.size() * 6);
-  geometry->op_counts.assign(list.rects.size(), 6);
-  for (const xtgui::PaintRect &rect : list.rects) pushRect(verts, rect);
+  geometry->op_counts.assign(list.rects.size(), 0);
+  /* Walk painter order so each rectangle carries its op's clip path. */
+  for (const xtgui::PaintOp &op : list.ops) {
+    if (op.kind != xtgui::PaintKind::Rect || op.index >= list.rects.size()) continue;
+    uint32_t before = (uint32_t)verts.size();
+    pushShape(verts, list.rects[op.index], op.clip, list);
+    geometry->op_counts[op.index] = (uint32_t)verts.size() - before;
+  }
   uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(Vertex));
 }
 

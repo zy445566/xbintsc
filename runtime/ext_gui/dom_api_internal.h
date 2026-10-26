@@ -29,6 +29,14 @@ extern xt_value g_class_list_proto;
 extern xt_value g_style_proto;
 extern xt_value g_canvas_proto;
 extern xt_value g_canvas_gradient_proto;
+extern xt_value g_webgl_proto;
+extern xt_value g_webgl_buffer_proto;
+extern xt_value g_webgl_texture_proto;
+extern xt_value g_webgl_shader_proto;
+extern xt_value g_webgl_program_proto;
+extern xt_value g_webgl_framebuffer_proto;
+extern xt_value g_webgl_renderbuffer_proto;
+extern xt_value g_webgl_uniform_proto;
 
 xt_value node_proto();
 xt_value document_proto();
@@ -37,6 +45,10 @@ xt_value class_list_proto();
 xt_value style_proto();
 xt_value canvas_proto();
 xt_value canvas_gradient_proto();
+xt_value webgl_proto();
+/** The prototype a WebGL object of `kind` inherits (`buffer`, `texture`, …),
+ * so `buffer instanceof WebGLBuffer` holds. */
+xt_value webgl_object_proto(const std::string &kind);
 
 /** Create/return the 2D context for a pending `<canvas>` handle (before load). */
 xt_value xt_canvas_pending_context(xt_value self, XtGuiWindow *win);
@@ -53,6 +65,32 @@ xt_value canvas_gradient_handle(xt_value context, const xtgui::Canvas2D *canvas,
 /** The gradient id stored on a handle, or 0 when it is not a gradient for
  * `canvas` (stale or created by another canvas). */
 uint64_t canvas_gradient_id(xt_value handle, const xtgui::Canvas2D *canvas);
+
+/* -- WebGL helpers shared by `dom_api_webgl*.cpp` ------------------------- */
+
+/** The engine WebGL context behind a context handle, or null. */
+xtgui::WebGLContext *webgl_from_context(xt_value self);
+/** The numeric context id stored on a context handle (0 when absent). */
+uint64_t webgl_context_id(xt_value self);
+/** Create the JavaScript handle for a canvas's WebGL context. */
+xt_value webgl_context_handle(xt_value element, xtgui::WebGLContext *context);
+/** The id stored on an object handle under `key`, or 0. */
+uint32_t webgl_object_id(xt_value handle, const char *key);
+/** Build an object handle (`{__xt_gl_context, __xt_gl_<key>}`). */
+xt_value webgl_make_object(xt_value context, const char *key, uint32_t id,
+                           const std::string &kind);
+double webgl_number(int32_t argc, xt_value *argv, int32_t index, double fallback);
+int webgl_int(int32_t argc, xt_value *argv, int32_t index, int fallback);
+std::string webgl_string(int32_t argc, xt_value *argv, int32_t index);
+/** Read an array/typed array of numbers. */
+std::vector<double> webgl_numbers(xt_value value);
+/** Read the raw bytes of a typed array / ArrayBuffer (or a byte array). */
+std::vector<uint8_t> webgl_bytes(xt_value value);
+/** Store `count` bytes into a typed array / array handle. */
+void webgl_write_bytes(xt_value target, const uint8_t *bytes, size_t count);
+/** Read the `UNPACK_FLIP_Y_WEBGL` / `UNPACK_PREMULTIPLY_ALPHA_WEBGL` flags set
+ * through `pixelStorei`. */
+void webgl_unpack_flags(xt_value context, bool *flip_y, bool *premultiply);
 
 /** How a pending handle names the node it will bind to. */
 enum PendingKind { pending_by_id = 1, pending_by_selector = 2 };
@@ -259,6 +297,141 @@ METHOD(class_list_contains);
 METHOD(style_set_property);
 METHOD(style_get_property_value);
 METHOD(style_remove_property);
+
+/* WebGL context: state and queries */
+METHOD(webgl_canvas_get);
+METHOD(webgl_drawing_buffer_width_get);
+METHOD(webgl_drawing_buffer_height_get);
+METHOD(webgl_enable);
+METHOD(webgl_disable);
+METHOD(webgl_is_enabled);
+METHOD(webgl_clear);
+METHOD(webgl_clear_color);
+METHOD(webgl_clear_depth);
+METHOD(webgl_clear_stencil);
+METHOD(webgl_color_mask);
+METHOD(webgl_depth_func);
+METHOD(webgl_depth_mask);
+METHOD(webgl_depth_range);
+METHOD(webgl_blend_color);
+METHOD(webgl_blend_equation);
+METHOD(webgl_blend_equation_separate);
+METHOD(webgl_blend_func);
+METHOD(webgl_blend_func_separate);
+METHOD(webgl_cull_face);
+METHOD(webgl_front_face);
+METHOD(webgl_viewport);
+METHOD(webgl_scissor);
+METHOD(webgl_finish);
+METHOD(webgl_flush);
+METHOD(webgl_hint);
+METHOD(webgl_line_width);
+METHOD(webgl_polygon_offset);
+METHOD(webgl_sample_coverage);
+METHOD(webgl_pixel_storei);
+METHOD(webgl_get_error);
+METHOD(webgl_get_parameter);
+METHOD(webgl_get_supported_extensions);
+METHOD(webgl_get_extension);
+METHOD(webgl_get_context_attributes);
+METHOD(webgl_is_context_lost);
+METHOD(webgl_stencil_func);
+METHOD(webgl_stencil_func_separate);
+METHOD(webgl_stencil_op);
+METHOD(webgl_stencil_op_separate);
+METHOD(webgl_stencil_mask);
+METHOD(webgl_stencil_mask_separate);
+METHOD(webgl_get_shader_precision_format);
+
+/* WebGL shaders, programs and uniforms */
+METHOD(webgl_create_shader);
+METHOD(webgl_delete_shader);
+METHOD(webgl_shader_source);
+METHOD(webgl_compile_shader);
+METHOD(webgl_get_shader_parameter);
+METHOD(webgl_get_shader_info_log);
+METHOD(webgl_get_shader_source);
+METHOD(webgl_create_program);
+METHOD(webgl_delete_program);
+METHOD(webgl_attach_shader);
+METHOD(webgl_detach_shader);
+METHOD(webgl_link_program);
+METHOD(webgl_use_program);
+METHOD(webgl_get_program_parameter);
+METHOD(webgl_get_program_info_log);
+METHOD(webgl_get_attached_shaders);
+METHOD(webgl_validate_program);
+METHOD(webgl_get_active_uniform);
+METHOD(webgl_get_active_attrib);
+METHOD(webgl_get_uniform_location);
+METHOD(webgl_get_attrib_location);
+METHOD(webgl_bind_attrib_location);
+METHOD(webgl_get_uniform);
+METHOD(webgl_uniform1f);
+METHOD(webgl_uniform2f);
+METHOD(webgl_uniform3f);
+METHOD(webgl_uniform4f);
+METHOD(webgl_uniform1i);
+METHOD(webgl_uniform2i);
+METHOD(webgl_uniform3i);
+METHOD(webgl_uniform4i);
+METHOD(webgl_uniform1fv);
+METHOD(webgl_uniform2fv);
+METHOD(webgl_uniform3fv);
+METHOD(webgl_uniform4fv);
+METHOD(webgl_uniform1iv);
+METHOD(webgl_uniform2iv);
+METHOD(webgl_uniform3iv);
+METHOD(webgl_uniform4iv);
+METHOD(webgl_uniform_matrix2fv);
+METHOD(webgl_uniform_matrix3fv);
+METHOD(webgl_uniform_matrix4fv);
+
+/* WebGL buffers, vertex attributes and draws */
+METHOD(webgl_create_buffer);
+METHOD(webgl_delete_buffer);
+METHOD(webgl_bind_buffer);
+METHOD(webgl_buffer_data);
+METHOD(webgl_buffer_sub_data);
+METHOD(webgl_get_buffer_parameter);
+METHOD(webgl_enable_vertex_attrib_array);
+METHOD(webgl_disable_vertex_attrib_array);
+METHOD(webgl_vertex_attrib_pointer);
+METHOD(webgl_vertex_attrib1f);
+METHOD(webgl_vertex_attrib2f);
+METHOD(webgl_vertex_attrib3f);
+METHOD(webgl_vertex_attrib4f);
+METHOD(webgl_vertex_attrib1fv);
+METHOD(webgl_vertex_attrib2fv);
+METHOD(webgl_vertex_attrib3fv);
+METHOD(webgl_vertex_attrib4fv);
+METHOD(webgl_get_vertex_attrib);
+METHOD(webgl_draw_arrays);
+METHOD(webgl_draw_elements);
+
+/* WebGL textures, framebuffers and readback */
+METHOD(webgl_create_texture);
+METHOD(webgl_delete_texture);
+METHOD(webgl_bind_texture);
+METHOD(webgl_active_texture);
+METHOD(webgl_tex_parameteri);
+METHOD(webgl_tex_parameterf);
+METHOD(webgl_get_tex_parameter);
+METHOD(webgl_tex_image_2d);
+METHOD(webgl_tex_sub_image_2d);
+METHOD(webgl_generate_mipmap);
+METHOD(webgl_create_framebuffer);
+METHOD(webgl_delete_framebuffer);
+METHOD(webgl_bind_framebuffer);
+METHOD(webgl_framebuffer_texture_2d);
+METHOD(webgl_check_framebuffer_status);
+METHOD(webgl_create_renderbuffer);
+METHOD(webgl_delete_renderbuffer);
+METHOD(webgl_bind_renderbuffer);
+METHOD(webgl_renderbuffer_storage);
+METHOD(webgl_framebuffer_renderbuffer);
+METHOD(webgl_get_renderbuffer_parameter);
+METHOD(webgl_read_pixels);
 
 #undef METHOD
 

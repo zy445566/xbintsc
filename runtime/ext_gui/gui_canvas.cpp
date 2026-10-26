@@ -65,11 +65,17 @@ xtgui::Canvas2D *xt_gui_canvas_get(XtGuiWindow *win, const xtgui::Node *node) {
   auto canvas = std::make_unique<xtgui::Canvas2D>(width, height);
   xtgui::Canvas2D *raw = canvas.get();
   win->canvases[node] = std::move(canvas);
+  /* A context obtained after the first frame must reach the display list
+   * immediately, so `paintList`/the next paint sees its size and texture id. */
+  if (win->document != nullptr) {
+    win->document->setCanvasInfo(node, (float)width, (float)height, raw->id());
+  }
   return raw;
 }
 
 void xt_gui_canvas_forget(XtGuiWindow *win, const xtgui::Node *node) {
   if (win == nullptr || node == nullptr) return;
+  xt_gui_webgl_forget(win, node);
   auto found = win->canvases.find(node);
   if (found == win->canvases.end()) return;
   releaseCanvasTexture(found->second.get());
@@ -81,10 +87,22 @@ void xt_gui_canvas_sync(XtGuiWindow *win) {
   std::vector<const xtgui::Node *> nodes;
   collectCanvases(win->document->root(), &nodes);
   for (const xtgui::Node *node : nodes) {
-    xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
-    if (canvas == nullptr) continue;
-    win->document->setCanvasInfo(node, (float)canvas->width(), (float)canvas->height(),
-                                 canvas->id());
+    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
+      win->document->setCanvasInfo(node, (float)webgl->width(), (float)webgl->height(),
+                                   webgl->id());
+      continue;
+    }
+    xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
+    if (canvas != nullptr) {
+      win->document->setCanvasInfo(node, (float)canvas->width(), (float)canvas->height(),
+                                   canvas->id());
+      continue;
+    }
+    /* No context yet: the attributes still define the intrinsic box, but there
+     * is nothing to paint (a canvas with no context is transparent). */
+    int width = canvasAttributeSize(node, "width", 300);
+    int height = canvasAttributeSize(node, "height", 150);
+    win->document->setCanvasInfo(node, (float)width, (float)height, 0);
   }
 }
 
@@ -116,6 +134,7 @@ void xt_gui_canvas_bind_pending(XtGuiWindow *win, const xtgui::Node *node, xt_va
 
 void xt_gui_canvas_shutdown(XtGuiWindow *win) {
   if (win == nullptr) return;
+  xt_gui_webgl_shutdown(win);
   for (auto &entry : win->canvases) releaseCanvasTexture(entry.second.get());
   win->canvases.clear();
   /* `pending_canvases` survives `loadHTML`: a module that asked for a context

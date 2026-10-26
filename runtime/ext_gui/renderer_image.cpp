@@ -13,6 +13,7 @@
 #include "image.h"
 #include "media.h"
 #include "svg.h"
+#include "webgl.h"
 
 #include "renderer_shaders.h"
 
@@ -114,8 +115,12 @@ static SDL_GPUTexture *ensureMediaTexture(SDL_GPUDevice *device, uint64_t media_
 }
 
 /** Ensure the texture for `canvas_id` exists and holds the canvas's newest
- * pixels. Returns `nullptr` for an unknown or empty canvas. */
+ * pixels. A WebGL canvas already owns its colour target, so it is returned
+ * directly and nothing is copied through the CPU. */
 static SDL_GPUTexture *ensureCanvasTexture(SDL_GPUDevice *device, uint64_t canvas_id) {
+  if (xtgui::WebGLContext *webgl = xtgui::xt_webgl_by_id(canvas_id)) {
+    return webgl->color_texture();
+  }
   xtgui::Canvas2D *canvas = xtgui::xt_canvas_by_id(canvas_id);
   if (canvas == nullptr) return nullptr;
   const xtgui::Image &image = canvas->image();

@@ -8,9 +8,12 @@
   （被 gitignore；按需获取）。媒体解码位于 `runtime/ext_media/`，单独构建。
 - `npm run gui`（`scripts/build-gui.ts`）获取固定版本的 SDL3（`SDL3_TAG`，
   默认 `release-3.2.10`），构建静态 SDL3，获取并构建静态 FreeType
-  （`FREETYPE_VERSION`）与 HarfBuzz（`HARFBUZZ_VERSION`），编译引擎，并把
+  （`FREETYPE_VERSION`）与 HarfBuzz（`HARFBUZZ_VERSION`），并获取、构建静态
+  **glslang**（`GLSLANG_VERSION`，默认 `16.6.0`）及固定版本的 SPIR-V 头文件
+  （`SPIRV_HEADERS_VERSION`）。glslang 是 WebGL 背后的运行时 GLSL ES 编译器
+  （见 [WebGL](./webgl.md)），与其他库一样合并进归档。随后编译引擎，并把
   所有内容合并到 `runtime/lib/<os>-<arch>/gui.a`（Windows 上 MSVC ABI 则为
-  `gui.lib`），与 `core.a` 采用相同约定，静态打包三者。合并使用 macOS 上的
+  `gui.lib`），与 `core.a` 采用相同约定，静态打包这些库。合并使用 macOS 上的
   `libtool` 与其他平台上的 `ar -M`（GNU/LLVM）；CMake 归档会在构建根目录或
   `Release/` 下按任一生成器风格被发现。
 - `npm run media`（`scripts/build-media.ts`）构建可选的 **FFmpeg** 后端。它获取

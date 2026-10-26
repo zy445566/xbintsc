@@ -84,7 +84,7 @@ describe.skipIf(!guiAvailable)("gui extension — browser globals", () => {
     expect(value("pending")).toBe("true");
     expect(value("audio")).toBe("48000:running:0.5");
     expect(value("buffer")).toBe("8:0.25:1");
-    expect(value("webgl")).toBe("undefined");
+    expect(value("webgl")).toBe("function");
     expect(value("adopt")).toBe("true:true");
     expect(value("bound")).toBe("hi:hi");
     expect(value("title")).toBe("ropes page:complete:false");

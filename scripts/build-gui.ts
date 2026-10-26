@@ -63,6 +63,12 @@ const freetypeSrc = join(vendorDir, "freetype");
 const freetypeBuild = join(vendorDir, "freetype-build");
 const harfbuzzSrc = join(vendorDir, "harfbuzz");
 const harfbuzzBuild = join(vendorDir, "harfbuzz-build");
+/* glslang translates the GLSL ES that WebGL programs supply at run time; it is
+ * built statically and merged into the archive, so a compiled binary needs no
+ * Vulkan SDK. The SPIR-V headers are its only external dependency. */
+const glslangSrc = join(vendorDir, "glslang");
+const glslangBuild = join(vendorDir, "glslang-build");
+const spirvHeadersSrc = join(glslangSrc, "External", "spirv-headers");
 const objDir = join(root, "build", "gui-obj");
 const outDir = join(runtimeDir, "lib", platformSlug());
 
@@ -108,8 +114,12 @@ function cmakeToolchainArgs(): string[] {
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
 const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
 const HARFBUZZ_VERSION = process.env.HARFBUZZ_VERSION || "10.1.0";
+const GLSLANG_VERSION = process.env.GLSLANG_VERSION || "16.6.0";
+const SPIRV_HEADERS_VERSION = process.env.SPIRV_HEADERS_VERSION || "vulkan-sdk-1.4.363.0";
 const FREETYPE_URL = `https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.xz`;
 const HARFBUZZ_URL = `https://github.com/harfbuzz/harfbuzz/releases/download/${HARFBUZZ_VERSION}/harfbuzz-${HARFBUZZ_VERSION}.tar.xz`;
+const GLSLANG_URL = `https://codeload.github.com/KhronosGroup/glslang/tar.gz/refs/tags/${GLSLANG_VERSION}`;
+const SPIRV_HEADERS_URL = `https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/refs/tags/${SPIRV_HEADERS_VERSION}`;
 
 function fail(message: string): never {
   console.error(`xbintsc: ${message}`);
@@ -326,6 +336,13 @@ function freetypeArchive(): string | undefined {
 function harfbuzzArchive(): string | undefined {
   return builtLibrary(harfbuzzBuild, ["libharfbuzz.a", "harfbuzz.lib"], /^harfbuzz[-\d.]*\.lib$/);
 }
+function glslangArchive(): string | undefined {
+  return builtLibrary(join(glslangBuild, "glslang"), ["libglslang.a", "glslang.lib"]);
+}
+function glslangLimitsArchive(): string | undefined {
+  return builtLibrary(join(glslangBuild, "glslang"),
+    ["libglslang-default-resource-limits.a", "glslang-default-resource-limits.lib"]);
+}
 
 /* -- 1. SDL3 source ------------------------------------------------------- */
 
@@ -434,6 +451,27 @@ if (!existsSync(harfbuzzArchive() ?? "")) {
   console.log(`xbintsc: reusing existing ${harfbuzzArchive()}`);
 }
 
+/* -- 2c. glslang (WebGL GLSL ES -> SPIR-V) -------------------------------- */
+
+ensureTarballSource("glslang", GLSLANG_URL, `glslang-${GLSLANG_VERSION}`);
+ensureTarballSource(join("glslang", "External", "spirv-headers"), SPIRV_HEADERS_URL,
+  `SPIRV-Headers-${SPIRV_HEADERS_VERSION}`);
+
+if (!existsSync(glslangArchive() ?? "")) {
+  const cmake = configureCmake("glslang", glslangSrc, glslangBuild, [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBUILD_SHARED_LIBS=OFF",
+    "-DENABLE_OPT=OFF",
+    "-DENABLE_HLSL=OFF",
+    "-DENABLE_GLSLANG_BINARIES=OFF",
+    "-DGLSLANG_TESTS=OFF",
+  ]);
+  console.log("xbintsc: building static glslang");
+  run(cmake, ["--build", glslangBuild, "--config", "Release", "--parallel"]);
+} else {
+  console.log(`xbintsc: reusing existing ${glslangArchive()}`);
+}
+
 /* -- 3. engine objects ---------------------------------------------------- */
 
 mkdirSync(objDir, { recursive: true });
@@ -443,6 +481,8 @@ const includeFlags = [
   "-I", join(freetypeSrc, "include"),
   "-I", join(freetypeBuild, "include"),
   "-I", join(harfbuzzSrc, "src"),
+  "-I", glslangSrc,
+  "-I", join(spirvHeadersSrc, "include"),
 ];
 const sources = readdirSync(engineDir)
   .filter((entry) => entry.endsWith(".cpp"))
@@ -470,10 +510,12 @@ for (const source of sources) {
 const sdl = sdlArchive();
 const freetype = freetypeArchive();
 const harfbuzz = harfbuzzArchive();
-if (!sdl || !freetype || !harfbuzz) {
-  fail("one of the SDL3/FreeType/HarfBuzz archives was not found after building");
+const glslang = glslangArchive();
+const glslangLimits = glslangLimitsArchive();
+if (!sdl || !freetype || !harfbuzz || !glslang || !glslangLimits) {
+  fail("one of the SDL3/FreeType/HarfBuzz/glslang archives was not found after building");
 }
-const libraries = [sdl, freetype, harfbuzz];
+const libraries = [sdl, freetype, harfbuzz, glslang, glslangLimits];
 
 mkdirSync(outDir, { recursive: true });
 rmSync(output, { force: true });

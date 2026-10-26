@@ -8,8 +8,12 @@
   `runtime/ext_media/` and is built separately.
 - `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
   default `release-3.2.10`), builds a static SDL3, fetches and builds static
-  FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), compiles the
-  engine and merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
+  FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), and fetches
+  and builds static **glslang** (`GLSLANG_VERSION`, default `16.6.0`) against
+  the pinned SPIR-V headers (`SPIRV_HEADERS_VERSION`). glslang is the runtime
+  GLSL ES compiler behind WebGL (see [WebGL](./webgl.md)); it is merged into the
+  archive like the other libraries. The script then compiles the engine and
+  merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
   `gui.lib` with the MSVC ABI on Windows), same convention as `core.a`,
   statically bundling all three. The merge uses `libtool` on macOS and
   `ar -M` (GNU/LLVM) elsewhere; CMake archives are discovered under the build

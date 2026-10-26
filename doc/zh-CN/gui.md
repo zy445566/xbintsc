@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M16** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
+状态：**M17** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
 `<video>`/`<audio>`——可选的 `media` 扩展用 vendored 的最小 FFmpeg 在主线程解码，
 视频帧走图像纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露
 `play`/`pause`/`currentTime`/… 与媒体事件。只启用 `gui` 不会链接 FFmpeg。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
@@ -12,7 +12,7 @@
 渲染器，因此盒子（以及其中的文本、图像与子元素）可以被平移、缩放与旋转而
 不触发任何重排——再加上 `transition: transform`，这些姿态可以动画（自绘的示例
 `examples/gui/pelican-svg` 正是用它让矢量画动起来）。参见
-[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
+[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**：`<canvas>.getContext("webgl")` 用内置的 glslang 把页面的 GLSL ES 编译成 SPIR-V，并通过 SDL_GPU 渲染，因此几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
 
 ## 目录
 
@@ -230,6 +230,19 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
       通过与 SVG 文件相同的 NanoSVG 缓存（`svg.{h,cpp}`）解析并光栅化；markup
       缓存有界，DOM 变更会在下一次布局时重新序列化。e2e 见
       `tests/e2e/gui-inline-svg.test.ts`。
+17. **M17 — WebGL** ✅
+    - `canvas.getContext("webgl")` 创建真正的 GPU 上下文（`webgl.{h,cpp}`）：
+      一张离屏 RGBA8 颜色纹理加一张深度纹理、自己的 SDL_GPU 命令缓冲，并根据
+      程序、顶点布局与固定功能状态惰性创建管线。页面通过既有图像路径直接合成
+      颜色纹理，不需要 CPU 读回。
+    - `webgl_glsl*.cpp` 把 GLSL ES 1.00/3.00 改写为 Vulkan GLSL ES 3.10
+      （属性/`varying` 位置、`gl_FragColor`、`texture2D`、每阶段一个 std140
+      uniform 块、显式采样器绑定），用静态打包的 glslang 编译，并反射 SPIR-V
+      得到 uniform 偏移。
+    - `dom_api_webgl*.cpp` 暴露 WebGL 1.0 接口，包括纹理、mipmap、
+      渲染到纹理的 framebuffer 与 `readPixels`。见 [WebGL](./gui/webgl.md)；
+      e2e 见 `tests/e2e/gui-webgl.test.ts` 与
+      `tests/e2e/gui-example-webgl.test.ts`，示例见 `examples/gui/webgl-cube`。
 
 ## 进度日志
 

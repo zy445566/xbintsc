@@ -99,18 +99,15 @@ struct WebGLTexture {
   int width = 0;
   int height = 0;
   int levels = 1;
-  /** The binding target this texture was created for (`TEXTURE_2D`,
-   * `TEXTURE_CUBE_MAP`, `TEXTURE_2D_ARRAY`, `TEXTURE_3D`). */
+  /** The binding target this texture was created for. */
   int target = GL_TEXTURE_2D;
   /** Layers for a cube/2D-array texture, depth for a 3D texture. */
   int layers = 1;
   SDL_GPUTexture *gpu = nullptr;
   SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-  /** True when `format` is a depth(-stencil) format; such a texture can be a
-   * depth attachment but never a colour attachment. */
+  /** Depth(-stencil) formats can only be depth attachments. */
   bool depth = false;
-  /** True when `format` is block-compressed; such a texture is sample-only and
-   * has exactly one mip level here. */
+  /** Block-compressed textures are sample-only, with one mip level. */
   bool compressed = false;
   /** Usage flags the current `gpu` texture was created with. */
   uint32_t usage = 0;
@@ -137,6 +134,8 @@ struct WebGLRenderbuffer {
 struct WebGLFramebuffer {
   uint32_t id = 0;
   uint32_t color_textures[kWebGLMaxDrawBuffers] = {};
+  /** Layer rendered to for an array/cube colour attachment. */
+  int color_layers[kWebGLMaxDrawBuffers] = {};
   /** `COLOR_ATTACHMENTi` or `NONE` per draw-buffer slot. */
   int draw_buffers[kWebGLMaxDrawBuffers] = {GL_COLOR_ATTACHMENT0, GL_NONE, GL_NONE, GL_NONE};
   uint32_t depth_texture = 0;
@@ -160,9 +159,7 @@ struct WebGLAttribState {
   float current[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 };
 
-/** A WebGL 2 vertex-array object: the attribute table plus its element buffer.
- * SDL_GPU has no VAO concept, so binding one restores this state into the live
- * `attribs_` array. */
+/** A WebGL 2 vertex-array object; binding one restores this state. */
 struct WebGLVertexArray {
   uint32_t id = 0;
   WebGLAttribState attribs[kWebGLMaxAttribs];
@@ -401,6 +398,8 @@ class WebGLContext {
                       SDL_GPUTextureFormat format, int target);
   bool tex_image_3d(uint32_t id, int width, int height, int depth,
                     SDL_GPUTextureFormat format, const uint8_t *pixels, int target);
+  bool tex_sub_image_3d(uint32_t id, int x, int y, int z, int width, int height, int depth,
+                        const uint8_t *pixels);
   /** Upload a block-compressed region (`data` holds the tightly packed blocks
    * for the `width`×`height` region). */
   bool tex_image_compressed(uint32_t id, int width, int height, SDL_GPUTextureFormat format,
@@ -421,6 +420,8 @@ class WebGLContext {
   bool blit_framebuffer(const int source[4], const int destination[4], int mask, int filter);
   bool framebuffer_texture(uint32_t framebuffer, uint32_t texture,
                            int attachment = GL_COLOR_ATTACHMENT0);
+  bool framebuffer_texture_layer(uint32_t framebuffer, uint32_t texture, int attachment,
+                                 int layer);
   bool framebuffer_status(uint32_t id);
   /** WebGL 2 `drawBuffers` / `readBuffer`. */
   void draw_buffers(int count, const int *buffers);
@@ -472,8 +473,7 @@ class WebGLContext {
   void end_pass();
   void flush_uploads();
   void begin_pass(bool clear_color, bool clear_depth, bool clear_stencil);
-  /** Clear the depth/stencil parts of a scissored `clear` by drawing a
-   * fullscreen triangle with depth/stencil writes and colour writes masked. */
+  /** Scissored depth/stencil clear via a masked fullscreen triangle. */
   void scissored_clear(int mask);
   /** The 1×1 texture a scissored colour clear blits from. */
   SDL_GPUTexture *clear_color_texture();
@@ -489,6 +489,7 @@ class WebGLContext {
   /** The texture rendered to for draw-buffer slot `slot`, or null. */
   SDL_GPUTexture *draw_color_texture(int slot);
   int draw_color_format(int slot);
+  int draw_color_layer(int slot);
   SDL_GPUTexture *ensure_texture_gpu(WebGLTexture *texture, bool as_target);
   SDL_GPUSampler *sampler_for(WebGLTexture *texture);
   SDL_GPUBuffer *ensure_buffer_gpu(WebGLBuffer *buffer);
@@ -534,8 +535,7 @@ class WebGLContext {
   float clear_depth_ = 1.0f;
   int clear_stencil_ = 0;
   float blend_color_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-  /** True once `drawingBufferStorage` fixed the size; canvas resizes then leave
-   * the drawing buffer alone. */
+  /** Set by `drawingBufferStorage`; canvas resizes then leave the size. */
   bool fixed_storage_ = false;
   WebGLDrawState state_;
   int viewport_[4] = {0, 0, 0, 0};
@@ -552,8 +552,7 @@ class WebGLContext {
   std::unordered_map<uint32_t, std::unique_ptr<WebGLSampler>> samplers_;
   std::unordered_map<uint32_t, std::unique_ptr<WebGLQuery>> queries_;
   std::unordered_map<uint32_t, std::unique_ptr<WebGLSync>> syncs_;
-  /** GPU buffers created for this context's transient draws (constant vertex
-   * attributes, expanded index data); released with the context. */
+  /** GPU buffers for transient draws (constant attributes, expanded indices). */
   std::vector<SDL_GPUBuffer *> temp_buffers_;
 
   uint32_t current_program_ = 0;

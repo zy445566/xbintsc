@@ -41,6 +41,15 @@ int WebGLContext::draw_color_format(int slot) {
   return texture != nullptr ? (int)texture->format : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 }
 
+int WebGLContext::draw_color_layer(int slot) {
+  if (slot < 0 || slot >= kWebGLMaxDrawBuffers || bound_framebuffer_ == 0) return 0;
+  WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
+  if (framebuffer == nullptr) return 0;
+  const int index = framebuffer->draw_buffers[slot] - GL_COLOR_ATTACHMENT0;
+  if (index < 0 || index >= kWebGLMaxDrawBuffers) return 0;
+  return framebuffer->color_layers[index];
+}
+
 void WebGLContext::draw_buffers(int count, const int *buffers) {
   if (count < 0) count = 0;
   if (count > kWebGLMaxDrawBuffers) count = kWebGLMaxDrawBuffers;

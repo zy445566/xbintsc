@@ -161,8 +161,9 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   `ImageBitmap` produced by `createImageBitmap`. Cube maps
   (`bindTexture(TEXTURE_CUBE_MAP)` plus six `texImage2D` faces) and 3D/array
   textures (`texImage3D`/`texStorage3D`) are sampled through `samplerCube`,
-  `sampler3D` and `sampler2DArray`; `texSubImage3D` and
-  `framebufferTextureLayer` are still no-ops.
+  `sampler3D` and `sampler2DArray`; `texSubImage3D` updates a sub-volume and
+  `framebufferTextureLayer` renders one array/cube layer as a colour
+  attachment.
 - **Framebuffers**: `createFramebuffer`, `bindFramebuffer`
   (`FRAMEBUFFER`/`READ_FRAMEBUFFER`/`DRAW_FRAMEBUFFER`),
   `framebufferTexture2D` (`COLOR_ATTACHMENT0`, `DEPTH_ATTACHMENT`,
@@ -235,8 +236,7 @@ backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
 ## Not implemented
 
 Uniform buffer objects in shader source, transform feedback (the entry points
-are no-ops) and MSAA/sample buffers; `texSubImage3D` and
-`framebufferTextureLayer` are no-ops. `blitFramebuffer`
+are no-ops) and MSAA/sample buffers. `blitFramebuffer`
 copies the colour attachment only; depth/stencil bits are accepted but not
 copied. Shaders that use built-in blocks, user uniform blocks or `gl_FragDepth`
 are rejected with a compile/link log.
@@ -272,7 +272,8 @@ uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
 - `tests/e2e/gui-media.test.ts` also uploads the latest decoded `<video>` frame
   as a texture and reads it back.
 - `tests/e2e/gui-webgl2-3d.test.ts` covers 2D-array and 3D texture layer
-  sampling.
+  sampling, `texSubImage3D` sub-volume updates and rendering to a colour
+  attachment layer.
 - `tests/e2e/gui-webgl2-mrt.test.ts` writes two fragment outputs to two
   colour attachments and reads each back.
 - `examples/gui/webgl-cube` is a spinning, lit, textured cube; it runs in a

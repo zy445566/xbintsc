@@ -206,7 +206,6 @@ WEBGL2_NOOP(webgl2_transform_feedback_varyings)
 WEBGL2_NOOP(webgl2_bind_buffer_base)
 WEBGL2_NOOP(webgl2_bind_buffer_range)
 WEBGL2_NOOP(webgl2_uniform_block_binding)
-WEBGL2_NOOP(webgl2_framebuffer_texture_layer)
 WEBGL2_NOOP(webgl2_invalidate_framebuffer)
 WEBGL2_NOOP(webgl2_invalidate_sub_framebuffer)
 
@@ -220,6 +219,51 @@ METHOD(webgl2_blit_framebuffer) {
                               webgl_int(argc, argv, 6, 0), webgl_int(argc, argv, 7, 0)};
   context->blit_framebuffer(source, destination, webgl_int(argc, argv, 8, GL_COLOR_BUFFER_BIT),
                             webgl_int(argc, argv, 9, GL_NEAREST));
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl2_tex_sub_image_3d) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const uint32_t texture = context->bound_texture(0);
+  if (texture == 0 || webgl_int(argc, argv, 1, 0) != 0) return XT_UNDEFINED;
+  const int x = webgl_int(argc, argv, 2, 0);
+  const int y = webgl_int(argc, argv, 3, 0);
+  const int z = webgl_int(argc, argv, 4, 0);
+  const int width = webgl_int(argc, argv, 5, 0);
+  const int height = webgl_int(argc, argv, 6, 0);
+  const int depth = webgl_int(argc, argv, 7, 0);
+  const int format = webgl_int(argc, argv, 8, GL_RGBA);
+  const int type = webgl_int(argc, argv, 9, GL_UNSIGNED_BYTE);
+  if (type != GL_UNSIGNED_BYTE) {
+    context->set_error(GL_INVALID_ENUM);
+    return XT_UNDEFINED;
+  }
+  int channels = 1;
+  if (format == GL_RGBA) channels = 4;
+  else if (format == GL_RGB) channels = 3;
+  else if (format == GL_LUMINANCE_ALPHA) channels = 2;
+  const std::vector<uint8_t> bytes = webgl_bytes(xt_arg(argc, argv, 10));
+  const size_t count = (size_t)width * height * depth;
+  if (bytes.size() < count * (size_t)channels) {
+    context->set_error(GL_INVALID_VALUE);
+    return XT_UNDEFINED;
+  }
+  std::vector<uint8_t> rgba;
+  webgl_convert_pixels(bytes.data(), (int)count, format, false, &rgba);
+  context->tex_sub_image_3d(texture, x, y, z, width, height, depth, rgba.data());
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl2_framebuffer_texture_layer) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  context->framebuffer_texture_layer(
+      context->bound_framebuffer_id(),
+      webgl_object_id(xt_arg(argc, argv, 2), "__xt_gl_texture"),
+      webgl_int(argc, argv, 1, GL_COLOR_ATTACHMENT0), webgl_int(argc, argv, 4, 0));
   return XT_UNDEFINED;
 }
 
@@ -426,7 +470,6 @@ METHOD(webgl2_tex_image_3d) {
   return XT_UNDEFINED;
 }
 
-WEBGL2_NOOP(webgl2_tex_sub_image_3d)
 WEBGL2_NOOP(webgl2_compressed_tex_image3d)
 WEBGL2_NOOP(webgl2_compressed_tex_sub_image3d)
 

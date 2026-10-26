@@ -184,10 +184,10 @@ SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_t
   record->depth = depth;
   /* Allocate sample *and* target usage up front: attaching a texture that was
    * already uploaded must not recreate it (shadow maps upload or attach in
-   * either order). Compressed and layered textures are sample-only. */
-  const bool layered = record->target != GL_TEXTURE_2D;
+   * either order). Compressed textures are sample-only; layered textures can
+   * still be colour targets (a single layer is selected at render time). */
   const uint32_t wanted =
-      (record->compressed || layered)
+      record->compressed
           ? SDL_GPU_TEXTUREUSAGE_SAMPLER
           : (SDL_GPU_TEXTUREUSAGE_SAMPLER |
              (depth ? SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
@@ -353,6 +353,19 @@ bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture
     record_framebuffer->height = record->height;
     ensure_texture_gpu(record, true);
   }
+  return true;
+}
+
+bool WebGLContext::framebuffer_texture_layer(uint32_t framebuffer_id, uint32_t texture_id,
+                                             int attachment, int layer) {
+  if (!framebuffer_texture(framebuffer_id, texture_id, attachment)) return false;
+  const int index = attachment - GL_COLOR_ATTACHMENT0;
+  WebGLFramebuffer *record = framebuffer(framebuffer_id);
+  if (record != nullptr && index >= 0 && index < kWebGLMaxDrawBuffers) {
+    record->color_layers[index] = layer;
+  }
+  /* SDL_GPU 3.2 depth-stencil targets have no layer selector; the depth
+   * attachment still binds, without per-layer rendering. */
   return true;
 }
 

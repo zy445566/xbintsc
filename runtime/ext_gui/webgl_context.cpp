@@ -366,6 +366,7 @@ void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_ste
     SDL_GPUColorTargetInfo &color_info = color_infos[color_count++];
     memset(&color_info, 0, sizeof(color_info));
     color_info.texture = color;
+    color_info.layer_or_depth_plane = (Uint32)draw_color_layer(slot);
     color_info.clear_color.r = clear_color_[0];
     color_info.clear_color.g = clear_color_[1];
     color_info.clear_color.b = clear_color_[2];

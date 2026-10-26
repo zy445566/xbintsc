@@ -80,6 +80,15 @@ void WebGLContext::delete_texture(uint32_t id) {
   for (uint32_t &bound : bound_textures_) {
     if (bound == id) bound = 0;
   }
+  for (uint32_t &bound : bound_cube_textures_) {
+    if (bound == id) bound = 0;
+  }
+  for (uint32_t &bound : bound_array_textures_) {
+    if (bound == id) bound = 0;
+  }
+  for (uint32_t &bound : bound_3d_textures_) {
+    if (bound == id) bound = 0;
+  }
   for (auto &entry : framebuffers_) {
     if (entry.second->color_texture == id) {
       entry.second->color_texture = 0;
@@ -102,11 +111,31 @@ void WebGLContext::delete_texture(uint32_t id) {
 
 void WebGLContext::bind_texture(int target, uint32_t id) {
   if (id != 0 && textures_.find(id) == textures_.end()) return;
-  /* Cube/array/3D textures are outside the supported subset; ignore the
-   * binding instead of raising an error (three.js binds placeholder cube
-   * textures even for unlit scenes). */
-  if (target != GL_TEXTURE_2D) return;
-  bound_textures_[active_unit_] = id;
+  uint32_t *slot = nullptr;
+  if (target == GL_TEXTURE_2D) {
+    slot = &bound_textures_[active_unit_];
+  } else if (target == GL_TEXTURE_CUBE_MAP) {
+    slot = &bound_cube_textures_[active_unit_];
+  } else if (target == GL_TEXTURE_2D_ARRAY) {
+    slot = &bound_array_textures_[active_unit_];
+  } else if (target == GL_TEXTURE_3D) {
+    slot = &bound_3d_textures_[active_unit_];
+  } else {
+    return;
+  }
+  *slot = id;
+  active_texture_target_[active_unit_] = target;
+  if (id != 0) {
+    WebGLTexture *record = texture(id);
+    if (record != nullptr) {
+      if (!record->defined && record->gpu == nullptr) {
+        record->target = target;
+      } else if (record->target != target) {
+        *slot = 0;
+        return;
+      }
+    }
+  }
 }
 
 void WebGLContext::active_texture(int unit) {
@@ -149,9 +178,10 @@ SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_t
   record->depth = depth;
   /* Allocate sample *and* target usage up front: attaching a texture that was
    * already uploaded must not recreate it (shadow maps upload or attach in
-   * either order). Compressed textures are sample-only. */
+   * either order). Compressed and layered textures are sample-only. */
+  const bool layered = record->target != GL_TEXTURE_2D;
   const uint32_t wanted =
-      record->compressed
+      (record->compressed || layered)
           ? SDL_GPU_TEXTUREUSAGE_SAMPLER
           : (SDL_GPU_TEXTUREUSAGE_SAMPLER |
              (depth ? SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
@@ -173,14 +203,26 @@ SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_t
   record->usage = wanted;
   record->levels =
       (depth || record->compressed) ? 1 : mip_levels_for(record->width, record->height);
+  SDL_GPUTextureType texture_type = SDL_GPU_TEXTURETYPE_2D;
+  int layers = 1;
+  if (record->target == GL_TEXTURE_CUBE_MAP) {
+    texture_type = SDL_GPU_TEXTURETYPE_CUBE;
+    layers = 6;
+  } else if (record->target == GL_TEXTURE_2D_ARRAY) {
+    texture_type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+    layers = record->layers > 0 ? record->layers : 1;
+  } else if (record->target == GL_TEXTURE_3D) {
+    texture_type = SDL_GPU_TEXTURETYPE_3D;
+    layers = record->layers > 0 ? record->layers : 1;
+  }
   SDL_GPUTextureCreateInfo info;
   memset(&info, 0, sizeof(info));
-  info.type = SDL_GPU_TEXTURETYPE_2D;
+  info.type = texture_type;
   info.format = record->format;
   info.usage = wanted;
   info.width = (Uint32)record->width;
   info.height = (Uint32)record->height;
-  info.layer_count_or_depth = 1;
+  info.layer_count_or_depth = (Uint32)layers;
   info.num_levels = (Uint32)record->levels;
   info.sample_count = SDL_GPU_SAMPLECOUNT_1;
   record->gpu = SDL_CreateGPUTexture(guidev::g_device, &info);

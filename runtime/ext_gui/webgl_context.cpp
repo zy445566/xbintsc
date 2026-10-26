@@ -139,6 +139,10 @@ void WebGLContext::lose_context() {
   copy_write_buffer_ = 0;
   active_unit_ = 0;
   for (uint32_t &texture : bound_textures_) texture = 0;
+  for (uint32_t &texture : bound_cube_textures_) texture = 0;
+  for (uint32_t &texture : bound_array_textures_) texture = 0;
+  for (uint32_t &texture : bound_3d_textures_) texture = 0;
+  for (int &target : active_texture_target_) target = GL_TEXTURE_2D;
   for (uint32_t &sampler : bound_samplers_) sampler = 0;
   state_ = WebGLDrawState();
   scissor_test_ = false;
@@ -411,7 +415,7 @@ double WebGLContext::parameter(int pname) {
     case GL_MAX_VIEWPORT_DIMS:
       return 8192;
     case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
-      return 0;
+      return 8192;
     case GL_SAMPLES:
     case GL_SAMPLE_BUFFERS:
       return 0;
@@ -501,7 +505,26 @@ uint32_t WebGLContext::bound_buffer(int target) const { return buffer_for_target
 
 uint32_t WebGLContext::bound_texture(int unit) const {
   if (unit < 0 || unit >= kWebGLMaxTextureUnits) return 0;
+  const int target = active_texture_target_[unit];
+  if (target == GL_TEXTURE_CUBE_MAP) return bound_cube_textures_[unit];
+  if (target == GL_TEXTURE_2D_ARRAY) return bound_array_textures_[unit];
+  if (target == GL_TEXTURE_3D) return bound_3d_textures_[unit];
   return bound_textures_[unit];
+}
+
+uint32_t WebGLContext::bound_cube_texture(int unit) const {
+  if (unit < 0 || unit >= kWebGLMaxTextureUnits) return 0;
+  return bound_cube_textures_[unit];
+}
+
+uint32_t WebGLContext::bound_array_texture(int unit) const {
+  if (unit < 0 || unit >= kWebGLMaxTextureUnits) return 0;
+  return bound_array_textures_[unit];
+}
+
+uint32_t WebGLContext::bound_3d_texture(int unit) const {
+  if (unit < 0 || unit >= kWebGLMaxTextureUnits) return 0;
+  return bound_3d_textures_[unit];
 }
 
 void WebGLContext::viewport_box(int out[4]) const {

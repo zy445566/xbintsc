@@ -483,7 +483,15 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       const WebGLUniform &uniform = program_->uniforms[(size_t)uniform_index];
       const int unit =
           uniform.unit >= 0 && uniform.unit < kWebGLMaxTextureUnits ? uniform.unit : 0;
-      WebGLTexture *sampled = texture(bound_textures_[unit]);
+      uint32_t texture_id = bound_textures_[unit];
+      if (uniform.layout.gl_type == GL_SAMPLER_CUBE) {
+        texture_id = bound_cube_textures_[unit];
+      } else if (uniform.layout.gl_type == GL_SAMPLER_3D) {
+        texture_id = bound_3d_textures_[unit];
+      } else if (uniform.layout.gl_type == GL_SAMPLER_2D_ARRAY) {
+        texture_id = bound_array_textures_[unit];
+      }
+      WebGLTexture *sampled = texture(texture_id);
       SDL_GPUTexture *gpu = sampled != nullptr ? ensure_texture_gpu(sampled, sampled->as_target)
                                                : nullptr;
       WebGLSampler *sampler_object = this->sampler(bound_samplers_[unit]);

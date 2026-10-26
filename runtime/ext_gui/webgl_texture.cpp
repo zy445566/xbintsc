@@ -29,7 +29,8 @@ int texel_bytes(SDL_GPUTextureFormat format) {
 /** Upload a rectangle of tightly packed texels into level 0 of `gpu`. `pixels`
  * may be null, which uploads zeros. */
 bool upload_region(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *gpu, int x,
-                   int y, int width, int height, const uint8_t *pixels, int bytes_per_texel) {
+                   int y, int width, int height, const uint8_t *pixels, int bytes_per_texel,
+                   int layer = 0) {
   const uint32_t bytes = (uint32_t)(width * height * bytes_per_texel);
   if (bytes == 0) return true;
   std::vector<uint8_t> zeros;
@@ -60,11 +61,62 @@ bool upload_region(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUText
   region.texture = gpu;
   region.x = (Uint32)x;
   region.y = (Uint32)y;
+  region.layer = (Uint32)layer;
   region.w = (Uint32)width;
   region.h = (Uint32)height;
   region.d = 1;
   SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
   SDL_UploadToGPUTexture(copy, &source, &region, false);
+  SDL_EndGPUCopyPass(copy);
+  SDL_ReleaseGPUTransferBuffer(device, transfer);
+  return true;
+}
+
+/** Upload a whole 3D/2D-array volume. Each slice is uploaded separately:
+ * SDL's multi-slice transfer stride is not usable for a 2-layer 3D texture on
+ * the Metal backend. */
+bool upload_volume(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *gpu,
+                   int width, int height, int depth, const uint8_t *pixels,
+                   int bytes_per_texel, bool is_3d) {
+  const uint32_t slice_bytes = (uint32_t)(width * height * bytes_per_texel);
+  const uint32_t bytes = slice_bytes * (uint32_t)depth;
+  if (bytes == 0) return true;
+  std::vector<uint8_t> zeros;
+  if (pixels == nullptr) {
+    zeros.assign(bytes, 0);
+    pixels = zeros.data();
+  }
+  SDL_GPUTransferBufferCreateInfo info;
+  memset(&info, 0, sizeof(info));
+  info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+  info.size = bytes;
+  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &info);
+  if (transfer == nullptr) return false;
+  void *mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
+  if (mapped == nullptr) {
+    SDL_ReleaseGPUTransferBuffer(device, transfer);
+    return false;
+  }
+  memcpy(mapped, pixels, bytes);
+  SDL_UnmapGPUTransferBuffer(device, transfer);
+  SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
+  for (int slice = 0; slice < depth; slice++) {
+    SDL_GPUTextureTransferInfo source;
+    memset(&source, 0, sizeof(source));
+    source.transfer_buffer = transfer;
+    source.offset = (Uint32)slice * slice_bytes;
+    source.pixels_per_row = (Uint32)width;
+    source.rows_per_layer = (Uint32)height;
+    SDL_GPUTextureRegion region;
+    memset(&region, 0, sizeof(region));
+    region.texture = gpu;
+    region.layer = is_3d ? 0 : (Uint32)slice;
+    region.z = is_3d ? (Uint32)slice : 0;
+    region.w = (Uint32)width;
+    region.h = (Uint32)height;
+    region.d = 1;
+    SDL_UploadToGPUTexture(copy, &source, &region, false);
+  }
   SDL_EndGPUCopyPass(copy);
   SDL_ReleaseGPUTransferBuffer(device, transfer);
   return true;
@@ -108,7 +160,8 @@ SDL_GPUTexture *WebGLContext::clear_color_texture() {
 }
 
 bool WebGLContext::tex_image_format(uint32_t id, int width, int height,
-                                    SDL_GPUTextureFormat format, const uint8_t *pixels) {
+                                    SDL_GPUTextureFormat format, const uint8_t *pixels,
+                                    int layer) {
   WebGLTexture *record = texture(id);
   if (record == nullptr || width <= 0 || height <= 0) {
     set_error(GL_INVALID_VALUE);
@@ -127,7 +180,8 @@ bool WebGLContext::tex_image_format(uint32_t id, int width, int height,
     record->width = width;
     record->height = height;
     record->format = format;
-    record->depth = depth_texture_format(format);
+    record->layers = 1;
+    record->target = layer >= 0 ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
     record->compressed = false;
     record->has_mipmaps = false;
     if (record->sampler != nullptr) {
@@ -139,8 +193,12 @@ bool WebGLContext::tex_image_format(uint32_t id, int width, int height,
     return false;
   }
   record->defined = true;
+  if (layer >= 0) {
+    record->target = GL_TEXTURE_CUBE_MAP;
+    record->layers = 6;
+  }
   return upload_region(guidev::g_device, cmd_, record->gpu, 0, 0, width, height, pixels,
-                       texel_bytes(format));
+                       texel_bytes(format), layer >= 0 ? layer : 0);
 }
 
 bool WebGLContext::tex_image_rgba(uint32_t id, int width, int height, const uint8_t *rgba) {
@@ -148,7 +206,7 @@ bool WebGLContext::tex_image_rgba(uint32_t id, int width, int height, const uint
 }
 
 bool WebGLContext::tex_sub_image_format(uint32_t id, int x, int y, int width, int height,
-                                        const uint8_t *pixels) {
+                                        const uint8_t *pixels, int layer) {
   WebGLTexture *record = texture(id);
   if (record == nullptr || !record->defined || record->gpu == nullptr) {
     set_error(GL_INVALID_OPERATION);
@@ -163,7 +221,7 @@ bool WebGLContext::tex_sub_image_format(uint32_t id, int x, int y, int width, in
   ensure_command();
   if (cmd_ == nullptr) return false;
   return upload_region(guidev::g_device, cmd_, record->gpu, x, y, width, height, pixels,
-                       texel_bytes(record->format));
+                       texel_bytes(record->format), layer);
 }
 
 bool WebGLContext::tex_sub_image_rgba(uint32_t id, int x, int y, int width, int height,
@@ -294,7 +352,8 @@ bool WebGLContext::tex_storage_format(uint32_t id, int levels, int width, int he
   record->width = width;
   record->height = height;
   record->format = format;
-  record->depth = depth_texture_format(format);
+  record->layers = 1;
+  record->target = GL_TEXTURE_2D;
   record->compressed = false;
   record->has_mipmaps = false;
   if (record->sampler != nullptr && guidev::g_device != nullptr) {
@@ -308,6 +367,77 @@ bool WebGLContext::tex_storage_format(uint32_t id, int levels, int width, int he
 bool WebGLContext::tex_storage_2d(uint32_t id, int levels, int width, int height) {
   return tex_storage_format(id, levels, width, height,
                             SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
+}
+
+bool WebGLContext::tex_storage_3d(uint32_t id, int levels, int width, int height, int depth,
+                                  SDL_GPUTextureFormat format, int target) {
+  (void)levels;
+  WebGLTexture *record = texture(id);
+  if (record == nullptr || width <= 0 || height <= 0 || depth <= 0) {
+    set_error(GL_INVALID_VALUE);
+    return false;
+  }
+  end_pass();
+  ensure_command();
+  if (record->gpu != nullptr) {
+    submit();
+    SDL_WaitForGPUIdle(guidev::g_device);
+    SDL_ReleaseGPUTexture(guidev::g_device, record->gpu);
+    record->gpu = nullptr;
+    record->usage = 0;
+  }
+  record->width = width;
+  record->height = height;
+  record->layers = depth;
+  record->format = format;
+  record->depth = false;
+  record->compressed = false;
+  record->target = target == GL_TEXTURE_3D ? GL_TEXTURE_3D : GL_TEXTURE_2D_ARRAY;
+  record->has_mipmaps = false;
+  if (record->sampler != nullptr && guidev::g_device != nullptr) {
+    SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
+    record->sampler = nullptr;
+  }
+  record->defined = true;
+  return ensure_texture_gpu(record, false) != nullptr;
+}
+
+bool WebGLContext::tex_image_3d(uint32_t id, int width, int height, int depth,
+                                SDL_GPUTextureFormat format, const uint8_t *pixels,
+                                int target) {
+  WebGLTexture *record = texture(id);
+  if (record == nullptr || width <= 0 || height <= 0 || depth <= 0) {
+    set_error(GL_INVALID_VALUE);
+    return false;
+  }
+  end_pass();
+  ensure_command();
+  if (cmd_ == nullptr) return false;
+  const int resolved_target = target == GL_TEXTURE_3D ? GL_TEXTURE_3D : GL_TEXTURE_2D_ARRAY;
+  if (record->gpu != nullptr &&
+      (record->width != width || record->height != height || record->layers != depth ||
+       record->format != format || record->target != resolved_target)) {
+    SDL_WaitForGPUIdle(guidev::g_device);
+    SDL_ReleaseGPUTexture(guidev::g_device, record->gpu);
+    record->gpu = nullptr;
+    record->usage = 0;
+  }
+  record->width = width;
+  record->height = height;
+  record->layers = depth;
+  record->format = format;
+  record->depth = false;
+  record->compressed = false;
+  record->target = resolved_target;
+  record->has_mipmaps = false;
+  if (record->sampler != nullptr) {
+    SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
+    record->sampler = nullptr;
+  }
+  if (ensure_texture_gpu(record, false) == nullptr) return false;
+  record->defined = true;
+  return upload_volume(guidev::g_device, cmd_, record->gpu, width, height, depth, pixels,
+                       texel_bytes(format), resolved_target == GL_TEXTURE_3D);
 }
 
 /* -- WebGL 2 clearBuffer* ------------------------------------------------ */

@@ -40,6 +40,8 @@ int gl_type_of(const std::string &type) {
   if (type == "mat4") return GL_FLOAT_MAT4;
   if (type == "sampler2D") return GL_SAMPLER_2D;
   if (type == "samplerCube") return GL_SAMPLER_CUBE;
+  if (type == "sampler3D") return GL_SAMPLER_3D;
+  if (type == "sampler2DArray") return GL_SAMPLER_2D_ARRAY;
   return 0;
 }
 

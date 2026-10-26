@@ -376,8 +376,57 @@ METHOD(webgl2_tex_storage_2d) {
   return XT_UNDEFINED;
 }
 
-WEBGL2_NOOP(webgl2_tex_storage_3d)
-WEBGL2_NOOP(webgl2_tex_image_3d)
+METHOD(webgl2_tex_storage_3d) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const int internalformat = webgl_int(argc, argv, 2, 0x8058);  // GL_RGBA8
+  context->tex_storage_3d(context->bound_texture(0), webgl_int(argc, argv, 1, 1),
+                          webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0),
+                          webgl_int(argc, argv, 5, 0),
+                          xtgui::webgl_storage_format(internalformat),
+                          webgl_int(argc, argv, 0, GL_TEXTURE_2D_ARRAY));
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl2_tex_image_3d) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context == nullptr) return XT_UNDEFINED;
+  const uint32_t texture = context->bound_texture(0);
+  if (texture == 0) return XT_UNDEFINED;
+  if (webgl_int(argc, argv, 1, 0) != 0) return XT_UNDEFINED;
+  const int internalformat = webgl_int(argc, argv, 2, GL_RGBA);
+  const int width = webgl_int(argc, argv, 3, 0);
+  const int height = webgl_int(argc, argv, 4, 0);
+  const int depth = webgl_int(argc, argv, 5, 0);
+  const int format = webgl_int(argc, argv, 7, GL_RGBA);
+  const int type = webgl_int(argc, argv, 8, GL_UNSIGNED_BYTE);
+  if (type != GL_UNSIGNED_BYTE || width <= 0 || height <= 0 || depth <= 0) {
+    context->set_error(GL_INVALID_VALUE);
+    return XT_UNDEFINED;
+  }
+  int channels = 1;
+  if (format == GL_RGBA) channels = 4;
+  else if (format == GL_RGB) channels = 3;
+  else if (format == GL_LUMINANCE_ALPHA) channels = 2;
+  const std::vector<uint8_t> bytes = webgl_bytes(xt_arg(argc, argv, 9));
+  const size_t count = (size_t)width * height * depth;
+  std::vector<uint8_t> rgba;
+  if (bytes.empty()) {
+    rgba.assign(count * 4, 0);
+  } else if (bytes.size() < count * (size_t)channels) {
+    context->set_error(GL_INVALID_VALUE);
+    return XT_UNDEFINED;
+  } else {
+    webgl_convert_pixels(bytes.data(), (int)count, format, false, &rgba);
+  }
+  context->tex_image_3d(texture, width, height, depth,
+                        xtgui::webgl_storage_format(internalformat), rgba.data(),
+                        webgl_int(argc, argv, 0, GL_TEXTURE_2D_ARRAY));
+  return XT_UNDEFINED;
+}
+
 WEBGL2_NOOP(webgl2_tex_sub_image_3d)
 WEBGL2_NOOP(webgl2_compressed_tex_image3d)
 WEBGL2_NOOP(webgl2_compressed_tex_sub_image3d)

@@ -96,8 +96,7 @@ reflected offsets; `uniform1i` on a sampler stores the texture unit. The block
 is pushed with the dynamic uniform-buffer API on every draw.
 
 Limits of the translator: struct-typed uniforms, user uniform blocks, uniform
-arrays whose size is not resolved by the preprocessor, sampler arrays and cube
-maps are rejected (the link/shader info log says so). Shader code inside
+arrays whose size is not resolved by the preprocessor, sampler arrays are rejected (the link/shader info log says so). Shader code inside
 `#ifdef` is fine; non-sampler uniform declarations are moved to the enclosing
 top-level position so the block stays unconditional.
 
@@ -159,7 +158,11 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   `WEBGL_compressed_texture_s3tc_srgb` and `WEBGL_compressed_texture_astc`;
   each extension is published only when the device can sample its formats.
   `texImage2D` also accepts the latest decoded `<video>` frame and an
-  `ImageBitmap` produced by `createImageBitmap`.
+  `ImageBitmap` produced by `createImageBitmap`. Cube maps
+  (`bindTexture(TEXTURE_CUBE_MAP)` plus six `texImage2D` faces) and 3D/array
+  textures (`texImage3D`/`texStorage3D`) are sampled through `samplerCube`,
+  `sampler3D` and `sampler2DArray`; `texSubImage3D` and
+  `framebufferTextureLayer` are still no-ops.
 - **Framebuffers**: `createFramebuffer`, `bindFramebuffer`
   (`FRAMEBUFFER`/`READ_FRAMEBUFFER`/`DRAW_FRAMEBUFFER`),
   `framebufferTexture2D` (`COLOR_ATTACHMENT0`, `DEPTH_ATTACHMENT`,
@@ -212,8 +215,8 @@ WebGL 2 adds:
   gracefully: a fence reports `ALREADY_SIGNALED` and query results are 0.
 - **Uniform blocks**: `getUniformBlockIndex` answers `INVALID_INDEX` so a
   library falls back to individual uniforms; the block entry points are no-ops.
-- **Transform feedback and 3D/array textures**: the entry points are present as
-  no-ops so feature-probing libraries do not throw.
+- **Transform feedback**: the entry points are present as no-ops so
+  feature-probing libraries do not throw.
 
 Textures are created with a full mip chain; sampling clamps to level 0 until
 `generateMipmap` runs. Matrix vertex attributes consume the right number of
@@ -228,8 +231,9 @@ backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
 ## Not implemented
 
 Uniform buffer objects in shader source, transform feedback (the entry points
-are no-ops), cube maps, 3D/array textures, multiple render targets (only the
-first fragment output is written) and MSAA/sample buffers. `blitFramebuffer`
+are no-ops), multiple render targets (only the first fragment output is
+written) and MSAA/sample buffers; `texSubImage3D` and
+`framebufferTextureLayer` are no-ops. `blitFramebuffer`
 copies the colour attachment only; depth/stencil bits are accepted but not
 copied. Shaders that use built-in blocks, user uniform blocks or `gl_FragDepth`
 are rejected with a compile/link log.
@@ -254,7 +258,7 @@ uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
 - `tests/e2e/gui-webgl.test.ts` compiles GLSL, draws a textured and a
   depth-tested quad, checks face culling and reads the pixels back; it also
   covers blend constants, dynamic buffer usage, vertex-shader texture sampling,
-  `gl_FragDepth` diagnostics and context loss/restore.
+  `gl_FragDepth` diagnostics, context loss/restore and cube maps.
 - `tests/e2e/gui-webgl2.test.ts` covers the WebGL 2 additions: `#version 300 es`
   shaders, a VAO round trip, instanced draws with a divisor, `texStorage2D`,
   `clearBufferfv`, buffer copies, sampler objects, struct-uniform fields,
@@ -264,6 +268,8 @@ uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
   scissored clears, framebuffer blits, compressed textures and `ImageBitmap`.
 - `tests/e2e/gui-media.test.ts` also uploads the latest decoded `<video>` frame
   as a texture and reads it back.
+- `tests/e2e/gui-webgl2-3d.test.ts` covers 2D-array and 3D texture layer
+  sampling.
 - `examples/gui/webgl-cube` is a spinning, lit, textured cube; it runs in a
   browser unchanged and is covered by
   `tests/e2e/gui-example-webgl.test.ts`.
@@ -284,8 +290,8 @@ is bundled any more**. Verified with three.js r160 through SDL_GPU:
 `CanvasTexture`, linear fog, ambient/directional/point/spot/hemisphere lights,
 `Sprite`, `Line`, `Points` and `InstancedMesh`.
 
-Features outside this engine's subset still cannot be emulated: cube
-textures/environment maps, multiple render targets and transform feedback.
+Features outside this engine's subset still cannot be emulated: multiple render
+targets and transform feedback.
 Depth textures, float render targets and compressed textures are available, but
 three.js shadow maps still need comparative `sampler2DShadow` sampling, which
 is not translated yet. A scene that needs one of those will not render

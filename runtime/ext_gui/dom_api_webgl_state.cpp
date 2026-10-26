@@ -366,6 +366,24 @@ METHOD(webgl_get_parameter) {
                  ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
                  : XT_NULL;
     }
+    case GL_TEXTURE_BINDING_CUBE_MAP: {
+      const uint32_t texture = context->bound_cube_texture(0);
+      return texture != 0
+                 ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
+                 : XT_NULL;
+    }
+    case GL_TEXTURE_BINDING_2D_ARRAY: {
+      const uint32_t texture = context->bound_array_texture(0);
+      return texture != 0
+                 ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
+                 : XT_NULL;
+    }
+    case GL_TEXTURE_BINDING_3D: {
+      const uint32_t texture = context->bound_3d_texture(0);
+      return texture != 0
+                 ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
+                 : XT_NULL;
+    }
     case GL_FRAMEBUFFER_BINDING: {
       const uint32_t framebuffer = context->bound_framebuffer_id();
       return framebuffer != 0

@@ -98,6 +98,11 @@ struct WebGLTexture {
   int width = 0;
   int height = 0;
   int levels = 1;
+  /** The binding target this texture was created for (`TEXTURE_2D`,
+   * `TEXTURE_CUBE_MAP`, `TEXTURE_2D_ARRAY`, `TEXTURE_3D`). */
+  int target = GL_TEXTURE_2D;
+  /** Layers for a cube/2D-array texture, depth for a 3D texture. */
+  int layers = 1;
   SDL_GPUTexture *gpu = nullptr;
   SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
   /** True when `format` is a depth(-stencil) format; such a texture can be a
@@ -376,15 +381,20 @@ class WebGLContext {
   /** Generic level-0 upload: `pixels` is tightly packed in `format` (always
    * four components; R/RG formats are expanded by the caller). */
   bool tex_image_format(uint32_t id, int width, int height, SDL_GPUTextureFormat format,
-                        const uint8_t *pixels);
+                        const uint8_t *pixels, int layer = -1);
   bool tex_sub_image_format(uint32_t id, int x, int y, int width, int height,
-                            const uint8_t *pixels);
+                            const uint8_t *pixels, int layer = 0);
   bool generate_mipmap(uint32_t id);
   /** WebGL 2 `texStorage2D`: allocate immutable storage at `width`×`height`.
    * The backend always allocates the full mip chain, so `levels` is a hint. */
   bool tex_storage_2d(uint32_t id, int levels, int width, int height);
   bool tex_storage_format(uint32_t id, int levels, int width, int height,
                           SDL_GPUTextureFormat format);
+  /** Allocate (and optionally upload) a 3D or 2D-array texture. */
+  bool tex_storage_3d(uint32_t id, int levels, int width, int height, int depth,
+                      SDL_GPUTextureFormat format, int target);
+  bool tex_image_3d(uint32_t id, int width, int height, int depth,
+                    SDL_GPUTextureFormat format, const uint8_t *pixels, int target);
   /** Upload a block-compressed region (`data` holds the tightly packed blocks
    * for the `width`×`height` region). */
   bool tex_image_compressed(uint32_t id, int width, int height, SDL_GPUTextureFormat format,
@@ -427,6 +437,9 @@ class WebGLContext {
   std::string string_parameter(int pname);
   uint32_t bound_buffer(int target) const;
   uint32_t bound_texture(int unit) const;
+  uint32_t bound_cube_texture(int unit) const;
+  uint32_t bound_array_texture(int unit) const;
+  uint32_t bound_3d_texture(int unit) const;
   uint32_t current_program_id() const { return current_program_; }
   uint32_t bound_framebuffer_id() const { return bound_framebuffer_; }
   uint32_t bound_renderbuffer_id() const { return bound_renderbuffer_; }
@@ -536,6 +549,12 @@ class WebGLContext {
   uint32_t read_framebuffer_ = 0;
   uint32_t bound_renderbuffer_ = 0;
   uint32_t bound_textures_[kWebGLMaxTextureUnits] = {};
+  uint32_t bound_cube_textures_[kWebGLMaxTextureUnits] = {};
+  uint32_t bound_array_textures_[kWebGLMaxTextureUnits] = {};
+  uint32_t bound_3d_textures_[kWebGLMaxTextureUnits] = {};
+  /** The target of the most recent `bindTexture` on each unit, so the existing
+   * per-unit entry points operate on the object the page just bound. */
+  int active_texture_target_[kWebGLMaxTextureUnits] = {};
   uint32_t bound_samplers_[kWebGLMaxTextureUnits] = {};
   uint32_t bound_vertex_array_ = 0;
   WebGLVertexArray default_vertex_array_;

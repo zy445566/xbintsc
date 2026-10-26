@@ -295,7 +295,12 @@ METHOD(webgl_tex_image_2d) {
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
   const int target = webgl_int(argc, argv, 0, GL_TEXTURE_2D);
-  if (target != GL_TEXTURE_2D) return XT_UNDEFINED;
+  int layer = -1;
+  if (target >= GL_TEXTURE_CUBE_MAP_POSITIVE_X && target <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z) {
+    layer = target - GL_TEXTURE_CUBE_MAP_POSITIVE_X;
+  } else if (target != GL_TEXTURE_2D) {
+    return XT_UNDEFINED;
+  }
   const uint32_t texture = context->bound_texture(0);
   if (texture == 0) {
     context->set_error(GL_INVALID_OPERATION);
@@ -340,7 +345,7 @@ METHOD(webgl_tex_image_2d) {
           convert_depth_pixels(pixels.empty() ? nullptr : pixels.data(), (int)count, type, stencil);
       if (flip_y) flip_rows_bpp(&data, width, height, 4);
       context->tex_image_format(texture, width, height, storage_format_for(internalformat),
-                                data.data());
+                                data.data(), layer);
       return XT_UNDEFINED;
     }
     if (is_float_internal(internalformat) || type == GL_FLOAT || type == GL_HALF_FLOAT) {
@@ -362,7 +367,7 @@ METHOD(webgl_tex_image_2d) {
       std::vector<uint8_t> data = convert_float_pixels(
           pixels.empty() ? nullptr : pixels.data(), (int)count, format, type, half);
       if (flip_y) flip_rows_bpp(&data, width, height, half ? 8 : 16);
-      context->tex_image_format(texture, width, height, sdl, data.data());
+      context->tex_image_format(texture, width, height, sdl, data.data(), layer);
       return XT_UNDEFINED;
     }
     if (type != GL_UNSIGNED_BYTE) {
@@ -389,7 +394,8 @@ METHOD(webgl_tex_image_2d) {
     return XT_UNDEFINED;
   }
   if (flip_y) flip_rows_bpp(&rgba, width, height, 4);
-  context->tex_image_rgba(texture, width, height, rgba.data());
+  context->tex_image_format(texture, width, height, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+                            rgba.data(), layer);
   return XT_UNDEFINED;
 }
 
@@ -397,6 +403,13 @@ METHOD(webgl_tex_sub_image_2d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
+  const int target = webgl_int(argc, argv, 0, GL_TEXTURE_2D);
+  int layer = 0;
+  if (target >= GL_TEXTURE_CUBE_MAP_POSITIVE_X && target <= GL_TEXTURE_CUBE_MAP_NEGATIVE_Z) {
+    layer = target - GL_TEXTURE_CUBE_MAP_POSITIVE_X;
+  } else if (target != GL_TEXTURE_2D) {
+    return XT_UNDEFINED;
+  }
   const uint32_t texture = context->bound_texture(0);
   if (texture == 0) return XT_UNDEFINED;
   const int level = webgl_int(argc, argv, 1, 0);
@@ -430,7 +443,7 @@ METHOD(webgl_tex_sub_image_2d) {
       std::vector<uint8_t> data = convert_depth_pixels(
           pixels.empty() ? nullptr : pixels.data(), (int)count, type, stencil);
       if (flip_y) flip_rows_bpp(&data, width, height, 4);
-      context->tex_sub_image_format(texture, x, y, width, height, data.data());
+      context->tex_sub_image_format(texture, x, y, width, height, data.data(), layer);
       return XT_UNDEFINED;
     }
     if (current == (int)SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT ||
@@ -443,7 +456,7 @@ METHOD(webgl_tex_sub_image_2d) {
       std::vector<uint8_t> data = convert_float_pixels(
           pixels.empty() ? nullptr : pixels.data(), (int)count, format, type, half);
       if (flip_y) flip_rows_bpp(&data, width, height, half ? 8 : 16);
-      context->tex_sub_image_format(texture, x, y, width, height, data.data());
+      context->tex_sub_image_format(texture, x, y, width, height, data.data(), layer);
       return XT_UNDEFINED;
     }
     if (pixels.size() < count * (size_t)bytes_per_pixel(format)) return XT_UNDEFINED;
@@ -458,7 +471,7 @@ METHOD(webgl_tex_sub_image_2d) {
     height = source_height;
   }
   if (flip_y) flip_rows_bpp(&rgba, width, height, 4);
-  context->tex_sub_image_rgba(texture, x, y, width, height, rgba.data());
+  context->tex_sub_image_format(texture, x, y, width, height, rgba.data(), layer);
   return XT_UNDEFINED;
 }
 

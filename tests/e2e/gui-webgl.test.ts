@@ -354,4 +354,105 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL", () => {
     expect(value("error")).toBe("0");
     expect(stderr).not.toContain("pipeline creation failed");
   });
+
+  it("samples a cube map face by direction", () => {
+    const { value, stderr } = harness.compileAndRun(
+      "webgl-cube-map",
+      `
+      import { createWindow } from "gui";
+      import page from "./page.html";
+
+      const win = createWindow({ title: "cube-map", width: 320, height: 240 });
+      const label = (name: string, value: any): void => console.log(name + "=" + value);
+
+      win.on("ready", () => {
+        const canvas: any = document.getElementById("c");
+        const gl: any = canvas.getContext("webgl");
+        if (gl == null) {
+          console.log("webgl=false");
+          win.close();
+          return;
+        }
+        label("max-cube", gl.getParameter(gl.MAX_CUBE_MAP_TEXTURE_SIZE));
+        const vs: any = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, "attribute vec2 a_pos; varying vec2 v_uv;" +
+          "void main() { v_uv = a_pos * 0.5 + 0.5;" +
+          "  gl_Position = vec4(a_pos, 0.0, 1.0); }");
+        gl.compileShader(vs);
+        const fs: any = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, "precision mediump float; varying vec2 v_uv;" +
+          "uniform samplerCube u_cube; uniform vec3 u_dir;" +
+          "void main() { gl_FragColor = textureCube(u_cube, u_dir); }");
+        gl.compileShader(fs);
+        const program: any = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+        label("link", gl.getProgramParameter(program, gl.LINK_STATUS));
+        gl.useProgram(program);
+        const quad = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+          -1, -1,  3, -1,  -1, 3,
+        ]), gl.STATIC_DRAW);
+        const pos: any = gl.getAttribLocation(program, "a_pos");
+        gl.enableVertexAttribArray(pos);
+        gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 8, 0);
+
+        const faces = [
+          gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+          gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+          gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+        ];
+        const colors = [
+          [255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255],
+          [255, 255, 0, 255], [255, 0, 255, 255], [0, 255, 255, 255],
+        ];
+        const cube: any = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_CUBE_MAP, cube);
+        for (let i = 0; i < 6; i++) {
+          gl.texImage2D(faces[i], 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+            new Uint8Array(colors[i]));
+        }
+        gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        label("binding", gl.getParameter(gl.TEXTURE_BINDING_CUBE_MAP) != null);
+        gl.uniform1i(gl.getUniformLocation(program, "u_cube"), 0);
+        const dir: any = gl.getUniformLocation(program, "u_dir");
+        const px = new Uint8Array(4);
+        const sample = (x: number, y: number, z: number): string => {
+          gl.uniform3f(dir, x, y, z);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+          gl.readPixels(32, 32, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          return px[0] + "," + px[1] + "," + px[2] + "," + px[3];
+        };
+        gl.viewport(0, 0, 64, 64);
+        label("face-x", sample(1, 0, 0));
+        label("face-neg-x", sample(-1, 0, 0));
+        label("face-y", sample(0, 1, 0));
+        label("face-neg-y", sample(0, -1, 0));
+        label("face-z", sample(0, 0, 1));
+        label("face-neg-z", sample(0, 0, -1));
+        label("error", gl.getError());
+        win.close();
+      });
+
+      win.loadHTML(page);
+      `,
+      { files: { "page.html": PAGE }, autocloseMs: 10000 },
+    );
+
+    expect(value("max-cube")).toBe("8192");
+    expect(value("link")).toBe("true");
+    expect(value("binding")).toBe("true");
+    expect(value("face-x")).toBe("255,0,0,255");
+    expect(value("face-neg-x")).toBe("0,255,0,255");
+    expect(value("face-y")).toBe("0,0,255,255");
+    expect(value("face-neg-y")).toBe("255,255,0,255");
+    expect(value("face-z")).toBe("255,0,255,255");
+    expect(value("face-neg-z")).toBe("0,255,255,255");
+    expect(value("error")).toBe("0");
+    expect(stderr).not.toContain("pipeline creation failed");
+  });
 });

@@ -1,7 +1,8 @@
 /*
  * xbintsc media extension — registration bridge.
  *
- * The decoders live in `media.a`, a prebuilt C++ archive. A static archive is
+ * The decoders live in `media.a` (`media.lib` with the MSVC ABI on Windows), a
+ * prebuilt C++ archive. A static archive is
  * only searched for members that satisfy an undefined symbol, so a backend that
  * merely had a constructor would never be extracted. This tiny C translation
  * unit is compiled and linked *directly* (it is the media extension's
@@ -24,12 +25,17 @@ static const XtMediaApi kMediaApi = {
 };
 
 #if defined(__GNUC__) || defined(__clang__)
+/* clang targeting Windows (the toolchain xbintsc uses there) implements this
+ * attribute with a `.CRT$XCU` entry, which the MSVC CRT runs before `main`. */
 __attribute__((constructor)) static void xt_media_register(void) {
   xt_media_install(&kMediaApi);
 }
 #elif defined(_MSC_VER)
-/* COFF has no `constructor` attribute. `media.lib` is not produced on Windows
- * yet; keep the table referenced so the translation unit is not empty. */
+/* A plain MSVC build has no constructor attribute; put the function pointer in
+ * the CRT's initializer table by hand. `media.lib` itself is built with
+ * clang-cl, so this branch is only for a cl.exe-built bridge. */
 void xt_media_register(void);
+#pragma section(".CRT$XCU", read)
+__declspec(allocate(".CRT$XCU")) static void (*const xt_media_register_ctor)(void) = xt_media_register;
 void xt_media_register(void) { xt_media_install(&kMediaApi); }
 #endif

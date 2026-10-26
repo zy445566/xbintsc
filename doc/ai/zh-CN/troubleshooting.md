@@ -94,10 +94,12 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
 - Windows 上解析到的 clang 找不到 MSVC/SDK 头文件或库。`xbintsc doctor` 会显示
   编译器及其目标；优先使用 Visual Studio 自带的 LLVM，它会自行定位 SDK。如果你的
   安装仍需要显式导入环境，请在 **x64 Native Tools Command Prompt for VS 2022**
-  （ARM64 机器上是 **ARM64 Native Tools**）里运行，或先导入环境：
+  （ARM64 机器上是 **ARM64 Native Tools**）里运行，或直接使用 CI 同一套设置：
   ```powershell
-  & "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
+  pwsh -File scripts/setup-vs-toolchain.ps1
   ```
+  该脚本会导入 `vcvarsall`，并把 `xbintsc_CLANG` 指向 Visual Studio 自带的
+  LLVM。直接执行 `vcvarsall.bat x64` 也仍然可行。
 - Linux 上链接器不对——设置 `xbintsc_CLANG`，并/或传
   `xbintsc_LINKER_ARGS=-fuse-ld=lld`；
 - `No C compiler found. Set xbintsc_CLANG to a clang binary.` —— `PATH` 里完全没有
@@ -110,10 +112,12 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
 
 ### `media native library not found at …`
 
-`<video>`/`<audio>` 播放需要可选的 `media` 归档（`media.a`），用
-`npm run media` 单独构建。构建它，或去掉 `--ext media`；仅启用 `gui` 的构建仍可
-链接，媒体元素只会触发 `error`。`media` 扩展还依赖 `gui`，目前没有 Windows
-归档，单独 `--ext media` 会被拒绝并提示应传的 flag。见
+`<video>`/`<audio>` 播放需要可选的 `media` 归档（`media.a`，Windows 上是
+`media.lib`），用 `npm run media` 单独构建。构建它，或去掉 `--ext media`；
+仅启用 `gui` 的构建仍可链接，媒体元素只会触发 `error`。`media` 扩展还依赖
+`gui`，单独 `--ext media` 会被拒绝并提示应传的 flag。Windows 上 FFmpeg 的
+构建还需要 POSIX shell（Git for Windows 的 bash）与原生 GNU make
+（Chocolatey `make`，或 `xbintsc_MAKE`）。脚本会指出缺失的是哪一个。见
 [../../zh-CN/gui/build.md](../../zh-CN/gui/build.md)。
 
 ### `Icon file not found` / 图标工具缺失

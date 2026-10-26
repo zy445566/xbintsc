@@ -58,8 +58,9 @@ TypeScript 编译器。
 - 预编译的运行时归档（`runtime/lib/<os>-<arch>/core.a`）。驱动会在首次使用时
   从随包发布的源码编译 C 运行时并缓存目标文件，所以第一次构建会更慢
   （见[首次构建与缓存](#首次构建与缓存)）；
-- GUI/media 的原生归档（`gui.a`、`media.a`）。如果你需要 `--ext gui` 或
-  `--ext media`，请使用 Linux/macOS 的发布压缩包，或从源码检出中构建这些归档。
+- GUI/media 的原生归档（`gui.a`/`gui.lib`、`media.a`/`media.lib`）。如果你需要
+  `--ext gui` 或 `--ext media`，请使用 Linux/macOS/Windows x64 的发布压缩包，
+  或从源码检出中构建这些归档。
 
 ## 环境要求
 
@@ -339,8 +340,10 @@ jobs:
   目标文件名是内容哈希，因此旧缓存不会污染新构建。
 - xbintsc 只为**宿主**平台构建，不是交叉编译器：要给多个平台产出产物，请使用
   CI matrix（每个 OS/arch 一个 job）。
-- macOS runner 已经带有 Xcode Command Line Tools；Windows runner 需要安装 LLVM
-  与 MSVC 生成工具，产物是 `build\main.exe`。
+- macOS runner 已经带有 Xcode Command Line Tools；Windows runner 需要安装
+  Visual Studio C++ 生成工具（MSVC + 自带的 LLVM），产物是 `build\main.exe`。
+  在源码检出中可运行 `pwsh -File scripts/setup-vs-toolchain.ps1` 显式导入该
+  工具链。
 
 ## npm 包还是发布压缩包？
 
@@ -348,7 +351,7 @@ jobs:
 | --- | --- | --- |
 | 需要 Node.js | 是，22+ | 否 |
 | 首次构建 | 从源码编译 C 运行时 | 直接链接预编译运行时 |
-| GUI / media 扩展 | 不包含 | Linux/macOS 压缩包包含 |
+| GUI / media 扩展 | 不包含 | Linux/macOS 与 Windows x64 压缩包包含 |
 | 安装方式 | `npm install` + lockfile / provenance | 下载、校验 `.sha256`、解压 |
 | 编程 API | 有 | 无（仅 CLI） |
 | 交叉编译 | 否——只构建宿主平台 | 否——只构建宿主平台 |
@@ -383,7 +386,7 @@ jobs:
 | 第一次构建很慢 | 正常：正在编译并缓存运行时 C 源码。后续构建会复用 `.xbintsc/`；`--time` 可确认。如果冷启动必须快，请使用发布压缩包。 |
 | 写 `.xbintsc/` 权限错误 | 用 `xbintsc_CACHE_DIR` 指向可写目录，或在可写目录中运行。 |
 | `module 'fs' is provided by the 'node' extension` | 加 `--ext node`，或在配置里写 `"extensions": ["node"]`。 |
-| `GUI native library not found` / `media native library not found` | npm 包不包含 `gui.a`/`media.a`；请使用 Linux/macOS 发布压缩包，或从源码检出构建。 |
+| `GUI native library not found` / `media native library not found` | npm 包不包含 `gui.a`/`gui.lib` 或 `media.a`/`media.lib`；请使用 Linux/macOS/Windows x64 发布压缩包，或从源码检出构建。 |
 | `require("xbintsc")` 失败 | 包只提供 ESM；使用 `import`（或动态 `import()`）。 |
 | Windows 链接时报缺少 MSVC 库 | 在 Native Tools 命令提示符中运行，安装 VS C++ 生成工具，并检查 `npx xbintsc doctor`。 |
 | `npm ci --omit=dev` 后构建找不到 `xbintsc` | 在构建阶段安装 devDependencies，或把 `xbintsc` 移到 `dependencies`。 |

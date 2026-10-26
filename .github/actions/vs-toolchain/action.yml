@@ -1,0 +1,24 @@
+name: Visual Studio toolchain
+
+# Windows jobs use the same compiler chain as a local build: the MSVC build
+# tools and the LLVM bundled with that Visual Studio installation, selected by
+# `scripts/setup-vs-toolchain.ps1`. No standalone/Chocolatey LLVM is installed,
+# so the driver, CMake, the GUI asset build and FFmpeg's clang-cl build all see
+# one `clang` and one MSVC CRT.
+description: Import the Visual Studio MSVC environment and its bundled LLVM
+
+inputs:
+  make:
+    description: Install GNU make for FFmpeg's configure (Windows x64 builds of the media archive)
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up the Visual Studio toolchain
+      shell: pwsh
+      run: |
+        # The media archive is only built on x64; on arm64 leave GNU make alone.
+        $installMake = ("${{ inputs.make }}" -eq "true") -and ($env:RUNNER_ARCH -eq "X64")
+        & (Join-Path $env:GITHUB_WORKSPACE "scripts/setup-vs-toolchain.ps1") -InstallMake:$installMake

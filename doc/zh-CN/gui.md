@@ -135,19 +135,24 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
    - **M6b — transition/动画** ✅ `transition` 简写 + 长写、对
      `background-color`/`color`/`border-color`/`border-radius` 的动画、重定向
      与 `win.advance(ms)`。`@keyframes` 仍待完成。
-7. **M7 — CI 与发布** ✅（Linux/macOS 构建） / 🚧（运行 + Windows）
+7. **M7 — CI 与发布** ✅（Linux/macOS 构建） / 🚧（运行 + Windows arm64）
    - `compile-examples` 在 Linux 与 macOS 上构建 `gui.a` 与 `media.a`（必需），
      然后在 Linux 上的 Xvfb + lavapipe 下运行示例与 `tests/e2e/gui-*.test.ts`
      （必需）。macOS 运行在确认 WindowServer 之前为试验性；它被保护起来，失败
      只记录日志而不标注运行。
-   - `package` job 在组装发布之前构建 `gui.a` 与 `media.a`，因此两者都会随现有
-     runtime 归档一起发布（`package-release` 复制整个 `runtime/`）。
-   - `vendor/`（`gui.a` 的 SDL3/FreeType/HarfBuzz，以及 `media.a` 的 FFmpeg，
+   - `package` job 在组装发布之前构建 `gui.a`/`gui.lib` 与 `media.a`/`media.lib`，
+     因此两者都会随现有 runtime 归档一起发布（`package-release` 复制整个
+     `runtime/`）。Windows x64 已包含；Windows arm64 仍跳过。
+   - `vendor/`（GUI 归档的 SDL3/FreeType/HarfBuzz，以及 `media` 的 FFmpeg，
      缓慢的部分）按 OS/arch 缓存，以 `scripts/build-gui.ts` /
-     `scripts/build-media.ts` 为键。
-   - Windows（构建 + 运行）在 CI 中保持试验性：MSVC 兼容的 `gui.lib` 可在本机
-     通过 SDL_GPU 的 Vulkan 后端构建并运行，但托管 runner 没有 GPU/Vulkan
-     驱动。失败只记录日志而不标注运行（见[待决问题](./gui/known-issues.md)）。
+     `scripts/build-media.ts` 为键。Windows x64 有独立的源码 + FFmpeg 安装前缀
+     缓存。
+   - Windows x64 在 CI 中构建两个归档并链接一个 `gui,media` 程序；托管 runner
+     没有 GPU/Vulkan 驱动，因此 GUI/媒体示例的*运行*仍为试验性（失败只记录
+     日志而不标注运行）。Windows arm64 仍跳过两个归档（见
+     [待决问题](./gui/known-issues.md)）。CI 通过
+     `.github/actions/vs-toolchain` → `scripts/setup-vs-toolchain.ps1` 使用与
+     本地构建相同的 Visual Studio MSVC + 自带 LLVM 工具链。
 8. **M8 — 交互式 DOM** ✅
    - 具有稳定标识的元素/文档句柄、通过运行时访问器读写属性、遍历/特性/查询、
      带有延迟重算样式/重新布局的变更
@@ -252,10 +257,13 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
   按绘制设备像素尺寸光栅化并按该尺寸缓存，因此缩放与 HiDPI 保持清晰。
 - **M6b** ✅ CSS transition（在 `style.*` 中解析、在 `document.*` 中维护动画
   时钟与 transition 状态、`advance`/`advance(ms)` 钩子、e2e 覆盖）。
-- **M7** ✅ 在 CI 中于 Linux 与 macOS 上构建 `gui.a`（以及可选的 `media.a`，
-  必需），并在 Linux 的 Xvfb 下运行示例与 GUI e2e 套件；`package` 发布两个归档，
-  `vendor/` 被缓存，`ar -M` 合并在 GNU/Linux 与 macOS 上可用。macOS 运行与所有
-  Windows 在 CI 中仍为试验性。
+- **M7** ✅ 在 CI 中于 Linux、macOS 与 Windows x64 上构建 `gui.a`/`gui.lib` 与
+  `media.a`/`media.lib`（必需），并在 Linux 的 Xvfb 下运行示例与 GUI e2e 套件；
+  `package` 发布这些归档（Windows x64 已包含），`vendor/` 被缓存，`ar -M` 合并
+  在 GNU/Linux、macOS 与 COFF/Windows 上可用。macOS 运行、Windows 示例的*运行*
+  以及 Windows arm64 在 CI 中仍为试验性。Windows job 通过
+  `.github/actions/vs-toolchain` 使用与本地构建相同的 Visual Studio MSVC +
+  自带 LLVM 工具链。
 - **M8** ✅ 元素/文档句柄（`dom_api.*`）、带延迟重算样式/重新布局的 DOM 变更
   （`document.*`、`xt_gui_flush_dom`）、带捕获/冒泡与 `stopPropagation` 的
   元素事件分发（`dom_api.*`、`gui.cpp`），以及

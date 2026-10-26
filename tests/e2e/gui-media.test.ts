@@ -37,11 +37,12 @@ function mediaSrc(absolutePath: string): string {
 const resourcesAvailable = existsSync(moviePath) && existsSync(soundPath);
 
 /**
- * The `media` archive is built separately (`npm run media`) and is POSIX-only
- * for now. Without it the suite would compile GUI programs that report the
- * expected `error` events, i.e. it would test the wrong thing.
+ * The `media` archive is built separately (`npm run media`) for every host
+ * platform (`media.a`, or `media.lib` with the MSVC ABI on Windows). Without it
+ * the suite would compile GUI programs that report the expected `error` events,
+ * i.e. it would test the wrong thing.
  */
-const mediaAvailable = process.platform !== "win32" && findRuntimeLibrary("media") !== undefined;
+const mediaAvailable = findRuntimeLibrary("media") !== undefined;
 
 describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui + media extensions", () => {
   const harness = createGuiHarness();

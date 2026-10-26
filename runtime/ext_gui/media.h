@@ -54,7 +54,7 @@ enum MediaEvent {
  * The audio output the decoder writes PCM to.
  *
  * The engine implements it with an SDL audio stream (`gui_media.cpp`), which
- * keeps SDL out of the optional `media.a`. The fixed format is 48 kHz stereo
+ * keeps SDL out of the optional `media.a`/`media.lib`. The fixed format is 48 kHz stereo
  * float: the decoder resamples every source stream to it with swresample.
  */
 class AudioSink {

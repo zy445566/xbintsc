@@ -106,8 +106,8 @@ gets the Canvas2D fallback described above):
 
 Enable with `--ext media` **together with** `gui` (`--ext gui,media`; the
 registry rejects `media` on its own). It links a separate FFmpeg-backed
-`media.a`, so adding `<video>`/`<audio>` playback does not make a GUI-only
-binary any larger.
+`media.a`/`media.lib`, so adding `<video>`/`<audio>` playback does not make a
+GUI-only binary any larger.
 
 The DOM API is the same as for any HTML media element: `play()` / `pause()` /
 `load()`, the `paused` / `ended` / `duration` / `currentTime` / `volume` /
@@ -117,8 +117,14 @@ The DOM API is the same as for any HTML media element: `play()` / `pause()` /
 elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM are
 decoded on the main thread; video goes through the image texture path. Without
 the extension, opening a media source fails and fires `error` (the element and
-its API still exist). The archive is POSIX-only for now, so Windows reports the
-same `error`; see [../gui/known-issues.md](../gui/known-issues.md).
+its API still exist). The archive is built for every host: POSIX produces
+`media.a`, while Windows produces `media.lib` from FFmpeg compiled with the
+MSVC-targeting `clang-cl`, so it links with `gui.lib`. Building it on Windows
+needs a POSIX shell (Git for Windows' bundled bash) and a native GNU make
+(Chocolatey `make`, or `xbintsc_MAKE`). See
+[../gui/build.md](../gui/build.md). Without the archive, or on a host where
+`npm run media` has not run, media elements report `error`; see
+[../gui/known-issues.md](../gui/known-issues.md).
 
 ## Third-party npm packages
 

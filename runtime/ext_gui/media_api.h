@@ -7,7 +7,7 @@
  * The engine knows how to model `<video>`/`<audio>` elements and how to draw
  * their frames, but it deliberately contains no decoder: FFmpeg lives in the
  * separate `media` compile extension (`runtime/ext_media/`, linked as
- * `media.a`). Keeping the boundary C-only means the backend can be a prebuilt
+ * `media.a`, or `media.lib` with the MSVC ABI on Windows). Keeping the boundary C-only means the backend can be a prebuilt
  * C++ archive that is compiled independently of the engine.
  *
  * Registration is push-based: the backend's bridge translation unit is linked
@@ -51,7 +51,7 @@ typedef struct XtMediaApi {
 void xt_media_install(const XtMediaApi *api);
 
 /** Decoder backend entry points, implemented by `runtime/ext_media/media.cpp`
- * (inside `media.a`). The bridge references them, which is what makes the
+ * (inside `media.a`/`media.lib`). The bridge references them, which is what makes the
  * linker extract the archive member when the media extension is enabled. */
 XtMediaPlayerHandle xt_media_backend_open(const char *path, char *error,
                                           size_t error_size, void *audio_sink);

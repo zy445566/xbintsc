@@ -13,8 +13,8 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../../.." && pwd)"
 runtime="$root/runtime"
 
-# On Git Bash/MSYS a native clang needs Windows-style paths. `cygpath -m` keeps
-# forward slashes (`C:/dir`), which both MSYS tools and clang accept.
+# In a Windows POSIX shell a native clang needs Windows-style paths.
+# `cygpath -m` keeps forward slashes (`C:/dir`), which those tools accept.
 if command -v cygpath >/dev/null 2>&1; then
   here="$(cygpath -m "$here")"
   runtime="$(cygpath -m "$runtime")"
@@ -32,7 +32,7 @@ find_tool() {
 
 is_windows=0
 case "$(uname -s)" in
-  *NT-* | MSYS* | CYGWIN*) is_windows=1 ;;
+  *NT-* | CYGWIN*) is_windows=1 ;;
 esac
 
 if [ -n "${CXX:-}" ]; then

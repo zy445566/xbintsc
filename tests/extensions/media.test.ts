@@ -18,7 +18,7 @@ afterEach(() => {
   mocks.findRuntimeLibrary.mockReset();
 });
 
-/** Pretend to be a POSIX host so the Windows-only guard does not fire. */
+/** Pretend to be a POSIX host, so the archive name in messages is `media.a`. */
 function posixHost(): void {
   vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
 }
@@ -50,9 +50,13 @@ describe("media extension object", () => {
     expect(() => mediaExtension.nativeObjects?.()).toThrow(/npm run media/);
   });
 
-  it("reports that Windows has no media archive yet", () => {
+  it("links media.lib and the Win32 system libraries on Windows", () => {
     vi.spyOn(process, "platform", "get").mockReturnValue("win32");
-    expect(() => mediaExtension.nativeObjects?.()).toThrow(/not available on Windows/);
+    mocks.findRuntimeLibrary.mockReturnValue("C:/repo/runtime/lib/win32-x64/media.lib");
+    expect(mediaExtension.nativeObjects?.()).toEqual(["C:/repo/runtime/lib/win32-x64/media.lib"]);
+    /* FFmpeg's avutil/avcodec reference bcrypt, ole32 and user32; the GUI
+     * extension already contributes the rest. */
+    expect(mediaExtension.linkerFlags?.()).toEqual(["-lbcrypt", "-lole32", "-luser32"]);
   });
 
   it("rejects a build that enables media without gui", () => {

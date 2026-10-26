@@ -124,22 +124,26 @@ Verify with `clang --version`. If xbintsc uses the wrong linker, set
 `xbintsc_CLANG` to the clang you want and/or pass extra flags through
 `xbintsc_LINKER_ARGS` (for example `-fuse-ld=lld`).
 
-## Windows — install the MSVC C++ build tools (and LLVM)
+## Windows — install the MSVC C++ build tools (with LLVM)
 
-xbintsc targets the **MSVC ABI** on Windows. Install the Visual Studio C++
-build tools plus LLVM with `winget`:
+xbintsc targets the **MSVC ABI** on Windows. One `winget` command installs the
+Visual Studio C++ workload, MSBuild and the Clang component that the local build
+scripts and CI use:
 
 ```powershell
-winget install -e --id LLVM.LLVM
 winget install -e --id Microsoft.VisualStudio.2022.BuildTools `
-  --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+  --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
 ```
 
 The LLVM bundled with Visual Studio 2022
-(`VC\Tools\Llvm\x64\bin\clang.exe`, version 19.1.5 in current installs) is
-enough, and so is a standalone LLVM. Either way the compiler must target the
-MSVC ABI (`Target: *-windows-msvc`): clang built for another Windows ABI cannot
-link with the MSVC runtime, so `xbintsc` rejects it with an explicit error.
+(`VC\Tools\Llvm\x64\bin\clang.exe`, version 19.1.5 in current installs) is what
+`scripts/setup-vs-toolchain.ps1` selects. A standalone LLVM also works for
+`xbintsc` itself (`winget install -e --id LLVM.LLVM`), but the GUI/media archive
+builds and the CI setup use the Visual Studio one so one toolchain produces the
+runtime, the archives and the final binary. Either way the compiler must target
+the MSVC ABI (`Target: *-windows-msvc`): clang built for another Windows ABI
+cannot link with the MSVC runtime, so `xbintsc` rejects it with an explicit
+error.
 
 A developer prompt is normally **not** required: `xbintsc` resolves the Visual
 Studio LLVM by absolute path, and that clang locates the MSVC/SDK headers,
@@ -150,6 +154,11 @@ imported, run the build from an **x64 Native Tools Command Prompt for VS 2022**
 ```powershell
 & "$env:ProgramFiles\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64
 ```
+
+In a source checkout, `pwsh -File scripts/setup-vs-toolchain.ps1` does the same
+and also pins `xbintsc_CLANG` to the LLVM bundled with that Visual Studio
+installation. CI calls the same script, so a local build, the release archives
+and CI use one Visual Studio toolchain.
 
 Verify with `xbintsc doctor` (or `clang --version`); the report names the
 resolved compiler, its version and its target.

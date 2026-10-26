@@ -8,7 +8,7 @@
  *   - the renderer (`renderer_image.cpp`), which owns the GPU textures.
  *
  * It also provides the SDL audio sink the decoder writes PCM to, which keeps
- * SDL out of `media.a`.
+ * SDL out of `media.a`/`media.lib`.
  *
  * The frame loop calls `xt_gui_media_sync` (open/close decoders so the next
  * layout sees the current sources and intrinsic sizes) and `xt_gui_media_tick`

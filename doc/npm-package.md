@@ -358,8 +358,10 @@ jobs:
   cannot poison a new build.
 - xbintsc builds for the **host** platform. It is not a cross-compiler: use a CI
   matrix (one job per OS/arch) to produce artifacts for several platforms.
-- macOS runners already have Xcode Command Line Tools; Windows runners need
-  LLVM and the MSVC build tools, and the binary is `build\main.exe`.
+- macOS runners already have Xcode Command Line Tools; Windows runners need the
+  Visual Studio C++ build tools (MSVC + its bundled LLVM), and the binary is
+  `build\main.exe`. In a source checkout,
+  `pwsh -File scripts/setup-vs-toolchain.ps1` imports that toolchain explicitly.
 
 ## npm package or release archive?
 
@@ -367,7 +369,7 @@ jobs:
 | --- | --- | --- |
 | Needs Node.js | Yes, 22+ | No |
 | First build | Compiles the C runtime from source | Links the prebuilt runtime |
-| GUI / media extensions | Not included | Included in Linux/macOS archives |
+| GUI / media extensions | Not included | Included in Linux/macOS and Windows x64 archives |
 | Installation | `npm install` + lockfile / provenance | Download, verify `.sha256`, unpack |
 | Programmatic API | Yes | No (CLI only) |
 | Cross-compiles | No — host only | No — host only |
@@ -409,7 +411,7 @@ the same file under `node_modules/xbintsc/doc/ai/`.
 | The first build takes a long time | Expected: the runtime C sources are compiled and cached. Later builds reuse `.xbintsc/`; `--time` confirms. Use a release archive if cold builds must be fast. |
 | Permission errors writing `.xbintsc/` | Set `xbintsc_CACHE_DIR` to a writable directory, or run from a writable working directory. |
 | `module 'fs' is provided by the 'node' extension` | Add `--ext node`, or `"extensions": ["node"]` in the config. |
-| `GUI native library not found` / `media native library not found` | The npm package does not ship `gui.a`/`media.a`; use a Linux/macOS release archive or build them from a source checkout. |
+| `GUI native library not found` / `media native library not found` | The npm package does not ship `gui.a`/`gui.lib` or `media.a`/`media.lib`; use a Linux/macOS/Windows x64 release archive or build them from a source checkout. |
 | `require("xbintsc")` fails | The package is ESM-only; use `import` (or dynamic `import()`). |
 | Windows link errors about missing MSVC libraries | Run from a Native Tools prompt, install the VS C++ build tools, and check `npx xbintsc doctor`. |
 | `npm ci --omit=dev` then the build cannot find `xbintsc` | Install devDependencies for the build stage, or move `xbintsc` to `dependencies`. |

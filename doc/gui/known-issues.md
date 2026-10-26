@@ -86,20 +86,27 @@
   MSVC-targeting clang as the driver (the LLVM bundled with Visual Studio when
   no newer one is on `PATH`), so a developer prompt is not required.
 - Windows: an MSVC-compatible `gui.lib` (COFF objects + `ar -M`/`llvm-ar`) is
-  produced by `scripts/build-gui.ts` but is not validated in CI, so the Windows
-  step is provisional (the job stays green) and `package` skips it. Building and
-  running `examples/gui/pelican-svg` and `examples/gui/pelican-bike` on a
-  developer machine works. SDL_GPU selects the **Vulkan** backend there
-  (`win.driver()` reports `"vulkan"`), so the archive needs no DXIL/`dxc`
-  toolchain; the hosted Windows runners have no GPU/Vulkan driver, which is why
-  the CI run stays provisional.
-- **Media on Windows:** the `media` extension is POSIX-only for now. The GUI
-  engine itself builds on Windows, but without the extension `<video>`/`<audio>`
-  are inert there (an open fails and fires `error`), and `--ext media` reports an
-  actionable error instead of linking. Enabling it needs an MSVC-compatible
-  FFmpeg build and is deferred until the Windows GUI path itself is validated.
-  `<video controls>` is likewise deferred — the intended pattern is TS + a CSS
-  overlay, as in `examples/gui/media.ts`.
+  produced by `scripts/build-gui.ts`. The Windows x64 CI job builds it with the
+  Visual Studio toolchain (`.github/actions/vs-toolchain` imports `vcvarsall`
+  and uses VS's bundled LLVM), links a `gui,media` program, and ships it in the
+  x64 release. *Running* the examples on the hosted runner stays provisional
+  because it has no GPU/Vulkan driver (SDL_GPU selects the **Vulkan** backend
+  there, so no DXIL/`dxc` toolchain is needed). Windows arm64 still skips both
+  archives. Building and running `examples/gui/pelican-svg` and
+  `examples/gui/pelican-bike` on a developer machine works.
+- **Windows: x64 builds in CI, arm64 and runtime validation stay provisional.**
+  `media.lib` is produced by `scripts/build-media.ts` with FFmpeg's MSVC
+  toolchain (`--toolchain=msvc --cc=clang-cl`) so its COFF objects and static CRT
+  match `gui.lib`, and `--ext media` links and plays there. Building it needs a
+  POSIX shell to run FFmpeg's `configure` and GNU make; the shell comes from Git
+  for Windows (already needed to clone SDL3), and make is a native GNU make
+  (Chocolatey's `make`, or `xbintsc_MAKE`). CI installs make explicitly,
+  builds `gui.lib` + `media.lib` on Windows x64 (using the same Visual Studio
+  `vcvarsall` + bundled LLVM as a local build), links a `gui,media` program, and
+  ships both archives in the Windows x64 release; the example *run* remains
+  provisional because hosted runners have no GPU/Vulkan driver. Windows arm64
+  still skips both archives, and `<video controls>` is likewise deferred — the
+  intended pattern is TS + a CSS overlay, as in `examples/gui/media.ts`.
 - **D3D12 shaders:** the SPIR-V (Vulkan) and DXIL (Direct3D 12) blobs are built
   and embedded, so the non-Metal path no longer skips geometry. DXIL remains
   unusable on **SDL 3.2.10**: its D3D12 backend rejects any graphics pipeline

@@ -7,6 +7,7 @@
 #include "style_values_internal.h"
 
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 namespace xtgui {

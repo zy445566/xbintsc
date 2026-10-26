@@ -25,7 +25,7 @@ struct Length {
   /* Arguments of `clamp(...)`, `min(...)` and `max(...)`; empty for a scalar
    * length. Kept unresolved so vw/vh/em are resolved against the element that
    * uses the length, not the viewport at parse time. */
-  std::vector<Length> args;
+  std::vector<Length> args = {};
 };
 
 struct Color {

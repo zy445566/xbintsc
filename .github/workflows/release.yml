@@ -212,33 +212,21 @@ jobs:
           done
           ls -l release-assets
 
-          # Every host needs its platform package, and each tarball must be the
-          # one built from this commit for this version: the main manifest is
-          # about to depend on exactly these names and versions.
-          for slug in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64; do
-            file="platform-packages/xbintsc-${slug}-${VERSION}.tgz"
-            if [ ! -f "${file}" ]; then
-              echo "::error::Missing npm platform package ${file}." >&2
-              exit 1
-            fi
-            read -r name pkg_version <<<"$(tar -xOf "${file}" package/package.json | node -e '
-              let raw = "";
-              process.stdin.on("data", (chunk) => { raw += chunk; });
-              process.stdin.on("end", () => {
-                const pkg = JSON.parse(raw);
-                console.log(`${pkg.name} ${pkg.version}`);
-              });
-            ')"
-            if [ "${name}" != "@xbintsc/${slug}" ] || [ "${pkg_version}" != "${VERSION}" ]; then
-              echo "::error::${file} contains ${name}@${pkg_version}, expected @xbintsc/${slug}@${VERSION}." >&2
-              exit 1
-            fi
-            tar -tf "${file}" | grep -Eq "^package/runtime/lib/${slug}/core\.(a|lib)$" \
-              || { echo "::error::${file} has no core runtime archive." >&2; exit 1; }
-            tar -tf "${file}" | grep -Eq "^package/runtime/lib/${slug}/ext_node\.(a|lib)$" \
-              || { echo "::error::${file} has no ext_node runtime archive." >&2; exit 1; }
-          done
           ls -l platform-packages
+
+      # Every host needs its platform package, and each tarball must be the one
+      # built from this commit for this version: the main manifest is about to
+      # depend on exactly these names and versions. The check lives in a script
+      # because the shell version (`tar -tf ... | grep -q ...`) was wrong: with
+      # `set -o pipefail`, `grep -q` exiting on the first match SIGPIPEs `tar`
+      # while it is still decompressing the tens of megabytes after `core.a`,
+      # so a perfectly good tarball was reported as "has no core runtime
+      # archive". See scripts/verify-platform-package.ts.
+      - name: Verify the npm platform packages
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: npm run verify:platform -- --dir platform-packages --version "${VERSION}"
 
       # The platform packages are published before the main package: its
       # optionalDependencies name exactly these versions, so a user installing

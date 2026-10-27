@@ -46,9 +46,27 @@ export interface PlatformPackageManifest {
   readonly publishConfig: { readonly access: "public" };
 }
 
+/** Every host a release publishes a platform package for. */
+export const PLATFORM_SLUGS = [
+  "linux-x64",
+  "linux-arm64",
+  "darwin-x64",
+  "darwin-arm64",
+  "win32-x64",
+  "win32-arm64",
+] as const;
+
 /** npm name of the platform package, e.g. `@xbintsc/linux-x64`. */
 export function platformPackageName(slug: string): string {
   return `@xbintsc/${slug}`;
+}
+
+/**
+ * File name `npm pack` gives the platform package, e.g.
+ * `xbintsc-linux-x64-1.2.3.tgz` (npm drops the scope from the file name).
+ */
+export function platformPackageFileName(slug: string, version: string): string {
+  return `xbintsc-${slug}-${version}.tgz`;
 }
 
 /** Split `linux-x64` into its npm `os` and `cpu` constraints. */

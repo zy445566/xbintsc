@@ -155,7 +155,12 @@ npm run package-platform   # 把宿主归档打包 -> dist/npm-platform/*.tgz
 ```
 
 `package-platform` 生成可选的 `@xbintsc/<os>-<arch>` npm 包；CI 会为每个宿主上传
-它，`release.yml` 在发布 `xbintsc` 之前先发布这些平台包。
+它，`release.yml` 在发布 `xbintsc` 之前先发布这些平台包。发布前
+`npm run verify:platform`（`scripts/verify-platform-package.ts`）会逐个校验暂存的
+tarball：清单必须写成该宿主与本次发布版本，并且必须带 `core` 与 `ext_node` 运行时归档。
+这项检查要留在 Node 里，不要写成 `tar -tf … | grep -q …` 的 shell 管道——在
+`set -o pipefail` 下，`grep -q` 命中第一个匹配就退出，会让仍在解压 `core.a` 之后那些
+归档的 `tar` 收到 SIGPIPE，于是好的 tarball 也被报成损坏。
 
 新增 C 文件时必须同时更新列出运行时源文件的地方（[../../../src/driver/runtime-objects.ts](../../../src/driver/runtime-objects.ts)
 里的 `RUNTIME_SOURCES`），因为那份列表决定什么会被编译和链接。扩展的 C 源由扩展自己声明。

@@ -186,7 +186,14 @@ npm run package-platform   # pack the host archives -> dist/npm-platform/*.tgz
 ```
 
 `package-platform` produces the optional `@xbintsc/<os>-<arch>` npm package; CI
-uploads it for every host and `release.yml` publishes it before `xbintsc`.
+uploads it for every host and `release.yml` publishes it before `xbintsc`. Before
+publishing, `npm run verify:platform` (`scripts/verify-platform-package.ts`)
+checks every staged tarball: its manifest must name that host and the release
+version, and it must carry the `core` and `ext_node` runtime archives. Keep that
+check in Node rather than a `tar -tf … | grep -q …` shell pipeline — under
+`set -o pipefail`, `grep -q` exiting on its first match SIGPIPEs `tar` while it
+is still decompressing the archives that follow `core.a`, which reports a good
+tarball as broken.
 
 Add a new C file only together with the place that lists the runtime sources
 (`RUNTIME_SOURCES` in [../../src/driver/runtime-objects.ts](../../src/driver/runtime-objects.ts)),

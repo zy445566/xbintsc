@@ -90,7 +90,7 @@ int computed_view_set(xt_value self, xt_value key, xt_value value, void *data) {
 const xt_object_hooks kComputedStyleHooks = {computed_view_get, computed_view_set, nullptr,
                                              nullptr, nullptr};
 
-xt_value g_computed_proto = XT_UNDEFINED;
+}  // namespace
 
 #define METHOD(name) xt_value name(xt_value self, xt_value env, int32_t argc, xt_value *argv)
 
@@ -111,8 +111,6 @@ METHOD(computed_style_get_property_priority) {
 }
 
 #undef METHOD
-
-}  // namespace
 
 xt_value computed_style_handle(xt_value element, xt_value pseudo) {
   xt_value handle = xt_object_new_with_proto(computed_style_proto());

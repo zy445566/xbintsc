@@ -340,12 +340,19 @@ METHOD(style_get_property_priority);
 METHOD(style_remove_property);
 METHOD(style_css_text_get);
 METHOD(style_css_text_set);
+METHOD(style_length_get);
+METHOD(style_item);
+/** Install the dynamic named-property hooks on a `style` handle
+ * (`style.width = "50%"`). */
+void install_style_hooks(xt_value style);
 
-/* computed style (`getComputedStyle`) */
+/* `dataset` (a DOMStringMap over `data-*` attributes) and computed style */
+METHOD(node_dataset_get);
 METHOD(computed_style_get_property_value);
 METHOD(computed_style_get_property_priority);
 /** Build the computed-style handle for an element (and optional pseudo). */
 xt_value computed_style_handle(xt_value element, xt_value pseudo);
+xt_value computed_style_proto();
 
 /* WebGL context: state and queries */
 METHOD(webgl_canvas_get);

@@ -185,6 +185,32 @@ xt_value xt_not(xt_value a);
 /* -- objects -------------------------------------------------------------- */
 xt_value xt_object_new(void);
 xt_value xt_object_new_with_proto(xt_value proto);
+
+/*
+ * Optional dynamic-property hooks.
+ *
+ * A host object that represents a *view* over external state — the GUI engine's
+ * `element.style`, `element.dataset` and `getComputedStyle()` — cannot know its
+ * property names when the prototype is built. Such an object installs these
+ * hooks; they are consulted only when ordinary property lookup/assignment finds
+ * nothing, so real properties and accessors keep precedence.
+ *
+ * `get` returns `XT_UNDEFINED` when it does not handle the key. `set`, `has`
+ * and `remove` return non-zero when they handled the operation; `keys` returns
+ * an array of the dynamically visible string keys (or `XT_UNDEFINED`).
+ * `data` is the host pointer handed to `xt_object_set_hooks`. Hooks must not
+ * store `xt_value`s outside a runtime object the collector can reach.
+ */
+typedef struct xt_object_hooks {
+  xt_value (*get)(xt_value self, xt_value key, void *data);
+  int (*set)(xt_value self, xt_value key, xt_value value, void *data);
+  int (*has)(xt_value self, xt_value key, void *data);
+  int (*remove)(xt_value self, xt_value key, void *data);
+  xt_value (*keys)(xt_value self, void *data);
+} xt_object_hooks;
+
+/** Install (or clear, with NULL) the dynamic-property hooks of `obj`. */
+xt_value xt_object_set_hooks(xt_value obj, const xt_object_hooks *hooks, void *data);
 /** The shared `Object.prototype` object (root of the ordinary object chain). */
 xt_value xt_object_prototype(void);
 /** The shared `Function.prototype` object. */

@@ -183,4 +183,91 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
     expect(value("title")).toBe("changed");
     expect(value("rect")).toBe("0,10,10,55,50,0,55");
   });
+  it("writes style and dataset properties through named access", () => {
+    const { value } = harness.compileAndRun(
+      "dom-properties",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #box { width: 100px; height: 40px; margin-top: 10px; }
+        #box::before { content: "hi"; color: #123456; }
+      </style></head><body>
+        <div id="box" data-role="lead" data-user-id="7">x</div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "dom-properties", width: 400, height: 300 });
+      win.on("ready", () => {
+        const doc = win.document;
+        const box: any = doc.getElementById("box");
+
+        // Property assignment used to park a dead field on the JS object.
+        box.style.width = "50%";
+        box.style.height = "30px";
+        console.log("width=" + box.style.width + ":" + win.computedStyle("#box", "width"));
+        console.log("rect=" + box.getBoundingClientRect().width + "x" + box.getBoundingClientRect().height);
+        box.style.backgroundColor = "#ff0000";
+        console.log("bg=" + box.style.backgroundColor + ":" + win.computedStyle("#box", "background-color"));
+        box.style.display = "none";
+        console.log("hidden=" + win.computedStyle("#box", "display"));
+        box.style.display = "";
+        console.log("shown=" + win.computedStyle("#box", "display"));
+        box.style.zIndex = "5";
+        console.log("z=" + win.computedStyle("#box", "z-index"));
+
+        // setProperty and named access address the same declaration block.
+        box.style.setProperty("color", "#00ff00");
+        console.log("color=" + box.style.color + ":" + box.style.getPropertyValue("color") +
+                    ":" + win.computedStyle("#box", "color"));
+        box.style.setProperty("--accent", "#abcdef");
+        console.log("custom=" + box.style.getPropertyValue("--accent") + ":" + box.style["--accent"]);
+        console.log("decl=" + box.style.length + ":" + box.style.item(0) + ":" + box.style.item(5));
+        box.style.removeProperty("z-index");
+        console.log("removed=" + ("zIndex" in box.style) + ":" + box.style.zIndex);
+
+        // dataset maps camelCase keys to data-* attributes, both ways.
+        console.log("dataset=" + box.dataset.role + ":" + box.dataset.userId);
+        box.dataset.count = "3";
+        console.log("data-set=" + box.getAttribute("data-count") + ":" + ("count" in box.dataset) +
+                    ":" + box.dataset.hasOwnProperty("count"));
+        box.dataset.role = "hero";
+        console.log("data-write=" + box.getAttribute("data-role"));
+        delete box.dataset.count;
+        console.log("data-delete=" + box.hasAttribute("data-count") + ":" + (box.dataset.count === undefined));
+        console.log("data-keys=" + Object.keys(box.dataset).join(","));
+
+        // getComputedStyle answers named properties from the cascade too.
+        const cs: any = getComputedStyle(box);
+        console.log("cs=" + cs.width + ":" + cs.height + ":" + cs.backgroundColor + ":" +
+                    cs.marginTop + ":" + cs.getPropertyValue("background-color") +
+                    ":" + cs.getPropertyValue("--accent"));
+        const before: any = getComputedStyle(box, "::before");
+        console.log("before=" + before.content + ":" + before.color);
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("width")).toBe("50%:50%");
+    expect(value("rect")).toBe("200x30");
+    expect(value("bg")).toBe("#ff0000:rgb(255, 0, 0)");
+    expect(value("hidden")).toBe("none");
+    expect(value("shown")).toBe("block");
+    expect(value("z")).toBe("5");
+    expect(value("color")).toBe("#00ff00:#00ff00:rgb(0, 255, 0)");
+    expect(value("custom")).toBe("#abcdef:#abcdef");
+    expect(value("decl")).toBe("6:width:--accent");
+    expect(value("removed")).toBe("false:");
+    expect(value("dataset")).toBe("lead:7");
+    expect(value("data-set")).toBe("3:true:true");
+    expect(value("data-write")).toBe("hero");
+    expect(value("data-delete")).toBe("false:true");
+    expect(value("data-keys")).toBe("role,userId");
+    expect(value("cs")).toBe("50%:30px:rgb(255, 0, 0):10px:rgb(255, 0, 0):#abcdef");
+    expect(value("before")).toBe('"hi":rgb(18, 52, 86)');
+  });
 });

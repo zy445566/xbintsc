@@ -55,6 +55,11 @@ xt_value canvas_proto();
 xt_value canvas_gradient_proto();
 xt_value webgl_proto();
 xt_value webgl2_proto();
+/** `AbortController` / `AbortSignal` prototypes and constructors. */
+xt_value abort_controller_proto();
+xt_value abort_signal_proto();
+xt_value abort_controller_new();
+xt_value abort_signal_new(bool aborted);
 /** The prototype a WebGL object of `kind` inherits (`buffer`, `texture`, …),
  * so `buffer instanceof WebGLBuffer` holds. */
 xt_value webgl_object_proto(const std::string &kind);
@@ -222,6 +227,7 @@ xt_value event_construct(xt_value type, xt_value init);
 METHOD(event_prevent_default);
 METHOD(event_stop_propagation);
 METHOD(event_stop_immediate_propagation);
+METHOD(event_composed_path);
 
 /* media (`<video>`/`<audio>`) */
 METHOD(node_play);

@@ -76,9 +76,11 @@ console.log(box.contains(inner));                 // 后代判断
 
 变更操作会把文档标记为脏；引擎会延迟地（在下一次读取或下一帧之前）重新计算
 样式并重新布局。`inner = …`/`innerHTML = …` **不会**执行脚本。元素事件支持
-捕获与冒泡阶段、`stopPropagation`、`once`，并向上冒泡到 `document`/`window`。
-旧式 `win.on(type, fn)` 负载保留其**字符串** `e.target`（`div#id.class`）；
-元素 `Event.target` 是一个句柄，其描述符与同一字符串匹配。
+捕获与冒泡阶段、`stopPropagation`、`once`、`passive` 与 `signal`（`AbortController`
+的信号会在 abort 时移除监听器），并向上冒泡到 `document`/`window`。
+`dispatchEvent` 派发同一个事件对象，并填充 `target`/`currentTarget`/`eventPhase`/
+`composedPath()`。旧式 `win.on(type, fn)` 负载保留其**字符串** `e.target`
+（`div#id.class`）；元素 `Event.target` 是一个句柄，其描述符与同一字符串匹配。
 
 ### style 对象、计算样式与几何
 

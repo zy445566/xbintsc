@@ -14,6 +14,12 @@ import { nodeExtension } from "../../src/extensions/node/index.js";
 
 const harness = createGuiHarness();
 
+const PROBE_PAGE = `<html><body>
+  <div class="touch"></div><div class="touch"></div><div class="touch"></div>
+  <canvas id="probe-canvas" width="120" height="80"></canvas>
+  <script src="./probe.ts"></script>
+</body></html>`;
+
 const PAGE = `<html><body>
   <div id="box">hi</div>
   <script src="./app.ts"></script>
@@ -127,5 +133,45 @@ export function bump(): number { n += seed; return n; }
     expect(stdout).toContain("shared-main=s");
     /* The shared module was already reachable eagerly and must not run twice. */
     expect(stdout.match(/shared-eager/g)?.length).toBe(1);
+  });
+
+  it("gives imported modules the real window, document and canvas", () => {
+    const { value } = harness.compileAndRun(
+      "script-import-probe",
+      `
+      import { createWindow } from "gui";
+      import page from "./probe.html";
+
+      const win = createWindow({ title: "probe", width: 1280, height: 720 });
+      const label = (name: string, value: any): void => console.log(name + "=" + value);
+      label("before", (win as any).probe === undefined ? "undefined" : "set");
+      win.loadHTML(page);
+      label("probe", (win as any).probe);
+      win.close();
+      `,
+      {
+        files: {
+          "probe.html": PROBE_PAGE,
+          "probe.ts": `
+const canvas: any = document.getElementById("probe-canvas");
+const gl: any = canvas.getContext("webgl2");
+const span: any = document.createElement("span");
+span.dataset.touch = "ok";
+const touches = document.querySelectorAll(".touch");
+( window as any ).probe = [
+  window.innerWidth + "x" + window.innerHeight,
+  touches.length,
+  span.tagName + ":" + span.dataset.touch,
+  canvas.width + "x" + canvas.height,
+  gl != null
+].join(",");
+console.log("probe-module=" + ( window as any ).probe);
+`,
+        },
+      },
+    );
+
+    expect(value("before")).toBe("undefined");
+    expect(value("probe")).toBe("1280x720,3,SPAN:ok,120x80,true");
   });
 });

@@ -107,13 +107,15 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
 
 ### `GUI native library not found at …`
 
-`gui` 扩展需要各平台预编译的 `gui.a`/`gui.lib`，普通源码检出并没有构建它。去掉
-`--ext gui`，或按 [../../zh-CN/gui.md](../../zh-CN/gui.md) 构建该归档。
+`gui` 扩展需要各平台预编译的 `gui.a`/`gui.lib`。可选的 `@xbintsc/<os>-<arch>`
+npm 包会提供它（去掉 `--omit=optional` 重新安装），但普通源码检出并没有构建它。
+去掉 `--ext gui`，或按 [../../zh-CN/gui.md](../../zh-CN/gui.md) 构建该归档。
 
 ### `media native library not found at …`
 
 `<video>`/`<audio>` 播放需要可选的 `media` 归档（`media.a`，Windows 上是
-`media.lib`），用 `npm run media` 单独构建。构建它，或去掉 `--ext media`；
+`media.lib`）。发布为其构建时，`@xbintsc/<os>-<arch>` npm 包会提供它；否则用
+`npm run media` 单独构建。构建它，或去掉 `--ext media`；
 仅启用 `gui` 的构建仍可链接，媒体元素只会触发 `error`。`media` 扩展还依赖
 `gui`，单独 `--ext media` 会被拒绝并提示应传的 flag。Windows 上 FFmpeg 的
 构建还需要 POSIX shell（Git for Windows 的 bash）与原生 GNU make

@@ -142,7 +142,8 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
      只记录日志而不标注运行。
    - `package` job 在组装发布之前构建 `gui.a`/`gui.lib` 与 `media.a`/`media.lib`，
      因此两者都会随现有 runtime 归档一起发布（`package-release` 复制整个
-     `runtime/`）。Windows x64 已包含；Windows arm64 仍跳过。
+     `runtime/`），也会打进可选的 `@xbintsc/<os>-<arch>` npm 包。Windows x64
+     已包含；Windows arm64 仍跳过。
    - `vendor/`（GUI 归档的 SDL3/FreeType/HarfBuzz，以及 `media` 的 FFmpeg，
      缓慢的部分）按 OS/arch 缓存，以 `scripts/build-gui.ts` /
      `scripts/build-media.ts` 为键。Windows x64 有独立的源码 + FFmpeg 安装前缀

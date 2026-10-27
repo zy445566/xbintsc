@@ -28,11 +28,11 @@
 import { join } from "node:path";
 import type { Extension } from "../registry.js";
 import { findRuntimeDir, platformSlug } from "../../driver/paths.js";
-import { findRuntimeLibrary } from "../../driver/runtime-lib.js";
+import { findRuntimeLibrary, runtimeLibDir } from "../../driver/runtime-lib.js";
 
 /** Absolute path to the per-platform prebuilt media archive. */
 function mediaArchive(): string {
-  return join(findRuntimeDir(), "lib", platformSlug(), process.platform === "win32" ? "media.lib" : "media.a");
+  return join(runtimeLibDir(), process.platform === "win32" ? "media.lib" : "media.a");
 }
 
 export const mediaExtension: Extension = {
@@ -50,7 +50,8 @@ export const mediaExtension: Extension = {
     if (archive === undefined) {
       throw new Error(
         `media native library not found at ${mediaArchive()} (media.a or media.lib).\n` +
-          `Build it for ${platformSlug()} first with \`npm run media\` (see doc/gui/build.md).`,
+          `The optional @xbintsc/${platformSlug()} package ships it: reinstall xbintsc ` +
+          `without --omit=optional, or build it with \`npm run media\` (see doc/gui/build.md).`,
       );
     }
     return [archive];

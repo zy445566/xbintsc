@@ -191,8 +191,9 @@ engine were Rust.
      annotating the run.
    - The `package` job builds `gui.a`/`gui.lib` and `media.a`/`media.lib` before
      assembling the release, so both ship inside the existing runtime archive
-     (`package-release` copies all of `runtime/`). Windows x64 is included;
-     Windows arm64 still skips them.
+     (`package-release` copies all of `runtime/`) and inside the optional
+     `@xbintsc/<os>-<arch>` npm package. Windows x64 is included; Windows arm64
+     still skips them.
    - `vendor/` (SDL3/FreeType/HarfBuzz for the GUI archive, FFmpeg for `media`)
      is cached per OS/arch, keyed by `scripts/build-gui.ts` /
      `scripts/build-media.ts`. Windows x64 gets its own source cache plus the

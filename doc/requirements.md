@@ -81,8 +81,12 @@ xbintsc-<os>-<arch>/
   runtime/               C runtime sources + prebuilt runtime/lib/<os>-<arch>/
 ```
 
-Windows archives omit the prebuilt `runtime/lib/`; the driver compiles the C
-runtime on demand with the user's clang.
+Every archive carries the prebuilt runtime for its host under
+`runtime/lib/<os>-<arch>/`: `core` and `ext_node` on all platforms (`.lib`
+instead of `.a` with the MSVC ABI on Windows), plus `gui`/`media` where the
+release builds them. The npm package receives the same archives from its
+optional `@xbintsc/<os>-<arch>` dependency, so an npm install does not compile
+the C runtime either.
 
 Unpack it, put `bin/` on `PATH` (or call `bin/xbintsc` directly), and install the
 toolchain for your platform below. Verify the download against the checksum

@@ -151,7 +151,11 @@ C 改动必须重建运行时才会生效：
 ```bash
 npm run runtime            # tsx scripts/build-runtime.ts -> runtime/lib/<os>-<arch>/
 npm run runtime:clean      # 删除 build/runtime-obj 与 runtime/lib
+npm run package-platform   # 把宿主归档打包 -> dist/npm-platform/*.tgz
 ```
+
+`package-platform` 生成可选的 `@xbintsc/<os>-<arch>` npm 包；CI 会为每个宿主上传
+它，`release.yml` 在发布 `xbintsc` 之前先发布这些平台包。
 
 新增 C 文件时必须同时更新列出运行时源文件的地方（[../../../src/driver/runtime-objects.ts](../../../src/driver/runtime-objects.ts)
 里的 `RUNTIME_SOURCES`），因为那份列表决定什么会被编译和链接。扩展的 C 源由扩展自己声明。

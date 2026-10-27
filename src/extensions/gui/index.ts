@@ -61,6 +61,7 @@ const hostTypes = [
   "ImageBitmap",
   "ImageData",
   "HTMLCanvasElement",
+  "Path2D",
   "HTMLImageElement",
   "HTMLVideoElement",
   "HTMLAudioElement",

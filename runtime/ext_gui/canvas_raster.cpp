@@ -100,7 +100,7 @@ static void add_span(float *row, int rowOriginX, float xa, float xb, float weigh
 
 void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<std::vector<CanvasPoint>> &loops, const CanvasPaint &paint,
-                float alpha) {
+                float alpha, bool even_odd) {
   if (width <= 0 || height <= 0 || loops.empty()) return;
   bool havePoint = false;
   float minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f;
@@ -154,6 +154,14 @@ void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
       if (crossings.empty()) continue;
       std::sort(crossings.begin(), crossings.end(),
                 [](const Crossing &a, const Crossing &b) { return a.x < b.x; });
+      if (even_odd) {
+        /* Every second crossing toggles the covered span, regardless of the
+         * direction each contour is wound. */
+        for (size_t i = 0; i + 1 < crossings.size(); i += 2) {
+          add_span(row, x0, crossings[i].x, crossings[i + 1].x, weight, x0, x1);
+        }
+        continue;
+      }
       int winding = 0;
       float spanStart = 0.0f;
       for (const Crossing &crossing : crossings) {
@@ -179,8 +187,10 @@ void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
 }
 
 void fill_loop(std::vector<unsigned char> &pixels, int width, int height,
-               const std::vector<CanvasPoint> &loop, const CanvasPaint &paint, float alpha) {
-  fill_loops(pixels, width, height, std::vector<std::vector<CanvasPoint>>{loop}, paint, alpha);
+               const std::vector<CanvasPoint> &loop, const CanvasPaint &paint, float alpha,
+               bool even_odd) {
+  fill_loops(pixels, width, height, std::vector<std::vector<CanvasPoint>>{loop}, paint, alpha,
+             even_odd);
 }
 
 void fill_rect(std::vector<unsigned char> &pixels, int width, int height, float x0, float y0,
@@ -331,16 +341,24 @@ void draw_image_affine(std::vector<unsigned char> &pixels, int width, int height
 
 void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<unsigned char> &glyph, int glyphWidth, int glyphHeight, int left,
-                int top, float x, float baselineY, const CanvasPaint &paint, float alpha) {
-  int originX = (int)std::lround(x) + left;
+                int top, float x, float baselineY, float scale_x, const CanvasPaint &paint,
+                float alpha) {
+  if (glyphWidth <= 0 || glyphHeight <= 0) return;
+  if (scale_x <= 0.0f) scale_x = 1.0f;
+  bool condense = scale_x < 0.999f;
+  int drawWidth = condense ? std::max(1, (int)std::lround((float)glyphWidth * scale_x))
+                           : glyphWidth;
+  int originX = (int)std::lround(x) + (int)std::lround((float)left * scale_x);
   int originY = (int)std::lround(baselineY) - top;
   for (int gy = 0; gy < glyphHeight; gy++) {
     int py = originY + gy;
     if (py < 0 || py >= height) continue;
-    for (int gx = 0; gx < glyphWidth; gx++) {
+    for (int gx = 0; gx < drawWidth; gx++) {
       int px = originX + gx;
       if (px < 0 || px >= width) continue;
-      float coverage = glyph[(size_t)gy * (size_t)glyphWidth + (size_t)gx] / 255.0f;
+      /* Nearest sample from the glyph coverage mask when condensing. */
+      int sourceX = condense ? std::min(glyphWidth - 1, (int)((float)gx / scale_x)) : gx;
+      float coverage = glyph[(size_t)gy * (size_t)glyphWidth + (size_t)sourceX] / 255.0f;
       if (coverage <= 0.0f) continue;
       float color[4];
       paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);

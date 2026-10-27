@@ -406,27 +406,6 @@ xt_value xt_in(xt_value key, xt_value value) {
   return XT_FALSE;
 }
 
-xt_value xt_delete(xt_value value, xt_value key) {
-  if (XT_IS_OBJECT(value)) {
-    xt_object *obj = (xt_object *)XT_GET_PTR(value);
-    xt_value k = xt_to_property_key(key);
-    for (uint32_t i = 0; i < obj->count; i++) {
-      if (xt_property_key_equals(obj->properties[i].key, k)) {
-        for (uint32_t j = i + 1; j < obj->count; j++) obj->properties[j - 1] = obj->properties[j];
-        obj->count--;
-        xt_object_shape_changed(obj);
-        break;
-      }
-    }
-    return XT_TRUE;
-  }
-  if (XT_IS_ARRAY(value)) {
-    if (!xt_is_symbol(key)) xt_array_set(value, key, XT_UNDEFINED);
-    return XT_TRUE;
-  }
-  return XT_TRUE;
-}
-
 xt_value xt_rest_args(int32_t argc, xt_value *argv, int32_t start) {
   if (start < 0) start = 0;
   int32_t count = argc - start;

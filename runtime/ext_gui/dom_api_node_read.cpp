@@ -330,6 +330,7 @@ METHOD(node_style_get) {
   if (XT_IS_OBJECT(cached)) return cached;
   xt_value style = xt_object_new_with_proto(style_proto());
   xt_object_set(style, xt_string_from_cstr("__xt_gui_node"), self);
+  install_style_hooks(style);
   xt_object_set(self, xt_string_from_cstr("__xt_gui_style"), style);
   return style;
 }

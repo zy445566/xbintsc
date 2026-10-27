@@ -31,12 +31,19 @@ const ctx = canvas.getContext("2d"); // 或 "webgl" 取得 GPU 上下文
 元素上，因此每次都返回**同一个**对象，绘制状态（变换、样式、路径）按 canvas 而非按调用
 保存。`ctx.canvas` 是所属元素的句柄。
 
+`getContext("2d", attributes)` 在首次调用时会尊重 `alpha`：传入 `{ alpha: false }`
+时位图以不透明黑色初始化（清除也回到不透明黑）。其余属性由
+`getContextAttributes()` 按规范默认值报告（`antialias: true`、`depth: true`、
+`stencil: false`、`premultipliedAlpha: true`、`preserveDrawingBuffer: false`、
+`colorSpace: "srgb"` 等），特性探测因此能得到诚实的答案。
+
 ## 绘制模型
 
 光栅器刻意保持精简且为自研（不依赖 Skia/Cairo）。它按每条像素行 **4 条垂直子扫描线**
-进行抗锯齿，并做一次**水平解析覆盖率**计算；路径采用**非零环绕规则**填充（因此当弧线
-以相反方向环绕时能形成空洞）。轴对齐矩形（变换中 `b == 0 && c == 0`）走直接的覆盖率
-快速路径。混合为非预乘 source-over，并按 `globalAlpha` 缩放。
+进行抗锯齿，并做一次**水平解析覆盖率**计算；路径默认采用**非零环绕规则**填充（因此当弧线
+以相反方向环绕时能形成空洞），`fill("evenodd")` 则改用奇偶规则。轴对齐矩形（变换中
+`b == 0 && c == 0`）走直接的覆盖率快速路径。混合为非预乘 source-over，并按
+`globalAlpha` 缩放。
 
 填充或描边可以使用纯色，也可以使用 **`CanvasGradient`**。渐变的坐标属于用户空间，
 因此光栅器会先用当前变换的逆矩阵把每个设备像素映射回用户空间再采样——形状被平移、
@@ -50,9 +57,11 @@ Canvas 像素**不参与垃圾回收**：canvas 由窗口拥有、以 DOM 节点
 ## 支持的 API
 
 状态与变换：`save` / `restore`（会恢复变换、线宽、透明度、字体/文本设置**以及**
-填充/描边样式）、`translate`、`rotate`、`scale`、`transform(a,b,c,d,e,f)`、
-`setTransform`、`resetTransform`、`getTransform`（返回带 `a`…`f` 与 `is2D` 的对象）。
-变换按 canvas 的顺序组合：`translate(x, y); rotate(a)` 围绕平移后的原点旋转。
+填充/描边样式）、`translate`、`rotate`、`scale`、`transform(a,b,c,d,e,f)` /
+`transform(matrix)`、`setTransform(a,b,c,d,e,f)` / `setTransform(matrix)`、
+`resetTransform`、`getTransform`（返回带 `a`…`f` 与 `is2D` 的对象）。矩阵可以是
+`{ a, b, c, d, e, f }` 对象或六元素数组。变换按 canvas 的顺序组合：
+`translate(x, y); rotate(a)` 围绕平移后的原点旋转。
 
 样式与设置：`fillStyle` / `strokeStyle`（层叠所用的颜色解析器能识别的 CSS 颜色，或
 `CanvasGradient`）、`lineWidth`、`globalAlpha`、`lineCap`（`butt`/`round`/`square`）、
@@ -70,20 +79,27 @@ Canvas 像素**不参与垃圾回收**：canvas 由窗口拥有、以 DOM 节点
 会忽略 `x0`/`y0`——请使用同心圆（`x0 == x1`、`y0 == y1`）。
 
 路径：`beginPath`、`closePath`、`moveTo`、`lineTo`、`rect`、`roundRect`、`arc`、
-`ellipse`、`quadraticCurveTo`、`bezierCurveTo`，然后 `fill`（多环、非零环绕）或
-`stroke`。贝塞尔与二次曲线段会被展平为线段；弧线与椭圆同样被展平。`roundRect` 只接受
-单个圆角半径数字（数组形式尚未实现）。
+`ellipse`、`quadraticCurveTo`、`bezierCurveTo`，然后
+`fill(fillRule?)` / `fill(path, fillRule?)`（多环；`"nonzero"` 或 `"evenodd"`）或
+`stroke(path?)`。贝塞尔与二次曲线段会被展平为线段；弧线与椭圆同样被展平。
+`roundRect` 接受单个半径数字，或 CSS 半径列表（`[all]`、`[tl, br]`、
+`[tl, tr, br]`、`[tl, tr, br, bl]`，元素为数字或 `{ x, y }` 对；圆角按圆弧绘制）。
+
+`Path2D` 支持同一组路径命令（`moveTo`、`lineTo`、`closePath`、`rect`、
+`roundRect`、`arc`、`ellipse`、`quadraticCurveTo`、`bezierCurveTo`、`addPath`），
+并可传给 `fill`/`stroke`，因此一次构建的路径可以在不同变换下重复使用。
 
 矩形：`clearRect`、`fillRect`、`strokeRect`。
 
 虚线：`setLineDash(segments)` / `getLineDash()` / `lineDashOffset` 实现标准规则
 （奇数长度列表会复制一遍，负数/非有限值会被忽略，全零列表表示实线）。
 
-文本：`measureText(text)`（返回 `{ width }`）、`fillText(text, x, y)` 与
-`strokeText(text, x, y)`。文本经 HarfBuzz 排版、FreeType 光栅化（与 HTML 文本相同的
-技术栈），按变换的近似缩放绘制。**仅支持平移与均匀缩放**——旋转或斜切变换仍会把每个
-字形放到其变换后的基线点，但不会旋转字形位图。`strokeText` 目前用描边样式执行填充，
-而非生成轮廓。
+文本：`measureText(text)`（返回 `{ width }`）、`fillText(text, x, y, maxWidth?)` 与
+`strokeText(text, x, y, maxWidth?)`。文本经 HarfBuzz 排版、FreeType 光栅化（与 HTML
+文本相同的技术栈），按变换的近似缩放绘制。正的 `maxWidth` 会按比例压缩步进与字形位图，
+使文本宽度不超过该值（与 canvas API 一致），而不是忽略该参数。**仅支持平移与均匀
+缩放**——旋转或斜切变换仍会把每个字形放到其变换后的基线点，但不会旋转字形位图。
+`strokeText` 目前用描边样式执行填充，而非生成轮廓。
 
 图像：`drawImage(source, …)` 支持 3 参数（`dx, dy`）、5 参数（`dx, dy, dw, dh`）与
 9 参数（本引擎为**目标优先**：`dx, dy, dw, dh, sx, sy, sw, sh`）。完整的仿射变换
@@ -98,9 +114,8 @@ Canvas 像素**不参与垃圾回收**：canvas 由窗口拥有、以 DOM 节点
 ## 尚未实现
 
 图案（`createPattern`）、阴影、`clip()`、`globalCompositeOperation`、
-`putImageData`、`createImageData`、`isPointInPath`、以 `DOMMatrix` 调用的
-`setTransform`、可切换图像平滑的 `drawImage`、`toDataURL`/`toBlob`、把 `<canvas>` 用作
-CSS `background-image`，以及离屏画布（`OffscreenCanvas`、
-`transferControlToOffscreen`）。`roundRect` 只接受单个半径，径向渐变会忽略内圆偏移。
+`putImageData`、`createImageData`、`isPointInPath`、可切换图像平滑的 `drawImage`、
+`toDataURL`/`toBlob`、把 `<canvas>` 用作 CSS `background-image`，以及离屏画布
+（`OffscreenCanvas`、`transferControlToOffscreen`）。径向渐变会忽略内圆偏移。
 
 另见[媒体](./media.md)：`drawImage` 与纹理上传所共享的图像/视频/音频解码栈。

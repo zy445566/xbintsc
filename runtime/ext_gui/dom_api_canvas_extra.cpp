@@ -100,15 +100,70 @@ METHOD(canvas_ellipse) {
   return XT_UNDEFINED;
 }
 
+namespace {
+
+/** One corner radius: a number, or a `{ x, y }` pair (the engine draws circular
+ * corners, so such a pair contributes its `x` radius). */
+bool canvas_radius_value(xt_value value, float *out) {
+  if (XT_IS_NUMBER(value)) {
+    *out = (float)xt_to_number(value);
+    return true;
+  }
+  if (XT_IS_OBJECT(value)) {
+    xt_value x = xt_object_get_cstr(value, "x");
+    xt_value y = xt_object_get_cstr(value, "y");
+    if (XT_IS_NUMBER(x)) {
+      *out = (float)xt_to_number(x);
+      return true;
+    }
+    if (XT_IS_NUMBER(y)) {
+      *out = (float)xt_to_number(y);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** `roundRect`'s fifth argument: one radius or a list of 1–4 radii in CSS order
+ * (top-left, top-right, bottom-right, bottom-left). */
+bool canvas_radii_arg(xt_value value, float radii[4]) {
+  radii[0] = radii[1] = radii[2] = radii[3] = 0.0f;
+  if (canvas_radius_value(value, &radii[0])) {
+    radii[1] = radii[2] = radii[3] = radii[0];
+    return true;
+  }
+  if (!XT_IS_ARRAY(value)) return false;
+  int32_t count = (int32_t)xt_to_number(xt_array_length(value));
+  if (count <= 0) return false;
+  if (count > 4) count = 4;
+  for (int32_t i = 0; i < count; i++) {
+    if (!canvas_radius_value(xt_array_get(value, xt_number((double)i)), &radii[i])) return false;
+  }
+  /* CSS expansion: [a] [a,b] [a,b,c] to four corners. */
+  if (count == 1) {
+    radii[1] = radii[2] = radii[3] = radii[0];
+  } else if (count == 2) {
+    radii[2] = radii[0];
+    radii[3] = radii[1];
+  } else if (count == 3) {
+    radii[3] = radii[1];
+  }
+  return true;
+}
+
+}  // namespace
+
 METHOD(canvas_round_rect) {
   (void)env;
   xtgui::Canvas2D *canvas = canvas_from_context(self);
   if (canvas != nullptr) {
+    float radii[4];
+    canvas_radii_arg(xt_arg(argc, argv, 4), radii);
     canvas->round_rect((float)canvas_number_arg(argc, argv, 0, 0.0),
                        (float)canvas_number_arg(argc, argv, 1, 0.0),
                        (float)canvas_number_arg(argc, argv, 2, 0.0),
-                       (float)canvas_number_arg(argc, argv, 3, 0.0),
-                       (float)canvas_number_arg(argc, argv, 4, 0.0));
+                       (float)canvas_number_arg(argc, argv, 3, 0.0), radii[0], radii[1],
+                       radii[2], radii[3]);
   }
   return XT_UNDEFINED;
 }

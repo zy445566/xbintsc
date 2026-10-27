@@ -85,7 +85,18 @@ void Canvas2D::resize(int width, int height) {
   image_.width = width;
   image_.height = height;
   image_.pixels.assign((size_t)width * (size_t)height * 4, 0);
+  if (!alpha_) {
+    /* `{ alpha: false }`: the canvas has an opaque black backdrop, so cleared
+     * pixels are black rather than transparent. */
+    for (size_t i = 3; i < image_.pixels.size(); i += 4) image_.pixels[i] = 255;
+  }
   generation_++;
+}
+
+void Canvas2D::set_alpha(bool alpha) {
+  if (alpha_ == alpha) return;
+  alpha_ = alpha;
+  resize(image_.width, image_.height);
 }
 
 void Canvas2D::save() { stack_.push_back(state_); }
@@ -214,7 +225,8 @@ void Canvas2D::ellipse(float cx, float cy, float rx, float ry, float rotation, f
   append_path_points(points);
 }
 
-void Canvas2D::round_rect(float x, float y, float width, float height, float radius) {
+void Canvas2D::round_rect(float x, float y, float width, float height, float radius_tl,
+                          float radius_tr, float radius_br, float radius_bl) {
   if (width < 0.0f) {
     x += width;
     width = -width;
@@ -223,18 +235,25 @@ void Canvas2D::round_rect(float x, float y, float width, float height, float rad
     y += height;
     height = -height;
   }
-  float maxRadius = std::min(width, height) * 0.5f;
-  if (radius < 0.0f) radius = 0.0f;
-  if (radius > maxRadius) radius = maxRadius;
-  move_to(x + radius, y);
-  line_to(x + width - radius, y);
-  quadratic_curve_to(x + width, y, x + width, y + radius);
-  line_to(x + width, y + height - radius);
-  quadratic_curve_to(x + width, y + height, x + width - radius, y + height);
-  line_to(x + radius, y + height);
-  quadratic_curve_to(x, y + height, x, y + height - radius);
-  line_to(x, y + radius);
-  quadratic_curve_to(x, y, x + radius, y);
+  const float maxRadius = std::min(width, height) * 0.5f;
+  float radii[4] = {radius_tl, radius_tr, radius_br, radius_bl};
+  for (float &radius : radii) {
+    if (radius < 0.0f) radius = 0.0f;
+    if (radius > maxRadius) radius = maxRadius;
+  }
+  const float tl = radii[0];
+  const float tr = radii[1];
+  const float br = radii[2];
+  const float bl = radii[3];
+  move_to(x + tl, y);
+  line_to(x + width - tr, y);
+  quadratic_curve_to(x + width, y, x + width, y + tr);
+  line_to(x + width, y + height - br);
+  quadratic_curve_to(x + width, y + height, x + width - br, y + height);
+  line_to(x + bl, y + height);
+  quadratic_curve_to(x, y + height, x, y + height - bl);
+  line_to(x, y + tl);
+  quadratic_curve_to(x, y, x + tl, y);
   close_path();
 }
 
@@ -274,9 +293,14 @@ void Canvas2D::to_device(float x, float y, float *outX, float *outY) const {
 }
 
 std::vector<CanvasSubpath> Canvas2D::device_subpaths() const {
+  return device_subpaths_of(path_);
+}
+
+std::vector<CanvasSubpath> Canvas2D::device_subpaths_of(
+    const std::vector<CanvasSubpath> &paths) const {
   std::vector<CanvasSubpath> result;
-  result.reserve(path_.size());
-  for (const CanvasSubpath &subpath : path_) {
+  result.reserve(paths.size());
+  for (const CanvasSubpath &subpath : paths) {
     CanvasSubpath device;
     device.reserve(subpath.size());
     for (const CanvasPoint &point : subpath) {
@@ -305,7 +329,7 @@ CanvasPaint Canvas2D::stroke_paint() const {
   return make_paint(state_.stroke_gradient, state_.stroke_color);
 }
 
-void Canvas2D::fill() {
+void Canvas2D::fill(bool even_odd) {
   std::vector<CanvasSubpath> subpaths = device_subpaths();
   std::vector<CanvasSubpath> loops;
   for (CanvasSubpath &subpath : subpaths) {
@@ -314,12 +338,37 @@ void Canvas2D::fill() {
   }
   if (loops.empty()) return;
   canvas_detail::fill_loops(image_.pixels, image_.width, image_.height, loops, fill_paint(),
-                            state_.global_alpha);
+                            state_.global_alpha, even_odd);
+  generation_++;
+}
+
+void Canvas2D::fill_paths(const std::vector<CanvasSubpath> &paths, bool even_odd) {
+  std::vector<CanvasSubpath> subpaths = device_subpaths_of(paths);
+  std::vector<CanvasSubpath> loops;
+  for (CanvasSubpath &subpath : subpaths) {
+    if (subpath.size() < 3) continue;
+    loops.push_back(std::move(subpath));
+  }
+  if (loops.empty()) return;
+  canvas_detail::fill_loops(image_.pixels, image_.width, image_.height, loops, fill_paint(),
+                            state_.global_alpha, even_odd);
   generation_++;
 }
 
 void Canvas2D::stroke() {
   std::vector<CanvasSubpath> subpaths = device_subpaths();
+  const CanvasPaint paint = stroke_paint();
+  for (const CanvasSubpath &subpath : subpaths) {
+    if (subpath.size() < 2) continue;
+    bool closed = subpath.size() >= 3 && subpath.front().x == subpath.back().x &&
+                  subpath.front().y == subpath.back().y;
+    stroke_subpath(subpath, closed, paint);
+  }
+  generation_++;
+}
+
+void Canvas2D::stroke_paths(const std::vector<CanvasSubpath> &paths) {
+  std::vector<CanvasSubpath> subpaths = device_subpaths_of(paths);
   const CanvasPaint paint = stroke_paint();
   for (const CanvasSubpath &subpath : subpaths) {
     if (subpath.size() < 2) continue;
@@ -378,7 +427,7 @@ float Canvas2D::measure_text(const std::string &text) const {
 }
 
 void Canvas2D::paint_text(const std::string &text, float x, float y, const CanvasPaint &paint,
-                          bool stroke) {
+                          bool stroke, float max_width) {
   Font *font = xt_text_resolve(state_.font);
   if (font == nullptr) return;
   std::vector<ShapedGlyph> glyphs;
@@ -386,11 +435,18 @@ void Canvas2D::paint_text(const std::string &text, float x, float y, const Canva
   float ascent = 0.0f, descent = 0.0f, lineHeight = 0.0f;
   xt_text_metrics(state_.font, &ascent, &descent, &lineHeight);
 
+  /* The optional `maxWidth` condenses the run horizontally instead of clipping
+   * it: advances and glyph bitmaps are squeezed by the same factor. */
+  float horizontal = 1.0f;
+  if (max_width > 0.0f && width > max_width && width > 0.0001f) {
+    horizontal = max_width / width;
+  }
+
   float originX = x;
   if (state_.text_align == 1) {
-    originX -= width * 0.5f;
+    originX -= width * horizontal * 0.5f;
   } else if (state_.text_align == 2) {
-    originX -= width;
+    originX -= width * horizontal;
   }
   float originY = y;
   switch (state_.text_baseline) {
@@ -419,7 +475,7 @@ void Canvas2D::paint_text(const std::string &text, float x, float y, const Canva
 
   float penX = 0.0f;
   for (const ShapedGlyph &glyph : glyphs) {
-    float userX = originX + penX + glyph.x_offset;
+    float userX = originX + (penX + glyph.x_offset) * horizontal;
     float userY = originY + glyph.y_offset;
     float deviceX = 0.0f, deviceY = 0.0f;
     to_device(userX, userY, &deviceX, &deviceY);
@@ -431,8 +487,8 @@ void Canvas2D::paint_text(const std::string &text, float x, float y, const Canva
     GlyphImage image;
     if (xt_text_rasterize(face, glyph.glyph, image) && image.width > 0 && image.height > 0) {
       canvas_detail::blit_glyph(image_.pixels, image_.width, image_.height, image.pixels, image.width,
-                                image.height, image.left, image.top, deviceX, deviceY, paint,
-                                state_.global_alpha);
+                                image.height, image.left, image.top, deviceX, deviceY, horizontal,
+                                paint, state_.global_alpha);
     }
     penX += glyph.x_advance;
   }
@@ -440,12 +496,12 @@ void Canvas2D::paint_text(const std::string &text, float x, float y, const Canva
   generation_++;
 }
 
-void Canvas2D::fill_text(const std::string &text, float x, float y) {
-  paint_text(text, x, y, fill_paint(), false);
+void Canvas2D::fill_text(const std::string &text, float x, float y, float max_width) {
+  paint_text(text, x, y, fill_paint(), false, max_width);
 }
 
-void Canvas2D::stroke_text(const std::string &text, float x, float y) {
-  paint_text(text, x, y, stroke_paint(), true);
+void Canvas2D::stroke_text(const std::string &text, float x, float y, float max_width) {
+  paint_text(text, x, y, stroke_paint(), true, max_width);
 }
 
 void Canvas2D::draw_image(const Image &source, float dx, float dy, float dw, float dh, float sx,

@@ -114,6 +114,10 @@ class Canvas2D {
   /** Resize the bitmap, discarding its contents (the DOM `canvas.width = …`
    * behaviour). */
   void resize(int width, int height);
+  /** `getContextAttributes().alpha`: an opaque canvas clears to opaque black
+   * instead of transparent, as the WebGL/2D context attribute specifies. */
+  void set_alpha(bool alpha);
+  bool alpha() const { return alpha_; }
 
   /* -- state ------------------------------------------------------------- */
   void save();
@@ -171,14 +175,21 @@ class Canvas2D {
   void move_to(float x, float y);
   void line_to(float x, float y);
   void rect(float x, float y, float width, float height);
-  void round_rect(float x, float y, float width, float height, float radius);
+  /** Four corner radii, clockwise from the top-left (CSS/`roundRect` order). */
+  void round_rect(float x, float y, float width, float height, float radius_tl, float radius_tr,
+                  float radius_br, float radius_bl);
   void arc(float cx, float cy, float radius, float start, float end, bool counterclockwise);
   void ellipse(float cx, float cy, float rx, float ry, float rotation, float start, float end,
                bool counterclockwise);
   void quadratic_curve_to(float cpx, float cpy, float x, float y);
   void bezier_curve_to(float c1x, float c1y, float c2x, float c2y, float x, float y);
-  void fill();
+  /** Fill the current path (`even_odd` selects the even-odd rule). */
+  void fill(bool even_odd = false);
   void stroke();
+  /** Fill/stroke a path supplied by the caller (`Path2D`); the points are user
+   * space and are transformed with the current state, like the current path. */
+  void fill_paths(const std::vector<CanvasSubpath> &paths, bool even_odd);
+  void stroke_paths(const std::vector<CanvasSubpath> &paths);
 
   /* -- rectangles -------------------------------------------------------- */
   void clear_rect(float x, float y, float width, float height);
@@ -187,8 +198,11 @@ class Canvas2D {
 
   /* -- text -------------------------------------------------------------- */
   float measure_text(const std::string &text) const;
-  void fill_text(const std::string &text, float x, float y);
-  void stroke_text(const std::string &text, float x, float y);
+  /** Draw text; a positive `max_width` condenses it horizontally so the run is
+   * at most that wide, as the canvas `fillText`/`strokeText` fourth argument
+   * requires. */
+  void fill_text(const std::string &text, float x, float y, float max_width = 0.0f);
+  void stroke_text(const std::string &text, float x, float y, float max_width = 0.0f);
 
   /* -- images ------------------------------------------------------------ */
   /** Draw `source` scaled into the destination rectangle, sampling the source
@@ -231,6 +245,8 @@ class Canvas2D {
   void to_device(float x, float y, float *outX, float *outY) const;
   /** The current path transformed into device space. */
   std::vector<CanvasSubpath> device_subpaths() const;
+  /** Any user-space path transformed into device space. */
+  std::vector<CanvasSubpath> device_subpaths_of(const std::vector<CanvasSubpath> &paths) const;
   /** Add one device-space polygon loop to `out`. */
   void flatten_arc(float cx, float cy, float radius, float start, float end, bool ccw,
                    CanvasSubpath *out) const;
@@ -250,9 +266,10 @@ class Canvas2D {
   void dash_polyline(const CanvasSubpath &points, bool closed,
                      std::vector<CanvasSubpath> *out) const;
   void paint_text(const std::string &text, float x, float y, const CanvasPaint &paint,
-                  bool stroke);
+                  bool stroke, float max_width);
 
   Image image_;
+  bool alpha_ = true;
   uint64_t id_ = 0;
   uint64_t generation_ = 0;
   State state_;

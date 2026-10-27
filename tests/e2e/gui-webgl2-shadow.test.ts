@@ -45,6 +45,7 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2 identity and sampler a
         label("constructor", gl.constructor.name);
         label("instanceof-webgl2", gl instanceof WebGL2RenderingContext);
         label("instanceof-webgl1", gl instanceof WebGLRenderingContext);
+        label("constructor-after-global", gl.constructor.name);
         label("canvas", gl.canvas === canvas);
         label("drawing-buffer", gl.drawingBufferWidth + "x" + gl.drawingBufferHeight);
         label("shared-prototype",
@@ -101,6 +102,7 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2 identity and sampler a
     expect(value("constructor")).toBe("WebGL2RenderingContext");
     expect(value("instanceof-webgl2")).toBe("true");
     expect(value("instanceof-webgl1")).toBe("false");
+    expect(value("constructor-after-global")).toBe("WebGL2RenderingContext");
     expect(value("shared-prototype")).toBe("false");
     expect(value("canvas")).toBe("true");
     expect(value("drawing-buffer")).toBe("64x64");

@@ -317,6 +317,18 @@ METHOD(class_list_contains);
 METHOD(style_set_property);
 METHOD(style_get_property_value);
 METHOD(style_remove_property);
+METHOD(style_length_get);
+METHOD(style_item);
+/** Install the dynamic named-property hooks on a `style` handle
+ * (`style.width = "50%"`). */
+void install_style_hooks(xt_value style);
+
+/* `dataset` (a DOMStringMap over `data-*` attributes) and computed style */
+METHOD(node_dataset_get);
+METHOD(computed_style_get_property_value);
+/** Build the computed-style handle for an element (and optional pseudo). */
+xt_value computed_style_handle(xt_value element, xt_value pseudo);
+xt_value computed_style_proto();
 
 /* WebGL context: state and queries */
 METHOD(webgl_canvas_get);

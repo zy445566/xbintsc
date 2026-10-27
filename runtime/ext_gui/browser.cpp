@@ -177,14 +177,13 @@ xt_value win_match_media(xt_value self, xt_value env, int32_t argc, xt_value *ar
   return media_list_build(query, xtgui::xt_css_media_matches(query, width, height));
 }
 
-/** `getComputedStyle(el)`: the engine exposes the element's style handle, which
- * answers `getPropertyValue` for everything the page set. */
+/** `getComputedStyle(el, pseudoElt)`: a live view of the *cascaded* style, so
+ * stylesheet rules (not only the inline `style` attribute) are visible; the
+ * optional `::before`/`::after` selector reads generated content. */
 xt_value win_get_computed_style(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)self;
   (void)env;
-  xt_value element = xt_arg(argc, argv, 0);
-  xt_value style = xt_get(element, xt_string_from_cstr("style"));
-  return XT_IS_OBJECT(style) ? style : xt_object_new();
+  return domapi::computed_style_handle(xt_arg(argc, argv, 0), xt_arg(argc, argv, 1));
 }
 
 xt_value win_alert(xt_value self, xt_value env, int32_t argc, xt_value *argv) {

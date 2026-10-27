@@ -78,6 +78,27 @@ console.log(box.offsetWidth, box.offsetHeight);   // rounded border box
 console.log(box.contains(inner));                 // descendant test
 ```
 
+### Style properties, dataset and computed style
+
+`style` behaves like a `CSSStyleDeclaration`: naming a property writes and reads
+the same declaration block as `setProperty` (`el.style.display = "none"`,
+`el.style.backgroundColor = "#f00"`, with camelCase mapped to the CSS spelling,
+and `el.style["--accent"]` for custom properties). `style.length` /
+`style.item(i)` enumerate the block, an assignment to `""` (or
+`delete el.style.width`) removes the declaration, and an unset property answers
+`""`.
+
+`el.dataset` is a live `DOMStringMap` over the element's `data-*` attributes:
+`dataset.fooBar` reads `data-foo-bar`, assignment writes the attribute, `delete`
+removes it, and `Object.keys(dataset)` / `for...in` list only the data keys.
+
+`getComputedStyle(el, pseudoElt)` reads the cascade (UA sheet, author rules,
+inheritance and the inline block) and answers both `getPropertyValue(name)` and
+named properties (`cs.width`, `cs.backgroundColor`, `cs["--accent"]`).
+`"::before"`/`"::after"` read generated content; any other pseudo-element
+answers empty values. Every read flushes a pending restyle, so an early handle
+stays live.
+
 Mutations mark the document dirty; the engine restyles + relayouts lazily (before
 the next read or frame). `inner = …`/`innerHTML = …` do **not** run scripts.
 Element events support capture and bubble phases, `stopPropagation`, `once`, and

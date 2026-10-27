@@ -74,6 +74,25 @@ console.log(box.offsetWidth, box.offsetHeight);   // 取整后的边框盒
 console.log(box.contains(inner));                 // 后代判断
 ```
 
+### style 属性、dataset 与计算样式
+
+`style` 的行为与 `CSSStyleDeclaration` 一致：以属性名赋值/读取的是与
+`setProperty` 相同的声明块（`el.style.display = "none"`、
+`el.style.backgroundColor = "#f00"`，驼峰名会映射到 CSS 拼写，
+`el.style["--accent"]` 用于自定义属性）。`style.length` / `style.item(i)`
+枚举声明块，赋值为 `""`（或 `delete el.style.width`）会移除该声明，未设置的
+属性返回 `""`。
+
+`el.dataset` 是元素 `data-*` 属性之上的实时 `DOMStringMap`：
+`dataset.fooBar` 读取 `data-foo-bar`，赋值写入属性，`delete` 移除属性，
+`Object.keys(dataset)` / `for...in` 只列出 data 键。
+
+`getComputedStyle(el, pseudoElt)` 读取层叠结果（UA 样式表、作者规则、继承与内联
+声明），同时支持 `getPropertyValue(name)` 与命名属性（`cs.width`、
+`cs.backgroundColor`、`cs["--accent"]`）。`"::before"`/`"::after"` 可读取生成
+内容；其他伪元素返回空值。每次读取都会先结算待处理的重新样式，因此早先创建的
+句柄在后续变更后仍然有效。
+
 变更操作会把文档标记为脏；引擎会延迟地（在下一次读取或下一帧之前）重新计算
 样式并重新布局。`inner = …`/`innerHTML = …` **不会**执行脚本。元素事件支持
 捕获与冒泡阶段、`stopPropagation`、`once`，并向上冒泡到 `document`/`window`。

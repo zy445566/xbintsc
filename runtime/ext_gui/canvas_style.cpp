@@ -112,11 +112,13 @@ bool positive_finite(float value) { return std::isfinite(value) && value >= 0.0f
 void Canvas2D::set_fill_style(const std::string &css) {
   parse_color_into(css, state_.fill_color, &state_.fill_style);
   state_.fill_gradient = 0;
+  state_.fill_pattern = 0;
 }
 
 void Canvas2D::set_stroke_style(const std::string &css) {
   parse_color_into(css, state_.stroke_color, &state_.stroke_style);
   state_.stroke_gradient = 0;
+  state_.stroke_pattern = 0;
 }
 
 void Canvas2D::set_fill_gradient(uint64_t id) {
@@ -124,7 +126,7 @@ void Canvas2D::set_fill_gradient(uint64_t id) {
     state_.fill_gradient = 0;
     return;
   }
-  if (find_gradient(id) != nullptr) state_.fill_gradient = id;
+  if (find_gradient(id) != nullptr) { state_.fill_gradient = id; state_.fill_pattern = 0; }
 }
 
 void Canvas2D::set_stroke_gradient(uint64_t id) {
@@ -132,7 +134,7 @@ void Canvas2D::set_stroke_gradient(uint64_t id) {
     state_.stroke_gradient = 0;
     return;
   }
-  if (find_gradient(id) != nullptr) state_.stroke_gradient = id;
+  if (find_gradient(id) != nullptr) { state_.stroke_gradient = id; state_.stroke_pattern = 0; }
 }
 
 void Canvas2D::set_global_alpha(float alpha) {

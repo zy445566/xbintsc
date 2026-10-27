@@ -139,12 +139,24 @@ Test hook: `getImageData(x, y, w, h)` copies a region to
 `{ width, height, data }` where `data` is a row-major RGBA8 byte array.
 Out-of-bounds pixels are transparent.
 
+Patterns: `createPattern(source, repetition?)` accepts an `<img>` or another
+`<canvas>` and tiles it in user space (`repeat`, `repeat-x`, `repeat-y`,
+`no-repeat`), so the tiles follow the current transform. Assign the result to
+`fillStyle`/`strokeStyle`; assigning a colour replaces it.
+
+Image data and export: `createImageData(width, height)` allocates a blank
+`{ width, height, data }`, and `putImageData(imageData, dx, dy[, dirtyX, dirtyY,
+dirtyWidth, dirtyHeight])` copies bytes straight into the bitmap (no transform,
+blending or `globalAlpha`). `canvas.toDataURL(type?)` exports a PNG data URL and
+`canvas.toBlob(callback, type?)` delivers a Blob-shaped `{ type, size }` from a
+microtask (the bytes are on `__xt_gui_blob_data`; there is no
+`URL.createObjectURL`).
+
 ## Not implemented
 
-Patterns (`createPattern`), shadows, `clip()`, `globalCompositeOperation`,
-`putImageData`, `createImageData`, `isPointInPath`, `drawImage` with an image
-smoothing toggle, `toDataURL`/`toBlob`, `<canvas>` as a CSS `background-image`,
-and offscreen canvases (`OffscreenCanvas`, `transferControlToOffscreen`).
+Shadows, `clip()`, `globalCompositeOperation`, `isPointInPath`, `drawImage` with
+an image smoothing toggle, `<canvas>` as a CSS `background-image`, and offscreen
+canvases (`OffscreenCanvas`, `transferControlToOffscreen`).
 Radial gradients ignore the inner circle's offset.
 
 See also [Media](./media.md) for the image/video/audio decode stack that

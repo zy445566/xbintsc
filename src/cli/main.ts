@@ -20,7 +20,7 @@ import { formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js"
 import { SourceFile } from "../diagnostics/source.js";
 import { build, compileEntry, COMPILER_VERSION, type EmitKind, type PhaseTiming } from "../driver/compiler.js";
 import { findRuntimeDir, platformSlug } from "../driver/paths.js";
-import { runtimeLibDir } from "../driver/runtime-lib.js";
+import { findRuntimeLibrary, runtimeLibDir } from "../driver/runtime-lib.js";
 import { resolveToolchain, type ResolvedToolchain } from "../driver/toolchain-provider.js";
 import { MINIMUM_CLANG_MAJOR, probeClang, realRunner, ToolchainError } from "../driver/toolchain.js";
 import {
@@ -290,6 +290,10 @@ function doctor(io: CliIo): number {
 
   try {
     io.stdout(`runtime lib: ${runtimeLibDir()}\n`);
+    const archives = ["core", "ext_node", "gui", "media"].filter((name) => findRuntimeLibrary(name) !== undefined);
+    io.stdout(
+      `archives   : ${archives.length > 0 ? archives.join(", ") : "none (C runtime compiled on demand)"}\n`,
+    );
   } catch {
     io.stdout("runtime lib: unavailable\n");
   }

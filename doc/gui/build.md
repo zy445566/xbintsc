@@ -58,8 +58,11 @@
   rather than through `make install`.
 - CI builds `gui.a`/`gui.lib` and `media.a`/`media.lib` before assembling the
   release archive so they ship inside `runtime/lib/<slug>/` (the release tarball
-  copies the whole `runtime/` tree). The archives are built and the examples are
-  run on Linux (under Xvfb, with the lavapipe software Vulkan driver) and macOS;
+  copies the whole `runtime/` tree). The same folders are packed into the
+  optional `@xbintsc/<slug>` npm package, so `--ext gui`/`--ext media` work from
+  an npm install on the hosts the release builds for. The archives are built and
+  the examples are run on Linux (under Xvfb, with the lavapipe software Vulkan
+  driver) and macOS;
   the Windows x64 job builds both archives and links a `gui,media` program, so
   the MSVC build is validated even though *running* the examples there stays
   provisional (the hosted runner has no GPU/Vulkan driver). Windows arm64 still

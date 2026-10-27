@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({ findRuntimeLibrary: vi.fn() }));
  * "not built yet" branches of `nativeObjects` can be exercised. */
 vi.mock("../../src/driver/runtime-lib.js", () => ({
   findRuntimeLibrary: mocks.findRuntimeLibrary,
+  runtimeLibDir: () => "/tmp/runtime/lib/darwin-x64",
 }));
 
 import { bundledExtensions } from "../../src/extensions/catalog.js";

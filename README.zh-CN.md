@@ -153,9 +153,11 @@ npx xbintsc doctor
 npx xbintsc build src/main.ts --out build
 ```
 
-它需要 Node.js 22+ 与 clang 16+ 工具链。npm 包在首次构建时会从源码编译 C 运行时
-（后续构建复用 `.xbintsc/`），并且不包含 GUI/media 归档。完整指南、CI 配置与注意
-事项见[通过 npm 包使用 xbintsc](./doc/zh-CN/npm-package.md)。
+它需要 Node.js 22+ 与 clang 16+ 工具链。安装时还会带上宿主平台对应的
+`@xbintsc/<os>-<arch>` 包，其中包含预编译运行时归档（`core`、`ext_node`，以及
+发布为其构建的 `gui`/`media`），所以首次构建直接链接归档而不编译 C。如果 npm
+跳过了这个可选包，才会从随包源码编译运行时并缓存到 `.xbintsc/`。完整指南、CI
+配置与注意事项见[通过 npm 包使用 xbintsc](./doc/zh-CN/npm-package.md)。
 
 ### 作为开发者（从源码）
 
@@ -233,7 +235,7 @@ run();                          // 主循环，直到所有窗口关闭
 npm run gui
 npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 
-# 预编译的 Linux/macOS 发布包已经内含该引擎：
+# 发布包或 npm 安装都已经内含该引擎：
 xbintsc run app.ts --ext gui
 
 # <video>/<audio> 播放是单独的可选归档，因此只做界面的二进制不会链接 FFmpeg：
@@ -256,10 +258,10 @@ xbintsc run examples/gui/media.ts --ext gui,media
 平台与完整说明：[doc/zh-CN/gui.md](./doc/zh-CN/gui.md) 是引擎总览（架构与
 路线图）；按功能拆分的文档位于 [doc/zh-CN/gui/](./doc/zh-CN/gui) —— API、
 DOM/CSS、布局、绘制、媒体、输入、动画、运行时、构建与已知问题。Linux 与 macOS 已在 CI 中构建
-并实际运行，其发布包内含引擎（`gui.a`）与可选的媒体归档（`media.a`）；Windows 的
-`gui.lib`（通过 SDL_GPU 的 Vulkan 后端渲染）由同一脚本产出，但仍是暂定状态，尚未
-随发布包提供。媒体播放目前仅支持 POSIX：没有 `media.a` 或在 Windows 上，
-`<video>` 与 `<audio>` 会触发 `error`。
+并实际运行，其发布包与可选的 `@xbintsc/<os>-<arch>` npm 包内含引擎（`gui.a`）与
+可选的媒体归档（`media.a`）；Windows x64 也会随发布包与 npm 平台包提供 `gui.lib`
+（通过 SDL_GPU 的 Vulkan 后端渲染）与 `media.lib`。媒体播放目前仅支持 POSIX：没有
+`media.a` 或在 Windows 上，`<video>` 与 `<audio>` 会触发 `error`。
 
 ## 增量编译
 

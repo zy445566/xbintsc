@@ -23,8 +23,8 @@
 
 import { join } from "node:path";
 import type { Extension, ExtensionModule } from "../registry.js";
-import { findRuntimeDir, platformSlug } from "../../driver/paths.js";
-import { findRuntimeLibrary } from "../../driver/runtime-lib.js";
+import { platformSlug } from "../../driver/paths.js";
+import { findRuntimeLibrary, runtimeLibDir } from "../../driver/runtime-lib.js";
 import { loadHtmlAsset } from "./html.js";
 import { loadScriptAsset } from "./three.js";
 
@@ -111,7 +111,7 @@ for (const type of hostTypes) {
 /** Absolute path to the per-platform prebuilt GUI archive (`gui.a`, or
  * `gui.lib` with the MSVC ABI on Windows). */
 function guiArchive(): string {
-  return join(findRuntimeDir(), "lib", platformSlug(), "gui.a");
+  return join(runtimeLibDir(), "gui.a");
 }
 
 export const guiExtension: Extension = {
@@ -122,7 +122,8 @@ export const guiExtension: Extension = {
     if (archive === undefined) {
       throw new Error(
         `GUI native library not found at ${guiArchive()} (or gui.lib).\n` +
-          `Build it for ${platformSlug()} first (see doc/gui.md).`,
+          `The optional @xbintsc/${platformSlug()} package ships it: reinstall xbintsc ` +
+          `without --omit=optional, or build it from a source checkout (see doc/gui.md).`,
       );
     }
     return [archive];

@@ -182,7 +182,11 @@ effect:
 ```bash
 npm run runtime            # tsx scripts/build-runtime.ts -> runtime/lib/<os>-<arch>/
 npm run runtime:clean      # drop build/runtime-obj and runtime/lib
+npm run package-platform   # pack the host archives -> dist/npm-platform/*.tgz
 ```
+
+`package-platform` produces the optional `@xbintsc/<os>-<arch>` npm package; CI
+uploads it for every host and `release.yml` publishes it before `xbintsc`.
 
 Add a new C file only together with the place that lists the runtime sources
 (`RUNTIME_SOURCES` in [../../src/driver/runtime-objects.ts](../../src/driver/runtime-objects.ts)),

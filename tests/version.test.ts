@@ -1,5 +1,8 @@
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { COMPILER_VERSION } from "../src/driver/compiler.js";
+import { checkPlatformVersions } from "../scripts/check-version.js";
 import { readTextFile } from "./platform.js";
 
 const packageJson = JSON.parse(readTextFile(new URL("../package.json", import.meta.url))) as {
@@ -9,6 +12,10 @@ const packageJson = JSON.parse(readTextFile(new URL("../package.json", import.me
 describe("compiler version", () => {
   it("matches package.json", () => {
     expect(COMPILER_VERSION).toBe(packageJson.version);
+  });
+
+  it("keeps platform optional dependencies on the placeholder or the release version", () => {
+    expect(checkPlatformVersions(resolve(dirname(fileURLToPath(import.meta.url)), ".."))).toBeUndefined();
   });
 
   it("is part of the incremental cache key", () => {

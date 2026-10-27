@@ -34,8 +34,8 @@ npx xbintsc build src/main.ts --out build
 4. 运行产物（`./build/<name>`，Windows 上是 `.exe`），并报告其路径。
 5. 如果构建报不支持的语法，阅读安装包里的子集指南
    `node_modules/xbintsc/doc/ai/language-support.md`；不要假设 Node 能跑的
-   TypeScript 就一定能编译。首次构建还会编译 C 运行时，请预留比增量构建更多的
-   时间。
+   TypeScript 就一定能编译。装有可选平台包时，首次构建直接链接预编译运行时；
+   没有平台包时才会从源码编译 C 运行时，那次构建会明显更慢。
 
 不要在 `node_modules/xbintsc` 里运行 `npm install`，也不要用 `tsc`/`esbuild`
 代替 xbintsc：原生产物必须由 `npx xbintsc` 生成。`xbintsc` 不读取
@@ -52,15 +52,18 @@ npx xbintsc build src/main.ts --out build
 它通过 Node.js 运行编译器。产出的二进制仍然是独立的：不嵌入 Node、V8 或
 TypeScript 编译器。
 
+安装它时还会安装宿主平台对应的可选包 `@xbintsc/<os>-<arch>`（例如
+`@xbintsc/linux-x64`）。该包在 `runtime/lib/<os>-<arch>/` 下携带预编译运行时归档：
+`core`、`ext_node`，以及发布时为该平台构建的 `gui` 与 `media`。驱动会就地链接这些
+归档，因此首次构建不再编译 C 运行时，也不需要用户再去发布页下载。
+
 这个包**不包含**：
 
-- C 编译器——构建机器需要 clang 16+；
-- 预编译的运行时归档（`runtime/lib/<os>-<arch>/core.a`）。驱动会在首次使用时
-  从随包发布的源码编译 C 运行时并缓存目标文件，所以第一次构建会更慢
-  （见[首次构建与缓存](#首次构建与缓存)）；
-- GUI/media 的原生归档（`gui.a`/`gui.lib`、`media.a`/`media.lib`）。如果你需要
-  `--ext gui` 或 `--ext media`，请使用 Linux/macOS/Windows x64 的发布压缩包，
-  或从源码检出中构建这些归档。
+- C 编译器——构建机器需要 clang 16+。
+
+如果 npm 跳过了这个可选包（`--omit=optional`、不安装可选依赖的包管理器，或发布
+未覆盖的宿主平台），驱动会回退到从随包源码编译 C 运行时并缓存目标文件；这样仍能
+工作，但首次构建更慢，`--ext gui` / `--ext media` 也需要归档存在。
 
 ## 环境要求
 
@@ -175,7 +178,7 @@ npm run build:native
 ./build/main          # Windows 上是 .\build\main.exe
 ```
 
-预期输出（首次构建还会编译 C 运行时）：
+预期输出：
 
 ```text
 xbintsc: wrote /absolute/path/my-app/build/main
@@ -187,14 +190,32 @@ Hello from xbintsc
 
 ## 首次构建与缓存
 
-运行时目标文件按源码/头文件内容哈希缓存。默认缓存目录是**执行命令时所在目录**下
-的 `.xbintsc/`（不一定是配置文件所在目录）；可以用 `xbintsc_CACHE_DIR` 改到别处。
+装有平台包时，首次构建直接链接预编译的
+`runtime/lib/<os>-<arch>/core.a`（Windows 上是 `.lib`），完全不编译 C，耗时与
+增量构建接近。
 
-npm 包只带运行时的 C 源码，不带预编译的 `core.a`，所以第一次构建会逐个编译
-运行时的翻译单元。这次构建会明显比后续构建慢。`--time` 可以看到时间花在哪里：
+如果可选包缺失——`npm install --omit=optional`、包管理器不安装可选依赖，或发布
+未覆盖当前宿主平台——驱动才会从随包源码编译 C 运行时。运行时目标文件按源码/
+头文件内容哈希缓存。默认缓存目录是**执行命令时所在目录**下的 `.xbintsc/`
+（不一定是配置文件所在目录）；可以用 `xbintsc_CACHE_DIR` 改到别处。这种回退构建
+会明显比后续构建慢。
+
+如果确实想忽略平台包归档、改从主包自带的源码编译 C 运行时（例如修改了
+`runtime/`，或预编译归档与当前环境不匹配），可以设置：
+
+```bash
+xbintsc_PREFER_PREBUILT=0 npx xbintsc build src/main.ts --out build
+```
+
+目标文件仍会缓存到 `.xbintsc/`；要完整重编，请把 `xbintsc_CACHE_DIR` 指向空目录
+（或删除 `.xbintsc/`）。只加 `--force` 不会绕过预编译归档。归档文件本身由源码
+检出中的 `npm run runtime` 生成；普通用户编译时不需要重新生成它们。
+
+`--time` 可以看到时间花在哪里：
 
 ```bash
 npx xbintsc build src/main.ts --out build --time
+# 未装平台包时的回退构建：
 # xbintsc: timing (frontend 4ms, codegen 7ms, clang 1089ms, runtime 37770ms, link 1966ms)
 ```
 
@@ -208,8 +229,8 @@ npx xbintsc build src/main.ts --out build
 实际使用中的建议：
 
 - 把 `.xbintsc/` 加进 `.gitignore`；
-- 在 CI 里保留 `.xbintsc/`（或把 `xbintsc_CACHE_DIR` 指向持久目录），避免每次
-  都重新编译运行时；
+- 在 CI 里保留 `.xbintsc/`（或把 `xbintsc_CACHE_DIR` 指向持久目录），避免回退
+  构建每次都重新编译运行时；
 - 删除 `.xbintsc/` 是安全的——下一次构建会重新生成；
 - `--force` 只忽略构建新鲜度记录，已缓存且内容哈希相同的运行时目标文件仍会复用。
   如果要强制完整重编 C 运行时，请删除 `.xbintsc/`。
@@ -350,15 +371,15 @@ jobs:
 | | npm 包（`xbintsc`） | 预编译发布压缩包 |
 | --- | --- | --- |
 | 需要 Node.js | 是，22+ | 否 |
-| 首次构建 | 从源码编译 C 运行时 | 直接链接预编译运行时 |
-| GUI / media 扩展 | 不包含 | Linux/macOS 与 Windows x64 压缩包包含 |
+| 首次构建 | 链接可选平台包里的预编译运行时 | 直接链接预编译运行时 |
+| GUI / media 扩展 | Linux/macOS 与 Windows x64（发布为这些平台构建）包含 | Linux/macOS 与 Windows x64 压缩包包含 |
 | 安装方式 | `npm install` + lockfile / provenance | 下载、校验 `.sha256`、解压 |
 | 编程 API | 有 | 无（仅 CLI） |
 | 交叉编译 | 否——只构建宿主平台 | 否——只构建宿主平台 |
-| 适合 | Node 项目与 CI，沿用熟悉的 npm 流程 | 没有 Node 的机器、首次构建要快、GUI 应用 |
+| 适合 | Node 项目与 CI，沿用熟悉的 npm 流程 | 没有 Node 的机器、GUI 应用、完全自包含的安装 |
 
-如果只需要核心运行时和 `node` 扩展，npm 包最方便。如果需要最快的冷启动构建，
-或者需要 GUI/media 归档，请使用发布压缩包（开发时也可以从源码构建）。
+npm 包通过可选平台包获得同一套预编译运行时，只有在跳过该包时才会付出从源码编译
+的冷启动成本。没有 Node 时请使用发布压缩包。
 
 ## 与普通 Node 构建的差异
 
@@ -383,10 +404,10 @@ jobs:
 | `npx xbintsc` 用了意料之外的版本 | 运行 `npx --no-install xbintsc version` 和 `npm ls xbintsc`；在 `package.json` 中固定版本，CI 用 `npm ci`。 |
 | `requires Node.js 22` / engine 错误 | 升级 Node；编译器使用了较新的 Node API。 |
 | `No C compiler found` 或 `requires clang 16 or newer` | 安装 clang 16+，运行 `npx xbintsc doctor`；需要时用 `xbintsc_CLANG` 指定 clang。 |
-| 第一次构建很慢 | 正常：正在编译并缓存运行时 C 源码。后续构建会复用 `.xbintsc/`；`--time` 可确认。如果冷启动必须快，请使用发布压缩包。 |
+| 第一次构建很慢 | 可选包 `@xbintsc/<os>-<arch>` 被跳过（或该宿主没有预编译包），正在编译并缓存运行时 C 源码。用 `npm ls @xbintsc/<os>-<arch>` 检查，并去掉 `--omit=optional` 重新安装；`--time` 可确认。 |
 | 写 `.xbintsc/` 权限错误 | 用 `xbintsc_CACHE_DIR` 指向可写目录，或在可写目录中运行。 |
 | `module 'fs' is provided by the 'node' extension` | 加 `--ext node`，或在配置里写 `"extensions": ["node"]`。 |
-| `GUI native library not found` / `media native library not found` | npm 包不包含 `gui.a`/`gui.lib` 或 `media.a`/`media.lib`；请使用 Linux/macOS/Windows x64 发布压缩包，或从源码检出构建。 |
+| `GUI native library not found` / `media native library not found` | 携带 `gui.a`/`gui.lib` 或 `media.a`/`media.lib` 的可选平台包被跳过，或该宿主没有预编译的 GUI/media 归档（Windows arm64）。去掉 `--omit=optional` 重新安装，或使用 Linux/macOS/Windows x64 发布压缩包，或从源码检出构建。 |
 | `require("xbintsc")` 失败 | 包只提供 ESM；使用 `import`（或动态 `import()`）。 |
 | Windows 链接时报缺少 MSVC 库 | 在 Native Tools 命令提示符中运行，安装 VS C++ 生成工具，并检查 `npx xbintsc doctor`。 |
 | `npm ci --omit=dev` 后构建找不到 `xbintsc` | 在构建阶段安装 devDependencies，或把 `xbintsc` 移到 `dependencies`。 |

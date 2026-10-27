@@ -52,7 +52,9 @@
   `vendor/ffmpeg-build-msvc/dist`，而不是执行 `make install`。
 - CI 在组装发布归档之前构建 `gui.a`/`gui.lib` 与 `media.a`/`media.lib`，因此它们
   会随 `runtime/lib/<slug>/` 一起发布（发布 tarball 会复制整个 `runtime/` 树）。
-  归档在 Linux（Xvfb 下，使用 lavapipe 软件 Vulkan 驱动）与 macOS 上构建并运行
+  同一批目录还会打进可选的 `@xbintsc/<slug>` npm 包，因此发布覆盖的宿主平台从
+  npm 安装后也能使用 `--ext gui`/`--ext media`。归档在 Linux（Xvfb 下，使用
+  lavapipe 软件 Vulkan 驱动）与 macOS 上构建并运行
   示例；Windows x64 也会构建两个归档并链接一个 `gui,media` 程序，因此 MSVC
   构建在 CI 中得到验证，只是*运行*示例仍为试验性（托管 runner 没有 GPU/Vulkan
   驱动）。Windows arm64 仍跳过两个归档（FFmpeg 的 MSVC arm64 构建尚未验证）。

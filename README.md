@@ -172,9 +172,11 @@ npx xbintsc doctor
 npx xbintsc build src/main.ts --out build
 ```
 
-It needs Node.js 22+ and a clang 16+ toolchain. The npm package compiles the C
-runtime from source on the first build (later builds reuse `.xbintsc/`), and it
-does not include the GUI/media archives. See
+It needs Node.js 22+ and a clang 16+ toolchain. The install also brings the
+matching `@xbintsc/<os>-<arch>` package with prebuilt runtime archives (`core`,
+`ext_node`, and `gui`/`media` where the release builds them), so the first build
+links them instead of compiling C. If npm skips that optional package, the
+runtime is compiled from the shipped sources and cached in `.xbintsc/`. See
 [Using xbintsc from npm](./doc/npm-package.md) for a complete guide, CI setup
 and caveats.
 
@@ -288,7 +290,7 @@ run();                          // main loop, until every window closes
 npm run gui
 npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 
-# A prebuilt Linux/macOS release archive already ships the engine:
+# A release archive or an npm install already ships the engine:
 xbintsc run app.ts --ext gui
 
 # <video>/<audio> playback is a separate opt-in archive, so GUI-only binaries
@@ -314,9 +316,10 @@ whose document also opens unchanged in a browser.
 Platforms and full details: [doc/gui.md](./doc/gui.md) is the engine overview
 (architecture and roadmap); the per-function documents live under
 [doc/gui/](./doc/gui) — API, DOM/CSS, layout, rendering, media, input, animation,
-runtime, build and known issues. Linux and macOS are built and exercised in CI
-and their release archives ship the engine (`gui.a`) plus the optional media
-archive (`media.a`). Windows x64 gets the same pair (`gui.lib` through SDL_GPU's
+runtime, build and known issues. Linux and macOS are built and exercised in CI;
+their release archives and the optional `@xbintsc/<os>-<arch>` npm packages ship
+the engine (`gui.a`) plus the optional media archive (`media.a`). Windows x64
+gets the same pair (`gui.lib` through SDL_GPU's
 Vulkan backend, and `media.lib` from FFmpeg compiled with clang-cl for the MSVC
 ABI), built in CI with the Visual Studio MSVC + LLVM toolchain a local build
 uses; Windows arm64 still skips them. Running the examples in CI stays

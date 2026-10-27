@@ -5,13 +5,19 @@
  *   runtime/lib/<os>-<arch>/core.a       compiled from RUNTIME_SOURCES
  *   runtime/lib/<os>-<arch>/ext_node.a   compiled from nodeExtension.runtimeSources()
  *
+ * On Windows the same archives are written as MSVC-compatible COFF libraries
+ * (`core.lib`, `ext_node.lib`): the objects are compiled by the MSVC-targeting
+ * clang the driver uses and merged by `llvm-ar`, exactly like `gui.lib` and
+ * `media.lib`.
+ *
  * The driver prefers these archives (see `src/driver/runtime-lib.ts`) and falls
  * back to compiling the C sources on demand when they are missing. Run this in
- * CI (or locally) after the runtime sources change.
+ * CI (or locally) after the runtime sources change; `scripts/package-platform.ts`
+ * then places the result in the optional `@xbintsc/<os>-<arch>` npm package.
  *
  * Environment:
  *   xbintsc_CLANG  C compiler override (otherwise the resolved toolchain is used)
- *   xbintsc_AR     archiver override (otherwise `llvm-ar`, then `ar`)
+ *   xbintsc_AR     archiver override (otherwise `llvm-ar`, then `ar` on POSIX)
  */
 
 import { mkdirSync, rmSync } from "node:fs";
@@ -28,15 +34,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeDir = join(root, "runtime");
 const outDir = join(runtimeDir, "lib", platformSlug());
 const objDir = join(root, "build", "runtime-obj");
-
-if (process.platform === "win32") {
-  // The driver links with the MSVC ABI on Windows, where the prebuilt archives
-  // are unnecessary: `build` compiles the runtime C sources on demand with the
-  // user's clang. (Producing MSVC-compatible COFF `.lib` archives is possible
-  // but not worth the extra step.)
-  console.log("xbintsc: skipping runtime archives on Windows; the driver compiles the C sources on demand");
-  process.exit(0);
-}
+const isWindows = process.platform === "win32";
+const archiveSuffix = isWindows ? ".lib" : ".a";
 
 // Use the same toolchain the driver will.
 const toolchain = resolveToolchain();
@@ -51,18 +50,24 @@ function isRunnable(candidate: string): boolean {
 
 function findArchiver(clangPath: string): string {
   const dir = dirname(clangPath);
-  const exe = process.platform === "win32" ? ".exe" : "";
+  const exe = isWindows ? ".exe" : "";
   const candidates = [
     process.env.xbintsc_AR,
     // A clang install usually ships `llvm-ar` next to the driver.
     dir === "." ? undefined : join(dir, `llvm-ar${exe}`),
     "llvm-ar",
-    "ar",
+    // On Windows only LLVM's archiver is known to write the COFF flavour the
+    // MSVC linker accepts; never fall back to a GNU `ar`.
+    isWindows ? undefined : "ar",
   ].filter((candidate): candidate is string => Boolean(candidate));
   for (const candidate of candidates) {
     if (isRunnable(candidate)) return candidate;
   }
-  console.error("xbintsc: no archiver found; set xbintsc_AR to llvm-ar or ar");
+  console.error(
+    isWindows
+      ? "xbintsc: no archiver found; install llvm-ar or set xbintsc_AR to it"
+      : "xbintsc: no archiver found; set xbintsc_AR to llvm-ar or ar",
+  );
   process.exit(1);
 }
 
@@ -101,9 +106,9 @@ console.log(`xbintsc: runtime toolchain ${clang} (${toolchain.source})`);
 const coreObjects = compile(RUNTIME_SOURCES.map((source) => join(runtimeDir, source)), "core");
 
 const ar = findArchiver(clang);
-archive("core.a", coreObjects, ar);
+archive(`core${archiveSuffix}`, coreObjects, ar);
 
 const nodeSources = nodeExtension.runtimeSources?.() ?? [];
 if (nodeSources.length > 0) {
-  archive("ext_node.a", compile(nodeSources, "node"), ar);
+  archive(`ext_node${archiveSuffix}`, compile(nodeSources, "node"), ar);
 }

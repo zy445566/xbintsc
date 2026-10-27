@@ -116,15 +116,17 @@ stderr — read the stderr, not just the first line. Frequent causes:
 
 ### `GUI native library not found at …`
 
-The `gui` extension needs its per-platform prebuilt `gui.a`/`gui.lib`, which is
-not built in a plain source checkout. Drop `--ext gui`, or build the archive as
-described in [../gui.md](../gui.md).
+The `gui` extension needs its per-platform prebuilt `gui.a`/`gui.lib`. The
+optional `@xbintsc/<os>-<arch>` npm package ships it (reinstall without
+`--omit=optional`), but a plain source checkout does not build it. Drop
+`--ext gui`, or build the archive as described in [../gui.md](../gui.md).
 
 ### `media native library not found at …`
 
 `<video>`/`<audio>` playback needs the optional `media` archive (`media.a`, or
-`media.lib` on Windows), built separately with `npm run media`. Build it, or
-drop `--ext media`; a GUI-only build still links and media elements simply fire
+`media.lib` on Windows). The `@xbintsc/<os>-<arch>` npm package ships it where
+the release builds it; otherwise build it separately with `npm run media`. Build
+it, or drop `--ext media`; a GUI-only build still links and media elements simply fire
 `error`. The `media` extension also requires `gui`, and `--ext media` alone is
 rejected with the flags to pass. On Windows the FFmpeg build additionally needs
 a POSIX shell (Git for Windows' bash) and a native GNU make (Chocolatey `make`,

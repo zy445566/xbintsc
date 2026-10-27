@@ -36,8 +36,9 @@ If you are an agent asked to build a project that already depends on `xbintsc`:
 4. Run the artifact (`./build/<name>`, `.exe` on Windows) and report its path.
 5. If the build reports unsupported syntax, read the installed subset guide at
    `node_modules/xbintsc/doc/ai/language-support.md`; do not assume
-   Node-compatible TypeScript. The first build also compiles the C runtime, so
-   allow more time than for an incremental build.
+   Node-compatible TypeScript. With the optional platform package installed the
+   first build links a prebuilt runtime; without it, the C runtime is compiled
+   from source and that build is noticeably slower.
 
 Do not run `npm install` inside `node_modules/xbintsc`, and do not substitute
 `tsc`/`esbuild` for xbintsc: the native artifact must come from `npx xbintsc`.
@@ -54,15 +55,22 @@ The package contains:
 It runs the compiler through Node.js. The binary it produces is still
 standalone: it does not embed Node, V8 or a TypeScript compiler.
 
+Installing it also installs the optional `@xbintsc/<os>-<arch>` package for the
+host (for example `@xbintsc/linux-x64`). That package contains the prebuilt
+runtime archives under `runtime/lib/<os>-<arch>/`: `core`, `ext_node` and, where
+the release publishes them, `gui` and `media`. The driver links those archives
+in place, so the first build does not compile the C runtime and needs no extra
+download from the release page.
+
 The package does **not** contain:
 
-- a C compiler — you need clang 16+ on the machine that builds;
-- prebuilt runtime archives (`runtime/lib/<os>-<arch>/core.a`). The driver
-  compiles the C runtime from the shipped sources on first use and caches the
-  objects, so the first build is slower (see [the cache](#the-first-build-and-the-cache));
-- the GUI/media native archives (`gui.a`, `media.a`). If you need `--ext gui` or
-  `--ext media`, use a Linux/macOS release archive or build those archives from
-  a source checkout.
+- a C compiler — you need clang 16+ on the machine that builds.
+
+If npm skips the optional package (`--omit=optional`, a package manager that
+does not install optional dependencies, or a host the release does not build
+for), the driver falls back to compiling the C runtime from the shipped sources
+and caches the objects; that build works but is slower, and `--ext gui` /
+`--ext media` need the archive to be present.
 
 ## Requirements
 
@@ -182,7 +190,7 @@ npm run build:native
 ./build/main          # .\build\main.exe on Windows
 ```
 
-Expected output (the first build also compiles the C runtime):
+Expected output:
 
 ```text
 xbintsc: wrote /absolute/path/my-app/build/main
@@ -195,17 +203,38 @@ pass the file explicitly: `xbintsc build src/main.ts --out build`.
 
 ## The first build and the cache
 
-The runtime objects are cached by source/header content hash. The default cache
-is `.xbintsc/` **in the directory you run the command from** (not necessarily
-next to the config file); set `xbintsc_CACHE_DIR` to put it elsewhere.
+With the platform package installed, the first build links the prebuilt
+`runtime/lib/<os>-<arch>/core.a` (`.lib` on Windows) and does not compile C at
+all, so it takes about as long as an incremental build.
 
-Because the npm package ships the runtime as C sources but not as a prebuilt
-`core.a`, the first build compiles each runtime translation unit. Expect that
-build to take noticeably longer than the ones after it. `--time` shows where the
-time went:
+If the optional package is missing — `npm install --omit=optional`, a package
+manager that does not install optional dependencies, or a host the release does
+not build for — the driver compiles the C runtime from the shipped sources
+instead. The runtime objects are cached by source/header content hash. The
+default cache is `.xbintsc/` **in the directory you run the command from** (not
+necessarily next to the config file); set `xbintsc_CACHE_DIR` to put it
+elsewhere. Expect that fallback build to take noticeably longer than the ones
+after it.
+
+To ignore the platform archive on purpose and compile the runtime from the
+sources shipped in the package — for example after patching `runtime/`, or when
+the prebuilt archive does not match the environment — set:
+
+```bash
+xbintsc_PREFER_PREBUILT=0 npx xbintsc build src/main.ts --out build
+```
+
+The objects are still cached in `.xbintsc/`; point `xbintsc_CACHE_DIR` at an
+empty directory (or delete `.xbintsc/`) for a full rebuild. `--force` alone
+does not bypass a prebuilt archive. The archive files themselves are produced
+by `npm run runtime` in a source checkout; users never need to regenerate them
+just to compile.
+
+`--time` shows where the time went:
 
 ```bash
 npx xbintsc build src/main.ts --out build --time
+# fallback without the platform package:
 # xbintsc: timing (frontend 4ms, codegen 7ms, clang 1089ms, runtime 37770ms, link 1966ms)
 ```
 
@@ -220,7 +249,7 @@ Practical consequences:
 
 - add `.xbintsc/` to `.gitignore`;
 - keep `.xbintsc/` between CI runs (or point `xbintsc_CACHE_DIR` at a persistent
-  directory) to avoid paying the runtime-compile cost every time;
+  directory) so a fallback build does not recompile the runtime every time;
 - deleting `.xbintsc/` is safe — the next build recreates it;
 - `--force` ignores the build freshness record, but cached runtime objects are
   still reused. Delete `.xbintsc/` if you want to force a full C rebuild.
@@ -368,17 +397,16 @@ jobs:
 | | npm package (`xbintsc`) | Prebuilt release archive |
 | --- | --- | --- |
 | Needs Node.js | Yes, 22+ | No |
-| First build | Compiles the C runtime from source | Links the prebuilt runtime |
-| GUI / media extensions | Not included | Included in Linux/macOS and Windows x64 archives |
+| First build | Links the prebuilt runtime from the optional platform package | Links the prebuilt runtime |
+| GUI / media extensions | Included on Linux/macOS and Windows x64 (the hosts the release builds them for) | Included in Linux/macOS and Windows x64 archives |
 | Installation | `npm install` + lockfile / provenance | Download, verify `.sha256`, unpack |
 | Programmatic API | Yes | No (CLI only) |
 | Cross-compiles | No — host only | No — host only |
-| Best for | Node projects and CI, familiar npm workflow | Machines without Node, fastest first build, GUI apps |
+| Best for | Node projects and CI, familiar npm workflow | Machines without Node, GUI apps, a fully self-contained install |
 
-If you only need the core runtime and the `node` extension, the npm package is
-the most convenient option. If you need the fastest possible cold build or the
-GUI/media archives, use a release archive (or build from source for
-development).
+The npm package gets the same prebuilt runtime through its optional platform
+package, so the cold-build penalty only applies when that package is skipped.
+Use a release archive when Node is not available.
 
 ## Things that differ from a regular Node build
 
@@ -408,10 +436,10 @@ the same file under `node_modules/xbintsc/doc/ai/`.
 | `npx xbintsc` uses an unexpected version | Run `npx --no-install xbintsc version` and `npm ls xbintsc`; pin the version in `package.json` and use `npm ci` in CI. |
 | `requires Node.js 22` / engine error | Upgrade Node; the compiler uses modern Node APIs. |
 | `No C compiler found` or `requires clang 16 or newer` | Install clang 16+ and run `npx xbintsc doctor`; set `xbintsc_CLANG` to a specific clang if needed. |
-| The first build takes a long time | Expected: the runtime C sources are compiled and cached. Later builds reuse `.xbintsc/`; `--time` confirms. Use a release archive if cold builds must be fast. |
+| The first build takes a long time | The optional `@xbintsc/<os>-<arch>` package was skipped (or this host has no prebuilt package), so the runtime C sources are compiled and cached. Check `npm ls @xbintsc/<os>-<arch>` and reinstall without `--omit=optional`; `--time` confirms. |
 | Permission errors writing `.xbintsc/` | Set `xbintsc_CACHE_DIR` to a writable directory, or run from a writable working directory. |
 | `module 'fs' is provided by the 'node' extension` | Add `--ext node`, or `"extensions": ["node"]` in the config. |
-| `GUI native library not found` / `media native library not found` | The npm package does not ship `gui.a`/`gui.lib` or `media.a`/`media.lib`; use a Linux/macOS/Windows x64 release archive or build them from a source checkout. |
+| `GUI native library not found` / `media native library not found` | The optional platform package that ships `gui.a`/`gui.lib` or `media.a`/`media.lib` was skipped, or this host has no prebuilt GUI/media archive (Windows arm64). Reinstall without `--omit=optional`, use a Linux/macOS/Windows x64 release archive, or build the archive from a source checkout. |
 | `require("xbintsc")` fails | The package is ESM-only; use `import` (or dynamic `import()`). |
 | Windows link errors about missing MSVC libraries | Run from a Native Tools prompt, install the VS C++ build tools, and check `npx xbintsc doctor`. |
 | `npm ci --omit=dev` then the build cannot find `xbintsc` | Install devDependencies for the build stage, or move `xbintsc` to `dependencies`. |

@@ -164,12 +164,16 @@ jobs:
           fi
           echo "Using binaries from CI run ${run_id}."
 
-          rm -rf .ci-artifacts release-assets
-          # Only the release archives assembled by the `package` job are
-          # published; the raw self-hosted binaries are left out of the release.
-          gh run download "${run_id}" --pattern 'release-*' --dir .ci-artifacts
+          rm -rf .ci-artifacts release-assets platform-packages
+          # The `package` job uploads both the release archive and the optional
+          # `@xbintsc/<os>-<arch>` npm package for its host; the raw self-hosted
+          # binaries are left out of the release.
+          gh run download "${run_id}" \
+            --pattern 'release-*' \
+            --pattern 'platform-*' \
+            --dir .ci-artifacts
 
-          mkdir -p release-assets
+          mkdir -p release-assets platform-packages
           shopt -s nullglob
           # Archives are already named xbintsc-<version>-<os>-<arch>.tar.{gz,zst}
           # (+ .sha256), so copy them through verbatim.
@@ -178,6 +182,14 @@ jobs:
             for file in "${dir}"/*; do
               [ -f "${file}" ] || continue
               cp "${file}" "release-assets/$(basename "${file}")"
+            done
+          done
+          # npm package tarballs: xbintsc-<os>-<arch>-<version>.tgz.
+          for dir in .ci-artifacts/platform-*; do
+            [ -d "${dir}" ] || continue
+            for file in "${dir}"/*.tgz; do
+              [ -f "${file}" ] || continue
+              cp "${file}" "platform-packages/$(basename "${file}")"
             done
           done
 
@@ -200,11 +212,68 @@ jobs:
           done
           ls -l release-assets
 
+          # Every host needs its platform package, and each tarball must be the
+          # one built from this commit for this version: the main manifest is
+          # about to depend on exactly these names and versions.
+          for slug in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64; do
+            file="platform-packages/xbintsc-${slug}-${VERSION}.tgz"
+            if [ ! -f "${file}" ]; then
+              echo "::error::Missing npm platform package ${file}." >&2
+              exit 1
+            fi
+            read -r name pkg_version <<<"$(tar -xOf "${file}" package/package.json | node -e '
+              let raw = "";
+              process.stdin.on("data", (chunk) => { raw += chunk; });
+              process.stdin.on("end", () => {
+                const pkg = JSON.parse(raw);
+                console.log(`${pkg.name} ${pkg.version}`);
+              });
+            ')"
+            if [ "${name}" != "@xbintsc/${slug}" ] || [ "${pkg_version}" != "${VERSION}" ]; then
+              echo "::error::${file} contains ${name}@${pkg_version}, expected @xbintsc/${slug}@${VERSION}." >&2
+              exit 1
+            fi
+            tar -tf "${file}" | grep -Eq "^package/runtime/lib/${slug}/core\.(a|lib)$" \
+              || { echo "::error::${file} has no core runtime archive." >&2; exit 1; }
+            tar -tf "${file}" | grep -Eq "^package/runtime/lib/${slug}/ext_node\.(a|lib)$" \
+              || { echo "::error::${file} has no ext_node runtime archive." >&2; exit 1; }
+          done
+          ls -l platform-packages
+
+      # The platform packages are published before the main package: its
+      # optionalDependencies name exactly these versions, so a user installing
+      # right after the main publish must be able to resolve them.
+      - name: Publish the npm platform packages
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for slug in linux-x64 linux-arm64 darwin-x64 darwin-arm64 win32-x64 win32-arm64; do
+            name="@xbintsc/${slug}"
+            file="platform-packages/xbintsc-${slug}-${VERSION}.tgz"
+            # Re-dispatching a release after a partial failure is safe: an
+            # immutable (name, version) already on the registry is skipped.
+            if npm view "${name}@${VERSION}" version >/dev/null 2>&1; then
+              echo "Already published: ${name}@${VERSION}"
+              continue
+            fi
+            npm publish "${file}" --provenance --access public
+          done
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: gh release create "${TAG}" --title "${TAG}" --generate-notes release-assets/*
+
+      # The committed manifest keeps the 0.0.0 placeholder (those packages exist
+      # on npm, so `npm ci` in a checkout never resolves a missing tarball).
+      # Rewrite it now that every platform package above exists.
+      - name: Point optionalDependencies at the release version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: npm run platform-versions -- --version "${VERSION}"
 
       # No NODE_AUTH_TOKEN needed: npm authenticates via GitHub OIDC
       # (id-token: write) against the npm trusted publisher config.

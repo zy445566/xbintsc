@@ -565,3 +565,17 @@ jobs:
           path: dist/release/xbintsc-*.tar.*
           if-no-files-found: error
           retention-days: 90
+
+      # The same archives also ship as the optional `@xbintsc/<os>-<arch>` npm
+      # package. `release.yml` collects these tarballs, publishes them first and
+      # then points the `xbintsc` manifest's optionalDependencies at that version.
+      - name: Assemble the npm platform package
+        run: npm run package-platform
+
+      - name: Upload the npm platform package
+        uses: actions/upload-artifact@v7
+        with:
+          name: platform-${{ runner.os }}-${{ runner.arch }}
+          path: dist/npm-platform/*.tgz
+          if-no-files-found: error
+          retention-days: 90

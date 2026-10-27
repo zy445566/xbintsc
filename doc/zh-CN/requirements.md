@@ -76,7 +76,10 @@ xbintsc-<os>-<arch>/
   runtime/               C 运行期 + 预编译 runtime/lib/<os>-<arch>/
 ```
 
-Windows 归档不含预编译 `runtime/lib/`；驱动会用用户的 clang 按需编译 C 运行期。
+每个归档都带有该宿主的预编译运行期，位于 `runtime/lib/<os>-<arch>/`：所有平台都有
+`core` 与 `ext_node`（Windows 的 MSVC ABI 下是 `.lib` 而不是 `.a`），发布为其构建
+时还包括 `gui`/`media`。npm 包通过可选的 `@xbintsc/<os>-<arch>` 依赖获得同一套归档，
+因此从 npm 安装也不需要编译 C 运行期。
 
 解压后把 `bin/` 加入 `PATH`（或直接调用 `bin/xbintsc`），再按下面的平台说明安装
 工具链。建议先校验下载内容：

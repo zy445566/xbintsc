@@ -97,10 +97,13 @@ function under [`doc/gui/`](../gui/)), and the scripting surface in
 Pages written for the browser also get the browser globals they reach for —
 `window`/`self`, `document`, `navigator`, `location`, `localStorage`,
 `requestAnimationFrame`, `matchMedia`, `getComputedStyle`, `alert`/`prompt`,
-`escape`, the `Event` family and a Web Audio *surface* (`AudioContext` with
-nodes, params and buffers, but no mixer) — plus a frame pump that starts at
-`loadHTML` and re-arms only while animation-frame callbacks remain, so a page
-that never calls `run()` still paints and then exits. **WebGL 1.0 and 2.0 are implemented**: `canvas.getContext("webgl")` /
+`escape`, the `Event` family and a working Web Audio implementation
+(`AudioContext` with gain, oscillator, buffer-source, biquad, compressor,
+stereo-panner, constant-source and delay nodes, a real 48 kHz mixer, per-sample
+AudioParam automation, and `decodeAudioData` for WAV in-engine plus compressed
+formats through `media`) — plus a frame pump that
+starts at `loadHTML` and re-arms only while animation-frame callbacks remain, so
+a page that never calls `run()` still paints and then exits. **WebGL 1.0 and 2.0 are implemented**: `canvas.getContext("webgl")` /
 `"webgl2"` return a GPU context whose GLSL ES shaders are compiled to SPIR-V by
 a bundled glslang — consumed by Vulkan, or cross-compiled to MSL by bundled
 SPIRV-Cross on Metal — and drawn through SDL_GPU; the page composites the colour

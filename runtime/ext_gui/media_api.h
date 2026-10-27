@@ -40,10 +40,30 @@ typedef XtMediaPlayerHandle (*XtMediaByIdFn)(uint64_t id);
 /** Tear down every decoder and process-wide media state. */
 typedef void (*XtMediaShutdownFn)(void);
 
+/** Interleaved float PCM returned by the memory decoder.
+ *
+ * `samples` is allocated by the backend and must be released with the table's
+ * `free_audio` entry point (both archives use the same static CRT). */
+typedef struct XtMediaAudioBuffer {
+  int channels;
+  int sample_rate;
+  int frames;
+  float *samples;
+} XtMediaAudioBuffer;
+
+/** Decode an in-memory audio file (`decodeAudioData`). Returns 1 on success and
+ * fills `out`; on failure returns 0 and copies a message into `error`. */
+typedef int (*XtMediaDecodeAudioFn)(const unsigned char *data, size_t size,
+                                    XtMediaAudioBuffer *out, char *error, size_t error_size);
+/** Release the `samples` a successful `decode_audio` allocated. */
+typedef void (*XtMediaFreeAudioFn)(void *samples);
+
 typedef struct XtMediaApi {
   XtMediaOpenFn open;
   XtMediaByIdFn by_id;
   XtMediaShutdownFn shutdown;
+  XtMediaDecodeAudioFn decode_audio;
+  XtMediaFreeAudioFn free_audio;
 } XtMediaApi;
 
 /** Install a decoder table. Implemented by the GUI engine; called once by the
@@ -57,6 +77,9 @@ XtMediaPlayerHandle xt_media_backend_open(const char *path, char *error,
                                           size_t error_size, void *audio_sink);
 XtMediaPlayerHandle xt_media_backend_by_id(uint64_t id);
 void xt_media_backend_shutdown(void);
+int xt_media_backend_decode_audio(const unsigned char *data, size_t size,
+                                  XtMediaAudioBuffer *out, char *error, size_t error_size);
+void xt_media_backend_free_audio(void *samples);
 
 #ifdef __cplusplus
 }

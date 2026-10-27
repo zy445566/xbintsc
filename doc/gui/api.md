@@ -54,7 +54,7 @@ requestAnimationFrame(frame);
 | `document` | that window's document handle |
 | `navigator` | `userAgent` (a desktop Chrome string ending in `xbintsc`), `platform`, `vendor`, `language(s)`, `hardwareConcurrency`, `maxTouchPoints`, `onLine`, `vibrate()` |
 | `localStorage` | an in-memory `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` store |
-| `AudioContext`, `webkitAudioContext` | a Web Audio graph builder (see below) |
+| `AudioContext`, `webkitAudioContext` | a Web Audio graph with a real mixer and decoder (see below) |
 | `Event`, `CustomEvent`, `ProgressEvent`, … | event constructors |
 | `HTMLCanvasElement`, `HTMLImageElement`, `WebGLRenderingContext`, `WebGL2RenderingContext`, `WebGLBuffer`/`WebGLTexture`/`WebGLShader`/`WebGLProgram`/`WebGLFramebuffer`/`WebGLRenderbuffer`/`WebGLUniformLocation`/`WebGLActiveInfo`/`WebGLVertexArrayObject`/`WebGLSampler`/`WebGLQuery`/`WebGLSync`/`WebGLTransformFeedback` | real constructor values. `canvas.getContext("webgl")` and `getContext("webgl2")` return GPU contexts (see [WebGL](./webgl.md)). |
 | `ImageBitmap`, `createImageBitmap(source)` | immutable bitmaps backed by decoded pixels (`<img>`, `<canvas>`, `<video>` frames and `ImageData` shapes); the promise resolves immediately and `texImage2D` accepts the result |
@@ -69,17 +69,56 @@ Once the page is parsed a miss answers `undefined`, like the browser.
 
 ### Web Audio
 
-`new AudioContext()` builds a graph but **does not mix or render audio**: there
-is no backend behind it. What is implemented is the surface a page needs to run
-and to read back its own state — `createGain` / `createOscillator` /
-`createBufferSource` / `createBiquadFilter` / `createDynamicsCompressor` /
-`createBuffer` (real `Float32Array` channels) / `decodeAudioData` (resolves with
-an empty buffer) / `resume` / `suspend` / `close`, `AudioParam` `value` plus
-`setValueAtTime` / `linearRampToValueAtTime` / `exponentialRampToValueAtTime` /
-`setTargetAtTime` / `cancelScheduledValues` / `cancelAndHoldAtTime`, and node
-`connect` (returns the destination, so chains chain) / `disconnect` / `start` /
-`stop`. `sampleRate` is 48000, `state` `"running"`, and `currentTime` advances
-only through the event loop.
+`new AudioContext()` builds a real graph and mixes it: `runtime/ext_gui/audio_mixer.cpp`
+renders 48 kHz stereo float in 128-frame quanta, multiple inputs are summed at
+every node, and the first `start()`/`resume()` opens the default SDL playback
+device (best effort — a headless host keeps rendering silently). The graph is
+rendered on the SDL audio thread from native state; the page never has to pump
+it, and no runtime value is touched off the main thread.
+
+Implemented nodes: `createGain`, `createOscillator` (sine, square, sawtooth,
+triangle), `createBufferSource` (buffer, loop, loopStart/loopEnd,
+playbackRate/detune), `createBiquadFilter` (lowpass, highpass, bandpass,
+lowshelf, highshelf, peaking, notch, allpass), `createDynamicsCompressor`,
+`createStereoPanner`, `createConstantSource` and `createDelay(maxDelayTime)`.
+`connect` returns the destination so chains chain (`src.connect(gain).connect(ctx.destination)`),
+`disconnect()` / `disconnect(target)` update the native graph, and `start(when, offset, duration)` /
+`stop(when)` are honoured on the graph's clock. Nodes outside this list
+(`createAnalyser`, `createConvolver`, `createWaveShaper`, `createChannelSplitter`,
+`createPeriodicWave`, …) are not provided, so their methods are simply absent.
+
+Every `AudioParam` has a live `value` plus `setValueAtTime` /
+`linearRampToValueAtTime` / `exponentialRampToValueAtTime` / `setTargetAtTime` /
+`cancelScheduledValues` / `cancelAndHoldAtTime`. The automation timeline is
+evaluated per sample, so a ramp keeps moving while the page is idle.
+`currentTime` advances with the rendered quanta.
+
+`createBuffer(channels, length, sampleRate)` returns an AudioBuffer whose
+`getChannelData(i)` is a real `Float32Array`, so samples can be generated
+procedurally. `decodeAudioData(bytes)` returns a promise for a decoded
+AudioBuffer: WAV (PCM 8/16/24/32-bit, IEEE float 32/64, A-law and µ-law) is
+decoded by the engine itself; MP3, AAC/M4A, Vorbis, Opus and FLAC need the
+optional `media` extension (`--ext gui,media`), whose FFmpeg decoder is used as
+the fallback. `bytes` may be an ArrayBuffer, a typed array, a Node `Buffer`, or
+the raw byte string `fs.readFileSync` returns (this runtime has no dedicated
+binary type, and that string's storage is exactly the file bytes). The result
+is resampled to the context's 48 kHz, so `buffer.sampleRate` matches
+`context.sampleRate`; the promise rejects with an `EncodingError` when nothing
+can decode the bytes.
+
+`resume()` / `suspend()` / `close()` control the device and the `state`
+property; `sampleRate` is 48000, like the media decoder.
+
+For tests and diagnostics an **offline** context renders synchronously:
+
+```ts
+const ctx = new AudioContext({ __offline: true });
+// … build the graph and start sources …
+const samples = ctx.__render(480);   // interleaved stereo Float32Array
+```
+
+This private hook never opens a device and is not part of the Web Audio API; it
+is what `tests/e2e/gui-audio.test.ts` uses to pin the mixer math.
 
 Input handlers receive a single payload object (lifecycle handlers receive none):
 

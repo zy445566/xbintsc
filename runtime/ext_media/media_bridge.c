@@ -22,6 +22,8 @@ static const XtMediaApi kMediaApi = {
     xt_media_backend_open,
     xt_media_backend_by_id,
     xt_media_backend_shutdown,
+    xt_media_backend_decode_audio,
+    xt_media_backend_free_audio,
 };
 
 #if defined(__GNUC__) || defined(__clang__)

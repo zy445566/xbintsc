@@ -250,6 +250,23 @@ xt_value xt_string_static(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_typed_array_ctor_by_name(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_typed_array_static_by_name(xt_value name, xt_value method, int32_t argc, xt_value *argv);
 xt_value xt_typed_array_prototype(xt_value name);
+/** Bulk access to the bytes an `ArrayBuffer` (or a typed array's backing
+ * store) holds, for decoders and encoders that cannot afford one property read
+ * per byte. `offset` and `count` are clamped to the buffer and the number of
+ * bytes actually transferred is returned. Extensions pass the backing buffer
+ * plus a view's `byteOffset`/`byteLength`; see `runtime/ext_gui/audio.cpp`. */
+uint32_t xt_array_buffer_copy_bytes_out(xt_value buffer, uint32_t offset, uint8_t *dst,
+                                        uint32_t count);
+uint32_t xt_array_buffer_copy_bytes_in(xt_value buffer, uint32_t offset, const uint8_t *src,
+                                       uint32_t count);
+/** Allocate a zero-filled `ArrayBuffer` of `byte_length` bytes (the native
+ * counterpart of `new ArrayBuffer(n)`). */
+xt_value xt_array_buffer_alloc(uint32_t byte_length);
+/** Typed-array view internals for extensions: whether `value` is a view, the
+ * `ArrayBuffer` it views, and the byte offset of the view inside it. */
+int xt_is_typed_array(xt_value value);
+xt_value xt_typed_array_backing_buffer(xt_value value);
+uint32_t xt_typed_array_view_offset(xt_value value);
 /** Error-family construction and prototype lookup by constructor name. */
 xt_value xt_error_ctor_by_name(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_error_prototype(xt_value name);

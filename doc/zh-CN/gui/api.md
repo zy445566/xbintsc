@@ -53,7 +53,7 @@ requestAnimationFrame(frame);
 | `document` | 该窗口的 document 句柄 |
 | `navigator` | `userAgent`（以 `xbintsc` 结尾的桌面 Chrome 字符串）、`platform`、`vendor`、`language(s)`、`hardwareConcurrency`、`maxTouchPoints`、`onLine`、`vibrate()` |
 | `localStorage` | 内存中的 `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` |
-| `AudioContext`、`webkitAudioContext` | Web Audio 图构建器（见下） |
+| `AudioContext`、`webkitAudioContext` | 带真实混音器与解码器的 Web Audio 图（见下） |
 | `Event`、`CustomEvent`、`ProgressEvent` 等 | 事件构造器 |
 | `HTMLCanvasElement`、`HTMLImageElement`、`WebGLRenderingContext`、`WebGL2RenderingContext`、`WebGLBuffer`/`WebGLTexture`/`WebGLShader`/`WebGLProgram`/`WebGLFramebuffer`/`WebGLRenderbuffer`/`WebGLUniformLocation`/`WebGLActiveInfo`/`WebGLVertexArrayObject`/`WebGLSampler`/`WebGLQuery`/`WebGLSync`/`WebGLTransformFeedback` | 真实的构造函数值。`canvas.getContext("webgl")` 与 `getContext("webgl2")` 返回 GPU 上下文（见 [WebGL](./webgl.md)）。 |
 | `ImageBitmap`、`createImageBitmap(source)` | 由已解码像素支撑的不可变位图（`<img>`、`<canvas>`、`<video>` 帧与 `ImageData` 形状）；promise 立即 settle，`texImage2D` 可直接接受该对象 |
@@ -67,15 +67,49 @@ requestAnimationFrame(frame);
 
 ### Web Audio
 
-`new AudioContext()` 会构建音频图，但**不做混音也不渲染音频**：背后没有后端。已实现的是
-页面运行与自检所需的接口 —— `createGain` / `createOscillator` / `createBufferSource` /
-`createBiquadFilter` / `createDynamicsCompressor` / `createBuffer`（真实的
-`Float32Array` 声道）/ `decodeAudioData`（以空缓冲区兑现）/ `resume` / `suspend` /
-`close`，`AudioParam` 的 `value` 与 `setValueAtTime` / `linearRampToValueAtTime` /
+`new AudioContext()` 会构建**真正参与混音的音频图**：`runtime/ext_gui/audio_mixer.cpp`
+以 48 kHz 立体声 float、128 帧为一个渲染量子进行混音，每个节点对多路输入求和；
+首次 `start()`/`resume()` 会尽力打开默认 SDL 播放设备（无头环境下保持静音但仍在渲染）。
+音频在 SDL 音频线程上基于原生状态渲染，页面无须自行驱动，音频线程也不会触碰任何运行时值。
+
+已实现的节点：`createGain`、`createOscillator`（sine、square、sawtooth、triangle）、
+`createBufferSource`（buffer、loop、loopStart/loopEnd、playbackRate/detune）、
+`createBiquadFilter`（lowpass、highpass、bandpass、lowshelf、highshelf、peaking、notch、allpass）、
+`createDynamicsCompressor`、`createStereoPanner`、`createConstantSource` 与
+`createDelay(maxDelayTime)`。`connect` 返回目标节点，因此可链式连接
+（`src.connect(gain).connect(ctx.destination)`）；`disconnect()` / `disconnect(target)`
+会更新原生图；`start(when, offset, duration)` / `stop(when)` 按图的时钟生效。
+列表之外的节点（`createAnalyser`、`createConvolver`、`createWaveShaper`、
+`createChannelSplitter`、`createPeriodicWave` 等）不提供，其方法就是缺失的。
+
+每个 `AudioParam` 都有实时 `value`，以及 `setValueAtTime` / `linearRampToValueAtTime` /
 `exponentialRampToValueAtTime` / `setTargetAtTime` / `cancelScheduledValues` /
-`cancelAndHoldAtTime`，节点 `connect`（返回目标节点，因此可链式连接）/ `disconnect` /
-`start` / `stop`。`sampleRate` 为 48000、`state` 为 `"running"`，`currentTime` 仅随
-事件循环推进。
+`cancelAndHoldAtTime`。自动化时间线**逐采样**求值，因此页面空闲时斜坡仍会继续推进；
+`currentTime` 随渲染量子前进。
+
+`createBuffer(channels, length, sampleRate)` 返回的 AudioBuffer 的
+`getChannelData(i)` 是真正的 `Float32Array`，可以用代码逐样本填充。
+`decodeAudioData(bytes)` 返回解码后的 AudioBuffer Promise：WAV（PCM 8/16/24/32 位、
+IEEE float 32/64、A-law 与 µ-law）由引擎自身解码；MP3、AAC/M4A、Vorbis、Opus 与 FLAC
+需要可选的 `media` 扩展（`--ext gui,media`），以其中的 FFmpeg 解码器作为回退。
+`bytes` 可以是 ArrayBuffer、类型化数组、Node `Buffer`，或 `fs.readFileSync`
+返回的原始字节字符串（本运行时没有专门的二进制类型，而该字符串的存储正是文件字节）。
+解码结果会重采样到上下文的 48 kHz，因此 `buffer.sampleRate` 与
+`context.sampleRate` 一致；若没有可用的解码器，Promise 会以 `EncodingError` 拒绝。
+
+`resume()` / `suspend()` / `close()` 控制设备与 `state` 属性；`sampleRate` 为 48000，
+与媒体解码器一致。
+
+测试与诊断可以创建**离线**上下文同步渲染：
+
+```ts
+const ctx = new AudioContext({ __offline: true });
+// … 构建音频图并启动音源 …
+const samples = ctx.__render(480);   // 交错立体声 Float32Array
+```
+
+这个私有钩子不会打开设备，也不属于 Web Audio API；`tests/e2e/gui-audio.test.ts`
+用它来固定混音数学。
 
 输入处理器接收单个负载对象（生命周期处理器不接收任何参数）：
 

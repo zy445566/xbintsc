@@ -35,10 +35,23 @@
 #include <memory>
 #include <string>
 
+#include "audio_decode.h"
 #include "image.h"
 #include "media_api.h"
 
 namespace xtgui {
+
+/**
+ * Decode an in-memory audio file (`decodeAudioData`).
+ *
+ * The engine has its own WAV decoder (`audio_decode.cpp`); this entry point is
+ * the fallback for compressed containers and codecs, which only the optional
+ * `media` extension can decode. Without that extension it fails with a message
+ * naming the extension. Implemented in `media.cpp`, which forwards to the
+ * backend table installed by the media bridge.
+ */
+bool xt_media_decode_audio(const uint8_t* data, size_t size, DecodedAudio* out,
+                           std::string* error);
 
 /** DOM events a media element may fire after `tick()`. */
 enum MediaEvent {

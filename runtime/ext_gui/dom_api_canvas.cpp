@@ -179,6 +179,9 @@ METHOD(canvas_fill_style_get) {
   if (canvas->fill_gradient_id() != 0) {
     return canvas_gradient_handle(self, canvas, canvas->fill_gradient_id());
   }
+  if (canvas->fill_pattern_id() != 0) {
+    return canvas_pattern_handle(self, canvas, canvas->fill_pattern_id());
+  }
   return xt_string_from_cstr(canvas->fill_style().c_str());
 }
 
@@ -190,6 +193,11 @@ METHOD(canvas_fill_style_set) {
     uint64_t gradient = canvas_gradient_id(xt_arg(argc, argv, 0), canvas);
     if (gradient != 0) {
       canvas->set_fill_gradient(gradient);
+      return XT_UNDEFINED;
+    }
+    uint64_t pattern = canvas_pattern_id(xt_arg(argc, argv, 0), canvas);
+    if (pattern != 0) {
+      canvas->set_fill_pattern(pattern);
       return XT_UNDEFINED;
     }
   }
@@ -206,6 +214,9 @@ METHOD(canvas_stroke_style_get) {
   if (canvas->stroke_gradient_id() != 0) {
     return canvas_gradient_handle(self, canvas, canvas->stroke_gradient_id());
   }
+  if (canvas->stroke_pattern_id() != 0) {
+    return canvas_pattern_handle(self, canvas, canvas->stroke_pattern_id());
+  }
   return xt_string_from_cstr(canvas->stroke_style().c_str());
 }
 
@@ -217,6 +228,11 @@ METHOD(canvas_stroke_style_set) {
     uint64_t gradient = canvas_gradient_id(xt_arg(argc, argv, 0), canvas);
     if (gradient != 0) {
       canvas->set_stroke_gradient(gradient);
+      return XT_UNDEFINED;
+    }
+    uint64_t pattern = canvas_pattern_id(xt_arg(argc, argv, 0), canvas);
+    if (pattern != 0) {
+      canvas->set_stroke_pattern(pattern);
       return XT_UNDEFINED;
     }
   }

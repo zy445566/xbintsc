@@ -37,11 +37,15 @@ struct Crossing {
 /** Resolve `paint` at a device-space pixel centre. Gradients are defined in
  * user space, so the pixel is mapped back through the inverse transform. */
 void paint_color_at(const CanvasPaint &paint, float x, float y, float out[4]) {
-  if (paint.gradient != nullptr) {
+  if (paint.pattern != nullptr || paint.gradient != nullptr) {
     const CanvasTransform &inverse = paint.inverse;
     float userX = inverse.a * x + inverse.c * y + inverse.e;
     float userY = inverse.b * x + inverse.d * y + inverse.f;
-    if (paint.gradient->color_at(userX, userY, out)) return;
+    if (paint.pattern != nullptr) {
+      if (paint.pattern->color_at(userX, userY, out)) return;
+    } else if (paint.gradient->color_at(userX, userY, out)) {
+      return;
+    }
   }
   if (paint.color != nullptr) {
     for (int i = 0; i < 4; i++) out[i] = paint.color[i];

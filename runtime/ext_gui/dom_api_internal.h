@@ -311,12 +311,21 @@ METHOD(canvas_stroke);
 METHOD(canvas_clear_rect);
 METHOD(canvas_fill_rect);
 METHOD(canvas_stroke_rect);
-METHOD(canvas_measure_text);
-METHOD(canvas_fill_text);
+METHOD(canvas_measure_text);METHOD(canvas_fill_text);
 METHOD(canvas_stroke_text);
 METHOD(canvas_draw_image);
 METHOD(canvas_get_image_data);
 METHOD(canvas_get_context_attributes);
+METHOD(canvas_put_image_data);
+METHOD(canvas_create_image_data);
+METHOD(canvas_create_pattern);
+METHOD(canvas_to_data_url);
+METHOD(canvas_to_blob);
+/** The cached `CanvasPattern` handle for `id` on `canvas`. */
+xt_value canvas_pattern_handle(xt_value context, const xtgui::Canvas2D *canvas, uint64_t id);
+/** The pattern id stored on a handle, or 0 when it is not a pattern for
+ * `canvas` (stale or created by another canvas). */
+uint64_t canvas_pattern_id(xt_value handle, const xtgui::Canvas2D *canvas);
 METHOD(canvas_ellipse);
 METHOD(canvas_round_rect);
 METHOD(canvas_line_cap_get);

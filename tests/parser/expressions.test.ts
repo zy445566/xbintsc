@@ -31,6 +31,40 @@ describe("arrow functions", () => {
     expect(expr.typeParameters).toHaveLength(1);
     expect(expr.typeParameters[0].name.text).toBe("T");
   });
+
+  it("scans template defaults without counting literal parens", () => {
+    /* The `}` of `${x}` must continue the template, not end it: the literal
+     * text contains `)` and `}` that findMatchingParen would otherwise count. */
+    const expr = initializer("const f = (a = `${x})}`, b = 1) => a + b;");
+    expect(expr.kind).toBe(SyntaxKind.ArrowFunction);
+    expect(expr.parameters).toHaveLength(2);
+    expect(expr.parameters[0].initializer.kind).toBe(SyntaxKind.TemplateLiteral);
+  });
+
+  it("continues a template after a nested template substitution", () => {
+    const expr = initializer("const f = (a = `x${ {b: `${c}`} }y`) => a;");
+    expect(expr.kind).toBe(SyntaxKind.ArrowFunction);
+    const template = expr.parameters[0].initializer;
+    expect(template.kind).toBe(SyntaxKind.TemplateLiteral);
+    expect(template.spans).toHaveLength(1);
+  });
+
+  it("keeps the regex fallback coherent after a template default", () => {
+    const expr = initializer("const f = (a = `${x}`) => /x/.test(a);");
+    expect(expr.kind).toBe(SyntaxKind.ArrowFunction);
+    expect(expr.body.kind).toBe(SyntaxKind.CallExpression);
+  });
+
+  it("scans a parenthesized template as one expression, not an arrow", () => {
+    /* `findMatchingParen` must stop at the outer `)`, not at a `)` that is
+     * template text after a substitution. */
+    const expr = initializer("const css = (`a${x})}b`).trim();");
+    expect(expr.kind).toBe(SyntaxKind.CallExpression);
+    const access = expr.expression;
+    expect(access.kind).toBe(SyntaxKind.PropertyAccessExpression);
+    expect(access.expression.kind).toBe(SyntaxKind.ParenthesizedExpression);
+    expect(access.expression.expression.kind).toBe(SyntaxKind.TemplateLiteral);
+  });
 });
 
 describe("type-only expressions", () => {

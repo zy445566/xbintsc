@@ -88,28 +88,30 @@ console.log(box.offsetWidth, box.offsetHeight);   // rounded border box
 console.log(box.contains(inner));                 // descendant test
 ```
 
-Mutations mark the document dirty; the engine restyles + relayouts lazily (before
-the next read or frame). `inner = …`/`innerHTML = …` do **not** run scripts.
-Element events support capture and bubble phases, `stopPropagation`, `once`, and
-bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps its
-**string** `e.target` (`div#id.class`); the element `Event.target` is a handle
-whose descriptor matches the same string.
+### Style properties, dataset, computed style and geometry
 
-### Style objects, computed style and geometry
+The inline `style` object is a CSSOM declaration block. Named access reads and
+writes the same block as `setProperty` (`el.style.display = "none"`,
+`el.style.backgroundColor = "#f00"`, camelCase mapped to the CSS spelling, and
+`el.style["--accent"]` for custom properties); `setProperty(name, value,
+priority)` stores `!important` when `priority` is `"important"` (any other
+priority makes the call a no-op, and an empty value removes the property).
+`getPropertyValue` / `getPropertyPriority` read it back, `removeProperty`
+returns the previous value, `cssText` gets or replaces the whole block,
+`style.length` / `style.item(i)` enumerate it, and an unset property answers
+`""`.
 
-The inline `style` object is a CSSOM declaration block: `setProperty(name,
-value, priority)` stores the declaration with `!important` when `priority` is
-`"important"` (any other priority makes the call a no-op, and an empty value
-removes the property), `getPropertyValue` / `getPropertyPriority` read it back,
-`removeProperty` returns the previous value, and `cssText` gets or replaces the
-whole block.
+`el.dataset` is a live `DOMStringMap` over the element's `data-*` attributes:
+`dataset.fooBar` reads `data-foo-bar`, assignment writes the attribute, `delete`
+removes it, and `Object.keys(dataset)` / `for...in` list only the data keys.
 
 `getComputedStyle(el, pseudoElt)` answers from the **cascade** — the UA sheet,
 author rules, inheritance and the inline declarations — rather than echoing the
-inline block, so a rule written in a stylesheet is visible. Pass `"::before"` or
-`"::after"` to read a generated-content box; any other pseudo-element answers
-empty values. Every read flushes a pending restyle, so a handle created early
-stays live after later mutations.
+inline block, so a stylesheet rule is visible. It exposes `getPropertyValue`,
+`getPropertyPriority` and named properties (`cs.width`, `cs.backgroundColor`,
+`cs["--accent"]`). Pass `"::before"`/`"::after"` to read generated content; any
+other pseudo-element answers empty values. Every read flushes a pending restyle,
+so a handle created early stays live after later mutations.
 
 `getBoundingClientRect()` carries the legacy `top` / `right` / `bottom` / `left`
 members next to `x` / `y` / `width` / `height`, and `document.title = …` writes
@@ -119,6 +121,13 @@ has none).
 `element.focus()` scrolls the element into view (pass `{ preventScroll: true }`
 to keep the page offset), and `document.hasFocus()` reports the window state
 toggled by `window.focus()` / `window.blur()`.
+
+Mutations mark the document dirty; the engine restyles + relayouts lazily (before
+the next read or frame). `inner = …`/`innerHTML = …` do **not** run scripts.
+Element events support capture and bubble phases, `stopPropagation`, `once`, and
+bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps its
+**string** `e.target` (`div#id.class`); the element `Event.target` is a handle
+whose descriptor matches the same string.
 
 ### Node lifetime
 

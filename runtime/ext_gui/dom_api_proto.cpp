@@ -47,6 +47,7 @@ xt_value node_proto() {
   define_getter(proto, "isConnected", (void *)node_is_connected_get);
   define_getter(proto, "classList", (void *)node_class_list_get);
   define_getter(proto, "style", (void *)node_style_get);
+  define_getter(proto, "dataset", (void *)node_dataset_get);
   define_getter(proto, "offsetWidth", (void *)node_offset_width_get);
   define_getter(proto, "offsetHeight", (void *)node_offset_height_get);
   /* Media element properties (`<video>`/`<audio>`; harmless on any element). */
@@ -178,6 +179,8 @@ xt_value style_proto() {
   define_method(proto, "removeProperty", (void *)style_remove_property);
   define_getter(proto, "cssText", (void *)style_css_text_get);
   define_setter(proto, "cssText", (void *)style_css_text_set);
+  define_method(proto, "item", (void *)style_item);
+  define_getter(proto, "length", (void *)style_length_get);
   g_style_proto = proto;
   return proto;
 }

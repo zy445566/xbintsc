@@ -224,6 +224,7 @@ xt_value canvas_proto() {
   define_method(proto, "strokeText", (void *)canvas_stroke_text);
   define_method(proto, "drawImage", (void *)canvas_draw_image);
   define_method(proto, "getImageData", (void *)canvas_get_image_data);
+  define_method(proto, "getContextAttributes", (void *)canvas_get_context_attributes);
   define_method(proto, "setLineDash", (void *)canvas_line_dash_set);
   define_method(proto, "getLineDash", (void *)canvas_line_dash_get);
   define_method(proto, "getTransform", (void *)canvas_get_transform);

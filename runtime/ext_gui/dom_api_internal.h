@@ -60,6 +60,16 @@ xt_value webgl_object_proto(const std::string &kind);
 /** Create/return the 2D context for a pending `<canvas>` handle (before load). */
 xt_value xt_canvas_pending_context(xt_value self, XtGuiWindow *win);
 
+/* -- Path2D --------------------------------------------------------------- */
+
+/** True when `value` is a `Path2D` handle. */
+bool path2d_is(xt_value value);
+/** The user-space subpaths a `Path2D` handle holds. */
+std::vector<xtgui::CanvasSubpath> path2d_subpaths(xt_value value);
+/** `new Path2D()` / `new Path2D(other)`. */
+xt_value path2d_create(xt_value source);
+xt_value path2d_proto();
+
 /* -- canvas helpers shared by `dom_api_canvas*.cpp` ----------------------- */
 
 /** The engine canvas behind a 2D context handle, or null when stale/foreign. */
@@ -290,6 +300,7 @@ METHOD(canvas_fill_text);
 METHOD(canvas_stroke_text);
 METHOD(canvas_draw_image);
 METHOD(canvas_get_image_data);
+METHOD(canvas_get_context_attributes);
 METHOD(canvas_ellipse);
 METHOD(canvas_round_rect);
 METHOD(canvas_line_cap_get);

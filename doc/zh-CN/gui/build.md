@@ -57,7 +57,10 @@
   lavapipe 软件 Vulkan 驱动）与 macOS 上构建并运行
   示例；Windows x64 也会构建两个归档并链接一个 `gui,media` 程序，因此 MSVC
   构建在 CI 中得到验证，只是*运行*示例仍为试验性（托管 runner 没有 GPU/Vulkan
-  驱动）。Windows arm64 仍跳过两个归档（FFmpeg 的 MSVC arm64 构建尚未验证）。
+  驱动）。macOS 的运行同样是试验性的：Intel runner 的虚拟 GPU 缺少
+  `MTLGPUFamilyMac2`，引擎会以 **77**（“此机器无法运行 GUI”）退出，任务记录为跳过，
+  而不是去编译一套无法呈现的测试。Windows arm64 仍跳过两个归档（FFmpeg 的
+  MSVC arm64 构建尚未验证）。
 - Windows CI 通过 `.github/actions/vs-toolchain` →
   `scripts/setup-vs-toolchain.ps1` 使用与本地构建相同的 Visual Studio
   `vcvarsall` 环境和自带的 LLVM（不再单独安装 Chocolatey LLVM）。媒体构建时该

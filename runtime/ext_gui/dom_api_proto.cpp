@@ -122,6 +122,7 @@ xt_value document_proto() {
   define_getter(proto, "visibilityState", (void *)doc_visibility_state_get);
   define_getter(proto, "readyState", (void *)doc_ready_state_get);
   define_getter(proto, "title", (void *)doc_title_get);
+  define_setter(proto, "title", (void *)doc_title_set);
   define_getter(proto, "defaultView", (void *)doc_default_view_get);
   define_method(proto, "createTextNode", (void *)doc_create_text_node);
   /* `document.addEventListener` / element listener plumbing come from the node
@@ -140,6 +141,7 @@ xt_value event_proto() {
   define_method(proto, "preventDefault", (void *)event_prevent_default);
   define_method(proto, "stopPropagation", (void *)event_stop_propagation);
   define_method(proto, "stopImmediatePropagation", (void *)event_stop_immediate_propagation);
+  define_method(proto, "composedPath", (void *)event_composed_path);
   g_event_proto = proto;
   return proto;
 }
@@ -162,8 +164,21 @@ xt_value style_proto() {
   xt_value proto = xt_object_new();
   define_method(proto, "setProperty", (void *)style_set_property);
   define_method(proto, "getPropertyValue", (void *)style_get_property_value);
+  define_method(proto, "getPropertyPriority", (void *)style_get_property_priority);
   define_method(proto, "removeProperty", (void *)style_remove_property);
+  define_getter(proto, "cssText", (void *)style_css_text_get);
+  define_setter(proto, "cssText", (void *)style_css_text_set);
   g_style_proto = proto;
+  return proto;
+}
+
+xt_value computed_style_proto() {
+  xt_gc_add_root(&g_computed_style_proto);
+  if (XT_IS_OBJECT(g_computed_style_proto)) return g_computed_style_proto;
+  xt_value proto = xt_object_new();
+  define_method(proto, "getPropertyValue", (void *)computed_style_get_property_value);
+  define_method(proto, "getPropertyPriority", (void *)computed_style_get_property_priority);
+  g_computed_style_proto = proto;
   return proto;
 }
 

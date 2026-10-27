@@ -177,14 +177,15 @@ xt_value win_match_media(xt_value self, xt_value env, int32_t argc, xt_value *ar
   return media_list_build(query, xtgui::xt_css_media_matches(query, width, height));
 }
 
-/** `getComputedStyle(el)`: the engine exposes the element's style handle, which
- * answers `getPropertyValue` for everything the page set. */
+/** `getComputedStyle(el, pseudoElt)`: a live view of the *cascaded* style, so
+ * stylesheet rules (not only the inline `style` attribute) are visible. The
+ * optional pseudo-element selector ("::before"/"::after") resolves against the
+ * generated-content box; any other pseudo-element yields empty values, like a
+ * browser does for one the engine did not generate. */
 xt_value win_get_computed_style(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)self;
   (void)env;
-  xt_value element = xt_arg(argc, argv, 0);
-  xt_value style = xt_get(element, xt_string_from_cstr("style"));
-  return XT_IS_OBJECT(style) ? style : xt_object_new();
+  return domapi::computed_style_handle(xt_arg(argc, argv, 0), xt_arg(argc, argv, 1));
 }
 
 xt_value win_alert(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
@@ -338,7 +339,12 @@ xt_value host_type_construct(xt_value self, xt_value env, int32_t argc, xt_value
 /** The prototype a DOM type name should inherit, so `el instanceof Element`
  * holds for every element handle the engine hands out. */
 xt_value type_proto(const std::string &name) {
-  if (name == "Event" || name == "CustomEvent" || name == "ProgressEvent") {
+  if (name == "AbortController") return domapi::abort_controller_proto();
+  if (name == "AbortSignal") return domapi::abort_signal_proto();
+  if (name == "Event" || name == "CustomEvent" || name == "ProgressEvent" ||
+      name == "UIEvent" || name == "MouseEvent" || name == "PointerEvent" ||
+      name == "WheelEvent" || name == "KeyboardEvent" || name == "FocusEvent" ||
+      name == "InputEvent" || name == "SubmitEvent") {
     return domapi::event_proto();
   }
   if (name == "AudioContext" || name == "webkitAudioContext") return xt_gui_audio_proto();
@@ -395,7 +401,12 @@ xt_value host_type_construct(xt_value self, xt_value env, int32_t argc, xt_value
   if (name == "AudioContext" || name == "webkitAudioContext") {
     return xt_gui_audio_create(argc, argv);
   }
-  if (name == "Event" || name == "CustomEvent" || name == "ProgressEvent") {
+  if (name == "AbortController") return domapi::abort_controller_new();
+  if (name == "AbortSignal") return domapi::abort_signal_new(false);
+  if (name == "Event" || name == "CustomEvent" || name == "ProgressEvent" ||
+      name == "UIEvent" || name == "MouseEvent" || name == "PointerEvent" ||
+      name == "WheelEvent" || name == "KeyboardEvent" || name == "FocusEvent" ||
+      name == "InputEvent" || name == "SubmitEvent") {
     return domapi::event_construct(xt_arg(argc, argv, 0), xt_arg(argc, argv, 1));
   }
   if (name == "Path2D") return domapi::path2d_create(xt_arg(argc, argv, 0));

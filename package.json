@@ -1,6 +1,6 @@
 {
   "name": "xbintsc",
-  "version": "0.5.32",
+  "version": "0.5.33",
   "description": "xbintsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
   "type": "module",
   "license": "MIT",
@@ -62,6 +62,14 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.70.1",
     "vitest": "^2.1.8"
+  },
+  "optionalDependencies": {
+    "@xbintsc/linux-x64": "0.0.0",
+    "@xbintsc/linux-arm64": "0.0.0",
+    "@xbintsc/darwin-x64": "0.0.0",
+    "@xbintsc/darwin-arm64": "0.0.0",
+    "@xbintsc/win32-x64": "0.0.0",
+    "@xbintsc/win32-arm64": "0.0.0"
   },
   "engines": {
     "node": ">=22"

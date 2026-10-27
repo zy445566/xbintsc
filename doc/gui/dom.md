@@ -118,10 +118,6 @@ members next to `x` / `y` / `width` / `height`, and `document.title = …` write
 the document's `<title>` (creating the element, and a `<head>`, when the page
 has none).
 
-`element.focus()` scrolls the element into view (pass `{ preventScroll: true }`
-to keep the page offset), and `document.hasFocus()` reports the window state
-toggled by `window.focus()` / `window.blur()`.
-
 Mutations mark the document dirty; the engine restyles + relayouts lazily (before
 the next read or frame). `inner = …`/`innerHTML = …` do **not** run scripts.
 Element events support capture and bubble phases, `stopPropagation`, `once`,
@@ -131,6 +127,10 @@ object and fills in `target`/`currentTarget`/`eventPhase`/`composedPath()`. The
 legacy `win.on(type, fn)` payload keeps its **string** `e.target`
 (`div#id.class`); the element `Event.target` is a handle whose descriptor
 matches the same string.
+
+`element.focus()` scrolls the element into view (pass `{ preventScroll: true }`
+to keep the page offset), and `document.hasFocus()` reports the window state
+toggled by `window.focus()` / `window.blur()`.
 
 ### Node lifetime
 

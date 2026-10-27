@@ -110,10 +110,6 @@ console.log(box.contains(inner));                 // 后代判断
 `top` / `right` / `bottom` / `left` 成员；`document.title = …` 写入文档的
 `<title>`（页面没有该元素时会创建它以及 `<head>`）。
 
-`element.focus()` 会把元素滚动到可见区域（传入 `{ preventScroll: true }` 则保持
-当前页面偏移）；`document.hasFocus()` 报告由 `window.focus()` / `window.blur()`
-切换的窗口焦点状态。
-
 变更操作会把文档标记为脏；引擎会延迟地（在下一次读取或下一帧之前）重新计算
 样式并重新布局。`inner = …`/`innerHTML = …` **不会**执行脚本。元素事件支持
 捕获与冒泡阶段、`stopPropagation`、`once`、`passive` 与 `signal`（`AbortController`
@@ -121,6 +117,10 @@ console.log(box.contains(inner));                 // 后代判断
 `dispatchEvent` 派发同一个事件对象，并填充 `target`/`currentTarget`/`eventPhase`/
 `composedPath()`。旧式 `win.on(type, fn)` 负载保留其**字符串** `e.target`
 （`div#id.class`）；元素 `Event.target` 是一个句柄，其描述符与同一字符串匹配。
+
+`element.focus()` 会把元素滚动到可见区域（传入 `{ preventScroll: true }` 则保持
+当前页面偏移）；`document.hasFocus()` 报告由 `window.focus()` / `window.blur()`
+切换的窗口焦点状态。
 
 ### 节点生命周期
 

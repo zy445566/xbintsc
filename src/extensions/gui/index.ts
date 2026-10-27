@@ -202,6 +202,7 @@ export const guiExtension: Extension = {
    */
   builtins: () => ({
     __registerScript: { symbol: "xt_register_script" },
+    __xt_defer: { symbol: "xt_gui_defer_module" },
     requestAnimationFrame: { symbol: "xt_browser_request_animation_frame" },
     cancelAnimationFrame: { symbol: "xt_browser_cancel_animation_frame" },
     matchMedia: { symbol: "xt_browser_match_media" },

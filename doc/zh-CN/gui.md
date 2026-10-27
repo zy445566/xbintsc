@@ -167,9 +167,10 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
      `__registerScript` 内置函数注册，并替换为
      `<script data-xt-id="<hash>">` 标记；`win.loadHTML` 在解析后运行匹配的
      函数并触发 `DOMContentLoaded` 然后是 `load`。
-   - **M9c** ✅ —— `<script src>` 文件相对 HTML 读取，其顶层 import 被提升
-     （说明符从 HTML 目录重写），其主体被包装/注册；缺失文件与 import 绑定
-     冲突会成为诊断。一切都按文档顺序运行。
+   - **M9c** ✅ —— `<script src>` 文件相对 HTML 读取，其主体被包装/注册；
+     相对 import 通过带记忆化的模块包装函数延迟到 `loadHTML` 求值，因此被导入
+     模块能看到已解析的文档并共享状态。缺失文件会成为诊断。一切都按文档顺序
+     运行。
 10. **M10 — 打磨** ✅
     - `win.requestAnimationFrame(fn)` / `win.cancelAnimationFrame(id)`；回调
       在每帧顶部以帧时间戳运行，并可修改 DOM
@@ -317,9 +318,9 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
   编译为启动时注册、由 `win.loadHTML` 运行的 AOT 函数（在首次布局之前；
   `DOMContentLoaded` 然后是 `load`）。`tests/extensions/gui.test.ts` 中的单元
   测试，`tests/e2e/gui-*.test.ts` 中的 e2e。
-- **M9c** ✅ 外部 `<script src>` 文件被读取，其 import 被提升（说明符从 HTML
-  目录重写），其主体被包装/注册；缺失文件与 import 绑定冲突会成为诊断。
-  加载器错误被 `loadGraph` 捕获并报告为构建错误。
+- **M9c** ✅ 外部 `<script src>` 文件被读取，其主体被包装/注册；相对 import
+  通过带记忆化的模块包装函数延迟到 `loadHTML`（模块级 DOM 工作因此能看到已解析
+  文档）；缺失文件会成为诊断。加载器错误被 `loadGraph` 捕获并报告为构建错误。
 - **M10** ✅ 窗口句柄上的 `requestAnimationFrame`/`cancelAnimationFrame`
   （回调在每帧布局之前以帧时间戳运行），以及元素句柄上的
   `offsetWidth`/`offsetHeight`/`contains`；e2e 覆盖在

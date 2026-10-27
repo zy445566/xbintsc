@@ -94,14 +94,19 @@ describe("gui .html asset loader", () => {
     expect(parseDiagnostics(moduleSource)).toBe(0);
   });
 
-  it("hoists imports from an external script, rewriting them from the HTML dir", () => {
+  it("defers a relative import and rewrites it from the HTML dir", () => {
     const directory = writeFiles({
       "scripts/app.ts": 'import { size } from "../lib/util";\nconsole.log(size);',
       "lib/util.ts": "export const size = 1;",
     });
     const htmlPath = join(directory, "page.html");
     const { moduleSource } = loadHtmlAsset(htmlPath, `<script src="./scripts/app.ts"></script>`);
-    expect(moduleSource).toContain('import { size } from "./lib/util"');
+    /* The loader marks the module, and the generated script loads it at run
+     * time instead of hoisting an eager import. */
+    expect(moduleSource).toContain(
+      'import { __xt_deferred_module as __xt_deferred_0_0 } from "./lib/util"',
+    );
+    expect(moduleSource).toContain("const { size } = __xt_deferred_0_0();");
     expect(moduleSource).toContain("console.log(size);");
     expect(moduleSource).not.toContain("../lib/util");
     expect(parseDiagnostics(moduleSource)).toBe(0);
@@ -125,7 +130,9 @@ describe("gui .html asset loader", () => {
     );
   });
 
-  it("rejects colliding imported bindings across external scripts", () => {
+  it("keeps deferred bindings local to each external script", () => {
+    /* Two scripts may import the same name: each prelude destructures into its
+     * own script function, so there is no module-scope collision. */
     const directory = writeFiles({
       "a.ts": 'import { x } from "./x";\nconsole.log(x);',
       "b.ts": 'import { x } from "./y";\nconsole.log(x);',
@@ -133,9 +140,13 @@ describe("gui .html asset loader", () => {
       "y.ts": "export const x = 2;",
     });
     const htmlPath = join(directory, "page.html");
-    expect(() =>
-      loadHtmlAsset(htmlPath, `<script src="./a.ts"></script><script src="./b.ts"></script>`),
-    ).toThrow(/already imported/);
+    const { moduleSource } = loadHtmlAsset(
+      htmlPath,
+      `<script src="./a.ts"></script><script src="./b.ts"></script>`,
+    );
+    expect(moduleSource).toContain("__xt_deferred_0_0");
+    expect(moduleSource).toContain("__xt_deferred_1_0");
+    expect(parseDiagnostics(moduleSource)).toBe(0);
   });
 
   it("emits only the HTML string when there are no scripts", () => {
@@ -155,7 +166,7 @@ describe("gui .html asset loader", () => {
     expect(parseDiagnostics(moduleSource)).toBe(0);
   });
 
-  it("hoists namespace, side-effect and re-export statements", () => {
+  it("defers namespace, side-effect and re-export statements", () => {
     const directory = writeFiles({
       "app.ts": [
         'import * as util from "./util";',
@@ -172,11 +183,15 @@ describe("gui .html asset loader", () => {
     });
     const htmlPath = join(directory, "page.html");
     const { moduleSource } = loadHtmlAsset(htmlPath, `<script src="./app.ts"></script>`);
-    expect(moduleSource).toContain('import * as util from "./util"');
-    expect(moduleSource).toContain('import {} from "./side-effect"');
-    expect(moduleSource).toContain('import defaultExport, { named } from "./mixed"');
-    expect(moduleSource).toContain('export { x } from "./x"');
-    expect(moduleSource).toContain('export * from "./y"');
+    expect(moduleSource).toContain('from "./util"');
+    expect(moduleSource).toContain('from "./side-effect"');
+    expect(moduleSource).toContain('from "./mixed"');
+    expect(moduleSource).toContain("const util = __xt_deferred_0_0();");
+    expect(moduleSource).toContain("__xt_deferred_0_1();");
+    expect(moduleSource).toContain("const defaultExport = __xt_deferred_0_2().default;");
+    expect(moduleSource).toContain("const { named } = __xt_deferred_0_2();");
+    expect(moduleSource).toContain("__xt_deferred_0_3();");
+    expect(moduleSource).toContain("__xt_deferred_0_4();");
     /* The local `export { a }` and `export default` are blanked out. */
     expect(moduleSource).not.toContain("export default 42");
     expect(moduleSource).not.toContain("export default function");

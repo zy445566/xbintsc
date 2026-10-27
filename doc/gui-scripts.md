@@ -155,17 +155,18 @@ export default __html;
 ### 2b. External `<script src>`
 
 `<script src="./app.ts">` is read relative to the HTML file, parsed, and split:
-its top-level `import`/`export … from` statements are **hoisted** to the
-generated module (with relative specifiers rewritten so they resolve from the
-HTML file's directory), and the remaining statements are wrapped in the script
-function. This is how an external script still runs at `loadHTML` time while
-being able to `import` other modules.
+its top-level `import`/`export … from` statements are removed from the body, and
+the remaining statements are wrapped in the script function. Relative imports
+are **deferred**, like a browser module script: the loader emits a synthetic
+`__xt_deferred_module` marker and the generated script calls the module wrapper
+at `loadHTML` time. The bundler wraps the whole local import graph in functions
+that return their exports (memoised by `__xt_defer`), so top-level module code
+runs after the document exists and two scripts importing the same module share
+one instance. Bare specifiers (`gui`, a package) stay eager.
 
-Two limitations are enforced with clear errors rather than silent breakage:
-
-- a missing `src` file throws (turned into a bundler diagnostic), and
-- two `src` scripts that import the same local binding name collide; the user
-  must alias one of them. (Non-conflicting or identical imports are fine.)
+A missing `src` file is still a clear error (turned into a bundler diagnostic),
+and `src` URLs (`https://…`, `data:…`, `//host`) are left untouched — they are
+not compile-time assets and never run.
 
 `src` URLs (`https://…`, `data:…`, `//host`) are left untouched — they are not
 compile-time assets and never run.
@@ -302,11 +303,11 @@ legacy `target` field over the handle.
   - **M9b** ✅ — gui `.html` loader (`src/extensions/gui/html.ts`), the
     `__registerScript` builtin, the script registry (`runtime/ext_gui/script.cpp`),
     `loadHTML` execution and `DOMContentLoaded`/`load`; e2e coverage.
-  - **M9c** ✅ — `<script src>` files are read, their top-level imports are
-    hoisted (specifiers rewritten to resolve from the HTML file) and their body
-    is wrapped and registered; missing files and import-binding collisions
-    surface as diagnostics. All scripts run in document order (effectively
-    deferred). e2e coverage.
+  - **M9c** ✅ — `<script src>` files are read and their body is wrapped and
+    registered; relative imports are deferred and evaluated by a memoised
+    module wrapper at `loadHTML` time, so the import graph sees a parsed
+    document and shares one instance per module. Missing files surface as
+    diagnostics. All scripts run in document order. e2e coverage.
   - **M9d** *(optional)* — detect inline HTML in template literals passed to
     `win.loadHTML(...)` and transform them too (fragile; deferred).
 - **M10 — polish** ✅ — `requestAnimationFrame`/`cancelAnimationFrame` on the
@@ -330,9 +331,8 @@ legacy `target` field over the handle.
   network fetches) do not run. Documented.
 - **Template-literal HTML** passed to `win.loadHTML(…)` is not transformed in
   M9b (only imported assets are). M9d addresses this if needed.
-- **Import-binding collisions** between external `<script src>` files. Detected
-  and reported (alias the import); a per-script rename with reference rewriting
-  is possible later.
+- **Top-level `await`** inside a deferred `<script src>` module is not
+  supported: the module body is wrapped in a synchronous init function.
 - **Assets.** `<script src>` is resolved relative to the HTML asset; URL `src`
   values are ignored. There is no fetch/network loading.
 

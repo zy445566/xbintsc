@@ -19,6 +19,19 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
 - Imported bindings and namespace members are snapshots at module-evaluation time (no live bindings) — see [Unimplemented: module system](../unimplemented/modules.md).
 - Type-only imports and re-exports (`import type { T } from "..."`, `import { type T } from "..."`, `export type { T } from "..."`) are erased. They are **not** module edges: the target is not loaded or bundled, and a type-only cycle between modules is not a circular dependency. Use a side-effect import (`import "./mod"`) when a module must be evaluated without binding a name.
 
+## Deferred evaluation
+
+- The `gui` `.html` asset loader marks relative `<script src>` imports with a
+  synthetic `__xt_deferred_module` binding. The bundler then wraps that module
+  and its local import graph in functions that return their exports, and the
+  generated script calls them after `loadHTML` (`__xt_defer` memoises each
+  module). This matches a browser module script, where the graph is evaluated
+  once the document exists.
+- Modules also reachable through a normal (non-marker) import stay eager and get
+  a thin wrapper over their already-initialised exports.
+- The wrapper body is synchronous: top-level `await` inside a deferred script
+  module is not supported.
+
 ## import.meta
 
 - `import.meta.url` / `.dirname` / `.filename`, resolved from the running executable's path.

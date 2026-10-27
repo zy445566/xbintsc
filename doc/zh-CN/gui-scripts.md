@@ -146,15 +146,16 @@ export default __html;
 ### 2b. 外部 `<script src>`
 
 `<script src="./app.ts">` 相对 HTML 文件读取、解析并拆分：其顶层
-`import`/`export … from` 语句被**提升**到生成的模块（相对说明符被重写以便
-从 HTML 文件所在目录解析），其余语句被包装进脚本函数。这样外部脚本既能在
-`loadHTML` 时运行，又能 `import` 其他模块。
+`import`/`export … from` 语句从主体中移除，其余语句被包装进脚本函数。相对
+import 会像浏览器的模块脚本一样**延迟**：loader 生成一个合成的
+`__xt_deferred_module` 标记，生成的脚本在 `loadHTML` 时调用模块包装函数。
+bundler 把整个本地 import 图包装成返回各自导出的函数（由 `__xt_defer`
+记忆化），因此模块顶层代码在文档就绪后才运行，且两个脚本导入同一模块时共享
+同一个实例。裸说明符（`gui`、npm 包）仍然立即加载。
 
-两个限制被强制执行并以清晰的错误报告，而不是悄悄出错：
-
-- 缺失的 `src` 文件会抛错（被转换为 bundler 诊断），并且
-- 两个 `src` 脚本导入同一个本地绑定名会冲突；用户必须给其中一个起别名。
-  （不冲突或完全相同的导入没问题。）
+缺失的 `src` 文件仍会抛出清晰的错误（被转换为 bundler 诊断）；
+`src` URL（`https://…`、`data:…`、`//host`）保持原样 —— 它们不是编译期资产，
+永不运行。
 
 `src` URL（`https://…`、`data:…`、`//host`）保持原样 —— 它们不是编译期资产，
 永不运行。
@@ -283,10 +284,10 @@ Event 的 `target` 是句柄，其描述符（`toString`）与同一 `div#id.cla
   - **M9b** ✅ —— gui `.html` 加载器（`src/extensions/gui/html.ts`）、
     `__registerScript` 内置函数、脚本注册表（`runtime/ext_gui/script.cpp`）、
     `loadHTML` 执行与 `DOMContentLoaded`/`load`；e2e 覆盖。
-  - **M9c** ✅ —— 读取 `<script src>` 文件，其顶层 import 被提升（说明符被
-    重写以便从 HTML 文件解析），其主体被包装并注册；缺失文件与 import 绑定
-    冲突作为诊断浮现。所有脚本按文档顺序运行（实际上是 deferred）。e2e
-    覆盖。
+  - **M9c** ✅ —— 读取 `<script src>` 文件，其主体被包装并注册；相对 import
+    通过带记忆化的模块包装函数延迟到 `loadHTML` 求值，因此 import 图能看到
+    已解析的文档，且同一模块只实例化一次。缺失文件作为诊断浮现。所有脚本按
+    文档顺序运行。e2e 覆盖。
   - **M9d** *(可选)* —— 检测传给 `win.loadHTML(...)` 的模板字面量中的内联
     HTML 并同样转换它们（脆弱；推迟）。
 - **M10 — 打磨** ✅ —— 窗口上的

@@ -88,8 +88,10 @@ import { createWindow, run } from "gui";
 
 为浏览器编写的页面还能直接使用它们依赖的浏览器全局 —— `window`/`self`、`document`、
 `navigator`、`location`、`localStorage`、`requestAnimationFrame`、`matchMedia`、
-`getComputedStyle`、`alert`/`prompt`、`escape`、`Event` 家族，以及一层 Web Audio
-**接口**（`AudioContext` 及其节点、参数与缓冲区，但没有混音后端）—— 另外还有帧泵：
+`getComputedStyle`、`alert`/`prompt`、`escape`、`Event` 家族，以及可用的 Web Audio
+实现（`AudioContext` 提供 gain、oscillator、buffer-source、biquad、compressor、
+stereo-panner、constant-source 与 delay 节点、真实的 48 kHz 混音器、逐采样的
+AudioParam 自动化，`decodeAudioData` 引擎内解码 WAV，压缩格式则通过 `media`）—— 另外还有帧泵：
 它在 `loadHTML` 时启动，仅在仍有动画帧回调时重新排程，因此从不调用 `run()` 的页面
 也能绘制并最终退出。**WebGL 1.0 与 2.0 已实现**：`canvas.getContext("webgl")` /
 `"webgl2"` 返回 GPU 上下文，其 GLSL ES 着色器由内置 glslang 编译为 SPIR-V

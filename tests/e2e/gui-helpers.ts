@@ -67,6 +67,13 @@ export interface GuiRunOptions {
    * driver on a loaded CI runner can stretch far past the default.
    */
   autocloseMs?: number;
+  /**
+   * Keep the console subsystem on Windows (maps to `app.console`). GUI programs
+   * are linked as Windows-subsystem executables, so `console.log` output is
+   * otherwise discarded and a headless test that does not open a window has no
+   * way to report its result.
+   */
+  console?: boolean;
 }
 
 /** Enough for programs whose whole body runs in the first frame's `ready` handler. */
@@ -125,6 +132,7 @@ export function createGuiHarness(): GuiHarness {
       outDir: join(workdir, `out-${name}`),
       cacheDir: join(workdir, `.cache-${name}`),
       extensions,
+      app: options.console === true ? { console: true } : undefined,
     });
     expect(result.diagnostics.filter((diagnostic) => diagnostic.category === "error")).toEqual([]);
     const executed = spawnSync(result.outputPath, [], {

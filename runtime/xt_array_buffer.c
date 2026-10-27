@@ -60,6 +60,8 @@ xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv) {
   return buffer;
 }
 
+xt_value xt_array_buffer_alloc(uint32_t byte_length) { return xt_ab_new(byte_length); }
+
 int xt_is_array_buffer(xt_value value) { return xt_ab_is_buffer(value); }
 
 uint32_t xt_array_buffer_byte_length(xt_value value) {
@@ -77,6 +79,34 @@ void xt_array_buffer_set_byte(xt_value buffer, uint32_t index, uint8_t value) {
   xt_value data = xt_ab_data(buffer);
   if (!XT_IS_ARRAY(data)) return;
   xt_set(data, xt_number((double)index), xt_number((double)value));
+}
+
+/* Bulk byte access. A decoder (WAV, image, …) would otherwise pay one hidden
+ * property read per byte, which is far too slow for a multi-megabyte file. The
+ * backing store is an `xt_array` of numbers; reading its `items` directly is
+ * the same representation `xt_ab_new` writes. */
+uint32_t xt_array_buffer_copy_bytes_out(xt_value buffer, uint32_t offset, uint8_t *dst,
+                                        uint32_t count) {
+  xt_array *data = xt_as_array(xt_ab_data(buffer));
+  if (data == NULL || dst == NULL) return 0;
+  if (offset >= data->length) return 0;
+  if (count > data->length - offset) count = data->length - offset;
+  for (uint32_t i = 0; i < count; i++) {
+    dst[i] = (uint8_t)(int32_t)xt_to_number(data->items[offset + i]);
+  }
+  return count;
+}
+
+uint32_t xt_array_buffer_copy_bytes_in(xt_value buffer, uint32_t offset, const uint8_t *src,
+                                       uint32_t count) {
+  xt_array *data = xt_as_array(xt_ab_data(buffer));
+  if (data == NULL || src == NULL) return 0;
+  if (offset >= data->length) return 0;
+  if (count > data->length - offset) count = data->length - offset;
+  for (uint32_t i = 0; i < count; i++) {
+    data->items[offset + i] = xt_number((double)src[i]);
+  }
+  return count;
 }
 
 static xt_value xt_ab_slice(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {

@@ -66,11 +66,13 @@ void xt_browser_schedule_frame(void);
 /** Whether `run()` currently owns the frame loop (the pump then stays idle). */
 int xt_gui_run_active(void);
 
-/* Web Audio objects (`audio.cpp`). */
-/** `AudioContext.prototype` — also the `instanceof AudioContext` target. */
+/* Web Audio objects (`audio.cpp`).
+ * `AudioContext.prototype` — also the `instanceof AudioContext` target. */
 xt_value xt_gui_audio_proto(void);
-/** `new AudioContext(...)`: it has no mixer backend yet, so the graph records
- * its shape and parameters but nothing is rendered to the sound device. */
+/** `new AudioContext(...)`: builds a real graph (mixer in `audio_mixer.cpp`)
+ * and decodes through `audio_decode.cpp` + the optional media backend. The
+ * device opens on the first `start()`/`resume()`; a headless host stays silent
+ * while the graph still renders. */
 xt_value xt_gui_audio_create(int32_t argc, xt_value *argv);
 
 #ifdef __cplusplus

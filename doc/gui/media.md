@@ -112,6 +112,10 @@ platform media framework in the path either way.
 - **Threading.** The engine is single-threaded and not thread-aware, so all
   decoding happens on the main thread inside `xt_gui_media_tick` — no decode
   thread, no cross-thread GC exposure.
+- **`decodeAudioData`.** The same FFmpeg build also decodes an in-memory audio
+  file for `AudioContext.decodeAudioData` (`runtime/ext_media/decode_audio.cpp`,
+  through the media table); WAV is handled by the GUI engine itself
+  (`audio_decode.cpp`), so only compressed formats need this extension.
 - **DOM API.** Element handles expose the media surface directly (see
   `runtime/ext_gui/dom_api_media.cpp` and the prototype in
   `dom_api_proto.cpp`): `play()` / `pause()` / `load()`, and the

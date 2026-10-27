@@ -65,7 +65,6 @@ const ffmpegInstall = join(ffmpegBuild, "dist");
 const objDir = join(root, "build", "media-obj");
 const outDir = join(runtimeDir, "lib", platformSlug());
 const output = join(outDir, isWindows ? "media.lib" : "media.a");
-const object = join(objDir, isWindows ? "media.obj" : "media.o");
 
 const FFMPEG_VERSION = process.env.FFMPEG_VERSION || "7.1";
 const FFMPEG_URL = `https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz`;
@@ -478,28 +477,37 @@ if (!ffmpegInstalled()) {
  * because the *source* root contains a file literally named `version` that
  * would shadow the C++ standard header for any `.cpp` that includes it. */
 mkdirSync(objDir, { recursive: true });
-const playerSource = join(sourceDir, "media.cpp");
-console.log("xbintsc: compiling media.cpp");
+/* Two translation units: the file-oriented player and the in-memory decoder
+ * `decodeAudioData` uses. Both are merged into the archive; the bridge object
+ * references every entry point, so each member is extracted on demand. */
+const playerSources = ["media.cpp", "decode_audio.cpp"];
+const playerObjects: string[] = [];
 const cxxFlags = ["-std=c++17", "-O2", "-Wall", "-Wextra", "-I", runtimeDir, "-I", join(ffmpegInstall, "include")];
 /* The engine and the player are C++ with the static CRT (`libcpmt`), matching
  * FFmpeg's clang-cl objects and the xbintsc runtime; see `scripts/build-gui.ts`. */
 if (isWindows) cxxFlags.push("-Xclang", "--dependent-lib=libcpmt");
 else cxxFlags.push("-fPIC");
-run(clangxx, [...cxxFlags, "-c", playerSource, "-o", object]);
+for (const name of playerSources) {
+  const source = join(sourceDir, name);
+  const compiled = join(objDir, isWindows ? name.replace(/\.cpp$/, ".obj") : name.replace(/\.cpp$/, ".o"));
+  console.log(`xbintsc: compiling ${name}`);
+  run(clangxx, [...cxxFlags, "-c", source, "-o", compiled]);
+  playerObjects.push(compiled);
+}
 
 /* -- 4. merge into the archive -------------------------------------------- */
 
 mkdirSync(outDir, { recursive: true });
 rmSync(output, { force: true });
 if (process.platform === "darwin") {
-  run("libtool", ["-static", "-o", output, object, ...ffmpegStaticLibraries()!], { quietStderr: true });
+  run("libtool", ["-static", "-o", output, ...playerObjects, ...ffmpegStaticLibraries()!], { quietStderr: true });
 } else {
   /* `ar -M` (GNU/LLVM) merges archives through an MRI script. Windows paths are
    * normalised to `/` so the MRI parser does not read `\` as an escape. */
   const mri = (path: string): string => path.replace(/\\/g, "/");
   const script = [
     `create ${mri(output)}`,
-    `addmod ${mri(object)}`,
+    ...playerObjects.map((object) => `addmod ${mri(object)}`),
     ...ffmpegStaticLibraries()!.map((library) => `addlib ${mri(library)}`),
     "save",
     "end",

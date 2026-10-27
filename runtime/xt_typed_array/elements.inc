@@ -58,6 +58,19 @@ const char *xt_typed_array_name_of(int kind) {
   return xt_ta_names[kind];
 }
 
+/* Public wrappers for extensions (ext_gui's audio decoder reads a Float32Array's
+ * bytes). `.buffer`/`.byteOffset` are accessors on the typed-array prototypes,
+ * so a raw `xt_object_get_cstr` cannot reach them. */
+int xt_is_typed_array(xt_value value) { return xt_typed_array_kind_of(value) >= 0; }
+
+xt_value xt_typed_array_backing_buffer(xt_value value) {
+  return xt_typed_array_kind_of(value) >= 0 ? xt_typed_array_buffer_of(value) : XT_UNDEFINED;
+}
+
+uint32_t xt_typed_array_view_offset(xt_value value) {
+  return xt_typed_array_kind_of(value) >= 0 ? xt_typed_array_byte_offset_of(value) : 0;
+}
+
 /* -- buffer-backed views -------------------------------------------------- */
 
 /* The backing ArrayBuffer and byte offset live under private symbols, so a

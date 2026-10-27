@@ -25,7 +25,10 @@ engine bounded memory: see [Node lifetime](./gui/dom.md#node-lifetime) and
 thread with a vendored minimal FFmpeg, video frames go through the image texture
 path and audio to an SDL stream, with the DOM media API exposing
 `play`/`pause`/`currentTime`/… and media events. Enabling `gui` alone does not
-link FFmpeg.
+link FFmpeg. The browser globals also get a real `AudioContext`: a 48 kHz mixer
+in `runtime/ext_gui/audio_mixer.cpp` plus `decodeAudioData` (WAV in-engine,
+compressed formats through `media`) — see
+[GUI API](./gui/api.md#web-audio).
 **M14** adds `<canvas>` with a self-written 2D software rasteriser (anti-aliased
 fills, paths, text and `drawImage`) uploaded through the image texture path —
 see [Canvas](./gui/canvas.md). **M15** adds CSS `transform` /

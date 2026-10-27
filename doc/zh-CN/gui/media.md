@@ -91,6 +91,9 @@ Windows 已不再特殊：`media.lib` 是用 clang-cl 为 MSVC ABI 编译的 FFm
   `media.a`/`media.lib` 只依赖 FFmpeg。
 - **线程。** 引擎是单线程且非线程感知，因此所有解码都在主线程的
   `xt_gui_media_tick` 内完成——没有解码线程，也没有跨线程 GC 暴露。
+- **`decodeAudioData`。** 同一套 FFmpeg 还会为 `AudioContext.decodeAudioData`
+  解码内存中的音频文件（`runtime/ext_media/decode_audio.cpp`，经媒体表分发）；
+  WAV 由 GUI 引擎自身处理（`audio_decode.cpp`），因此只有压缩格式需要该扩展。
 - **DOM API。** 元素句柄直接暴露媒体接口（见
   `runtime/ext_gui/dom_api_media.cpp` 与 `dom_api_proto.cpp` 中的原型）：
   `play()` / `pause()` / `load()`，以及 `paused` / `ended` / `duration` /

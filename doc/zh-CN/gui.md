@@ -5,7 +5,7 @@
 状态：**M19** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
 `<video>`/`<audio>`——可选的 `media` 扩展用 vendored 的最小 FFmpeg 在主线程解码，
 视频帧走图像纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露
-`play`/`pause`/`currentTime`/… 与媒体事件。只启用 `gui` 不会链接 FFmpeg。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
+`play`/`pause`/`currentTime`/… 与媒体事件。只启用 `gui` 不会链接 FFmpeg。浏览器全局还带有真正可用的 `AudioContext`：`runtime/ext_gui/audio_mixer.cpp` 中的 48 kHz 混音器，以及 `decodeAudioData`（WAV 由引擎内解码，压缩格式经 `media`）——见 [GUI API](./gui/api.md#web-audio)。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
 填充、路径、文本与 `drawImage`），并经图像纹理路径上传——参见
 [Canvas](./gui/canvas.md)。**M15** 增加了 CSS `transform` /
 `transform-origin`：每个布局盒一个合成好的 `Matrix2D`，由显示列表一路带到

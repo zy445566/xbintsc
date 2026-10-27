@@ -55,6 +55,38 @@ void xt_media_shutdown() {
   if (g_api != nullptr && g_api->shutdown != nullptr) g_api->shutdown();
 }
 
+bool xt_media_decode_audio(const uint8_t* data, size_t size, DecodedAudio* out,
+                           std::string* error) {
+  if (g_api == nullptr || g_api->decode_audio == nullptr) {
+    if (error) {
+      *error = "cannot decode this audio format; enable the 'media' extension (pass --ext media)";
+    }
+    return false;
+  }
+  XtMediaAudioBuffer decoded = {0, 0, 0, nullptr};
+  char message[kErrorSize] = {0};
+  if (g_api->decode_audio(data, size, &decoded, message, sizeof(message)) == 0 ||
+      decoded.samples == nullptr) {
+    if (decoded.samples != nullptr && g_api->free_audio != nullptr) {
+      g_api->free_audio(decoded.samples);
+    }
+    if (error) *error = message[0] != '\0' ? message : "cannot decode audio data";
+    return false;
+  }
+  if (decoded.channels <= 0 || decoded.frames < 0 || decoded.sample_rate <= 0) {
+    if (g_api->free_audio != nullptr) g_api->free_audio(decoded.samples);
+    if (error) *error = "decoder produced an empty audio buffer";
+    return false;
+  }
+  out->channels = decoded.channels;
+  out->sample_rate = decoded.sample_rate;
+  out->frames = static_cast<uint32_t>(decoded.frames);
+  size_t count = static_cast<size_t>(decoded.frames) * static_cast<size_t>(decoded.channels);
+  out->interleaved.assign(decoded.samples, decoded.samples + count);
+  if (g_api->free_audio != nullptr) g_api->free_audio(decoded.samples);
+  return true;
+}
+
 }  // namespace xtgui
 
 extern "C" void xt_media_install(const XtMediaApi* api) { g_api = api; }

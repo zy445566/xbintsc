@@ -34,7 +34,10 @@ METHOD(node_tag_name_get) {
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
-  return xt_string_from_cstr(to_upper(node->tag).c_str());
+  /* `tagName` uppercases HTML element names but keeps the authored case in a
+   * foreign namespace (SVG's `linearGradient`, `clipPath`, …). */
+  const bool html = node->ns.empty() || node->ns == "http://www.w3.org/1999/xhtml";
+  return xt_string_from_cstr(html ? to_upper(node->tag).c_str() : node->tag.c_str());
 }
 
 METHOD(node_node_type_get) {
@@ -56,6 +59,38 @@ METHOD(node_id_get) {
   if (node == nullptr || !node->isElement()) return xt_string_from_cstr("");
   const std::string *value = node->attr("id");
   return xt_string_from_cstr(value != nullptr ? value->c_str() : "");
+}
+
+/** `namespaceURI`: the namespace passed to `createElementNS`, or the HTML
+ * namespace for an ordinary element. */
+METHOD(node_namespace_uri_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xtgui::Node *node = resolve_node(self, nullptr);
+  if (node == nullptr || !node->isElement()) return XT_NULL;
+  if (!node->ns.empty()) return xt_string_from_cstr(node->ns.c_str());
+  return xt_string_from_cstr("http://www.w3.org/1999/xhtml");
+}
+
+METHOD(node_local_name_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xtgui::Node *node = resolve_node(self, nullptr);
+  if (node == nullptr) return XT_UNDEFINED;
+  if (!node->isElement()) return XT_NULL;
+  return xt_string_from_cstr(node->tag.c_str());
+}
+
+METHOD(node_prefix_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xtgui::Node *node = resolve_node(self, nullptr);
+  if (node == nullptr) return XT_UNDEFINED;
+  if (node->ns_prefix.empty()) return XT_NULL;
+  return xt_string_from_cstr(node->ns_prefix.c_str());
 }
 
 METHOD(node_id_set) {
@@ -295,6 +330,7 @@ METHOD(node_style_get) {
   if (XT_IS_OBJECT(cached)) return cached;
   xt_value style = xt_object_new_with_proto(style_proto());
   xt_object_set(style, xt_string_from_cstr("__xt_gui_node"), self);
+  install_style_hooks(style);
   xt_object_set(self, xt_string_from_cstr("__xt_gui_style"), style);
   return style;
 }

@@ -27,6 +27,9 @@ xt_value node_proto() {
   define_getter(proto, "tagName", (void *)node_tag_name_get);
   define_getter(proto, "nodeName", (void *)node_tag_name_get);
   define_getter(proto, "nodeType", (void *)node_node_type_get);
+  define_getter(proto, "namespaceURI", (void *)node_namespace_uri_get);
+  define_getter(proto, "localName", (void *)node_local_name_get);
+  define_getter(proto, "prefix", (void *)node_prefix_get);
   define_getter(proto, "id", (void *)node_id_get);
   define_getter(proto, "className", (void *)node_class_name_get);
   define_getter(proto, "textContent", (void *)node_text_content_get);
@@ -44,6 +47,7 @@ xt_value node_proto() {
   define_getter(proto, "isConnected", (void *)node_is_connected_get);
   define_getter(proto, "classList", (void *)node_class_list_get);
   define_getter(proto, "style", (void *)node_style_get);
+  define_getter(proto, "dataset", (void *)node_dataset_get);
   define_getter(proto, "offsetWidth", (void *)node_offset_width_get);
   define_getter(proto, "offsetHeight", (void *)node_offset_height_get);
   /* Media element properties (`<video>`/`<audio>`; harmless on any element). */
@@ -86,6 +90,10 @@ xt_value node_proto() {
   define_method(proto, "querySelectorAll", (void *)node_query_selector_all);
   define_method(proto, "matches", (void *)node_matches);
   define_method(proto, "appendChild", (void *)node_append_child);
+  define_method(proto, "append", (void *)node_append);
+  define_method(proto, "prepend", (void *)node_prepend);
+  define_method(proto, "replaceChildren", (void *)node_replace_children);
+  define_method(proto, "insertAdjacentHTML", (void *)node_insert_adjacent_html);
   define_method(proto, "insertBefore", (void *)node_insert_before);
   define_method(proto, "removeChild", (void *)node_remove_child);
   define_method(proto, "replaceChild", (void *)node_replace_child);
@@ -125,6 +133,7 @@ xt_value document_proto() {
   define_getter(proto, "visibilityState", (void *)doc_visibility_state_get);
   define_getter(proto, "readyState", (void *)doc_ready_state_get);
   define_getter(proto, "title", (void *)doc_title_get);
+  define_setter(proto, "title", (void *)doc_title_set);
   define_getter(proto, "defaultView", (void *)doc_default_view_get);
   define_method(proto, "createTextNode", (void *)doc_create_text_node);
   /* `document.addEventListener` / element listener plumbing come from the node
@@ -143,6 +152,7 @@ xt_value event_proto() {
   define_method(proto, "preventDefault", (void *)event_prevent_default);
   define_method(proto, "stopPropagation", (void *)event_stop_propagation);
   define_method(proto, "stopImmediatePropagation", (void *)event_stop_immediate_propagation);
+  define_method(proto, "composedPath", (void *)event_composed_path);
   g_event_proto = proto;
   return proto;
 }
@@ -165,8 +175,23 @@ xt_value style_proto() {
   xt_value proto = xt_object_new();
   define_method(proto, "setProperty", (void *)style_set_property);
   define_method(proto, "getPropertyValue", (void *)style_get_property_value);
+  define_method(proto, "getPropertyPriority", (void *)style_get_property_priority);
   define_method(proto, "removeProperty", (void *)style_remove_property);
+  define_getter(proto, "cssText", (void *)style_css_text_get);
+  define_setter(proto, "cssText", (void *)style_css_text_set);
+  define_method(proto, "item", (void *)style_item);
+  define_getter(proto, "length", (void *)style_length_get);
   g_style_proto = proto;
+  return proto;
+}
+
+xt_value computed_style_proto() {
+  xt_gc_add_root(&g_computed_style_proto);
+  if (XT_IS_OBJECT(g_computed_style_proto)) return g_computed_style_proto;
+  xt_value proto = xt_object_new();
+  define_method(proto, "getPropertyValue", (void *)computed_style_get_property_value);
+  define_method(proto, "getPropertyPriority", (void *)computed_style_get_property_priority);
+  g_computed_style_proto = proto;
   return proto;
 }
 
@@ -227,6 +252,7 @@ xt_value canvas_proto() {
   define_method(proto, "strokeText", (void *)canvas_stroke_text);
   define_method(proto, "drawImage", (void *)canvas_draw_image);
   define_method(proto, "getImageData", (void *)canvas_get_image_data);
+  define_method(proto, "getContextAttributes", (void *)canvas_get_context_attributes);
   define_method(proto, "putImageData", (void *)canvas_put_image_data);
   define_method(proto, "createImageData", (void *)canvas_create_image_data);
   define_method(proto, "createPattern", (void *)canvas_create_pattern);

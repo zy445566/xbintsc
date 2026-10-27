@@ -141,6 +141,10 @@ typedef struct {
    * Deliberately not a property: `Object.keys`, `for...in` and JSON.stringify
    * must not see it, while `error.stack` returns it through `xt_get`. */
   xt_value error_stack;
+  /* Optional dynamic-property view (host objects such as `element.style`); see
+   * `xt_object_hooks` in `rt.h`. NULL for ordinary objects. */
+  const xt_object_hooks *hooks;
+  void *hook_data;
 } xt_object;
 
 typedef struct {

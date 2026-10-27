@@ -170,6 +170,9 @@ xt_value xt_object_new_with_proto(xt_value proto) {
   obj->prototype = proto;
   obj->frozen = 0;
   obj->is_array_base = 0;
+  obj->error_stack = XT_UNDEFINED;
+  obj->hooks = NULL;
+  obj->hook_data = NULL;
   return XT_FROM_PTR(XT_TAG_OBJECT, obj);
 }
 
@@ -190,6 +193,10 @@ static xt_property *xt_object_find(xt_object *obj, xt_value key) {
   }
   return NULL;
 }
+
+/* Defined in `access.inc`: append the dynamic keys of a host view whose
+ * `xt_object_hooks::keys` returns them. */
+static void xt_object_append_dynamic_keys(xt_object *obj, xt_value value, xt_value result);
 
 /*
  * JavaScript enumerates own string keys in a canonical order: array-index
@@ -313,6 +320,13 @@ xt_value xt_object_get(xt_value value, xt_value key) {
     if (!XT_IS_OBJECT(cur->prototype)) break;
     cur = (xt_object *)XT_GET_PTR(cur->prototype);
   }
+  /* A host view (`element.style`, `element.dataset`, computed style) answers the
+   * keys it owns dynamically. Only a miss reaches this point, so prototype
+   * methods and real properties win. */
+  if (obj->hooks != NULL && obj->hooks->get != NULL) {
+    xt_value dynamic = obj->hooks->get(value, k, obj->hook_data);
+    if (!XT_IS_UNDEFINED(dynamic)) return dynamic;
+  }
   return XT_UNDEFINED;
 }
 
@@ -367,6 +381,11 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
       break; /* plain inherited data property: create an own shadowing property */
     }
     ancestor = xt_object_prototype_of(ancestor->prototype, ancestor);
+  }
+  /* A host view handles the assignment itself (e.g. `style.width = "50%"` or
+   * `dataset.foo = "1"`); it never stores a shadowing data property. */
+  if (obj->hooks != NULL && obj->hooks->set != NULL) {
+    if (obj->hooks->set(value, k, newValue, obj->hook_data)) return newValue;
   }
   xt_property *inserted = xt_object_insert_property(obj, k);
   inserted->value = newValue;
@@ -446,36 +465,6 @@ int xt_object_is_frozen(xt_value value) {
   return obj ? obj->frozen : 0;
 }
 
-xt_value xt_object_has_own(xt_value value, xt_value key) {
-  if (XT_IS_ARRAY(value)) {
-    xt_array *array = (xt_array *)XT_GET_PTR(value);
-    xt_value propertyKey = xt_to_property_key(key);
-    if (XT_IS_STRING(propertyKey)) {
-      xt_string *k = xt_as_string(propertyKey);
-      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
-      uint32_t index = 0;
-      if (xt_key_is_array_index(k, &index)) return xt_bool(index < array->length);
-    }
-    return xt_bool(XT_IS_OBJECT(array->extra) &&
-                   xt_object_find((xt_object *)XT_GET_PTR(array->extra), propertyKey));
-  }
-  if (XT_IS_STRING(value)) {
-    xt_string *string = xt_as_string(value);
-    if (xt_is_symbol(key)) return XT_FALSE;
-    xt_string *k = xt_as_string(xt_to_string(key));
-    if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
-    uint32_t index = 0;
-    return xt_bool(xt_key_is_array_index(k, &index) && index < xt_string_utf16_length(string));
-  }
-  xt_object *obj = xt_as_object(value);
-  if (!obj) return XT_FALSE;
-  /* Map/Set/Date/RegExp/Promise/Symbol use their own struct layout and have no
-   * property bag; interpreting them as `xt_object` would read past the end. */
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
-    return XT_FALSE;
-  }
-  return xt_bool(xt_object_find(obj, xt_to_property_key(key)) != NULL);
-}
 
 xt_value xt_object_from_entries(xt_value entries) {
   xt_value result = xt_object_new();
@@ -495,7 +484,13 @@ xt_value xt_object_has(xt_value value, xt_value key) {
   if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
     return XT_FALSE;
   }
-  return xt_bool(xt_object_find(obj, xt_to_property_key(key)) != NULL);
+  xt_value propertyKey = xt_to_property_key(key);
+  if (xt_object_find(obj, propertyKey) != NULL) return XT_TRUE;
+  if (obj->hooks != NULL && obj->hooks->has != NULL &&
+      obj->hooks->has(value, propertyKey, obj->hook_data)) {
+    return XT_TRUE;
+  }
+  return XT_FALSE;
 }
 
 /* `Object.getOwnPropertySymbols`: the symbol-keyed own properties, in
@@ -531,6 +526,9 @@ xt_value xt_object_keys(xt_value value) {
     for (uint32_t i = 0; i < obj->count; i++) {
       if (XT_IS_STRING(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
     }
+    /* Dynamic keys of a host view (`element.dataset`, ...), appended without
+     * repeating a real property that was just pushed. */
+    xt_object_append_dynamic_keys(obj, value, result);
     return result;
   }
   if (XT_IS_ARRAY(value)) {

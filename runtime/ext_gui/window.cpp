@@ -9,6 +9,7 @@
  */
 
 #include "gui_engine.h"
+#include "listener_options.h"
 
 #include <algorithm>
 
@@ -17,6 +18,12 @@
 #include "text.h"
 
 static xt_value g_window_proto = XT_UNDEFINED;
+
+/** String value of a runtime value, as `std::string` ("" for null/undefined). */
+static std::string window_string(xt_value value) {
+  const char *data = xt_string_data(xt_to_string(value));
+  return data != nullptr ? data : "";
+}
 
 /* -- methods -------------------------------------------------------------- */
 
@@ -371,65 +378,6 @@ static xt_value win_cancel_animation_frame(xt_value self, xt_value env, int32_t 
   return XT_UNDEFINED;
 }
 
-static xt_value win_on(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)env;
-  if (argc >= 2) {
-    xt_value name = xt_to_string(xt_arg(argc, argv, 0));
-    xt_value fn = xt_arg(argc, argv, 1);
-    if (XT_IS_FUNCTION(fn)) {
-      xt_value listeners = xt_object_get_cstr(self, "__xt_gui_events");
-      if (!XT_IS_OBJECT(listeners)) {
-        listeners = xt_object_new();
-        xt_object_set(self, xt_string_from_cstr("__xt_gui_events"), listeners);
-      }
-      xt_value array = xt_object_get(listeners, name);
-      if (!XT_IS_ARRAY(array)) {
-        array = xt_array_new(0, NULL);
-        xt_object_set(listeners, name, array);
-      }
-      xt_array_push(array, fn);
-    }
-  }
-  return self;
-}
-
-static xt_value win_off(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)env;
-  if (argc >= 2) {
-    xt_value listeners = xt_object_get_cstr(self, "__xt_gui_events");
-    if (XT_IS_OBJECT(listeners)) {
-      xt_value name = xt_to_string(xt_arg(argc, argv, 0));
-      xt_value fn = xt_arg(argc, argv, 1);
-      xt_value array = xt_object_get(listeners, name);
-      if (XT_IS_ARRAY(array)) {
-        xt_value kept = xt_array_new(0, NULL);
-        int32_t count = (int32_t)xt_to_number(xt_array_length(array));
-        for (int32_t i = 0; i < count; i++) {
-          xt_value candidate = xt_array_get(array, xt_number((double)i));
-          if (candidate != fn) xt_array_push(kept, candidate);
-        }
-        xt_object_set(listeners, name, kept);
-      }
-    }
-  }
-  return self;
-}
-
-/** Web spelling of 'on': 'window.addEventListener(type, fn, options?)'. The
- * optional 'options' argument ('capture'/'once') is accepted and ignored —
- * window-level delivery has no capture phase — so a document written against
- * the browser API compiles and behaves the same here. */
-static xt_value win_add_event_listener(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  win_on(self, env, argc, argv);
-  return XT_UNDEFINED;
-}
-
-/** Web spelling of 'off': 'window.removeEventListener(type, fn, options?)'. */
-static xt_value win_remove_event_listener(xt_value self, xt_value env, int32_t argc,
-                                          xt_value *argv) {
-  win_off(self, env, argc, argv);
-  return XT_UNDEFINED;
-}
 
 /* -- input diagnostics ---------------------------------------------------- */
 
@@ -570,12 +518,10 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "driver", (void *)win_driver);
   define_method(proto, "requestAnimationFrame", (void *)win_request_animation_frame);
   define_method(proto, "cancelAnimationFrame", (void *)win_cancel_animation_frame);
-  define_method(proto, "on", (void *)win_on);
-  define_method(proto, "off", (void *)win_off);
-  /* Web spellings, so a document written against the browser API runs
-   * unchanged under the engine. */
-  define_method(proto, "addEventListener", (void *)win_add_event_listener);
-  define_method(proto, "removeEventListener", (void *)win_remove_event_listener);
+  /* `on` / `off` and their Web spellings (`addEventListener` /
+   * `removeEventListener` with the listener options bag) live in
+   * `window_events.cpp`. */
+  xt_gui_install_window_events(proto);
   define_method(proto, "hitTest", (void *)win_hit_test);
   define_method(proto, "sendEvent", (void *)win_send_event);
   define_method(proto, "stats", (void *)win_stats);

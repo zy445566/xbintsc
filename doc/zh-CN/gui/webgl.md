@@ -16,7 +16,7 @@ if (gl == null) {
 
 2D 上下文把图形光栅化到 CPU 位图再上传为纹理；WebGL 上下文则**在 GPU 上渲染**：顶点变换、光照、纹理采样、深度测试与混合全部在 SDL_GPU 管线中执行（Windows/Linux 上是 Vulkan，macOS 上是 Metal）。页面直接合成该上下文的颜色纹理，因此显示时不需要把像素读回 CPU。
 
-同时提供 **WebGL 1.0** 与 **WebGL 2.0**。一个 canvas 会固定为它第一次申请的上下文类型：先调用 `getContext("webgl2")` 之后，`getContext("webgl")` 返回 `null`，反之亦然。WebGL 2 上下文也满足 `instanceof WebGLRenderingContext`（其原型继承 WebGL 1 原型），并在其上增加 WebGL 2 的常量与方法。
+同时提供 **WebGL 1.0** 与 **WebGL 2.0**。一个 canvas 会固定为它第一次申请的上下文类型：先调用 `getContext("webgl2")` 之后，`getContext("webgl")` 返回 `null`，反之亦然。WebGL 2 上下文拥有自己的 `WebGL2RenderingContext` 原型（其中复制了 WebGL 1 的常量与方法），因此 `gl instanceof WebGL2RenderingContext` 为真，而 `gl instanceof WebGLRenderingContext` 为假，与浏览器一致——three.js 等库正是据此选择 WebGL 2 路径。`gl.constructor.name` 也会报告对应类型名。
 
 ## 一帧如何到达屏幕
 
@@ -53,7 +53,7 @@ SDL_GPU 不能在运行时编译 GLSL，且每个后端只消费自己的格式�
 | `gl_FragData[0]` | `xt_FragColor` |
 | 缺少 `#version` / `#version 100` | `#version 310 es` |
 
-两个阶段的非采样器 uniform 会合并成同一个块，并在每个阶段各声明一次（顶点 set 1、片元 set 3），与 SDL_GPU 的 Vulkan 描述符布局一致。在 Metal 上同一批声明会变成 `[[buffer(0)]]` 与 `[[texture(N)]]`/`[[sampler(N)]]`，正是 SDL_GPU Metal 后端绑定的槽位。`uniformMatrix4fv` 按列主序写入反射出的偏移；对采样器调用 `uniform1i` 时记录纹理单元。每次绘制都用动态 uniform 缓冲接口推送该块。
+实现限制：结构体 uniform、用户 uniform 块、预处理阶段无法确定长度的 uniform 数组，以及用非常量表达式索引的采样器数组会被拒绝（shader/link info log 会说明）。`#pragma unroll_loop_start` 循环会在改写前展开，因此 three.js 生成的 `sampler2D shadowMap[ NUM_DIR_LIGHT_SHADOWS ]` / `shadowMap[ i ]` 会变成常量索引。`#ifdef` 内的着色器代码可用；非采样器 uniform 声明会被移动到顶层，保证块保持无条件。两个阶段的非采样器 uniform 会合并成同一个块，并在每个阶段各声明一次（顶点 set 1、片元 set 3），与 SDL_GPU 的 Vulkan 描述符布局一致。在 Metal 上同一批声明会变成 `[[buffer(0)]]` 与 `[[texture(N)]]`/`[[sampler(N)]]`，正是 SDL_GPU Metal 后端绑定的槽位。`uniformMatrix4fv` 按列主序写入反射出的偏移；对采样器调用 `uniform1i` 时记录纹理单元。每次绘制都用动态 uniform 缓冲接口推送该块。
 
 翻译器的限制：结构体 uniform、用户 uniform 块、预处理后仍无法确定长度的 uniform 数组、采样器数组与采样器类型不匹配的声明会被拒绝（着色器/链接日志会说明）。`#ifdef` 内的代码没问题；非采样器 uniform 声明会被移到外层顶层位置，保证块是无条件的。
 
@@ -116,6 +116,6 @@ transform feedback（入口为空操作）与 MSAA/采样缓冲（SDL_GPU 的 Me
 
 ## three.js
 
-`.js` 资源加载器现在只修补 three.js 的着色器循环展开；`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
+着色器改写器会把 three.js 的 `#pragma unroll_loop_start` 循环展开为常量索引（否则其采样器数组无法通过 Vulkan GLSL），`.js` 资源加载器则避免渲染器自带的展开器重复处理。`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
 
 本引擎子集之外的能力仍无法模拟：transform feedback 与 MSAA；立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标与压缩纹理已经可用。需要这些能力的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。

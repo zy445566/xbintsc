@@ -36,6 +36,10 @@ bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
      * 0..num_samplers-1, so any other allocation would sample the wrong
      * texture (or none at all). */
     options.enable_decoration_binding = true;
+    /* Sampler arrays (three.js shadow maps) need MSL 2.0: with the default
+     * 1.2 target SPIRV-Cross rejects "MSL 2.0 or greater is required for
+     * arrays of textures". Every Metal device SDL_GPU runs on supports 2.0. */
+    options.msl_version = spirv_cross::CompilerMSL::Options::make_msl_version(2, 0);
     compiler.set_msl_options(options);
     *source = compiler.compile();
     *entry = compiler.get_cleansed_entry_point_name(

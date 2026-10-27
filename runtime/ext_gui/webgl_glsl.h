@@ -126,6 +126,9 @@ struct GlslLinkLayout {
   std::vector<GlslUniformDecl> block_members;
 };
 
+/** Expand three.js's `#pragma unroll_loop_start` loops into constant indices. */
+std::string unroll_glsl_pragmas(const std::string &source);
+
 /** Scan `source` for the declarations WebGL needs to know about. */
 void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info);
 

@@ -22,9 +22,20 @@ run();                                 // 驱动主循环，直到所有窗口�
 `getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`，以及
 `driver()`——它报告当前使用的 SDL_GPU 后端（`"vulkan"`、`"direct3d12"`、
 `"metal"` 等，由 SDL 挑选设备支持的最佳后端）。同时也提供 Web 写法：
-`addEventListener` / `removeEventListener` 是 `on` / `off` 的别名（其
-`options` 参数会被接受并忽略），`closed` getter 对应 `isOpen()`，因此按浏览器
+`addEventListener` / `removeEventListener` 接受标准的选项对象（`capture`、
+`once`、`passive`、`signal`），`closed` getter 对应 `isOpen()`，因此按浏览器
 API 编写的文档可以原样运行。
+
+元素监听器支持同一组选项：`{ once }` 在首次调用后移除监听器，`{ passive: true }`
+使 `preventDefault()` 变成无操作，`{ signal }`（来自 `new AbortController()` 的
+`AbortSignal`）在 abort 时移除监听器，包括添加时就已经 abort 的信号。
+`element.dispatchEvent(event)` 派发的就是**同一个**事件对象（身份可观察），并填充
+`target` / `currentTarget` / `eventPhase`、记录路径供 `event.composedPath()` 使用。
+`new Event(...)`、`new CustomEvent(...)`、`new MouseEvent(...)`、
+`new KeyboardEvent(...)`、`new PointerEvent(...)`、`new WheelEvent(...)`、
+`new FocusEvent(...)`、`new InputEvent(...)` 与 `new SubmitEvent(...)` 会保留 `init`
+对象的全部字段（`detail`、`composed`、鼠标/键盘成员等）。窗口监听器接受同一组
+选项（`capture` 参与监听器身份匹配；窗口投递没有捕获阶段）。
 
 窗口导航是真实实现的：`scrollTo(x, y)` / `scrollTo({ left, top })` /
 `scrollBy(...)` 移动页面视口（会按内容边界夹取，绘制与命中测试随之偏移），
@@ -77,7 +88,8 @@ requestAnimationFrame(frame);
 | `navigator` | `userAgent`（以 `xbintsc` 结尾的桌面 Chrome 字符串）、`platform`、`vendor`、`language(s)`、`hardwareConcurrency`、`maxTouchPoints`、`onLine`、`vibrate()` |
 | `localStorage` | 内存中的 `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` |
 | `AudioContext`、`webkitAudioContext` | 带真实混音器与解码器的 Web Audio 图（见下） |
-| `Event`、`CustomEvent`、`ProgressEvent` 等 | 事件构造器 |
+| `Event`、`CustomEvent`、`ProgressEvent`、`MouseEvent`、`KeyboardEvent`、`PointerEvent`、`WheelEvent`、`FocusEvent`、`InputEvent`、`SubmitEvent` | 事件构造器；`init` 参数按原样保留（`detail`、`composed`、鼠标/键盘字段等） |
+| `AbortController`、`AbortSignal` | 真实的 controller/signal 对，用于 `{ signal }` 移除监听器，支持 `abort()`、`aborted`、`reason`、`onabort` 与 `throwIfAborted()` |
 | `HTMLCanvasElement`、`HTMLImageElement`、`WebGLRenderingContext`、`WebGL2RenderingContext`、`WebGLBuffer`/`WebGLTexture`/`WebGLShader`/`WebGLProgram`/`WebGLFramebuffer`/`WebGLRenderbuffer`/`WebGLUniformLocation`/`WebGLActiveInfo`/`WebGLVertexArrayObject`/`WebGLSampler`/`WebGLQuery`/`WebGLSync`/`WebGLTransformFeedback` | 真实的构造函数值。`canvas.getContext("webgl")` 与 `getContext("webgl2")` 返回 GPU 上下文（见 [WebGL](./webgl.md)）。 |
 | `ImageBitmap`、`createImageBitmap(source)` | 由已解码像素支撑的不可变位图（`<img>`、`<canvas>`、`<video>` 帧与 `ImageData` 形状）；promise 立即 settle，`texImage2D` 可直接接受该对象 |
 | `ImageData`、`OffscreenCanvas`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（没有 XR/fetch/流式后端），让页面走自己的“不支持”分支，而不是调用空壳。Three.js 页面在本后端上使用真实渲染器（见[已知问题](./known-issues.md)）。 |

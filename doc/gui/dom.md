@@ -124,10 +124,13 @@ toggled by `window.focus()` / `window.blur()`.
 
 Mutations mark the document dirty; the engine restyles + relayouts lazily (before
 the next read or frame). `inner = …`/`innerHTML = …` do **not** run scripts.
-Element events support capture and bubble phases, `stopPropagation`, `once`, and
-bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps its
-**string** `e.target` (`div#id.class`); the element `Event.target` is a handle
-whose descriptor matches the same string.
+Element events support capture and bubble phases, `stopPropagation`, `once`,
+`passive` and `signal` (an `AbortController`'s signal removes the listener), and
+bubble up to `document`/`window`. `dispatchEvent` dispatches the same event
+object and fills in `target`/`currentTarget`/`eventPhase`/`composedPath()`. The
+legacy `win.on(type, fn)` payload keeps its **string** `e.target`
+(`div#id.class`); the element `Event.target` is a handle whose descriptor
+matches the same string.
 
 ### Node lifetime
 

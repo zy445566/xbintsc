@@ -153,6 +153,7 @@ xt_value event_proto() {
   define_method(proto, "preventDefault", (void *)event_prevent_default);
   define_method(proto, "stopPropagation", (void *)event_stop_propagation);
   define_method(proto, "stopImmediatePropagation", (void *)event_stop_immediate_propagation);
+  define_method(proto, "composedPath", (void *)event_composed_path);
   g_event_proto = proto;
   return proto;
 }

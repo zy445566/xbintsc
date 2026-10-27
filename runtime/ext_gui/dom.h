@@ -31,6 +31,10 @@ struct Node {
   NodeType type = NodeType::Element;
   std::string tag;   // lowercased element name (empty for document/text)
   std::string text;  // text content (text nodes only)
+  /* `createElementNS` keeps the namespace and the qualified name's prefix.
+   * Ordinary HTML elements leave both empty and report the XHTML namespace. */
+  std::string ns;
+  std::string ns_prefix;
   std::vector<Attr> attrs;
   Node *parent = nullptr;
   std::vector<std::unique_ptr<Node>> children;

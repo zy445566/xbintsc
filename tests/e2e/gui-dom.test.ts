@@ -106,4 +106,71 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
     expect(value("winCompat")).toBe("win:div#inner.warm");
     expect(value("stopped")).toBe("inner");
   });
+
+  it("mutates the tree with append/prepend/replaceChildren/insertAdjacentHTML and namespaces", () => {
+    const { value } = harness.compileAndRun(
+      "dom-mutation",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><body style="margin:0">
+        <div id="host"></div>
+      </body></html>\`;
+
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const win = createWindow({ title: "dom-mutation", width: 400, height: 300 });
+      win.on("ready", () => {
+        const doc = win.document;
+        const host: any = doc.getElementById("host");
+
+        // append/prepend mix nodes and strings, like the DOM.
+        host.append("a", doc.createElement("b"));
+        console.log("append=" + host.textContent + ":" + host.children.length + ":" +
+                    host.lastElementChild.tagName);
+        host.prepend("z", doc.createElement("i"));
+        console.log("prepend=" + host.textContent + ":" + host.firstElementChild.tagName);
+
+        // insertAdjacentHTML at all four positions.
+        host.insertAdjacentHTML("beforebegin", "<p id='pre'>pre</p>");
+        host.insertAdjacentHTML("afterbegin", "<b>head</b>");
+        host.insertAdjacentHTML("beforeend", "<u>tail</u>");
+        host.insertAdjacentHTML("afterend", "<p id='post'>post</p>");
+        console.log("adjacent=" + doc.getElementById("pre").textContent + ":" +
+                    doc.getElementById("post").textContent + ":" +
+                    host.firstElementChild.tagName + ":" + host.lastElementChild.tagName);
+
+        // replaceChildren keeps a node argument that used to be a child.
+        const keep: any = doc.createElement("em");
+        keep.textContent = "keep";
+        host.append(keep);
+        host.replaceChildren("t", keep);
+        console.log("replace=" + host.textContent + ":" + host.children.length + ":" +
+                    host.firstElementChild.tagName);
+
+        // createElementNS records the namespace and preserves SVG's case.
+        const gradient: any = doc.createElementNS(SVG_NS, "svg:linearGradient");
+        console.log("ns=" + gradient.namespaceURI + ":" + gradient.localName + ":" +
+                    gradient.prefix + ":" + gradient.tagName);
+        const rect: any = doc.createElementNS(SVG_NS, "rect");
+        console.log("svg-case=" + rect.tagName + ":" + rect.localName + ":" + rect.prefix);
+        const html: any = doc.createElementNS("http://www.w3.org/1999/xhtml", "DIV");
+        console.log("html-ns=" + html.localName + ":" + html.namespaceURI + ":" + html.tagName);
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("append")).toBe("a:1:B");
+    expect(value("prepend")).toBe("za:I");
+    expect(value("adjacent")).toBe("pre:post:B:U");
+    expect(value("replace")).toBe("tkeep:1:EM");
+    expect(value("ns")).toBe(
+      "http://www.w3.org/2000/svg:linearGradient:svg:linearGradient",
+    );
+    expect(value("svg-case")).toBe("rect:rect:null");
+    expect(value("html-ns")).toBe("div:http://www.w3.org/1999/xhtml:DIV");
+  });
 });

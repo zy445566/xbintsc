@@ -68,6 +68,16 @@ created.textContent = "added";
 box.appendChild(created);
 box.removeChild(created);
 
+// 父子变更辅助方法可在同一次调用中混用节点与字符串。
+box.append("text", doc.createElement("span"));
+box.prepend(doc.createElement("b"));
+box.insertAdjacentHTML("beforeend", "<i>tail</i>"); // beforebegin/afterbegin/beforeend/afterend
+box.replaceChildren("fresh", doc.createElement("em"));
+
+// 命名空间会被记录；外部（SVG）元素名保留大小写。
+const gradient = doc.createElementNS("http://www.w3.org/2000/svg", "svg:linearGradient");
+console.log(gradient.namespaceURI, gradient.localName, gradient.prefix);
+
 inner.addEventListener("click", (e) => console.log(e.target.id, e.currentTarget.id));
 inner.click();                          // 在该元素处合成一次点击
 console.log(box.offsetWidth, box.offsetHeight);   // 取整后的边框盒

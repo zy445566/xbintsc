@@ -95,12 +95,21 @@ Canvas 像素**不参与垃圾回收**：canvas 由窗口拥有、以 DOM 节点
 测试钩子：`getImageData(x, y, w, h)` 把区域复制为 `{ width, height, data }`，其中
 `data` 是按行主序的 RGBA8 字节数组。越界像素为透明。
 
+图案：`createPattern(source, repetition?)` 接受 `<img>` 或另一个 `<canvas>`，在用户
+空间中平铺（`repeat`、`repeat-x`、`repeat-y`、`no-repeat`），因此平铺会跟随当前
+变换。把结果赋给 `fillStyle`/`strokeStyle`；重新赋颜色会替换掉图案。
+
+图像数据与导出：`createImageData(width, height)` 分配一个空的
+`{ width, height, data }`，`putImageData(imageData, dx, dy[, dirtyX, dirtyY,
+dirtyWidth, dirtyHeight])` 直接把字节写入位图（不受变换、混合或 `globalAlpha`
+影响）。`canvas.toDataURL(type?)` 导出 PNG data URL，`canvas.toBlob(callback,
+type?)` 从微任务中交付 Blob 形状的 `{ type, size }`（字节在
+`__xt_gui_blob_data` 上；本运行时没有 `URL.createObjectURL`）。
+
 ## 尚未实现
 
-图案（`createPattern`）、阴影、`clip()`、`globalCompositeOperation`、
-`putImageData`、`createImageData`、`isPointInPath`、以 `DOMMatrix` 调用的
-`setTransform`、可切换图像平滑的 `drawImage`、`toDataURL`/`toBlob`、把 `<canvas>` 用作
-CSS `background-image`，以及离屏画布（`OffscreenCanvas`、
-`transferControlToOffscreen`）。`roundRect` 只接受单个半径，径向渐变会忽略内圆偏移。
+阴影、`clip()`、`globalCompositeOperation`、`isPointInPath`、可切换图像平滑的
+`drawImage`、把 `<canvas>` 用作 CSS `background-image`，以及离屏画布
+（`OffscreenCanvas`、`transferControlToOffscreen`）。径向渐变会忽略内圆偏移。
 
 另见[媒体](./media.md)：`drawImage` 与纹理上传所共享的图像/视频/音频解码栈。

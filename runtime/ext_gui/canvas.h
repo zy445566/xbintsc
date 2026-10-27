@@ -91,13 +91,39 @@ class CanvasGradient {
   std::vector<Stop> stops_;
 };
 
-/** What a fill or stroke paints with: a solid colour, or a gradient sampled
- * through the inverse of the current transform. `color` points into the
- * canvas state and stays valid for the duration of one draw call. */
+class CanvasGradient;
+class CanvasPattern;
+
+/** What a fill or stroke paints with: a solid colour, a gradient sampled through
+ * the inverse of the current transform, or a repeating image pattern. `color`
+ * points into the canvas state and stays valid for one draw call. */
 struct CanvasPaint {
   const float *color = nullptr;
   const CanvasGradient *gradient = nullptr;
+  const CanvasPattern *pattern = nullptr;
   CanvasTransform inverse;
+};
+
+/**
+ * A `CanvasPattern`: an image tiled in user space with one of the four
+ * repetition modes. Owned by the canvas that created it, like a gradient, so a
+ * stale handle resolves to no pattern instead of a dangling pointer.
+ */
+class CanvasPattern {
+ public:
+  enum class Repeat { Both, X, Y, None };
+
+  CanvasPattern(uint64_t id, const Image &image, Repeat repeat);
+  uint64_t id() const { return id_; }
+  Repeat repeat() const { return repeat_; }
+  /** Pattern colour at a user-space point; false when the point falls outside a
+   * non-repeating pattern (the caller then paints nothing). */
+  bool color_at(float x, float y, float out[4]) const;
+
+ private:
+  uint64_t id_ = 0;
+  Image image_;
+  Repeat repeat_ = Repeat::Both;
 };
 
 class Canvas2D {
@@ -138,6 +164,11 @@ class Canvas2D {
   void set_stroke_gradient(uint64_t id);
   uint64_t fill_gradient_id() const { return state_.fill_gradient; }
   uint64_t stroke_gradient_id() const { return state_.stroke_gradient; }
+  /** Use a pattern created by this canvas (`0` restores the solid colour). */
+  void set_fill_pattern(uint64_t id);
+  void set_stroke_pattern(uint64_t id);
+  uint64_t fill_pattern_id() const { return state_.fill_pattern; }
+  uint64_t stroke_pattern_id() const { return state_.stroke_pattern; }
   void set_line_width(float width) { state_.line_width = width > 0.0f ? width : 0.0f; }
   float line_width() const { return state_.line_width; }
   void set_line_cap(const std::string &value);
@@ -164,6 +195,11 @@ class Canvas2D {
   CanvasGradient *create_radial_gradient(float x0, float y0, float r0, float x1, float y1,
                                          float r1);
   CanvasGradient *find_gradient(uint64_t id) const;
+
+  /* -- patterns ---------------------------------------------------------- */
+  /** Create a tiled pattern from `image`; the canvas owns it. */
+  CanvasPattern *create_pattern(const Image &image, CanvasPattern::Repeat repeat);
+  CanvasPattern *find_pattern(uint64_t id) const;
 
   /* -- paths ------------------------------------------------------------- */
   void begin_path();
@@ -196,6 +232,15 @@ class Canvas2D {
   void draw_image(const Image &source, float dx, float dy, float dw, float dh, float sx, float sy,
                   float sw, float sh);
 
+  /* -- pixel writes and export ------------------------------------------- */
+  /** `putImageData`: copy RGBA bytes straight into the bitmap (no transform,
+   * blending or globalAlpha), clipped to the canvas and the optional dirty
+   * rectangle. */
+  void set_image_data(const std::vector<unsigned char> &rgba, int data_width, int data_height,
+                      int dx, int dy, int dirty_x, int dirty_y, int dirty_width, int dirty_height);
+  /** Encode the bitmap as a PNG (used by `toDataURL`/`toBlob`). */
+  bool encode_png(std::vector<unsigned char> *out) const;
+
   /* -- test hook --------------------------------------------------------- */
   /** Copy an `(x, y, w, h)` region to `out` (RGBA8, row-major). Out-of-bounds
    * pixels are transparent. Returns false when the region is empty. */
@@ -223,6 +268,8 @@ class Canvas2D {
     float stroke_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     uint64_t fill_gradient = 0;
     uint64_t stroke_gradient = 0;
+    uint64_t fill_pattern = 0;
+    uint64_t stroke_pattern = 0;
     std::string line_cap_string = "butt";
     std::string line_join_string = "miter";
   };
@@ -240,7 +287,7 @@ class Canvas2D {
   /** Paint descriptors for the current state. */
   CanvasPaint fill_paint() const;
   CanvasPaint stroke_paint() const;
-  CanvasPaint make_paint(uint64_t gradient_id, const float color[4]) const;
+  CanvasPaint make_paint(uint64_t gradient_id, uint64_t pattern_id, const float color[4]) const;
   void stroke_subpath(const CanvasSubpath &points, bool closed, const CanvasPaint &paint);
   /** Stroke one polyline with caps and joins; `half` is half the device-space
    * line width. Used by `stroke_subpath` for both solid and dashed paths. */
@@ -259,6 +306,7 @@ class Canvas2D {
   std::vector<State> stack_;
   std::vector<CanvasSubpath> path_;
   std::unordered_map<uint64_t, std::unique_ptr<CanvasGradient>> gradients_;
+  std::unordered_map<uint64_t, std::unique_ptr<CanvasPattern>> patterns_;
 };
 
 /** The canvas with the given process-wide id, or null. Used by the renderer. */

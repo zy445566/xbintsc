@@ -103,6 +103,9 @@ xt_value node_proto() {
   define_method(proto, "pause", (void *)node_pause);
   define_method(proto, "load", (void *)node_load);
   define_method(proto, "getContext", (void *)node_get_context);
+  /* `toDataURL`/`toBlob` belong to the canvas *element*, as in the DOM. */
+  define_method(proto, "toDataURL", (void *)canvas_to_data_url);
+  define_method(proto, "toBlob", (void *)canvas_to_blob);
   g_node_proto = proto;
   return proto;
 }
@@ -224,6 +227,11 @@ xt_value canvas_proto() {
   define_method(proto, "strokeText", (void *)canvas_stroke_text);
   define_method(proto, "drawImage", (void *)canvas_draw_image);
   define_method(proto, "getImageData", (void *)canvas_get_image_data);
+  define_method(proto, "putImageData", (void *)canvas_put_image_data);
+  define_method(proto, "createImageData", (void *)canvas_create_image_data);
+  define_method(proto, "createPattern", (void *)canvas_create_pattern);
+  define_method(proto, "toDataURL", (void *)canvas_to_data_url);
+  define_method(proto, "toBlob", (void *)canvas_to_blob);
   define_method(proto, "setLineDash", (void *)canvas_line_dash_set);
   define_method(proto, "getLineDash", (void *)canvas_line_dash_get);
   define_method(proto, "getTransform", (void *)canvas_get_transform);

@@ -289,20 +289,22 @@ std::vector<CanvasSubpath> Canvas2D::device_subpaths() const {
   return result;
 }
 
-CanvasPaint Canvas2D::make_paint(uint64_t gradient_id, const float color[4]) const {
+CanvasPaint Canvas2D::make_paint(uint64_t gradient_id, uint64_t pattern_id,
+                                 const float color[4]) const {
   CanvasPaint paint;
   paint.color = color;
   paint.gradient = gradient_id == 0 ? nullptr : find_gradient(gradient_id);
+  paint.pattern = pattern_id == 0 ? nullptr : find_pattern(pattern_id);
   paint.inverse = state_.transform.inverted();
   return paint;
 }
 
 CanvasPaint Canvas2D::fill_paint() const {
-  return make_paint(state_.fill_gradient, state_.fill_color);
+  return make_paint(state_.fill_gradient, state_.fill_pattern, state_.fill_color);
 }
 
 CanvasPaint Canvas2D::stroke_paint() const {
-  return make_paint(state_.stroke_gradient, state_.stroke_color);
+  return make_paint(state_.stroke_gradient, state_.stroke_pattern, state_.stroke_color);
 }
 
 void Canvas2D::fill() {

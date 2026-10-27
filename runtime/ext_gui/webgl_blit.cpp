@@ -82,7 +82,11 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
   memset(&info, 0, sizeof(info));
   info.source = source_region;
   info.destination = destination_region;
-  info.load_op = SDL_GPU_LOADOP_DONT_CARE;
+  /* A blit only writes the destination rectangle; everything outside it keeps
+   * its previous contents, as `blitFramebuffer` requires. DONT_CARE lets a
+   * backend (Metal's MTLLoadActionDontCare) discard the attachment and leave
+   * those pixels undefined, so load it. */
+  info.load_op = SDL_GPU_LOADOP_LOAD;
   info.filter = filter == GL_LINEAR ? SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;
   SDL_BlitGPUTexture(cmd_, &info);
   return true;

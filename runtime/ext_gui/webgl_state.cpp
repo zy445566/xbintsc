@@ -205,7 +205,12 @@ void WebGLContext::clear(int mask) {
           memset(&info, 0, sizeof(info));
           info.source = source_region;
           info.destination = destination_region;
-          info.load_op = SDL_GPU_LOADOP_DONT_CARE;
+          /* The pixels outside the scissor rectangle must survive the clear, so
+           * the blit has to load the destination. DONT_CARE maps to Metal's
+           * MTLLoadActionDontCare, which discards the whole attachment before
+           * the blit writes its region and leaves the rest undefined (Vulkan
+           * happened to preserve it, which hid this in CI on Linux). */
+          info.load_op = SDL_GPU_LOADOP_LOAD;
           info.filter = SDL_GPU_FILTER_NEAREST;
           SDL_BlitGPUTexture(cmd_, &info);
         }

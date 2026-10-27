@@ -38,6 +38,7 @@ export const RUNTIME_SOURCES = [
   "xt_performance.c",
   "xt_text_codec.c",
   "xt_url.c",
+  "xt_url_object.c",
   "xt_array_buffer.c",
   "xt_io.c",
 ] as const;

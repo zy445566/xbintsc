@@ -55,6 +55,21 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 - `Symbol(description)` primitives (`XT_OBJECT_KIND_SYMBOL`), the 13 well-known symbols (`Symbol.iterator`, `Symbol.asyncIterator`, `Symbol.match`, ...), `Symbol.for` / `Symbol.keyFor` global registry, `symbol.description` / `toString()` / `valueOf()`.
 - Symbols are valid property keys (`Object.getOwnPropertySymbols`, symbol keyed `get`/`set`/`in`/`delete`), are skipped by `Object.keys` / `values` / `entries` / `for...in` / `JSON.stringify`, and print as `Symbol(desc)`.
 
+## URL
+
+- `URL` is implemented in `runtime/xt_url_object.c`: `new URL(input)` and
+  `new URL(input, base)` (the base may be another `URL`), resolving relative
+  references against a hierarchical `scheme://authority/path` base.
+- A reference with **no scheme is a filesystem path**: `new URL("./model.glb")`
+  resolves against the working directory and yields a `file:` URL (an explicit
+  base is still honoured, so `new URL("./x", import.meta.url)` works too).
+- Read-only `href`, `protocol`, `origin`, `host`, `hostname`, `port`,
+  `pathname`, `search`, `hash`, `searchParams` and `toString()` / `toJSON()`;
+  absolute inputs are kept as written.
+- Not a full WHATWG parser: path percent-encoding, IDNA, setters and live
+  `searchParams` synchronisation are not implemented — see
+  [Runtime deviations](../unimplemented/deviations.md).
+
 ## URLSearchParams
 
 - `URLSearchParams` is implemented in `runtime/xt_url.c`.

@@ -8,6 +8,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | --- | --- |
 | RegExp byte-oriented matching | The engine matches UTF-8 bytes: literal multi-byte text works, but `.` and character classes consume one byte per repetition (`\d` / `\w` stay ASCII). Offsets returned by `exec` / `search` / replacement callbacks are converted to UTF-16 code units |
 | Global RegExp `lastIndex` | `test` / `exec` do not advance or honour a caller-set `lastIndex` for `/g` / `/y` regexes |
+| `URL` parser | Read-only WHATWG subset: no path percent-encoding, IDNA, setters or live `searchParams`; a reference with no scheme resolves against the working directory as a `file:` URL |
 | String `normalize` | Not implemented |
 | First-class built-in methods | Implemented as unbound method values (see [Functions](./functions.md)); `fn.toString()` returns a placeholder rather than source text |
 | `for...in` | Enumerates own keys of objects / arrays / strings; does not include prototype-chain properties |

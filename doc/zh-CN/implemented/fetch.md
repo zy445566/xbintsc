@@ -7,6 +7,8 @@
 - 全局 `fetch(input, init)` 是 HTTP/1.1 客户端。阻塞的套接字交换（`getaddrinfo`、connect、send、receive）运行在异步 I/O 工作线程池上，因此进行中的请求**不会**卡住事件循环：定时器、套接字与其他 `await` 继续运行，promise 在 reactor 派发完成结果时 settle。
 - 重定向在主线程上处理：每一跳是一次 offload 交换，最多 20 次；301/302/303 会把 POST 改成 GET。
 - 只接受 `http://` URL —— 由于未链接 TLS 后端，`https://` 会以 `TypeError` 拒绝。
+- **没有协议的引用**（相对路径）与 `file://` URL 会读取本地文件，因此编译后的程序
+  无需 HTTP 服务即可加载磁盘资源。相对路径相对工作目录解析；支持 `GET` / `HEAD`。
 - 选项：`method`、`headers`（普通对象或 `Headers`）、`body` 与 `redirect`（`follow` / `manual` / `error`）。
 - 解析出的 `Response` 形状对象暴露 `ok` / `status` / `statusText` / `url` / `headers` 以及 `text()` / `json()` / `arrayBuffer()` / `bytes()` / `clone()`。响应体在 promise settle 前已完整缓冲；不支持流式响应体。
 - `Headers` 大小写不敏感，提供 `get` / `has` / `set` / `append` / `delete` / `keys` / `values` / `entries` / `forEach` / `getSetCookie`。

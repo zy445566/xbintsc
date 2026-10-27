@@ -375,13 +375,16 @@ static void xt_url_append_decoded(char *out, size_t size, const char *text, size
  * another scheme. The `?query` / `#fragment` suffix is not part of the path.
  */
 int xt_url_file_path(const char *url, char *out, size_t size) {
-  if (!url) return 0;
+  if (!url || url[0] == '\0') return 0;
   out[0] = 0;
   char work[XT_URL_MAX];
   snprintf(work, sizeof(work), "%s", url);
   char *fragment = work;
   while (*fragment && *fragment != '?' && *fragment != '#') fragment++;
   *fragment = 0;
+  /* A reference that is only a query/fragment has no file to read; let the
+   * caller report it as an invalid URL like an empty `fetch("")`. */
+  if (work[0] == '\0') return 0;
 
   size_t schemeLength = xt_url_scheme_length(work);
   const char *path = work;

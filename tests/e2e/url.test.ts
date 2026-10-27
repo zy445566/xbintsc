@@ -85,6 +85,11 @@ describeE2E("URL", (harness: E2EHarness) => {
           (error: any) => "rejected:" + (error instanceof TypeError),
         );
         console.log("missing=" + missing);
+        const empty = await fetch("").then(
+          () => "resolved",
+          (error: any) => "rejected:" + (error instanceof TypeError),
+        );
+        console.log("empty=" + empty);
       }
       main();
     `);
@@ -94,6 +99,7 @@ describeE2E("URL", (harness: E2EHarness) => {
         "value=ok",
         "file=200",
         "missing=rejected:true",
+        "empty=rejected:true",
       ].join("\n"),
     );
   });

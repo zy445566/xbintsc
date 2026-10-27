@@ -363,6 +363,7 @@ xt_value type_proto(const std::string &name) {
   if (name == "WebGLQuery") return domapi::webgl_object_proto("query");
   if (name == "WebGLSync") return domapi::webgl_object_proto("sync");
   if (name == "WebGLTransformFeedback") return domapi::webgl_object_proto("transformfeedback");
+  if (name == "Path2D") return domapi::path2d_proto();
   if (name == "ImageBitmap") {
     /* A bitmap is a plain immutable object, not a DOM node: a node proto would
      * expose the element width/height accessors and answer 0. */
@@ -408,6 +409,7 @@ xt_value host_type_construct(xt_value self, xt_value env, int32_t argc, xt_value
       name == "InputEvent" || name == "SubmitEvent") {
     return domapi::event_construct(xt_arg(argc, argv, 0), xt_arg(argc, argv, 1));
   }
+  if (name == "Path2D") return domapi::path2d_create(xt_arg(argc, argv, 0));
   xt_value target = xt_object_new_with_proto(type_proto(name));
   set_prop(target, "constructor", type_value(name));
   return target;

@@ -24,13 +24,14 @@ void blend_pixel(unsigned char *pixel, const float color[4], float coverage, flo
 /** Fill one closed polygon loop (already in device space) with `paint`,
  * anti-aliased, blending source-over. */
 void fill_loop(std::vector<unsigned char> &pixels, int width, int height,
-               const std::vector<CanvasPoint> &loop, const CanvasPaint &paint, float alpha);
+               const std::vector<CanvasPoint> &loop, const CanvasPaint &paint, float alpha,
+               bool even_odd = false);
 
 /** Fill several loops as one path with the nonzero winding rule (so a contour
- * inside another punches a hole). */
+ * inside another punches a hole), or the even-odd rule. */
 void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<std::vector<CanvasPoint>> &loops, const CanvasPaint &paint,
-                float alpha);
+                float alpha, bool even_odd = false);
 
 /** Fill a device-space axis-aligned rectangle, anti-aliased. Used by the
  * `fillRect`/`clearRect` fast path when the transform preserves axis
@@ -58,10 +59,12 @@ void draw_image_affine(std::vector<unsigned char> &pixels, int width, int height
                        float sy, float sw, float sh, const CanvasTransform &transform,
                        float alpha);
 
-/** Composite one grayscale glyph bitmap at `(x, baselineY)` with `paint`. */
+/** Composite one grayscale glyph bitmap at `(x, baselineY)` with `paint`.
+ * `scale_x` < 1 condenses the bitmap horizontally (`fillText`'s `maxWidth`). */
 void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<unsigned char> &glyph, int glyphWidth, int glyphHeight, int left,
-                int top, float x, float baselineY, const CanvasPaint &paint, float alpha);
+                int top, float x, float baselineY, float scale_x, const CanvasPaint &paint,
+                float alpha);
 
 }  // namespace canvas_detail
 }  // namespace xtgui

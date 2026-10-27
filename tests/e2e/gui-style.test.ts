@@ -139,6 +139,66 @@ describe.skipIf(!guiAvailable)("gui extension — style", () => {
     expect(value("focus-bg")).toBe("rgb(0, 255, 0)"); // :focus wins over :hover
   });
 
+  it("parses selector lists that span lines", () => {
+    const { value } = harness.compileAndRun(
+      "multiline-selectors",
+      `
+      import { createWindow, run } from "gui";
+
+      const ACCENT = "#ff0000";
+      // A template default exercises the parser's template continuation while
+      // the page itself keeps its selector lists on separate lines.
+      const page = (gap = \`\${4}px\`) => \`
+      <html><head><style>
+        .one,
+        .two,
+        .three {
+          color: \${ACCENT};
+          padding-top: \${gap};
+        }
+        .wrap
+          > .child,
+        .other { width: 55%; }
+        [data-label='a,b'],
+        [data-x=']'] { font-size: 12px; }
+      </style></head><body>
+        <div class="one" data-label="a,b">1</div>
+        <div class="two" data-x="]">2</div>
+        <div class="three">3</div>
+        <div class="wrap"><div class="child">c</div></div>
+        <div class="other">o</div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "multiline-selectors", width: 400, height: 300 });
+      win.on("ready", () => {
+        for (const selector of [".one", ".two", ".three"]) {
+          console.log(selector + "=" + win.computedStyle(selector, "color"));
+        }
+        console.log("pad=" + win.computedStyle(".one", "padding-top"));
+        console.log("child-width=" + win.computedStyle(".wrap > .child", "width"));
+        console.log("other-width=" + win.computedStyle(".other", "width"));
+        console.log("quoted=" + win.computedStyle("[data-label='a,b']", "font-size"));
+        console.log("bracket=" + win.computedStyle("[data-x=']']", "font-size"));
+        console.log("count=" + win.queryCount(".one,\\n.two"));
+        win.close();
+      });
+      win.loadHTML(page());
+      run();
+      `,
+    );
+
+    expect(value(".one")).toBe("rgb(255, 0, 0)");
+    expect(value(".two")).toBe("rgb(255, 0, 0)");
+    expect(value(".three")).toBe("rgb(255, 0, 0)");
+    expect(value("pad")).toBe("4px"); // the template default
+    expect(value("child-width")).toBe("55%");
+    expect(value("other-width")).toBe("55%");
+    expect(value("quoted")).toBe("12px"); // comma inside a quoted value
+    expect(value("bracket")).toBe("12px"); // `]` inside a quoted value
+    expect(value("count")).toBe("2"); // a selector list in queryCount
+  });
+
   it("interpolates CSS transitions as the clock advances", () => {
     const { value } = harness.compileAndRun(
       "transition",

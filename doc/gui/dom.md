@@ -14,9 +14,12 @@ close rules (`li`, `dt`/`dd`, `option`, `p`, headings, table cells/rows).
 **CSS parser** (`runtime/ext_gui/css.{h,cpp}`): comments are stripped; `@media`
 blocks are parsed recursively (nested queries combine with `and`, and a comma
 list distributes over the inner query) while other at-rules are skipped. Rules
-support multiple selectors and declarations. Selectors: type, `.class`, `#id`,
-attribute (`=`, `~=`, `|=`, `^=`, `$=`, `*=`), the four combinators
-(descendant, child, adjacent and general sibling), the pseudo-classes
+support multiple selectors and declarations; a selector list may be formatted
+across any number of lines (line breaks are ordinary whitespace, so a wrapped
+combinator stays a combinator), and a quoted attribute value may contain
+commas, brackets or parentheses without splitting the list. Selectors: type,
+`.class`, `#id`, attribute (`=`, `~=`, `|=`, `^=`, `$=`, `*=`), the four
+combinators (descendant, child, adjacent and general sibling), the pseudo-classes
 `:first-child`, `:last-child`, `:only-child`, `:empty`, `:root`, `:not(...)`,
 `:nth-child(an+b)`, `:disabled`, `:checked`, plus the stateful `:hover` and
 `:focus` (see [Input](./input.md)), and the pseudo-elements `::before`/`::after`

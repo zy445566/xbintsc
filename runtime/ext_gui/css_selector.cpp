@@ -16,11 +16,29 @@ class SelectorParser {
     std::vector<ComplexSelector> selectors;
     size_t start = 0;
     int depth = 0;
+    char quote = 0;
+    /* Split at top-level commas. A selector list may be formatted across any
+     * number of lines: newlines are ordinary CSS whitespace, and `parseComplex`
+     * turns a whitespace run into a descendant combinator. Quoted attribute
+     * values are skipped so a `,`/`(`/`[` inside them cannot unbalance the
+     * split (an attribute value may itself span lines). */
     for (size_t i = 0; i <= text_.size(); i++) {
       char c = (i < text_.size()) ? text_[i] : ',';
-      if (c == '(' || c == '[') depth++;
-      else if (c == ')' || c == ']') depth--;
-      else if (c == ',' && depth == 0) {
+      if (quote != 0) {
+        if (c == '\\' && i + 1 < text_.size()) {
+          i++;
+          continue;
+        }
+        if (c == quote) quote = 0;
+        continue;
+      }
+      if (c == '"' || c == '\'') {
+        quote = c;
+      } else if (c == '(' || c == '[') {
+        depth++;
+      } else if (c == ')' || c == ']') {
+        if (depth > 0) depth--;
+      } else if (c == ',' && depth == 0) {
         std::string part = text_.substr(start, i - start);
         ComplexSelector selector;
         if (parseComplex(part, &selector) && !selector.compounds.empty()) {

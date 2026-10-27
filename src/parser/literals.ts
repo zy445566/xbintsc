@@ -206,10 +206,8 @@ export const literalMethods: LiteralMethods = {
       } as unknown as TemplateLiteral;
     }
     if (startToken.kind === TokenKind.Backtick) {
-      // Re-scan from the backtick so the scanner produces a TemplateHead.
-      this.scanner.seek(startToken.start);
-      this.tokens = [this.scanner.nextToken()];
-      this.index = 0;
+      // Re-scan from the backtick so the scanner produces a template token.
+      this.rescanFrom(startToken.start);
       return this.parseTemplateLiteral();
     }
     const head = String(startToken.value ?? "");
@@ -222,11 +220,9 @@ export const literalMethods: LiteralMethods = {
         this.error(DiagnosticCode.UnterminatedTemplate, "Expected '}' to close template substitution");
         return { kind: SyntaxKind.TemplateLiteral, head, raw: headRaw, spans, start: startToken.start, end: this.token.end };
       }
-      // The `}` terminates a substitution; re-read it as template text without
-      // first scanning the following (template) characters as normal tokens.
-      const closeStart = this.token.start;
-      this.tokens = [this.scanner.continueTemplate(closeStart)];
-      this.index = 0;
+      // The `}` terminates a substitution; the token after it is the template
+      // continuation (the token stream re-reads that source as literal text).
+      this.nextToken();
       const literalToken = this.token;
       if (literalToken.kind === TokenKind.NoSubstitutionTemplateLiteral) {
         this.nextToken();
@@ -287,9 +283,7 @@ export const literalMethods: LiteralMethods = {
     const flagsStart = i;
     while (i < text.length && /[a-z]/i.test(text[i]!)) i++;
     const flags = text.slice(flagsStart, i);
-    this.scanner.seek(i);
-    this.tokens = [this.scanner.nextToken()];
-    this.index = 0;
+    this.rescanFrom(i);
     return { kind: SyntaxKind.RegularExpressionLiteral, text: text.slice(token.start, i), pattern, flags, start: token.start, end: i };
   },
 };

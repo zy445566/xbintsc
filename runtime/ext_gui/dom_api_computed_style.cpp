@@ -4,9 +4,10 @@
  * The handle reads through the *cascade* (`XtDocument::styleOf`), not the
  * element's inline `style` object, and exposes the result both as named
  * properties (`cs.width`, via the runtime's dynamic-property hooks) and through
- * `getPropertyValue`. Each read flushes a pending restyle first, so the handle
- * stays correct after later DOM mutations, and `::before`/`::after` resolve the
- * current generated-content node instead of a stale pointer.
+ * `getPropertyValue`/`getPropertyPriority`. Each read flushes a pending restyle
+ * first, so the handle stays correct after later DOM mutations, and
+ * `::before`/`::after` resolve the current generated-content node instead of a
+ * stale pointer.
  */
 
 #include "dom_api_internal.h"
@@ -18,14 +19,18 @@ namespace domapi {
 
 namespace {
 
-enum ComputedPseudo { kPseudoNone = 0, kPseudoBefore = 1, kPseudoAfter = 2 };
+/** Which pseudo-element the handle addresses. `kPseudoUnknown` is a pseudo the
+ * engine never generates (`::marker`, `::selection`, …): it keeps answering
+ * empty values instead of falling back to the parent element's style. */
+enum ComputedPseudo { kPseudoNone = 0, kPseudoBefore = 1, kPseudoAfter = 2, kPseudoUnknown = 3 };
 
 int pseudo_from_argument(xt_value value) {
   if (!XT_IS_STRING(value)) return kPseudoNone;
   std::string text = xtgui::xt_css_lower(xtgui::xt_css_trim(to_string_value(value)));
+  if (text.empty()) return kPseudoNone;
   if (text == "::before" || text == ":before") return kPseudoBefore;
   if (text == "::after" || text == ":after") return kPseudoAfter;
-  return kPseudoNone;
+  return kPseudoUnknown;
 }
 
 const xtgui::XtStyle *computed_style_of(xt_value self) {
@@ -36,6 +41,7 @@ const xtgui::XtStyle *computed_style_of(xt_value self) {
   xt_gui_flush_dom(win);
   xt_value sideValue = xt_object_get_cstr(self, "__xt_gui_pseudo");
   int side = XT_IS_NUMBER(sideValue) ? (int)xt_to_number(sideValue) : kPseudoNone;
+  if (side == kPseudoUnknown) return nullptr;
   if (side == kPseudoBefore) node = node->pseudo_before;
   else if (side == kPseudoAfter) node = node->pseudo_after;
   if (node == nullptr) return nullptr;
@@ -84,27 +90,7 @@ int computed_view_set(xt_value self, xt_value key, xt_value value, void *data) {
 const xt_object_hooks kComputedStyleHooks = {computed_view_get, computed_view_set, nullptr,
                                              nullptr, nullptr};
 
-xt_value g_computed_proto = XT_UNDEFINED;
-
 }  // namespace
-
-xt_value computed_style_proto() {
-  if (XT_IS_OBJECT(g_computed_proto)) return g_computed_proto;
-  g_computed_proto = xt_object_new();
-  xt_gc_add_root(&g_computed_proto);
-  xt_object_set(g_computed_proto, xt_string_from_cstr("getPropertyValue"),
-                xt_closure_new((void *)computed_style_get_property_value, 0, nullptr));
-  return g_computed_proto;
-}
-
-xt_value computed_style_handle(xt_value element, xt_value pseudo) {
-  xt_value handle = xt_object_new_with_proto(computed_style_proto());
-  xt_object_set(handle, xt_string_from_cstr("__xt_gui_element"), element);
-  xt_object_set(handle, xt_string_from_cstr("__xt_gui_pseudo"),
-                xt_number((double)pseudo_from_argument(pseudo)));
-  xt_object_set_hooks(handle, &kComputedStyleHooks, nullptr);
-  return handle;
-}
 
 #define METHOD(name) xt_value name(xt_value self, xt_value env, int32_t argc, xt_value *argv)
 
@@ -115,6 +101,24 @@ METHOD(computed_style_get_property_value) {
       computed_value(computed_style_of(self), to_string_value(xt_arg(argc, argv, 0))).c_str());
 }
 
+/** Computed styles never carry a declaration priority (spec: always ""). */
+METHOD(computed_style_get_property_priority) {
+  (void)self;
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return xt_string_from_cstr("");
+}
+
 #undef METHOD
+
+xt_value computed_style_handle(xt_value element, xt_value pseudo) {
+  xt_value handle = xt_object_new_with_proto(computed_style_proto());
+  xt_object_set(handle, xt_string_from_cstr("__xt_gui_element"), element);
+  xt_object_set(handle, xt_string_from_cstr("__xt_gui_pseudo"),
+                xt_number((double)pseudo_from_argument(pseudo)));
+  xt_object_set_hooks(handle, &kComputedStyleHooks, nullptr);
+  return handle;
+}
 
 }  // namespace domapi

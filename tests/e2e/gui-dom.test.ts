@@ -107,6 +107,82 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
     expect(value("stopped")).toBe("inner");
   });
 
+  it("honours the style object, computed style and geometry arguments", () => {
+    const { value } = harness.compileAndRun(
+      "dom-style-args",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #box { width: 100px; height: 40px; margin-top: 10px; }
+        #box::before { content: "hi"; color: #123456; }
+      </style></head><body>
+        <div id="box">x</div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "dom-style-args", width: 400, height: 300 });
+      win.on("ready", () => {
+        const doc = win.document;
+        const box: any = doc.getElementById("box");
+        const cl = box.classList;
+
+        // toggle(name, force) is idempotent; toggle(name) still flips.
+        console.log("t1=" + cl.toggle("on", true) + ":" + box.className);
+        console.log("t2=" + cl.toggle("on", true) + ":" + box.className);
+        console.log("t3=" + cl.toggle("on", false) + ":" + box.className);
+        console.log("t4=" + cl.toggle("on", false) + ":" + box.className);
+        console.log("t5=" + cl.toggle("on") + ":" + box.className);
+
+        box.style.setProperty("color", "#ff0000", "important");
+        console.log("p1=" + box.style.getPropertyValue("color") + ":" + box.style.getPropertyPriority("color"));
+        box.style.setProperty("color", "#0000ff");
+        console.log("p2=" + box.style.getPropertyPriority("color") + ":" + getComputedStyle(box).getPropertyValue("color"));
+        // An invalid priority makes the call a no-op, as in the CSSOM.
+        box.style.setProperty("color", "#00ff00", "urgent");
+        console.log("p3=" + box.style.getPropertyValue("color"));
+        console.log("rm=" + box.style.removeProperty("color") + ":" + box.style.getPropertyValue("color"));
+
+        box.style.cssText = "background-color: #010203; width: 55px";
+        console.log("ct=" + box.style.getPropertyValue("width") + ":" + box.style.getPropertyValue("background-color"));
+
+        const cs: any = getComputedStyle(box);
+        console.log("cs=" + cs.getPropertyValue("display") + ":" + cs.getPropertyValue("width") +
+                    ":" + cs.getPropertyPriority("width") + ":" + cs.getPropertyValue("margin-top"));
+        const before: any = getComputedStyle(box, "::before");
+        console.log("before=" + before.getPropertyValue("content") + ":" + before.getPropertyValue("color"));
+        console.log("unsupported-pseudo=" + getComputedStyle(box, "::marker").getPropertyValue("color"));
+
+        doc.title = "changed";
+        console.log("title=" + doc.title);
+
+        const rect: any = box.getBoundingClientRect();
+        console.log("rect=" + rect.x + "," + rect.y + "," + rect.top + "," + rect.right + "," +
+                    rect.bottom + "," + rect.left + "," + rect.width);
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("t1")).toBe("true:on");
+    expect(value("t2")).toBe("true:on");
+    expect(value("t3")).toBe("false:");
+    expect(value("t4")).toBe("false:");
+    expect(value("t5")).toBe("true:on");
+    expect(value("p1")).toBe("#ff0000:important");
+    expect(value("p2")).toBe(":rgb(0, 0, 255)");
+    expect(value("p3")).toBe("#0000ff");
+    expect(value("rm")).toBe("#0000ff:");
+    expect(value("ct")).toBe("55px:#010203");
+    expect(value("cs")).toBe("block:55px::10px");
+    expect(value("before")).toBe('"hi":rgb(18, 52, 86)');
+    expect(value("unsupported-pseudo")).toBe("");
+    expect(value("title")).toBe("changed");
+    expect(value("rect")).toBe("0,10,10,55,50,0,55");
+  });
   it("writes style and dataset properties through named access", () => {
     const { value } = harness.compileAndRun(
       "dom-properties",

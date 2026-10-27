@@ -27,6 +27,7 @@ extern xt_value g_document_proto;
 extern xt_value g_event_proto;
 extern xt_value g_class_list_proto;
 extern xt_value g_style_proto;
+extern xt_value g_computed_style_proto;
 extern xt_value g_canvas_proto;
 extern xt_value g_canvas_gradient_proto;
 extern xt_value g_webgl_proto;
@@ -49,16 +50,32 @@ xt_value document_proto();
 xt_value event_proto();
 xt_value class_list_proto();
 xt_value style_proto();
+xt_value computed_style_proto();
 xt_value canvas_proto();
 xt_value canvas_gradient_proto();
 xt_value webgl_proto();
 xt_value webgl2_proto();
+/** `AbortController` / `AbortSignal` prototypes and constructors. */
+xt_value abort_controller_proto();
+xt_value abort_signal_proto();
+xt_value abort_controller_new();
+xt_value abort_signal_new(bool aborted);
 /** The prototype a WebGL object of `kind` inherits (`buffer`, `texture`, …),
  * so `buffer instanceof WebGLBuffer` holds. */
 xt_value webgl_object_proto(const std::string &kind);
 
 /** Create/return the 2D context for a pending `<canvas>` handle (before load). */
 xt_value xt_canvas_pending_context(xt_value self, XtGuiWindow *win);
+
+/* -- Path2D --------------------------------------------------------------- */
+
+/** True when `value` is a `Path2D` handle. */
+bool path2d_is(xt_value value);
+/** The user-space subpaths a `Path2D` handle holds. */
+std::vector<xtgui::CanvasSubpath> path2d_subpaths(xt_value value);
+/** `new Path2D()` / `new Path2D(other)`. */
+xt_value path2d_create(xt_value source);
+xt_value path2d_proto();
 
 /* -- canvas helpers shared by `dom_api_canvas*.cpp` ----------------------- */
 
@@ -158,6 +175,7 @@ METHOD(doc_hidden_get);
 METHOD(doc_visibility_state_get);
 METHOD(doc_ready_state_get);
 METHOD(doc_title_get);
+METHOD(doc_title_set);
 METHOD(doc_default_view_get);
 METHOD(doc_create_text_node);
 METHOD(doc_body_get);
@@ -219,6 +237,7 @@ xt_value event_construct(xt_value type, xt_value init);
 METHOD(event_prevent_default);
 METHOD(event_stop_propagation);
 METHOD(event_stop_immediate_propagation);
+METHOD(event_composed_path);
 
 /* media (`<video>`/`<audio>`) */
 METHOD(node_play);
@@ -290,6 +309,7 @@ METHOD(canvas_fill_text);
 METHOD(canvas_stroke_text);
 METHOD(canvas_draw_image);
 METHOD(canvas_get_image_data);
+METHOD(canvas_get_context_attributes);
 METHOD(canvas_ellipse);
 METHOD(canvas_round_rect);
 METHOD(canvas_line_cap_get);
@@ -316,7 +336,10 @@ METHOD(class_list_contains);
 /* style methods */
 METHOD(style_set_property);
 METHOD(style_get_property_value);
+METHOD(style_get_property_priority);
 METHOD(style_remove_property);
+METHOD(style_css_text_get);
+METHOD(style_css_text_set);
 METHOD(style_length_get);
 METHOD(style_item);
 /** Install the dynamic named-property hooks on a `style` handle
@@ -326,6 +349,7 @@ void install_style_hooks(xt_value style);
 /* `dataset` (a DOMStringMap over `data-*` attributes) and computed style */
 METHOD(node_dataset_get);
 METHOD(computed_style_get_property_value);
+METHOD(computed_style_get_property_priority);
 /** Build the computed-style handle for an element (and optional pseudo). */
 xt_value computed_style_handle(xt_value element, xt_value pseudo);
 xt_value computed_style_proto();

@@ -4,9 +4,10 @@
  * three.js's `WebGLRenderer` runs unchanged on this engine's real WebGL 2
  * backend; no Canvas2D fallback (and no renderer wrapper) is needed. The one
  * shader-side workaround is its `unrollLoops` pass: its lazy global regex does
- * not behave reliably on this runtime, and the shader rewriter already defines
- * `UNROLLED_LOOP_INDEX` and keeps the numeric `for` loop. Disabling the pattern
- * therefore leaves valid GLSL instead of a half-expanded loop.
+ * not behave reliably on this runtime. The shader rewriter expands
+ * `#pragma unroll_loop_start` itself (and substitutes `UNROLLED_LOOP_INDEX`),
+ * so disabling the JavaScript pass leaves valid GLSL instead of a
+ * half-expanded loop.
  */
 
 import type { AssetLoadResult } from "../registry.js";

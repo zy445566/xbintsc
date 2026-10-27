@@ -223,6 +223,16 @@ xt_value webgl_proto() {
   define_getter(proto, "canvas", (void *)webgl_canvas_get);
   define_getter(proto, "drawingBufferWidth", (void *)webgl_drawing_buffer_width_get);
   define_getter(proto, "drawingBufferHeight", (void *)webgl_drawing_buffer_height_get);
+  /* `gl.constructor.name` is how three.js tells a WebGL 2 context from a
+   * WebGL 1 one. A host-type value from `xt_browser_type` later replaces this
+   * with the real constructor (and its `prototype`), but the context must
+   * answer the name even when the page never read the global. */
+  {
+    xt_value constructor = xt_object_new();
+    xt_object_set(constructor, xt_string_from_cstr("name"),
+                  xt_string_from_cstr("WebGLRenderingContext"));
+    xt_object_set(proto, xt_string_from_cstr("constructor"), constructor);
+  }
   g_webgl_proto = proto;
   return proto;
 }

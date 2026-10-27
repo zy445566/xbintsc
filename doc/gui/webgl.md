@@ -23,8 +23,11 @@ display.
 Both **WebGL 1.0** and **WebGL 2.0** are available. A canvas keeps the first
 context kind it asks for: after `getContext("webgl2")` a later
 `getContext("webgl")` answers `null`, and the other way round. A WebGL 2 context
-also satisfies `instanceof WebGLRenderingContext` (its prototype inherits the
-WebGL 1 one) and adds the WebGL 2 constants and methods.
+has its own `WebGL2RenderingContext` prototype (with a copy of the WebGL 1
+constants and methods), so `gl instanceof WebGL2RenderingContext` is true while
+`gl instanceof WebGLRenderingContext` is false, like a browser — libraries such
+as three.js use exactly that check to pick their WebGL 2 path. `gl.constructor.name`
+reports the type as well.
 
 ## How a frame reaches the screen
 
@@ -54,8 +57,9 @@ format, so the engine ships two statically linked translators:
 
 - **glslang** compiles the rewritten GLSL to SPIR-V, which the Vulkan backend
   consumes directly;
-- **SPIRV-Cross** cross-compiles that same SPIR-V to Metal Shading Language text,
-  which the Metal backend compiles at run time.
+- **SPIRV-Cross** cross-compiles that same SPIR-V to Metal Shading Language 2.0
+  text (needed for arrays of textures/samplers), which the Metal backend
+  compiles at run time.
 
 Both live in `gui.a` / `gui.lib`; the Metal path reuses the SPIR-V module rather
 than growing a second GLSL front end, so both backends accept exactly the same
@@ -96,9 +100,13 @@ reflected offsets; `uniform1i` on a sampler stores the texture unit. The block
 is pushed with the dynamic uniform-buffer API on every draw.
 
 Limits of the translator: struct-typed uniforms, user uniform blocks, uniform
-arrays whose size is not resolved by the preprocessor, sampler arrays are rejected (the link/shader info log says so). Shader code inside
-`#ifdef` is fine; non-sampler uniform declarations are moved to the enclosing
-top-level position so the block stays unconditional.
+arrays whose size is not resolved by the preprocessor, and a sampler array
+indexed by a non-constant expression are rejected (the link/shader info log
+says so). A `#pragma unroll_loop_start` loop is expanded before rewriting, so
+the `sampler2D shadowMap[ NUM_DIR_LIGHT_SHADOWS ]` / `shadowMap[ i ]` shape
+three.js emits becomes constant-indexed. Shader code inside `#ifdef` is fine;
+non-sampler uniform declarations are moved to the enclosing top-level position
+so the block stays unconditional.
 
 ### GLSL ES 3.00 (WebGL 2)
 
@@ -299,9 +307,11 @@ same assertions as the SPIR-V one.
 
 ## three.js
 
-The `.js` asset loader only patches three.js's shader unroller; `WebGLRenderer`
-runs unchanged on this engine's real WebGL 2 backend, so **no Canvas2D fallback
-is bundled any more**. Verified with three.js r160 through SDL_GPU:
+The shader rewriter expands three.js's `#pragma unroll_loop_start` loops into
+constant indices (its sampler arrays would otherwise fail Vulkan GLSL), and the
+`.js` asset loader keeps the renderer's own unroller out of the way.
+`WebGLRenderer` runs unchanged on this engine's real WebGL 2 backend, so **no
+Canvas2D fallback is bundled any more**. Verified with three.js r160 through SDL_GPU:
 `MeshBasicMaterial`, `MeshStandardMaterial` and `MeshPhongMaterial`,
 `CanvasTexture`, linear fog, ambient/directional/point/spot/hemisphere lights,
 `Sprite`, `Line`, `Points` and `InstancedMesh`.

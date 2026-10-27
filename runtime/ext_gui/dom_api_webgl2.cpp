@@ -121,12 +121,44 @@ xt_value uint_array(const unsigned int *values, int count) {
 xt_value webgl2_proto() {
   xt_gc_add_root(&g_webgl2_proto);
   if (XT_IS_OBJECT(g_webgl2_proto)) return g_webgl2_proto;
-  xt_value proto = xt_object_new_with_proto(webgl_proto());
+  /* WebGL 2 shares the WebGL 1 surface but not its prototype: in a browser
+   * `gl2 instanceof WebGLRenderingContext` is false, which is how three.js and
+   * other libraries detect WebGL 2. Copy the WebGL 1 members instead of
+   * inheriting the WebGL 1 prototype. */
+  xt_value webgl1 = webgl_proto();
+  xt_value proto = xt_object_new();
+  xt_value keys = xt_object_keys(webgl1);
+  const double count = xt_to_number(xt_array_length(keys));
+  for (int32_t i = 0; i < (int32_t)count; i++) {
+    xt_value key = xt_array_get(keys, xt_number((double)i));
+    const char *name = xt_string_data(key);
+    if (name == nullptr) continue;
+    /* `constructor` gets the WebGL 2 name below. The three host getters are
+     * accessors, not values: reading them here would run them against the
+     * WebGL 1 prototype and copy `undefined`. Reinstall them as accessors. */
+    if (strcmp(name, "constructor") == 0 || strcmp(name, "canvas") == 0 ||
+        strcmp(name, "drawingBufferWidth") == 0 || strcmp(name, "drawingBufferHeight") == 0) {
+      continue;
+    }
+    xt_object_set(proto, key, xt_object_get(webgl1, key));
+  }
+  xt_object_define_getter(proto, xt_string_from_cstr("canvas"),
+                          xt_closure_new((void *)webgl_canvas_get, 0, nullptr));
+  xt_object_define_getter(proto, xt_string_from_cstr("drawingBufferWidth"),
+                          xt_closure_new((void *)webgl_drawing_buffer_width_get, 0, nullptr));
+  xt_object_define_getter(proto, xt_string_from_cstr("drawingBufferHeight"),
+                          xt_closure_new((void *)webgl_drawing_buffer_height_get, 0, nullptr));
 #define XT_WEBGL2_CONSTANT(name, value) \
   xt_object_set(proto, xt_string_from_cstr(#name), xt_number((double)(value)));
   XT_WEBGL2_CONSTANTS(XT_WEBGL2_CONSTANT)
 #undef XT_WEBGL2_CONSTANT
   for (const MethodEntry &method : kMethods) define_method(proto, method.name, method.fn);
+  {
+    xt_value constructor = xt_object_new();
+    xt_object_set(constructor, xt_string_from_cstr("name"),
+                  xt_string_from_cstr("WebGL2RenderingContext"));
+    xt_object_set(proto, xt_string_from_cstr("constructor"), constructor);
+  }
   g_webgl2_proto = proto;
   return proto;
 }

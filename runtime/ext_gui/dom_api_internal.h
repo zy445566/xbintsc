@@ -174,6 +174,7 @@ METHOD(doc_create_element_ns);
 METHOD(doc_hidden_get);
 METHOD(doc_visibility_state_get);
 METHOD(doc_ready_state_get);
+METHOD(doc_has_focus);
 METHOD(doc_title_get);
 METHOD(doc_title_set);
 METHOD(doc_default_view_get);

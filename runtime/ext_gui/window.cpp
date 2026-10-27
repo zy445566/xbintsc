@@ -58,6 +58,9 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win != nullptr) {
     win->html = html;
+    /* A fresh document starts at the top of the page. */
+    win->scroll_x = 0.0f;
+    win->scroll_y = 0.0f;
     /* Fresh document: invalidate every previously handed-out handle, and drop
      * the decoders that belonged to the old tree. */
     xt_gui_handles_reset(win);

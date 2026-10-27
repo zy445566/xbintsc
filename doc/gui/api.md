@@ -35,11 +35,27 @@ path for `event.composedPath()`. `new Event(...)`, `new CustomEvent(...)`,
 `new MouseEvent(...)`, `new KeyboardEvent(...)`, `new PointerEvent(...)`,
 `new WheelEvent(...)`, `new FocusEvent(...)`, `new InputEvent(...)` and
 `new SubmitEvent(...)` keep every field of their `init` object (`detail`,
-`composed`, the mouse/keyboard members, …).
-Events emitted:
-`ready` (after the first presented frame), `load`, `close`, `resize` and the
-input events `mousemove`, `mousedown`, `mouseup`, `click`, `wheel`, `keydown`,
-`keyup`.
+`composed`, the mouse/keyboard members, …). Window listeners take the same bag
+(capture is part of listener identity; window delivery has no capture phase).
+
+Window navigation is real: `scrollTo(x, y)` / `scrollTo({ left, top })` /
+`scrollBy(...)` move the page viewport (clamped to the content bounds; painting
+and hit testing follow it), and `scrollX` / `scrollY` / `pageXOffset` /
+`pageYOffset` report it. `focus()` raises the OS window and sets
+`document.hasFocus()`; `blur()` clears it. Events emitted:
+`ready` (after the first presented frame), `load`, `close`, `resize`, `scroll`,
+`focus`, `blur` and the input events `mousemove`, `mousedown`, `mouseup`,
+`click`, `wheel`, `keydown`, `keyup`.
+
+`createWindow(options)` honours more than the title and size:
+`{ title, width, height, highDensity, resizable, borderless, alwaysOnTop,
+hidden, fullscreen, x, y, opacity, maximized, minimized }` map to the matching
+SDL window flags/calls instead of being ignored.
+
+`window.confirm(message)` / `window.prompt(message, defaultValue)` never drop
+their arguments: with `XT_GUI_DIALOGS=1` and a live window they show a native
+message box; otherwise the message goes to stderr and the documented default is
+returned (`confirm` → `false`, `prompt` → `defaultValue` or `""`).
 
 On Windows a GUI program is linked as a **Windows-subsystem** executable, so
 launching it does not flash a console window. That also means stdout/stderr go
@@ -81,7 +97,7 @@ requestAnimationFrame(frame);
 | `ImageBitmap`, `createImageBitmap(source)` | immutable bitmaps backed by decoded pixels (`<img>`, `<canvas>`, `<video>` frames and `ImageData` shapes); the promise resolves immediately and `texImage2D` accepts the result |
 | `ImageData`, `OffscreenCanvas`, `XRWebGL*`, `Request`, `Headers`, `Response`, `ReadableStream`, `DOMParser` | `typeof` probes answer `"undefined"` (no XR/fetch/streaming backend), which lets a page take its "unsupported" branch instead of calling a no-op stub. Three.js pages use its real renderer on this backend (see [Known issues](./known-issues.md)). |
 | `requestAnimationFrame` / `cancelAnimationFrame` | queued on the window's frame list; see [Runtime integration](./runtime.md) |
-| `alert` / `confirm` / `prompt`, `matchMedia`, `getComputedStyle`, `escape` | host implementations (Annex B `escape` encodes per UTF-16 code unit, matching `decodeURIComponent(escape(bytes))`) |
+| `alert` / `confirm` / `prompt`, `matchMedia`, `getComputedStyle`, `escape` | host implementations. `matchMedia` returns a **live** list (cached per query): `matches` is re-evaluated on resize and `change` listeners fire when it flips. `confirm`/`prompt` use a native dialog only with `XT_GUI_DIALOGS=1`; otherwise they report the message on stderr and return the documented default (Annex B `escape` encodes per UTF-16 code unit, matching `decodeURIComponent(escape(bytes))`) |
 
 `getElementById` / `querySelector` are answered even before `loadHTML` runs: the
 handle is *pending* and binds to the real node the first time it is used, so a

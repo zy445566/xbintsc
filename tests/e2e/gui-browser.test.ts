@@ -189,4 +189,75 @@ describe.skipIf(!guiAvailable)("gui extension — browser globals", () => {
     expect(run.stdout).toContain("started");
     expect(value("frames")).toBe("5");
   });
+
+  it("scrolls the page, focuses the window, answers dialogs and reports media changes", () => {
+    const { value, stderr } = harness.compileAndRun(
+      "navigation",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>body { margin: 0; }</style></head><body style="height:1000px">
+        <div id="far" style="position:absolute;top:205px;left:0;width:10px;height:20px"></div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "navigation", width: 300, height: 300 });
+      win.on("ready", () => {
+        const doc = win.document;
+        const far: any = doc.getElementById("far");
+        console.log("scroll0=" + window.scrollX + ":" + window.scrollY + ":" + window.pageYOffset);
+        window.scrollTo(0, 200);
+        console.log("scroll1=" + window.scrollY + ":" + win.hitTest(5, 5));
+        win.sendEvent("wheel", { x: 5, y: 5, deltaY: 100 });
+        console.log("wheel=" + window.scrollY);
+        window.scrollTo({ left: 0, top: 50 });
+        console.log("scroll2=" + window.scrollX + ":" + window.scrollY);
+
+        window.scrollTo(0, 700);
+        far.focus();
+        console.log("focus-scroll=" + window.scrollY);
+        window.scrollTo(0, 700);
+        far.focus({ preventScroll: true });
+        console.log("prevent-scroll=" + window.scrollY);
+        console.log("has-focus=" + doc.hasFocus());
+        win.focus();
+        console.log("focused=" + doc.hasFocus());
+        win.blur();
+        console.log("blurred=" + doc.hasFocus());
+
+        console.log("confirm=" + confirm("Delete?"));
+        console.log("prompt=" + prompt("Name?", "abc"));
+
+        const mq: any = matchMedia("(min-width: 400px)");
+        let changes = 0;
+        mq.addEventListener("change", () => { changes++; });
+        console.log("mq0=" + mq.matches);
+        win.setSize(500, 300);
+        win.setTimeout(() => {
+          console.log("mq1=" + mq.matches + ":" + changes);
+          win.close();
+        }, 150);
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+      { autocloseMs: 3000 },
+    );
+
+    expect(value("scroll0")).toBe("0:0:0");
+    expect(value("scroll1")).toBe("200:div#far");
+    expect(value("wheel")).toBe("300");
+    expect(value("scroll2")).toBe("0:50");
+    expect(value("focus-scroll")).toBe("205");
+    expect(value("prevent-scroll")).toBe("700");
+    expect(value("has-focus")).toBe("false");
+    expect(value("focused")).toBe("true");
+    expect(value("blurred")).toBe("false");
+    expect(value("confirm")).toBe("false");
+    expect(value("prompt")).toBe("abc");
+    expect(stderr).toContain("confirm: Delete?");
+    expect(stderr).toContain("prompt: Name?");
+    expect(value("mq0")).toBe("false");
+    expect(value("mq1")).toBe("true:1");
+  });
 });

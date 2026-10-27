@@ -246,6 +246,34 @@ void xt_paint_build(const LayoutBox *root, DisplayList &out, float viewportWidth
   paintBox(root, out, none, chain, viewportWidth, viewportHeight);
 }
 
+void xt_paint_translate(DisplayList &list, float dx, float dy) {
+  if (dx == 0.0f && dy == 0.0f) return;
+  for (PaintRect &rect : list.rects) {
+    rect.x += dx;
+    rect.y += dy;
+  }
+  for (PaintText &text : list.texts) {
+    text.x += dx;
+    text.baseline += dy;
+  }
+  for (PaintImage &image : list.images) {
+    image.x += dx;
+    image.y += dy;
+  }
+  for (PaintOp &op : list.ops) {
+    op.clip.x += dx;
+    op.clip.y += dy;
+  }
+  for (ClipPathGeometry &path : list.clip_paths) {
+    for (ClipTriangle &triangle : path.triangles) {
+      for (int i = 0; i < 3; i++) {
+        triangle.x[i] += dx;
+        triangle.y[i] += dy;
+      }
+    }
+  }
+}
+
 std::string DisplayList::dump() const {
   std::string text;
   char buffer[320];

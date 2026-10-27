@@ -29,7 +29,6 @@ namespace {
 xt_value g_navigator = XT_UNDEFINED;
 xt_value g_local_storage = XT_UNDEFINED;
 xt_value g_location = XT_UNDEFINED;
-xt_value g_media_list = XT_UNDEFINED;
 xt_value g_document_global = XT_UNDEFINED;
 /** Type name -> the constructor value handed out for it (built on first use). */
 std::unordered_map<std::string, xt_value> g_types;
@@ -156,25 +155,17 @@ xt_value win_location_get(xt_value self, xt_value env, int32_t argc, xt_value *a
   return g_location;
 }
 
-xt_value media_list_build(const std::string &query, bool matches);
-
-/** `matchMedia(query)` -> a MediaQueryList-shaped object evaluated against the
- * current window's viewport, using the same evaluator as `@media` rules. The
- * list is a snapshot (there is no live change event), which matches the
- * engine's restyle-on-resize model. */
+/** `matchMedia(query)` -> a live `MediaQueryList` evaluated against the current
+ * viewport with the same evaluator as `@media` rules. The list is cached per
+ * window and query, and `change` listeners fire when a resize flips it. */
 xt_value win_match_media(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   std::string query;
   if (argc >= 1) query = cstr(xt_arg(argc, argv, 0));
   XtGuiWindow *win = xt_gui_window_from_this(self);
-  if (win == NULL) {
-    xt_value handle = xt_gui_ensure_window();
-    win = xt_gui_window_from_this(handle);
-  }
-  float width = 0.0f;
-  float height = 0.0f;
-  if (win != NULL) xt_gui_window_viewport(win, &width, &height);
-  return media_list_build(query, xtgui::xt_css_media_matches(query, width, height));
+  if (win == NULL) win = xt_gui_window_from_this(xt_gui_ensure_window());
+  if (win == NULL) return xt_object_new();
+  return xt_browser_media_list(win->object, query);
 }
 
 /** `getComputedStyle(el, pseudoElt)`: a live view of the *cascaded* style, so
@@ -197,19 +188,13 @@ xt_value win_alert(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
 }
 
 xt_value win_confirm(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)self;
   (void)env;
-  (void)argc;
-  (void)argv;
-  return XT_FALSE;
+  return xt_browser_confirm(xt_gui_window_from_this(self), argc, argv);
 }
 
 xt_value win_prompt(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)self;
   (void)env;
-  (void)argc;
-  (void)argv;
-  return XT_UNDEFINED;
+  return xt_browser_prompt(xt_gui_window_from_this(self), argc, argv);
 }
 
 /* -- host objects --------------------------------------------------------- */
@@ -252,18 +237,6 @@ xt_value location_build(void) {
   set_method(location, "replace", (void *)noop);
   set_prop(location, "toString", fn_of((void *)noop));
   return location;
-}
-
-xt_value media_list_build(const std::string &query, bool matches) {
-  xt_value list = xt_object_new();
-  set_prop(list, "media", xt_string_from_cstr(query.c_str()));
-  set_prop(list, "matches", matches ? XT_TRUE : XT_FALSE);
-  set_method(list, "addListener", (void *)noop);
-  set_method(list, "removeListener", (void *)noop);
-  set_method(list, "addEventListener", (void *)noop);
-  set_method(list, "removeEventListener", (void *)noop);
-  set_method(list, "dispatchEvent", (void *)noop);
-  return list;
 }
 
 /* -- localStorage --------------------------------------------------------- */
@@ -451,10 +424,6 @@ void ensure_singletons(void) {
     g_location = location_build();
     xt_gc_add_root(&g_location);
   }
-  if (!XT_IS_OBJECT(g_media_list)) {
-    g_media_list = media_list_build("", false);
-    xt_gc_add_root(&g_media_list);
-  }
 }
 
 }  // namespace
@@ -487,9 +456,8 @@ void xt_browser_install_window(xt_value proto) {
   set_method(proto, "confirm", (void *)win_confirm);
   set_method(proto, "prompt", (void *)win_prompt);
   set_method(proto, "escape", (void *)xt_browser_escape);
-  set_method(proto, "focus", (void *)noop);
-  set_method(proto, "blur", (void *)noop);
-  set_method(proto, "scrollTo", (void *)noop);
+  /* Page scroll and window focus/blur live in `browser_navigation.cpp`. */
+  xt_browser_install_window_navigation(proto);
 }
 
 /** `window` / `self`. */
@@ -593,4 +561,8 @@ xt_value xt_browser_alert(int32_t argc, xt_value *argv) {
 
 xt_value xt_browser_prompt(int32_t argc, xt_value *argv) {
   return win_prompt(XT_UNDEFINED, XT_UNDEFINED, argc, argv);
+}
+
+xt_value xt_browser_confirm_global(int32_t argc, xt_value *argv) {
+  return win_confirm(XT_UNDEFINED, XT_UNDEFINED, argc, argv);
 }

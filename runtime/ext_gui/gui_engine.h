@@ -55,6 +55,8 @@ xt_value xt_browser_computed_style(int32_t argc, xt_value *argv);
 xt_value xt_browser_escape(int32_t argc, xt_value *argv);
 xt_value xt_browser_alert(int32_t argc, xt_value *argv);
 xt_value xt_browser_prompt(int32_t argc, xt_value *argv);
+/** The bare `confirm(message)` global (the window method shares the engine). */
+xt_value xt_browser_confirm_global(int32_t argc, xt_value *argv);
 /** Install `innerWidth`, `setTimeout`, `navigator`, … on the window prototype. */
 void xt_browser_install_window(xt_value proto);
 /** Poll and dispatch pending SDL input events once (the browser frame pump in
@@ -158,6 +160,14 @@ struct XtGuiWindow {
   float background[4];
   int width;
   int height;
+  /** Page scroll offset (CSS pixels); painting and hit testing subtract it. */
+  float scroll_x = 0;
+  float scroll_y = 0;
+  /** `document.hasFocus()` state, toggled by `window.focus()` / `blur()`. */
+  int focused = 0;
+  /** Live `matchMedia` lists for this window (one per query string). */
+  std::vector<xt_value> media_lists;
+  std::unordered_map<std::string, xt_value> media_lists_by_query;
 
   /* -- DOM object model (element handles + events) ----------------------- */
   /** `document` handle for this window (lazily created). */
@@ -247,6 +257,22 @@ void xt_gui_render_window(XtGuiWindow *win);
 void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms);
 /** Current logical window size (CSS viewport), in pixels. */
 void xt_gui_window_viewport(XtGuiWindow *win, float *width, float *height);
+/** Scroll the page to `(x, y)` (clamped to the content bounds), repaint and
+ * notify live `matchMedia` lists. */
+void xt_gui_scroll_to(XtGuiWindow *win, float x, float y);
+/** The largest valid scroll offset for the current layout. */
+void xt_gui_scroll_bounds(XtGuiWindow *win, float *max_x, float *max_y);
+/** Re-evaluate every live `matchMedia` list (window resize / scroll). */
+void xt_gui_media_lists_notify(XtGuiWindow *win);
+/** `window.matchMedia(query)`: the cached live list for this window. */
+xt_value xt_browser_media_list(xt_value window, const std::string &query);
+/** `window.confirm` / `window.prompt` (native dialog only when
+ * `XT_GUI_DIALOGS=1`; otherwise the message goes to stderr and the documented
+ * default is returned). */
+xt_value xt_browser_confirm(XtGuiWindow *win, int32_t argc, xt_value *argv);
+xt_value xt_browser_prompt(XtGuiWindow *win, int32_t argc, xt_value *argv);
+/** Install `scrollTo`/`scrollBy`/`scrollX`/`scrollY`/`focus`/`blur`. */
+void xt_browser_install_window_navigation(xt_value proto);
 /** CSS-like descriptor of the deepest element at (x, y), or `""` (test/debug). */
 std::string xt_gui_hit_test(XtGuiWindow *win, float x, float y);
 /** Synthesise a pointer event (`mousemove`/`mousedown`/`mouseup`/`click`). */

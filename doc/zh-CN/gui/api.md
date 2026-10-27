@@ -26,6 +26,23 @@ run();                                 // 驱动主循环，直到所有窗口�
 `options` 参数会被接受并忽略），`closed` getter 对应 `isOpen()`，因此按浏览器
 API 编写的文档可以原样运行。
 
+窗口导航是真实实现的：`scrollTo(x, y)` / `scrollTo({ left, top })` /
+`scrollBy(...)` 移动页面视口（会按内容边界夹取，绘制与命中测试随之偏移），
+`scrollX` / `scrollY` / `pageXOffset` / `pageYOffset` 报告偏移量。`focus()`
+提升操作系统窗口并置位 `document.hasFocus()`，`blur()` 清除它。事件：
+`ready`（首帧呈现后）、`load`、`close`、`resize`、`scroll`、`focus`、`blur`，
+以及输入事件 `mousemove`、`mousedown`、`mouseup`、`click`、`wheel`、
+`keydown`、`keyup`。
+
+`createWindow(options)` 除标题与尺寸外还支持：`{ title, width, height,
+highDensity, resizable, borderless, alwaysOnTop, hidden, fullscreen, x, y,
+opacity, maximized, minimized }`，它们会映射到对应的 SDL 窗口标志/调用，而不是
+被忽略。
+
+`window.confirm(message)` / `window.prompt(message, defaultValue)` 不会再丢弃
+参数：设置 `XT_GUI_DIALOGS=1` 且存在窗口时显示原生消息框；否则把消息写到 stderr
+并返回文档化的默认值（`confirm` → `false`，`prompt` → `defaultValue` 或 `""`）。
+
 在 Windows 上，GUI 程序会被链接为 **Windows 子系统**可执行文件，因此启动时不会闪出控制台
 窗口；这也意味着从资源管理器启动时 stdout/stderr 无处可去，调试时可在
 `xbintsc.config.json` 里设置 `app.console: true` 保留控制台子系统。
@@ -65,7 +82,7 @@ requestAnimationFrame(frame);
 | `ImageBitmap`、`createImageBitmap(source)` | 由已解码像素支撑的不可变位图（`<img>`、`<canvas>`、`<video>` 帧与 `ImageData` 形状）；promise 立即 settle，`texImage2D` 可直接接受该对象 |
 | `ImageData`、`OffscreenCanvas`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（没有 XR/fetch/流式后端），让页面走自己的“不支持”分支，而不是调用空壳。Three.js 页面在本后端上使用真实渲染器（见[已知问题](./known-issues.md)）。 |
 | `requestAnimationFrame` / `cancelAnimationFrame` | 排入窗口的动画帧列表，见[运行时集成](./runtime.md) |
-| `alert` / `confirm` / `prompt`、`matchMedia`、`getComputedStyle`、`escape` | 宿主实现（Annex B `escape` 按 UTF-16 码元编码，与 `decodeURIComponent(escape(bytes))` 一致） |
+| `alert` / `confirm` / `prompt`、`matchMedia`、`getComputedStyle`、`escape` | 宿主实现。`matchMedia` 返回**实时**列表（按查询缓存）：`matches` 在窗口尺寸变化时重新求值，翻转时触发 `change` 监听器。`confirm`/`prompt` 仅在 `XT_GUI_DIALOGS=1` 时使用原生对话框，否则把消息写到 stderr 并返回文档化的默认值（Annex B `escape` 按 UTF-16 码元编码，与 `decodeURIComponent(escape(bytes))` 一致） |
 
 `getElementById` / `querySelector` 在 `loadHTML` 之前也能回答：此时得到的是**挂起**句柄，
 首次使用时才绑定到真实节点，因此在模块初始化阶段缓存 `document.querySelector("#id")`

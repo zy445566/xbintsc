@@ -85,6 +85,10 @@ bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps it
 **string** `e.target` (`div#id.class`); the element `Event.target` is a handle
 whose descriptor matches the same string.
 
+`element.focus()` scrolls the element into view (pass `{ preventScroll: true }`
+to keep the page offset), and `document.hasFocus()` reports the window state
+toggled by `window.focus()` / `window.blur()`.
+
 ### Node lifetime
 
 A mutation decides whether the nodes it removes can still be reached, and the

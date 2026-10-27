@@ -121,6 +121,7 @@ xt_value document_proto() {
   define_getter(proto, "hidden", (void *)doc_hidden_get);
   define_getter(proto, "visibilityState", (void *)doc_visibility_state_get);
   define_getter(proto, "readyState", (void *)doc_ready_state_get);
+  define_method(proto, "hasFocus", (void *)doc_has_focus);
   define_getter(proto, "title", (void *)doc_title_get);
   define_getter(proto, "defaultView", (void *)doc_default_view_get);
   define_method(proto, "createTextNode", (void *)doc_create_text_node);

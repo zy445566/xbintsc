@@ -124,6 +124,15 @@ METHOD(doc_visibility_state_get) {
   return xt_string_from_cstr("visible");
 }
 
+/** `document.hasFocus()`: true after `window.focus()` until `window.blur()`. */
+METHOD(doc_has_focus) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = resolve_window(self);
+  return win != nullptr && win->focused ? XT_TRUE : XT_FALSE;
+}
+
 /** `document.readyState`: the page is fully parsed before any script runs. */
 METHOD(doc_ready_state_get) {
   (void)self;

@@ -80,6 +80,10 @@ console.log(box.contains(inner));                 // 后代判断
 旧式 `win.on(type, fn)` 负载保留其**字符串** `e.target`（`div#id.class`）；
 元素 `Event.target` 是一个句柄，其描述符与同一字符串匹配。
 
+`element.focus()` 会把元素滚动到可见区域（传入 `{ preventScroll: true }` 则保持
+当前页面偏移）；`document.hasFocus()` 报告由 `window.focus()` / `window.blur()`
+切换的窗口焦点状态。
+
 ### 节点生命周期
 
 一次变更会决定它移除的节点是否仍可到达，引擎只释放那些确实不可到达的节点：

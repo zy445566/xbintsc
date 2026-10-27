@@ -140,6 +140,10 @@ struct DisplayList {
 void xt_paint_build(const LayoutBox *root, DisplayList &out, float viewportWidth = 0.0f,
                     float viewportHeight = 0.0f);
 
+/** Shift every shape and clip in `list` by `(dx, dy)`. Used for page scroll:
+ * the layout stays at document coordinates and painting moves the viewport. */
+void xt_paint_translate(DisplayList &list, float dx, float dy);
+
 }  // namespace xtgui
 
 #endif /* XT_GUI_PAINT_H */

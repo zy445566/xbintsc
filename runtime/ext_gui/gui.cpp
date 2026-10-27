@@ -94,6 +94,7 @@ static void xt_gui_gc_scan_roots(void) {
     }
     for (const XtGuiAnimationFrame &frame : win.animation_frames) xt_gc_mark_value(frame.fn);
     for (const XtGuiAnimationFrame &frame : win.running_frames) xt_gc_mark_value(frame.fn);
+    for (const xt_value list : win.media_lists) xt_gc_mark_value(list);
   }
 }
 
@@ -177,6 +178,8 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   win->open = 0;
   xt_gui_emit(win, "close");
   win->animation_frames.clear();
+  win->media_lists.clear();
+  win->media_lists_by_query.clear();
   xt_gui_media_shutdown(win);
   xt_gui_canvas_shutdown(win);
   xt_gui_handles_reset(win);
@@ -218,12 +221,12 @@ static int xt_gui_int_or(xt_value value, int fallback) {
 /* Build (and record) one window. Shared by `createWindow` and the implicit
  * window a page written against `window`/`document` gets on first access. */
 static XtGuiWindow *create_window_record(const char *title, int width, int height,
-                                         bool high_density) {
+                                         bool high_density, SDL_WindowFlags extra_flags) {
   if (g_window_count >= XT_GUI_MAX_WINDOWS) {
     fprintf(stderr, "xt_gui: too many windows (max %d)\n", XT_GUI_MAX_WINDOWS);
     return NULL;
   }
-  SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
+  SDL_WindowFlags flags = extra_flags;
   if (high_density) flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
   SDL_Window *window = SDL_CreateWindow(title, width, height, flags);
   if (window == NULL) {
@@ -253,6 +256,11 @@ static XtGuiWindow *create_window_record(const char *title, int width, int heigh
   record->animation_frames.clear();
   record->media_players.clear();
   record->next_animation_frame_id = 1;
+  record->scroll_x = 0.0f;
+  record->scroll_y = 0.0f;
+  record->focused = 0;
+  record->media_lists.clear();
+  record->media_lists_by_query.clear();
   record->background[0] = 0.08f;
   record->background[1] = 0.09f;
   record->background[2] = 0.11f;
@@ -283,7 +291,8 @@ xt_value xt_gui_ensure_window(void) {
     if (g_windows[i].open) return g_windows[i].object;
   }
   ensure_init();
-  XtGuiWindow *record = create_window_record("xbintsc gui", 800, 600, true);
+  XtGuiWindow *record =
+      create_window_record("xbintsc gui", 800, 600, true, SDL_WINDOW_RESIZABLE);
   if (record == NULL) {
     throw_gui_error("xbintsc gui: could not open the implicit window (see the diagnostic above)");
     return XT_UNDEFINED;
@@ -299,6 +308,25 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   int width = 800;
   int height = 600;
   bool high_density = true;
+  SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
+  bool has_x = false;
+  bool has_y = false;
+  bool has_opacity = false;
+  int x = 0;
+  int y = 0;
+  float opacity = 1.0f;
+  bool maximized = false;
+  bool minimized = false;
+  auto option_bool = [](xt_value options, const char *name, bool fallback) {
+    xt_value value = xt_object_get_cstr(options, name);
+    return XT_IS_BOOL(value) ? (xt_truthy(value) != 0) : fallback;
+  };
+  auto option_number = [](xt_value options, const char *name, bool *present, double fallback) {
+    xt_value value = xt_object_get_cstr(options, name);
+    if (!XT_IS_NUMBER(value)) return fallback;
+    *present = true;
+    return xt_to_number(value);
+  };
   xt_value options = xt_arg(argc, argv, 0);
   if (XT_IS_OBJECT(options)) {
     title = xt_gui_string_or(xt_object_get_cstr(options, "title"), title);
@@ -306,6 +334,19 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
     height = xt_gui_int_or(xt_object_get_cstr(options, "height"), height);
     xt_value density = xt_object_get_cstr(options, "highDensity");
     if (!XT_IS_UNDEFINED(density)) high_density = xt_truthy(density);
+    /* Window flags and placement: the rest of the options object used to be
+     * ignored, which made `{ resizable: false }` or `{ borderless: true }`
+     * silently open a plain window. */
+    if (!option_bool(options, "resizable", true)) flags &= ~SDL_WINDOW_RESIZABLE;
+    if (option_bool(options, "borderless", false)) flags |= SDL_WINDOW_BORDERLESS;
+    if (option_bool(options, "alwaysOnTop", false)) flags |= SDL_WINDOW_ALWAYS_ON_TOP;
+    if (option_bool(options, "hidden", false)) flags |= SDL_WINDOW_HIDDEN;
+    if (option_bool(options, "fullscreen", false)) flags |= SDL_WINDOW_FULLSCREEN;
+    x = (int)option_number(options, "x", &has_x, 0);
+    y = (int)option_number(options, "y", &has_y, 0);
+    opacity = (float)option_number(options, "opacity", &has_opacity, 1.0);
+    maximized = option_bool(options, "maximized", false);
+    minimized = option_bool(options, "minimized", false);
   } else if (XT_IS_STRING(options)) {
     title = xt_string_data(options);
     width = xt_gui_int_or(xt_arg(argc, argv, 1), width);
@@ -334,11 +375,16 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
     return record->object;
   }
 
-  XtGuiWindow *record = create_window_record(title, width, height, high_density);
+  XtGuiWindow *record = create_window_record(title, width, height, high_density, flags);
   if (record == NULL) {
     throw_gui_error("xbintsc gui: could not open a window (see the diagnostic above)");
     return XT_UNDEFINED;
   }
+  if (has_x || has_y) SDL_SetWindowPosition(record->window, has_x ? x : SDL_WINDOWPOS_CENTERED,
+                                            has_y ? y : SDL_WINDOWPOS_CENTERED);
+  if (has_opacity) SDL_SetWindowOpacity(record->window, opacity);
+  if (maximized) SDL_MaximizeWindow(record->window);
+  if (minimized) SDL_MinimizeWindow(record->window);
   return record->object;
 }
 

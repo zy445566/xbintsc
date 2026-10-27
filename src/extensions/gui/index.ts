@@ -198,6 +198,7 @@ export const guiExtension: Extension = {
     escape: { symbol: "xt_browser_escape" },
     alert: { symbol: "xt_browser_alert" },
     prompt: { symbol: "xt_browser_prompt" },
+    confirm: { symbol: "xt_browser_confirm_global" },
   }),
   /** Browser globals (`window`, `document`, the DOM type names). */
   globalValues: () => browserGlobals,

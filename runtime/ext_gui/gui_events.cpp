@@ -52,6 +52,53 @@ void xt_gui_flush_dom(XtGuiWindow *win) {
   win->geometry.dirty = 1;
 }
 
+/* -- page scroll ---------------------------------------------------------- */
+
+namespace {
+
+void content_bounds(const xtgui::LayoutBox *box, float *max_x, float *max_y) {
+  if (box == nullptr) return;
+  float right = box->x + box->width;
+  float bottom = box->y + box->height;
+  if (right > *max_x) *max_x = right;
+  if (bottom > *max_y) *max_y = bottom;
+  for (const std::unique_ptr<xtgui::LayoutBox> &child : box->children) {
+    content_bounds(child.get(), max_x, max_y);
+  }
+}
+
+}  // namespace
+
+void xt_gui_scroll_bounds(XtGuiWindow *win, float *max_x, float *max_y) {
+  float content_x = 0;
+  float content_y = 0;
+  if (win != nullptr && win->document != nullptr) {
+    xt_gui_flush_dom(win);
+    content_bounds(win->document->layout().root(), &content_x, &content_y);
+  }
+  float viewport_width = 0;
+  float viewport_height = 0;
+  if (win != nullptr) xt_gui_window_viewport(win, &viewport_width, &viewport_height);
+  *max_x = content_x > viewport_width ? content_x - viewport_width : 0.0f;
+  *max_y = content_y > viewport_height ? content_y - viewport_height : 0.0f;
+}
+
+void xt_gui_scroll_to(XtGuiWindow *win, float x, float y) {
+  if (win == nullptr) return;
+  float max_x = 0;
+  float max_y = 0;
+  xt_gui_scroll_bounds(win, &max_x, &max_y);
+  if (x < 0.0f) x = 0.0f;
+  if (y < 0.0f) y = 0.0f;
+  if (x > max_x) x = max_x;
+  if (y > max_y) y = max_y;
+  if (x == win->scroll_x && y == win->scroll_y) return;
+  win->scroll_x = x;
+  win->scroll_y = y;
+  win->geometry.dirty = 1;
+  xt_gui_emit(win, "scroll");
+}
+
 static XtGuiWindow *xt_gui_find_by_window_id(SDL_WindowID id) {
   SDL_Window *window = SDL_GetWindowFromID(id);
   if (window == NULL) return NULL;
@@ -66,7 +113,8 @@ static XtGuiWindow *xt_gui_find_by_window_id(SDL_WindowID id) {
 /** Deepest element under (x, y), or NULL. */
 static const xtgui::Node *xt_gui_hit_node(XtGuiWindow *win, float x, float y) {
   if (win->document == nullptr) return nullptr;
-  const xtgui::LayoutBox *box = win->document->layout().hitTest(x, y);
+  const xtgui::LayoutBox *box =
+      win->document->layout().hitTest(x + win->scroll_x, y + win->scroll_y);
   const xtgui::Node *node = box != nullptr ? box->node : nullptr;
   while (node != nullptr && !node->isElement()) node = node->parent;
   return node;
@@ -122,6 +170,8 @@ void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, fl
   const xtgui::Node *node = xt_gui_hit_node(win, x, y);
   if (node != nullptr) xt_gui_emit_dom_event(win, "wheel", node, payload);
   xt_gui_emit_payload(win, "wheel", payload);
+  /* Default action: scroll the page (content that fits does not move). */
+  xt_gui_scroll_to(win, win->scroll_x + delta_x, win->scroll_y + delta_y);
 }
 
 static xt_value xt_gui_key_payload(const char *type, const char *key, const char *code, bool repeat,
@@ -168,6 +218,7 @@ void handle_event(const SDL_Event *event) {
     /* Web 'resize', so a document can re-measure on a window change in every
      * host (a browser already fires one). */
     xt_gui_emit(win, "resize");
+    xt_gui_media_lists_notify(win);
     return;
   }
 
@@ -273,6 +324,7 @@ void xt_gui_render_window(XtGuiWindow *win) {
   if (can_paint && win->geometry.dirty && win->document != nullptr) {
     xtgui::DisplayList list;
     xtgui::xt_paint_build(win->document->layout().root(), list, viewport_width, viewport_height);
+    xt_paint_translate(list, -win->scroll_x, -win->scroll_y);
     xt_gui_geometry_upload(g_device, &win->geometry, list);
     float density = SDL_GetWindowPixelDensity(win->window);
     float text_scale = density > 0.0f ? density : 1.0f;

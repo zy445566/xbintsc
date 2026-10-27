@@ -252,12 +252,30 @@ METHOD(node_contains) {
 
 METHOD(node_focus) {
   (void)env;
-  (void)argc;
-  (void)argv;
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || win == nullptr || win->document == nullptr) return XT_UNDEFINED;
+  /* `{ preventScroll: true }` keeps the current page offset; otherwise the
+   * focused box is scrolled into view, like the browser default. */
+  bool prevent_scroll = false;
+  xt_value options = xt_arg(argc, argv, 0);
+  if (XT_IS_OBJECT(options)) {
+    prevent_scroll = value_truthy(xt_object_get_cstr(options, "preventScroll"));
+  }
   if (win->document->setFocus(node)) win->geometry.dirty = 1;
+  const xtgui::LayoutBox *box = win->document->boxOf(node);
+  if (!prevent_scroll && box != nullptr) {
+    float viewport_width = 0;
+    float viewport_height = 0;
+    xt_gui_window_viewport(win, &viewport_width, &viewport_height);
+    float x = win->scroll_x;
+    float y = win->scroll_y;
+    if (box->x < x) x = box->x;
+    else if (box->x + box->width > x + viewport_width) x = box->x + box->width - viewport_width;
+    if (box->y < y) y = box->y;
+    else if (box->y + box->height > y + viewport_height) y = box->y + box->height - viewport_height;
+    xt_gui_scroll_to(win, x, y);
+  }
   return XT_UNDEFINED;
 }
 

@@ -41,9 +41,33 @@ std::string string_arg(int32_t argc, xt_value *argv, int32_t index) {
   return to_string_value(xt_arg(argc, argv, index));
 }
 
+/* Defined with the path bindings below; the transform methods accept a matrix
+ * argument too. */
+/** `transform(a, b, c, d, e, f)` or `transform(matrix)` where `matrix` is a
+ * `DOMMatrix`, `{ a, b, c, d, e, f }` or a six-element array. */
+bool canvas_matrix_arg(int32_t argc, xt_value *argv, int32_t index, float values[6]) {
+  if (index >= argc) return false;
+  xt_value value = xt_arg(argc, argv, index);
+  if (XT_IS_ARRAY(value)) {
+    if (xt_to_number(xt_array_length(value)) < 6) return false;
+    for (int i = 0; i < 6; i++) values[i] = (float)xt_to_number(xt_array_get(value, xt_number(i)));
+    return true;
+  }
+  if (!XT_IS_OBJECT(value)) return false;
+  static const char *const names[6] = {"a", "b", "c", "d", "e", "f"};
+  for (int i = 0; i < 6; i++) {
+    xt_value member = xt_object_get_cstr(value, names[i]);
+    if (!XT_IS_NUMBER(member)) return false;
+    values[i] = (float)xt_to_number(member);
+  }
+  return true;
+}
+
 }  // namespace
 
 xtgui::Canvas2D *canvas_from_context(xt_value self) { return context_canvas(self); }
+
+xt_value canvas_context_attributes(xt_value requested, bool alpha);
 
 double canvas_number_arg(int32_t argc, xt_value *argv, int32_t index, double fallback) {
   return number_arg(argc, argv, index, fallback);
@@ -75,16 +99,68 @@ METHOD(node_get_context) {
   if (node == nullptr) return xt_canvas_pending_context(self, win);
   if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
   if (xt_gui_webgl_find(win, node) != nullptr) return XT_NULL;  // already a WebGL canvas
-  xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
-  if (canvas == nullptr) return XT_NULL;
   xt_value cached = xt_object_get_cstr(self, "__xt_gui_ctx");
   if (XT_IS_OBJECT(cached)) return cached;
+  xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
+  if (canvas == nullptr) return XT_NULL;
+  /* The second argument only takes effect when the context is created; a later
+   * `getContext("2d", ...)` returns the existing context unchanged. `alpha` is
+   * the one attribute with an observable effect on the bitmap. */
+  xt_value attributes = xt_arg(argc, argv, 1);
+  bool alpha = true;
+  if (XT_IS_OBJECT(attributes)) {
+    xt_value value = xt_object_get_cstr(attributes, "alpha");
+    if (XT_IS_BOOL(value)) alpha = value_truthy(value);
+  }
+  canvas->set_alpha(alpha);
   xt_value ctx = xt_object_new_with_proto(canvas_proto());
   xt_object_set(ctx, xt_string_from_cstr("__xt_gui_canvas"), xt_number((double)canvas->id()));
   /* Keep the element handle alive (and reachable) from the context. */
   xt_object_set(ctx, xt_string_from_cstr("__xt_gui_node"), self);
+  xt_object_set(ctx, xt_string_from_cstr("__xt_gui_ctx_attributes"),
+                canvas_context_attributes(attributes, alpha));
   xt_object_set(self, xt_string_from_cstr("__xt_gui_ctx"), ctx);
   return ctx;
+}
+
+/** The attributes object `getContextAttributes()` reports. Options the engine
+ * does not implement keep their specification default, so a feature test sees
+ * an honest answer instead of `undefined`. */
+xt_value canvas_context_attributes(xt_value requested, bool alpha) {
+  xt_value result = xt_object_new();
+  struct Attribute {
+    const char *name;
+    bool fallback;
+  };
+  const Attribute defaults[] = {
+      {"alpha", alpha},           {"antialias", true},
+      {"depth", true},            {"stencil", false},
+      {"premultipliedAlpha", true}, {"preserveDrawingBuffer", false},
+      {"desynchronized", false},  {"willReadFrequently", false},
+      {"failIfMajorPerformanceCaveat", false},
+  };
+  for (const Attribute &attribute : defaults) {
+    xt_value value = XT_UNDEFINED;
+    if (XT_IS_OBJECT(requested)) value = xt_object_get_cstr(requested, attribute.name);
+    if (XT_IS_BOOL(value)) {
+      xt_object_set(result, xt_string_from_cstr(attribute.name), value);
+    } else {
+      xt_object_set(result, xt_string_from_cstr(attribute.name),
+                    attribute.fallback ? XT_TRUE : XT_FALSE);
+    }
+  }
+  xt_object_set(result, xt_string_from_cstr("powerPreference"),
+                xt_string_from_cstr("default"));
+  xt_object_set(result, xt_string_from_cstr("colorSpace"), xt_string_from_cstr("srgb"));
+  return result;
+}
+
+METHOD(canvas_get_context_attributes) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xt_value stored = xt_object_get_cstr(self, "__xt_gui_ctx_attributes");
+  return XT_IS_OBJECT(stored) ? stored : canvas_context_attributes(XT_UNDEFINED, true);
 }
 
 METHOD(canvas_get_canvas) {
@@ -103,6 +179,9 @@ METHOD(canvas_fill_style_get) {
   if (canvas->fill_gradient_id() != 0) {
     return canvas_gradient_handle(self, canvas, canvas->fill_gradient_id());
   }
+  if (canvas->fill_pattern_id() != 0) {
+    return canvas_pattern_handle(self, canvas, canvas->fill_pattern_id());
+  }
   return xt_string_from_cstr(canvas->fill_style().c_str());
 }
 
@@ -114,6 +193,11 @@ METHOD(canvas_fill_style_set) {
     uint64_t gradient = canvas_gradient_id(xt_arg(argc, argv, 0), canvas);
     if (gradient != 0) {
       canvas->set_fill_gradient(gradient);
+      return XT_UNDEFINED;
+    }
+    uint64_t pattern = canvas_pattern_id(xt_arg(argc, argv, 0), canvas);
+    if (pattern != 0) {
+      canvas->set_fill_pattern(pattern);
       return XT_UNDEFINED;
     }
   }
@@ -130,6 +214,9 @@ METHOD(canvas_stroke_style_get) {
   if (canvas->stroke_gradient_id() != 0) {
     return canvas_gradient_handle(self, canvas, canvas->stroke_gradient_id());
   }
+  if (canvas->stroke_pattern_id() != 0) {
+    return canvas_pattern_handle(self, canvas, canvas->stroke_pattern_id());
+  }
   return xt_string_from_cstr(canvas->stroke_style().c_str());
 }
 
@@ -141,6 +228,11 @@ METHOD(canvas_stroke_style_set) {
     uint64_t gradient = canvas_gradient_id(xt_arg(argc, argv, 0), canvas);
     if (gradient != 0) {
       canvas->set_stroke_gradient(gradient);
+      return XT_UNDEFINED;
+    }
+    uint64_t pattern = canvas_pattern_id(xt_arg(argc, argv, 0), canvas);
+    if (pattern != 0) {
+      canvas->set_stroke_pattern(pattern);
       return XT_UNDEFINED;
     }
   }
@@ -269,23 +361,33 @@ METHOD(canvas_scale) {
 METHOD(canvas_transform) {
   (void)env;
   xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr)
-    canvas->transform((float)number_arg(argc, argv, 0, 1.0), (float)number_arg(argc, argv, 1, 0.0),
-                      (float)number_arg(argc, argv, 2, 0.0), (float)number_arg(argc, argv, 3, 1.0),
-                      (float)number_arg(argc, argv, 4, 0.0), (float)number_arg(argc, argv, 5, 0.0));
+  if (canvas == nullptr) return XT_UNDEFINED;
+  float values[6];
+  if (canvas_matrix_arg(argc, argv, 0, values)) {
+    canvas->transform(values[0], values[1], values[2], values[3], values[4], values[5]);
+    return XT_UNDEFINED;
+  }
+  canvas->transform((float)number_arg(argc, argv, 0, 1.0), (float)number_arg(argc, argv, 1, 0.0),
+                    (float)number_arg(argc, argv, 2, 0.0), (float)number_arg(argc, argv, 3, 1.0),
+                    (float)number_arg(argc, argv, 4, 0.0), (float)number_arg(argc, argv, 5, 0.0));
   return XT_UNDEFINED;
 }
 
 METHOD(canvas_set_transform) {
   (void)env;
   xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr)
-    canvas->set_transform((float)number_arg(argc, argv, 0, 1.0),
-                          (float)number_arg(argc, argv, 1, 0.0),
-                          (float)number_arg(argc, argv, 2, 0.0),
-                          (float)number_arg(argc, argv, 3, 1.0),
-                          (float)number_arg(argc, argv, 4, 0.0),
-                          (float)number_arg(argc, argv, 5, 0.0));
+  if (canvas == nullptr) return XT_UNDEFINED;
+  float values[6];
+  if (canvas_matrix_arg(argc, argv, 0, values)) {
+    canvas->set_transform(values[0], values[1], values[2], values[3], values[4], values[5]);
+    return XT_UNDEFINED;
+  }
+  canvas->set_transform((float)number_arg(argc, argv, 0, 1.0),
+                        (float)number_arg(argc, argv, 1, 0.0),
+                        (float)number_arg(argc, argv, 2, 0.0),
+                        (float)number_arg(argc, argv, 3, 1.0),
+                        (float)number_arg(argc, argv, 4, 0.0),
+                        (float)number_arg(argc, argv, 5, 0.0));
   return XT_UNDEFINED;
 }
 
@@ -295,104 +397,6 @@ METHOD(canvas_reset_transform) {
   (void)argv;
   xtgui::Canvas2D *canvas = context_canvas(self);
   if (canvas != nullptr) canvas->reset_transform();
-  return XT_UNDEFINED;
-}
-
-/* -- paths ---------------------------------------------------------------- */
-
-METHOD(canvas_begin_path) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr) canvas->begin_path();
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_close_path) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr) canvas->close_path();
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_move_to) {
-  (void)env;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr)
-    canvas->move_to((float)number_arg(argc, argv, 0, 0.0), (float)number_arg(argc, argv, 1, 0.0));
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_line_to) {
-  (void)env;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr)
-    canvas->line_to((float)number_arg(argc, argv, 0, 0.0), (float)number_arg(argc, argv, 1, 0.0));
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_rect) {
-  (void)env;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr)
-    canvas->rect((float)number_arg(argc, argv, 0, 0.0), (float)number_arg(argc, argv, 1, 0.0),
-                 (float)number_arg(argc, argv, 2, 0.0), (float)number_arg(argc, argv, 3, 0.0));
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_arc) {
-  (void)env;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr) {
-    canvas->arc((float)number_arg(argc, argv, 0, 0.0), (float)number_arg(argc, argv, 1, 0.0),
-                (float)number_arg(argc, argv, 2, 0.0), (float)number_arg(argc, argv, 3, 0.0),
-                (float)number_arg(argc, argv, 4, 0.0), value_truthy(xt_arg(argc, argv, 5)));
-  }
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_quadratic_curve_to) {
-  (void)env;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr)
-    canvas->quadratic_curve_to((float)number_arg(argc, argv, 0, 0.0),
-                               (float)number_arg(argc, argv, 1, 0.0),
-                               (float)number_arg(argc, argv, 2, 0.0),
-                               (float)number_arg(argc, argv, 3, 0.0));
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_bezier_curve_to) {
-  (void)env;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr)
-    canvas->bezier_curve_to((float)number_arg(argc, argv, 0, 0.0),
-                            (float)number_arg(argc, argv, 1, 0.0),
-                            (float)number_arg(argc, argv, 2, 0.0),
-                            (float)number_arg(argc, argv, 3, 0.0),
-                            (float)number_arg(argc, argv, 4, 0.0),
-                            (float)number_arg(argc, argv, 5, 0.0));
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_fill) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr) canvas->fill();
-  return XT_UNDEFINED;
-}
-
-METHOD(canvas_stroke) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  xtgui::Canvas2D *canvas = context_canvas(self);
-  if (canvas != nullptr) canvas->stroke();
   return XT_UNDEFINED;
 }
 
@@ -440,7 +444,8 @@ METHOD(canvas_fill_text) {
   xtgui::Canvas2D *canvas = context_canvas(self);
   if (canvas != nullptr)
     canvas->fill_text(string_arg(argc, argv, 0), (float)number_arg(argc, argv, 1, 0.0),
-                      (float)number_arg(argc, argv, 2, 0.0));
+                      (float)number_arg(argc, argv, 2, 0.0),
+                      (float)number_arg(argc, argv, 3, 0.0));
   return XT_UNDEFINED;
 }
 
@@ -449,7 +454,8 @@ METHOD(canvas_stroke_text) {
   xtgui::Canvas2D *canvas = context_canvas(self);
   if (canvas != nullptr)
     canvas->stroke_text(string_arg(argc, argv, 0), (float)number_arg(argc, argv, 1, 0.0),
-                        (float)number_arg(argc, argv, 2, 0.0));
+                        (float)number_arg(argc, argv, 2, 0.0),
+                        (float)number_arg(argc, argv, 3, 0.0));
   return XT_UNDEFINED;
 }
 

@@ -93,17 +93,31 @@ METHOD(doc_create_element) {
   return xt_gui_node_handle(win, win->document->createElement(tag));
 }
 
-/** `createElementNS(ns, name)`: the engine has no namespaces, so the qualified
- * name after `:` is what gets created (`createElementNS(svgNS, "svg:rect")`). */
+/** `createElementNS(ns, name)`: the namespace is recorded (so `namespaceURI`
+ * answers it) and the qualified name's prefix is preserved. HTML names are
+ * lowercased, but names in another namespace keep their case — SVG is
+ * case-sensitive (`linearGradient`, `clipPath`). */
 METHOD(doc_create_element_ns) {
   (void)env;
   XtGuiWindow *win = resolve_window(self);
   if (win == nullptr || win->document == nullptr || argc < 2) return XT_UNDEFINED;
+  std::string ns = to_string_value(xt_arg(argc, argv, 0));
   std::string name = to_string_value(xt_arg(argc, argv, 1));
+  std::string prefix;
   size_t colon = name.rfind(':');
-  if (colon != std::string::npos) name = name.substr(colon + 1);
-  for (char &c : name) c = (char)std::tolower((unsigned char)c);
-  return xt_gui_node_handle(win, win->document->createElement(name));
+  if (colon != std::string::npos) {
+    prefix = name.substr(0, colon);
+    name = name.substr(colon + 1);
+  }
+  const bool html = ns.empty() || ns == "http://www.w3.org/1999/xhtml";
+  if (html) {
+    for (char &c : name) c = (char)std::tolower((unsigned char)c);
+  }
+  xtgui::Node *node = win->document->createElement(name);
+  if (node == nullptr) return XT_UNDEFINED;
+  node->ns = ns;
+  node->ns_prefix = prefix;
+  return xt_gui_node_handle(win, node);
 }
 
 /** `document.hidden` / `visibilityState`: a window in the main loop is always
@@ -156,6 +170,36 @@ METHOD(doc_title_get) {
     }
   }
   return xt_string_from_cstr(text.c_str());
+}
+
+/** `document.title = text`: replace the text of the document's `<title>`.
+ * A page without one gets a `<title>` (and a `<head>`, if the parser did not
+ * create one), so the assignment is not silently lost. */
+METHOD(doc_title_set) {
+  (void)env;
+  XtGuiWindow *win = resolve_window(self);
+  if (win == nullptr || win->document == nullptr) return XT_UNDEFINED;
+  std::string text;
+  if (argc >= 1) text = to_string_value(xt_arg(argc, argv, 0));
+  xtgui::Node *root = const_cast<xtgui::Node *>(win->document->root());
+  xtgui::Node *title = const_cast<xtgui::Node *>(find_by_tag(root, "title"));
+  if (title == nullptr) {
+    xtgui::Node *head = const_cast<xtgui::Node *>(find_by_tag(root, "head"));
+    if (head == nullptr) {
+      head = win->document->createElement("head");
+      if (head == nullptr) return XT_UNDEFINED;
+      /* `<head>` belongs before the body, not after it. */
+      xtgui::Node *body = const_cast<xtgui::Node *>(find_by_tag(root, "body"));
+      win->document->insertBefore(root, head, body);
+    }
+    title = win->document->createElement("title");
+    if (title == nullptr) return XT_UNDEFINED;
+    win->document->appendChild(head, title);
+  }
+  title->children.clear();
+  if (!text.empty()) title->addText(text);
+  mark_dirty(win);
+  return XT_UNDEFINED;
 }
 
 METHOD(doc_default_view_get) {

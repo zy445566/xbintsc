@@ -32,6 +32,7 @@ xt_value g_document_proto = XT_UNDEFINED;
 xt_value g_event_proto = XT_UNDEFINED;
 xt_value g_class_list_proto = XT_UNDEFINED;
 xt_value g_style_proto = XT_UNDEFINED;
+xt_value g_computed_style_proto = XT_UNDEFINED;
 xt_value g_canvas_proto = XT_UNDEFINED;
 xt_value g_canvas_gradient_proto = XT_UNDEFINED;
 

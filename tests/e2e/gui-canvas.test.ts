@@ -421,4 +421,5 @@ describe.skipIf(!guiAvailable)("gui extension — canvas", () => {
     expect(value("fresh")).toBe("0,255,0,255");
     expect(value("stale")).toBe("true");
   });
+
 });

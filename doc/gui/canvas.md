@@ -36,12 +36,20 @@ a shared prototype. The handle is cached on the element, so every call returns
 the **same** object and the drawing state (transform, styles, path) is per
 canvas, not per call. `ctx.canvas` is the owning element handle.
 
+`getContext("2d", attributes)` honours `alpha` on the first call: with
+`{ alpha: false }` the bitmap starts (and clears) opaque black. The other
+attributes are reported by `getContextAttributes()` at their specification
+defaults (`antialias: true`, `depth: true`, `stencil: false`,
+`premultipliedAlpha: true`, `preserveDrawingBuffer: false`, `colorSpace:
+"srgb"`, …), so a feature test gets an honest answer.
+
 ## Drawing model
 
 The rasteriser is deliberately small and self-written (no Skia/Cairo). It
 anti-aliases with **4 vertical sub-scanlines** per pixel row and an **analytic
 horizontal coverage** pass, and fills paths with the **non-zero winding rule**
-(so `arc`-shaped holes work when wound the other way). An axis-aligned rectangle
+(so `arc`-shaped holes work when wound the other way) unless
+`fill("evenodd")` selects the even-odd rule. An axis-aligned rectangle
 (`b == 0 && c == 0` in the transform) takes a direct coverage fast path.
 Blending is non-premultiplied source-over, scaled by `globalAlpha`.
 
@@ -63,10 +71,11 @@ matching GPU texture.
 
 State and transforms: `save` / `restore` (which restore the transform, line
 width, alpha, font/text settings **and** the fill/stroke styles),
-`translate`, `rotate`, `scale`, `transform(a,b,c,d,e,f)`, `setTransform`,
-`resetTransform`, `getTransform` (returns an object with `a`…`f` and `is2D`).
-Transforms compose in canvas order: `translate(x, y); rotate(a)` rotates around
-the translated origin.
+`translate`, `rotate`, `scale`, `transform(a,b,c,d,e,f)` / `transform(matrix)`,
+`setTransform(a,b,c,d,e,f)` / `setTransform(matrix)`, `resetTransform`,
+`getTransform` (returns an object with `a`…`f` and `is2D`). A matrix is a
+`{ a, b, c, d, e, f }` object or a six-element array. Transforms compose in
+canvas order: `translate(x, y); rotate(a)` rotates around the translated origin.
 
 Styles and settings: `fillStyle` / `strokeStyle` (CSS colors understood by the
 cascade's color parser, or a `CanvasGradient`), `lineWidth`, `globalAlpha`,
@@ -86,10 +95,18 @@ distance from the **outer** circle's centre (`x1, y1`), so `x0`/`y0` are
 currently ignored: use concentric circles (`x0 == x1`, `y0 == y1`).
 
 Paths: `beginPath`, `closePath`, `moveTo`, `lineTo`, `rect`, `roundRect`,
-`arc`, `ellipse`, `quadraticCurveTo`, `bezierCurveTo`, then `fill` (multi-loop,
-non-zero winding) or `stroke`. Bezier and quadratic segments are flattened into
-line segments; arcs and ellipses are flattened too. `roundRect` accepts one
-radius number (the array form is not implemented).
+`arc`, `ellipse`, `quadraticCurveTo`, `bezierCurveTo`, then
+`fill(fillRule?)` / `fill(path, fillRule?)` (multi-loop; `"nonzero"` or
+`"evenodd"`) or `stroke(path?)`. Bezier and quadratic segments are flattened
+into line segments; arcs and ellipses are flattened too. `roundRect` accepts a
+single radius number or the CSS radius list (`[all]`, `[tl, br]`,
+`[tl, tr, br]`, `[tl, tr, br, bl]`, numbers or `{ x, y }` pairs; corners are
+drawn circular).
+
+`Path2D` is implemented with the same path commands (`moveTo`, `lineTo`,
+`closePath`, `rect`, `roundRect`, `arc`, `ellipse`, `quadraticCurveTo`,
+`bezierCurveTo`, `addPath`) and can be passed to `fill`/`stroke`, so a path can
+be built once and replayed under different transforms.
 
 Rectangles: `clearRect`, `fillRect`, `strokeRect`.
 
@@ -97,9 +114,12 @@ Dashes: `setLineDash(segments)` / `getLineDash()` / `lineDashOffset` implement
 the standard pattern rules (an odd-length list is duplicated, negative or
 non-finite entries are ignored, an all-zero list means a solid line).
 
-Text: `measureText(text)` (returns `{ width }`), `fillText(text, x, y)` and
-`strokeText(text, x, y)`. Text is shaped with HarfBuzz and rasterised with
-FreeType (the same stack as HTML text) at the transform's approximate scale.
+Text: `measureText(text)` (returns `{ width }`), `fillText(text, x, y,
+maxWidth?)` and `strokeText(text, x, y, maxWidth?)`. Text is shaped with
+HarfBuzz and rasterised with FreeType (the same stack as HTML text) at the
+transform's approximate scale. A positive `maxWidth` condenses advances and
+glyph bitmaps horizontally so the run is at most that wide (as the canvas API
+specifies) instead of being ignored.
 **Only translation and uniform scale are honoured** — a rotated or skewed
 transform still places each glyph at its transformed baseline point but does not
 rotate the glyph bitmaps. `strokeText` currently fills with the stroke style
@@ -119,14 +139,25 @@ Test hook: `getImageData(x, y, w, h)` copies a region to
 `{ width, height, data }` where `data` is a row-major RGBA8 byte array.
 Out-of-bounds pixels are transparent.
 
+Patterns: `createPattern(source, repetition?)` accepts an `<img>` or another
+`<canvas>` and tiles it in user space (`repeat`, `repeat-x`, `repeat-y`,
+`no-repeat`), so the tiles follow the current transform. Assign the result to
+`fillStyle`/`strokeStyle`; assigning a colour replaces it.
+
+Image data and export: `createImageData(width, height)` allocates a blank
+`{ width, height, data }`, and `putImageData(imageData, dx, dy[, dirtyX, dirtyY,
+dirtyWidth, dirtyHeight])` copies bytes straight into the bitmap (no transform,
+blending or `globalAlpha`). `canvas.toDataURL(type?)` exports a PNG data URL and
+`canvas.toBlob(callback, type?)` delivers a Blob-shaped `{ type, size }` from a
+microtask (the bytes are on `__xt_gui_blob_data`; there is no
+`URL.createObjectURL`).
+
 ## Not implemented
 
-Patterns (`createPattern`), shadows, `clip()`, `globalCompositeOperation`,
-`putImageData`, `createImageData`, `isPointInPath`, `setTransform` with a
-`DOMMatrix`, `drawImage` with an image smoothing toggle, `toDataURL`/`toBlob`,
-`<canvas>` as a CSS `background-image`, and offscreen canvases
-(`OffscreenCanvas`, `transferControlToOffscreen`). `roundRect` takes a single
-radius, and radial gradients ignore the inner circle's offset.
+Shadows, `clip()`, `globalCompositeOperation`, `isPointInPath`, `drawImage` with
+an image smoothing toggle, `<canvas>` as a CSS `background-image`, and offscreen
+canvases (`OffscreenCanvas`, `transferControlToOffscreen`).
+Radial gradients ignore the inner circle's offset.
 
 See also [Media](./media.md) for the image/video/audio decode stack that
 `drawImage` and the texture upload share.

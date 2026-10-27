@@ -105,8 +105,7 @@ static xt_value xt_array_iterator_method(void) {
   return xt_array_iterator_method_value;
 }
 
-xt_value xt_get(xt_value target, xt_value key) {
-  if (target == XT_UNDEFINED || target == XT_NULL) xt_throw_read_of_nullish(target, key);
+xt_value xt_get(xt_value target, xt_value key) {  if (target == XT_UNDEFINED || target == XT_NULL) xt_throw_read_of_nullish(target, key);
   if (XT_IS_ARRAY(target)) {
     /* `arr.length` must read the array's length, never an element. */
     if (XT_IS_STRING(key)) {
@@ -289,6 +288,8 @@ xt_value xt_get_ic(xt_value target, xt_value key, int64_t *cache) {
   if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
     return xt_get(target, key);
   }
+  /* A host view answers keys dynamically, outside the shape cache. */
+  if (obj->hooks != NULL) return xt_get(target, key);
   if (!XT_IS_STRING(key) && !xt_is_symbol(key)) return xt_get(target, key);
   xt_shape *shape = obj->shape;
   uintptr_t cachedShape = (uintptr_t)cache[0];
@@ -386,4 +387,95 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
     return xt_object_set(target, key, value);
   }
   return value;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Dynamic host-view properties                                               */
+/* ------------------------------------------------------------------------- */
+
+xt_value xt_object_set_hooks(xt_value value, const xt_object_hooks *hooks, void *data) {
+  xt_object *obj = xt_as_object(value);
+  if (!obj) return value;
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+    return value;
+  }
+  obj->hooks = hooks;
+  obj->hook_data = data;
+  return value;
+}
+
+void xt_object_append_dynamic_keys(xt_object *obj, xt_value value, xt_value result) {
+  if (obj->hooks == NULL || obj->hooks->keys == NULL) return;
+  xt_value dynamic = obj->hooks->keys(value, obj->hook_data);
+  xt_array *list = xt_as_array(dynamic);
+  if (list == NULL) return;
+  for (uint32_t i = 0; i < list->length; i++) {
+    xt_value key = list->items[i];
+    if (!XT_IS_STRING(key)) continue;
+    if (xt_object_find(obj, key) != NULL) continue;
+    xt_array_push(result, key);
+  }
+}
+/* `delete obj[key]`: remove a real property (arrays clear the element) and let
+ * a host view delete its dynamic key. */
+xt_value xt_delete(xt_value value, xt_value key) {
+  if (XT_IS_OBJECT(value)) {
+    xt_object *obj = (xt_object *)XT_GET_PTR(value);
+    xt_value k = xt_to_property_key(key);
+    for (uint32_t i = 0; i < obj->count; i++) {
+      if (xt_property_key_equals(obj->properties[i].key, k)) {
+        for (uint32_t j = i + 1; j < obj->count; j++) obj->properties[j - 1] = obj->properties[j];
+        obj->count--;
+        xt_object_shape_changed(obj);
+        break;
+      }
+    }
+    /* A host view (`element.style`, `element.dataset`) owns no real property for
+     * its keys, so `delete` must reach it even when the bag stayed empty. */
+    if (obj->hooks != NULL && obj->hooks->remove != NULL) {
+      obj->hooks->remove(value, k, obj->hook_data);
+    }
+    return XT_TRUE;
+  }
+  if (XT_IS_ARRAY(value)) {
+    if (!xt_is_symbol(key)) xt_array_set(value, key, XT_UNDEFINED);
+    return XT_TRUE;
+  }
+  return XT_TRUE;
+}
+xt_value xt_object_has_own(xt_value value, xt_value key) {
+  if (XT_IS_ARRAY(value)) {
+    xt_array *array = (xt_array *)XT_GET_PTR(value);
+    xt_value propertyKey = xt_to_property_key(key);
+    if (XT_IS_STRING(propertyKey)) {
+      xt_string *k = xt_as_string(propertyKey);
+      if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
+      uint32_t index = 0;
+      if (xt_key_is_array_index(k, &index)) return xt_bool(index < array->length);
+    }
+    return xt_bool(XT_IS_OBJECT(array->extra) &&
+                   xt_object_find((xt_object *)XT_GET_PTR(array->extra), propertyKey));
+  }
+  if (XT_IS_STRING(value)) {
+    xt_string *string = xt_as_string(value);
+    if (xt_is_symbol(key)) return XT_FALSE;
+    xt_string *k = xt_as_string(xt_to_string(key));
+    if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
+    uint32_t index = 0;
+    return xt_bool(xt_key_is_array_index(k, &index) && index < xt_string_utf16_length(string));
+  }
+  xt_object *obj = xt_as_object(value);
+  if (!obj) return XT_FALSE;
+  /* Map/Set/Date/RegExp/Promise/Symbol use their own struct layout and have no
+   * property bag; interpreting them as `xt_object` would read past the end. */
+  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+    return XT_FALSE;
+  }
+  xt_value propertyKey = xt_to_property_key(key);
+  if (xt_object_find(obj, propertyKey) != NULL) return XT_TRUE;
+  if (obj->hooks != NULL && obj->hooks->has != NULL &&
+      obj->hooks->has(value, propertyKey, obj->hook_data)) {
+    return XT_TRUE;
+  }
+  return XT_FALSE;
 }

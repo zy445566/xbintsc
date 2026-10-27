@@ -99,6 +99,22 @@ struct XtGuiNodeListener {
   xt_value fn;
   bool once;
   bool capture;
+  /** `{ passive: true }`: `preventDefault()` is ignored while it runs. */
+  bool passive;
+  /** `{ signal }`: the listener is skipped once the signal is aborted. */
+  xt_value signal;
+};
+
+/** One window-level listener (`window.addEventListener`). Window delivery has
+ * no capture phase, but `capture` is still part of listener identity, as in the
+ * DOM; `once`, `passive` and `signal` behave like the element ones. */
+struct XtGuiWindowListener {
+  std::string type;
+  xt_value fn;
+  bool once;
+  bool capture;
+  bool passive;
+  xt_value signal;
 };
 
 /** One pending `requestAnimationFrame` callback. */
@@ -166,6 +182,8 @@ struct XtGuiWindow {
   std::unordered_map<const xtgui::Node *, xt_value> node_handles;
   /** Element-level listeners, keyed by node. */
   std::unordered_map<const xtgui::Node *, std::vector<XtGuiNodeListener>> node_listeners;
+  /** Window-level listeners registered through `window.addEventListener`. */
+  std::vector<XtGuiWindowListener> window_listeners;
   /** Set by a DOM mutation; consumed by the frame loop before repainting. */
   int struct_dirty = 0;
   /** Callbacks queued for the next frame, plus the id counter. */
@@ -223,6 +241,9 @@ void xt_gui_run_scripts(XtGuiWindow *win);
 void xt_gui_script_gc_scan(void);
 /** Shared prototype carrying the window methods. */
 xt_value xt_gui_window_proto(void);
+/** Install `on` / `off` / `addEventListener` / `removeEventListener` (the
+ * listener options bag is parsed in `window_events.cpp`). */
+void xt_gui_install_window_events(xt_value proto);
 /** Release GPU claim + destroy the window and mark the record closed. */
 void xt_gui_quit_window(XtGuiWindow *win);
 /** Deliver `event` (no arguments) to handlers registered with `on`. */

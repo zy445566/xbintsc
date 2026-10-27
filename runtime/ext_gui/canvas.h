@@ -91,13 +91,39 @@ class CanvasGradient {
   std::vector<Stop> stops_;
 };
 
-/** What a fill or stroke paints with: a solid colour, or a gradient sampled
- * through the inverse of the current transform. `color` points into the
- * canvas state and stays valid for the duration of one draw call. */
+class CanvasGradient;
+class CanvasPattern;
+
+/** What a fill or stroke paints with: a solid colour, a gradient sampled through
+ * the inverse of the current transform, or a repeating image pattern. `color`
+ * points into the canvas state and stays valid for one draw call. */
 struct CanvasPaint {
   const float *color = nullptr;
   const CanvasGradient *gradient = nullptr;
+  const CanvasPattern *pattern = nullptr;
   CanvasTransform inverse;
+};
+
+/**
+ * A `CanvasPattern`: an image tiled in user space with one of the four
+ * repetition modes. Owned by the canvas that created it, like a gradient, so a
+ * stale handle resolves to no pattern instead of a dangling pointer.
+ */
+class CanvasPattern {
+ public:
+  enum class Repeat { Both, X, Y, None };
+
+  CanvasPattern(uint64_t id, const Image &image, Repeat repeat);
+  uint64_t id() const { return id_; }
+  Repeat repeat() const { return repeat_; }
+  /** Pattern colour at a user-space point; false when the point falls outside a
+   * non-repeating pattern (the caller then paints nothing). */
+  bool color_at(float x, float y, float out[4]) const;
+
+ private:
+  uint64_t id_ = 0;
+  Image image_;
+  Repeat repeat_ = Repeat::Both;
 };
 
 class Canvas2D {
@@ -114,6 +140,10 @@ class Canvas2D {
   /** Resize the bitmap, discarding its contents (the DOM `canvas.width = …`
    * behaviour). */
   void resize(int width, int height);
+  /** `getContextAttributes().alpha`: an opaque canvas clears to opaque black
+   * instead of transparent, as the WebGL/2D context attribute specifies. */
+  void set_alpha(bool alpha);
+  bool alpha() const { return alpha_; }
 
   /* -- state ------------------------------------------------------------- */
   void save();
@@ -138,6 +168,11 @@ class Canvas2D {
   void set_stroke_gradient(uint64_t id);
   uint64_t fill_gradient_id() const { return state_.fill_gradient; }
   uint64_t stroke_gradient_id() const { return state_.stroke_gradient; }
+  /** Use a pattern created by this canvas (`0` restores the solid colour). */
+  void set_fill_pattern(uint64_t id);
+  void set_stroke_pattern(uint64_t id);
+  uint64_t fill_pattern_id() const { return state_.fill_pattern; }
+  uint64_t stroke_pattern_id() const { return state_.stroke_pattern; }
   void set_line_width(float width) { state_.line_width = width > 0.0f ? width : 0.0f; }
   float line_width() const { return state_.line_width; }
   void set_line_cap(const std::string &value);
@@ -165,20 +200,32 @@ class Canvas2D {
                                          float r1);
   CanvasGradient *find_gradient(uint64_t id) const;
 
+  /* -- patterns ---------------------------------------------------------- */
+  /** Create a tiled pattern from `image`; the canvas owns it. */
+  CanvasPattern *create_pattern(const Image &image, CanvasPattern::Repeat repeat);
+  CanvasPattern *find_pattern(uint64_t id) const;
+
   /* -- paths ------------------------------------------------------------- */
   void begin_path();
   void close_path();
   void move_to(float x, float y);
   void line_to(float x, float y);
   void rect(float x, float y, float width, float height);
-  void round_rect(float x, float y, float width, float height, float radius);
+  /** Four corner radii, clockwise from the top-left (CSS/`roundRect` order). */
+  void round_rect(float x, float y, float width, float height, float radius_tl, float radius_tr,
+                  float radius_br, float radius_bl);
   void arc(float cx, float cy, float radius, float start, float end, bool counterclockwise);
   void ellipse(float cx, float cy, float rx, float ry, float rotation, float start, float end,
                bool counterclockwise);
   void quadratic_curve_to(float cpx, float cpy, float x, float y);
   void bezier_curve_to(float c1x, float c1y, float c2x, float c2y, float x, float y);
-  void fill();
+  /** Fill the current path (`even_odd` selects the even-odd rule). */
+  void fill(bool even_odd = false);
   void stroke();
+  /** Fill/stroke a path supplied by the caller (`Path2D`); the points are user
+   * space and are transformed with the current state, like the current path. */
+  void fill_paths(const std::vector<CanvasSubpath> &paths, bool even_odd);
+  void stroke_paths(const std::vector<CanvasSubpath> &paths);
 
   /* -- rectangles -------------------------------------------------------- */
   void clear_rect(float x, float y, float width, float height);
@@ -187,14 +234,26 @@ class Canvas2D {
 
   /* -- text -------------------------------------------------------------- */
   float measure_text(const std::string &text) const;
-  void fill_text(const std::string &text, float x, float y);
-  void stroke_text(const std::string &text, float x, float y);
+  /** Draw text; a positive `max_width` condenses it horizontally so the run is
+   * at most that wide, as the canvas `fillText`/`strokeText` fourth argument
+   * requires. */
+  void fill_text(const std::string &text, float x, float y, float max_width = 0.0f);
+  void stroke_text(const std::string &text, float x, float y, float max_width = 0.0f);
 
   /* -- images ------------------------------------------------------------ */
   /** Draw `source` scaled into the destination rectangle, sampling the source
    * rectangle `(sx, sy, sw, sh)`. `source` is RGBA8. */
   void draw_image(const Image &source, float dx, float dy, float dw, float dh, float sx, float sy,
                   float sw, float sh);
+
+  /* -- pixel writes and export ------------------------------------------- */
+  /** `putImageData`: copy RGBA bytes straight into the bitmap (no transform,
+   * blending or globalAlpha), clipped to the canvas and the optional dirty
+   * rectangle. */
+  void set_image_data(const std::vector<unsigned char> &rgba, int data_width, int data_height,
+                      int dx, int dy, int dirty_x, int dirty_y, int dirty_width, int dirty_height);
+  /** Encode the bitmap as a PNG (used by `toDataURL`/`toBlob`). */
+  bool encode_png(std::vector<unsigned char> *out) const;
 
   /* -- test hook --------------------------------------------------------- */
   /** Copy an `(x, y, w, h)` region to `out` (RGBA8, row-major). Out-of-bounds
@@ -223,6 +282,8 @@ class Canvas2D {
     float stroke_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
     uint64_t fill_gradient = 0;
     uint64_t stroke_gradient = 0;
+    uint64_t fill_pattern = 0;
+    uint64_t stroke_pattern = 0;
     std::string line_cap_string = "butt";
     std::string line_join_string = "miter";
   };
@@ -231,6 +292,8 @@ class Canvas2D {
   void to_device(float x, float y, float *outX, float *outY) const;
   /** The current path transformed into device space. */
   std::vector<CanvasSubpath> device_subpaths() const;
+  /** Any user-space path transformed into device space. */
+  std::vector<CanvasSubpath> device_subpaths_of(const std::vector<CanvasSubpath> &paths) const;
   /** Add one device-space polygon loop to `out`. */
   void flatten_arc(float cx, float cy, float radius, float start, float end, bool ccw,
                    CanvasSubpath *out) const;
@@ -240,7 +303,7 @@ class Canvas2D {
   /** Paint descriptors for the current state. */
   CanvasPaint fill_paint() const;
   CanvasPaint stroke_paint() const;
-  CanvasPaint make_paint(uint64_t gradient_id, const float color[4]) const;
+  CanvasPaint make_paint(uint64_t gradient_id, uint64_t pattern_id, const float color[4]) const;
   void stroke_subpath(const CanvasSubpath &points, bool closed, const CanvasPaint &paint);
   /** Stroke one polyline with caps and joins; `half` is half the device-space
    * line width. Used by `stroke_subpath` for both solid and dashed paths. */
@@ -250,15 +313,17 @@ class Canvas2D {
   void dash_polyline(const CanvasSubpath &points, bool closed,
                      std::vector<CanvasSubpath> *out) const;
   void paint_text(const std::string &text, float x, float y, const CanvasPaint &paint,
-                  bool stroke);
+                  bool stroke, float max_width);
 
   Image image_;
+  bool alpha_ = true;
   uint64_t id_ = 0;
   uint64_t generation_ = 0;
   State state_;
   std::vector<State> stack_;
   std::vector<CanvasSubpath> path_;
   std::unordered_map<uint64_t, std::unique_ptr<CanvasGradient>> gradients_;
+  std::unordered_map<uint64_t, std::unique_ptr<CanvasPattern>> patterns_;
 };
 
 /** The canvas with the given process-wide id, or null. Used by the renderer. */

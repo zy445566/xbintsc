@@ -106,4 +106,234 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
     expect(value("winCompat")).toBe("win:div#inner.warm");
     expect(value("stopped")).toBe("inner");
   });
+
+  it("mutates the tree with append/prepend/replaceChildren/insertAdjacentHTML and namespaces", () => {
+    const { value } = harness.compileAndRun(
+      "dom-mutation",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><body style="margin:0">
+        <div id="host"></div>
+      </body></html>\`;
+
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const win = createWindow({ title: "dom-mutation", width: 400, height: 300 });
+      win.on("ready", () => {
+        const doc = win.document;
+        const host: any = doc.getElementById("host");
+
+        // append/prepend mix nodes and strings, like the DOM.
+        host.append("a", doc.createElement("b"));
+        console.log("append=" + host.textContent + ":" + host.children.length + ":" +
+                    host.lastElementChild.tagName);
+        host.prepend("z", doc.createElement("i"));
+        console.log("prepend=" + host.textContent + ":" + host.firstElementChild.tagName);
+
+        // insertAdjacentHTML at all four positions.
+        host.insertAdjacentHTML("beforebegin", "<p id='pre'>pre</p>");
+        host.insertAdjacentHTML("afterbegin", "<b>head</b>");
+        host.insertAdjacentHTML("beforeend", "<u>tail</u>");
+        host.insertAdjacentHTML("afterend", "<p id='post'>post</p>");
+        console.log("adjacent=" + doc.getElementById("pre").textContent + ":" +
+                    doc.getElementById("post").textContent + ":" +
+                    host.firstElementChild.tagName + ":" + host.lastElementChild.tagName);
+
+        // replaceChildren keeps a node argument that used to be a child.
+        const keep: any = doc.createElement("em");
+        keep.textContent = "keep";
+        host.append(keep);
+        host.replaceChildren("t", keep);
+        console.log("replace=" + host.textContent + ":" + host.children.length + ":" +
+                    host.firstElementChild.tagName);
+
+        // createElementNS records the namespace and preserves SVG's case.
+        const gradient: any = doc.createElementNS(SVG_NS, "svg:linearGradient");
+        console.log("ns=" + gradient.namespaceURI + ":" + gradient.localName + ":" +
+                    gradient.prefix + ":" + gradient.tagName);
+        const rect: any = doc.createElementNS(SVG_NS, "rect");
+        console.log("svg-case=" + rect.tagName + ":" + rect.localName + ":" + rect.prefix);
+        const html: any = doc.createElementNS("http://www.w3.org/1999/xhtml", "DIV");
+        console.log("html-ns=" + html.localName + ":" + html.namespaceURI + ":" + html.tagName);
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("append")).toBe("a:1:B");
+    expect(value("prepend")).toBe("za:I");
+    expect(value("adjacent")).toBe("pre:post:B:U");
+    expect(value("replace")).toBe("tkeep:1:EM");
+    expect(value("ns")).toBe(
+      "http://www.w3.org/2000/svg:linearGradient:svg:linearGradient",
+    );
+    expect(value("svg-case")).toBe("rect:rect:null");
+    expect(value("html-ns")).toBe("div:http://www.w3.org/1999/xhtml:DIV");
+  });
+  it("honours the style object, computed style and geometry arguments", () => {
+    const { value } = harness.compileAndRun(
+      "dom-style-args",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #box { width: 100px; height: 40px; margin-top: 10px; }
+        #box::before { content: "hi"; color: #123456; }
+      </style></head><body>
+        <div id="box">x</div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "dom-style-args", width: 400, height: 300 });
+      win.on("ready", () => {
+        const doc = win.document;
+        const box: any = doc.getElementById("box");
+        const cl = box.classList;
+
+        // toggle(name, force) is idempotent; toggle(name) still flips.
+        console.log("t1=" + cl.toggle("on", true) + ":" + box.className);
+        console.log("t2=" + cl.toggle("on", true) + ":" + box.className);
+        console.log("t3=" + cl.toggle("on", false) + ":" + box.className);
+        console.log("t4=" + cl.toggle("on", false) + ":" + box.className);
+        console.log("t5=" + cl.toggle("on") + ":" + box.className);
+
+        box.style.setProperty("color", "#ff0000", "important");
+        console.log("p1=" + box.style.getPropertyValue("color") + ":" + box.style.getPropertyPriority("color"));
+        box.style.setProperty("color", "#0000ff");
+        console.log("p2=" + box.style.getPropertyPriority("color") + ":" + getComputedStyle(box).getPropertyValue("color"));
+        // An invalid priority makes the call a no-op, as in the CSSOM.
+        box.style.setProperty("color", "#00ff00", "urgent");
+        console.log("p3=" + box.style.getPropertyValue("color"));
+        console.log("rm=" + box.style.removeProperty("color") + ":" + box.style.getPropertyValue("color"));
+
+        box.style.cssText = "background-color: #010203; width: 55px";
+        console.log("ct=" + box.style.getPropertyValue("width") + ":" + box.style.getPropertyValue("background-color"));
+
+        const cs: any = getComputedStyle(box);
+        console.log("cs=" + cs.getPropertyValue("display") + ":" + cs.getPropertyValue("width") +
+                    ":" + cs.getPropertyPriority("width") + ":" + cs.getPropertyValue("margin-top"));
+        const before: any = getComputedStyle(box, "::before");
+        console.log("before=" + before.getPropertyValue("content") + ":" + before.getPropertyValue("color"));
+        console.log("unsupported-pseudo=" + getComputedStyle(box, "::marker").getPropertyValue("color"));
+
+        doc.title = "changed";
+        console.log("title=" + doc.title);
+
+        const rect: any = box.getBoundingClientRect();
+        console.log("rect=" + rect.x + "," + rect.y + "," + rect.top + "," + rect.right + "," +
+                    rect.bottom + "," + rect.left + "," + rect.width);
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("t1")).toBe("true:on");
+    expect(value("t2")).toBe("true:on");
+    expect(value("t3")).toBe("false:");
+    expect(value("t4")).toBe("false:");
+    expect(value("t5")).toBe("true:on");
+    expect(value("p1")).toBe("#ff0000:important");
+    expect(value("p2")).toBe(":rgb(0, 0, 255)");
+    expect(value("p3")).toBe("#0000ff");
+    expect(value("rm")).toBe("#0000ff:");
+    expect(value("ct")).toBe("55px:#010203");
+    expect(value("cs")).toBe("block:55px::10px");
+    expect(value("before")).toBe('"hi":rgb(18, 52, 86)');
+    expect(value("unsupported-pseudo")).toBe("");
+    expect(value("title")).toBe("changed");
+    expect(value("rect")).toBe("0,10,10,55,50,0,55");
+  });
+  it("writes style and dataset properties through named access", () => {
+    const { value } = harness.compileAndRun(
+      "dom-properties",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #box { width: 100px; height: 40px; margin-top: 10px; }
+        #box::before { content: "hi"; color: #123456; }
+      </style></head><body>
+        <div id="box" data-role="lead" data-user-id="7">x</div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "dom-properties", width: 400, height: 300 });
+      win.on("ready", () => {
+        const doc = win.document;
+        const box: any = doc.getElementById("box");
+
+        // Property assignment used to park a dead field on the JS object.
+        box.style.width = "50%";
+        box.style.height = "30px";
+        console.log("width=" + box.style.width + ":" + win.computedStyle("#box", "width"));
+        console.log("rect=" + box.getBoundingClientRect().width + "x" + box.getBoundingClientRect().height);
+        box.style.backgroundColor = "#ff0000";
+        console.log("bg=" + box.style.backgroundColor + ":" + win.computedStyle("#box", "background-color"));
+        box.style.display = "none";
+        console.log("hidden=" + win.computedStyle("#box", "display"));
+        box.style.display = "";
+        console.log("shown=" + win.computedStyle("#box", "display"));
+        box.style.zIndex = "5";
+        console.log("z=" + win.computedStyle("#box", "z-index"));
+
+        // setProperty and named access address the same declaration block.
+        box.style.setProperty("color", "#00ff00");
+        console.log("color=" + box.style.color + ":" + box.style.getPropertyValue("color") +
+                    ":" + win.computedStyle("#box", "color"));
+        box.style.setProperty("--accent", "#abcdef");
+        console.log("custom=" + box.style.getPropertyValue("--accent") + ":" + box.style["--accent"]);
+        console.log("decl=" + box.style.length + ":" + box.style.item(0) + ":" + box.style.item(5));
+        box.style.removeProperty("z-index");
+        console.log("removed=" + ("zIndex" in box.style) + ":" + box.style.zIndex);
+
+        // dataset maps camelCase keys to data-* attributes, both ways.
+        console.log("dataset=" + box.dataset.role + ":" + box.dataset.userId);
+        box.dataset.count = "3";
+        console.log("data-set=" + box.getAttribute("data-count") + ":" + ("count" in box.dataset) +
+                    ":" + box.dataset.hasOwnProperty("count"));
+        box.dataset.role = "hero";
+        console.log("data-write=" + box.getAttribute("data-role"));
+        delete box.dataset.count;
+        console.log("data-delete=" + box.hasAttribute("data-count") + ":" + (box.dataset.count === undefined));
+        console.log("data-keys=" + Object.keys(box.dataset).join(","));
+
+        // getComputedStyle answers named properties from the cascade too.
+        const cs: any = getComputedStyle(box);
+        console.log("cs=" + cs.width + ":" + cs.height + ":" + cs.backgroundColor + ":" +
+                    cs.marginTop + ":" + cs.getPropertyValue("background-color") +
+                    ":" + cs.getPropertyValue("--accent"));
+        const before: any = getComputedStyle(box, "::before");
+        console.log("before=" + before.content + ":" + before.color);
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("width")).toBe("50%:50%");
+    expect(value("rect")).toBe("200x30");
+    expect(value("bg")).toBe("#ff0000:rgb(255, 0, 0)");
+    expect(value("hidden")).toBe("none");
+    expect(value("shown")).toBe("block");
+    expect(value("z")).toBe("5");
+    expect(value("color")).toBe("#00ff00:#00ff00:rgb(0, 255, 0)");
+    expect(value("custom")).toBe("#abcdef:#abcdef");
+    expect(value("decl")).toBe("6:width:--accent");
+    expect(value("removed")).toBe("false:");
+    expect(value("dataset")).toBe("lead:7");
+    expect(value("data-set")).toBe("3:true:true");
+    expect(value("data-write")).toBe("hero");
+    expect(value("data-delete")).toBe("false:true");
+    expect(value("data-keys")).toBe("role,userId");
+    expect(value("cs")).toBe("50%:30px:rgb(255, 0, 0):10px:rgb(255, 0, 0):#abcdef");
+    expect(value("before")).toBe('"hi":rgb(18, 52, 86)');
+  });
 });

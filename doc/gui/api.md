@@ -21,9 +21,23 @@ Methods implemented on a window handle: `setTitle` / `setSize` / `loadHTML` /
 `getHTML` / `setBackground` / `close` / `isOpen` / `on` / `off`, plus `driver()`,
 which reports the SDL_GPU backend in use (`"vulkan"`, `"direct3d12"`, `"metal"`,
 … — SDL picks the best one the device supports). The Web spellings are available
-too: `addEventListener` / `removeEventListener` are aliases of `on` / `off` (their
-`options` argument is accepted and ignored) and the `closed` getter mirrors
-`isOpen()`, so a document written against the browser API runs unchanged.
+too: `addEventListener` / `removeEventListener` take the standard options bag
+(`capture`, `once`, `passive`, `signal`), and `closed` mirrors `isOpen()`, so a
+document written against the browser API runs unchanged.
+
+Element listeners accept the same options: `{ once }` drops the listener after
+its first call, `{ passive: true }` makes `preventDefault()` a no-op, and
+`{ signal }` (an `AbortSignal` from `new AbortController()`) removes it on
+abort, including a signal that was already aborted when the listener was added.
+`element.dispatchEvent(event)` dispatches the *same* event object (identity is
+observable), fills in `target` / `currentTarget` / `eventPhase` and records the
+path for `event.composedPath()`. `new Event(...)`, `new CustomEvent(...)`,
+`new MouseEvent(...)`, `new KeyboardEvent(...)`, `new PointerEvent(...)`,
+`new WheelEvent(...)`, `new FocusEvent(...)`, `new InputEvent(...)` and
+`new SubmitEvent(...)` keep every field of their `init` object (`detail`,
+`composed`, the mouse/keyboard members, …). Window listeners take the same bag
+(capture is part of listener identity; window delivery has no capture phase).
+
 Window navigation is real: `scrollTo(x, y)` / `scrollTo({ left, top })` /
 `scrollBy(...)` move the page viewport (clamped to the content bounds; painting
 and hit testing follow it), and `scrollX` / `scrollY` / `pageXOffset` /
@@ -77,7 +91,8 @@ requestAnimationFrame(frame);
 | `navigator` | `userAgent` (a desktop Chrome string ending in `xbintsc`), `platform`, `vendor`, `language(s)`, `hardwareConcurrency`, `maxTouchPoints`, `onLine`, `vibrate()` |
 | `localStorage` | an in-memory `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` store |
 | `AudioContext`, `webkitAudioContext` | a Web Audio graph with a real mixer and decoder (see below) |
-| `Event`, `CustomEvent`, `ProgressEvent`, … | event constructors |
+| `Event`, `CustomEvent`, `ProgressEvent`, `MouseEvent`, `KeyboardEvent`, `PointerEvent`, `WheelEvent`, `FocusEvent`, `InputEvent`, `SubmitEvent` | event constructors; the `init` argument is kept as given (`detail`, `composed`, mouse/keyboard fields, …) |
+| `AbortController`, `AbortSignal` | a real controller/signal pair for `{ signal }` listener removal, with `abort()`, `aborted`, `reason`, `onabort` and `throwIfAborted()` |
 | `HTMLCanvasElement`, `HTMLImageElement`, `WebGLRenderingContext`, `WebGL2RenderingContext`, `WebGLBuffer`/`WebGLTexture`/`WebGLShader`/`WebGLProgram`/`WebGLFramebuffer`/`WebGLRenderbuffer`/`WebGLUniformLocation`/`WebGLActiveInfo`/`WebGLVertexArrayObject`/`WebGLSampler`/`WebGLQuery`/`WebGLSync`/`WebGLTransformFeedback` | real constructor values. `canvas.getContext("webgl")` and `getContext("webgl2")` return GPU contexts (see [WebGL](./webgl.md)). |
 | `ImageBitmap`, `createImageBitmap(source)` | immutable bitmaps backed by decoded pixels (`<img>`, `<canvas>`, `<video>` frames and `ImageData` shapes); the promise resolves immediately and `texImage2D` accepts the result |
 | `ImageData`, `OffscreenCanvas`, `XRWebGL*`, `Request`, `Headers`, `Response`, `ReadableStream`, `DOMParser` | `typeof` probes answer `"undefined"` (no XR/fetch/streaming backend), which lets a page take its "unsupported" branch instead of calling a no-op stub. Three.js pages use its real renderer on this backend (see [Known issues](./known-issues.md)). |

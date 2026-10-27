@@ -4,6 +4,7 @@
  */
 
 #include "dom_api_internal.h"
+#include "listener_options.h"
 
 #include <algorithm>
 #include <cmath>
@@ -217,13 +218,19 @@ METHOD(node_get_bounding_rect) {
   if (node == nullptr || win == nullptr || win->document == nullptr) return XT_UNDEFINED;
   const xtgui::LayoutBox *box = win->document->boxOf(node);
   if (box == nullptr) return XT_UNDEFINED;
-  /* Like the DOM: the rectangle of the *transformed* border box. */
+  /* Like the DOM: the rectangle of the *transformed* border box. The legacy
+   * `top`/`right`/`bottom`/`left` members are the same rectangle in the other
+   * spelling; libraries read both. */
   xtgui::LayoutRect rect = xtgui::xt_layout_transformed_bounds(box);
   xt_value object = xt_object_new();
   xt_object_set(object, xt_string_from_cstr("x"), xt_number(rect.x));
   xt_object_set(object, xt_string_from_cstr("y"), xt_number(rect.y));
   xt_object_set(object, xt_string_from_cstr("width"), xt_number(rect.width));
   xt_object_set(object, xt_string_from_cstr("height"), xt_number(rect.height));
+  xt_object_set(object, xt_string_from_cstr("top"), xt_number(rect.y));
+  xt_object_set(object, xt_string_from_cstr("right"), xt_number(rect.x + rect.width));
+  xt_object_set(object, xt_string_from_cstr("bottom"), xt_number(rect.y + rect.height));
+  xt_object_set(object, xt_string_from_cstr("left"), xt_number(rect.x));
   return object;
 }
 
@@ -308,20 +315,18 @@ METHOD(node_add_event_listener) {
   if (node == nullptr || win == nullptr || argc < 2) return self;
   xt_value fn = xt_arg(argc, argv, 1);
   if (!XT_IS_FUNCTION(fn)) return self;
-  bool capture = false;
-  bool once = false;
-  xt_value options = xt_arg(argc, argv, 2);
-  if (XT_IS_OBJECT(options)) {
-    capture = value_truthy(xt_object_get_cstr(options, "capture"));
-    once = value_truthy(xt_object_get_cstr(options, "once"));
-  } else if (XT_IS_BOOL(options)) {
-    capture = value_truthy(options);
-  }
+  XtGuiListenerOptions options = xt_gui_listener_options(xt_arg(argc, argv, 2));
+  /* `{ signal: controller.signal }` removes the listener: an already-aborted
+   * signal means it was never installed, and a later abort is honoured at
+   * dispatch time (see `call_node_listeners`). */
+  if (xt_gui_signal_aborted(options.signal)) return self;
   XtGuiNodeListener listener;
   listener.type = to_string_value(xt_arg(argc, argv, 0));
   listener.fn = fn;
-  listener.once = once;
-  listener.capture = capture;
+  listener.once = options.once;
+  listener.capture = options.capture;
+  listener.passive = options.passive;
+  listener.signal = options.signal;
   win->node_listeners[node].push_back(listener);
   return self;
 }
@@ -331,11 +336,9 @@ METHOD(node_remove_event_listener) {
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || win == nullptr || argc < 2) return self;
-  bool capture = false;
-  xt_value options = xt_arg(argc, argv, 2);
-  if (XT_IS_OBJECT(options)) capture = value_truthy(xt_object_get_cstr(options, "capture"));
-  else if (XT_IS_BOOL(options)) capture = value_truthy(options);
-  remove_listener(win, node, to_string_value(xt_arg(argc, argv, 0)), xt_arg(argc, argv, 1), capture);
+  XtGuiListenerOptions options = xt_gui_listener_options(xt_arg(argc, argv, 2));
+  remove_listener(win, node, to_string_value(xt_arg(argc, argv, 0)), xt_arg(argc, argv, 1),
+                  options.capture);
   return self;
 }
 

@@ -90,7 +90,14 @@ static void xt_gui_gc_scan_roots(void) {
     xt_gc_mark_value(win.document_object);
     for (const auto &entry : win.node_handles) xt_gc_mark_value(entry.second);
     for (const auto &entry : win.node_listeners) {
-      for (const XtGuiNodeListener &listener : entry.second) xt_gc_mark_value(listener.fn);
+      for (const XtGuiNodeListener &listener : entry.second) {
+        xt_gc_mark_value(listener.fn);
+        xt_gc_mark_value(listener.signal);
+      }
+    }
+    for (const XtGuiWindowListener &listener : win.window_listeners) {
+      xt_gc_mark_value(listener.fn);
+      xt_gc_mark_value(listener.signal);
     }
     for (const XtGuiAnimationFrame &frame : win.animation_frames) xt_gc_mark_value(frame.fn);
     for (const XtGuiAnimationFrame &frame : win.running_frames) xt_gc_mark_value(frame.fn);
@@ -180,6 +187,7 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   win->animation_frames.clear();
   win->media_lists.clear();
   win->media_lists_by_query.clear();
+  win->window_listeners.clear();
   xt_gui_media_shutdown(win);
   xt_gui_canvas_shutdown(win);
   xt_gui_handles_reset(win);

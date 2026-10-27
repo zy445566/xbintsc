@@ -19,6 +19,7 @@
 #include "paint.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 namespace guidev {
@@ -98,11 +99,32 @@ static void xt_gui_gc_scan_roots(void) {
 
 /* -- initialisation ------------------------------------------------------- */
 
-static int ensure_init(void) {  if (g_sdl_initialized) return 1;
-  xt_gc_register_root_provider(xt_gui_gc_scan_roots);
+/**
+ * Exit status for "this host cannot run a GUI program": no video driver, or no
+ * GPU device the SDL_GPU backends accept. It is deliberately distinct from a
+ * failed program so a CI script (or a user) can skip the run instead of
+ * reporting a crash. 77 is the autotools "skip" convention; `ci.yml` treats it
+ * that way for the provisional macOS job.
+ */
+const int kGuiUnavailableExit = 77;
+
+/** Report a window that could not be created as a JavaScript `Error`. Returning
+ * `undefined` used to surface one line later as `Cannot read properties of
+ * undefined (reading 'on')`, which hid the real diagnostic. */
+static void throw_gui_error(const char *message) {
+  xt_value text = xt_string_from_cstr(message);
+  xt_throw(xt_error_ctor_by_name(xt_string_from_cstr("Error"), 1, &text));
+}
+
+static void ensure_init(void) {
+  if (g_sdl_initialized) return;
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     fprintf(stderr, "xt_gui: SDL_Init failed: %s\n", SDL_GetError());
-    return 0;
+    fprintf(stderr,
+            "xt_gui: the GUI extension needs a display (or a virtual one such as Xvfb); "
+            "exiting with status %d.\n",
+            kGuiUnavailableExit);
+    exit(kGuiUnavailableExit);
   }
   /* Accept every shader format so the same code runs on Metal, Vulkan and
    * D3D12; the backend only needs the one it supports. The engine ships MSL,
@@ -113,11 +135,17 @@ static int ensure_init(void) {  if (g_sdl_initialized) return 1;
   g_device = SDL_CreateGPUDevice(formats, false, NULL);
   if (g_device == NULL) {
     fprintf(stderr, "xt_gui: SDL_CreateGPUDevice failed: %s\n", SDL_GetError());
+    fprintf(stderr,
+            "xt_gui: the GUI extension needs a Metal (macOS), Vulkan or D3D12 device; "
+            "this host does not provide a usable one. Exiting with status %d.\n",
+            kGuiUnavailableExit);
     SDL_Quit();
-    return 0;
+    exit(kGuiUnavailableExit);
   }
+  /* Registered only once a window can exist: a failed init has nothing to
+   * mark, and a caller that cannot retry never needs a second provider. */
+  xt_gc_register_root_provider(xt_gui_gc_scan_roots);
   g_sdl_initialized = 1;
-  return 1;
 }
 
 /* -- window lookup -------------------------------------------------------- */
@@ -254,15 +282,18 @@ xt_value xt_gui_ensure_window(void) {
   for (int i = g_window_count - 1; i >= 0; i--) {
     if (g_windows[i].open) return g_windows[i].object;
   }
-  if (!ensure_init()) return XT_UNDEFINED;
+  ensure_init();
   XtGuiWindow *record = create_window_record("xbintsc gui", 800, 600, true);
-  if (record == NULL) return XT_UNDEFINED;
+  if (record == NULL) {
+    throw_gui_error("xbintsc gui: could not open the implicit window (see the diagnostic above)");
+    return XT_UNDEFINED;
+  }
   g_implicit_window = 1;
   return record->object;
 }
 
 extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
-  if (!ensure_init()) return XT_UNDEFINED;
+  ensure_init();
 
   const char *title = "xbintsc gui";
   int width = 800;
@@ -304,7 +335,11 @@ extern "C" xt_value xt_gui_create_window(int32_t argc, xt_value *argv) {
   }
 
   XtGuiWindow *record = create_window_record(title, width, height, high_density);
-  return record != NULL ? record->object : XT_UNDEFINED;
+  if (record == NULL) {
+    throw_gui_error("xbintsc gui: could not open a window (see the diagnostic above)");
+    return XT_UNDEFINED;
+  }
+  return record->object;
 }
 
 /* -- run() / quit() ------------------------------------------------------- */

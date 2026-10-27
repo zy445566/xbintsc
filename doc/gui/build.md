@@ -65,8 +65,12 @@
   driver) and macOS;
   the Windows x64 job builds both archives and links a `gui,media` program, so
   the MSVC build is validated even though *running* the examples there stays
-  provisional (the hosted runner has no GPU/Vulkan driver). Windows arm64 still
-  skips both archives: FFmpeg's MSVC arm64 build is not validated yet.
+  provisional (the hosted runner has no GPU/Vulkan driver). The macOS run is
+  provisional too: the Intel runner's virtualised GPU lacks
+  `MTLGPUFamilyMac2`, so the engine exits **77** ("cannot run a GUI here") and
+  the job records a skip instead of compiling a suite that cannot present.
+  Windows arm64 still skips both archives: FFmpeg's MSVC arm64 build is not
+  validated yet.
 - The Windows CI steps call `.github/actions/vs-toolchain` →
   `scripts/setup-vs-toolchain.ps1`, which imports the same Visual Studio
   `vcvarsall` environment and bundled LLVM a local build uses (no separate

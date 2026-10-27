@@ -34,6 +34,14 @@ launching it does not flash a console window. That also means stdout/stderr go
 nowhere when it is started from Explorer; set `app.console: true` in
 `xbintsc.config.json` to keep the console subsystem (useful while debugging).
 
+A host without a usable GPU cannot run the GUI at all. When SDL cannot open a
+video driver or create a Metal/Vulkan/D3D12 device, the engine prints the reason
+and exits with status **77** — the autotools "skip" convention, so CI and scripts
+can tell "this machine has no GUI" from "the program failed". A window that
+cannot be opened after that (an SDL window or GPU-claim error) makes
+`createWindow` throw a JavaScript `Error`; it no longer returns an `undefined`
+handle that fails a line later as `Cannot read properties of undefined`.
+
 ## Browser globals
 
 A document ported from the web rarely stops at `createWindow`. With `--ext gui`

@@ -30,6 +30,12 @@ API 编写的文档可以原样运行。
 窗口；这也意味着从资源管理器启动时 stdout/stderr 无处可去，调试时可在
 `xbintsc.config.json` 里设置 `app.console: true` 保留控制台子系统。
 
+没有可用 GPU 的宿主无法运行 GUI。当 SDL 无法打开视频驱动，或无法创建
+Metal/Vulkan/D3D12 设备时，引擎会打印原因并以状态码 **77** 退出——这是 autotools
+的“跳过”约定，CI 与脚本因此可以区分“这台机器没有 GUI”和“程序失败”。此后若窗口仍
+无法打开（SDL 窗口或 GPU claim 错误），`createWindow` 会抛出 JavaScript `Error`，
+而不再返回 `undefined` 句柄、让下一行以 `Cannot read properties of undefined` 失败。
+
 触发的事件：
 `ready`（首个呈现帧之后）、`load`、`close`、`resize`，以及输入事件
 `mousemove`、`mousedown`、`mouseup`、`click`、`wheel`、`keydown`、`keyup`。

@@ -102,8 +102,9 @@ transform feedback（入口为空操作）与 MSAA/采样缓冲（SDL_GPU 的 Me
 ## 测试
 
 - `tests/e2e/gui-webgl.test.ts` 编译 GLSL、绘制带纹理和深度测试的四边形、检查面剔除，并读回像素；它还覆盖混合常量色、动态缓冲 usage、顶点着色器纹理采样、`gl_FragDepth` 诊断、上下文丢失/恢复与立方体贴图。
-- `tests/e2e/gui-webgl2.test.ts` 覆盖 WebGL 2 的新增能力：`#version 300 es` 着色器、VAO 往返、带 divisor 的实例化绘制、`texStorage2D`、`clearBufferfv`、缓冲拷贝、采样器对象、结构体 uniform 字段、`drawingBufferStorage`，以及模板测试、浮点纹理、深度纹理、带 scissor 的清除、framebuffer blit、压缩纹理、`ImageBitmap`、立方体贴图与 3D/数组纹理。
-- `tests/e2e/gui-webgl2-formats.test.ts` 单独覆盖模板、浮点/深度纹理、scissor 清除、framebuffer blit、压缩纹理与 `ImageBitmap`。
+- `tests/e2e/gui-webgl2.test.ts` 覆盖 WebGL 2 的着色器/状态新增能力：`#version 300 es` 着色器、VAO 往返、带 divisor 的实例化绘制、`texStorage2D`、`clearBufferfv`、缓冲拷贝、采样器对象、结构体 uniform 字段与 `drawingBufferStorage`。
+- `tests/e2e/gui-webgl2-formats.test.ts` 覆盖模板、浮点/深度纹理、压缩纹理与 `ImageBitmap`。
+- `tests/e2e/gui-webgl2-blit.test.ts` 覆盖带 scissor 的颜色/深度清除、framebuffer blit，以及局部 blit 之外必须保留的像素（在 Metal 上，若目标 load-op 丢弃这些像素，该测试就会失败）。
 - `tests/e2e/gui-webgl2-3d.test.ts` 覆盖 2D 数组纹理与 3D 纹理的多层采样、`texSubImage3D` 子区域更新与 `framebufferTextureLayer` 渲染到数组层。
 - `tests/e2e/gui-webgl2-mrt.test.ts` 覆盖两个片元输出分别写入两个颜色附件。
 - `tests/e2e/gui-webgl2-ubo.test.ts` 覆盖 uniform 块的绑定、std140 成员与运行时更新。

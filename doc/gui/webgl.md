@@ -268,13 +268,15 @@ uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
   depth-tested quad, checks face culling and reads the pixels back; it also
   covers blend constants, dynamic buffer usage, vertex-shader texture sampling,
   `gl_FragDepth` diagnostics, context loss/restore and cube maps.
-- `tests/e2e/gui-webgl2.test.ts` covers the WebGL 2 additions: `#version 300 es`
-  shaders, a VAO round trip, instanced draws with a divisor, `texStorage2D`,
-  `clearBufferfv`, buffer copies, sampler objects, struct-uniform fields,
-  `drawingBufferStorage`, stencil tests, float and depth textures, scissored
-  clears, framebuffer blits, compressed textures and `ImageBitmap`.
+- `tests/e2e/gui-webgl2.test.ts` covers the WebGL 2 shader/state additions:
+  `#version 300 es` shaders, a VAO round trip, instanced draws with a divisor,
+  `texStorage2D`, `clearBufferfv`, buffer copies, sampler objects, struct-uniform
+  fields and `drawingBufferStorage`.
 - `tests/e2e/gui-webgl2-formats.test.ts` covers stencil, float/depth textures,
-  scissored clears, framebuffer blits, compressed textures and `ImageBitmap`.
+  compressed textures and `ImageBitmap`.
+- `tests/e2e/gui-webgl2-blit.test.ts` covers scissored colour/depth clears,
+  framebuffer blits, and the pixels around a partial blit that must survive
+  (a destination load-op that discards them fails there on Metal).
 - `tests/e2e/gui-media.test.ts` also uploads the latest decoded `<video>` frame
   as a texture and reads it back.
 - `tests/e2e/gui-webgl2-3d.test.ts` covers 2D-array and 3D texture layer

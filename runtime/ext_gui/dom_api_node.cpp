@@ -217,13 +217,19 @@ METHOD(node_get_bounding_rect) {
   if (node == nullptr || win == nullptr || win->document == nullptr) return XT_UNDEFINED;
   const xtgui::LayoutBox *box = win->document->boxOf(node);
   if (box == nullptr) return XT_UNDEFINED;
-  /* Like the DOM: the rectangle of the *transformed* border box. */
+  /* Like the DOM: the rectangle of the *transformed* border box. The legacy
+   * `top`/`right`/`bottom`/`left` members are the same rectangle in the other
+   * spelling; libraries read both. */
   xtgui::LayoutRect rect = xtgui::xt_layout_transformed_bounds(box);
   xt_value object = xt_object_new();
   xt_object_set(object, xt_string_from_cstr("x"), xt_number(rect.x));
   xt_object_set(object, xt_string_from_cstr("y"), xt_number(rect.y));
   xt_object_set(object, xt_string_from_cstr("width"), xt_number(rect.width));
   xt_object_set(object, xt_string_from_cstr("height"), xt_number(rect.height));
+  xt_object_set(object, xt_string_from_cstr("top"), xt_number(rect.y));
+  xt_object_set(object, xt_string_from_cstr("right"), xt_number(rect.x + rect.width));
+  xt_object_set(object, xt_string_from_cstr("bottom"), xt_number(rect.y + rect.height));
+  xt_object_set(object, xt_string_from_cstr("left"), xt_number(rect.x));
   return object;
 }
 

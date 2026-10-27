@@ -172,6 +172,36 @@ METHOD(doc_title_get) {
   return xt_string_from_cstr(text.c_str());
 }
 
+/** `document.title = text`: replace the text of the document's `<title>`.
+ * A page without one gets a `<title>` (and a `<head>`, if the parser did not
+ * create one), so the assignment is not silently lost. */
+METHOD(doc_title_set) {
+  (void)env;
+  XtGuiWindow *win = resolve_window(self);
+  if (win == nullptr || win->document == nullptr) return XT_UNDEFINED;
+  std::string text;
+  if (argc >= 1) text = to_string_value(xt_arg(argc, argv, 0));
+  xtgui::Node *root = const_cast<xtgui::Node *>(win->document->root());
+  xtgui::Node *title = const_cast<xtgui::Node *>(find_by_tag(root, "title"));
+  if (title == nullptr) {
+    xtgui::Node *head = const_cast<xtgui::Node *>(find_by_tag(root, "head"));
+    if (head == nullptr) {
+      head = win->document->createElement("head");
+      if (head == nullptr) return XT_UNDEFINED;
+      /* `<head>` belongs before the body, not after it. */
+      xtgui::Node *body = const_cast<xtgui::Node *>(find_by_tag(root, "body"));
+      win->document->insertBefore(root, head, body);
+    }
+    title = win->document->createElement("title");
+    if (title == nullptr) return XT_UNDEFINED;
+    win->document->appendChild(head, title);
+  }
+  title->children.clear();
+  if (!text.empty()) title->addText(text);
+  mark_dirty(win);
+  return XT_UNDEFINED;
+}
+
 METHOD(doc_default_view_get) {
   (void)env;
   (void)argc;

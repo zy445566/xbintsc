@@ -90,6 +90,22 @@ console.log(box.contains(inner));                 // 后代判断
 旧式 `win.on(type, fn)` 负载保留其**字符串** `e.target`（`div#id.class`）；
 元素 `Event.target` 是一个句柄，其描述符与同一字符串匹配。
 
+### style 对象、计算样式与几何
+
+内联 `style` 对象是一个 CSSOM 声明块：`setProperty(name, value, priority)` 在
+`priority` 为 `"important"` 时以 `!important` 保存该声明（其他优先级值会让本次
+调用成为无操作，空值则移除该属性），`getPropertyValue` / `getPropertyPriority`
+读回声明，`removeProperty` 返回旧值，`cssText` 读取或整体替换声明块。
+
+`getComputedStyle(el, pseudoElt)` 从**层叠结果**读取——UA 样式表、作者规则、
+继承和内联声明——而不是回显内联块，因此写在样式表里的规则同样可见。传入
+`"::before"` 或 `"::after"` 可读取生成内容盒；其他伪元素返回空值。每次读取都会
+先结算待处理的重新样式，因此早先创建的句柄在后续变更后仍然有效。
+
+`getBoundingClientRect()` 在 `x` / `y` / `width` / `height` 之外还带有旧式的
+`top` / `right` / `bottom` / `left` 成员；`document.title = …` 写入文档的
+`<title>`（页面没有该元素时会创建它以及 `<head>`）。
+
 `element.focus()` 会把元素滚动到可见区域（传入 `{ preventScroll: true }` 则保持
 当前页面偏移）；`document.hasFocus()` 报告由 `window.focus()` / `window.blur()`
 切换的窗口焦点状态。

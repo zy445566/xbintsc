@@ -27,6 +27,7 @@ extern xt_value g_document_proto;
 extern xt_value g_event_proto;
 extern xt_value g_class_list_proto;
 extern xt_value g_style_proto;
+extern xt_value g_computed_style_proto;
 extern xt_value g_canvas_proto;
 extern xt_value g_canvas_gradient_proto;
 extern xt_value g_webgl_proto;
@@ -49,6 +50,7 @@ xt_value document_proto();
 xt_value event_proto();
 xt_value class_list_proto();
 xt_value style_proto();
+xt_value computed_style_proto();
 xt_value canvas_proto();
 xt_value canvas_gradient_proto();
 xt_value webgl_proto();
@@ -169,6 +171,7 @@ METHOD(doc_visibility_state_get);
 METHOD(doc_ready_state_get);
 METHOD(doc_has_focus);
 METHOD(doc_title_get);
+METHOD(doc_title_set);
 METHOD(doc_default_view_get);
 METHOD(doc_create_text_node);
 METHOD(doc_body_get);
@@ -344,7 +347,16 @@ METHOD(class_list_contains);
 /* style methods */
 METHOD(style_set_property);
 METHOD(style_get_property_value);
+METHOD(style_get_property_priority);
 METHOD(style_remove_property);
+METHOD(style_css_text_get);
+METHOD(style_css_text_set);
+
+/* computed style (`getComputedStyle`) */
+METHOD(computed_style_get_property_value);
+METHOD(computed_style_get_property_priority);
+/** Build the computed-style handle for an element (and optional pseudo). */
+xt_value computed_style_handle(xt_value element, xt_value pseudo);
 
 /* WebGL context: state and queries */
 METHOD(webgl_canvas_get);

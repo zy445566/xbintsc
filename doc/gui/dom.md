@@ -95,6 +95,27 @@ bubble up to `document`/`window`. The legacy `win.on(type, fn)` payload keeps it
 **string** `e.target` (`div#id.class`); the element `Event.target` is a handle
 whose descriptor matches the same string.
 
+### Style objects, computed style and geometry
+
+The inline `style` object is a CSSOM declaration block: `setProperty(name,
+value, priority)` stores the declaration with `!important` when `priority` is
+`"important"` (any other priority makes the call a no-op, and an empty value
+removes the property), `getPropertyValue` / `getPropertyPriority` read it back,
+`removeProperty` returns the previous value, and `cssText` gets or replaces the
+whole block.
+
+`getComputedStyle(el, pseudoElt)` answers from the **cascade** — the UA sheet,
+author rules, inheritance and the inline declarations — rather than echoing the
+inline block, so a rule written in a stylesheet is visible. Pass `"::before"` or
+`"::after"` to read a generated-content box; any other pseudo-element answers
+empty values. Every read flushes a pending restyle, so a handle created early
+stays live after later mutations.
+
+`getBoundingClientRect()` carries the legacy `top` / `right` / `bottom` / `left`
+members next to `x` / `y` / `width` / `height`, and `document.title = …` writes
+the document's `<title>` (creating the element, and a `<head>`, when the page
+has none).
+
 `element.focus()` scrolls the element into view (pass `{ preventScroll: true }`
 to keep the page offset), and `document.hasFocus()` reports the window state
 toggled by `window.focus()` / `window.blur()`.

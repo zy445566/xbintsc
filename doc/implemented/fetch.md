@@ -13,6 +13,10 @@ Location: `runtime/xt_fetch.c`, `runtime/xt_fetch/async.inc`, `runtime/xt_async_
   exchange, up to 20 redirects, and a 301/302/303 switches POST to GET.
 - It accepts `http://` URLs only — `https://` rejects with a `TypeError` because
   no TLS backend is linked.
+- A reference with **no scheme** (a relative path) and `file://` URLs read a
+  local file, so a compiled program can load an asset from disk without an HTTP
+  server. Relative paths resolve against the working directory; `GET` / `HEAD`
+  are supported.
 - Options: `method`, `headers` (plain object or `Headers`), `body` and `redirect`
   (`follow` / `manual` / `error`).
 - The resolved `Response`-shaped object exposes `ok` / `status` / `statusText` /

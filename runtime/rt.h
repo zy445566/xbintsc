@@ -305,6 +305,9 @@ xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_regexp_ctor(int32_t argc, xt_value *argv);
 
 /* -- node:url ------------------------------------------------------------- */
+xt_value xt_url_ctor(int32_t argc, xt_value *argv);
+/** Resolve a `fetch` reference to a filesystem path (file: URLs and relative paths). */
+int xt_url_file_path(const char *url, char *out, size_t size);
 xt_value xt_url_path_to_file_url(int32_t argc, xt_value *argv);
 xt_value xt_url_file_url_to_path(int32_t argc, xt_value *argv);
 

@@ -8,6 +8,7 @@
 | --- | --- |
 | 正则按字节匹配 | 引擎按 UTF-8 字节匹配：多字节字面量仍可匹配，但 `.` 与字符类每次只消费一个字节（`\d`/`\w` 仍是 ASCII）。`exec` / `search` / 替换回调返回的偏移会转换为 UTF-16 码元 |
 | 全局正则 `lastIndex` | `/g`、`/y` 正则的 `test` / `exec` 不推进也不读取调用方设置的 `lastIndex` |
+| `URL` 解析器 | 只读 WHATWG 子集：未实现路径百分号编码、IDNA、setter 与 `searchParams` 实时联动；无协议引用按工作目录解析为 `file:` URL |
 | `String.normalize` | 未实现 |
 | 内置方法一等公民 | 以未绑定方法值实现（见[函数](./functions.md)）；`fn.toString()` 返回占位字符串而非源码文本 |
 | `for...in` | 枚举对象 / 数组 / 字符串的自身键；不含原型链属性 |

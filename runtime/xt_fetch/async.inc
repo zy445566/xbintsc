@@ -201,6 +201,66 @@ static void xt_fetch_hop_complete(xt_async_job *job) {
 
 /* Main thread: validate the current URL and queue one exchange. */
 static void xt_fetch_start(xt_fetch_state *state) {
+  /* `file:` URLs and references with no scheme (a relative path) read a local
+   * file. This is what lets a compiled page load an asset from disk without an
+   * HTTP server; the response is built on this thread because a local read is
+   * already complete. */
+  char path[4096];
+  if (xt_url_file_path(state->url, path, sizeof(path))) {
+    if (strcmp(state->method, "GET") != 0 && strcmp(state->method, "HEAD") != 0) {
+      xt_fetch_state_reject(state, "fetch failed: file URLs only support GET or HEAD");
+      return;
+    }
+    FILE *file = fopen(path, "rb");
+    if (!file) {
+      xt_fetch_state_reject(state, "fetch failed: cannot read file");
+      return;
+    }
+    size_t capacity = 0;
+    size_t length = 0;
+    char *body = NULL;
+    char chunk[16384];
+    for (;;) {
+      size_t count = fread(chunk, 1, sizeof(chunk), file);
+      if (count > 0) {
+        if (length + count + 1 > capacity) {
+          capacity = (length + count + 1) * 2;
+          char *grown = (char *)realloc(body, capacity);
+          if (!grown) {
+            free(body);
+            fclose(file);
+            xt_fetch_state_reject(state, "fetch failed");
+            return;
+          }
+          body = grown;
+        }
+        memcpy(body + length, chunk, count);
+        length += count;
+      }
+      if (count < sizeof(chunk)) break;
+    }
+    fclose(file);
+
+    char href[4300];
+    if (path[0] == '/') {
+      snprintf(href, sizeof(href), "file://%s", path);
+    } else {
+      snprintf(href, sizeof(href), "file:///%s", path);
+    }
+    xt_value headers = xt_headers_new();
+    char lengthText[32];
+    snprintf(lengthText, sizeof(lengthText), "%zu", length);
+    xt_headers_set_raw(headers, "content-length", lengthText);
+    xt_headers_set_raw(headers, "content-type", "application/octet-stream");
+    size_t bodyLength = strcmp(state->method, "HEAD") == 0 ? 0 : length;
+    xt_value response = xt_response_new(headers, 200, "OK", href, body, bodyLength);
+    free(body);
+    xt_value promise = state->promise;
+    xt_fetch_state_free(state);
+    xt_promise_fulfill(promise, response);
+    return;
+  }
+
   xt_fetch_url parsed;
   if (xt_fetch_parse_url(state->url, &parsed) != 0) {
     xt_fetch_state_reject(state, "Failed to parse URL");

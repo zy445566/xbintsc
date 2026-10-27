@@ -53,6 +53,20 @@
 - `Symbol(description)` 原始值（`XT_OBJECT_KIND_SYMBOL`）、13 个著名符号（`Symbol.iterator`、`Symbol.asyncIterator`、`Symbol.match` 等）、`Symbol.for` / `Symbol.keyFor` 全局注册表、`symbol.description` / `toString()` / `valueOf()`。
 - symbol 可作为属性键（`Object.getOwnPropertySymbols`，symbol 键的 `get`/`set`/`in`/`delete`），会被 `Object.keys` / `values` / `entries` / `for...in` / `JSON.stringify` 跳过，打印为 `Symbol(desc)`。
 
+## URL
+
+- `URL` 实现在 `runtime/xt_url_object.c`：支持 `new URL(input)` 与
+  `new URL(input, base)`（base 也可以是另一个 `URL`），并按层级式
+  `scheme://authority/path` base 解析相对引用。
+- **没有协议的引用按文件路径处理**：`new URL("./model.glb")` 相对工作目录解析，
+  得到 `file:` URL（显式 base 仍然生效，因此 `new URL("./x", import.meta.url)`
+  也可用）。
+- 只读属性 `href`、`protocol`、`origin`、`host`、`hostname`、`port`、
+  `pathname`、`search`、`hash`、`searchParams` 以及 `toString()` / `toJSON()`；
+  绝对输入按原样保留。
+- 不是完整的 WHATWG 解析器：未实现路径百分号编码、IDNA、setter 与
+  `searchParams` 的实时同步 —— 见[运行时偏差](../unimplemented/deviations.md)。
+
 ## URLSearchParams
 
 - `URLSearchParams` 实现在 `runtime/xt_url.c`。

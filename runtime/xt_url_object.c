@@ -219,6 +219,30 @@ static void xt_url_resolve(const char *input, const char *base, char *out, size_
   xt_url_append(out, size, suffix);
 }
 
+/**
+ * Canonicalize the Windows spellings of a `file:` URL. `file://C:/dir` and
+ * `file://C:\dir` both name the path `C:\dir`, and a special URL treats a
+ * backslash as a path separator, so both become `file:///C:/dir` — the same
+ * href `xt_url_cwd_base` produces and the same one Node reports. Anything
+ * else (including a real host) is copied unchanged.
+ */
+static void xt_url_canonical_file(const char *url, char *out, size_t size) {
+  snprintf(out, size, "%s", url);
+  if (xt_url_scheme_length(url) != 4 || strncmp(url, "file:", 5) != 0) return;
+  char normalized[XT_URL_MAX];
+  snprintf(normalized, sizeof(normalized), "%s", url);
+  for (char *p = normalized; *p && *p != '?' && *p != '#'; p++) {
+    if (*p == '\\') *p = '/';
+  }
+  const char *rest = normalized + 5;
+  if (rest[0] != '/' || rest[1] != '/') return;
+  const char *authority = rest + 2;
+  const char *end = authority;
+  while (*end && *end != '/' && *end != '?' && *end != '#') end++;
+  if (end - authority != 2 || !isalpha((unsigned char)authority[0]) || authority[1] != ':') return;
+  snprintf(out, size, "file:///%.*s%s", (int)(end - authority), authority, end);
+}
+
 /** Publish the read-only components parsed from `href` on the URL object. */
 static void xt_url_set_components(xt_value url, const char *href) {
   size_t schemeLength = xt_url_scheme_length(href);
@@ -333,6 +357,10 @@ xt_value xt_url_ctor(int32_t argc, xt_value *argv) {
   }
 #endif
 
+  char canonical[XT_URL_MAX];
+  xt_url_canonical_file(inputText, canonical, sizeof(canonical));
+  inputText = canonical;
+
   char href[XT_URL_MAX];
   xt_url_resolve(inputText, base, href, sizeof(href));
   xt_value url = xt_object_new();
@@ -390,7 +418,12 @@ int xt_url_file_path(const char *url, char *out, size_t size) {
   const char *path = work;
   if (schemeLength > 0) {
     if (schemeLength != 4 || strncmp(work, "file:", 5) != 0) return 0;
-    path = work + 5;
+    /* `file://C:\dir` is the Windows spelling of `file:///C:/dir`; rewrite it
+     * before separating the authority so the drive is not mistaken for a host
+     * (and a backslash is a separator, as in a browser). */
+    char canonical[XT_URL_MAX];
+    xt_url_canonical_file(work, canonical, sizeof(canonical));
+    path = canonical + 5;
     if (path[0] == '/' && path[1] == '/') {
       path += 2;
       const char *slash = strchr(path, '/');

@@ -65,7 +65,9 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
   base is still honoured, so `new URL("./x", import.meta.url)` works too).
 - Read-only `href`, `protocol`, `origin`, `host`, `hostname`, `port`,
   `pathname`, `search`, `hash`, `searchParams` and `toString()` / `toJSON()`;
-  absolute inputs are kept as written.
+  absolute inputs are kept as written, except that the Windows spellings of a
+  `file:` URL (`file://C:/dir` and `file://C:\dir`) are canonicalized to
+  `file:///C:/dir`, matching Node.
 - Not a full WHATWG parser: path percent-encoding, IDNA, setters and live
   `searchParams` synchronisation are not implemented — see
   [Runtime deviations](../unimplemented/deviations.md).

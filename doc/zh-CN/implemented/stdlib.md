@@ -63,7 +63,8 @@
   也可用）。
 - 只读属性 `href`、`protocol`、`origin`、`host`、`hostname`、`port`、
   `pathname`、`search`、`hash`、`searchParams` 以及 `toString()` / `toJSON()`；
-  绝对输入按原样保留。
+  绝对输入按原样保留，但 `file:` URL 的 Windows 写法（`file://C:/dir` 与
+  `file://C:\dir`）会规范化为 `file:///C:/dir`，与 Node 一致。
 - 不是完整的 WHATWG 解析器：未实现路径百分号编码、IDNA、setter 与
   `searchParams` 的实时同步 —— 见[运行时偏差](../unimplemented/deviations.md)。
 

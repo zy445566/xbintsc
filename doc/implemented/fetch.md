@@ -16,7 +16,8 @@ Location: `runtime/xt_fetch.c`, `runtime/xt_fetch/async.inc`, `runtime/xt_async_
 - A reference with **no scheme** (a relative path) and `file://` URLs read a
   local file, so a compiled program can load an asset from disk without an HTTP
   server. Relative paths resolve against the working directory; `GET` / `HEAD`
-  are supported.
+  are supported. On Windows the standard `file:///C:/dir/file` spelling and
+  `file://C:/dir/file` / `file://C:\dir\file` all name the same file.
 - Options: `method`, `headers` (plain object or `Headers`), `body` and `redirect`
   (`follow` / `manual` / `error`).
 - The resolved `Response`-shaped object exposes `ok` / `status` / `statusText` /

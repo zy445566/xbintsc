@@ -70,6 +70,27 @@ describeE2E("URL", (harness: E2EHarness) => {
     );
   });
 
+  it("canonicalizes the Windows spellings of a file: URL", () => {
+    const windowsForm = JSON.stringify("file://C:\\proj\\build\\app.exe");
+    const backslashForm = JSON.stringify("file://D:\\assets\\model.glb?rev=2#top");
+    const out = harness.runProgram(`
+      const drive = new URL(${windowsForm});
+      console.log(drive.href);
+      console.log(drive.pathname, JSON.stringify(drive.host), drive.origin);
+      const backslash = new URL(${backslashForm});
+      console.log(backslash.href);
+      console.log(backslash.pathname, backslash.search, backslash.hash);
+    `);
+    expect(out).toBe(
+      [
+        "file:///C:/proj/build/app.exe",
+        "/C:/proj/build/app.exe \"\" null",
+        "file:///D:/assets/model.glb?rev=2#top",
+        "/D:/assets/model.glb ?rev=2 #top",
+      ].join("\n"),
+    );
+  });
+
   it("reads relative and file: URLs with fetch", async () => {
     const target = join(workdir, "payload.json");
     writeFileSync(target, '{"value":"ok"}');

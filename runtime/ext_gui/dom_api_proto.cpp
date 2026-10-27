@@ -27,6 +27,9 @@ xt_value node_proto() {
   define_getter(proto, "tagName", (void *)node_tag_name_get);
   define_getter(proto, "nodeName", (void *)node_tag_name_get);
   define_getter(proto, "nodeType", (void *)node_node_type_get);
+  define_getter(proto, "namespaceURI", (void *)node_namespace_uri_get);
+  define_getter(proto, "localName", (void *)node_local_name_get);
+  define_getter(proto, "prefix", (void *)node_prefix_get);
   define_getter(proto, "id", (void *)node_id_get);
   define_getter(proto, "className", (void *)node_class_name_get);
   define_getter(proto, "textContent", (void *)node_text_content_get);
@@ -87,6 +90,10 @@ xt_value node_proto() {
   define_method(proto, "querySelectorAll", (void *)node_query_selector_all);
   define_method(proto, "matches", (void *)node_matches);
   define_method(proto, "appendChild", (void *)node_append_child);
+  define_method(proto, "append", (void *)node_append);
+  define_method(proto, "prepend", (void *)node_prepend);
+  define_method(proto, "replaceChildren", (void *)node_replace_children);
+  define_method(proto, "insertAdjacentHTML", (void *)node_insert_adjacent_html);
   define_method(proto, "insertBefore", (void *)node_insert_before);
   define_method(proto, "removeChild", (void *)node_remove_child);
   define_method(proto, "replaceChild", (void *)node_replace_child);

@@ -72,6 +72,16 @@ created.textContent = "added";
 box.appendChild(created);
 box.removeChild(created);
 
+// Parent/child helpers accept nodes and strings in one call.
+box.append("text", doc.createElement("span"));
+box.prepend(doc.createElement("b"));
+box.insertAdjacentHTML("beforeend", "<i>tail</i>"); // beforebegin/afterbegin/beforeend/afterend
+box.replaceChildren("fresh", doc.createElement("em"));
+
+// Namespaces are recorded; foreign (SVG) element names keep their case.
+const gradient = doc.createElementNS("http://www.w3.org/2000/svg", "svg:linearGradient");
+console.log(gradient.namespaceURI, gradient.localName, gradient.prefix);
+
 inner.addEventListener("click", (e) => console.log(e.target.id, e.currentTarget.id));
 inner.click();                          // synthesise a click at the element
 console.log(box.offsetWidth, box.offsetHeight);   // rounded border box

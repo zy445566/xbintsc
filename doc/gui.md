@@ -219,10 +219,11 @@ engine were Rust.
      registered through the `__registerScript` builtin and replaced by
      `<script data-xt-id="<hash>">` markers; `win.loadHTML` runs the matching
      functions after parsing and fires `DOMContentLoaded` then `load`.
-   - **M9c** ✅ — `<script src>` files are read relative to the HTML, their
-     top-level imports are hoisted (specifiers rewritten from the HTML dir) and
-     their body is wrapped/registered; missing files and import-binding
-     collisions become diagnostics. Everything runs in document order.
+   - **M9c** ✅ — `<script src>` files are read relative to the HTML and their
+     body is wrapped/registered; relative imports are deferred to `loadHTML`
+     through a memoised module wrapper, so imported modules see the parsed
+     document and share state. Missing files become diagnostics. Everything
+     runs in document order.
 10. **M10 — polish** ✅
     - `win.requestAnimationFrame(fn)` / `win.cancelAnimationFrame(id)`; callbacks
       run at the top of each frame with the frame timestamp and may mutate the
@@ -387,10 +388,11 @@ engine were Rust.
   bodies into AOT functions registered at startup and run by `win.loadHTML`
   (before first layout; `DOMContentLoaded` then `load`). Unit tests in
   `tests/extensions/gui.test.ts`, e2e in `tests/e2e/gui-*.test.ts`.
-- **M9c** ✅ external `<script src>` files are read, their imports hoisted
-  (specifiers rewritten from the HTML dir) and their body wrapped/registered;
-  missing files and import-binding collisions are diagnostics. Loader errors are
-  caught by `loadGraph` and reported as build errors.
+- **M9c** ✅ external `<script src>` files are read and their body
+  wrapped/registered; relative imports are deferred to `loadHTML` through a
+  memoised module wrapper (so module-level DOM work sees the parsed document),
+  while missing files are diagnostics. Loader errors are caught by `loadGraph`
+  and reported as build errors.
 - **M10** ✅ `requestAnimationFrame`/`cancelAnimationFrame` on window handles
   (callbacks run with the frame timestamp before layout each frame) plus
   `offsetWidth`/`offsetHeight`/`contains` on element handles; e2e coverage in

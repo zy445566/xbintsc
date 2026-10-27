@@ -25,6 +25,14 @@ static std::unordered_map<std::string, xt_value> &script_registry() {
   return registry;
 }
 
+/** Deferred module id -> its exports object. A `<script src>`'s imports are
+ * evaluated on first use (after `loadHTML`) and then shared by every script
+ * that imports the same module. */
+static std::unordered_map<std::string, xt_value> &deferred_registry() {
+  static std::unordered_map<std::string, xt_value> registry;
+  return registry;
+}
+
 extern "C" xt_value xt_register_script(int32_t argc, xt_value *argv) {
   if (argc >= 2) {
     xt_value id_value = xt_to_string(xt_arg(argc, argv, 0));
@@ -42,6 +50,29 @@ extern "C" xt_value xt_register_script(int32_t argc, xt_value *argv) {
 
 void xt_gui_script_gc_scan(void) {
   for (const auto &entry : script_registry()) xt_gc_mark_value(entry.second);
+  for (const auto &entry : deferred_registry()) xt_gc_mark_value(entry.second);
+}
+
+/** `__xt_defer(id, init)`: evaluate `init` once and return its exports. The
+ * placeholder is published before the call so a cyclic import sees the same
+ * object instead of recursing. */
+extern "C" xt_value xt_gui_defer_module(int32_t argc, xt_value *argv) {
+  if (argc < 2) return XT_UNDEFINED;
+  xt_value id_value = xt_to_string(xt_arg(argc, argv, 0));
+  const char *id = xt_string_data(id_value);
+  if (id == nullptr) return XT_UNDEFINED;
+  std::unordered_map<std::string, xt_value> &registry = deferred_registry();
+  auto found = registry.find(std::string(id));
+  if (found != registry.end()) return found->second;
+  xt_gc_register_root_provider(xt_gui_script_gc_scan);
+  xt_value exports = xt_object_new();
+  registry[std::string(id)] = exports;
+  xt_value init = xt_arg(argc, argv, 1);
+  if (XT_IS_FUNCTION(init)) {
+    exports = xt_call_with_this(init, XT_UNDEFINED, 0, nullptr);
+    registry[std::string(id)] = exports;
+  }
+  return exports;
 }
 
 /** Collect `data-xt-id` markers from `<script>` elements, in document order. */

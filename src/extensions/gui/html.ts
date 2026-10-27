@@ -119,32 +119,99 @@ function importLocalNames(declaration: ImportDeclaration): string[] {
 interface CompiledModule {
   /** Hoisted `import`/`export … from` statements (specifiers rewritten). */
   imports: string[];
-  /** Local names the hoisted imports introduce. */
+  /** Synthetic imports that ask the bundler to defer a local module. */
+  lazyImports: string[];
+  /** Statements that load deferred modules at script-run time. */
+  prelude: string[];
+  /** Local names the hoisted (eager) imports introduce. */
   localNames: string[];
   /** The module body, wrapped as a script function by the caller. */
   body: string;
 }
 
+/**
+ * A relative script import is evaluated lazily (after `loadHTML`), like a
+ * browser module script. Bare specifiers stay eager: they usually name a
+ * compiler extension or a package whose top level does not touch the page.
+ */
+function isDeferredSpecifier(specifier: string): boolean {
+  return specifier.startsWith("./") || specifier.startsWith("../") || specifier.startsWith("/") ||
+    /^[A-Za-z]:[\\/]/.test(specifier);
+}
+
+/** `const { a, b: c } = load();` for a deferred import's named bindings. */
+function deferredPrelude(alias: string, declaration: ImportDeclaration): string[] {
+  const clause = declaration.importClause;
+  if (!clause) return [`${alias}();`];
+  const lines: string[] = [];
+  if (clause.name) lines.push(`const ${clause.name.text} = ${alias}().default;`);
+  const bindings = clause.namedBindings;
+  if (bindings && bindings.kind === SyntaxKind.NamedImports) {
+    const pairs = bindings.elements
+      .filter((element) => !element.isTypeOnly)
+      .map((element) => {
+        const imported = element.propertyName?.text ?? element.name.text;
+        return imported === element.name.text ? element.name.text : `${imported}: ${element.name.text}`;
+      });
+    if (pairs.length > 0) lines.push(`const { ${pairs.join(", ")} } = ${alias}();`);
+  } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport) {
+    lines.push(`const ${bindings.name.text} = ${alias}();`);
+  }
+  if (lines.length === 0) lines.push(`${alias}();`);
+  return lines;
+}
+
 /** Split an external script module into hoisted imports and a body. */
-function compileModuleSource(htmlPath: string, scriptPath: string): CompiledModule {
+function compileModuleSource(htmlPath: string, scriptPath: string, scriptIndex: number): CompiledModule {
   const source = readFileSync(scriptPath, "utf8");
   const bag = new DiagnosticBag();
   const parsed = new Parser(new SourceFile(scriptPath, source), bag).parseSourceFile();
   const chars = source.split("");
   const imports: string[] = [];
+  const lazyImports: string[] = [];
+  const prelude: string[] = [];
   const localNames: string[] = [];
+  let lazyIndex = 0;
   const blank = (start: number, end: number): void => {
     for (let i = start; i < end; i += 1) chars[i] = " ";
+  };
+  const hasRuntimeBinding = (clause: ImportDeclaration["importClause"]): boolean => {
+    if (!clause) return true;
+    if (clause.name) return true;
+    const bindings = clause.namedBindings;
+    if (!bindings) return false;
+    if (bindings.kind === SyntaxKind.NamespaceImport) return true;
+    return bindings.elements.some((element) => !element.isTypeOnly);
+  };
+  const marker = (specifier: string): string => {
+    const alias = `__xt_deferred_${scriptIndex}_${lazyIndex}`;
+    lazyIndex += 1;
+    lazyImports.push(
+      `import { __xt_deferred_module as ${alias} } from ${JSON.stringify(rewriteSpecifier(htmlPath, scriptPath, specifier))};`,
+    );
+    return alias;
   };
 
   for (const statement of parsed.statements) {
     if (statement.kind === SyntaxKind.ImportDeclaration) {
       const declaration = statement as ImportDeclaration;
+      const specifier = declaration.moduleSpecifier.value;
+      const clause = declaration.importClause;
+      if (
+        (clause === undefined || !clause.isTypeOnly) &&
+        hasRuntimeBinding(clause) &&
+        isDeferredSpecifier(specifier)
+      ) {
+        const alias = marker(specifier);
+        prelude.push(...deferredPrelude(alias, declaration));
+        blank(statement.start, statement.end);
+        continue;
+      }
       /* The front-end has no side-effect `import "x"` form; spell it as an
        * empty named import so the dependency is still loaded. */
-      const hoisted = declaration.importClause
+      const hoisted = clause
         ? rewriteSpecifierText(htmlPath, scriptPath, source, statement, declaration.moduleSpecifier)
-        : `import {} from ${JSON.stringify(rewriteSpecifier(htmlPath, scriptPath, declaration.moduleSpecifier.value))}`;
+        : `import {} from ${JSON.stringify(rewriteSpecifier(htmlPath, scriptPath, specifier))}`;
       imports.push(hoisted);
       localNames.push(...importLocalNames(declaration));
       blank(statement.start, statement.end);
@@ -153,7 +220,12 @@ function compileModuleSource(htmlPath: string, scriptPath: string): CompiledModu
     if (statement.kind === SyntaxKind.ExportDeclaration) {
       const declaration = statement as ExportDeclaration;
       if (declaration.moduleSpecifier) {
-        imports.push(rewriteSpecifierText(htmlPath, scriptPath, source, statement, declaration.moduleSpecifier));
+        if (isDeferredSpecifier(declaration.moduleSpecifier.value)) {
+          const alias = marker(declaration.moduleSpecifier.value);
+          prelude.push(`${alias}();`);
+        } else {
+          imports.push(rewriteSpecifierText(htmlPath, scriptPath, source, statement, declaration.moduleSpecifier));
+        }
       }
       blank(statement.start, statement.end);
       continue;
@@ -173,7 +245,7 @@ function compileModuleSource(htmlPath: string, scriptPath: string): CompiledModu
     }
   }
 
-  return { imports, localNames, body: chars.join("") };
+  return { imports, lazyImports, prelude, localNames, body: chars.join("") };
 }
 
 /** Resolve a `<script src>` value to a local file path (ignoring `?`/`#`). */
@@ -187,8 +259,9 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
   /* `file` is set for an external `<script src>`: its body keeps that file as
    * the origin of every node, so a `.js` script stays untyped and diagnostics
    * name the script, not the HTML page. */
-  const scripts: Array<{ id: string; body: string; file?: string }> = [];
+  const scripts: Array<{ id: string; body: string; prelude: string[]; file?: string }> = [];
   const imports: string[] = [];
+  const lazyImports: string[] = [];
   const importedText = new Set<string>();
   const bound = new Set<string>();
 
@@ -204,13 +277,14 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
       if (!existsSync(scriptPath)) {
         throw new Error(`gui: <script src="${src}"> not found (looked for ${scriptPath})`);
       }
-      const compiled = compileModuleSource(path, scriptPath);
+      const compiled = compileModuleSource(path, scriptPath, scripts.length);
       for (const text of compiled.imports) {
         if (!importedText.has(text)) {
           importedText.add(text);
           imports.push(text);
         }
       }
+      lazyImports.push(...compiled.lazyImports);
       for (const name of compiled.localNames) {
         if (bound.has(name)) {
           throw new Error(
@@ -219,8 +293,8 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
         }
         bound.add(name);
       }
-      const id = hashString(compiled.body);
-      scripts.push({ id, body: compiled.body, file: scriptPath });
+      const id = hashString([...compiled.prelude, compiled.body].join("\n"));
+      scripts.push({ id, body: compiled.body, prelude: compiled.prelude, file: scriptPath });
       return `<script data-xt-id="${id}"></script>`;
     }
 
@@ -228,21 +302,23 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
     if (src !== undefined) return match;
     if (inlineBody.trim() === "") return match;
     const id = hashString(inlineBody);
-    scripts.push({ id, body: inlineBody });
+    scripts.push({ id, body: inlineBody, prelude: [] });
     return `<script data-xt-id="${id}"></script>`;
   });
 
-  const parts: string[] = [...imports];
+  const parts: string[] = [...imports, ...lazyImports];
   const sourceRanges: AssetSourceRange[] = [];
   /* Offset of the next part once joined with "\n", so a body's span in the
    * generated module can be reported back as the file it was copied from. */
   let offset = parts.reduce((total, part) => total + part.length + 1, 0);
-  for (const { id, body, file } of scripts) {
+  for (const { id, body, prelude, file } of scripts) {
     const header = `function __xt_script_${id}(window: any, document: any): void {\n`;
+    const preludeText = prelude.length > 0 ? `${prelude.join("\n")}\n` : "";
     const part =
-      `${header}${body}\n}\n` + `__registerScript(${JSON.stringify(id)}, __xt_script_${id});`;
+      `${header}${preludeText}${body}\n}\n` + `__registerScript(${JSON.stringify(id)}, __xt_script_${id});`;
     if (file !== undefined) {
-      sourceRanges.push({ start: offset + header.length, end: offset + header.length + body.length, file });
+      const bodyStart = offset + header.length + preludeText.length;
+      sourceRanges.push({ start: bodyStart, end: bodyStart + body.length, file });
     }
     parts.push(part);
     offset += part.length + 1;

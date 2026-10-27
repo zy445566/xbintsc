@@ -24,6 +24,8 @@ xt_value xt_gui_run(int32_t argc, xt_value *argv);
 xt_value xt_gui_quit(int32_t argc, xt_value *argv);
 /** `__registerScript(id, fn)`: record an AOT-compiled `<script>` body. */
 xt_value xt_register_script(int32_t argc, xt_value *argv);
+/** `__xt_defer(id, init)`: evaluate a deferred module once and cache its exports. */
+xt_value xt_gui_defer_module(int32_t argc, xt_value *argv);
 /** Which SDL_GPU backend the device is using (`"vulkan"`, `"direct3d12"`,
  * `"metal"`, …), or `""` before the device exists. */
 const char *xt_gui_driver(void);

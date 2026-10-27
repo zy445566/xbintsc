@@ -9,12 +9,14 @@ name: Build pelican-bike-demo
 # self-contained: no Node, no xbintsc and no asset files are needed to run it.
 #
 # This is not cross-compilation: every runner builds its own platform/arch
-# natively, exactly like the `compile-examples` job in ci.yml.
-#   Linux x64      -> ubuntu-latest
+# natively, exactly like the `compile-examples` job in ci.yml. The runner
+# labels are fixed images (no floating `latest`), matching ci.yml, so an image
+# move cannot change the produced binary without a commit here. Node.js is 22.
+#   Linux x64      -> ubuntu-24.04
 #   Linux arm64    -> ubuntu-24.04-arm
 #   macOS x64      -> macos-15-intel
 #   macOS arm64    -> macos-15
-#   Windows x64    -> windows-latest     (provisional, see doc/gui.md)
+#   Windows x64    -> windows-2025       (provisional, see doc/gui.md)
 #   Windows arm64  -> windows-11-arm     (provisional, see doc/gui.md)
 on:
   workflow_dispatch:
@@ -45,11 +47,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,    arch: x64,   label: "Linux x64" }
+          - { os: ubuntu-24.04,    arch: x64,   label: "Linux x64" }
           - { os: ubuntu-24.04-arm, arch: arm64, label: "Linux arm64" }
           - { os: macos-15-intel,   arch: x64,   label: "macOS x64" }
           - { os: macos-15,         arch: arm64, label: "macOS arm64" }
-          - { os: windows-latest,   arch: x64,   label: "Windows x64",   provisional: true }
+          - { os: windows-2025,     arch: x64,   label: "Windows x64",   provisional: true }
           - { os: windows-11-arm,   arch: arm64, label: "Windows arm64", provisional: true }
     steps:
       - uses: actions/checkout@v7

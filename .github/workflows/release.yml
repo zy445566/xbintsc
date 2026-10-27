@@ -29,7 +29,9 @@ permissions:
 jobs:
   release:
     name: Tag, publish and release
-    runs-on: ubuntu-latest
+    # Fixed image (not a floating `latest`): the tag/version checks and the npm
+    # provenance build must not change because a runner image moved.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -73,7 +75,8 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          # Same Node.js as CI: 22, the version package.json declares.
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
           cache: npm
 

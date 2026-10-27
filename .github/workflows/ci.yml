@@ -21,17 +21,25 @@ concurrency:
 #
 # Every host architecture is covered, but these are native builds, not
 # cross-compilation: each runner builds and tests its own architecture.
-#   Linux x64      -> ubuntu-latest
+#
+# The runner labels are pinned to fixed images on purpose: a floating `latest`
+# label moves to a new OS image without a commit here, which changes the
+# compiler, the SDK and the prebuilt archives the job produces. Bump one
+# deliberately.
+#   Linux x64      -> ubuntu-24.04
 #   Linux arm64    -> ubuntu-24.04-arm
 #   macOS x64      -> macos-15-intel
 #   macOS arm64    -> macos-15
-#   Windows x64    -> windows-latest
+#   Windows x64    -> windows-2025
 #   Windows arm64  -> windows-11-arm
+#
+# Node.js is pinned to 22 everywhere: it is the documented minimum from
+# package.json (`engines.node`) and the only version CI exercises.
 
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -81,27 +89,24 @@ jobs:
         run: npm test
 
   test:
-    name: ${{ matrix.os }} / node ${{ matrix.node }}
+    name: ${{ matrix.os }} / node 22
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest        # Linux x64
-          - ubuntu-24.04-arm     # Linux arm64
-          - macos-15-intel       # macOS x64
-          - macos-15             # macOS arm64
-          - windows-latest       # Windows x64
-          - windows-11-arm       # Windows arm64
-        # A pull request only exercises Node.js 22: the full 22 + 26 sweep runs
-        # on push to main/master and on dispatch.
-        node: ${{ github.event_name == 'pull_request' && fromJSON('["22"]') || fromJSON('["22","26"]') }}
+          - ubuntu-24.04        # Linux x64
+          - ubuntu-24.04-arm    # Linux arm64
+          - macos-15-intel      # macOS x64
+          - macos-15            # macOS arm64
+          - windows-2025        # Windows x64
+          - windows-11-arm      # Windows arm64
     steps:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node }}
+          node-version: "22"
           cache: npm
 
       - name: Install a C compiler (Linux)
@@ -168,12 +173,12 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest        # Linux x64
-          - ubuntu-24.04-arm     # Linux arm64
-          - macos-15-intel       # macOS x64
-          - macos-15             # macOS arm64
-          - windows-latest       # Windows x64
-          - windows-11-arm       # Windows arm64
+          - ubuntu-24.04        # Linux x64
+          - ubuntu-24.04-arm    # Linux arm64
+          - macos-15-intel      # macOS x64
+          - macos-15            # macOS arm64
+          - windows-2025        # Windows x64
+          - windows-11-arm      # Windows arm64
     steps:
       - uses: actions/checkout@v7
 
@@ -380,12 +385,12 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest        # Linux x64
-          - ubuntu-24.04-arm     # Linux arm64
-          - macos-15-intel       # macOS x64
-          - macos-15             # macOS arm64
-          - windows-latest       # Windows x64
-          - windows-11-arm       # Windows arm64
+          - ubuntu-24.04        # Linux x64
+          - ubuntu-24.04-arm    # Linux arm64
+          - macos-15-intel      # macOS x64
+          - macos-15            # macOS arm64
+          - windows-2025        # Windows x64
+          - windows-11-arm      # Windows arm64
     steps:
       - uses: actions/checkout@v7
 
@@ -468,12 +473,12 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest        # Linux x64
-          - ubuntu-24.04-arm     # Linux arm64
-          - macos-15-intel       # macOS x64
-          - macos-15             # macOS arm64
-          - windows-latest       # Windows x64
-          - windows-11-arm       # Windows arm64
+          - ubuntu-24.04        # Linux x64
+          - ubuntu-24.04-arm    # Linux arm64
+          - macos-15-intel      # macOS x64
+          - macos-15            # macOS arm64
+          - windows-2025        # Windows x64
+          - windows-11-arm      # Windows arm64
     steps:
       - uses: actions/checkout@v7
 

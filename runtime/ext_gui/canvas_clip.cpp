@@ -85,13 +85,18 @@ void Canvas2D::clip_paths(const std::vector<CanvasSubpath> &paths, bool even_odd
   canvas_detail::CoverageGrid coverage;
   canvas_detail::compute_coverage(image_.width, image_.height, loops, even_odd, &coverage);
   if (!coverage.empty()) {
-    const int rowWidth = coverage.x1 - coverage.x0;
-    for (int y = coverage.y0; y < coverage.y1; y++) {
-      const float *row = coverage.values.data() + (size_t)(y - coverage.y0) * (size_t)rowWidth;
-      uint8_t *out = mask->data.data() + (size_t)y * (size_t)image_.width;
-      for (int x = 0; x < rowWidth; x++) {
-        float value = std::max(0.0f, std::min(1.0f, row[x]));
-        out[coverage.x0 + x] = (uint8_t)(value * 255.0f + 0.5f);
+    const int rows = coverage.y1 - coverage.y0;
+    for (int r = 0; r < rows; r++) {
+      const uint32_t begin = coverage.row_offset[(size_t)r];
+      const uint32_t end = coverage.row_offset[(size_t)r + 1];
+      if (begin >= end) continue;
+      const int y = coverage.y0 + r;
+      const int rx = coverage.row_x[(size_t)r];
+      const float *values = coverage.values.data() + begin;
+      uint8_t *out = mask->data.data() + (size_t)y * (size_t)image_.width + (size_t)rx;
+      for (uint32_t i = begin; i < end; i++) {
+        float value = std::max(0.0f, std::min(1.0f, values[i - begin]));
+        out[i - begin] = (uint8_t)(value * 255.0f + 0.5f);
       }
     }
   }
@@ -104,7 +109,8 @@ void Canvas2D::clip_paths(const std::vector<CanvasSubpath> &paths, bool even_odd
     }
   }
   state_.clip = std::move(mask);
-  generation_++;
+  /* A clip changes future draws only; it touches no pixels, so it must not
+   * schedule a texture upload. */
 }
 
 bool Canvas2D::is_point_in_path(float x, float y, bool even_odd) const {

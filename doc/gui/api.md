@@ -223,6 +223,8 @@ program has done in total, which is how rendering cost is measured (see
 | `restyles`, `restyleNodes`, `rulesEvaluated`, `mediaEvaluated`, `layouts`, `layoutBoxes` | cascade and layout work |
 | `textShapeCalls`, `textShapeHits`, `textCacheBytes`, `textCacheEntries` | shaping cache misses/hits and its occupancy |
 | `paints`, `paintOps`, `drawRuns`, `drawCalls`, `uploadSubmits`, `vertices`, `syncNodes` | display-list, draw-call and upload work |
+| `canvasDraws`, `canvasUploads`, `canvasUploadBytes` | Canvas 2D draw calls, texture uploads and the bytes copied (a partial redraw uploads only its dirty rectangle) |
+| `webglDraws`, `webglPasses`, `webglPipelineMisses`, `webglBufferUploadBytes` | WebGL draw calls, render passes opened, pipelines created and buffer bytes copied |
 
 Every field except the `*Ms` timings is cumulative, so subtract two snapshots to
 get one frame. `restyleMs` covers the cascade **and** the layout pass it

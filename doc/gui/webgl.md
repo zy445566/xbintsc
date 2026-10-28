@@ -36,9 +36,10 @@ reports the type as well.
   `height` attributes. `canvas.width = …` recreates them and discards the
   contents, like the DOM rule.
 - The context records into its own SDL_GPU command buffer. `clear`/`draw*`
-  keep a render pass open; a buffer/texture upload or a framebuffer change ends
-  it and starts a new pass with `LOAD`, so the drawing buffer persists between
-  draws just like WebGL's.
+  keep a render pass open; only a buffer/texture upload or a framebuffer
+  change ends it and starts a new pass with `LOAD`, so the drawing buffer
+  persists between draws just like WebGL's and a draw that has nothing to
+  upload never breaks the pass.
 - Once per frame, before the page's own render pass, the engine submits every
   WebGL command buffer. The image pipeline then samples the colour texture as
   an ordinary `PaintImage`, with no CPU copy.

@@ -118,14 +118,14 @@ void xt_gui_build_runs(XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometr
  * once per frame, before the render command buffer, so the texture sampled by
  * the draw already holds that frame. Returns true when a texture was uploaded
  * (the frame loop then presents even without a DOM change). */
-bool xt_gui_media_upload_frames(SDL_GPUDevice *device);
+bool xt_gui_media_upload_frames(SDL_GPUDevice *device, XtGuiUploadBatch *batch = nullptr);
 /** Release one media texture (when a `<video>` is removed or navigated away). */
 void xt_gui_media_texture_release(SDL_GPUDevice *device, uint64_t media_id);
-/** Re-upload the current bitmap of every live `<canvas>` texture. Called once
+/** Re-upload the dirty region of every live `<canvas>` texture. Called once
  * per frame, before the render command buffer, so a canvas animated from
  * `requestAnimationFrame` reaches the screen without a relayout. Returns true
  * when a texture was uploaded. */
-bool xt_gui_canvas_upload_frames(SDL_GPUDevice *device);
+bool xt_gui_canvas_upload_frames(SDL_GPUDevice *device, XtGuiUploadBatch *batch = nullptr);
 /** Release one canvas texture (when the canvas is dropped). */
 void xt_gui_canvas_texture_release(SDL_GPUDevice *device, uint64_t canvas_id);
 

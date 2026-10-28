@@ -385,6 +385,11 @@ void xt_gui_render_window(XtGuiWindow *win) {
 
   /* Rebuild the geometry only when the document or viewport changed. */
   bool can_paint = xt_gui_renderer_ensure(g_device, win->window);
+  /* One command buffer for every upload this frame — geometry, glyph atlas,
+   * image textures, video frames and canvas bitmaps — so K animated canvases
+   * cost one submit, not K. */
+  XtGuiUploadBatch uploads;
+  xt_gui_upload_begin(&uploads, g_device);
   if (can_paint && win->geometry.dirty && win->document != nullptr) {
     {
       xtgui::PerfScope scope(&xtgui::g_perf_frame_ms.paint);
@@ -398,16 +403,11 @@ void xt_gui_render_window(XtGuiWindow *win) {
       xtgui::g_perf_frame.paintOps += (uint64_t)list.ops.size();
       {
         xtgui::PerfScope upload_scope(&xtgui::g_perf_frame_ms.upload);
-        /* One command buffer for the frame's three vertex arrays (and the
-         * glyph atlas), instead of one submit per buffer. */
-        XtGuiUploadBatch uploads;
-        xt_gui_upload_begin(&uploads, g_device);
         xt_gui_geometry_upload(g_device, &win->geometry, list, &uploads);
         float density = SDL_GetWindowPixelDensity(win->window);
         float text_scale = density > 0.0f ? density : 1.0f;
         xt_gui_text_upload(g_device, &win->text_geometry, list, text_scale, &uploads);
         xt_gui_image_upload(g_device, &win->image_geometry, list, text_scale, &uploads);
-        xt_gui_upload_end(&uploads);
         xt_gui_build_runs(&win->geometry, &win->text_geometry, &win->image_geometry, list);
       }
       xtgui::g_perf_frame.drawRuns += (uint64_t)win->geometry.runs.size();
@@ -417,9 +417,10 @@ void xt_gui_render_window(XtGuiWindow *win) {
 
   /* Upload any new video frame before the render command buffer is recorded,
    * so the draw samples the frame that just arrived. */
-  bool uploaded = xt_gui_media_upload_frames(g_device);
+  bool uploaded = xt_gui_media_upload_frames(g_device, &uploads);
   /* Canvases are CPU-drawn: push any new bitmap without a relayout. */
-  if (xt_gui_canvas_upload_frames(g_device)) uploaded = true;
+  if (xt_gui_canvas_upload_frames(g_device, &uploads)) uploaded = true;
+  xt_gui_upload_end(&uploads);
   /* WebGL contexts record into their own command buffers; submit them first so
    * the page's render pass samples this frame's drawing-buffer contents. */
   xt_gui_webgl_submit_all();

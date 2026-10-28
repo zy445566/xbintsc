@@ -3,22 +3,24 @@
  *
  * SDL_GPU has no dynamic state for blend/depth/rasterisation: those live in a
  * `SDL_GPUGraphicsPipeline`. WebGL changes them with `glEnable`/`glDepthFunc`,
- * so a pipeline is built lazily per (program, vertex layout, the subset of
- * fixed-function state that matters) and cached on the program.
+ * so a pipeline is built lazily per (program, vertex layout, state) and cached.
  *
- * A matrix attribute consumes several consecutive vertex locations; the
- * pipeline spells out one `SDL_GPUVertexAttribute` per column, all reading the
- * same vertex buffer binding.
+ * A draw is mostly a cache lookup: `prepare_draw` returns the pipeline plus the
+ * vertex-layout bindings for the current state, and a repeated draw in the same
+ * render pass is one pipeline bind (when it changed) and one `SDL_Draw*` call.
+ * Everything that needs a GPU upload (buffer/texture data, an expanded index
+ * list, a constant attribute) records that upload *before* `begin_pass`, so an
+ * unchanged sequence of draws never ends the pass it is recording into.
  */
 
 #include "webgl.h"
 
 #include <algorithm>
 #include <cstring>
-#include <string>
 #include <vector>
 
 #include "gui_internal.h"
+#include "perf.h"
 
 namespace xtgui {
 namespace {
@@ -34,150 +36,6 @@ int type_size(int type) {
     default:
       return 4;
   }
-}
-
-int components_of_type(const std::string &type) {
-  if (!type.empty() && type.back() >= '2' && type.back() <= '4') return type.back() - '0';
-  return 1;
-}
-
-SDL_GPUVertexElementFormat float_format(int size) {
-  switch (size) {
-    case 1:
-      return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT;
-    case 2:
-      return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
-    case 3:
-      return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-    default:
-      return SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
-  }
-}
-
-SDL_GPUVertexElementFormat format_of(int size, int type, bool normalized) {
-  if (size < 1 || size > 4) return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
-  if (type == GL_FLOAT) return float_format(size);
-  if (type == GL_UNSIGNED_BYTE || type == GL_BYTE) {
-    const bool is_byte = type == GL_BYTE;
-    if (size == 2) {
-      return normalized ? (is_byte ? SDL_GPU_VERTEXELEMENTFORMAT_BYTE2_NORM
-                                   : SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2_NORM)
-                        : (is_byte ? SDL_GPU_VERTEXELEMENTFORMAT_BYTE2
-                                   : SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2);
-    }
-    if (size == 4) {
-      return normalized ? (is_byte ? SDL_GPU_VERTEXELEMENTFORMAT_BYTE4_NORM
-                                   : SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM)
-                        : (is_byte ? SDL_GPU_VERTEXELEMENTFORMAT_BYTE4
-                                   : SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4);
-    }
-    return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
-  }
-  if (type == GL_UNSIGNED_SHORT || type == GL_SHORT) {
-    const bool is_short = type == GL_SHORT;
-    if (size == 2) {
-      return normalized ? (is_short ? SDL_GPU_VERTEXELEMENTFORMAT_SHORT2_NORM
-                                    : SDL_GPU_VERTEXELEMENTFORMAT_USHORT2_NORM)
-                        : (is_short ? SDL_GPU_VERTEXELEMENTFORMAT_SHORT2
-                                    : SDL_GPU_VERTEXELEMENTFORMAT_USHORT2);
-    }
-    if (size == 4) {
-      return normalized ? (is_short ? SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM
-                                    : SDL_GPU_VERTEXELEMENTFORMAT_USHORT4_NORM)
-                        : (is_short ? SDL_GPU_VERTEXELEMENTFORMAT_SHORT4
-                                    : SDL_GPU_VERTEXELEMENTFORMAT_USHORT4);
-    }
-    return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
-  }
-  return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
-}
-
-/** `vertexAttribIPointer` formats: integer attributes keep their integer type
- * in the shader (`in ivec3 …`). SDL has no 1- or 3-component byte/short
- * integer formats, so only the sizes it can express are accepted. */
-SDL_GPUVertexElementFormat int_format_of(int size, int type) {
-  if (size < 1 || size > 4) return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
-  if (type == GL_INT) {
-    switch (size) {
-      case 1:
-        return SDL_GPU_VERTEXELEMENTFORMAT_INT;
-      case 2:
-        return SDL_GPU_VERTEXELEMENTFORMAT_INT2;
-      case 3:
-        return SDL_GPU_VERTEXELEMENTFORMAT_INT3;
-      default:
-        return SDL_GPU_VERTEXELEMENTFORMAT_INT4;
-    }
-  }
-  if (type == GL_UNSIGNED_INT) {
-    switch (size) {
-      case 1:
-        return SDL_GPU_VERTEXELEMENTFORMAT_UINT;
-      case 2:
-        return SDL_GPU_VERTEXELEMENTFORMAT_UINT2;
-      case 3:
-        return SDL_GPU_VERTEXELEMENTFORMAT_UINT3;
-      default:
-        return SDL_GPU_VERTEXELEMENTFORMAT_UINT4;
-    }
-  }
-  if (type == GL_SHORT && (size == 2 || size == 4)) {
-    return size == 2 ? SDL_GPU_VERTEXELEMENTFORMAT_SHORT2 : SDL_GPU_VERTEXELEMENTFORMAT_SHORT4;
-  }
-  if (type == GL_UNSIGNED_SHORT && (size == 2 || size == 4)) {
-    return size == 2 ? SDL_GPU_VERTEXELEMENTFORMAT_USHORT2
-                     : SDL_GPU_VERTEXELEMENTFORMAT_USHORT4;
-  }
-  if (type == GL_BYTE && (size == 2 || size == 4)) {
-    return size == 2 ? SDL_GPU_VERTEXELEMENTFORMAT_BYTE2 : SDL_GPU_VERTEXELEMENTFORMAT_BYTE4;
-  }
-  if (type == GL_UNSIGNED_BYTE && (size == 2 || size == 4)) {
-    return size == 2 ? SDL_GPU_VERTEXELEMENTFORMAT_UBYTE2 : SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4;
-  }
-  return SDL_GPU_VERTEXELEMENTFORMAT_INVALID;
-}
-
-/** A cache key covering everything (other than the program) that a
- * `SDL_GPUGraphicsPipeline` bakes in. */
-std::string pipeline_key(int mode, int index_size,
-                         const std::vector<SDL_GPUVertexAttribute> &attrs,
-                         const std::vector<SDL_GPUVertexBufferDescription> &buffers,
-                         const WebGLDrawState &state) {
-  std::string key = std::to_string(mode) + "/" + std::to_string(index_size);
-  key += "/f" + std::to_string(state.color_target_count) + ":";
-  for (int i = 0; i < state.color_target_count; i++) {
-    key += std::to_string(state.color_formats[i]) + ",";
-  }
-  key += ":" + std::to_string(state.depth_format);
-  for (const SDL_GPUVertexAttribute &attr : attrs) {
-    key += "/" + std::to_string(attr.location) + ":" + std::to_string(attr.buffer_slot) + ":" +
-           std::to_string((int)attr.format) + ":" + std::to_string(attr.offset);
-  }
-  for (const SDL_GPUVertexBufferDescription &buffer : buffers) {
-    key += "|" + std::to_string(buffer.slot) + ":" + std::to_string(buffer.pitch) + ":" +
-           std::to_string((int)buffer.input_rate);
-  }
-  char state_key[256];
-  snprintf(state_key, sizeof(state_key), "|%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d",
-           (int)state.blend, state.blend_src_rgb, state.blend_dst_rgb, state.blend_src_alpha,
-           state.blend_dst_alpha, state.blend_eq_rgb, state.blend_eq_alpha, (int)state.depth_test,
-           (int)state.depth_write, state.depth_func, (int)state.cull, state.cull_face,
-           state.front_face, (int)state.color_mask[0]);
-  key += state_key;
-  key += std::to_string((int)state.color_mask[1]);
-  key += std::to_string((int)state.color_mask[2]);
-  key += std::to_string((int)state.color_mask[3]);
-  char stencil_key[224];
-  snprintf(stencil_key, sizeof(stencil_key), "|s%d,%d,%d,%d,%d,%u,%d,%d,%d,%d,%u,%u,%u",
-           (int)state.stencil, state.stencil_front.func, state.stencil_front.fail,
-           state.stencil_front.zfail, state.stencil_front.zpass,
-           (unsigned)state.stencil_front.write_mask, state.stencil_back.func,
-           state.stencil_back.fail, state.stencil_back.zfail, state.stencil_back.zpass,
-           (unsigned)state.stencil_back.write_mask,
-           (unsigned)state.stencil_front.value_mask,
-           (unsigned)state.stencil_front.write_mask);
-  key += stencil_key;
-  return key;
 }
 
 }  // namespace
@@ -233,6 +91,7 @@ void WebGLContext::draw_range_elements(int mode, int start, int end, int count, 
 void WebGLContext::draw(int mode, int first, int count, int index_type, int offset,
                         int instances) {
   if (count <= 0) return;
+  g_perf_frame.webglDraws += 1;
   WebGLProgram *program_ = program(current_program_);
   if (program_ == nullptr || !program_->linked || program_->vs_shader == nullptr) {
     set_error(GL_INVALID_OPERATION);
@@ -244,13 +103,14 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     return;
   }
   ensure_fallback();
-  end_pass();
   ensure_command();
+  if (cmd_ == nullptr) return;
 
   /* Expand source indices when the draw needs a primitive SDL_GPU lacks or a
-   * byte-sized index type. */
+   * byte-sized index type. These are per-draw temporary buffers: they change
+   * the index buffer, not the pipeline, so they stay out of the setup cache. */
   std::vector<uint32_t> expanded;
-  SDL_GPUBuffer *index_gpu = nullptr;
+  SDL_GPUBuffer *expanded_gpu = nullptr;
   int index_size = 0;
   int first_index = 0;
   int draw_mode = mode;
@@ -302,10 +162,10 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     }
     index_size = 4;
     if (!expanded.empty()) {
-      index_gpu = upload_temp_buffer(expanded.data(),
-                                     (uint32_t)(expanded.size() * sizeof(uint32_t)),
-                                     SDL_GPU_BUFFERUSAGE_INDEX);
-      if (index_gpu == nullptr) return;
+      expanded_gpu = upload_temp_buffer(expanded.data(),
+                                        (uint32_t)(expanded.size() * sizeof(uint32_t)),
+                                        SDL_GPU_BUFFERUSAGE_INDEX);
+      if (expanded_gpu == nullptr) return;
     }
   } else if (index_type != 0) {
     WebGLBuffer *element = buffer(bound_element_);
@@ -313,8 +173,6 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       set_error(GL_INVALID_OPERATION);
       return;
     }
-    index_gpu = ensure_buffer_gpu(element);
-    if (index_gpu == nullptr) return;
     index_size = type_size(index_type) == 4 ? 4 : 2;
     first_index = offset / index_size;
   }
@@ -333,77 +191,18 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   if (state_.color_target_count == 0) state_.color_target_count = 1;
   state_.depth_format = target_depth_format();
 
-  std::vector<SDL_GPUVertexAttribute> attributes;
-  std::vector<SDL_GPUVertexBufferDescription> buffers;
-  std::vector<SDL_GPUBufferBinding> bindings;
+  WebGLDrawKey key;
+  key.program = current_program_;
+  key.mode = draw_mode;
+  key.index_size = index_size;
+  key.element_buffer = !needs_expand && index_size > 0 ? bound_element_ : 0;
+  key.attribs_version = attribs_version_;
+  key.gpu_version = gpu_version_;
+  key.framebuffer_version = framebuffer_version_;
+  draw_state_hash(&key.state_hash, &key.state_hash2);
 
-  for (const GlslUniformDecl &decl : program_->attribs) {
-    auto location_it = program_->attrib_locations.find(decl.name);
-    if (location_it == program_->attrib_locations.end()) continue;
-    const int base_location = location_it->second;
-    if (base_location < 0 || base_location >= kWebGLMaxAttribs) continue;
-    WebGLAttribState &attrib = attribs_[base_location];
-    const int slots = decl.type == "mat2" ? 2 : (decl.type == "mat3" ? 3 : (decl.type == "mat4" ? 4 : 1));
-    const int components = slots > 1 ? slots : (components_of_type(decl.type) > 4 ? 4
-                                                                                 : components_of_type(decl.type));
-    const uint32_t slot = (uint32_t)buffers.size();
-    SDL_GPUVertexBufferDescription description;
-    memset(&description, 0, sizeof(description));
-    description.slot = slot;
-    description.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-    SDL_GPUBufferBinding binding;
-    memset(&binding, 0, sizeof(binding));
-    if (!attrib.enabled) {
-      float values[4] = {attrib.current[0], attrib.current[1], attrib.current[2], attrib.current[3]};
-      binding.buffer = upload_temp_buffer(values, sizeof(values), SDL_GPU_BUFFERUSAGE_VERTEX);
-      description.pitch = 0;
-      if (binding.buffer == nullptr) continue;
-      for (int column = 0; column < slots; column++) {
-        SDL_GPUVertexAttribute attribute;
-        memset(&attribute, 0, sizeof(attribute));
-        attribute.location = (Uint32)(base_location + column);
-        attribute.buffer_slot = slot;
-        attribute.format = float_format(components);
-        attribute.offset = 0;
-        attributes.push_back(attribute);
-      }
-      buffers.push_back(description);
-      bindings.push_back(binding);
-      continue;
-    }
-    WebGLBuffer *buffer_ = buffer(attrib.buffer);
-    if (buffer_ == nullptr || buffer_->data.empty()) {
-      set_error(GL_INVALID_OPERATION);
-      return;
-    }
-    SDL_GPUVertexElementFormat format = attrib.integer
-                                            ? int_format_of(attrib.size, attrib.type)
-                                            : format_of(attrib.size, attrib.type, attrib.normalized);
-    if (format == SDL_GPU_VERTEXELEMENTFORMAT_INVALID) {
-      set_error(GL_INVALID_OPERATION);
-      return;
-    }
-    description.input_rate = attrib.divisor > 0 ? SDL_GPU_VERTEXINPUTRATE_INSTANCE
-                                                : SDL_GPU_VERTEXINPUTRATE_VERTEX;
-    const int stride =
-        attrib.stride > 0 ? attrib.stride : components * type_size(attrib.type) * slots;
-    description.pitch = (Uint32)stride;
-    SDL_GPUBuffer *gpu = ensure_buffer_gpu(buffer_);
-    if (gpu == nullptr) return;
-    binding.buffer = gpu;
-    binding.offset = 0;
-    for (int column = 0; column < slots; column++) {
-      SDL_GPUVertexAttribute attribute;
-      memset(&attribute, 0, sizeof(attribute));
-      attribute.location = (Uint32)(base_location + column);
-      attribute.buffer_slot = slot;
-      attribute.format = format;
-      attribute.offset = (Uint32)(attrib.offset + column * components * type_size(attrib.type));
-      attributes.push_back(attribute);
-    }
-    buffers.push_back(description);
-    bindings.push_back(binding);
-  }
+  const WebGLDrawSetup *setup = prepare_draw(key);
+  if (setup == nullptr) return;
 
   begin_pass(false, false, false);
   if (pass_ == nullptr) return;
@@ -443,18 +242,29 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   if (scissor.h < 0) scissor.h = 0;
   SDL_SetGPUScissor(pass_, &scissor);
 
-  const std::string key = pipeline_key(draw_mode, index_size, attributes, buffers, state_);
-  SDL_GPUGraphicsPipeline *pipeline = nullptr;
-  auto cached = program_->pipeline_cache.find(key);
-  if (cached != program_->pipeline_cache.end()) {
-    pipeline = cached->second;
-  } else {
-    pipeline = create_pipeline(program_, draw_mode, index_size, (int)attributes.size(),
-                               (int)buffers.size(), attributes.data(), buffers.data(), key);
+  /* Bindings belong to the render pass, so a setup reused across an upload (a
+   * new pass) must be bound again even though nothing about it changed. */
+  if (last_setup_ != setup || last_setup_pass_ != pass_serial_) {
+    SDL_BindGPUGraphicsPipeline(pass_, setup->pipeline);
+    if (!setup->bindings.empty()) {
+      SDL_BindGPUVertexBuffers(pass_, 0, setup->bindings.data(),
+                               (Uint32)setup->bindings.size());
+    }
+    SDL_GPUBuffer *index_buffer = index_size > 0 ? (needs_expand ? expanded_gpu : setup->index_buffer)
+                                                 : nullptr;
+    if (index_buffer != nullptr) {
+      SDL_GPUBufferBinding binding;
+      memset(&binding, 0, sizeof(binding));
+      binding.buffer = index_buffer;
+      binding.offset = 0;
+      SDL_BindGPUIndexBuffer(pass_, &binding,
+                             index_size == 4 ? SDL_GPU_INDEXELEMENTSIZE_32BIT
+                                             : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+    }
+    last_pipeline_ = setup->pipeline;
+    last_setup_ = setup;
+    last_setup_pass_ = pass_serial_;
   }
-  if (pipeline == nullptr) return;
-
-  SDL_BindGPUGraphicsPipeline(pass_, pipeline);
   if (state_.stencil) {
     SDL_SetGPUStencilReference(pass_, (Uint8)(stencil_reference() & 0xFF));
   }
@@ -466,17 +276,6 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     constants.a = blend_color_[3];
     SDL_SetGPUBlendConstants(pass_, constants);
   }
-  if (!bindings.empty()) {
-    SDL_BindGPUVertexBuffers(pass_, 0, bindings.data(), (Uint32)bindings.size());
-  }
-  if (index_size > 0) {
-    SDL_GPUBufferBinding binding;
-    binding.buffer = index_gpu;
-    binding.offset = 0;
-    SDL_BindGPUIndexBuffer(pass_, &binding,
-                           index_size == 4 ? SDL_GPU_INDEXELEMENTSIZE_32BIT
-                                           : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-  }
   /* User uniform blocks live in the same std140 block; refresh their members
    * from the CPU-side buffer bound to each block's binding point. */
   for (const WebGLUniformBlock &block : program_->blocks) {
@@ -485,17 +284,17 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     if (binding.buffer == 0) continue;
     WebGLBuffer *uniform_buffer = buffer(binding.buffer);
     if (uniform_buffer == nullptr) continue;
-    size_t offset = binding.offset;
+    size_t block_offset = binding.offset;
     size_t length = (size_t)block.data_size;
     if (binding.size > 0 && length > binding.size) length = binding.size;
-    if (offset > uniform_buffer->data.size()) continue;
-    if (length > uniform_buffer->data.size() - offset) {
-      length = uniform_buffer->data.size() - offset;
+    if (block_offset > uniform_buffer->data.size()) continue;
+    if (length > uniform_buffer->data.size() - block_offset) {
+      length = uniform_buffer->data.size() - block_offset;
     }
     if (block.base_offset >= 0 &&
         block.base_offset + (int)length <= program_->block_size) {
       memcpy(program_->block.data() + block.base_offset,
-             uniform_buffer->data.data() + offset, length);
+             uniform_buffer->data.data() + block_offset, length);
     }
   }
 
@@ -503,13 +302,14 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     SDL_PushGPUVertexUniformData(cmd_, 0, program_->block.data(), (Uint32)program_->block.size());
   }
   if (program_->fs_has_block && program_->block_size > 0) {
-    SDL_PushGPUFragmentUniformData(cmd_, 0, program_->block.data(), (Uint32)program_->block.size());
+    SDL_PushGPUFragmentUniformData(cmd_, 0, program_->block.data(),
+                                   (Uint32)program_->block.size());
   }
 
   auto bind_samplers = [&](const std::vector<int> &stage, bool vertex_stage) {
     if (stage.empty()) return;
-    std::vector<SDL_GPUTextureSamplerBinding> sampler_bindings;
-    sampler_bindings.reserve(stage.size());
+    sampler_bindings_.clear();
+    sampler_bindings_.reserve(stage.size());
     for (int uniform_index : stage) {
       const WebGLUniform &uniform = program_->uniforms[(size_t)uniform_index];
       const int unit =
@@ -541,14 +341,14 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       SDL_GPUTextureSamplerBinding texture_binding;
       texture_binding.texture = gpu;
       texture_binding.sampler = sampler;
-      sampler_bindings.push_back(texture_binding);
+      sampler_bindings_.push_back(texture_binding);
     }
     if (vertex_stage) {
-      SDL_BindGPUVertexSamplers(pass_, 0, sampler_bindings.data(),
-                                (Uint32)sampler_bindings.size());
+      SDL_BindGPUVertexSamplers(pass_, 0, sampler_bindings_.data(),
+                                (Uint32)sampler_bindings_.size());
     } else {
-      SDL_BindGPUFragmentSamplers(pass_, 0, sampler_bindings.data(),
-                                  (Uint32)sampler_bindings.size());
+      SDL_BindGPUFragmentSamplers(pass_, 0, sampler_bindings_.data(),
+                                  (Uint32)sampler_bindings_.size());
     }
   };
   bind_samplers(program_->vs_sampler_uniforms, true);

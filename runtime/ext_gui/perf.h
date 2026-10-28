@@ -43,6 +43,18 @@ struct PerfCounters {
   uint64_t vertices = 0;
   uint64_t syncNodes = 0;
   uint64_t transitionFrames = 0;
+  /* Canvas 2D: CPU draws, texture uploads and the bytes they move. A canvas
+   * that is only redrawn in a small region should show a small `bytes` count. */
+  uint64_t canvasDraws = 0;
+  uint64_t canvasUploads = 0;
+  uint64_t canvasUploadBytes = 0;
+  /* WebGL: draw calls, render passes actually opened (a draw that has nothing
+   * to upload must not open a new pass), pipeline-cache misses and the bytes
+   * buffer updates copy to the GPU. */
+  uint64_t webglDraws = 0;
+  uint64_t webglPasses = 0;
+  uint64_t webglPipelineMisses = 0;
+  uint64_t webglBufferUploadBytes = 0;
 };
 
 /** Wall-clock phase timings in milliseconds. */

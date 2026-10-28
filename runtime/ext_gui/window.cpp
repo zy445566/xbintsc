@@ -526,6 +526,13 @@ static xt_value win_stats(xt_value self, xt_value env, int32_t argc, xt_value *a
   setCounter("vertices", counters.vertices);
   setCounter("syncNodes", counters.syncNodes);
   setCounter("transitionFrames", counters.transitionFrames);
+  setCounter("canvasDraws", counters.canvasDraws);
+  setCounter("canvasUploads", counters.canvasUploads);
+  setCounter("canvasUploadBytes", counters.canvasUploadBytes);
+  setCounter("webglDraws", counters.webglDraws);
+  setCounter("webglPasses", counters.webglPasses);
+  setCounter("webglPipelineMisses", counters.webglPipelineMisses);
+  setCounter("webglBufferUploadBytes", counters.webglBufferUploadBytes);
   return object;
 }
 

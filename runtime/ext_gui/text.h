@@ -86,6 +86,16 @@ Font *xt_text_scale(Font *font, float pixel_size);
  * the glyph has no outline (e.g. a space) or cannot be rendered. */
 bool xt_text_rasterize(Font *font, uint32_t glyph, GlyphImage &out);
 
+/** `xt_text_rasterize` through a bounded, two-generation cache. A canvas that
+ * redraws the same text every frame otherwise runs FreeType for every glyph of
+ * every `fillText`. The pointer stays valid for the rest of the frame (until a
+ * later call fills a generation and drops the spare one); callers must not hold
+ * it across frames. Returns null for a glyph without a bitmap. */
+const GlyphImage *xt_text_glyph_cached(Font *font, uint32_t glyph);
+
+/** Drop every cached glyph bitmap (called by `xt_text_shutdown`). */
+void xt_text_glyph_cache_clear(void);
+
 /** Shaped horizontal advance of `utf8` in pixels. Falls back to a deterministic
  * approximation when no font file can be loaded. */
 float xt_text_measure_width(const std::string &utf8, const FontSpec &spec);

@@ -21,10 +21,25 @@ if (gl == null) {
 ## 一帧如何到达屏幕
 
 - 每个上下文拥有一张离屏 `R8G8B8A8_UNORM` 颜色纹理（绘图缓冲）和一张 `D32_FLOAT` 深度纹理，尺寸取自 canvas 的 `width` / `height` 属性。`canvas.width = …` 会重建它们并丢弃内容，与 DOM 规则一致。
-- 上下文记录到自己的 SDL_GPU 命令缓冲。`clear`/`draw*` 保持一个渲染 pass 打开；缓冲区/纹理上传或切换 framebuffer 会结束它，并以 `LOAD` 开始新 pass，因此绘图缓冲在多次绘制之间保留，和 WebGL 一样。
+- 上下文记录到自己的 SDL_GPU 命令缓冲。`clear`/`draw*` 保持一个渲染 pass 打开；只有缓冲区/纹理上传或切换 framebuffer 才会结束它，并以 `LOAD` 开始新 pass，因此绘图缓冲在多次绘制之间保留，和 WebGL 一样；没有上传的绘制不会中断 pass。
 - 每帧一次，在页面自己的渲染 pass 之前，引擎提交所有 WebGL 命令缓冲。随后图像管线把颜色纹理当作普通 `PaintImage` 采样，没有 CPU 拷贝。
 - WebGL 原点在左下，SDL_GPU 渲染目标原点在左上，因此帧缓冲按自上而下存储：转换 `viewport`/`scissor`，`readPixels` 再把行翻回去，合成器看到的是正立的纹理。
 - 固定功能状态变化（`blendFunc`、`depthFunc`、`cullFace`、`colorMask` 等）会改变所需的 `SDL_GPUGraphicsPipeline`，因此管线按（程序、顶点布局、状态）惰性创建，并缓存在程序上。
+
+## 性能
+
+重复绘制命中缓存，而不是每次重建：当前（程序、属性布局、固定功能状态、附件格式）
+对应的管线、顶点布局与缓冲绑定只准备一次并复用（`webgl_draw_setup.cpp`）；状态变化时
+缓存未命中并新建管线。固定功能状态被哈希进 128 位键，而不是每次 draw 拼字符串；活动
+属性在链接时解析一次。上传被前移到渲染 pass 之前：没有上传的绘制不会结束 pass，禁用
+的顶点属性读取持久的常量缓冲而不是每次 draw 分配 GPU 缓冲，状态未变的绘制不重复绑定。
+`bufferSubData` 只拷贝写入的字节区间，增长中的缓冲按 2 的幂扩容。
+
+`win.stats()` 报告 `webglDraws`、`webglPasses`、`webglPipelineMisses` 与
+`webglBufferUploadBytes`；`tests/e2e/gui-draw-perf.test.ts` 正是用它们固定行为
+（2,000 次绘制只开一个 pass、稳定状态不再创建管线、4 MiB 缓冲只重传 64 KiB 区间）。
+剩余的每次 draw 开销来自后端自身的提交；大量相同对象仍应由应用改用
+`drawElementsInstanced`。
 
 ## 着色器：GLSL ES 到 SPIR-V（再到 MSL）
 

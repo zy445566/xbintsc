@@ -15,6 +15,8 @@
 #include <cstring>
 #include <vector>
 
+#include "perf.h"
+
 namespace xtgui {
 
 void Canvas2D::set_image_data(const std::vector<unsigned char> &rgba, int data_width,
@@ -38,6 +40,7 @@ void Canvas2D::set_image_data(const std::vector<unsigned char> &rgba, int data_w
   int dest_y0 = std::max(0, dy + source_y0);
   int dest_x1 = std::min(image_.width, dx + source_x1);
   int dest_y1 = std::min(image_.height, dy + source_y1);
+  mark_dirty((float)dest_x0, (float)dest_y0, (float)dest_x1, (float)dest_y1);
   for (int py = dest_y0; py < dest_y1; py++) {
     int source_row = py - dy;
     const unsigned char *src =
@@ -46,6 +49,7 @@ void Canvas2D::set_image_data(const std::vector<unsigned char> &rgba, int data_w
         image_.pixels.data() + ((size_t)py * (size_t)image_.width + (size_t)dest_x0) * 4;
     memcpy(dst, src, (size_t)(dest_x1 - dest_x0) * 4);
   }
+  g_perf_frame.canvasDraws += 1;
   generation_++;
 }
 

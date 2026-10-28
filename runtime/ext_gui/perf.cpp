@@ -57,6 +57,13 @@ void addCounters(PerfCounters *target, const PerfCounters &value) {
   target->vertices += value.vertices;
   target->syncNodes += value.syncNodes;
   target->transitionFrames += value.transitionFrames;
+  target->canvasDraws += value.canvasDraws;
+  target->canvasUploads += value.canvasUploads;
+  target->canvasUploadBytes += value.canvasUploadBytes;
+  target->webglDraws += value.webglDraws;
+  target->webglPasses += value.webglPasses;
+  target->webglPipelineMisses += value.webglPipelineMisses;
+  target->webglBufferUploadBytes += value.webglBufferUploadBytes;
 }
 
 void addTimings(PerfTimings *target, const PerfTimings &value) {
@@ -74,7 +81,9 @@ void printLine(uint64_t frames, const PerfTimings &ms, const PerfCounters &count
                "xt_gui perf frames=%llu ms=%.3f restyle=%.3f layout=%.3f paint=%.3f "
                "upload=%.3f draw=%.3f restyles=%llu nodes=%llu rules=%llu media=%llu "
                "layouts=%llu boxes=%llu text=%llu textHit=%llu ops=%llu runs=%llu "
-               "draws=%llu uploads=%llu verts=%llu sync=%llu presents=%llu skip=%llu\n",
+               "draws=%llu uploads=%llu verts=%llu sync=%llu presents=%llu skip=%llu "
+               "cdraw=%llu cups=%llu cbytes=%llu gldraw=%llu passes=%llu gmiss=%llu "
+               "gbytes=%llu\n",
                (unsigned long long)frames, ms.frame / divisor, ms.restyle / divisor,
                ms.layout / divisor, ms.paint / divisor, ms.upload / divisor, ms.draw / divisor,
                (unsigned long long)counters.restyles, (unsigned long long)counters.restyleNodes,
@@ -86,7 +95,14 @@ void printLine(uint64_t frames, const PerfTimings &ms, const PerfCounters &count
                (unsigned long long)counters.drawRuns, (unsigned long long)counters.drawCalls,
                (unsigned long long)counters.uploadSubmits, (unsigned long long)counters.vertices,
                (unsigned long long)counters.syncNodes, (unsigned long long)counters.presents,
-               (unsigned long long)counters.skippedFrames);
+               (unsigned long long)counters.skippedFrames,
+               (unsigned long long)counters.canvasDraws,
+               (unsigned long long)counters.canvasUploads,
+               (unsigned long long)counters.canvasUploadBytes,
+               (unsigned long long)counters.webglDraws,
+               (unsigned long long)counters.webglPasses,
+               (unsigned long long)counters.webglPipelineMisses,
+               (unsigned long long)counters.webglBufferUploadBytes);
 }
 
 }  // namespace

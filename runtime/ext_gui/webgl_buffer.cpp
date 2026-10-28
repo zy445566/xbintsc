@@ -372,12 +372,14 @@ void WebGLContext::bind_framebuffer(int target, uint32_t id) {
   if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER) return;
   if (id != bound_framebuffer_) end_pass();
   bound_framebuffer_ = id;
+  framebuffer_version_ += 1;
   if (target == GL_FRAMEBUFFER) read_framebuffer_ = id;
   read_buffer_ = id == 0 ? GL_BACK : GL_COLOR_ATTACHMENT0;
 }
 
 bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture_id,
                                        int attachment) {
+  framebuffer_version_ += 1;
   WebGLFramebuffer *record_framebuffer = framebuffer(framebuffer_id);
   WebGLTexture *record = texture(texture_id);
   if (record_framebuffer == nullptr) return false;
@@ -491,6 +493,7 @@ bool WebGLContext::renderbuffer_storage(uint32_t id, int width, int height, bool
 }
 
 bool WebGLContext::framebuffer_renderbuffer(uint32_t framebuffer_id, uint32_t renderbuffer_id) {
+  framebuffer_version_ += 1;
   WebGLFramebuffer *framebuffer_ = framebuffer(framebuffer_id);
   WebGLRenderbuffer *record = renderbuffer(renderbuffer_id);
   if (framebuffer_ == nullptr) return false;

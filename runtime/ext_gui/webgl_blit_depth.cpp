@@ -194,12 +194,12 @@ bool WebGLContext::blit_depth(uint32_t source_framebuffer, uint32_t destination_
   buffer_description.pitch = 8;
   buffer_description.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
   SDL_GPUGraphicsPipeline *pipeline = nullptr;
-  auto cached = program->pipeline_cache.find(key);
-  if (cached != program->pipeline_cache.end()) {
+  auto cached = internal_pipelines_.find(key);
+  if (cached != internal_pipelines_.end()) {
     pipeline = cached->second;
   } else {
-    pipeline = create_pipeline(program, GL_TRIANGLE_STRIP, 0, 1, 1, &attribute, &buffer_description,
-                               key);
+    pipeline = create_pipeline(program, GL_TRIANGLE_STRIP, 1, 1, &attribute, &buffer_description);
+    if (pipeline != nullptr) internal_pipelines_[key] = pipeline;
   }
   bool ok = pipeline != nullptr;
   if (ok) {
@@ -260,6 +260,10 @@ bool WebGLContext::blit_depth(uint32_t source_framebuffer, uint32_t destination_
 
   state_ = saved_state;
   current_program_ = saved_program;
+  /* This pass bound the blit pipeline directly, outside the prepared-draw
+   * cache; a later draw in the same pass must bind its own pipeline again. */
+  last_setup_ = nullptr;
+  last_pipeline_ = nullptr;
   return ok;
 }
 

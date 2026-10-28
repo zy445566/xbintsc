@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include "gui_internal.h"
+#include "perf.h"
 
 namespace xtgui {
 namespace {
@@ -54,6 +55,11 @@ void WebGLContext::release_gpu_resources() {
   if (guidev::g_device == nullptr) return;
   SDL_WaitForGPUIdle(guidev::g_device);
   for (auto &entry : programs_) release_program_pipelines(entry.second.get());
+  for (auto &entry : internal_pipelines_) {
+    if (entry.second != nullptr) SDL_ReleaseGPUGraphicsPipeline(guidev::g_device, entry.second);
+  }
+  internal_pipelines_.clear();
+  clear_draw_cache();
   for (auto &entry : textures_) {
     if (entry.second->gpu != nullptr) SDL_ReleaseGPUTexture(guidev::g_device, entry.second->gpu);
     if (entry.second->sampler != nullptr) {
@@ -126,6 +132,8 @@ void WebGLContext::lose_context() {
    * after the restore. */
   shaders_.clear();
   programs_.clear();
+  clear_draw_cache();
+  internal_pipelines_.clear();
   buffers_.clear();
   textures_.clear();
   framebuffers_.clear();
@@ -243,6 +251,7 @@ void WebGLContext::resize(int width, int height) {
   if (height < 0) height = 0;
   width_ = width > 0 ? width : 1;
   height_ = height > 0 ? height : 1;
+  framebuffer_version_ += 1;
   viewport_[0] = 0;
   viewport_[1] = 0;
   viewport_[2] = width_;
@@ -406,6 +415,10 @@ void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_ste
 
   pass_ = SDL_BeginGPURenderPass(cmd_, color_infos, (Uint32)color_count,
                                  depth != nullptr ? &depth_info : nullptr);
+  if (pass_ != nullptr) {
+    g_perf_frame.webglPasses += 1;
+    pass_serial_ += 1;
+  }
   pass_targets_default_ = bound_framebuffer_ == 0;
   pass_framebuffer_ = bound_framebuffer_;
 }

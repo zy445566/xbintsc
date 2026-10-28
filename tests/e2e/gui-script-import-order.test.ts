@@ -146,6 +146,7 @@ export function bump(): number { n += seed; return n; }
       const label = (name: string, value: any): void => console.log(name + "=" + value);
       label("before", (win as any).probe === undefined ? "undefined" : "set");
       win.loadHTML(page);
+      label("size", (win as any).innerWidth + "x" + (win as any).innerHeight);
       label("probe", (win as any).probe);
       win.close();
       `,
@@ -172,6 +173,13 @@ console.log("probe-module=" + ( window as any ).probe);
     );
 
     expect(value("before")).toBe("undefined");
-    expect(value("probe")).toBe("1280x720,3,SPAN:ok,120x80,true");
+    const parts = value("probe").split(",");
+    /* The module ran during `loadHTML` and saw the same window the program
+     * holds. Its size is compared rather than asserted literally: a runner may
+     * clamp the requested 1280×720 to its display (the macOS CI window comes
+     * back smaller), and the point here is that the deferred module reads the
+     * real window, not a particular size. */
+    expect(parts[0]).toBe(value("size"));
+    expect(parts.slice(1)).toEqual(["3", "SPAN:ok", "120x80", "true"]);
   });
 });

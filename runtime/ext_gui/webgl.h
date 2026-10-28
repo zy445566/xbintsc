@@ -34,13 +34,10 @@
 #include "webgl2_constants.h"
 #include "webgl_draw_state.h"
 #include "webgl_glsl.h"
+#include "webgl_objects.h"
 #include "webgl_uniform_block.h"
 
 namespace xtgui {
-
-constexpr int kWebGLMaxAttribs = 16;
-constexpr int kWebGLMaxTextureUnits = 16;
-constexpr int kWebGLMaxDrawBuffers = 4;
 
 struct WebGLShader {
   uint32_t id = 0;
@@ -73,6 +70,7 @@ struct WebGLProgram {
   std::vector<WebGLUniform> uniforms;
   std::vector<WebGLUniformBlock> blocks;
   std::vector<GlslUniformDecl> attribs;
+  std::vector<WebGLDrawAttribPlan> draw_attribs;
   std::unordered_map<std::string, int> attrib_locations;  // name -> location
   std::unordered_map<std::string, int> attrib_bindings;   // bindAttribLocation overrides
   std::unordered_map<std::string, int> uniform_index;     // name -> uniforms[] index
@@ -86,115 +84,7 @@ struct WebGLProgram {
   SDL_GPUShader *vs_shader = nullptr;
   SDL_GPUShader *fs_shader = nullptr;
   std::vector<SDL_GPUGraphicsPipeline *> pipelines;
-  std::unordered_map<std::string, SDL_GPUGraphicsPipeline *> pipeline_cache;
-};
-
-struct WebGLBuffer {
-  uint32_t id = 0;
-  std::vector<uint8_t> data;
-  SDL_GPUBuffer *gpu = nullptr;
-  uint32_t capacity = 0;
-  bool dirty = true;
-  /** `bufferData` usage hint, reported by `getBufferParameter`. */
-  int usage = GL_STATIC_DRAW;
-};
-
-struct WebGLTexture {
-  uint32_t id = 0;
-  int width = 0;
-  int height = 0;
-  int levels = 1;
-  /** The binding target this texture was created for. */
-  int target = GL_TEXTURE_2D;
-  /** Layers for a cube/2D-array texture, depth for a 3D texture. */
-  int layers = 1;
-  SDL_GPUTexture *gpu = nullptr;
-  SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-  /** Depth(-stencil) formats can only be depth attachments. */
-  bool depth = false;
-  /** Block-compressed textures are sample-only, with one mip level. */
-  bool compressed = false;
-  /** Usage flags the current `gpu` texture was created with. */
-  uint32_t usage = 0;
-  bool as_target = false;        // bound as a colour attachment
-  bool as_depth_target = false;  // bound as a depth attachment
-  bool has_mipmaps = false;
-  int min_filter = 0;
-  int mag_filter = 0;
-  int wrap_s = 0;
-  int wrap_t = 0;
-  SDL_GPUSampler *sampler = nullptr;
-  /** Comparison sampler for a `sampler2DShadow` binding. */
-  SDL_GPUSampler *compare_sampler = nullptr;
-  bool compare_mode = false;
-  int compare_func = GL_LEQUAL;
-  bool dirty = false;
-  bool defined = false;
-};
-
-struct WebGLRenderbuffer {
-  uint32_t id = 0;
-  int width = 0;
-  int height = 0;
-  bool stencil = false;
-  SDL_GPUTexture *depth = nullptr;
-};
-
-struct WebGLFramebuffer {
-  uint32_t id = 0;
-  uint32_t color_textures[kWebGLMaxDrawBuffers] = {};
-  /** Layer rendered to for an array/cube colour attachment. */
-  int color_layers[kWebGLMaxDrawBuffers] = {};
-  /** `COLOR_ATTACHMENTi` or `NONE` per draw-buffer slot. */
-  int draw_buffers[kWebGLMaxDrawBuffers] = {GL_COLOR_ATTACHMENT0, GL_NONE, GL_NONE, GL_NONE};
-  uint32_t depth_texture = 0;
-  uint32_t depth_renderbuffer = 0;
-  int width = 0;
-  int height = 0;
-  SDL_GPUTexture *depth = nullptr;  // owned when no renderbuffer/texture supplies one
-};
-
-/** Per-attribute array state. */
-struct WebGLAttribState {
-  bool enabled = false;
-  bool integer = false;  // `vertexAttribIPointer` rather than `vertexAttribPointer`
-  uint32_t buffer = 0;
-  int size = 4;
-  int type = GL_FLOAT;
-  bool normalized = false;
-  int stride = 0;
-  int offset = 0;
-  int divisor = 0;  // 0 = per vertex, 1 = per instance
-  float current[4] = {0.0f, 0.0f, 0.0f, 1.0f};
-};
-
-/** A WebGL 2 vertex-array object; binding one restores this state. */
-struct WebGLVertexArray {
-  uint32_t id = 0;
-  WebGLAttribState attribs[kWebGLMaxAttribs];
-  uint32_t element_buffer = 0;
-};
-
-/** A WebGL 2 sampler object, bound to a texture unit with `bindSampler`. */
-struct WebGLSampler {
-  uint32_t id = 0;
-  int min_filter = 0;
-  int mag_filter = 0;
-  int wrap_s = 0;
-  int wrap_t = 0;
-  /** `TEXTURE_COMPARE_MODE`/`TEXTURE_COMPARE_FUNC` (WebGL 2 sampler objects
-   * carry them too). */
-  bool compare_mode = false;
-  int compare_func = GL_LEQUAL;
-  SDL_GPUSampler *gpu = nullptr;
-};
-
-struct WebGLQuery {
-  uint32_t id = 0;
-};
-
-struct WebGLSync {
-  uint32_t id = 0;
+  std::unordered_map<WebGLDrawKey, SDL_GPUGraphicsPipeline *, WebGLDrawKeyHash> pipeline_cache;
 };
 
 class WebGLContext {
@@ -472,6 +362,17 @@ class WebGLContext {
   SDL_GPUSampler *sampler_for(WebGLTexture *texture);
   SDL_GPUSampler *sampler_for_compare(WebGLTexture *texture);
   SDL_GPUBuffer *ensure_buffer_gpu(WebGLBuffer *buffer);
+  /** Upload `size` bytes at `offset` into an existing GPU buffer, ending the
+   * open render pass first (a copy pass cannot run inside one). */
+  bool upload_buffer_range(SDL_GPUBuffer *gpu, uint32_t offset, const void *bytes, uint32_t size);
+  /** The persistent GPU buffer for a disabled attribute's `current[]` value. */
+  SDL_GPUBuffer *constant_attrib_buffer(int index);
+  /** Hash the current fixed-function state into a draw key. */
+  void draw_state_hash(uint64_t *first, uint64_t *second) const;
+  /** The prepared pipeline/layout for `key`, building and caching it on miss. */
+  const WebGLDrawSetup *prepare_draw(const WebGLDrawKey &key);
+  /** Drop every prepared draw and pipeline key (state/layout changed shape). */
+  void clear_draw_cache();
   void ensure_default_target();
   void rebuild_default_target();
   bool ensure_fallback();
@@ -483,11 +384,10 @@ class WebGLContext {
   SDL_GPUSampler *sampler_gpu(WebGLSampler *sampler);
   uint32_t buffer_for_target(int target) const;
   void release_program_pipelines(WebGLProgram *program);
-  SDL_GPUGraphicsPipeline *create_pipeline(WebGLProgram *program, int mode, int index_type,
+  SDL_GPUGraphicsPipeline *create_pipeline(WebGLProgram *program, int mode,
                                            int attribute_count, int buffer_count,
                                            const SDL_GPUVertexAttribute *attrs,
-                                           const SDL_GPUVertexBufferDescription *buffers,
-                                           const std::string &key);
+                                           const SDL_GPUVertexBufferDescription *buffers);
 
   uint64_t id_ = 0;
   int width_ = 0;
@@ -499,6 +399,23 @@ class WebGLContext {
   SDL_GPURenderPass *pass_ = nullptr;
   bool pass_targets_default_ = true;
   uint32_t pass_framebuffer_ = 0;
+  /** Bumped every time a render pass is actually opened: bindings recorded in
+   * a previous pass do not survive an intervening upload. */
+  uint64_t pass_serial_ = 0;
+  /** State-shape versions. A mutation that changes the vertex layout, the GPU
+   * buffer handles or the attachment formats bumps one of these, which
+   * invalidates every prepared draw. */
+  uint64_t attribs_version_ = 1;
+  uint64_t gpu_version_ = 1;
+  uint64_t framebuffer_version_ = 1;
+  std::unordered_map<WebGLDrawKey, WebGLDrawSetup, WebGLDrawKeyHash> draw_setups_;
+  SDL_GPUGraphicsPipeline *last_pipeline_ = nullptr;
+  const WebGLDrawSetup *last_setup_ = nullptr;
+  uint64_t last_setup_pass_ = 0;
+  /** Pipelines for internal helper draws (depth blit), keyed by their state. */
+  std::unordered_map<std::string, SDL_GPUGraphicsPipeline *> internal_pipelines_;
+  /** Scratch for the sampler bindings of one draw. */
+  std::vector<SDL_GPUTextureSamplerBinding> sampler_bindings_;
 
   SDL_GPUTexture *color_ = nullptr;
   SDL_GPUTexture *depth_ = nullptr;

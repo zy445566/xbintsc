@@ -114,6 +114,8 @@ void WebGLContext::scissored_clear(int mask) {
   attribs_[attrib].type = GL_FLOAT;
   attribs_[attrib].stride = 8;
   attribs_[attrib].offset = 0;
+  /* The temporary attribute layout must not be mistaken for the caller's. */
+  attribs_version_ += 1;
   int target_width = 0;
   int target_height = 0;
   framebuffer_size(bound_framebuffer_, &target_width, &target_height);
@@ -136,6 +138,7 @@ void WebGLContext::scissored_clear(int mask) {
   current_program_ = saved_program;
   bound_array_ = saved_array;
   memcpy(attribs_, saved_attribs, sizeof(attribs_));
+  attribs_version_ += 1;
   for (int i = 0; i < 4; i++) viewport_[i] = saved_viewport[i];
 }
 

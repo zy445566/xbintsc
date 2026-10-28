@@ -201,6 +201,20 @@ is what `tests/e2e/gui-perf.test.ts` asserts on.
   report the run count and its cost; they are the metric for the remaining
   follow-up (an overlap-aware batching pass) — painter order requires
   alternating background and text runs to stay separate until that lands.
+- **Immediate-mode surfaces.** `<canvas>` 2D and WebGL draws are script-driven,
+  so their cost is per call rather than per document change; the counters above
+  cover the retained pipeline only. `tests/e2e/gui-draw-perf.test.ts` measures
+  them: on the reference Windows x64/Vulkan machine a 1280×720 frame with 5,000
+  solid `fillRect`s, 200 eight-point strokes, 300 `fillText` runs and 200 1:1
+  `drawImage`s fell from 231ms to 158ms (fill 4.3ms, stroke 151ms, text 1.4ms,
+  image 1.6ms), and 2,000 WebGL `drawElements` calls with a per-draw matrix went
+  from 38.6ms to 27.5ms while the render passes opened per frame dropped from
+  2,001 to 1 and a 64 KiB `bufferSubData` into a 4 MiB buffer stopped
+  re-uploading the whole buffer. A 100×100 canvas redraw now uploads 40 KB
+  rather than the whole 1.2 MB bitmap. The suite asserts the counters (one
+  upload per frame, no steady-state pipeline creation, only the dirty bytes), so
+  the wall-clock numbers stay informational and a software GPU in CI is not
+  penalised.
 
 Known limits: a mutation still restyles and relayouts the **whole** document
 (there is no incremental subtree invalidation), and a paint-only change (for

@@ -180,6 +180,15 @@ class Canvas2D {
   uint64_t id() const { return id_; }
   /** Bumped by every draw; the renderer re-uploads when it changes. */
   uint64_t generation() const { return generation_; }
+  /** Device-space bounds of the pixels changed since the renderer last uploaded
+   * them. Empty means nothing visible changed (a no-op or off-canvas draw), so
+   * the renderer can skip the upload entirely. */
+  struct CanvasDirtyRect {
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    bool empty() const { return x1 <= x0 || y1 <= y0; }
+  };
+  const CanvasDirtyRect &pending_dirty() const { return dirty_; }
+  void clear_dirty() { dirty_ = CanvasDirtyRect(); }
   const Image &image() const { return image_; }
   /** Resize the bitmap, discarding its contents (the DOM `canvas.width = …`
    * behaviour). */
@@ -373,6 +382,15 @@ class Canvas2D {
 
   /** Transform a user-space point into device space. */
   void to_device(float x, float y, float *outX, float *outY) const;
+  /** Union a device-space rectangle into the pending upload region. */
+  void mark_dirty(float x0, float y0, float x1, float y1);
+  /** Union the bounds of a device-space path (grown by `expand`) into the
+   * pending upload region. */
+  void mark_path_dirty(const std::vector<CanvasSubpath> &subpaths, float expand);
+  void mark_all_dirty();
+  /** How far a stroke can reach outside its centre line (half width, miter
+   * limit and a pixel of anti-aliasing slack). */
+  float stroke_extent() const;
   /** The current path transformed into device space. */
   std::vector<CanvasSubpath> device_subpaths() const;
   /** Any user-space path transformed into device space. */
@@ -416,6 +434,7 @@ class Canvas2D {
   bool alpha_ = true;
   uint64_t id_ = 0;
   uint64_t generation_ = 0;
+  CanvasDirtyRect dirty_;
   State state_;
   std::vector<State> stack_;
   std::vector<CanvasSubpath> path_;

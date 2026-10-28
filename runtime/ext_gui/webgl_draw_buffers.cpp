@@ -62,6 +62,7 @@ void WebGLContext::draw_buffers(int count, const int *buffers) {
   for (int i = 0; i < kWebGLMaxDrawBuffers; i++) {
     target[i] = (i < count && buffers != nullptr) ? buffers[i] : GL_NONE;
   }
+  framebuffer_version_ += 1;
   end_pass();
 }
 

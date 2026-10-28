@@ -331,15 +331,17 @@ std::vector<uint8_t> webgl_bytes(xt_value value) {
     const double length = xt_to_number(xt_get(value, xt_string_from_cstr("byteLength")));
     if (!(length > 0.0) || !xt_is_array_buffer(buffer)) return out;
     out.resize((size_t)length);
-    for (uint32_t i = 0; i < (uint32_t)length; i++) {
-      out[i] = xt_array_buffer_get_byte(buffer, offset + i);
-    }
+    /* The runtime stores an ArrayBuffer as one byte value per array slot, so
+     * this is still an element loop — but one call into the runtime instead of
+     * one extern call per byte, which is what a multi-megabyte vertex buffer or
+     * `texImage2D` pays for. */
+    out.resize(xt_array_buffer_copy_bytes_out(buffer, offset, out.data(), (uint32_t)length));
     return out;
   }
   if (xt_is_array_buffer(value)) {
     const uint32_t length = xt_array_buffer_byte_length(value);
     out.resize(length);
-    for (uint32_t i = 0; i < length; i++) out[i] = xt_array_buffer_get_byte(value, i);
+    out.resize(xt_array_buffer_copy_bytes_out(value, 0, out.data(), length));
     return out;
   }
   const std::vector<double> numbers = webgl_numbers(value);
@@ -356,12 +358,20 @@ std::vector<uint8_t> webgl_bytes(xt_value value) {
 void webgl_write_bytes(xt_value target, const uint8_t *bytes, size_t count) {
   if (!XT_IS_OBJECT(target) || bytes == nullptr) return;
   const int kind = xt_typed_array_kind_of(target);
-  for (size_t i = 0; i < count; i++) {
-    if (kind >= 0) {
-      xt_typed_array_write(target, (uint32_t)i, xt_number((double)bytes[i]));
-    } else {
-      xt_set(target, xt_number((double)i), xt_number((double)bytes[i]));
+  if (kind >= 0) {
+    xt_value buffer = xt_typed_array_buffer_of(target);
+    const uint32_t offset = xt_typed_array_byte_offset_of(target);
+    if (xt_is_array_buffer(buffer)) {
+      xt_array_buffer_copy_bytes_in(buffer, offset, bytes, (uint32_t)count);
+      return;
     }
+  }
+  if (xt_is_array_buffer(target)) {
+    xt_array_buffer_copy_bytes_in(target, 0, bytes, (uint32_t)count);
+    return;
+  }
+  for (size_t i = 0; i < count; i++) {
+    xt_set(target, xt_number((double)i), xt_number((double)bytes[i]));
   }
 }
 

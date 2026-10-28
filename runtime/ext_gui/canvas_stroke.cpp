@@ -30,6 +30,27 @@ bool same_point(const CanvasPoint &a, const CanvasPoint &b) {
   return std::fabs(a.x - b.x) < 1e-6f && std::fabs(a.y - b.y) < 1e-6f;
 }
 
+/** Twice the signed area of a closed polygon (shoelace). */
+float signed_area(const CanvasSubpath &loop) {
+  float sum = 0.0f;
+  const size_t count = loop.size();
+  for (size_t i = 0; i < count; i++) {
+    const CanvasPoint &a = loop[i];
+    const CanvasPoint &b = loop[(i + 1) % count];
+    sum += a.x * b.y - b.x * a.y;
+  }
+  return sum;
+}
+
+/** Append one stroke piece to the batch, normalising its winding: a stroke is
+ * filled as one nonzero path, so a join that happened to be wound the other
+ * way would cancel the quads it overlaps instead of covering them. */
+void append_piece(std::vector<CanvasSubpath> *loops, CanvasSubpath piece) {
+  if (piece.size() < 3) return;
+  if (signed_area(piece) < 0.0f) std::reverse(piece.begin(), piece.end());
+  loops->push_back(std::move(piece));
+}
+
 }  // namespace
 
 void Canvas2D::stroke_subpath(const CanvasSubpath &points, bool closed, const CanvasPaint &paint) {
@@ -54,10 +75,12 @@ void Canvas2D::stroke_polyline(const CanvasSubpath &points, bool closed, float h
   const size_t n = pts.size();
   if (n < 2) return;
 
-  auto fill_loop = [&](const CanvasSubpath &loop) {
-    canvas_detail::fill_loop(image_.pixels, image_.width, image_.height, loop, paint,
-                             state_.global_alpha, false, clip_mask());
-  };
+  /* Every segment, join and cap becomes one polygon; the whole polyline is
+   * filled in a single coverage pass instead of one pass per piece (which was
+   * the dominant cost of a many-segment stroke). */
+  std::vector<CanvasSubpath> loops;
+  loops.reserve(n * 2 + 2);
+
   auto fill_disc = [&](const CanvasPoint &p) {
     CanvasSubpath disc;
     const int segments = 24;
@@ -66,7 +89,7 @@ void Canvas2D::stroke_polyline(const CanvasSubpath &points, bool closed, float h
       float angle = 2.0f * kPi * ((float)i / (float)segments);
       disc.push_back(CanvasPoint{p.x + half * std::cos(angle), p.y + half * std::sin(angle)});
     }
-    fill_loop(disc);
+    append_piece(&loops, std::move(disc));
   };
 
   /* Segments. A square cap extends the first/last quad along the line by half
@@ -92,7 +115,7 @@ void Canvas2D::stroke_polyline(const CanvasSubpath &points, bool closed, float h
     }
     CanvasSubpath quad{CanvasPoint{p.x + nx, p.y + ny}, CanvasPoint{q.x + nx, q.y + ny},
                        CanvasPoint{q.x - nx, q.y - ny}, CanvasPoint{p.x - nx, p.y - ny}};
-    fill_loop(quad);
+    append_piece(&loops, std::move(quad));
   }
 
   /* Joins: round adds a disc, bevel a triangle, miter the intersect of the two
@@ -120,7 +143,7 @@ void Canvas2D::stroke_polyline(const CanvasSubpath &points, bool closed, float h
     CanvasPoint a{p.x - v1y * half * side, p.y + v1x * half * side};
     CanvasPoint b{p.x - v2y * half * side, p.y + v2x * half * side};
     if (state_.line_join == 2) {
-      fill_loop(CanvasSubpath{a, b, p});
+      append_piece(&loops, CanvasSubpath{a, b, p});
       return;
     }
     float t = ((b.x - a.x) * v2y - (b.y - a.y) * v2x) / cross;
@@ -128,9 +151,9 @@ void Canvas2D::stroke_polyline(const CanvasSubpath &points, bool closed, float h
     float miterLength = std::sqrt((miter.x - p.x) * (miter.x - p.x) +
                                   (miter.y - p.y) * (miter.y - p.y));
     if (std::isfinite(miterLength) && miterLength <= half * state_.miter_limit) {
-      fill_loop(CanvasSubpath{a, miter, b, p});
+      append_piece(&loops, CanvasSubpath{a, miter, b, p});
     } else {
-      fill_loop(CanvasSubpath{a, b, p});
+      append_piece(&loops, CanvasSubpath{a, b, p});
     }
   };
 
@@ -147,6 +170,11 @@ void Canvas2D::stroke_polyline(const CanvasSubpath &points, bool closed, float h
       fill_disc(pts.front());
       fill_disc(pts.back());
     }
+  }
+
+  if (!loops.empty()) {
+    canvas_detail::fill_loops(image_.pixels, image_.width, image_.height, loops, paint,
+                              state_.global_alpha, false, clip_mask());
   }
 }
 

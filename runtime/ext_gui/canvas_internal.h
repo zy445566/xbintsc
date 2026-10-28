@@ -26,10 +26,17 @@ void blend_pixel(unsigned char *pixel, const float color[4], float coverage, flo
 void blend_pixel_mode(unsigned char *pixel, const float color[4], float coverage, float alpha,
                       int composite);
 
-/** One path's anti-aliased coverage, clipped to the canvas bitmap. */
+/** One path's anti-aliased coverage, clipped to the canvas bitmap. Only the
+ * covered span of each row is stored, so a thin diagonal stroke costs its own
+ * pixels instead of its (potentially huge) bounding box. */
 struct CoverageGrid {
   int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-  std::vector<float> values;  // row-major over [x0,x1) x [y0,y1)
+  /** Concatenated row spans; row `r` owns `[row_offset[r], row_offset[r+1])`. */
+  std::vector<float> values;
+  /** One past-the-end index per row, plus a final entry (size = rows + 1). */
+  std::vector<uint32_t> row_offset;
+  /** Device-space x of the first stored coverage value of each row. */
+  std::vector<int> row_x;
   bool empty() const { return x1 <= x0 || y1 <= y0; }
 };
 

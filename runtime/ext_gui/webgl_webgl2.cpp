@@ -78,6 +78,7 @@ void WebGLContext::save_vertex_array() {
 void WebGLContext::load_vertex_array(const WebGLVertexArray *array) {
   for (int i = 0; i < kWebGLMaxAttribs; i++) attribs_[i] = array->attribs[i];
   bound_element_ = array->element_buffer;
+  attribs_version_ += 1;
 }
 
 void WebGLContext::bind_vertex_array(uint32_t id) {

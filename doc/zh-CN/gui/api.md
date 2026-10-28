@@ -208,6 +208,8 @@ win.stats()                            // 引擎/运行时计数器（内存排�
 | `restyles`、`restyleNodes`、`rulesEvaluated`、`mediaEvaluated`、`layouts`、`layoutBoxes` | 层叠与布局的工作量 |
 | `textShapeCalls`、`textShapeHits`、`textCacheBytes`、`textCacheEntries` | 整形缓存的未命中/命中与占用 |
 | `paints`、`paintOps`、`drawRuns`、`drawCalls`、`uploadSubmits`、`vertices`、`syncNodes` | 显示列表、绘制调用与上传的工作量 |
+| `canvasDraws`、`canvasUploads`、`canvasUploadBytes` | Canvas 2D 绘制次数、纹理上传次数与拷贝字节数（局部重绘只上传脏矩形） |
+| `webglDraws`、`webglPasses`、`webglPipelineMisses`、`webglBufferUploadBytes` | WebGL 绘制次数、打开的渲染 pass 数、新建管线数与缓冲拷贝字节数 |
 
 除 `*Ms` 时间外，所有字段都是累计值，因此两次快照相减即得到一帧的工作量。
 `restyleMs` 覆盖层叠**以及**它触发的布局过程（布局过程本身也单独报告为

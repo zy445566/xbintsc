@@ -16,6 +16,7 @@
 #include <unordered_map>
 
 #include "canvas_internal.h"
+#include "perf.h"
 
 namespace xtgui {
 
@@ -94,6 +95,7 @@ void Canvas2D::resize(int width, int height) {
      * pixels are black rather than transparent. */
     for (size_t i = 3; i < image_.pixels.size(); i += 4) image_.pixels[i] = 255;
   }
+  mark_all_dirty();
   generation_++;
 }
 
@@ -296,6 +298,57 @@ void Canvas2D::to_device(float x, float y, float *outX, float *outY) const {
   state_.transform.apply(x, y, outX, outY);
 }
 
+void Canvas2D::mark_dirty(float x0, float y0, float x1, float y1) {
+  if (x1 < x0) std::swap(x0, x1);
+  if (y1 < y0) std::swap(y0, y1);
+  const int ix0 = std::max(0, (int)std::floor(x0));
+  const int iy0 = std::max(0, (int)std::floor(y0));
+  const int ix1 = std::min(image_.width, (int)std::ceil(x1));
+  const int iy1 = std::min(image_.height, (int)std::ceil(y1));
+  if (ix1 <= ix0 || iy1 <= iy0) return;
+  if (dirty_.empty()) {
+    dirty_ = CanvasDirtyRect{ix0, iy0, ix1, iy1};
+    return;
+  }
+  dirty_.x0 = std::min(dirty_.x0, ix0);
+  dirty_.y0 = std::min(dirty_.y0, iy0);
+  dirty_.x1 = std::max(dirty_.x1, ix1);
+  dirty_.y1 = std::max(dirty_.y1, iy1);
+}
+
+void Canvas2D::mark_path_dirty(const std::vector<CanvasSubpath> &subpaths, float expand) {
+  bool have = false;
+  float minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f;
+  for (const CanvasSubpath &subpath : subpaths) {
+    for (const CanvasPoint &point : subpath) {
+      if (!have) {
+        minX = maxX = point.x;
+        minY = maxY = point.y;
+        have = true;
+      } else {
+        minX = std::min(minX, point.x);
+        maxX = std::max(maxX, point.x);
+        minY = std::min(minY, point.y);
+        maxY = std::max(maxY, point.y);
+      }
+    }
+  }
+  if (!have) return;
+  mark_dirty(minX - expand, minY - expand, maxX + expand, maxY + expand);
+}
+
+void Canvas2D::mark_all_dirty() {
+  dirty_ = CanvasDirtyRect{0, 0, image_.width, image_.height};
+}
+
+float Canvas2D::stroke_extent() const {
+  float scale = state_.transform.scale();
+  if (!(scale > 0.0f)) scale = 1.0f;
+  float half = state_.line_width * scale * 0.5f;
+  if (!(half > 0.0f)) half = 0.5f;
+  return half * std::max(1.0f, state_.miter_limit) + 1.0f;
+}
+
 std::vector<CanvasSubpath> Canvas2D::device_subpaths() const {
   return device_subpaths_of(path_);
 }
@@ -342,6 +395,7 @@ void Canvas2D::fill(bool even_odd) {
     end_shadow_layer();
     return;
   }
+  g_perf_frame.canvasDraws += 1;
   std::vector<CanvasSubpath> subpaths = device_subpaths();
   std::vector<CanvasSubpath> loops;
   for (CanvasSubpath &subpath : subpaths) {
@@ -349,6 +403,7 @@ void Canvas2D::fill(bool even_odd) {
     loops.push_back(std::move(subpath));
   }
   if (loops.empty()) return;
+  mark_path_dirty(loops, 0.0f);
   canvas_detail::fill_loops(image_.pixels, image_.width, image_.height, loops, fill_paint(),
                             state_.global_alpha, even_odd, clip_mask());
   generation_++;
@@ -360,6 +415,7 @@ void Canvas2D::fill_paths(const std::vector<CanvasSubpath> &paths, bool even_odd
     end_shadow_layer();
     return;
   }
+  g_perf_frame.canvasDraws += 1;
   std::vector<CanvasSubpath> subpaths = device_subpaths_of(paths);
   std::vector<CanvasSubpath> loops;
   for (CanvasSubpath &subpath : subpaths) {
@@ -367,6 +423,7 @@ void Canvas2D::fill_paths(const std::vector<CanvasSubpath> &paths, bool even_odd
     loops.push_back(std::move(subpath));
   }
   if (loops.empty()) return;
+  mark_path_dirty(loops, 0.0f);
   canvas_detail::fill_loops(image_.pixels, image_.width, image_.height, loops, fill_paint(),
                             state_.global_alpha, even_odd, clip_mask());
   generation_++;
@@ -378,7 +435,9 @@ void Canvas2D::stroke() {
     end_shadow_layer();
     return;
   }
+  g_perf_frame.canvasDraws += 1;
   std::vector<CanvasSubpath> subpaths = device_subpaths();
+  mark_path_dirty(subpaths, stroke_extent());
   const CanvasPaint paint = stroke_paint();
   for (const CanvasSubpath &subpath : subpaths) {
     if (subpath.size() < 2) continue;
@@ -395,7 +454,9 @@ void Canvas2D::stroke_paths(const std::vector<CanvasSubpath> &paths) {
     end_shadow_layer();
     return;
   }
+  g_perf_frame.canvasDraws += 1;
   std::vector<CanvasSubpath> subpaths = device_subpaths_of(paths);
+  mark_path_dirty(subpaths, stroke_extent());
   const CanvasPaint paint = stroke_paint();
   for (const CanvasSubpath &subpath : subpaths) {
     if (subpath.size() < 2) continue;
@@ -407,9 +468,11 @@ void Canvas2D::stroke_paths(const std::vector<CanvasSubpath> &paths) {
 }
 
 void Canvas2D::clear_rect(float x, float y, float width, float height) {
+  g_perf_frame.canvasDraws += 1;
   float x0, y0, x1, y1;
   to_device(x, y, &x0, &y0);
   to_device(x + width, y + height, &x1, &y1);
+  mark_dirty(x0, y0, x1, y1);
   canvas_detail::clear_rect(image_.pixels, image_.width, image_.height, x0, y0, x1, y1,
                             clip_mask());
   generation_++;
@@ -421,10 +484,12 @@ void Canvas2D::fill_rect(float x, float y, float width, float height) {
     end_shadow_layer();
     return;
   }
+  g_perf_frame.canvasDraws += 1;
   if (state_.transform.axis_aligned()) {
     float x0, y0, x1, y1;
     to_device(x, y, &x0, &y0);
     to_device(x + width, y + height, &x1, &y1);
+    mark_dirty(x0, y0, x1, y1);
     canvas_detail::fill_rect(image_.pixels, image_.width, image_.height, x0, y0, x1, y1,
                              fill_paint(), state_.global_alpha, clip_mask());
   } else {
@@ -436,6 +501,7 @@ void Canvas2D::fill_rect(float x, float y, float width, float height) {
       to_device(corner[0], corner[1], &point.x, &point.y);
       loop.push_back(point);
     }
+    mark_path_dirty(std::vector<CanvasSubpath>{loop}, 0.0f);
     canvas_detail::fill_loop(image_.pixels, image_.width, image_.height, loop, fill_paint(),
                              state_.global_alpha, false, clip_mask());
   }
@@ -448,6 +514,7 @@ void Canvas2D::stroke_rect(float x, float y, float width, float height) {
     end_shadow_layer();
     return;
   }
+  g_perf_frame.canvasDraws += 1;
   CanvasSubpath loop;
   const float corners[5][2] = {
       {x, y}, {x + width, y}, {x + width, y + height}, {x, y + height}, {x, y}};
@@ -457,99 +524,8 @@ void Canvas2D::stroke_rect(float x, float y, float width, float height) {
     loop.push_back(point);
   }
   stroke_subpath(loop, true, stroke_paint());
+  mark_path_dirty(std::vector<CanvasSubpath>{loop}, stroke_extent());
   generation_++;
-}
-
-float Canvas2D::measure_text(const std::string &text) const {
-  return xt_text_measure_width(text, state_.font);
-}
-
-void Canvas2D::paint_text(const std::string &text, float x, float y, const CanvasPaint &paint,
-                          bool stroke, float max_width) {
-  Font *font = xt_text_resolve(state_.font);
-  if (font == nullptr) return;
-  std::vector<ShapedGlyph> glyphs;
-  float width = xt_text_shape_run(text, font, glyphs);
-  float ascent = 0.0f, descent = 0.0f, lineHeight = 0.0f;
-  xt_text_metrics(state_.font, &ascent, &descent, &lineHeight);
-
-  /* The optional `maxWidth` condenses the run horizontally instead of clipping
-   * it: advances and glyph bitmaps are squeezed by the same factor. */
-  float horizontal = 1.0f;
-  if (max_width > 0.0f && width > max_width && width > 0.0001f) {
-    horizontal = max_width / width;
-  }
-
-  float originX = x;
-  if (state_.text_align == 1) {
-    originX -= width * horizontal * 0.5f;
-  } else if (state_.text_align == 2) {
-    originX -= width * horizontal;
-  }
-  float originY = y;
-  switch (state_.text_baseline) {
-    case 1:
-      originY += ascent;
-      break;
-    case 2:
-      originY += (ascent - descent) * 0.5f;
-      break;
-    case 3:
-      originY -= descent;
-      break;
-    case 4:
-      originY += ascent * 0.8f;
-      break;
-    case 5:
-      originY -= descent;
-      break;
-    default:
-      break;
-  }
-
-  float scale = state_.transform.scale();
-  if (scale <= 0.0001f) scale = 1.0f;
-  bool scaled = std::fabs(scale - 1.0f) > 0.01f;
-
-  float penX = 0.0f;
-  for (const ShapedGlyph &glyph : glyphs) {
-    float userX = originX + (penX + glyph.x_offset) * horizontal;
-    float userY = originY + glyph.y_offset;
-    float deviceX = 0.0f, deviceY = 0.0f;
-    to_device(userX, userY, &deviceX, &deviceY);
-    Font *face = glyph.font != nullptr ? glyph.font : font;
-    if (scaled) {
-      Font *sized = xt_text_scale(face, state_.font.pixel_size * scale);
-      if (sized != nullptr) face = sized;
-    }
-    GlyphImage image;
-    if (xt_text_rasterize(face, glyph.glyph, image) && image.width > 0 && image.height > 0) {
-      canvas_detail::blit_glyph(image_.pixels, image_.width, image_.height, image.pixels, image.width,
-                                image.height, image.left, image.top, deviceX, deviceY, horizontal,
-                                paint, state_.global_alpha, clip_mask());
-    }
-    penX += glyph.x_advance;
-  }
-  (void)stroke;
-  generation_++;
-}
-
-void Canvas2D::fill_text(const std::string &text, float x, float y, float max_width) {
-  if (begin_shadow_layer()) {
-    fill_text(text, x, y, max_width);
-    end_shadow_layer();
-    return;
-  }
-  paint_text(text, x, y, fill_paint(), false, max_width);
-}
-
-void Canvas2D::stroke_text(const std::string &text, float x, float y, float max_width) {
-  if (begin_shadow_layer()) {
-    stroke_text(text, x, y, max_width);
-    end_shadow_layer();
-    return;
-  }
-  paint_text(text, x, y, stroke_paint(), true, max_width);
 }
 
 void Canvas2D::draw_image(const Image &source, float dx, float dy, float dw, float dh, float sx,
@@ -559,14 +535,32 @@ void Canvas2D::draw_image(const Image &source, float dx, float dy, float dw, flo
     end_shadow_layer();
     return;
   }
+  g_perf_frame.canvasDraws += 1;
   if (state_.transform.axis_aligned()) {
     float x0, y0, x1, y1;
     to_device(dx, dy, &x0, &y0);
     to_device(dx + dw, dy + dh, &x1, &y1);
+    mark_dirty(x0, y0, x1, y1);
     canvas_detail::draw_image(image_.pixels, image_.width, image_.height, source, x0, y0, x1 - x0,
                               y1 - y0, sx, sy, sw, sh, state_.global_alpha,
                               state_.image_smoothing, clip_mask());
   } else {
+    float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
+    const float corners[4][2] = {{dx, dy}, {dx + dw, dy}, {dx + dw, dy + dh}, {dx, dy + dh}};
+    for (int i = 0; i < 4; i++) {
+      float px = 0.0f, py = 0.0f;
+      to_device(corners[i][0], corners[i][1], &px, &py);
+      if (i == 0) {
+        minX = maxX = px;
+        minY = maxY = py;
+      } else {
+        minX = std::min(minX, px);
+        maxX = std::max(maxX, px);
+        minY = std::min(minY, py);
+        maxY = std::max(maxY, py);
+      }
+    }
+    mark_dirty(minX, minY, maxX, maxY);
     canvas_detail::draw_image_affine(image_.pixels, image_.width, image_.height, source, dx, dy,
                                      dw, dh, sx, sy, sw, sh, state_.transform,
                                      state_.global_alpha, state_.image_smoothing, clip_mask());

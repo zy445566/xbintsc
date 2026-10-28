@@ -19,20 +19,12 @@ namespace canvas_detail {
 
 namespace {
 
-constexpr int kSubSamples = 4;
-
 int clamp_byte(float value) {
   int result = (int)(value + 0.5f);
   if (result < 0) result = 0;
   if (result > 255) result = 255;
   return result;
 }
-
-/** One edge crossing on the current sub-scanline. */
-struct Crossing {
-  float x;
-  int winding;
-};
 
 /** Resolve `paint` at a device-space pixel centre. Gradients are defined in
  * user space, so the pixel is mapped back through the inverse transform. */
@@ -54,6 +46,33 @@ void paint_color_at(const CanvasPaint &paint, float x, float y, float out[4]) {
   out[0] = out[1] = out[2] = out[3] = 0.0f;
 }
 
+/** True when the paint is a single colour, so the per-pixel colour resolution
+ * (a branch on gradient/pattern and a 4-float copy) can be hoisted out of the
+ * pixel loop. A solid paint is the common case in a multi-element scene. */
+bool paint_is_solid(const CanvasPaint &paint) {
+  return paint.gradient == nullptr && paint.pattern == nullptr && paint.color != nullptr;
+}
+
+void copy_color(const float color[4], float out[4]) {
+  out[0] = color[0];
+  out[1] = color[1];
+  out[2] = color[2];
+  out[3] = color[3];
+}
+
+unsigned char color_byte(float value) {
+  value = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+  return (unsigned char)(value * 255.0f + 0.5f);
+}
+
+/** True when a source-over paint writes its colour unchanged at full coverage
+ * (opaque colour, opaque globalAlpha): the rasteriser can store bytes directly
+ * instead of running the compositing math per pixel. */
+bool paint_is_opaque_source(const CanvasPaint &paint, float alpha) {
+  return paint_is_solid(paint) && paint.composite == kCanvasCompositeSourceOver &&
+         alpha >= 0.999f && paint.color[3] >= 0.999f;
+}
+
 }  // namespace
 
 void blend_pixel(unsigned char *pixel, const float color[4], float coverage, float alpha) {
@@ -71,125 +90,36 @@ static void blend_clipped(unsigned char *pixel, const float color[4], float cove
   blend_pixel_mode(pixel, color, coverage, alpha, paint.composite);
 }
 
-/** Add the horizontal span `[xa, xb)` into a bbox-relative coverage row. */
-static void add_span(float *row, int rowOriginX, float xa, float xb, float weight, int clipX0,
-                     int clipX1) {
-  if (xb <= xa) return;
-  if (xa < (float)clipX0) xa = (float)clipX0;
-  if (xb > (float)clipX1) xb = (float)clipX1;
-  if (xb <= xa) return;
-  int ia = (int)std::floor(xa);
-  int ib = (int)std::ceil(xb) - 1;
-  if (ib < ia) return;
-  if (ia == ib) {
-    row[ia - rowOriginX] += (xb - xa) * weight;
-    return;
-  }
-  row[ia - rowOriginX] += ((float)(ia + 1) - xa) * weight;
-  for (int x = ia + 1; x < ib; x++) row[x - rowOriginX] += weight;
-  float last = xb - (float)ib;
-  if (last > 0.0f) row[ib - rowOriginX] += last * weight;
-}
-
-void compute_coverage(int width, int height,
-                      const std::vector<std::vector<CanvasPoint>> &loops, bool even_odd,
-                      CoverageGrid *out) {
-  out->x0 = out->y0 = out->x1 = out->y1 = 0;
-  out->values.clear();
-  if (width <= 0 || height <= 0 || loops.empty()) return;
-  bool havePoint = false;
-  float minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f;
-  for (const std::vector<CanvasPoint> &loop : loops) {
-    for (const CanvasPoint &point : loop) {
-      if (!havePoint) {
-        minX = maxX = point.x;
-        minY = maxY = point.y;
-        havePoint = true;
-      } else {
-        minX = std::min(minX, point.x);
-        maxX = std::max(maxX, point.x);
-        minY = std::min(minY, point.y);
-        maxY = std::max(maxY, point.y);
-      }
-    }
-  }
-  if (!havePoint) return;
-  int x0 = std::max(0, (int)std::floor(minX));
-  int x1 = std::min(width, (int)std::ceil(maxX));
-  int y0 = std::max(0, (int)std::floor(minY));
-  int y1 = std::min(height, (int)std::ceil(maxY));
-  if (x1 <= x0 || y1 <= y0) return;
-
-  const int boxWidth = x1 - x0;
-  out->x0 = x0;
-  out->y0 = y0;
-  out->x1 = x1;
-  out->y1 = y1;
-  out->values.assign((size_t)boxWidth * (size_t)(y1 - y0), 0.0f);
-  const float weight = 1.0f / (float)kSubSamples;
-
-  std::vector<Crossing> crossings;
-  for (int py = y0; py < y1; py++) {
-    float *row = out->values.data() + (size_t)(py - y0) * (size_t)boxWidth;
-    for (int sample = 0; sample < kSubSamples; sample++) {
-      float sy = (float)py + ((float)sample + 0.5f) / (float)kSubSamples;
-      crossings.clear();
-      for (const std::vector<CanvasPoint> &loop : loops) {
-        if (loop.size() < 3) continue;
-        for (size_t i = 0; i < loop.size(); i++) {
-          const CanvasPoint &p0 = loop[i];
-          const CanvasPoint &p1 = loop[(i + 1) % loop.size()];
-          if (p0.y == p1.y) continue;
-          float top = std::min(p0.y, p1.y);
-          float bottom = std::max(p0.y, p1.y);
-          if (sy < top || sy >= bottom) continue;
-          float t = (sy - p0.y) / (p1.y - p0.y);
-          Crossing crossing;
-          crossing.x = p0.x + t * (p1.x - p0.x);
-          crossing.winding = p1.y > p0.y ? 1 : -1;
-          crossings.push_back(crossing);
-        }
-      }
-      if (crossings.empty()) continue;
-      std::sort(crossings.begin(), crossings.end(),
-                [](const Crossing &a, const Crossing &b) { return a.x < b.x; });
-      if (even_odd) {
-        /* Every second crossing toggles the covered span, regardless of the
-         * direction each contour is wound. */
-        for (size_t i = 0; i + 1 < crossings.size(); i += 2) {
-          add_span(row, x0, crossings[i].x, crossings[i + 1].x, weight, x0, x1);
-        }
-        continue;
-      }
-      int winding = 0;
-      float spanStart = 0.0f;
-      for (const Crossing &crossing : crossings) {
-        if (winding == 0) spanStart = crossing.x;
-        winding += crossing.winding;
-        if (winding == 0) add_span(row, x0, spanStart, crossing.x, weight, x0, x1);
-      }
-    }
-  }
-}
-
 void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<std::vector<CanvasPoint>> &loops, const CanvasPaint &paint,
                 float alpha, bool even_odd, const CanvasClipMask *clip) {
   CoverageGrid coverage;
   compute_coverage(width, height, loops, even_odd, &coverage);
   if (coverage.empty()) return;
-  const int boxWidth = coverage.x1 - coverage.x0;
-  for (int py = coverage.y0; py < coverage.y1; py++) {
-    const float *row = coverage.values.data() + (size_t)(py - coverage.y0) * (size_t)boxWidth;
-    unsigned char *dst =
-        pixels.data() + ((size_t)py * (size_t)width + (size_t)coverage.x0) * 4;
-    for (int px = 0; px < boxWidth; px++) {
-      float c = row[px];
+  const bool solid = paint_is_solid(paint);
+  float solid_color[4];
+  if (solid) copy_color(paint.color, solid_color);
+  const int rows = coverage.y1 - coverage.y0;
+  for (int r = 0; r < rows; r++) {
+    const uint32_t begin = coverage.row_offset[(size_t)r];
+    const uint32_t end = coverage.row_offset[(size_t)r + 1];
+    if (begin >= end) continue;
+    const int py = coverage.y0 + r;
+    const int rx = coverage.row_x[(size_t)r];
+    const float *row = coverage.values.data() + begin;
+    const int row_width = (int)(end - begin);
+    unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)rx) * 4;
+    for (int i = 0; i < row_width; i++) {
+      float c = row[i];
       if (c <= 0.0f) continue;
       if (c > 1.0f) c = 1.0f;
       float color[4];
-      paint_color_at(paint, (float)(coverage.x0 + px) + 0.5f, (float)py + 0.5f, color);
-      blend_clipped(dst + (size_t)px * 4, color, c, alpha, paint, clip, coverage.x0 + px, py);
+      if (solid) {
+        copy_color(solid_color, color);
+      } else {
+        paint_color_at(paint, (float)(rx + i) + 0.5f, (float)py + 0.5f, color);
+      }
+      blend_clipped(dst + (size_t)i * 4, color, c, alpha, paint, clip, rx + i, py);
     }
   }
 }
@@ -210,15 +140,49 @@ void fill_rect(std::vector<unsigned char> &pixels, int width, int height, float 
   int ix1 = std::min(width, (int)std::ceil(x1));
   int iy0 = std::max(0, (int)std::floor(y0));
   int iy1 = std::min(height, (int)std::ceil(y1));
+  const bool solid = paint_is_solid(paint);
+  float solid_color[4];
+  if (solid) copy_color(paint.color, solid_color);
+  /* A fully opaque solid fill at full coverage is a byte store: the same bytes
+   * `blend_pixel_mode` would compute, without the per-pixel compositing math.
+   * Fractional edges (and clipped or translucent fills) keep the general path,
+   * so the output is unchanged for every other case. */
+  unsigned char opaque_bytes[4] = {0, 0, 0, 0};
+  const bool opaque = paint_is_opaque_source(paint, alpha) && clip == nullptr;
+  if (opaque) {
+    opaque_bytes[0] = color_byte(solid_color[0]);
+    opaque_bytes[1] = color_byte(solid_color[1]);
+    opaque_bytes[2] = color_byte(solid_color[2]);
+    opaque_bytes[3] = 255;
+  }
   for (int py = iy0; py < iy1; py++) {
     float cy = std::min(y1, (float)(py + 1)) - std::max(y0, (float)py);
     if (cy <= 0.0f) continue;
     unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)ix0) * 4;
+    if (opaque && cy >= 0.999f) {
+      for (int px = ix0; px < ix1; px++) {
+        float cx = std::min(x1, (float)(px + 1)) - std::max(x0, (float)px);
+        if (cx <= 0.0f) continue;
+        unsigned char *pixel = dst + (size_t)(px - ix0) * 4;
+        if (cx >= 0.999f) {
+          std::memcpy(pixel, opaque_bytes, 4);
+        } else {
+          float color[4];
+          copy_color(solid_color, color);
+          blend_pixel(pixel, color, cx, alpha);
+        }
+      }
+      continue;
+    }
     for (int px = ix0; px < ix1; px++) {
       float cx = std::min(x1, (float)(px + 1)) - std::max(x0, (float)px);
       if (cx <= 0.0f) continue;
       float color[4];
-      paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);
+      if (solid) {
+        copy_color(solid_color, color);
+      } else {
+        paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);
+      }
       blend_clipped(dst + (size_t)(px - ix0) * 4, color, cx * cy, alpha, paint, clip, px, py);
     }
   }
@@ -228,6 +192,11 @@ void clear_rect(std::vector<unsigned char> &pixels, int width, int height, float
                 float x1, float y1, const CanvasClipMask *clip) {
   if (x1 < x0) std::swap(x0, x1);
   if (y1 < y0) std::swap(y0, y1);
+  if (clip == nullptr && x0 <= 0.0f && y0 <= 0.0f && x1 >= (float)width &&
+      y1 >= (float)height) {
+    std::fill(pixels.begin(), pixels.end(), (unsigned char)0);
+    return;
+  }
   int ix0 = std::max(0, (int)std::floor(x0));
   int ix1 = std::min(width, (int)std::ceil(x1));
   int iy0 = std::max(0, (int)std::floor(y0));
@@ -309,6 +278,38 @@ void draw_image(std::vector<unsigned char> &pixels, int width, int height, const
   int iy0 = std::max(0, (int)std::floor(dy));
   int iy1 = std::min(height, (int)std::ceil(dy + dh));
   const CanvasPaint paint;
+  /* A 1:1 blit at integer offsets samples exactly one texel per pixel: skip the
+   * per-pixel divide and the four bilinear taps. Sprite/offscreen-canvas
+   * compositing in a multi-element scene is usually this case. */
+  const int dx_int = (int)std::lround(dx);
+  const int dy_int = (int)std::lround(dy);
+  const int sx_int = (int)std::lround(sx);
+  const int sy_int = (int)std::lround(sy);
+  const bool one_to_one = std::fabs(dw - sw) < 0.001f && std::fabs(dh - sh) < 0.001f &&
+                          std::fabs(dx - (float)dx_int) < 0.001f &&
+                          std::fabs(dy - (float)dy_int) < 0.001f &&
+                          std::fabs(sx - (float)sx_int) < 0.001f &&
+                          std::fabs(sy - (float)sy_int) < 0.001f;
+  if (one_to_one) {
+    for (int py = iy0; py < iy1; py++) {
+      int texelY = sy_int + (py - dy_int);
+      if (texelY < 0) texelY = 0;
+      if (texelY >= source.height) texelY = source.height - 1;
+      const unsigned char *source_row =
+          source.pixels.data() + (size_t)texelY * (size_t)source.width * 4;
+      unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)ix0) * 4;
+      for (int px = ix0; px < ix1; px++) {
+        int texelX = sx_int + (px - dx_int);
+        if (texelX < 0) texelX = 0;
+        if (texelX >= source.width) texelX = source.width - 1;
+        const unsigned char *texel = source_row + (size_t)texelX * 4;
+        float sampled[4] = {texel[0] / 255.0f, texel[1] / 255.0f, texel[2] / 255.0f,
+                            texel[3] / 255.0f};
+        blend_clipped(dst + (size_t)(px - ix0) * 4, sampled, 1.0f, alpha, paint, clip, px, py);
+      }
+    }
+    return;
+  }
   for (int py = iy0; py < iy1; py++) {
     for (int px = ix0; px < ix1; px++) {
       float u = ((float)px + 0.5f - dx) / dw;
@@ -375,6 +376,9 @@ void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
                            : glyphWidth;
   int originX = (int)std::lround(x) + (int)std::lround((float)left * scale_x);
   int originY = (int)std::lround(baselineY) - top;
+  const bool solid = paint_is_solid(paint);
+  float solid_color[4];
+  if (solid) copy_color(paint.color, solid_color);
   for (int gy = 0; gy < glyphHeight; gy++) {
     int py = originY + gy;
     if (py < 0 || py >= height) continue;
@@ -386,7 +390,11 @@ void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
       float coverage = glyph[(size_t)gy * (size_t)glyphWidth + (size_t)sourceX] / 255.0f;
       if (coverage <= 0.0f) continue;
       float color[4];
-      paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);
+      if (solid) {
+        copy_color(solid_color, color);
+      } else {
+        paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);
+      }
       blend_clipped(pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4, color,
                     coverage, alpha, paint, clip, px, py);
     }

@@ -86,6 +86,9 @@ void Canvas2D::end_shadow_layer() {
   std::swap(image_.pixels, shadow_layer_.pixels);
   composite_shadow_layer(shadow_layer_);
   composite_layer(shadow_layer_);
+  /* The shadow can reach beyond the draw's own bounds (offset + blur), so the
+   * conservative upload region is the whole canvas. */
+  mark_all_dirty();
   generation_++;
 }
 

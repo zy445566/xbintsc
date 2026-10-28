@@ -106,6 +106,33 @@ decode table). It is released when the node is dropped (`loadHTML`, window
 close/quit, or a mutation that discards the subtree), which also releases the
 matching GPU texture.
 
+## Performance
+
+A canvas is redrawn by the script, not by the engine, so its cost is per drawing
+call. With many elements the hot paths are deliberately branch-light:
+
+- a solid, opaque `fillRect` is a byte store into the bitmap (fractional edges
+  still take the anti-aliased path), and `clearRect` over the whole bitmap is a
+  single `memset`;
+- path coverage is rasterised with a per-row **active-edge list**, and only the
+  **covered span of each row** is materialised — a thin diagonal stroke costs
+  its own pixels, not its bounding box;
+- one `stroke()` batches all of its segment quads, joins and caps into a single
+  non-zero fill instead of one coverage pass per piece (each piece's winding is
+  normalised first, so overlapping pieces cover rather than cancel);
+- `fillText` shares the shaped-run cache with layout (`text_cache.cpp`) and uses
+  a bounded two-generation glyph bitmap cache (`text_glyph_cache.cpp`);
+- `drawImage` at integer offsets with no scaling copies one texel per pixel
+  instead of running the bilinear sampler.
+
+The bitmap reaches the screen through a **dirty rectangle**: every draw unions
+its device-space bounds, and the renderer copies only that region into the
+canvas texture. All of a frame's canvas and video uploads share the frame's one
+upload command buffer, so K animated canvases cost one submit rather than K.
+`getImageData` always reads the CPU bitmap, so it is unaffected.
+`tests/e2e/gui-draw-perf.test.ts` measures the multi-element paths and pins the
+counter behaviour (one upload per frame, only the dirty bytes).
+
 ## Supported API
 
 State and transforms: `save` / `restore` (which restore the transform, line

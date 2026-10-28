@@ -204,6 +204,9 @@ void WebGLContext::release_program_pipelines(WebGLProgram *program) {
   if (program->fs_shader != nullptr) SDL_ReleaseGPUShader(guidev::g_device, program->fs_shader);
   program->vs_shader = nullptr;
   program->fs_shader = nullptr;
+  /* Prepared draws hold pipeline pointers too; a relink reuses the same program
+   * id, so they must not be served from the cache after this. */
+  clear_draw_cache();
 }
 
 void WebGLContext::delete_program(uint32_t id) {
@@ -396,6 +399,19 @@ bool WebGLContext::link_program(uint32_t id) {
   }
   record->vs_sampler_uniforms.clear();
   record->fs_sampler_uniforms.clear();
+
+  /* Resolve the active attributes once: a draw then iterates this plan instead
+   * of re-scanning `attribs` and hashing every attribute name again. */
+  record->draw_attribs.clear();
+  record->draw_attribs.reserve(record->attribs.size());
+  for (const GlslUniformDecl &decl : record->attribs) {
+    auto found = record->attrib_locations.find(decl.name);
+    if (found == record->attrib_locations.end()) continue;
+    WebGLDrawAttribPlan plan;
+    plan.location = found->second;
+    plan.type = decl.type;
+    record->draw_attribs.push_back(plan);
+  }
 
   for (const GlslBlockMember &member : members) {
     WebGLUniform uniform;

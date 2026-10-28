@@ -27,6 +27,7 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -518,6 +519,7 @@ void xt_text_shutdown() {
   Engine &e = engine();
   /* Cached shaped runs point at faces, so drop them before the faces go. */
   xt_text_cache_clear();
+  xt_text_glyph_cache_clear();
   e.primary.clear();
   e.fallbacks.clear();
   e.cache.clear();

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "gui_internal.h"
+#include "perf.h"
 
 namespace xtgui {
 namespace {
@@ -251,10 +252,8 @@ SDL_GPUBuffer *WebGLContext::upload_temp_buffer(const void *data, uint32_t size,
 }
 
 SDL_GPUGraphicsPipeline *WebGLContext::create_pipeline(
-    WebGLProgram *program, int mode, int index_size, int attribute_count, int buffer_count,
-    const SDL_GPUVertexAttribute *attrs, const SDL_GPUVertexBufferDescription *buffers,
-    const std::string &key) {
-  (void)index_size;
+    WebGLProgram *program, int mode, int attribute_count, int buffer_count,
+    const SDL_GPUVertexAttribute *attrs, const SDL_GPUVertexBufferDescription *buffers) {
   SDL_GPUColorTargetDescription color_targets[kWebGLMaxDrawBuffers];
   const int color_target_count =
       state_.color_target_count > 0 ? state_.color_target_count : 1;
@@ -318,9 +317,10 @@ SDL_GPUGraphicsPipeline *WebGLContext::create_pipeline(
     set_error(GL_INVALID_OPERATION);
     return nullptr;
   }
-  program->pipeline_cache[key] = pipeline;
-  program->pipelines.push_back(pipeline);
-  return pipeline;
-}
+  /* Ownership stays with the caller: a program draw pushes the pipeline into
+   * its own list, an internal helper draw keeps it in the context. Releasing
+   * both would free it twice. */
+  g_perf_frame.webglPipelineMisses += 1;
+  return pipeline;}
 
 }  // namespace xtgui

@@ -12,12 +12,13 @@
 #include <cstring>
 
 #include "gui_internal.h"
+#include "perf.h"
 
 namespace xtgui {
 namespace {
 
 bool upload_transfer(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUBuffer *buffer,
-                     const void *bytes, uint32_t size) {
+                     const void *bytes, uint32_t size, uint32_t offset) {
   if (size == 0) return true;
   SDL_GPUTransferBufferCreateInfo info;
   memset(&info, 0, sizeof(info));
@@ -39,11 +40,39 @@ bool upload_transfer(SDL_GPUDevice *device, SDL_GPUCommandBuffer *cmd, SDL_GPUBu
   SDL_GPUBufferRegion region;
   memset(&region, 0, sizeof(region));
   region.buffer = buffer;
+  region.offset = offset;
   region.size = size;
   SDL_UploadToGPUBuffer(copy, &source, &region, false);
   SDL_EndGPUCopyPass(copy);
   SDL_ReleaseGPUTransferBuffer(device, transfer);
   return true;
+}
+
+/** Extend a buffer's dirty range to cover `[offset, offset + size)`. Offsets
+ * are rounded to 4 bytes because the SDL_GPU copy path requires an aligned
+ * destination offset. */
+void mark_dirty_range(WebGLBuffer *buffer, uint32_t offset, uint32_t size) {
+  if (size == 0) return;
+  uint32_t lo = offset & ~3u;
+  uint32_t hi = (offset + size + 3u) & ~3u;
+  if (hi > (uint32_t)buffer->data.size()) hi = (uint32_t)buffer->data.size();
+  if (lo > hi) lo = hi;
+  if (!buffer->dirty) {
+    buffer->dirty_lo = lo;
+    buffer->dirty_hi = hi;
+  } else {
+    buffer->dirty_lo = std::min(buffer->dirty_lo, lo);
+    buffer->dirty_hi = std::max(buffer->dirty_hi, hi);
+  }
+  buffer->dirty = true;
+}
+
+/** Round a byte size up to a power of two, so a growing buffer is reallocated
+ * O(log n) times instead of once per new frame's vertex count. */
+uint32_t grow_capacity(uint32_t size) {
+  uint32_t capacity = 64;
+  while (capacity < size && capacity < (1u << 31)) capacity <<= 1;
+  return capacity < size ? size : capacity;
 }
 
 }  // namespace
@@ -66,6 +95,8 @@ void WebGLContext::delete_buffer(uint32_t id) {
   for (WebGLAttribState &attrib : attribs_) {
     if (attrib.buffer == id) attrib.buffer = 0;
   }
+  gpu_version_ += 1;
+  attribs_version_ += 1;
   if (found->second->gpu != nullptr && guidev::g_device != nullptr) {
     submit(); SDL_WaitForGPUIdle(guidev::g_device);
     SDL_ReleaseGPUBuffer(guidev::g_device, found->second->gpu);
@@ -107,7 +138,7 @@ bool WebGLContext::copy_buffer_sub_data(int read_target, int write_target, uint3
     memmove(write_buffer->data.data() + write_offset,
             read_buffer->data.data() + read_offset, size);
   }
-  write_buffer->dirty = true;
+  mark_dirty_range(write_buffer, write_offset, size);
   return ensure_buffer_gpu(write_buffer) != nullptr || size == 0;
 }
 
@@ -125,37 +156,95 @@ bool WebGLContext::get_buffer_sub_data(int target, uint32_t offset, uint8_t *out
 SDL_GPUBuffer *WebGLContext::ensure_buffer_gpu(WebGLBuffer *buffer) {
   if (buffer == nullptr || guidev::g_device == nullptr) return nullptr;
   if (buffer->data.empty()) return nullptr;
+  const uint32_t size = (uint32_t)buffer->data.size();
+  const bool needs_storage = buffer->gpu == nullptr || buffer->capacity < size;
+  /* Steady state (data already on the GPU) must not end the open render pass:
+   * that was one pass restart per draw for every multi-element scene. */
+  if (!needs_storage && !buffer->dirty) return buffer->gpu;
   end_pass();
   ensure_command();
   if (cmd_ == nullptr) return nullptr;
-  const uint32_t size = (uint32_t)buffer->data.size();
-  if (buffer->gpu == nullptr || buffer->capacity < size) {
+  if (needs_storage) {
     if (buffer->gpu != nullptr) {
-      submit(); SDL_WaitForGPUIdle(guidev::g_device);
+      submit();
+      SDL_WaitForGPUIdle(guidev::g_device);
       SDL_ReleaseGPUBuffer(guidev::g_device, buffer->gpu);
     }
     SDL_GPUBufferCreateInfo info;
     memset(&info, 0, sizeof(info));
     info.usage = SDL_GPU_BUFFERUSAGE_VERTEX | SDL_GPU_BUFFERUSAGE_INDEX;
-    info.size = size;
+    info.size = grow_capacity(size);
     buffer->gpu = SDL_CreateGPUBuffer(guidev::g_device, &info);
-    buffer->capacity = size;
+    buffer->capacity = info.size;
     if (buffer->gpu == nullptr) {
       set_error(GL_OUT_OF_MEMORY);
       return nullptr;
     }
+    /* A fresh buffer holds nothing: everything must be uploaded. */
+    buffer->dirty_lo = 0;
+    buffer->dirty_hi = size;
+    buffer->dirty = true;
+    /* Cached draw setups hold the old handle. */
+    gpu_version_ += 1;
   }
   if (buffer->dirty) {
     /* Recreating the buffer above submitted the pending command buffer. */
     ensure_command();
     if (cmd_ == nullptr) return nullptr;
-    if (!upload_transfer(guidev::g_device, cmd_, buffer->gpu, buffer->data.data(), size)) {
+    uint32_t lo = std::min(buffer->dirty_lo, size);
+    uint32_t hi = std::min(buffer->dirty_hi, size);
+    if (hi > lo &&
+        !upload_transfer(guidev::g_device, cmd_, buffer->gpu, buffer->data.data() + lo, hi - lo,
+                         lo)) {
       set_error(GL_OUT_OF_MEMORY);
       return nullptr;
     }
+    g_perf_frame.webglBufferUploadBytes += hi - lo;
     buffer->dirty = false;
+    buffer->dirty_lo = 0;
+    buffer->dirty_hi = 0;
   }
   return buffer->gpu;
+}
+
+bool WebGLContext::upload_buffer_range(SDL_GPUBuffer *gpu, uint32_t offset, const void *bytes,
+                                       uint32_t size) {
+  if (gpu == nullptr || size == 0) return true;
+  end_pass();
+  ensure_command();
+  if (cmd_ == nullptr) return false;
+  if (!upload_transfer(guidev::g_device, cmd_, gpu, bytes, size, offset)) {
+    set_error(GL_OUT_OF_MEMORY);
+    return false;
+  }
+  g_perf_frame.webglBufferUploadBytes += size;
+  return true;
+}
+
+SDL_GPUBuffer *WebGLContext::constant_attrib_buffer(int index) {
+  if (index < 0 || index >= kWebGLMaxAttribs || guidev::g_device == nullptr) return nullptr;
+  WebGLAttribState &attrib = attribs_[index];
+  if (attrib.constant_gpu == nullptr) {
+    SDL_GPUBufferCreateInfo info;
+    memset(&info, 0, sizeof(info));
+    info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+    info.size = sizeof(attrib.current);
+    attrib.constant_gpu = SDL_CreateGPUBuffer(guidev::g_device, &info);
+    if (attrib.constant_gpu == nullptr) {
+      set_error(GL_OUT_OF_MEMORY);
+      return nullptr;
+    }
+    attrib.constant_bytes = (uint32_t)sizeof(attrib.current);
+    attrib.constant_dirty = true;
+  }
+  if (attrib.constant_dirty) {
+    if (!upload_buffer_range(attrib.constant_gpu, 0, attrib.current,
+                             (uint32_t)sizeof(attrib.current))) {
+      return nullptr;
+    }
+    attrib.constant_dirty = false;
+  }
+  return attrib.constant_gpu;
 }
 
 bool WebGLContext::buffer_data(uint32_t id, const uint8_t *bytes, uint32_t size, int usage) {
@@ -173,6 +262,8 @@ bool WebGLContext::buffer_data(uint32_t id, const uint8_t *bytes, uint32_t size,
   record->data.assign(size, 0);
   if (bytes != nullptr && size > 0) memcpy(record->data.data(), bytes, size);
   record->dirty = true;
+  record->dirty_lo = 0;
+  record->dirty_hi = size;
   return ensure_buffer_gpu(record) != nullptr || size == 0;
 }
 
@@ -185,7 +276,7 @@ bool WebGLContext::buffer_sub_data(uint32_t id, uint32_t offset, const uint8_t *
     return false;
   }
   memcpy(record->data.data() + offset, bytes, size);
-  record->dirty = true;
+  mark_dirty_range(record, offset, size);
   return ensure_buffer_gpu(record) != nullptr;
 }
 
@@ -202,6 +293,7 @@ void WebGLContext::enable_attrib(int index, bool enabled) {
     return;
   }
   attribs_[index].enabled = enabled;
+  attribs_version_ += 1;
 }
 
 bool WebGLContext::attrib_enabled(int index) const {
@@ -222,6 +314,7 @@ void WebGLContext::attrib_pointer(int index, int size, int type, bool normalized
   attrib.integer = false;
   attrib.stride = stride > 0 ? stride : 0;
   attrib.offset = offset;
+  attribs_version_ += 1;
 }
 
 void WebGLContext::attrib_ipointer(int index, int size, int type, int stride, int offset) {
@@ -237,6 +330,7 @@ void WebGLContext::attrib_ipointer(int index, int size, int type, int stride, in
   attrib.integer = true;
   attrib.stride = stride > 0 ? stride : 0;
   attrib.offset = offset;
+  attribs_version_ += 1;
 }
 
 void WebGLContext::attrib_divisor(int index, int divisor) {
@@ -248,12 +342,15 @@ void WebGLContext::attrib_divisor(int index, int divisor) {
    * rates WebGL programs use — per vertex (0) and per instance (1) — map onto
    * the backend. A larger divisor is clamped. */
   attribs_[index].divisor = divisor > 0 ? 1 : 0;
+  attribs_version_ += 1;
 }
 
 void WebGLContext::attrib_value(int index, int components, const float *values) {
   if (index < 0 || index >= kWebGLMaxAttribs) return;
   for (int i = 0; i < 4; i++) attribs_[index].current[i] = i < components ? values[i] : 0.0f;
   if (components < 4) attribs_[index].current[3] = 1.0f;
+  attribs_[index].constant_dirty = true;
+  attribs_version_ += 1;
 }
 
 void WebGLContext::attrib_state(int index, int *size, int *type, int *stride, bool *normalized,

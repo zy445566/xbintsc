@@ -12,7 +12,7 @@
 渲染器，因此盒子（以及其中的文本、图像与子元素）可以被平移、缩放与旋转而
 不触发任何重排——再加上 `transition: transform`，这些姿态可以动画（自绘的示例
 `examples/gui/pelican-svg` 正是用它让矢量画动起来）。参见
-[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V（Metal 上再由内置 SPIRV-Cross 转成 MSL）并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向多层背景、`text-shadow`、`clip-path` 与 `filter` 颜色/阴影效果。`backdrop-filter` 与真正的组模糊需要离屏合成器，仍为有文档说明的近似或未支持——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。**M20** 让大文档保持可交互：`@media` 每条规则只求值一次，布局与绘制共享一个有界的整形缓存，一帧只做（也只提交）变更所要求的工作——见[性能](./gui/rendering.md#性能m20)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
+[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V（Metal 上再由内置 SPIRV-Cross 转成 MSL）并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向/重复多层背景、`text-shadow`、`clip-path`、`mix-blend-mode`（通过离屏合成器）与 `filter` 颜色/阴影效果。`backdrop-filter` 仍需要背景快照，真正的组模糊也仍是近似——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。**M20** 让大文档保持可交互：`@media` 每条规则只求值一次，布局与绘制共享一个有界的整形缓存，一帧只做（也只提交）变更所要求的工作——见[性能](./gui/rendering.md#性能m20)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
 
 ## 目录
 

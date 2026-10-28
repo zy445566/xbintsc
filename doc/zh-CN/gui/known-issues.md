@@ -43,14 +43,16 @@
   `var()` 自定义属性、`inset` 简写、`box-sizing`、`visibility`/`pointer-events`、
   `@media` 查询、生成内容（`::before`/`::after`）、线性/径向多层背景、
   `text-shadow`、`clip-path`（`inset`/`circle`/`ellipse`/`polygon`）以及 `filter`
-  的颜色函数。仍有限制：`mix-blend-mode`、`background-clip`、
-  `background-position`/`size`/`repeat`、重复渐变与 `backdrop-filter` 合成都未实现
-  （`backdrop-filter` 会解析并参与层叠，但采样背景需要离屏图层，因此不绘制）；
+  的颜色函数。仍有限制：`background-clip`、`background-position`/`size`/`repeat`
+  与 `backdrop-filter` 合成都未实现（`backdrop-filter` 会解析并参与层叠，但采样
+  背景需要离屏图层，因此不绘制）；`mix-blend-mode` 与重复渐变已实现（见
+  [渲染](./rendering.md)），但组 `opacity` 是按图形 alpha 近似而非真正的组合成，
+  且 D3D12/DXIL 后端没有混合合成器，那里会退回普通 source-over 绘制；
   `filter: blur()` 是按图形做九次偏移的近似，而不是真正的组模糊，重叠的子元素会加深；
   `drop-shadow` 用盒子轮廓近似；最多只交叉两层嵌套 `clip-path`（更深时保留外侧两层）；
   图像/画布除图像着色器能携带的亮度与透明度染色外不做颜色滤镜。Canvas 纹理使用
-  最近邻采样。背景渐变仍是纯色带（线性 18 条、径向 32 个同心椭圆），柔和渐变可能
-  出现轻微条带。
+  最近邻采样。背景渐变仍是纯色带（线性 18 条、径向 32 个同心椭圆；重复渐变
+  64 条），柔和渐变可能出现轻微条带。
 - **SVG 是 NanoSVG 的子集。** SVG *文件*（`<img src="logo.svg">`）与内联
   `<svg>` 子树共用 vendored 的 NanoSVG 解析/光栅化器（`runtime/ext_gui/svg.cpp`、
   `inline_svg.cpp`），它会渲染 `path`/`rect`/`circle`/`ellipse`/`line`/

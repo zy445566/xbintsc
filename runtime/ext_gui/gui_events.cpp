@@ -471,23 +471,26 @@ void xt_gui_render_window(XtGuiWindow *win) {
         }
         win->present_deferred = 0;
         xtgui::g_perf_frame.presents += 1;
-        SDL_GPUColorTargetInfo target;
-        memset(&target, 0, sizeof(target));
-        target.texture = swapchain;
-        target.clear_color.r = win->background[0];
-        target.clear_color.g = win->background[1];
-        target.clear_color.b = win->background[2];
-        target.clear_color.a = win->background[3];
-        target.load_op = SDL_GPU_LOADOP_CLEAR;
-        target.store_op = SDL_GPU_STOREOP_STORE;
-        SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
         if (can_paint) {
           float density = SDL_GetWindowPixelDensity(win->window);
           if (density <= 0.0f) density = 1.0f;
-          xt_gui_renderer_draw(cmd, pass, &win->geometry, &win->text_geometry,
-                               &win->image_geometry, viewport_width, viewport_height, density);
+          xt_gui_renderer_draw(cmd, swapchain, win->background, &win->geometry,
+                               &win->text_geometry, &win->image_geometry,
+                               win->display_list, viewport_width, viewport_height, density);
+        } else {
+          /* No renderer (no usable shader backend): still clear the window. */
+          SDL_GPUColorTargetInfo target;
+          memset(&target, 0, sizeof(target));
+          target.texture = swapchain;
+          target.clear_color.r = win->background[0];
+          target.clear_color.g = win->background[1];
+          target.clear_color.b = win->background[2];
+          target.clear_color.a = win->background[3];
+          target.load_op = SDL_GPU_LOADOP_CLEAR;
+          target.store_op = SDL_GPU_STOREOP_STORE;
+          SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+          if (pass != NULL) SDL_EndGPURenderPass(pass);
         }
-        SDL_EndGPURenderPass(pass);
         firstFrame = !win->ready;
         win->ready = 1;
       } else {

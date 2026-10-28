@@ -27,6 +27,8 @@ SDL_GPUGraphicsPipeline *g_pipeline = nullptr;
 SDL_GPUGraphicsPipeline *g_text_pipeline = nullptr;
 SDL_GPUGraphicsPipeline *g_image_pipeline = nullptr;
 SDL_GPUSampler *g_sampler = nullptr;
+SDL_GPUDevice *g_device = nullptr;
+SDL_GPUTextureFormat g_swapchain_format = SDL_GPU_TEXTUREFORMAT_INVALID;
 int g_renderer_failed = 0;
 bool g_text_ok = false;
 std::unordered_map<std::string, SDL_GPUTexture *> g_image_textures;
@@ -146,6 +148,8 @@ bool xt_gui_renderer_ensure(SDL_GPUDevice *device, SDL_Window *reference) {
   using namespace xtgui::renderer_detail;
   if (g_pipeline != nullptr) return true;
   if (g_renderer_failed) return false;
+  g_device = device;
+  g_swapchain_format = SDL_GetGPUSwapchainTextureFormat(device, reference);
   const ShaderSource fill_vs = selectShader(device, ShaderProgram::Fill, false);
   const ShaderSource fill_fs = selectShader(device, ShaderProgram::Fill, true);
   if (!fill_vs.valid() || !fill_fs.valid()) {
@@ -242,6 +246,7 @@ bool xt_gui_renderer_ensure(SDL_GPUDevice *device, SDL_Window *reference) {
 
 void xt_gui_renderer_destroy(SDL_GPUDevice *device) {
   using namespace xtgui::renderer_detail;
+  xtgui::renderer_detail::layerRendererDestroy(device);
   if (g_pipeline != nullptr) {
     SDL_ReleaseGPUGraphicsPipeline(device, g_pipeline);
     g_pipeline = nullptr;
@@ -275,6 +280,8 @@ void xt_gui_renderer_destroy(SDL_GPUDevice *device) {
   g_atlas_full_logged = false;
   g_text_ok = false;
   g_renderer_failed = 0;
+  g_device = nullptr;
+  g_swapchain_format = SDL_GPU_TEXTUREFORMAT_INVALID;
 }
 
 void xt_gui_geometry_destroy(SDL_GPUDevice *device, XtGuiGeometry *geometry) {
@@ -286,6 +293,13 @@ void xt_gui_geometry_destroy(SDL_GPUDevice *device, XtGuiGeometry *geometry) {
     SDL_ReleaseGPUTransferBuffer(device, geometry->staging);
     geometry->staging = nullptr;
   }
+  for (SDL_GPUTexture *texture : geometry->scene_textures) {
+    if (texture != nullptr) SDL_ReleaseGPUTexture(device, texture);
+  }
+  geometry->scene_textures.clear();
+  geometry->scene_width = 0;
+  geometry->scene_height = 0;
+  geometry->scene_format = SDL_GPU_TEXTUREFORMAT_INVALID;
   geometry->staging_capacity = 0;
   geometry->capacity_bytes = 0;
   geometry->vertex_count = 0;
@@ -314,6 +328,15 @@ void xt_gui_build_runs(XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometr
   shapes->runs.clear();
   uint32_t cursor[3] = {0, 0, 0};
   for (const xtgui::PaintOp &op : list.ops) {
+    if (op.kind == xtgui::PaintKind::LayerBegin ||
+        op.kind == xtgui::PaintKind::LayerEnd) {
+      XtGuiDrawRun marker;
+      marker.pipeline = op.kind == xtgui::PaintKind::LayerBegin ? XtGuiDrawRun::LayerBegin
+                                                                : XtGuiDrawRun::LayerEnd;
+      marker.layer = op.kind == xtgui::PaintKind::LayerBegin ? op.index : 0;
+      shapes->runs.push_back(marker);
+      continue;
+    }
     int pipeline = (int)op.kind;
     XtGuiGeometry *geometry = pipeline == 0 ? shapes : (pipeline == 1 ? texts : images);
     if (op.index >= geometry->op_counts.size()) continue;
@@ -349,17 +372,13 @@ void xt_gui_build_runs(XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometr
   }
 }
 
-void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
-                          XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
-                          float viewport_width, float viewport_height, float pixel_density) {
-  using namespace xtgui::renderer_detail;
-  if (viewport_width <= 0.0f || viewport_height <= 0.0f) return;
-  if (pixel_density <= 0.0f) pixel_density = 1.0f;
-  float viewport[2] = {viewport_width, viewport_height};
-  SDL_PushGPUVertexUniformData(cmd, 0, viewport, sizeof(viewport));
+namespace xtgui {
+namespace renderer_detail {
 
-  int target_width = (int)(viewport_width * pixel_density + 0.5f);
-  int target_height = (int)(viewport_height * pixel_density + 0.5f);
+void drawRuns(SDL_GPURenderPass *pass, const std::vector<XtGuiDrawRun> &runs, size_t begin,
+              size_t end, XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
+              int target_width, int target_height, float pixel_density) {
+  if (pass == nullptr) return;
   /* A run list alternates pipelines (background, text, background, …), so the
    * same scissor rectangle and the same pipeline were re-bound for every run.
    * Track what is bound and only issue the state change when it actually
@@ -389,7 +408,11 @@ void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
     SDL_BindGPUFragmentSamplers(pass, 0, &texture_binding, 1);
     bound_texture = texture;
   };
-  for (const XtGuiDrawRun &run : shapes->runs) {
+  for (size_t i = begin; i < end && i < runs.size(); i++) {
+    const XtGuiDrawRun &run = runs[i];
+    if (run.pipeline == XtGuiDrawRun::LayerBegin || run.pipeline == XtGuiDrawRun::LayerEnd)
+      continue;
+    if (run.count == 0) continue;
     SDL_Rect scissor;
     scissor.x = 0;
     scissor.y = 0;
@@ -426,7 +449,7 @@ void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
       bindTexture(g_atlas_texture);
       SDL_DrawGPUPrimitives(pass, run.count, 1, run.first, 0);
       xtgui::g_perf_frame.drawCalls += 1;
-    } else {
+    } else if (run.pipeline == XtGuiDrawRun::Image) {
       if (g_image_pipeline == nullptr || g_sampler == nullptr || images->buffer == nullptr ||
           run.texture == nullptr)
         continue;
@@ -437,11 +460,56 @@ void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
     }
   }
 
-  /* Restore the full-target scissor so the next frame starts clean. */
+  /* Restore the full-target scissor so the next pass starts clean. */
   SDL_Rect full;
   full.x = 0;
   full.y = 0;
   full.w = target_width;
   full.h = target_height;
   SDL_SetGPUScissor(pass, &full);
+}
+
+}  // namespace renderer_detail
+}  // namespace xtgui
+
+void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *swapchain,
+                          const float clear_color[4], XtGuiGeometry *shapes,
+                          XtGuiGeometry *texts, XtGuiGeometry *images,
+                          const xtgui::DisplayList &list, float viewport_width,
+                          float viewport_height, float pixel_density) {
+  using namespace xtgui::renderer_detail;
+  if (cmd == nullptr || swapchain == nullptr) return;
+  if (viewport_width <= 0.0f || viewport_height <= 0.0f) return;
+  if (pixel_density <= 0.0f) pixel_density = 1.0f;
+  float viewport[2] = {viewport_width, viewport_height};
+  SDL_PushGPUVertexUniformData(cmd, 0, viewport, sizeof(viewport));
+
+  /* `mix-blend-mode` needs the backdrop as a texture; the blend pipeline is
+   * compiled at run time on the SPIR-V/MSL backends. Everywhere else (or if
+   * that compilation failed) the ordinary single pass still paints the
+   * unblended content rather than dropping it. */
+  if (!list.layers.empty() && layerRendererReady(g_device)) {
+    if (drawLayeredScene(cmd, swapchain, clear_color, shapes, texts, images, list, viewport_width,
+                         viewport_height, pixel_density))
+      return;
+  }
+
+  SDL_GPUColorTargetInfo target;
+  memset(&target, 0, sizeof(target));
+  target.texture = swapchain;
+  target.clear_color.r = clear_color != nullptr ? clear_color[0] : 0.0f;
+  target.clear_color.g = clear_color != nullptr ? clear_color[1] : 0.0f;
+  target.clear_color.b = clear_color != nullptr ? clear_color[2] : 0.0f;
+  target.clear_color.a = clear_color != nullptr ? clear_color[3] : 1.0f;
+  target.load_op = SDL_GPU_LOADOP_CLEAR;
+  target.store_op = SDL_GPU_STOREOP_STORE;
+  SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, nullptr);
+  if (pass == nullptr) return;
+  int target_width = (int)(viewport_width * pixel_density + 0.5f);
+  int target_height = (int)(viewport_height * pixel_density + 0.5f);
+  if (shapes != nullptr && texts != nullptr && images != nullptr) {
+    drawRuns(pass, shapes->runs, 0, shapes->runs.size(), shapes, texts, images, target_width,
+             target_height, pixel_density);
+  }
+  SDL_EndGPURenderPass(pass);
 }

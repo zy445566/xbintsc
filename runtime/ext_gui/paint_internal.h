@@ -25,6 +25,10 @@ namespace paint_detail {
 struct FilterChain {
   std::vector<FilterOp> ops;  // colour functions (and any unknown no-ops)
   float blur = 0.0f;          // resolved px
+  /** Product of the CSS `opacity` values on the ancestor chain (including the
+   * element itself). It multiplies every painted colour's alpha, which is the
+   * per-shape approximation of group opacity. */
+  float opacity = 1.0f;
   struct Shadow {
     float dx = 0.0f;
     float dy = 0.0f;
@@ -33,7 +37,7 @@ struct FilterChain {
   };
   std::vector<Shadow> shadows;
 
-  bool empty() const { return ops.empty() && blur <= 0.0f && shadows.empty(); }
+  bool empty() const { return ops.empty() && blur <= 0.0f && shadows.empty() && opacity >= 1.0f; }
 };
 
 /** Append `filters` (declared on a box with `style`) to `parent`. */

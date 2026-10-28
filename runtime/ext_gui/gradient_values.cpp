@@ -134,67 +134,59 @@ bool parseGradientColor(const std::string &token, Color *color, std::string *res
   return true;
 }
 
-/** Parse one `[<percent>]` / `<number>` offset. */
-bool parseGradientOffset(const std::string &raw, float *out) {
+/** Parse one gradient stop offset: a percentage, a length (`px`, `em`, …) or a
+ * bare number (0.5 = 50%, 50 = 50%). */
+bool parseGradientOffset(const std::string &raw, Length *out) {
   std::string text = xt_css_trim(raw);
   if (text.empty()) return false;
-  bool percent = text.back() == '%';
-  if (percent) text.pop_back();
+  if (text.back() == '%') {
+    float value = 0;
+    if (!xt_css_parse_number(text.substr(0, text.size() - 1), &value)) return false;
+    *out = Length{value, Unit::Percent};
+    return true;
+  }
   float value = 0;
-  if (!xt_css_parse_number(text, &value)) return false;
-  if (percent) value /= 100.0f;
-  else if (value > 1.0f) value /= 100.0f;
-  if (value < 0) value = 0;
-  if (value > 1) value = 1;
-  *out = value;
-  return true;
+  if (xt_css_parse_number(text, &value)) {
+    /* Unitless offsets are fractions of the gradient line, matching the old
+     * parser: `0.5` is 50% and `50` is also 50%. */
+    if (value > 1.0f) *out = Length{value, Unit::Percent};
+    else *out = Length{value * 100.0f, Unit::Percent};
+    return true;
+  }
+  Length length = xt_css_parse_length(text);
+  if (length.unit != Unit::Invalid && length.unit != Unit::Auto &&
+      length.unit != Unit::None && length.unit != Unit::Number) {
+    *out = length;
+    return true;
+  }
+  return false;
 }
 
-/** Parse a comma-separated `[color [offset [offset]]]` stop list. */
+/** Parse a comma-separated `[color [offset [offset]]]` stop list. Offsets stay
+ * unresolved here: `px` is resolved against the gradient line in paint. */
 bool parseStops(const std::string &text, std::vector<BackgroundGradientStop> *stops) {
   std::vector<std::string> parts = splitCommas(text);
   if (parts.size() < 2) return false;
-  float last = -1.0f;
   for (const std::string &part : parts) {
     Color color;
     std::string rest;
     if (!parseGradientColor(part, &color, &rest)) continue;
     BackgroundGradientStop stop;
     stop.color = color;
-    stop.offset = -1.0f;
-    if (!rest.empty()) {
-      std::vector<std::string> offsets = splitTokens(rest);
-      if (!offsets.empty()) {
-        float first = 0;
-        if (parseGradientOffset(offsets[0], &first)) {
-          stop.offset = first;
-          if (stop.offset < last) stop.offset = last;
-          last = stop.offset;
-        }
+    std::vector<std::string> offsets = splitTokens(rest);
+    if (!offsets.empty() && parseGradientOffset(offsets[0], &stop.offset)) {
+      /* `color <start> <end>` is shorthand for the same colour at both offsets
+       * (a hard band), so emit the second stop too. */
+      stops->push_back(stop);
+      if (offsets.size() > 1) {
+        BackgroundGradientStop end = stop;
+        if (parseGradientOffset(offsets[1], &end.offset)) stops->push_back(end);
       }
+    } else {
+      stops->push_back(stop);
     }
-    stops->push_back(stop);
   }
-  if (stops->size() < 2) return false;
-  /* Fill implicit offsets by distributing them between their neighbours. */
-  size_t i = 0;
-  while (i < stops->size()) {
-    if ((*stops)[i].offset >= 0) {
-      i++;
-      continue;
-    }
-    size_t j = i;
-    while (j < stops->size() && (*stops)[j].offset < 0) j++;
-    float before = (i == 0) ? 0.0f : (*stops)[i - 1].offset;
-    float after = (j >= stops->size()) ? 1.0f : (*stops)[j].offset;
-    size_t count = j - i;
-    for (size_t k = 0; k < count; k++)
-      (*stops)[i + k].offset = before + (after - before) * (float)(k + 1) / (float)(count + 1);
-    i = j;
-  }
-  stops->front().offset = 0.0f;
-  stops->back().offset = 1.0f;
-  return true;
+  return stops->size() >= 2;
 }
 
 /** CSS gradient direction/angle. Returns true when `text` was a direction. */
@@ -395,14 +387,18 @@ bool parseRadialGradient(const std::string &body, BackgroundLayer *layer) {
 /** Parse one layer, appending it when it is a supported gradient or image. */
 bool parseLayer(const std::string &part, BackgroundLayer *layer) {
   std::string body;
-  if (findCall(part, "linear-gradient", &body) ||
-      findCall(part, "repeating-linear-gradient", &body)) {
+  /* The repeating prefix is checked first: a plain substring search for
+   * `linear-gradient(` would also match inside `repeating-linear-gradient(`. */
+  if (findCall(part, "repeating-linear-gradient", &body)) {
+    layer->repeating = true;
     return parseLinearGradient(body, layer);
   }
-  if (findCall(part, "radial-gradient", &body) ||
-      findCall(part, "repeating-radial-gradient", &body)) {
+  if (findCall(part, "linear-gradient", &body)) return parseLinearGradient(body, layer);
+  if (findCall(part, "repeating-radial-gradient", &body)) {
+    layer->repeating = true;
     return parseRadialGradient(body, layer);
   }
+  if (findCall(part, "radial-gradient", &body)) return parseRadialGradient(body, layer);
   if (findCall(part, "url", &body)) {
     std::string source = xt_css_trim(body);
     if (source.size() >= 2 && (source.front() == '"' || source.front() == '\'') &&

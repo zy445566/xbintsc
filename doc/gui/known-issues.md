@@ -59,18 +59,22 @@
   `pointer-events`, `@media` queries, generated content (`::before`/`::after`),
   multi-layer linear/radial backgrounds, `text-shadow`, `clip-path`
   (`inset`/`circle`/`ellipse`/`polygon`) and `filter` colour functions are
-  implemented. Known limits: `mix-blend-mode`, `background-clip`,
-  `background-position`/`size`/`repeat`, repeating gradients and `backdrop-filter`
-  compositing are not implemented (`backdrop-filter` parses and cascades, but
-  sampling the backdrop needs an offscreen layer, so it paints nothing);
+  implemented. Known limits: `background-clip`,
+  `background-position`/`size`/`repeat` and `backdrop-filter` compositing are not
+  implemented (`backdrop-filter` parses and cascades, but sampling the backdrop
+  needs an offscreen layer, so it paints nothing); `mix-blend-mode` and repeating
+  gradients are implemented (see [Rendering](./rendering.md)), but group
+  `opacity` is a per-shape alpha rather than a true group composite, and the
+  blend compositor is unavailable on the D3D12/DXIL backend, where groups fall
+  back to normal source-over painting;
   `filter: blur()` is a nine-tap per-shape spread rather than a true group blur,
   so overlapping descendants can darken; `drop-shadow` is approximated from box
   silhouettes; at most two nested `clip-path` shapes are intersected (deeper
   nesting keeps the outer two); and images/canvases are not colour-filtered
   except for the brightness/opacity tint the image shader can carry. Canvas
   textures are sampled nearest-neighbour. Background gradients remain solid
-  bands (18 for linear, 32 concentric ellipses for radial), so a soft gradient
-  may show slight banding.
+  bands (18 for linear, 32 concentric ellipses for radial; 64 for repeating
+  gradients), so a soft gradient may show slight banding.
 - **SVG is NanoSVG's subset.** SVG *files* (`<img src="logo.svg">`) and inline
   `<svg>` trees share the vendored NanoSVG parser/rasteriser
   (`runtime/ext_gui/svg.cpp`, `inline_svg.cpp`), which renders

@@ -9,6 +9,7 @@
 #include "paint.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdio>
 #include <utility>
 
@@ -56,6 +57,9 @@ int zIndexOf(const LayoutBox *box) {
 void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
               const paint_detail::FilterChain &parentChain, float viewportWidth,
               float viewportHeight);
+void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
+                   const paint_detail::FilterChain &parentChain, float viewportWidth,
+                   float viewportHeight);
 
 /** The clip a box imposes on its content: its padding box, intersected with the
  * clip already in effect. Only `overflow: hidden/scroll/auto` clips. A
@@ -149,9 +153,9 @@ void addTextRuns(const LayoutBox *box, const XtStyle &style, DisplayList &out,
   }
 }
 
-void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
-              const paint_detail::FilterChain &parentChain, float viewportWidth,
-              float viewportHeight) {
+void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
+                   const paint_detail::FilterChain &parentChain, float viewportWidth,
+                   float viewportHeight) {
   if (box == nullptr) return;
   const XtStyle *style = box->style;
 
@@ -166,6 +170,11 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
     chain = paint_detail::extendFilter(parentChain, style->filters, *style, viewportWidth,
                                        viewportHeight);
   }
+  /* `opacity` is not inherited, but its effect is: every shape painted by the
+   * box or its descendants gets its alpha multiplied by the product down the
+   * chain. This makes fractional opacity visible instead of treating anything
+   * above zero as fully opaque. */
+  if (style != nullptr && !box->is_text) chain.opacity *= style->opacity;
 
   PaintClip own = clip;
   if (style != nullptr && box->display != Display::None && !box->is_text) {
@@ -252,6 +261,32 @@ void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
   paintChildren(box, out, clipForChildren(box, own), childChain, viewportWidth, viewportHeight);
 }
 
+/** Paint one box, wrapping it in a `mix-blend-mode` group when it declares one.
+ * The group's ops are bounded by `LayerBegin`/`LayerEnd`, so the renderer can
+ * draw the subtree to an offscreen texture and blend it over the backdrop as
+ * one unit (overlapping children must not blend twice). */
+void paintBox(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
+              const paint_detail::FilterChain &parentChain, float viewportWidth,
+              float viewportHeight) {
+  if (box == nullptr) return;
+  const XtStyle *style = box->style;
+  const bool group = style != nullptr && !box->is_text && box->display != Display::None &&
+                     style->mix_blend_mode != MixBlendMode::Normal;
+  if (!group) {
+    paintBoxInner(box, out, clip, parentChain, viewportWidth, viewportHeight);
+    return;
+  }
+  size_t first = out.ops.size();
+  paintBoxInner(box, out, clip, parentChain, viewportWidth, viewportHeight);
+  if (out.ops.size() == first) return;  /* nothing painted (e.g. opacity: 0) */
+  PaintLayer layer;
+  layer.blend = style->mix_blend_mode;
+  uint32_t index = (uint32_t)out.layers.size();
+  out.layers.push_back(layer);
+  out.ops.insert(out.ops.begin() + (ptrdiff_t)first, PaintOp{PaintKind::LayerBegin, index, clip});
+  out.ops.push_back(PaintOp{PaintKind::LayerEnd, 0, clip});
+}
+
 }  // namespace
 
 void xt_paint_build(const LayoutBox *root, DisplayList &out, float viewportWidth,
@@ -310,6 +345,21 @@ std::string DisplayList::dump() const {
         prefix += std::to_string(op.clip.paths[i]);
       }
       prefix += " ";
+    }
+    if (op.kind == PaintKind::LayerBegin) {
+      static const char *const names[] = {
+          "normal",     "multiply",    "screen",      "overlay",     "darken",
+          "lighten",    "color-dodge", "color-burn",  "hard-light",  "soft-light",
+          "difference", "exclusion",   "hue",         "saturation",  "color",
+          "luminosity"};
+      const char *name = "normal";
+      if (op.index < layers.size()) name = names[(int)layers[op.index].blend];
+      text += prefix + "layer blend=" + name + "\n";
+      continue;
+    }
+    if (op.kind == PaintKind::LayerEnd) {
+      text += prefix + "end-layer\n";
+      continue;
     }
     std::string suffix;
     if (op.kind == PaintKind::Rect) {

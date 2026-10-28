@@ -215,4 +215,89 @@ describe.skipIf(!guiAvailable)("gui extension — paint", () => {
     // Anything above 0 is painted in full (there is no partial compositing yet).
     expect(list).toContain("#ff0000ff");
   });
+
+  it("applies fractional `opacity` to every painted colour in the subtree", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "opacity-half",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; background-color: #000000; }
+        #half { width: 40px; height: 20px; background: #ff0000; opacity: 0.5; }
+        #nested { width: 20px; height: 10px; background: #00ff00; color: #00ff00; opacity: 0.5; }
+        #label { color: #ffff00; }
+      </style></head><body>
+        <div id="half"><div id="nested"><span id="label">faded</span></div></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "opacity-half", width: 400, height: 300 });
+      win.on("ready", () => {
+        console.log("opacity=" + win.computedStyle("#nested", "opacity"));
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    expect(value("opacity")).toBe("0.5");
+    // #half's red background, then #nested's 0.5 on top of it, then the text's
+    // inherited 0.25: alpha is multiplied down the paint chain instead of
+    // treating any value above zero as opaque.
+    expect(list).toContain("color=#ff000080");
+    expect(list).toContain("color=#00ff0040");
+    expect(list).toContain("color=#ffff0040");
+  });
+
+  it("wraps `mix-blend-mode` boxes in a compositing layer", () => {
+    const { value, stdout, stderr } = harness.compileAndRun(
+      "mix-blend-mode",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #card { width: 100px; height: 100px; background: #ffffff; }
+        #multiply { width: 50px; height: 50px; background: #ff0000; mix-blend-mode: multiply; }
+        #overlay { width: 20px; height: 20px; background: #00ff00; mix-blend-mode: overlay; }
+      </style></head><body>
+        <div id="card"><div id="multiply"><div id="overlay"></div></div></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "mix-blend-mode", width: 400, height: 300 });
+      win.on("ready", () => {
+        console.log("multiply=" + win.computedStyle("#multiply", "mix-blend-mode"));
+        console.log("overlay=" + win.computedStyle("#overlay", "mix-blend-mode"));
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    expect(value("multiply")).toBe("multiply");
+    expect(value("overlay")).toBe("overlay");
+    // The card paints normally; the multiply element and its overlay child are
+    // separate nested groups (the renderer composites each as a unit).
+    expect(list).toContain("layer blend=multiply");
+    expect(list).toContain("layer blend=overlay");
+    expect(list).toContain("end-layer");
+    expect(list).toContain("color=#ffffffff");
+    expect(list).toContain("color=#ff0000ff");
+    expect(list).toContain("color=#00ff00ff");
+    // The offscreen blend pipeline and its runtime-compiled shader must not
+    // fall back on this GPU backend.
+    expect(stderr).not.toContain("mix-blend-mode");
+  });
 });

@@ -15,9 +15,10 @@
 顺序都能保留到渲染器。`DisplayList::dump()` 为 `paintList()`/`paintCount()`
 提供数据。
 
-`opacity` 只在两端生效：计算值为 `0` 的盒子（及其整棵子树）不绘制任何内容，
-大于 `0` 的一律按完全不透明绘制。图形只携带其颜色自身的 alpha，因此没有部分
-透明盒子的合成——CSS 解析器接受的 `opacity` 过渡因此也看不到效果。把隐藏态写成
+`opacity` 会乘到该盒子及其后代绘制的每个颜色 alpha 上（沿绘制链逐层相乘），
+因此小数 opacity 以及 CSS 解析器接受的 `opacity` 过渡都能看到效果。这是按图形
+逐个近似的，而不是离屏分组：半透明盒子的重叠子元素会各自合成，浏览器则先把整组
+合成一次再应用 alpha。`opacity: 0` 仍会跳过整棵子树。把隐藏态写成
 `opacity: 0` 来隐藏/显示一层，正是 `examples/gui/pelican-bike` 游戏结束遮罩的做法。
 
 `runtime/ext_gui/renderer.{h,cpp}` 把该列表转换为每个窗口的批处理顶点缓冲
@@ -67,13 +68,19 @@
 `background-color` 与每一条 `background-image` 层都会绘制。逗号分隔的层列表按
 从底到上的顺序绘制（声明中的第一层在最上面），两种渐变均受支持：
 
-- **线性**渐变在 18 个位置采样并输出为纯色矩形；支持 `to <side>`、
-  `deg`/`grad`/`rad`/`turn`、百分比与多色标（色带沿最近轴行走，因此斜角会退化为
+- **线性**渐变在 18 个位置采样（重复渐变 64 个）并输出为纯色矩形；支持
+  `to <side>`、`deg`/`grad`/`rad`/`turn`、百分比或长度（`px`/`em`/…）偏移、
+  `color <start> <end>` 简写与多色标（色带沿最近轴行走，因此斜角会退化为
   最近的轴向）；
-- **径向**渐变是 32 个同心椭圆。每个都是单位半径的圆角矩形，经图形管线的
-  transform 槽映射，因此圆/椭圆仍保留距离场抗锯齿。支持形状/尺寸关键字
-  （`circle`/`ellipse`、`closest-side`/`farthest-side`/`closest-corner`/
+- **径向**渐变是 32 个同心椭圆（重复渐变 64 个）。每个都是单位半径的圆角矩形，
+  经图形管线的 transform 槽映射，因此圆/椭圆仍保留距离场抗锯齿。支持形状/尺寸
+  关键字（`circle`/`ellipse`、`closest-side`/`farthest-side`/`closest-corner`/
   `farthest-corner`、显式半径）与 `at <position>`。
+
+`repeating-linear-gradient()` 与 `repeating-radial-gradient()` 会在整个盒子上
+从 0 平铺到最后一个色标的偏移量；色标列表不会被强制结束在 100%，因此
+`red 0%, blue 10%` 每 10% 重复一次。普通渐变的最后一个色标若小于 100%，则剩余
+区域保持该颜色，与 CSS 一致。
 
 背景色位于所有层下方。若渐变色标带透明度，渐变也会半透明；色带近似可能产生
 轻微条带，非常透明的多色标渐变会出现 alpha 叠加。
@@ -96,9 +103,21 @@ shader 改动，但边缘是硬边（没有解析抗锯齿）。支持两层嵌�
 **`filter`** 的颜色函数（`brightness`、`contrast`、`grayscale`、`sepia`、
 `invert`、`saturate`、`hue-rotate`、`opacity`）会折进每个绘制颜色，因此盒子与
 其后代都会看到滤镜。`blur()` 与 `drop-shadow()` 是显示列表层面的近似：模糊把每个
-图形展开成九个半透明副本，投影用盒子/文字轮廓。这样保持单渲染通道（没有离屏
-渲染目标），代价是组语义：被模糊/滤镜的组内重叠后代可能加深；`backdrop-filter`
-无法采样元素背后的内容，因此会解析并参与层叠，但不绘制。
+图形展开成九个半透明副本，投影用盒子/文字轮廓。这样普通绘制保持单渲染通道，代价
+是组语义：被模糊/滤镜的组内重叠后代可能加深；`backdrop-filter` 无法采样元素背后
+的内容，因此会解析并参与层叠，但不绘制。
+
+**`mix-blend-mode`** 是唯一真正需要离屏图层的例外。非 `normal` 的盒子会被
+`LayerBegin`/`LayerEnd` 标记包住（在 `paintList()` 中显示为 `layer blend=…` /
+`end-layer`），渲染器把该组绘制到全视口离屏纹理，再用一个小型 GLSL 混合
+shader 合成到场景上。全部十六种 CSS 模式（`multiply`、`screen`、`overlay`、
+`darken`、`lighten`、`color-dodge`、`color-burn`、`hard-light`、`soft-light`、
+`difference`、`exclusion`、`hue`、`saturation`、`color`、`luminosity`）都按
+合成规范公式实现。shader 在运行时由内置 glslang 编译（Vulkan 用 SPIR-V），
+再由 SPIRV-Cross 交叉编译为 MSL（Metal）；每个嵌套层级的两张场景纹理跨帧复用，
+并通过 ping-pong 让背景在写入时仍可采样。既不吃 SPIR-V 也不吃 MSL 的后端
+（这里的 D3D12/DXIL 路径没有 shader 编译器）仍用普通 source-over 混合绘制该组。
+`backdrop-filter` 依旧不绘制。
 
 ## 文本技术栈（M4b）
 

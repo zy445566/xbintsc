@@ -236,6 +236,14 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "flex-basis") return formatLength(style.flex_basis);
   if (property == "border-radius") return formatNumber(style.border_radius) + "px";
   if (property == "opacity") return formatNumber(style.opacity);
+  if (property == "mix-blend-mode") {
+    static const char *const names[] = {
+        "normal",     "multiply",    "screen",      "overlay",     "darken",
+        "lighten",    "color-dodge", "color-burn",  "hard-light",  "soft-light",
+        "difference", "exclusion",   "hue",         "saturation",  "color",
+        "luminosity"};
+    return names[(int)style.mix_blend_mode];
+  }
   if (property == "z-index") return style.has_z_index ? formatNumber((float)style.z_index) : "auto";
   if (property == "content") return style.has_content ? quoteText(style.content) : "none";
   if (property == "clip-path") return formatClipPath(style.clip_path);
@@ -248,9 +256,9 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
     for (const BackgroundLayer &layer : style.background_layers) {
       if (!out.empty()) out += ", ";
       if (layer.kind == BackgroundKind::Linear) {
-        out += "linear-gradient()";
+        out += layer.repeating ? "repeating-linear-gradient()" : "linear-gradient()";
       } else if (layer.kind == BackgroundKind::Radial) {
-        out += "radial-gradient()";
+        out += layer.repeating ? "repeating-radial-gradient()" : "radial-gradient()";
       } else {
         out += "url(" + layer.image_src + ")";
       }

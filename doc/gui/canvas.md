@@ -206,7 +206,10 @@ engine's 9-argument form is destination-first) forms. A full affine transform
 (rotation/skew/scale) is honoured: the destination rectangle becomes a
 parallelogram and every device pixel is inverse-mapped to the source rectangle.
 `source` may be an `<img>` element (decoded through the image module), another
-`<canvas>`, an `OffscreenCanvas`, or an `ImageBitmap`. Sampling is bilinear when
+`<canvas>`, an `OffscreenCanvas`, an `ImageBitmap`, or — an engine extension — a
+string path/`data:` URL that is decoded directly, so an SVG or bitmap data URL
+can be drawn without an `<img>`. A vector source is rasterised at the destination
+size (`dw`/`dh`), keeping a scaled SVG crisp. Sampling is bilinear when
 `imageSmoothingEnabled` is `true` (the default) and nearest-neighbour when it is
 `false`.
 
@@ -230,7 +233,8 @@ from a microtask (the bytes are on `__xt_gui_blob_data`; there is no
 shape and `transferToImageBitmap()` snapshots the bitmap.
 
 CSS backgrounds: `background-image: url(...)` accepts a file path or a `data:`
-URL, so a canvas can be used as a CSS background by exporting it first
+URL (a raster payload or an SVG document, base64 or percent-encoded), so a
+canvas can be used as a CSS background by exporting it first
 (`element.style.backgroundImage = "url(" + canvas.toDataURL() + ")"`). An image
 layer is stretched to the element's border box; `background-size`,
 `background-position` and tiling are not modelled.

@@ -42,9 +42,9 @@ copy examples\resources\pelican-bike.svg build\pelican-svg\pelican-bike.svg
 >
 > - **别用 `file:///D:/…` 这种 URL。** Windows 上引擎的 `file://` 处理会把第三个斜杠当成 authority
 >   分隔符，最后交给系统的是 `/D:/…`，打不开（stderr 报 `could not decode image`）。给原生绝对路径最稳。
-> - **`data:` URI 不行。** 引擎会先按扩展名或文件头给 `src` 分类（这一步要打开文件），`stb_image` 也
->   读不了 `data:`，实测 `<img src="data:image/svg+xml;base64,…">` 得到 0×0 的盒子、显示列表里没有图。
->   所以图必须是磁盘上的真实文件。
+> - **`data:` URI 现在可以用。** `<img src="data:image/svg+xml;base64,…">` 与百分号编码的
+>   `data:image/svg+xml,%3Csvg…` 都会解码并显示（仍受 NanoSVG 子集限制，滤镜等不渲染）。
+>   本示例仍用磁盘文件，因为原图 `examples/resources/pelican-bike.svg` 还要给其它示例和外部 SVG 编辑器使用。
 
 引擎同时支持 SVG **文件**与**内联 `<svg>` 子树**：`runtime/ext_gui/svg.cpp` 封装了 vendored 的
 **NanoSVG** 解析器 + 抗锯齿扫描线光栅化器，`image.{h,cpp}` 把 SVG 当作矢量图，按**绘制尺寸**

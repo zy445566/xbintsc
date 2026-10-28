@@ -35,6 +35,13 @@ PNG/JPEG/BMP/GIF/TGA 解码为 RGBA8，并带有解码缓存与仅头文件的�
   （最近最少使用），动画文档不会让它无限增长。
 - 解析结果按路径缓存；解析与光栅化器状态在 `xt_svg_shutdown`
   （`xt_image_shutdown`）中释放。
+- `data:` URL 在内存中解码，凡接受路径的地方都可使用：`<img src>`、CSS
+  `background-image` 与 `canvas.drawImage(url, …)`。既支持 `;base64` 形式，也支持
+  百分号编码（或原样）的载荷，`base64` 标志大小写不敏感。MIME 类型只用于分类：
+  `image/svg+xml`（或 MIME 为通用/缺失时按内容嗅探出 SVG）走 NanoSVG——data URL
+  里的 SVG 与 SVG 文件一样按绘制尺寸光栅化；PNG/JPEG/BMP/GIF/TGA 走
+  `stb_image`。NanoSVG 的子集限制仍然生效：只靠 `<filter>`（`feTurbulence` 等）
+  出图的 SVG 能解码、能布局，但滤镜本身会被忽略。
 
 文档 CSS 只作用于 `<svg>` **盒子**——尺寸、外边距、背景、边框、`transform`、
 opacity、`display`——与任何其他元素一样。盒子内部的艺术内容保持 SVG 语义：
@@ -45,8 +52,8 @@ opacity、`display`——与任何其他元素一样。盒子内部的艺术内�
 重写艺术内容的程序会为每个变体保留一张纹理；更好的做法是用 `transform`、
 `opacity` 给盒子做动画，或在一小组文档之间切换。
 
-图像仍需完成：CSS `background-image: url(...)`、`data:` URI、`object-fit`、
-九宫格边框。
+图像仍需完成：`object-fit`、九宫格边框。（CSS `background-image: url(...)` 与
+`data:` URL 已支持。）
 
 两种 SVG 都受限于 NanoSVG 的子集：`path`、`rect`、`circle`、`ellipse`、
 `line`、`polyline`、`polygon`、组（`g`）、带线性/径向渐变的 `defs` 以及基于

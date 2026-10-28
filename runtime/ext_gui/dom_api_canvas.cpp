@@ -468,41 +468,59 @@ METHOD(canvas_draw_image) {
   (void)env;
   xtgui::Canvas2D *canvas = context_canvas(self);
   if (canvas == nullptr || argc < 3) return XT_UNDEFINED;
+
+  const bool has_destination = argc >= 5;
+  const float dx = (float)number_arg(argc, argv, 1, 0.0);
+  const float dy = (float)number_arg(argc, argv, 2, 0.0);
+  const float destination_width =
+      has_destination ? (float)number_arg(argc, argv, 3, 0.0) : 0.0f;
+  const float destination_height =
+      has_destination ? (float)number_arg(argc, argv, 4, 0.0) : 0.0f;
+  auto raster_target = [](float value) -> int {
+    return value > 0.0f ? (int)(value + 0.5f) : 0;
+  };
+
   XtGuiWindow *win = nullptr;
   xt_value source_value = xt_arg(argc, argv, 0);
   const xtgui::Image *image = nullptr;
-  /* An `OffscreenCanvas` (or a transferred one) has no DOM node; its bitmap is
-   * reachable through the process-wide canvas id. */
-  if (XT_IS_OBJECT(source_value)) {
-    xt_value canvas_id = xt_object_get_cstr(source_value, "__xt_gui_canvas");
-    if (XT_IS_NUMBER(canvas_id)) {
-      xtgui::Canvas2D *offscreen = xtgui::xt_canvas_by_id((uint64_t)xt_to_number(canvas_id));
-      if (offscreen != nullptr) {
-        image = &offscreen->image();
+  if (XT_IS_STRING(source_value)) {
+    /* Engine extension: the source may be a path or a `data:` URL itself, so a
+     * data-URL bitmap/SVG can be drawn without an `<img>` element. */
+    const std::string source_url(xt_string_data(source_value));
+    image = xtgui::xt_image_load(source_url, raster_target(destination_width),
+                                 raster_target(destination_height));
+  } else {
+    /* An `OffscreenCanvas` (or a transferred one) has no DOM node; its bitmap
+     * is reachable through the process-wide canvas id. */
+    if (XT_IS_OBJECT(source_value)) {
+      xt_value canvas_id = xt_object_get_cstr(source_value, "__xt_gui_canvas");
+      if (XT_IS_NUMBER(canvas_id)) {
+        xtgui::Canvas2D *offscreen = xtgui::xt_canvas_by_id((uint64_t)xt_to_number(canvas_id));
+        if (offscreen != nullptr) image = &offscreen->image();
+      }
+    }
+    if (image == nullptr) {
+      xtgui::Node *source = resolve_node(source_value, &win);
+      if (source != nullptr && source->isElement() && source->isTag("img")) {
+        const std::string *src = source->attr("src");
+        if (src != nullptr) {
+          image = xtgui::xt_image_load(*src, raster_target(destination_width),
+                                       raster_target(destination_height));
+        }
+      } else if (source != nullptr) {
+        xtgui::Canvas2D *other = xt_gui_canvas_find(win, source);
+        if (other != nullptr) image = &other->image();
       }
     }
   }
-  xtgui::Node *source = resolve_node(source_value, &win);
-  if (source != nullptr && source->isElement() && source->isTag("img")) {
-    const std::string *src = source->attr("src");
-    if (src != nullptr) image = xtgui::xt_image_load(*src);
-  } else if (source != nullptr) {
-    xtgui::Canvas2D *other = xt_gui_canvas_find(win, source);
-    if (other != nullptr) image = &other->image();
-  }
   if (image == nullptr || image->width <= 0 || image->height <= 0) return XT_UNDEFINED;
-  float dx = (float)number_arg(argc, argv, 1, 0.0);
-  float dy = (float)number_arg(argc, argv, 2, 0.0);
-  float dw = (float)image->width;
-  float dh = (float)image->height;
+
+  const float dw = has_destination ? destination_width : (float)image->width;
+  const float dh = has_destination ? destination_height : (float)image->height;
   float sx = 0.0f;
   float sy = 0.0f;
   float sw = (float)image->width;
   float sh = (float)image->height;
-  if (argc >= 5) {
-    dw = (float)number_arg(argc, argv, 3, (double)dw);
-    dh = (float)number_arg(argc, argv, 4, (double)dh);
-  }
   if (argc >= 9) {
     sx = (float)number_arg(argc, argv, 5, 0.0);
     sy = (float)number_arg(argc, argv, 6, 0.0);

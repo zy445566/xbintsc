@@ -23,9 +23,11 @@ struct Image {
   std::vector<unsigned char> pixels;
 };
 
-/** Decode an image file (PNG/JPEG/BMP/GIF/TGA or SVG) to RGBA8. Returns
- * nullptr on failure. Results (including failures) are cached by path. A
- * `file://` prefix and URL percent-encoding are handled.
+/** Decode an image source (PNG/JPEG/BMP/GIF/TGA or SVG, from a file path or a
+ * `data:` URL) to RGBA8. Returns nullptr on failure. Results (including
+ * failures) are cached. A `file://` prefix and URL percent-encoding are
+ * handled for paths; a `data:` URL accepts a `;base64` or percent-encoded
+ * payload and is classified by MIME type/content (SVG or raster).
  *
  * `target_width`/`target_height` are the pixel size the image will be drawn at.
  * Raster formats ignore them (they decode at their intrinsic resolution), but
@@ -40,7 +42,7 @@ const Image *xt_image_load(const std::string &path, int target_width = 0, int ta
  * viewBox). Returns false when the file cannot be read/parsed. Cached. */
 bool xt_image_size(const std::string &path, int *width, int *height);
 
-/** Decode an in-memory buffer to RGBA8 (e.g. a future `data:` URI). */
+/** Decode an in-memory raster buffer to RGBA8 (used by the app icon). */
 bool xt_image_decode(const unsigned char *data, size_t size, Image *out);
 
 /** True when `path` is a vector source (SVG) that is rasterised on demand

@@ -166,8 +166,10 @@ canvas 由脚本重绘而不是引擎重绘，因此开销按绘制调用计。�
 9 参数（本引擎为**目标优先**：`dx, dy, dw, dh, sx, sy, sw, sh`）。完整的仿射变换
 （旋转/斜切/缩放）会被应用：目标矩形变为平行四边形，每个设备像素反查到源矩形。
 `source` 可以是 `<img>` 元素（经图像模块解码）、另一个 `<canvas>`、
-`OffscreenCanvas` 或 `ImageBitmap`。`imageSmoothingEnabled` 为 `true`（默认）时使用
-双线性采样，为 `false` 时使用最近邻。
+`OffscreenCanvas`、`ImageBitmap`，或——本引擎的扩展——直接传字符串路径/`data:` URL，
+由图像模块解码，因此 SVG 或位图的 data URL 无需 `<img>` 就能绘制。矢量源按目标尺寸
+（`dw`/`dh`）光栅化，放大时 SVG 依然清晰。`imageSmoothingEnabled` 为 `true`（默认）
+时使用双线性采样，为 `false` 时使用最近邻。
 
 测试钩子：`getImageData(x, y, w, h)` 把区域复制为 `{ width, height, data }`，其中
 `data` 是按行主序的 RGBA8 字节数组。越界像素为透明。
@@ -186,8 +188,8 @@ dirtyWidth, dirtyHeight])` 直接把字节写入位图（不受变换、混合�
 `OffscreenCanvas.convertToBlob()` 解析为同一形状，`transferToImageBitmap()` 对位图
 做快照。
 
-CSS 背景：`background-image: url(...)` 接受文件路径或 `data:` URL，因此可以先把
-canvas 导出再作为 CSS 背景使用
+CSS 背景：`background-image: url(...)` 接受文件路径或 `data:` URL（位图载荷或 SVG
+文档，base64 或百分号编码均可），因此可以先把 canvas 导出再作为 CSS 背景使用
 （`element.style.backgroundImage = "url(" + canvas.toDataURL() + ")"`）。图像层会拉伸
 到元素的边框盒；`background-size`、`background-position` 与平铺尚未建模。
 

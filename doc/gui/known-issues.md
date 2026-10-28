@@ -78,9 +78,11 @@
   gradients and class-based `<style>` rules. `<text>`, `<use>`, filters, masks
   and clip paths are not rendered, and CSS applied by the document cascade does
   not reach inside the artwork (fill/stroke are SVG presentation attributes,
-  not CSS properties here). Vector art that needs those has to be rasterised
-  beforehand, drawn from boxes, or restricted to the supported syntax. See
-  [Media](./media.md#images-m6a).
+  not CSS properties here). An SVG whose only artwork comes from a filter
+  (`feTurbulence` noise, blur, …) therefore shows the unfiltered shapes — often
+  a solid rect — rather than the filter result. Vector art that needs those has
+  to be rasterised beforehand, drawn from boxes, or restricted to the supported
+  syntax. See [Media](./media.md#images-m6a).
 - **Rendering is still whole-document per change.** A DOM mutation recomputes
   the cascade and lays out the complete document again (there is no incremental
   subtree invalidation), and a change that only affects paint (a hover colour,

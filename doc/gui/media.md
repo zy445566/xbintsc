@@ -43,6 +43,15 @@ subtree, whose DOM nodes are serialized into a document first
   without limit.
 - The parse is cached per path; the parse and rasteriser state are released in
   `xt_svg_shutdown` (`xt_image_shutdown`).
+- `data:` URLs are decoded in memory and work wherever a path does:
+  `<img src>`, CSS `background-image` and `canvas.drawImage(url, …)`. Both the
+  `;base64` form and a percent-encoded (or plain) payload are accepted, and the
+  `base64` flag is case-insensitive. The MIME type only classifies the payload:
+  `image/svg+xml` (or an SVG sniff when the type is generic or absent) goes
+  through NanoSVG — a data-URL SVG is rasterised at the drawn size exactly like
+  an SVG file — while PNG/JPEG/BMP/GIF/TGA go through `stb_image`. NanoSVG's
+  subset still applies: an SVG whose only artwork comes from `<filter>`
+  (`feTurbulence`, …) decodes and lays out, but the filter itself is ignored.
 
 Document CSS styles the `<svg>` **box** — size, margins, background, borders,
 `transform`, opacity, `display` — exactly as it styles any other element. The
@@ -55,8 +64,8 @@ renderer caches one texture per markup-and-size pair, so a program that rewrites
 its artwork every frame keeps a texture per variant; prefer animating the box
 (`transform`, `opacity`) or swapping between a small set of documents.
 
-Still to do for images: CSS `background-image: url(...)`, `data:` URIs,
-`object-fit` and 9-slice borders.
+Still to do for images: `object-fit` and 9-slice borders. (CSS
+`background-image: url(...)` and `data:` URLs are supported.)
 
 Both kinds of SVG share NanoSVG's subset: `path`, `rect`, `circle`, `ellipse`,
 `line`, `polyline`, `polygon`, groups (`g`), `defs` with linear/radial gradients

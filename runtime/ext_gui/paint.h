@@ -102,7 +102,14 @@ struct PaintClip {
   int paths[2] = {-1, -1};
 };
 
-enum class PaintKind { Rect, Text, Image };
+enum class PaintKind { Rect, Text, Image, LayerBegin, LayerEnd };
+
+/** One `mix-blend-mode` compositing group. The ops between its `LayerBegin`
+ * and `LayerEnd` markers are rendered to an offscreen texture and composited
+ * over the backdrop as a group, so overlapping children blend once. */
+struct PaintLayer {
+  MixBlendMode blend = MixBlendMode::Normal;
+};
 
 /** One entry in painter order: which kind of shape, its index in the matching
  * payload vector, and the clip in effect. */
@@ -121,6 +128,8 @@ struct DisplayList {
   std::vector<PaintOp> ops;
   /** Device-space clip-path polygons shared by an element's ops. */
   std::vector<ClipPathGeometry> clip_paths;
+  /** `mix-blend-mode` groups referenced by `LayerBegin` ops. */
+  std::vector<PaintLayer> layers;
 
   void clear() {
     rects.clear();
@@ -128,6 +137,7 @@ struct DisplayList {
     images.clear();
     ops.clear();
     clip_paths.clear();
+    layers.clear();
   }
   bool empty() const { return rects.empty() && texts.empty() && images.empty(); }
   /** Human-readable dump, one shape per line, in painter order (diagnostics/tests). */

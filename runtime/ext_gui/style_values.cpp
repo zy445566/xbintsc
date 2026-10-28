@@ -543,6 +543,16 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     if (xt_css_parse_number(value, &number)) style->opacity = number < 0 ? 0 : (number > 1 ? 1 : number);
     return;
   }
+  if (property == "mix-blend-mode") {
+    static const char *const names[] = {
+        "normal",       "multiply",   "screen",      "overlay",     "darken",
+        "lighten",      "color-dodge", "color-burn", "hard-light", "soft-light",
+        "difference",   "exclusion",  "hue",         "saturation", "color",
+        "luminosity"};
+    int index = 0;
+    if (parseEnum(value, names, 16, &index)) style->mix_blend_mode = (MixBlendMode)index;
+    return;
+  }
   if (property == "overflow" || property == "overflow-x" || property == "overflow-y") {
     static const char *const names[] = {"visible", "hidden", "scroll", "auto"};
     int index = 0;

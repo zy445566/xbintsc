@@ -3,7 +3,8 @@
  *
  * The renderer has one rounded-rectangle pipeline and no gradient shader, so a
  * gradient is emitted as a run of solid bands: 18 strips for a linear gradient
- * and 32 concentric ellipses for a radial one. Radial ellipses use the shape
+ * (64 while repeating) and 32 concentric ellipses for a radial one (64 while
+ * repeating). Radial ellipses use the shape
  * pipeline's transform slot (a unit circle scaled to the ellipse radii), which
  * keeps the distance-field antialiasing intact.
  */
@@ -19,9 +20,81 @@ namespace paint_detail {
 
 namespace {
 
-Color gradientColorAt(const BackgroundLayer &layer, float t) {
-  const std::vector<BackgroundGradientStop> &stops = layer.stops;
+struct ResolvedStop {
+  float offset = 0.0f;
+  Color color;
+};
+
+/** Resolve the declaration's percentage/length offsets against the gradient
+ * line, then distribute the omitted (`Unit::Auto`) ones between their
+ * neighbours. The last explicit stop is preserved: for a normal gradient it
+ * holds that colour, and for a repeating one it defines the period. */
+std::vector<ResolvedStop> resolveStops(const BackgroundLayer &layer, float line_length,
+                                       const XtStyle &style, float viewportWidth,
+                                       float viewportHeight) {
+  std::vector<ResolvedStop> stops;
+  for (const BackgroundGradientStop &stop : layer.stops) {
+    ResolvedStop resolved;
+    resolved.color = stop.color;
+    resolved.offset = -1.0f;
+    if (stop.offset.unit == Unit::Percent) {
+      resolved.offset = stop.offset.value / 100.0f;
+    } else if (stop.offset.unit != Unit::Auto && stop.offset.unit != Unit::Invalid &&
+               stop.offset.unit != Unit::None) {
+      float pixels = resolveLength(stop.offset, 0.0f, style.font_size, viewportWidth,
+                                   viewportHeight);
+      resolved.offset = line_length > 0.00001f ? pixels / line_length : 0.0f;
+    }
+    stops.push_back(resolved);
+  }
+  if (stops.empty()) return stops;
+
+  /* Explicit offsets are non-decreasing, as in CSS. */
+  float last = -1.0f;
+  for (ResolvedStop &stop : stops) {
+    if (stop.offset < 0.0f) continue;
+    if (stop.offset < last) stop.offset = last;
+    last = stop.offset;
+  }
+
+  /* Fill implicit offsets by distributing them between their neighbours. */
+  size_t i = 0;
+  while (i < stops.size()) {
+    if (stops[i].offset >= 0.0f) {
+      i++;
+      continue;
+    }
+    size_t j = i;
+    while (j < stops.size() && stops[j].offset < 0.0f) j++;
+    float before = (i == 0) ? 0.0f : stops[i - 1].offset;
+    float after = (j >= stops.size()) ? 1.0f : stops[j].offset;
+    size_t count = j - i;
+    for (size_t k = 0; k < count; k++) {
+      float offset = 0.0f;
+      if (i == 0 && j >= stops.size()) {
+        offset = count > 1 ? (float)k / (float)(count - 1) : 0.0f;
+      } else if (i == 0) {
+        offset = after * (float)k / (float)count;
+      } else if (j >= stops.size()) {
+        offset = before + (1.0f - before) * (float)(k + 1) / (float)count;
+      } else {
+        offset = before + (after - before) * (float)(k + 1) / (float)(count + 1);
+      }
+      stops[i + k].offset = offset;
+    }
+    i = j;
+  }
+  return stops;
+}
+
+Color gradientColorAt(const std::vector<ResolvedStop> &stops, bool repeating, float t) {
   if (stops.empty()) return Color();
+  /* A repeating gradient restarts its stop pattern at the last stop's offset. */
+  if (repeating) {
+    float period = stops.back().offset;
+    if (period <= 0.00001f) return stops.back().color;
+    t -= std::floor(t / period) * period;
+  }
   if (t <= stops.front().offset) return stops.front().color;
   if (t >= stops.back().offset) return stops.back().color;
   for (size_t i = 1; i < stops.size(); i++) {
@@ -75,17 +148,23 @@ PaintClip boxClip(const PaintClip &clip, const LayoutBox &box) {
   return out;
 }
 
-void paintLinear(const LayoutBox &box, const BackgroundLayer &layer, const FilterChain &chain,
-                 const PaintClip &clip, DisplayList &out) {
+void paintLinear(const LayoutBox &box, const XtStyle &style, const BackgroundLayer &layer,
+                 const FilterChain &chain, const PaintClip &clip, float viewportWidth,
+                 float viewportHeight, DisplayList &out) {
   if (layer.stops.size() < 2 || box.width <= 0.0f || box.height <= 0.0f) return;
-  const int strips = 18;
+  /* Repeating patterns need more samples than one gradient ramp: a 10%
+   * stripe is only two bands at the old 18-strip resolution. */
+  const int strips = layer.repeating ? 64 : 18;
   bool horizontal = (layer.angle > 80.0f && layer.angle < 100.0f) ||
                     (layer.angle > 260.0f && layer.angle < 280.0f);
   bool reverse = (layer.angle > 260.0f && layer.angle < 280.0f) || layer.angle < 10.0f ||
                  layer.angle > 350.0f;
+  const float line_length = horizontal ? box.width : box.height;
+  std::vector<ResolvedStop> stops = resolveStops(layer, line_length, style, viewportWidth,
+                                                 viewportHeight);
   for (int i = 0; i < strips; i++) {
     float t = ((float)i + 0.5f) / (float)strips;
-    Color color = gradientColorAt(layer, reverse ? 1.0f - t : t);
+    Color color = gradientColorAt(stops, layer.repeating, reverse ? 1.0f - t : t);
     color = filterColor(chain, color);
     if (color.a <= 0.0f) continue;
     if (horizontal) {
@@ -188,15 +267,17 @@ void paintRadial(const LayoutBox &box, const XtStyle &style, const BackgroundLay
   float ry = 0.0f;
   radialRadii(box, layer, style, viewportWidth, viewportHeight, &cx, &cy, &rx, &ry);
   if (rx <= 0.0f || ry <= 0.0f) return;
-  const int bands = 32;
+  std::vector<ResolvedStop> stops = resolveStops(layer, std::max(rx, ry), style, viewportWidth,
+                                                 viewportHeight);
+  const int bands = layer.repeating ? 64 : 32;
   for (int i = bands; i >= 1; i--) {
     float t = (float)i / (float)bands;
-    Color color = filterColor(chain, gradientColorAt(layer, t));
+    Color color = filterColor(chain, gradientColorAt(stops, layer.repeating, t));
     if (color.a <= 0.0f) continue;
     addEllipse(out, cx, cy, rx * t, ry * t, color, clip, box.world);
   }
   /* Exact centre colour (the innermost band samples just off zero). */
-  Color center = filterColor(chain, gradientColorAt(layer, 0.0f));
+  Color center = filterColor(chain, gradientColorAt(stops, layer.repeating, 0.0f));
   addEllipse(out, cx, cy, 0.6f, 0.6f, center, clip, box.world);
 }
 
@@ -233,7 +314,7 @@ void paintBackgrounds(DisplayList &out, const LayoutBox &box, const XtStyle &sty
   for (size_t i = style.background_layers.size(); i-- > 0;) {
     const BackgroundLayer &layer = style.background_layers[i];
     if (layer.kind == BackgroundKind::Linear) {
-      paintLinear(box, layer, chain, layerClip, out);
+      paintLinear(box, style, layer, chain, layerClip, viewportWidth, viewportHeight, out);
     } else if (layer.kind == BackgroundKind::Radial) {
       paintRadial(box, style, layer, chain, layerClip, viewportWidth, viewportHeight, out);
     } else {

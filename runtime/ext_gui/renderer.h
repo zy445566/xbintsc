@@ -33,7 +33,9 @@ struct DisplayList;
  * `clip_width <= 0` means the whole viewport. For image runs, `texture` is the
  * bound texture. */
 struct XtGuiDrawRun {
-  enum Pipeline { Shape = 0, Text = 1, Image = 2 };
+  /** `LayerBegin`/`LayerEnd` are zero-count markers around a
+   * `mix-blend-mode` group; `layer` indexes `DisplayList::layers`. */
+  enum Pipeline { Shape = 0, Text = 1, Image = 2, LayerBegin = 3, LayerEnd = 4 };
   int pipeline = Shape;
   uint32_t first = 0;
   uint32_t count = 0;
@@ -42,6 +44,7 @@ struct XtGuiDrawRun {
   float clip_width = 0;
   float clip_height = 0;
   SDL_GPUTexture *texture = nullptr;
+  uint32_t layer = 0;
 };
 
 /** Per-window GPU geometry (vertex buffer + draw range). */
@@ -63,6 +66,12 @@ struct XtGuiGeometry {
   /** Painter-order draw runs, built from the display list by
    * `xt_gui_build_runs` and consumed by `xt_gui_renderer_draw`. */
   std::vector<XtGuiDrawRun> runs;
+  /** Offscreen colour targets used by `mix-blend-mode` groups (two per nesting
+   * level). Reused across frames and tied to the swapchain size/format. */
+  std::vector<SDL_GPUTexture *> scene_textures;
+  uint32_t scene_width = 0;
+  uint32_t scene_height = 0;
+  SDL_GPUTextureFormat scene_format = SDL_GPU_TEXTUREFORMAT_INVALID;
 };
 
 /** One GPU command buffer shared by every upload a frame performs (shape, text,
@@ -91,10 +100,15 @@ void xt_gui_geometry_destroy(SDL_GPUDevice *device, XtGuiGeometry *geometry);
  * immediately. */
 void xt_gui_geometry_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
                             const xtgui::DisplayList &list, XtGuiUploadBatch *batch = nullptr);
-/** Draw `geometry` inside an active render pass. */
-void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
-                          XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
-                          float viewport_width, float viewport_height, float pixel_density);
+/** Draw the display list into `swapchain`, beginning and ending its own render
+ * passes. With `mix-blend-mode` groups the renderer draws them to offscreen
+ * textures and composites them with a runtime-compiled blend shader; without
+ * groups this is the original single clear-and-draw pass. */
+void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *swapchain,
+                          const float clear_color[4], XtGuiGeometry *shapes,
+                          XtGuiGeometry *texts, XtGuiGeometry *images,
+                          const xtgui::DisplayList &list, float viewport_width,
+                          float viewport_height, float pixel_density);
 /** Shape `list.texts`, ensure their glyphs are in the atlas, and upload the
  * text geometry. `scale` is the device pixel density (1.0 = logical pixels). */
 void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,

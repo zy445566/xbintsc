@@ -68,6 +68,8 @@ struct GlyphKeyHash {
 };
 
 extern SDL_GPUTexture *g_atlas_texture;
+extern SDL_GPUDevice *g_device;
+extern SDL_GPUTextureFormat g_swapchain_format;
 extern std::vector<unsigned char> g_atlas_mirror;
 extern std::unordered_map<GlyphKey, GlyphEntry, GlyphKeyHash> g_glyphs;
 extern int g_atlas_x;
@@ -117,6 +119,30 @@ bool ensureGlyph(SDL_GPUDevice *device, xtgui::Font *font, uint32_t glyph, Glyph
 void flushAtlas(SDL_GPUDevice *device, XtGuiUploadBatch *batch);
 SDL_GPUGraphicsPipeline *createTextPipeline(SDL_GPUDevice *device, SDL_Window *reference);
 SDL_GPUSampler *createSampler(SDL_GPUDevice *device);
+
+/* -- draw runs ------------------------------------------------------------ */
+
+/** Draw the drawable runs in `[begin, end)` into an active pass. Layer markers
+ * are skipped. State is re-bound after a pass restart. */
+void drawRuns(SDL_GPURenderPass *pass, const std::vector<XtGuiDrawRun> &runs, size_t begin,
+              size_t end, XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
+              int target_width, int target_height, float pixel_density);
+
+/* -- mix-blend-mode layers ------------------------------------------------ */
+
+/** True when the runtime blend pipeline was created (and the backend consumes
+ * SPIR-V or MSL). D3D12/DXIL has no shader compiler here, so it falls back to
+ * the ordinary single-pass painter. */
+bool layerRendererReady(SDL_GPUDevice *device);
+/** Render `list` through the offscreen layer compositor into `swapchain`.
+ * Returns false before recording any pass when the scene textures cannot be
+ * created, so the caller can fall back to the ordinary painter. */
+bool drawLayeredScene(SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *swapchain,
+                      const float clear_color[4], XtGuiGeometry *shapes, XtGuiGeometry *texts,
+                      XtGuiGeometry *images, const xtgui::DisplayList &list,
+                      float viewport_width, float viewport_height, float pixel_density);
+/** Release the blend pipeline and sampler. */
+void layerRendererDestroy(SDL_GPUDevice *device);
 
 /* -- images --------------------------------------------------------------- */
 

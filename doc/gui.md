@@ -40,10 +40,11 @@ them) can be translated, scaled and rotated without reflowing anything — and
 [Animation](./gui/animation.md#css-transforms-m15).
 **M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang (and to MSL by the bundled SPIRV-Cross on Metal) and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md).
 **M19** fills in the decorative CSS layer: `@media` queries, generated content
-(`::before`/`::after`), multi-layer linear/radial backgrounds, `text-shadow`,
-`clip-path` and the `filter` colour/shadow effects. `backdrop-filter` and true
-group blur need an offscreen compositor and remain documented approximations or
-unsupported — see [Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19).
+(`::before`/`::after`), multi-layer linear/radial/repeating backgrounds,
+`text-shadow`, `clip-path`, `mix-blend-mode` (through an offscreen compositor)
+and the `filter` colour/shadow effects. `backdrop-filter` still needs a backdrop
+snapshot, and true group blur remains an approximation — see
+[Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19).
 **M20** makes large documents interactive: `@media` is evaluated once per rule,
 layout and paint share a bounded shaping cache, and a frame only does (and
 presents) the work a change requires — see

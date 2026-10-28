@@ -15,12 +15,14 @@ up to two indices into the display list's triangulated `clip-path` polygons, so
 `overflow`/`clip-path` clipping and `z-index` ordering survive into the renderer.
 `DisplayList::dump()` feeds `paintList()`/`paintCount()`.
 
-`opacity` is honoured only at its extremes: a box whose computed `opacity` is
-`0` (and its whole subtree) paints nothing, and anything above `0` paints fully
-opaque. A shape carries its colour's alpha only, so there is no compositing of a
-partly transparent box — the `opacity` transitions the CSS parser accepts are
-therefore not visible either. Hiding and revealing a layer with `opacity: 0` on
-the hidden state is what `examples/gui/pelican-bike`'s game-over overlay does.
+`opacity` multiplies the alpha of every colour painted by the box and its
+descendants (the values multiply down the paint chain), so fractional opacity and
+the `opacity` transitions the CSS parser accepts are visible. It is a
+per-shape approximation, not an offscreen group: overlapping children of a
+translucent box composite individually, whereas a browser composes the group
+once and then applies the alpha. `opacity: 0` still skips the whole subtree.
+Hiding and revealing a layer with `opacity: 0` on the hidden state is what
+`examples/gui/pelican-bike`'s game-over overlay does.
 
 `runtime/ext_gui/renderer.{h,cpp}` turns that list into batched vertex buffers
 per window (shapes, glyph quads and images) and merges consecutive ops that
@@ -80,14 +82,23 @@ The window background (`setBackground`) is the render-pass clear colour.
 comma-separated layer list is painted bottom-up (the first declaration layer is
 topmost), and both gradient kinds are supported:
 
-- a **linear** gradient is sampled at 18 points and emitted as solid rectangles;
-  `to <side>`, `deg`/`grad`/`rad`/`turn`, percentage and multi-stop colours work
-  (the band walk is axis-aligned, so an oblique angle uses the nearest axis);
-- a **radial** gradient is 32 concentric ellipses. Each is a unit-radius rounded
-  rectangle mapped through the shape pipeline's transform slot, so a circle or
-  ellipse keeps the distance-field antialiasing. Shape/size keywords
-  (`circle`/`ellipse`, `closest-side`/`farthest-side`/`closest-corner`/
-  `farthest-corner`, explicit radii) and `at <position>` are parsed.
+- a **linear** gradient is sampled at 18 points (64 when repeating) and emitted
+  as solid rectangles; `to <side>`, `deg`/`grad`/`rad`/`turn`, percentage or
+  length (`px`/`em`/…) offsets, the `color <start> <end>` shorthand and
+  multi-stop colours work (the band walk is axis-aligned, so an oblique angle
+  uses the nearest axis);
+- a **radial** gradient is 32 concentric ellipses (64 when repeating). Each is a
+  unit-radius rounded rectangle mapped through the shape pipeline's transform
+  slot, so a circle or ellipse keeps the distance-field antialiasing.
+  Shape/size keywords (`circle`/`ellipse`, `closest-side`/`farthest-side`/
+  `closest-corner`/`farthest-corner`, explicit radii) and `at <position>` are
+  parsed.
+
+`repeating-linear-gradient()` and `repeating-radial-gradient()` tile the stop
+pattern from 0 to the last stop's offset across the whole box; the stop list is
+not forced to end at 100%, so `red 0%, blue 10%` repeats every 10%. A normal
+gradient whose last stop is below 100% holds that colour for the rest of the box,
+as in CSS.
 
 The background colour sits under every layer. Gradients are partially
 transparent if their stops are, and the band approximation can show banding and
@@ -117,10 +128,24 @@ nesting keeps the outermost two.
 colour, so a box and its descendants see the filter. `blur()` and
 `drop-shadow()` are approximations at the display-list level: blur spreads nine
 translucent copies per shape, drop-shadow is a box/text silhouette. This keeps
-the single render pass — there is no offscreen render target — at the cost of
-group semantics: overlapping descendants of a blurred/filtered group can darken,
-and `backdrop-filter` cannot sample what is behind the element, so it parses and
-cascades but paints nothing.
+the ordinary painter single-pass at the cost of group semantics: overlapping
+descendants of a blurred/filtered group can darken, and `backdrop-filter` cannot
+sample what is behind the element, so it parses and cascades but paints nothing.
+
+**`mix-blend-mode`** is the exception that does need an offscreen layer. A box
+with a non-`normal` mode is wrapped in `LayerBegin`/`LayerEnd` markers (visible
+in `paintList()` as `layer blend=…` / `end-layer`); the renderer draws that group
+to a full-viewport offscreen texture and composites it over the scene with a
+small GLSL blend shader. All sixteen CSS modes (`multiply`, `screen`, `overlay`,
+`darken`, `lighten`, `color-dodge`, `color-burn`, `hard-light`, `soft-light`,
+`difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity`) are
+implemented with the compositing-spec formulas. The shader is compiled at run
+time by the bundled glslang (SPIR-V for Vulkan) and cross-compiled to MSL by
+SPIRV-Cross (Metal); the two scene textures per nesting level are reused across
+frames and ping-pong so the backdrop stays sampleable while it is written.
+Backends that consume neither format — the D3D12/DXIL path, which has no shader
+compiler here — keep painting the group with ordinary source-over blending.
+`backdrop-filter` still paints nothing.
 
 ## Text stack (M4b)
 

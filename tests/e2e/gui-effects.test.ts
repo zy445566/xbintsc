@@ -154,6 +154,114 @@ describe.skipIf(!guiAvailable)("gui extension — effects", () => {
     expect(Number(value("count"))).toBeGreaterThan(30);
   });
 
+  it("tiles repeating gradients across the whole box", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "repeating-gradient",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #r {
+          width: 100px; height: 40px;
+          background: repeating-linear-gradient(90deg,
+            #ff0000 0%, #ff0000 10%, #0000ff 10%, #0000ff 20%);
+        }
+      </style></head><body><div id="r"></div></body></html>
+      \`;
+
+      const win = createWindow({ title: "repeating-gradient", width: 400, height: 300 });
+      win.on("ready", () => {
+        console.log("image=" + win.computedStyle("#r", "background-image"));
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    // The computed value keeps the repeating function name ...
+    expect(value("image")).toBe("repeating-linear-gradient()");
+    // ... and the whole 100px box is tiled: a 20% period gives five red and
+    // five blue bands, not one ramp that holds the final colour.
+    expect((list.match(/#ff0000ff/g) ?? []).length).toBeGreaterThan(4);
+    expect((list.match(/#0000ffff/g) ?? []).length).toBeGreaterThan(4);
+  });
+
+  it("resolves pixel offsets in repeating gradients", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "repeating-gradient-px",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #r {
+          width: 100px; height: 20px;
+          background: repeating-linear-gradient(90deg,
+            #123456 0px 10px, #abcdef 10px 20px);
+        }
+      </style></head><body><div id="r"></div></body></html>
+      \`;
+
+      const win = createWindow({ title: "repeating-gradient-px", width: 400, height: 300 });
+      win.on("ready", () => {
+        console.log("image=" + win.computedStyle("#r", "background-image"));
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    expect(value("image")).toBe("repeating-linear-gradient()");
+    expect((list.match(/#123456ff/g) ?? []).length).toBeGreaterThan(4);
+    expect((list.match(/#abcdefff/g) ?? []).length).toBeGreaterThan(4);
+  });
+
+  it("tiles repeating radial gradients", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "repeating-radial-gradient",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #r {
+          width: 40px; height: 40px;
+          background: repeating-radial-gradient(circle at 50% 50%,
+            #ff0000 0%, #ff0000 5%, #0000ff 5%, #0000ff 10%);
+        }
+      </style></head><body><div id="r"></div></body></html>
+      \`;
+
+      const win = createWindow({ title: "repeating-radial-gradient", width: 400, height: 300 });
+      win.on("ready", () => {
+        console.log("image=" + win.computedStyle("#r", "background-image"));
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    expect(value("image")).toBe("repeating-radial-gradient()");
+    expect(list).toContain("#ff0000ff");
+    expect(list).toContain("#0000ffff");
+  });
+
   it("paints text-shadow copies behind the text", () => {
     const { value, stdout } = harness.compileAndRun(
       "text-shadow",

@@ -38,6 +38,27 @@ enum class BorderStyle { None, Solid, Dashed, Dotted };
 enum class FontStyle { Normal, Italic };
 enum class TimingFunction { Linear, Ease, EaseIn, EaseOut, EaseInOut };
 
+/** CSS `mix-blend-mode`. The order matches the composite shader's `u_mode`
+ * enum and the keyword table in `style_values.cpp`. */
+enum class MixBlendMode {
+  Normal,
+  Multiply,
+  Screen,
+  Overlay,
+  Darken,
+  Lighten,
+  ColorDodge,
+  ColorBurn,
+  HardLight,
+  SoftLight,
+  Difference,
+  Exclusion,
+  Hue,
+  Saturation,
+  Color,
+  Luminosity
+};
+
 /** One `transition` entry: which property, how long, how it eases. */
 struct TransitionSpec {
   std::string property = "all";
@@ -56,7 +77,9 @@ struct GridTrack {
 };
 
 struct BackgroundGradientStop {
-  float offset = 0.0f;
+  /** `Unit::Auto` means the offset was omitted; `Percent` and length units are
+   * resolved against the gradient line when the layer is painted. */
+  Length offset;
   Color color;
 };
 
@@ -72,6 +95,9 @@ struct BackgroundLayer {
   BackgroundKind kind = BackgroundKind::Linear;
   /* linear */
   float angle = 180.0f;  // CSS degrees: 0 = to top, 90 = to right, 180 = to bottom
+  /** `repeating-linear-gradient` / `repeating-radial-gradient`: the stop
+   * pattern is tiled beyond its last stop instead of holding the final colour. */
+  bool repeating = false;
   /* radial */
   bool circle = false;
   bool has_shape = false;
@@ -225,6 +251,8 @@ struct XtStyle {
   Length flex_basis;
 
   float opacity = 1.0f;
+  /** `mix-blend-mode` (not inherited: it creates a compositing group). */
+  MixBlendMode mix_blend_mode = MixBlendMode::Normal;
   Overflow overflow = Overflow::Visible;
   int z_index = 0;
   bool has_z_index = false;

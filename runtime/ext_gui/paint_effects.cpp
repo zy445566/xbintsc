@@ -169,6 +169,7 @@ Color filterColor(const FilterChain &chain, Color color) {
     color.b = clamp01(color.b);
     color.a = clamp01(color.a);
   }
+  color.a = clamp01(color.a * chain.opacity);
   return color;
 }
 
@@ -190,7 +191,7 @@ Color imageTint(const FilterChain &chain) {
   tint.r = clamp01(tint.r);
   tint.g = clamp01(tint.g);
   tint.b = clamp01(tint.b);
-  tint.a = clamp01(tint.a);
+  tint.a = clamp01(tint.a * chain.opacity);
   return tint;
 }
 

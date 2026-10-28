@@ -19,6 +19,8 @@
 
 #include "gui_internal.h"
 
+#include "perf.h"
+
 #include <cstring>
 #include <string>
 #include <unordered_set>
@@ -113,6 +115,7 @@ bool booleanAttr(const xtgui::Node *node, const char *name) {
 
 void collectMedia(const xtgui::Node *node, std::vector<const xtgui::Node *> *out) {
   if (node == nullptr) return;
+  xtgui::g_perf_frame.syncNodes += 1;
   if (isMediaElement(node)) {
     out->push_back(node);
     return;  // a media element's children are `<source>`/`<track>`, not media

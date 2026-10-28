@@ -194,6 +194,7 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   win->document_object = XT_UNDEFINED;
   win->document.reset();
   win->html.clear();
+  win->display_list.clear();
   if (g_device != NULL) {
     xt_gui_geometry_destroy(g_device, &win->geometry);
     xt_gui_geometry_destroy(g_device, &win->text_geometry);
@@ -253,6 +254,8 @@ static XtGuiWindow *create_window_record(const char *title, int width, int heigh
   record->window = window;
   record->open = 1;
   record->ready = 0;
+  record->present_dirty = 1;
+  record->sync_dirty = 1;
   record->width = width;
   record->height = height;
   record->html.clear();

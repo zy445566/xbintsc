@@ -15,6 +15,7 @@
 #include "document.h"
 #include "gui_engine.h"
 #include "gui_internal.h"
+#include "perf.h"
 
 namespace {
 
@@ -25,6 +26,7 @@ bool isCanvasElement(const xtgui::Node *node) {
 /** Canvas children are fallback content, so a canvas element ends the walk. */
 void collectCanvases(const xtgui::Node *node, std::vector<const xtgui::Node *> *out) {
   if (node == nullptr) return;
+  xtgui::g_perf_frame.syncNodes += 1;
   if (isCanvasElement(node)) {
     out->push_back(node);
     return;

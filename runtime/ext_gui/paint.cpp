@@ -101,7 +101,26 @@ PaintClip clipForChildren(const LayoutBox *box, const PaintClip &parent) {
 void paintChildren(const LayoutBox *box, DisplayList &out, const PaintClip &clip,
                    const paint_detail::FilterChain &chain, float viewportWidth,
                    float viewportHeight) {
+  /* Fast path: with no stacking child the painter order *is* document order, so
+   * skip the temporary vector and the sort (they used to be allocated and run
+   * for every parent, every repaint). */
+  bool stacked = false;
+  for (const std::unique_ptr<LayoutBox> &child : box->children) {
+    if (child->display == Display::None || child->style == nullptr) continue;
+    if (zIndexOf(child.get()) != 0) {
+      stacked = true;
+      break;
+    }
+  }
+  if (!stacked) {
+    for (const std::unique_ptr<LayoutBox> &child : box->children) {
+      if (child->display == Display::None || child->style == nullptr) continue;
+      paintBox(child.get(), out, clip, chain, viewportWidth, viewportHeight);
+    }
+    return;
+  }
   std::vector<const LayoutBox *> children;
+  children.reserve(box->children.size());
   for (const std::unique_ptr<LayoutBox> &child : box->children) {
     if (child->display == Display::None || child->style == nullptr) continue;
     children.push_back(child.get());

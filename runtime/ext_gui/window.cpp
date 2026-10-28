@@ -15,6 +15,7 @@
 
 #include "inline_svg.h"
 #include "paint.h"
+#include "perf.h"
 #include "text.h"
 
 static xt_value g_window_proto = XT_UNDEFINED;
@@ -72,10 +73,15 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
     xt_gui_window_viewport(win, &width, &height);
     win->document->load(html, width, height);
     win->geometry.dirty = 1;
+    win->present_dirty = 1;
     /* Run the AOT-compiled `<script>` bodies now that the tree is parsed, so
      * `document.getElementById(...)` resolves, then settle the first layout. */
     xt_gui_run_scripts(win);
     xt_gui_flush_dom(win);
+    /* The document was replaced, so the frame loop must reconcile the media
+     * and canvas tables with it on the next frame. `loadHTML` already flushed
+     * the style/layout, so this is a sync request, not a restyle. */
+    win->sync_dirty = 1;
   }
   xt_object_set(self, xt_string_from_cstr("__xt_gui_html"), xt_string_from_cstr(html.c_str()));
   /* Painting the document is milestone M3b+; the parsed tree and computed
@@ -199,6 +205,7 @@ static xt_value win_set_background(xt_value self, xt_value env, int32_t argc, xt
         win->background[1] = color.g;
         win->background[2] = color.b;
         win->background[3] = color.a;
+        win->present_dirty = 1;
       }
     }
     xt_object_set(self, xt_string_from_cstr("__xt_gui_background"), text);
@@ -265,7 +272,10 @@ static xt_value win_advance(xt_value self, xt_value env, int32_t argc, xt_value 
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win == nullptr || win->document == nullptr) return XT_UNDEFINED;
   double ms = argc > 0 ? xt_to_number(xt_arg(argc, argv, 0)) : 0.0;
-  if (win->document->advance(ms)) win->geometry.dirty = 1;
+  if (win->document->advance(ms)) {
+    win->geometry.dirty = 1;
+    win->present_dirty = 1;
+  }
   return XT_UNDEFINED;
 }
 
@@ -481,6 +491,41 @@ static xt_value win_stats(xt_value self, xt_value env, int32_t argc, xt_value *a
                 xt_number(win != nullptr ? (double)win->node_order.size() : 0));
   xt_object_set(object, xt_string_from_cstr("listeners"),
                 xt_number(win != nullptr ? (double)win->node_listeners.size() : 0));
+  /* -- renderer counters (see `perf.h`) ---------------------------------- */
+  /* The `*Ms` values describe the last completed frame; every other counter is
+   * cumulative (diff two calls to get the work one frame did). */
+  const xtgui::PerfTimings &ms = xtgui::g_perf_last;
+  xt_object_set(object, xt_string_from_cstr("frameMs"), xt_number(ms.frame));
+  xt_object_set(object, xt_string_from_cstr("restyleMs"), xt_number(ms.restyle));
+  xt_object_set(object, xt_string_from_cstr("layoutMs"), xt_number(ms.layout));
+  xt_object_set(object, xt_string_from_cstr("paintMs"), xt_number(ms.paint));
+  xt_object_set(object, xt_string_from_cstr("uploadMs"), xt_number(ms.upload));
+  xt_object_set(object, xt_string_from_cstr("drawMs"), xt_number(ms.draw));
+  const xtgui::PerfCounters &counters = xtgui::g_perf_total;
+  auto setCounter = [&object](const char *name, uint64_t value) {
+    xt_object_set(object, xt_string_from_cstr(name), xt_number((double)value));
+  };
+  setCounter("frames", counters.frames);
+  setCounter("presents", counters.presents);
+  setCounter("skippedFrames", counters.skippedFrames);
+  setCounter("restyles", counters.restyles);
+  setCounter("restyleNodes", counters.restyleNodes);
+  setCounter("rulesEvaluated", counters.rulesEvaluated);
+  setCounter("mediaEvaluated", counters.mediaEvaluated);
+  setCounter("layouts", counters.layouts);
+  setCounter("layoutBoxes", counters.layoutBoxes);
+  setCounter("textShapeCalls", counters.textShapeCalls);
+  setCounter("textShapeHits", counters.textShapeHits);
+  setCounter("textCacheBytes", xtgui::xt_text_cache_bytes());
+  setCounter("textCacheEntries", xtgui::xt_text_cache_entries());
+  setCounter("paints", counters.paints);
+  setCounter("paintOps", counters.paintOps);
+  setCounter("drawRuns", counters.drawRuns);
+  setCounter("drawCalls", counters.drawCalls);
+  setCounter("uploadSubmits", counters.uploadSubmits);
+  setCounter("vertices", counters.vertices);
+  setCounter("syncNodes", counters.syncNodes);
+  setCounter("transitionFrames", counters.transitionFrames);
   return object;
 }
 

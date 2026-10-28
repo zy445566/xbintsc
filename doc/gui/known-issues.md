@@ -81,6 +81,27 @@
   not CSS properties here). Vector art that needs those has to be rasterised
   beforehand, drawn from boxes, or restricted to the supported syntax. See
   [Media](./media.md#images-m6a).
+- **Rendering is still whole-document per change.** A DOM mutation recomputes
+  the cascade and lays out the complete document again (there is no incremental
+  subtree invalidation), and a change that only affects paint (a hover colour,
+  for example) reflows too. Documents with generated content
+  (`::before`/`::after`) are not special-cased. The measured cost of each stage
+  is exposed by `win.stats()`/`XT_GUI_PERF`, which is what a follow-up would be
+  keyed off; see [Performance](./rendering.md#performance-m20).
+- **Draw calls follow painter order.** Runs only merge when they are
+  consecutive in painter order and share pipeline, clip and texture, so a list
+  whose rows alternate a background and text costs one shape run and one text
+  run per row (`drawCalls` in `win.stats()`). Reordering for fewer draw calls
+  needs an overlap-aware batcher (text may be covered by a later background) and
+  is not implemented. Measured: the 200-row perf page issues 400 draw calls and
+  spends about 0.4 ms in the draw phase, so this is a follow-up for
+  draw-call-dominated pages rather than the current bottleneck.
+- **The text shaping cache is bounded.** Two generations of up to 2 MiB of
+  glyphs / 8,192 entries hold `(face, text) -> glyphs`. A document with more
+  distinct words than that re-shapes some of them after a cache rotation;
+  `textCacheBytes`/`textShapeHits` in `win.stats()` show whether it is the
+  bottleneck. Inline `style="…"` attributes are re-parsed on each restyle of
+  the element that carries them.
 
 ## Open questions
 

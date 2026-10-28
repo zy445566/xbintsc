@@ -40,6 +40,12 @@ struct ShapedGlyph {
   Font *font = nullptr;
 };
 
+/** One shaped run: its glyphs and total advance. */
+struct ShapedRun {
+  float width = 0;
+  std::vector<ShapedGlyph> glyphs;
+};
+
 /** An 8-bit grayscale glyph bitmap, as produced by FreeType. */
 struct GlyphImage {
   int width = 0;
@@ -58,6 +64,19 @@ Font *xt_text_resolve(const FontSpec &spec);
  * cover are shaped with the first fallback face that has them, and each
  * glyph's `font` says which face it belongs to. */
 float xt_text_shape_run(const std::string &utf8, Font *font, std::vector<ShapedGlyph> &out);
+
+/** Shape `utf8` through the process-wide bounded cache (`text_cache.cpp`).
+ * Returns a stable pointer for the lifetime of the cache entry (valid until the
+ * next cache generation is dropped); callers must not hold it across frames.
+ * Layout and paint both go through this, so a word is shaped once instead of
+ * once per layout pass and again per repaint. `nullptr` for a null face. */
+const ShapedRun *xt_text_shape_cached(const std::string &utf8, Font *font);
+
+/** Current cache occupancy (bytes of keys + glyphs, number of entries). */
+uint64_t xt_text_cache_bytes();
+uint64_t xt_text_cache_entries();
+/** Drop every entry (called by `xt_text_shutdown`, and by tests). */
+void xt_text_cache_clear();
 
 /** The same face as `font` at a different pixel size (used to rasterise glyphs
  * at the display's scale factor), or null when it cannot be loaded. */

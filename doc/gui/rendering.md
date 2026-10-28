@@ -160,3 +160,59 @@ cascades but paints nothing.
 - Layout uses these real metrics for text widths, line breaking and
   `line-height: normal`; `measureText`/`fontMetrics` expose them to tests.
 
+## Performance (M20)
+
+The engine is a retained-mode pipeline: a DOM mutation restyles the document,
+lays it out, rebuilds the display list and uploads vertex arrays; a frame that
+changes nothing does no CPU or GPU work. A document with thousands of elements
+is kept interactive by budgeting each stage, and every stage is measured. Set
+`XT_GUI_PERF=1` to print one line per frame (or `XT_GUI_PERF=<N>` for an
+aggregated line every N frames); `win.stats()` returns the same counters, which
+is what `tests/e2e/gui-perf.test.ts` asserts on.
+
+- **Cascade.** An `@media` prelude is evaluated **once per rule** per restyle
+  (it used to be parsed once per rule *and* node, which was the largest cost on
+  a large document). A sheet without `::before`/`::after` rules skips generated
+  content entirely, the declaration candidate list is reused across the
+  depth-first walk instead of allocated per element, and `:hover`/`:focus` only
+  restyle when the sheet actually has such a rule.
+- **Text.** Layout and paint share a bounded shaping cache (`text_cache.cpp`):
+  `(face, text) -> glyphs + advance`. It uses two generations of up to 2 MiB of
+  glyphs / 8,192 entries; when a generation is full the *spare* one is dropped
+  and becomes current, so the hot path has no LRU bookkeeping. A word is shaped
+  once and reused by every later layout pass and repaint that draws it. Primary
+  face lookups are cached by (family class, size) as well.
+- **Frame loop.** The media/canvas tables are reconciled with the DOM only when
+  the document changed (or on the first frame) instead of walking the tree every
+  frame. A frame presents only when something happened — a mutation, a scroll,
+  an animation frame, a transition, a new video/canvas frame, an expose/resize
+  event — so a static page performs no swapchain acquire and no draw at all.
+  `XT_GUI_ALWAYS_PRESENT=1` restores the old always-present behaviour when
+  debugging a missed invalidation.
+- **Paint and upload.** The display list and the vertex staging arrays are kept
+  on the window and cleared per repaint, so their capacity survives. All of a
+  dirty frame's vertex/atlas uploads share one command buffer (one submit),
+  the geometry's staging transfer buffer is reused (cycled while the previous
+  copy may still be in flight), and paint skips the z-index sort and temporary
+  vector when no child stacks.
+- **Draw.** Consecutive ops with the same pipeline, clip and texture still merge
+  into one run, and the renderer now only re-binds a pipeline/vertex
+  buffer/scissor when it actually changes. `drawCalls`/`drawMs` in `win.stats()`
+  report the run count and its cost; they are the metric for the remaining
+  follow-up (an overlap-aware batching pass) — painter order requires
+  alternating background and text runs to stay separate until that lands.
+
+Known limits: a mutation still restyles and relayouts the **whole** document
+(there is no incremental subtree invalidation), and a paint-only change (for
+example a hover colour) currently reflows too; `win.stats()` is what a follow-up
+would be keyed off. Inline `style="…"` attributes are re-parsed on every restyle
+of the element that carries them.
+
+As a reference point, `tests/e2e/gui-perf.test.ts` builds a 200-row list (about
+1,000 elements, 400 draw runs) and prints the numbers it measured, e.g.
+`textFrame=5.2ms restyle=3.6ms layout=1.7ms paint=1.0ms upload=0.8ms draw=0.4ms`
+for a one-field `textContent` change on a Windows x64/Vulkan machine. The
+absolute values are host-specific; the test asserts the *counters* (one restyle,
+one layout, cache hits instead of shapes, no work on an idle frame), which are
+what a regression would change.
+

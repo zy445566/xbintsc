@@ -81,6 +81,13 @@ struct Rule {
 
 struct StyleSheet {
   std::vector<Rule> rules;
+  /* Facts the cascade can act on once per sheet instead of once per element (a
+   * `@media` block, a `::before` rule or a `transition` declaration used to be
+   * discovered by scanning every rule for every node). */
+  bool has_pseudo_elements = false;
+  bool has_hover = false;
+  bool has_focus = false;
+  bool has_transitions = false;
 };
 
 /** Dynamic element state consulted by `:hover` / `:focus` while matching. */

@@ -93,6 +93,10 @@ class XtDocument {
 
   /** Mark the document as needing a restyle/relayout before the next paint. */
   void invalidate() { dirty_ = true; }
+  /** Whether a restyle is pending (peek; `takeDirty` consumes it). The frame
+   * loop uses this to skip reconciling media/canvas tables when nothing in the
+   * document changed. */
+  bool dirty() const { return dirty_; }
   bool takeDirty() {
     bool was = dirty_;
     dirty_ = false;
@@ -127,6 +131,10 @@ class XtDocument {
   MediaSizeMap mediaSizes_;                            // `<video>` intrinsic sizes
   CanvasInfoMap canvasInfo_;                           // `<canvas>` sizes + ids
   std::vector<ActiveTransition> transitions_;
+  /** Whether any computed style declares a `transition` (from the sheet or an
+   * inline `style="…"`): when false the document skips the transition snapshot
+   * and `display_` stays empty. */
+  bool has_transitions_ = false;
   double clock_ms_ = 0.0;
   LayoutTree layout_;
   const Node *hover_ = nullptr;

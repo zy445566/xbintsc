@@ -140,6 +140,27 @@ void parseRules(const std::string &text, const std::string &media, int *order,
   }
 }
 
+/** Record the sheet-wide facts the cascade consults per run (see `StyleSheet`).
+ * `:hover`/`:focus` are matched by substring so a nested `:not(:hover)` rule is
+ * still recognised — a false positive only costs the restyle that is already
+ * being skipped. */
+void computeSheetFlags(StyleSheet *sheet) {
+  for (const Rule &rule : sheet->rules) {
+    for (const ComplexSelector &selector : rule.selectors) {
+      for (const CompoundSelector &compound : selector.compounds) {
+        if (!compound.pseudo_element.empty()) sheet->has_pseudo_elements = true;
+        for (const std::string &pseudo : compound.pseudoClasses) {
+          if (pseudo.find("hover") != std::string::npos) sheet->has_hover = true;
+          if (pseudo.find("focus") != std::string::npos) sheet->has_focus = true;
+        }
+      }
+    }
+    for (const Declaration &declaration : rule.declarations) {
+      if (declaration.property.compare(0, 10, "transition") == 0) sheet->has_transitions = true;
+    }
+  }
+}
+
 }  // namespace
 
 std::vector<Declaration> xt_css_parse_declarations(const std::string &text) {
@@ -167,6 +188,7 @@ StyleSheet xt_css_parse_stylesheet(const std::string &text) {
   std::string clean = stripComments(text);
   int order = 0;
   parseRules(clean, "", &order, &sheet);
+  computeSheetFlags(&sheet);
   return sheet;
 }
 

@@ -20,6 +20,7 @@
 
 #include "image.h"
 #include "inline_svg.h"
+#include "perf.h"
 #include "style_internal.h"
 
 namespace xtgui {
@@ -172,6 +173,8 @@ std::string dumpBox(const LayoutBox *box, int depth) {
 void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *, XtStyle> &styles,
                          float viewportWidth, float viewportHeight, const MediaSizeMap *media,
                          const CanvasInfoMap *canvases) {
+  PerfScope perf_scope(&g_perf_frame_ms.layout);
+  g_perf_frame.layouts += 1;
   root_.reset();
   index_.clear();
   root_style_ = xt_style_initial();
@@ -214,6 +217,7 @@ void LayoutTree::compute(const Node *root, const std::unordered_map<const Node *
     const LayoutBox *box = stack.back();
     stack.pop_back();
     if (box->node != nullptr) index_[box->node] = box;
+    g_perf_frame.layoutBoxes += 1;
     for (const std::unique_ptr<LayoutBox> &child : box->children) stack.push_back(child.get());
   }
 }

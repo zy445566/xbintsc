@@ -12,6 +12,8 @@
 
 #include "text.h"
 
+#include "perf.h"
+
 #include "renderer_shaders.h"
 
 namespace xtgui {
@@ -114,7 +116,7 @@ bool ensureGlyph(SDL_GPUDevice *device, xtgui::Font *font, uint32_t glyph, Glyph
   return true;
 }
 
-void flushAtlas(SDL_GPUDevice *device) {
+void flushAtlas(SDL_GPUDevice *device, XtGuiUploadBatch *batch) {
   if (!g_atlas_dirty || g_atlas_texture == nullptr) return;
   g_atlas_dirty = false;
   int x0 = g_atlas_dirty_x0;
@@ -141,7 +143,7 @@ void flushAtlas(SDL_GPUDevice *device) {
   }
   SDL_UnmapGPUTransferBuffer(device, transfer);
 
-  SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device);
+  SDL_GPUCommandBuffer *cmd = uploadCommand(device, batch);
   if (cmd == nullptr) {
     SDL_ReleaseGPUTransferBuffer(device, transfer);
     return;
@@ -166,7 +168,7 @@ void flushAtlas(SDL_GPUDevice *device) {
   SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
   SDL_UploadToGPUTexture(copy, &source, &destination, false);
   SDL_EndGPUCopyPass(copy);
-  SDL_SubmitGPUCommandBuffer(cmd);
+  uploadDone(cmd, batch);
   SDL_ReleaseGPUTransferBuffer(device, transfer);
 }
 
@@ -270,7 +272,7 @@ SDL_GPUSampler *createSampler(SDL_GPUDevice *device) {
 }  // namespace xtgui
 
 void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
-                        const xtgui::DisplayList &list, float scale) {
+                        const xtgui::DisplayList &list, float scale, XtGuiUploadBatch *batch) {
   using namespace xtgui::renderer_detail;
   if (!g_text_ok) {
     geometry->vertex_count = 0;
@@ -278,7 +280,8 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   }
   if (scale <= 0.0f) scale = 1.0f;
 
-  std::vector<TextVertex> verts;
+  std::vector<TextVertex> &verts = g_text_staging;
+  verts.clear();
   geometry->op_counts.assign(list.texts.size(), 0);
   for (const xtgui::PaintOp &op : list.ops) {
     if (op.kind != xtgui::PaintKind::Text || op.index >= list.texts.size()) continue;
@@ -296,16 +299,25 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     if (glyph_scale < kMinGlyphScale) glyph_scale = kMinGlyphScale;
     if (glyph_scale > kMaxGlyphScale) glyph_scale = kMaxGlyphScale;
 
-    std::vector<xtgui::ShapedGlyph> glyphs;
-    xtgui::xt_text_shape_run(run.text, logical, glyphs);
+    const xtgui::ShapedRun *shaped = xtgui::xt_text_shape_cached(run.text, logical);
+    if (shaped == nullptr) continue;
     float pen_x = run.x;
     uint32_t before = (uint32_t)verts.size();
-    for (const xtgui::ShapedGlyph &glyph : glyphs) {
+    /* The scaled face is a per-run decision (the size and matrix are constant
+     * for the run); resolving it per glyph used to build a 512-byte key and
+     * hash it for every character on a HiDPI display. */
+    xtgui::Font *scaled_input = nullptr;
+    xtgui::Font *scaled_output = nullptr;
+    for (const xtgui::ShapedGlyph &glyph : shaped->glyphs) {
       if (glyph.glyph != 0) {
         xtgui::Font *face = glyph.font != nullptr ? glyph.font : logical;
         if (glyph_scale != 1.0f) {
-          xtgui::Font *scaled = xtgui::xt_text_scale(face, run.font.pixel_size * glyph_scale);
-          if (scaled != nullptr) face = scaled;
+          if (face != scaled_input) {
+            xtgui::Font *scaled = xtgui::xt_text_scale(face, run.font.pixel_size * glyph_scale);
+            scaled_input = face;
+            scaled_output = scaled != nullptr ? scaled : face;
+          }
+          face = scaled_output;
         }
         GlyphEntry entry;
         if (ensureGlyph(device, face, glyph.glyph, entry)) {
@@ -323,6 +335,6 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     }
     geometry->op_counts[op.index] = (uint32_t)verts.size() - before;
   }
-  uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex));
-  flushAtlas(device);
+  uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex), batch);
+  flushAtlas(device, batch);
 }

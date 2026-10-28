@@ -198,6 +198,22 @@ win.stats()                            // 引擎/运行时计数器（内存排�
 `detachedNodes` 或 `handles` 持续上升，说明程序移除节点的速度快于释放速度
 （见[节点生命周期](./dom.md)）。
 
+同一个对象还报告上一帧做了什么以及程序累计做了多少工作，渲染开销就是靠它度量
+（见[性能](./rendering.md#性能m20)）：
+
+| 字段 | 含义 |
+| --- | --- |
+| `frameMs`、`restyleMs`、`layoutMs`、`paintMs`、`uploadMs`、`drawMs` | 上一帧各阶段耗时（毫秒） |
+| `frames`、`presents`、`skippedFrames`、`transitionFrames` | 帧循环活动（`presents` 是提交呈现的帧数；`skippedFrames` 是无需提交的帧数） |
+| `restyles`、`restyleNodes`、`rulesEvaluated`、`mediaEvaluated`、`layouts`、`layoutBoxes` | 层叠与布局的工作量 |
+| `textShapeCalls`、`textShapeHits`、`textCacheBytes`、`textCacheEntries` | 整形缓存的未命中/命中与占用 |
+| `paints`、`paintOps`、`drawRuns`、`drawCalls`、`uploadSubmits`、`vertices`、`syncNodes` | 显示列表、绘制调用与上传的工作量 |
+
+除 `*Ms` 时间外，所有字段都是累计值，因此两次快照相减即得到一帧的工作量。
+`restyleMs` 覆盖层叠**以及**它触发的布局过程（布局过程本身也单独报告为
+`layoutMs`）。`XT_GUI_PERF=1` 会把同样的数字打印到 stderr（逐帧一行；
+`XT_GUI_PERF=<N>` 则每 N 帧取平均）。
+
 它们被 `tests/e2e/gui-*.test.ts` 用来断言解析、选择器匹配、特异性、继承、
 `!important` 与布局几何。它们在之后仍可用于调试。
 

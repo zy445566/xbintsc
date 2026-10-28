@@ -92,6 +92,7 @@ xt_value xt_gui_audio_create(int32_t argc, xt_value *argv);
 #include "canvas.h"
 #include "document.h"
 #include "media.h"
+#include "paint.h"
 #include "renderer.h"
 #include "webgl.h"
 
@@ -159,6 +160,10 @@ struct XtGuiWindow {
   XtGuiGeometry geometry;
   XtGuiGeometry text_geometry;
   XtGuiGeometry image_geometry;
+  /** The frame's display list. Kept on the window so its payload vectors keep
+   * their capacity across frames instead of being reallocated from zero on
+   * every repaint. */
+  xtgui::DisplayList display_list;
   float background[4];
   int width;
   int height;
@@ -188,6 +193,16 @@ struct XtGuiWindow {
   std::vector<XtGuiWindowListener> window_listeners;
   /** Set by a DOM mutation; consumed by the frame loop before repainting. */
   int struct_dirty = 0;
+  /** Set when something may have changed on screen (a mutation, a scroll, an
+   * animation frame, a new video/canvas frame, an expose event, …). The frame
+   * loop skips acquiring a swapchain and recording a render pass while it is
+   * clear, so a static page does no GPU work at all; `XT_GUI_ALWAYS_PRESENT=1`
+   * disables the gate. */
+  int present_dirty = 1;
+  /** Set when the media/canvas tables must be reconciled with the document
+   * without a restyle (a replaced document, for example): the frame loop then
+   * runs the DOM walk once even though no style changed. */
+  int sync_dirty = 0;
   /** Callbacks queued for the next frame, plus the id counter. */
   std::vector<XtGuiAnimationFrame> animation_frames;
   /** One decoder per `<video>`/`<audio>` element, keyed by the element node. The

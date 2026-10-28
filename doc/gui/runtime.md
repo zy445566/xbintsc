@@ -18,11 +18,21 @@ expose an explicit `run()`; **M2 uses the explicit `run()`** so the window is a
 plain native call the TypeScript program controls. Each tick it:
 
 1. pumps SDL window/input events for every window,
-2. builds/uploads the display list when it changed and renders every open
+2. reconciles the decoder/canvas tables with the DOM **only when the document
+   changed** (or on the first frame),
+3. builds/uploads the display list when it changed and renders every open
    window (clear pass + shape geometry + text geometry),
-3. calls `xt_loop_poll(0)` and `xt_drain_microtasks()` so sockets/timers and
+4. calls `xt_loop_poll(0)` and `xt_drain_microtasks()` so sockets/timers and
    `await` continuations keep making progress,
-4. repeats until all windows close or `quit()` is called.
+5. repeats until all windows close or `quit()` is called.
+
+A frame **presents only when something happened**: a DOM mutation, a scroll, a
+queued animation frame, a running transition, a new video/canvas frame, an
+expose/resize event, or the first frame. A static document therefore performs no
+swapchain acquire and no draw while the loop keeps servicing events, timers and
+promises; `XT_GUI_ALWAYS_PRESENT=1` restores the old always-present behaviour
+when debugging a missed invalidation. `XT_GUI_PERF=1` prints what each frame did
+(see [Performance](./rendering.md#performance-m20)).
 
 The `xt_loop_set_main` hook remains available for hosts that want to own the
 loop themselves.

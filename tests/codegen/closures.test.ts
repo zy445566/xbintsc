@@ -43,4 +43,14 @@ describe("closure lowering", () => {
     const ir = irOf("const h = function inner() { return 1; };");
     expect(ir).toContain("inner");
   });
+
+  it("reads a captured binding from a default parameter", () => {
+    /* The default value runs before the body, so its capture slot has to exist
+     * by then; Three.js defaults e.g. `wrapS = ClampToEdgeWrapping`. */
+    const ir = irOf(
+      "function outer() { const k = 1; class A { constructor(x = k) { this.v = x; } } return new A(); }",
+    );
+    expect(ir).toContain("@xt_closure_env");
+    expect(ir).toContain("@xt_closure_new");
+  });
 });

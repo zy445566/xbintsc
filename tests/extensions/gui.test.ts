@@ -112,6 +112,34 @@ describe("gui .html asset loader", () => {
     expect(parseDiagnostics(moduleSource)).toBe(0);
   });
 
+  it("keeps a CRLF external script intact when hoisting its imports", () => {
+    /* The parser indexes newline-normalized text, so masking the raw file would
+     * blank the wrong spans and leave fragments like "js';" in the body. */
+    const directory = writeFiles({
+      "app.ts":
+        "import { size } from './util';\r\n\r\nconst label = 'ready';\r\nconsole.log(size, label);\r\n",
+      "util.ts": "export const size = 1;",
+    });
+    const htmlPath = join(directory, "page.html");
+    const { moduleSource, sourceRanges } = loadHtmlAsset(
+      htmlPath,
+      `<html>\r\n<body>\r\n<script src="./app.ts"></script>\r\n</body>\r\n</html>`,
+    );
+    expect(moduleSource).toContain("console.log(size, label);");
+    expect(moduleSource).toContain("const label = 'ready';");
+    expect(moduleSource.match(/js';/g)).toBeNull();
+    const html = htmlOf(moduleSource);
+    expect(html).not.toContain("\r");
+    expect(html).toContain("<body>");
+    expect(sourceRanges).toHaveLength(1);
+    const range = sourceRanges![0]!;
+    const body = moduleSource.slice(range.start, range.end);
+    expect(body).toContain("const label = 'ready';");
+    expect(body).toContain("console.log(size, label);");
+    expect(body).not.toContain("import {");
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
   it("strips export modifiers from an external script", () => {
     const directory = writeFiles({
       "app.ts": "export const a = 1;\nexport function f() { return a; }",

@@ -160,6 +160,18 @@ export const moduleMethods: ModuleMethods = {
       );
     }
 
+    // Captures threaded through the environment. Declared before the
+    // parameters because a default parameter may read an enclosing binding
+    // (e.g. `constructor(wrapS = ClampToEdgeWrapping)`), and a capture has no
+    // other slot to read.
+    for (const symbol of fn.captures) {
+      if (this.moduleGlobals.has(symbol.id)) continue;
+      const index = fn.captureIndex.get(symbol.id)!;
+      const value = this.reg();
+      this.emit(`  ${value} = call i64 @xt_closure_env(i64 %env, i32 ${index})`);
+      this.defineCaptureSlot(symbol, value);
+    }
+
     // Parameters.
     const parameterNodes = (fn.node as { parameters?: Parameter[] }).parameters ?? [];
     for (let index = 0; index < fn.params.length; index++) {
@@ -185,13 +197,16 @@ export const moduleMethods: ModuleMethods = {
       if (parameter.initializer) this.emitDefaultParameter(symbol, value, parameter.initializer);
     }
 
-    // Captures threaded through the environment.
-    for (const symbol of fn.captures) {
-      if (this.moduleGlobals.has(symbol.id)) continue;
-      const index = fn.captureIndex.get(symbol.id)!;
-      const value = this.reg();
-      this.emit(`  ${value} = call i64 @xt_closure_env(i64 %env, i32 ${index})`);
-      this.defineCaptureSlot(symbol, value);
+    // Boxed bindings declared in this frame get their box now, before any
+    // statement runs. A closure built earlier in the body — a class's methods
+    // are installed by the class statement, which may precede the `const` the
+    // method reads — captures the box pointer, so the later declaration fills
+    // the same box. Without this the closure would capture an undefined slot
+    // (Three.js declares `_zero`/`_one` after the class that uses them).
+    for (const symbol of fn.locals) {
+      if (!symbol.boxed || this.moduleGlobals.has(symbol.id)) continue;
+      if (this.current.slots.has(symbol.id)) continue;
+      this.declareSlot(symbol, i64(XT_UNDEFINED));
     }
 
     // Hoisted function declarations: create their closure values in this

@@ -163,7 +163,10 @@ function deferredPrelude(alias: string, declaration: ImportDeclaration): string[
 
 /** Split an external script module into hoisted imports and a body. */
 function compileModuleSource(htmlPath: string, scriptPath: string, scriptIndex: number): CompiledModule {
-  const source = readFileSync(scriptPath, "utf8");
+  /* Mask the normalized text: the parser indexes the `SourceFile` text, where
+   * `\r\n` already became `\n`, so blanking statement spans in the raw file
+   * would remove the wrong characters on a CRLF checkout. */
+  const source = new SourceFile(scriptPath, readFileSync(scriptPath, "utf8")).text;
   const bag = new DiagnosticBag();
   const parsed = new Parser(new SourceFile(scriptPath, source), bag).parseSourceFile();
   const chars = source.split("");
@@ -256,6 +259,10 @@ function resolveScriptPath(htmlPath: string, src: string): string {
 
 /** Rewrite `<script>` bodies into registered AOT functions + an HTML string. */
 export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
+  /* The generated module is parsed as a `SourceFile`, which rewrites `\r\n` to
+   * `\n`; normalize first so the module text, the offsets recorded for
+   * `<script src>` bodies and the exported HTML string all share one layout. */
+  const page = new SourceFile(path, source).text;
   /* `file` is set for an external `<script src>`: its body keeps that file as
    * the origin of every node, so a `.js` script stays untyped and diagnostics
    * name the script, not the HTML page. */
@@ -267,7 +274,7 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
 
   /* The engine's cascade only reads `<style>` elements, so a linked stylesheet
    * would be dropped at runtime. Inline it (and its `@import`s) now. */
-  const styles = inlineStylesheets(path, source);
+  const styles = inlineStylesheets(path, page);
   const html = styles.html.replace(SCRIPT_RE, (match, attributes: string, inlineBody: string) => {
     if (!isExecutable(attribute(attributes, "type"), attribute(attributes, "lang"))) return match;
     const src = attribute(attributes, "src");

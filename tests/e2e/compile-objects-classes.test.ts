@@ -522,4 +522,37 @@ describeE2E("end-to-end objects, functions and classes", (harness) => {
     `;
     expect(runProgram(source)).toBe("1,2\n4,5");
   });
+
+  it("captures a const declared after the class whose methods read it", () => {
+    // Regression: a class's method closures are built when the class statement
+    // runs, which can precede the `const` they read (Three.js declares
+    // `_zero`/`_one` after the classes that use them). The binding's box is now
+    // created at frame entry, so the closure captures the box, not undefined.
+    const source = `
+      function make(): number {
+        class Box {
+          later(): number { return LATE + 1; }
+        }
+        const LATE = 7;
+        return new Box().later();
+      }
+      console.log(make());
+    `;
+    expect(runProgram(source)).toBe("8");
+  });
+
+  it("reads a captured binding from a default parameter", () => {
+    const source = `
+      function make(): string {
+        const FALLBACK = "default";
+        class Box {
+          label: string;
+          constructor(value: string = FALLBACK) { this.label = value; }
+        }
+        return new Box().label;
+      }
+      console.log(make());
+    `;
+    expect(runProgram(source)).toBe("default");
+  });
 });

@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include "paint.h"
+#include "perf.h"
 #include "text.h"
 
 #include "renderer_shaders.h"
@@ -39,10 +40,32 @@ bool g_atlas_dirty = false;
 int g_atlas_dirty_x0 = 0, g_atlas_dirty_y0 = 0, g_atlas_dirty_x1 = 0, g_atlas_dirty_y1 = 0;
 bool g_atlas_full_logged = false;
 
+std::vector<Vertex> g_shape_staging;
+std::vector<TextVertex> g_text_staging;
+std::vector<TextVertex> g_image_staging;
+
+/** The command buffer an upload records into. With a batch, the frame's single
+ * command buffer is acquired lazily and submitted by `xt_gui_upload_end`;
+ * without one, each upload submits on its own. */
+SDL_GPUCommandBuffer *uploadCommand(SDL_GPUDevice *device, XtGuiUploadBatch *batch) {
+  if (batch == nullptr) return SDL_AcquireGPUCommandBuffer(device);
+  if (batch->cmd == nullptr) batch->cmd = SDL_AcquireGPUCommandBuffer(batch->device);
+  return batch->cmd;
+}
+
+void uploadDone(SDL_GPUCommandBuffer *cmd, XtGuiUploadBatch *batch) {
+  if (batch != nullptr) {
+    batch->recorded += 1;
+    return;
+  }
+  SDL_SubmitGPUCommandBuffer(cmd);
+  g_perf_frame.uploadSubmits += 1;
+}
+
 /** Upload `count` vertices (of `stride` bytes) into `geometry`, reusing or
  * growing its GPU buffer. Does nothing when `count` is zero. */
 void uploadVertices(SDL_GPUDevice *device, XtGuiGeometry *geometry, const void *data,
-                    uint32_t count, uint32_t stride) {
+                    uint32_t count, uint32_t stride, XtGuiUploadBatch *batch) {
   geometry->vertex_count = count;
   if (count == 0) return;
   uint32_t bytes = count * stride;
@@ -61,29 +84,37 @@ void uploadVertices(SDL_GPUDevice *device, XtGuiGeometry *geometry, const void *
     return;
   }
 
-  SDL_GPUTransferBufferCreateInfo transfer_info;
-  memset(&transfer_info, 0, sizeof(transfer_info));
-  transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  transfer_info.size = bytes;
-  SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transfer_info);
-  if (transfer == nullptr) {
+  /* Reuse the geometry's staging buffer: a repaint used to create and release a
+   * transfer buffer for every vertex array, every frame. */
+  if (geometry->staging == nullptr || geometry->staging_capacity < bytes) {
+    if (geometry->staging != nullptr) SDL_ReleaseGPUTransferBuffer(device, geometry->staging);
+    SDL_GPUTransferBufferCreateInfo transfer_info;
+    memset(&transfer_info, 0, sizeof(transfer_info));
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = bytes;
+    geometry->staging = SDL_CreateGPUTransferBuffer(device, &transfer_info);
+    geometry->staging_capacity = geometry->staging != nullptr ? bytes : 0;
+  }
+  if (geometry->staging == nullptr) {
     fprintf(stderr, "xt_gui: transfer buffer creation failed: %s\n", SDL_GetError());
     geometry->vertex_count = 0;
     return;
   }
-  void *mapped = SDL_MapGPUTransferBuffer(device, transfer, false);
+  /* `cycle` rotates SDL's internal allocation while the previous frame's copy
+   * may still be in flight: the staging buffer is reused every frame, so the
+   * non-cycling map could overwrite data the GPU has not read yet. */
+  void *mapped = SDL_MapGPUTransferBuffer(device, geometry->staging, true);
   std::memcpy(mapped, data, bytes);
-  SDL_UnmapGPUTransferBuffer(device, transfer);
+  SDL_UnmapGPUTransferBuffer(device, geometry->staging);
 
-  SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device);
+  SDL_GPUCommandBuffer *cmd = uploadCommand(device, batch);
   if (cmd == nullptr) {
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
     geometry->vertex_count = 0;
     return;
   }
   SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
   SDL_GPUTransferBufferLocation source;
-  source.transfer_buffer = transfer;
+  source.transfer_buffer = geometry->staging;
   source.offset = 0;
   SDL_GPUBufferRegion destination;
   destination.buffer = geometry->buffer;
@@ -91,12 +122,25 @@ void uploadVertices(SDL_GPUDevice *device, XtGuiGeometry *geometry, const void *
   destination.size = bytes;
   SDL_UploadToGPUBuffer(copy, &source, &destination, false);
   SDL_EndGPUCopyPass(copy);
-  SDL_SubmitGPUCommandBuffer(cmd);
-  SDL_ReleaseGPUTransferBuffer(device, transfer);
+  uploadDone(cmd, batch);
+  g_perf_frame.vertices += count;
 }
 
 }  // namespace renderer_detail
 }  // namespace xtgui
+
+void xt_gui_upload_begin(XtGuiUploadBatch *batch, SDL_GPUDevice *device) {
+  batch->device = device;
+  batch->cmd = nullptr;
+  batch->recorded = 0;
+}
+
+void xt_gui_upload_end(XtGuiUploadBatch *batch) {
+  if (batch == nullptr || batch->cmd == nullptr) return;
+  SDL_SubmitGPUCommandBuffer(batch->cmd);
+  batch->cmd = nullptr;
+  xtgui::g_perf_frame.uploadSubmits += 1;
+}
 
 bool xt_gui_renderer_ensure(SDL_GPUDevice *device, SDL_Window *reference) {
   using namespace xtgui::renderer_detail;
@@ -238,15 +282,21 @@ void xt_gui_geometry_destroy(SDL_GPUDevice *device, XtGuiGeometry *geometry) {
     SDL_ReleaseGPUBuffer(device, geometry->buffer);
     geometry->buffer = nullptr;
   }
+  if (geometry->staging != nullptr) {
+    SDL_ReleaseGPUTransferBuffer(device, geometry->staging);
+    geometry->staging = nullptr;
+  }
+  geometry->staging_capacity = 0;
   geometry->capacity_bytes = 0;
   geometry->vertex_count = 0;
   geometry->dirty = true;
 }
 
 void xt_gui_geometry_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
-                            const xtgui::DisplayList &list) {
+                            const xtgui::DisplayList &list, XtGuiUploadBatch *batch) {
   using namespace xtgui::renderer_detail;
-  std::vector<Vertex> verts;
+  std::vector<Vertex> &verts = g_shape_staging;
+  verts.clear();
   verts.reserve(list.rects.size() * 6);
   geometry->op_counts.assign(list.rects.size(), 0);
   /* Walk painter order so each rectangle carries its op's clip path. */
@@ -256,7 +306,7 @@ void xt_gui_geometry_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     pushShape(verts, list.rects[op.index], op.clip, list);
     geometry->op_counts[op.index] = (uint32_t)verts.size() - before;
   }
-  uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(Vertex));
+  uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(Vertex), batch);
 }
 
 void xt_gui_build_runs(XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometry *images,
@@ -310,6 +360,35 @@ void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
 
   int target_width = (int)(viewport_width * pixel_density + 0.5f);
   int target_height = (int)(viewport_height * pixel_density + 0.5f);
+  /* A run list alternates pipelines (background, text, background, …), so the
+   * same scissor rectangle and the same pipeline were re-bound for every run.
+   * Track what is bound and only issue the state change when it actually
+   * changes: a 1,000-row list has hundreds of runs. */
+  SDL_Rect bound_scissor;
+  bound_scissor.x = -1;
+  bound_scissor.y = -1;
+  bound_scissor.w = -1;
+  bound_scissor.h = -1;
+  int bound_pipeline = -1;
+  SDL_GPUTexture *bound_texture = nullptr;
+  auto bindPipeline = [&](int pipeline, SDL_GPUBuffer *buffer, SDL_GPUGraphicsPipeline *gpu) {
+    if (bound_pipeline == pipeline) return;
+    SDL_BindGPUGraphicsPipeline(pass, gpu);
+    SDL_GPUBufferBinding binding;
+    binding.buffer = buffer;
+    binding.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+    bound_pipeline = pipeline;
+    bound_texture = nullptr;  // a new pipeline invalidates the bound sampler
+  };
+  auto bindTexture = [&](SDL_GPUTexture *texture) {
+    if (bound_texture == texture) return;
+    SDL_GPUTextureSamplerBinding texture_binding;
+    texture_binding.texture = texture;
+    texture_binding.sampler = g_sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, &texture_binding, 1);
+    bound_texture = texture;
+  };
   for (const XtGuiDrawRun &run : shapes->runs) {
     SDL_Rect scissor;
     scissor.x = 0;
@@ -330,42 +409,31 @@ void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
       scissor.w = x1 > x0 ? x1 - x0 : 0;
       scissor.h = y1 > y0 ? y1 - y0 : 0;
     }
-    SDL_SetGPUScissor(pass, &scissor);
+    if (scissor.x != bound_scissor.x || scissor.y != bound_scissor.y ||
+        scissor.w != bound_scissor.w || scissor.h != bound_scissor.h) {
+      SDL_SetGPUScissor(pass, &scissor);
+      bound_scissor = scissor;
+    }
 
     if (run.pipeline == XtGuiDrawRun::Shape) {
       if (g_pipeline == nullptr || shapes->buffer == nullptr) continue;
-      SDL_BindGPUGraphicsPipeline(pass, g_pipeline);
-      SDL_GPUBufferBinding binding;
-      binding.buffer = shapes->buffer;
-      binding.offset = 0;
-      SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
+      bindPipeline(XtGuiDrawRun::Shape, shapes->buffer, g_pipeline);
       SDL_DrawGPUPrimitives(pass, run.count, 1, run.first, 0);
+      xtgui::g_perf_frame.drawCalls += 1;
     } else if (run.pipeline == XtGuiDrawRun::Text) {
       if (!g_text_ok || g_atlas_texture == nullptr || texts->buffer == nullptr) continue;
-      SDL_BindGPUGraphicsPipeline(pass, g_text_pipeline);
-      SDL_GPUBufferBinding binding;
-      binding.buffer = texts->buffer;
-      binding.offset = 0;
-      SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-      SDL_GPUTextureSamplerBinding atlas_binding;
-      atlas_binding.texture = g_atlas_texture;
-      atlas_binding.sampler = g_sampler;
-      SDL_BindGPUFragmentSamplers(pass, 0, &atlas_binding, 1);
+      bindPipeline(XtGuiDrawRun::Text, texts->buffer, g_text_pipeline);
+      bindTexture(g_atlas_texture);
       SDL_DrawGPUPrimitives(pass, run.count, 1, run.first, 0);
+      xtgui::g_perf_frame.drawCalls += 1;
     } else {
       if (g_image_pipeline == nullptr || g_sampler == nullptr || images->buffer == nullptr ||
           run.texture == nullptr)
         continue;
-      SDL_BindGPUGraphicsPipeline(pass, g_image_pipeline);
-      SDL_GPUBufferBinding binding;
-      binding.buffer = images->buffer;
-      binding.offset = 0;
-      SDL_BindGPUVertexBuffers(pass, 0, &binding, 1);
-      SDL_GPUTextureSamplerBinding texture_binding;
-      texture_binding.texture = run.texture;
-      texture_binding.sampler = g_sampler;
-      SDL_BindGPUFragmentSamplers(pass, 0, &texture_binding, 1);
+      bindPipeline(XtGuiDrawRun::Image, images->buffer, g_image_pipeline);
+      bindTexture(run.texture);
       SDL_DrawGPUPrimitives(pass, run.count, 1, run.first, 0);
+      xtgui::g_perf_frame.drawCalls += 1;
     }
   }
 

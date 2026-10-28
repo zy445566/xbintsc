@@ -4,6 +4,8 @@
 
 #include "document.h"
 
+#include "perf.h"
+
 namespace xtgui {
 
 void XtDocument::collectStyleText(const Node *node, std::string *out) const {
@@ -43,11 +45,15 @@ void XtDocument::load(const std::string &html, float viewportWidth, float viewpo
 void XtDocument::restyle(float viewportWidth, float viewportHeight) {
   viewportWidth_ = viewportWidth;
   viewportHeight_ = viewportHeight;
+  g_perf_frame.restyles += 1;
   if (root_ != nullptr) {
     MatchState state;
     state.hover = hover_;
     state.focus = focus_;
-    xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight, state, &pseudos_);
+    bool hasTransitions = sheet_.has_transitions;
+    xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight, state, &pseudos_,
+                     &hasTransitions);
+    has_transitions_ = hasTransitions;
     startTransitions();
     updateDisplay();
   }
@@ -119,6 +125,10 @@ void applyNumber(XtStyle *style, const std::string &property, float value) {
 
 void XtDocument::startTransitions() {
   if (display_.empty()) return;  // first style computation: nothing to animate from
+  /* Without a `transition` declaration anywhere in the sheet (or in an inline
+   * style) no transition can start, so skip the O(nodes) scan `restyle` would
+   * otherwise do every time. */
+  if (!has_transitions_) return;
   static const char *const kProperties[] = {"background-color", "color", "border-color",
                                            "border-radius", "transform"};
   for (auto &entry : styles_) {
@@ -186,6 +196,17 @@ void XtDocument::startTransitions() {
 }
 
 void XtDocument::updateDisplay() {
+  /* Without a `transition` declaration in the sheet (or an inline style) no
+   * transition can ever start, so the displayed style *is* the cascade result:
+   * skip the per-node deep copy of the whole style map (and keep `display_`
+   * empty, which `styleOf` already falls back from). */
+  if (!has_transitions_) {
+    if (!transitions_.empty()) transitions_.clear();
+    if (!display_.empty()) display_.clear();
+    layout_.compute(root_.get(), styles_, viewportWidth_, viewportHeight_, &mediaSizes_,
+                    &canvasInfo_);
+    return;
+  }
   display_ = styles_;
   for (size_t i = 0; i < transitions_.size();) {
     ActiveTransition &transition = transitions_[i];
@@ -232,6 +253,8 @@ bool XtDocument::advance(double delta_ms) {
 bool XtDocument::setHover(const Node *node) {
   if (hover_ == node) return false;
   hover_ = node;
+  /* No `:hover` rule anywhere: the state changed but the paint cannot. */
+  if (!sheet_.has_hover) return false;
   restyle(viewportWidth_, viewportHeight_);
   return true;
 }
@@ -239,6 +262,7 @@ bool XtDocument::setHover(const Node *node) {
 bool XtDocument::setFocus(const Node *node) {
   if (focus_ == node) return false;
   focus_ = node;
+  if (!sheet_.has_focus) return false;
   restyle(viewportWidth_, viewportHeight_);
   return true;
 }

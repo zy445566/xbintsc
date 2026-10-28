@@ -264,11 +264,12 @@ class PseudoNodeSet {
  * `state` supplies `:hover`/`:focus` for dynamic selector matching. When
  * `pseudos` is non-null, `::before`/`::after` styles are computed too and each
  * element's transient `pseudo_before`/`pseudo_after` pointers are published for
- * layout. */
+ * layout. When `hasTransitions` is non-null it is OR-ed with whether any
+ * computed style declares a `transition` (inline `style="…"` included). */
 void xt_style_compute(const Node *root, const StyleSheet &sheet,
                       std::unordered_map<const Node *, XtStyle> &out, float viewportWidth,
                       float viewportHeight, const MatchState &state = MatchState(),
-                      PseudoNodeSet *pseudos = nullptr);
+                      PseudoNodeSet *pseudos = nullptr, bool *hasTransitions = nullptr);
 
 /** Format a computed property for diagnostics/tests (`computedStyle(sel, prop)`). */
 std::string xt_style_property_to_string(const XtStyle &style, const std::string &property);

@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M19** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
+状态：**M20** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
 `<video>`/`<audio>`——可选的 `media` 扩展用 vendored 的最小 FFmpeg 在主线程解码，
 视频帧走图像纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露
 `play`/`pause`/`currentTime`/… 与媒体事件。只启用 `gui` 不会链接 FFmpeg。浏览器全局还带有真正可用的 `AudioContext`：`runtime/ext_gui/audio_mixer.cpp` 中的 48 kHz 混音器，以及 `decodeAudioData`（WAV 由引擎内解码，压缩格式经 `media`）——见 [GUI API](./gui/api.md#web-audio)。**M14** 增加了 `<canvas>`，配一个自研的 2D 软件光栅器（抗锯齿
@@ -12,7 +12,7 @@
 渲染器，因此盒子（以及其中的文本、图像与子元素）可以被平移、缩放与旋转而
 不触发任何重排——再加上 `transition: transform`，这些姿态可以动画（自绘的示例
 `examples/gui/pelican-svg` 正是用它让矢量画动起来）。参见
-[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V（Metal 上再由内置 SPIRV-Cross 转成 MSL）并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向多层背景、`text-shadow`、`clip-path` 与 `filter` 颜色/阴影效果。`backdrop-filter` 与真正的组模糊需要离屏合成器，仍为有文档说明的近似或未支持——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
+[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V（Metal 上再由内置 SPIRV-Cross 转成 MSL）并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向多层背景、`text-shadow`、`clip-path` 与 `filter` 颜色/阴影效果。`backdrop-filter` 与真正的组模糊需要离屏合成器，仍为有文档说明的近似或未支持——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。**M20** 让大文档保持可交互：`@media` 每条规则只求值一次，布局与绘制共享一个有界的整形缓存，一帧只做（也只提交）变更所要求的工作——见[性能](./gui/rendering.md#性能m20)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
 
 ## 目录
 
@@ -273,6 +273,16 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
       [已知问题](./gui/known-issues.md)）。
     - e2e 覆盖见 `tests/e2e/gui-effects.test.ts`；参见
       [绘制](./gui/rendering.md#背景生成内容与特效m19)。
+20. **M20 — 渲染性能** ✅
+    - `@media` 每次重算样式时每条规则只求值一次；没有伪元素的样式表跳过生成
+      内容；只有样式表跟踪 `:hover`/`:focus` 时才因它们重算样式。
+    - 有界的两代整形缓存同时服务布局与绘制，并缓存主字体。
+    - 帧循环：只在文档变化时对齐媒体/画布表，只在发生事情时提交呈现，并据此
+      决定是否执行整帧工作。
+    - 复用显示列表/顶点暂存/transfer buffer，一个脏帧只提交一次上传，去掉
+      冗余的渲染状态绑定。
+    - `win.stats()`/`XT_GUI_PERF` 计数器与 `tests/e2e/gui-perf.test.ts`；参见
+      [性能](./gui/rendering.md#性能m20)。
 
 ## 进度日志
 
@@ -402,4 +412,17 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
   采样模糊/投影并生成 `text-shadow` run，`paint_clip.cpp`/`renderer_clip.cpp`
   对三角化的 `clip-path` 多边形裁剪几何。e2e 见
   `tests/e2e/gui-effects.test.ts`。
+- **M20** ✅ 渲染性能。`@media` 每次重算样式时每条规则只求值一次；没有
+  `::before`/`::after` 的样式表完全跳过生成内容；只有样式表包含
+  `:hover`/`:focus` 规则时才因这两个状态重算样式（`style.cpp`、
+  `css_sheet.cpp`）。一个有界的两代整形缓存（`text_cache.cpp`）同时服务布局与
+  绘制，因此一个词只整形一次，而不是每次布局和重绘都整形一次；主字体也按
+  （类别，字号）缓存。帧循环只在文档变化时对齐解码器/画布，并且只在确实发生了
+  事情时提交呈现（`gui_events.cpp`），因此静态页面不产生任何 GPU 工作
+  （调试时可用 `XT_GUI_ALWAYS_PRESENT=1` 恢复旧行为）。显示列表、顶点暂存与
+  transfer buffer 都被复用，一个脏帧的多次上传共用一次命令缓冲区提交，渲染器
+  只在状态真正变化时重新绑定（`renderer*.cpp`、`gui_engine.h`）。
+  `win.stats()` 报告帧耗时与累计工作量计数器，`XT_GUI_PERF` 打印它们
+  （`perf.{h,cpp}`）；`tests/e2e/gui-perf.test.ts` 用 200 行列表固化这些断言。
+  参见[性能](./gui/rendering.md#性能m20)。
 

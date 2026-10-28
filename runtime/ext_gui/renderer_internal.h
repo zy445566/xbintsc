@@ -79,6 +79,18 @@ extern bool g_atlas_full_logged;
 
 /* -- geometry helpers ----------------------------------------------------- */
 
+/** Reused vertex staging arrays (one frame at a time, cleared on each upload).
+ * Keeping their capacity avoids reallocating a few megabytes per repaint. */
+extern std::vector<Vertex> g_shape_staging;
+extern std::vector<TextVertex> g_text_staging;
+extern std::vector<TextVertex> g_image_staging;
+
+/** The command buffer an upload records into: the frame's batch when given,
+ * otherwise a freshly acquired one that `uploadDone` submits. */
+SDL_GPUCommandBuffer *uploadCommand(SDL_GPUDevice *device, XtGuiUploadBatch *batch);
+/** Submit a command buffer acquired for a one-off upload (`batch == nullptr`). */
+void uploadDone(SDL_GPUCommandBuffer *cmd, XtGuiUploadBatch *batch);
+
 /** Push one rounded rectangle, clipped by the op's `clip-path` polygons (if
  * any). Returns the number of vertices appended. */
 uint32_t pushShape(std::vector<Vertex> &verts, const xtgui::PaintRect &rect,
@@ -95,14 +107,14 @@ uint32_t pushQuad(std::vector<TextVertex> &verts, const float corners_x[4],
                   const xtgui::Color &color, const xtgui::Matrix2D &transform,
                   const xtgui::PaintClip &clip, const xtgui::DisplayList &list);
 void uploadVertices(SDL_GPUDevice *device, XtGuiGeometry *geometry, const void *data,
-                    uint32_t count, uint32_t stride);
+                    uint32_t count, uint32_t stride, XtGuiUploadBatch *batch);
 
 /* -- text ----------------------------------------------------------------- */
 
 bool ensureAtlasTexture(SDL_GPUDevice *device);
 void markAtlasDirty(int x, int y, int width, int height);
 bool ensureGlyph(SDL_GPUDevice *device, xtgui::Font *font, uint32_t glyph, GlyphEntry &out);
-void flushAtlas(SDL_GPUDevice *device);
+void flushAtlas(SDL_GPUDevice *device, XtGuiUploadBatch *batch);
 SDL_GPUGraphicsPipeline *createTextPipeline(SDL_GPUDevice *device, SDL_Window *reference);
 SDL_GPUSampler *createSampler(SDL_GPUDevice *device);
 
@@ -114,7 +126,7 @@ SDL_GPUGraphicsPipeline *createImagePipeline(SDL_GPUDevice *device, SDL_Window *
  * rasterised at that size, raster sources ignore it. The texture cache is keyed
  * by the resulting pixel size, so an SVG drawn at two sizes gets two textures. */
 SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src, int pixel_width,
-                                   int pixel_height);
+                                   int pixel_height, XtGuiUploadBatch *batch);
 
 }  // namespace renderer_detail
 }  // namespace xtgui

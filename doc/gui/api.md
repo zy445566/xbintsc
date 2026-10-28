@@ -212,6 +212,24 @@ steady state every one of them is constant — a climbing `detachedNodes` or
 `handles` means the program removes nodes faster than it releases them (see
 [Node lifetime](./dom.md#node-lifetime)).
 
+The same object reports what the last completed frame did and how much work the
+program has done in total, which is how rendering cost is measured (see
+[Performance](./rendering.md#performance-m20)):
+
+| Field | Meaning |
+| --- | --- |
+| `frameMs`, `restyleMs`, `layoutMs`, `paintMs`, `uploadMs`, `drawMs` | phase timings of the last frame (milliseconds) |
+| `frames`, `presents`, `skippedFrames`, `transitionFrames` | frame loop activity (presents count swapchain frames; `skippedFrames` counts frames nothing needed) |
+| `restyles`, `restyleNodes`, `rulesEvaluated`, `mediaEvaluated`, `layouts`, `layoutBoxes` | cascade and layout work |
+| `textShapeCalls`, `textShapeHits`, `textCacheBytes`, `textCacheEntries` | shaping cache misses/hits and its occupancy |
+| `paints`, `paintOps`, `drawRuns`, `drawCalls`, `uploadSubmits`, `vertices`, `syncNodes` | display-list, draw-call and upload work |
+
+Every field except the `*Ms` timings is cumulative, so subtract two snapshots to
+get one frame. `restyleMs` covers the cascade **and** the layout pass it
+triggers (which is also reported on its own as `layoutMs`). `XT_GUI_PERF=1`
+prints the same numbers on stderr (one line per frame; `XT_GUI_PERF=<N>`
+averages over N frames).
+
 They are used by `tests/e2e/gui-*.test.ts` to assert parsing, selector matching,
 specificity, inheritance, `!important` and layout geometry. They will stay useful
 afterwards for debugging.

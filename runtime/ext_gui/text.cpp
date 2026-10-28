@@ -17,6 +17,8 @@
 
 #include "text.h"
 
+#include "perf.h"
+
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
@@ -125,6 +127,10 @@ struct Engine {
   std::unordered_map<std::string, std::unique_ptr<Font>> cache;  // key -> face (may be null)
   std::unordered_map<std::string, std::vector<Font *>> fallbacks;  // class+size -> faces
   std::unordered_map<std::string, hb_face_t *> hb_faces;         // path -> face
+  /** Primary face by (family class, pixel size): `xt_text_resolve` and
+   * `xt_text_metrics` are called per text box per layout, and building the
+   * 512-byte path key each time showed up in the profile. */
+  std::unordered_map<std::string, Font *> primary;
 };
 
 Engine &engine() {
@@ -416,9 +422,15 @@ Font *xt_text_resolve(const FontSpec &spec) {
   if (!e.ft_ok) return nullptr;
 
   bool mono = isMonospaceFamily(spec.family);
+  char key[48];
+  std::snprintf(key, sizeof(key), "%c|%.4f", mono ? 'm' : 's', (double)spec.pixel_size);
+  auto cached = e.primary.find(key);
+  if (cached != e.primary.end()) return cached->second;
+
   const std::string &path = mono ? e.mono_path : e.sans_path;
-  if (path.empty()) return nullptr;
-  return resolveFacePath(path, spec.pixel_size, mono);
+  Font *font = path.empty() ? nullptr : resolveFacePath(path, spec.pixel_size, mono);
+  e.primary.emplace(key, font);
+  return font;
 }
 
 Font *xt_text_scale(Font *font, float pixel_size) {
@@ -429,12 +441,14 @@ Font *xt_text_scale(Font *font, float pixel_size) {
 float xt_text_measure_width(const std::string &utf8, const FontSpec &spec) {
   Font *font = xt_text_resolve(spec);
   if (font == nullptr) return approximateWidth(utf8, spec.pixel_size, spec.family);
-  std::vector<ShapedGlyph> glyphs;
-  return xt_text_shape_run(utf8, font, glyphs);
+  if (utf8.empty()) return 0.0f;
+  const ShapedRun *run = xt_text_shape_cached(utf8, font);
+  return run != nullptr ? run->width : 0.0f;
 }
 
 float xt_text_shape_run(const std::string &utf8, Font *font, std::vector<ShapedGlyph> &out) {
   if (font == nullptr) return 0;
+  g_perf_frame.textShapeCalls += 1;
   float total = 0;
   size_t index = 0;
   size_t segment_start = 0;
@@ -502,6 +516,9 @@ bool xt_text_ready() {
 
 void xt_text_shutdown() {
   Engine &e = engine();
+  /* Cached shaped runs point at faces, so drop them before the faces go. */
+  xt_text_cache_clear();
+  e.primary.clear();
   e.fallbacks.clear();
   e.cache.clear();
   for (auto &entry : e.hb_faces) {

@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M19** — features (M1–M15) are complete: HTML parsing, CSS selector
+Status: **M20** — features (M1–M15) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -44,6 +44,10 @@ them) can be translated, scaled and rotated without reflowing anything — and
 `clip-path` and the `filter` colour/shadow effects. `backdrop-filter` and true
 group blur need an offscreen compositor and remain documented approximations or
 unsupported — see [Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19).
+**M20** makes large documents interactive: `@media` is evaluated once per rule,
+layout and paint share a bounded shaping cache, and a frame only does (and
+presents) the work a change requires — see
+[Performance](./gui/rendering.md#performance-m20).
 This overview records the locked decisions, the architecture, the milestone plan
 and the current progress; the engine itself is documented by function in the
 pages above.
@@ -342,6 +346,18 @@ engine were Rust.
       offscreen backdrop pass (see [Known issues](./gui/known-issues.md)).
     - E2E coverage in `tests/e2e/gui-effects.test.ts`; see
       [Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19).
+20. **M20 — rendering performance** ✅
+    - `@media` evaluated once per rule per restyle, generated content skipped for
+      sheets without pseudo-elements, and `:hover`/`:focus` restyle only when
+      the sheet tracks them.
+    - Bounded two-generation shaping cache shared by layout and paint, plus a
+      primary-face cache.
+    - Frame loop: reconcile media/canvas only when the document changed, present
+      only when something happened, and gate the whole pass behind it.
+    - Reused display list/vertex staging/transfer buffers, one upload submit per
+      dirty frame, and redundant render-state binds removed.
+    - `win.stats()`/`XT_GUI_PERF` counters and `tests/e2e/gui-perf.test.ts`; see
+      [Performance](./gui/rendering.md#performance-m20).
 
 ## Progress log
 
@@ -490,4 +506,20 @@ engine were Rust.
   functions plus nine-tap blur/drop-shadow and emits `text-shadow` runs, and
   `paint_clip.cpp`/`renderer_clip.cpp` clip geometry against triangulated
   `clip-path` polygons. E2E: `tests/e2e/gui-effects.test.ts`.
+- **M20** ✅ rendering performance. `@media` is evaluated once per rule per
+  restyle, generated content is skipped for sheets without `::before`/`::after`,
+  and `:hover`/`:focus` only restyle when the sheet tracks them
+  (`style.cpp`, `css_sheet.cpp`). A bounded two-generation shaping cache
+  (`text_cache.cpp`) serves layout and paint, so a word is shaped once instead
+  of on every layout pass and repaint; primary faces are cached by
+  (class, size) too. The frame loop reconciles decoders/canvases only when the
+  document changed and presents only when something happened
+  (`gui_events.cpp`), so a static page does no GPU work
+  (`XT_GUI_ALWAYS_PRESENT=1` restores the old behaviour for debugging). The
+  display list, vertex staging and transfer buffers are reused, a dirty frame's
+  uploads share one command buffer, and the renderer only re-binds state that
+  changed (`renderer*.cpp`, `gui_engine.h`). `win.stats()` reports per-frame
+  timings and cumulative work counters and `XT_GUI_PERF` prints them
+  (`perf.{h,cpp}`); `tests/e2e/gui-perf.test.ts` pins a 200-row list. See
+  [Performance](./gui/rendering.md#performance-m20).
 

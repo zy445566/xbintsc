@@ -9,6 +9,7 @@
 #include "style_internal.h"
 
 #include "css_internal.h"
+#include "perf.h"
 
 #include <algorithm>
 #include <cctype>
@@ -45,13 +46,17 @@ struct Candidate {
   int important = 0;
   int specificity = 0;
   int order = 0;
+  /** Push order, so two candidates with the same `order` (the inline
+   * declarations all use `INT_MAX`) keep their declaration order. */
+  int sequence = 0;
   const Declaration *declaration = nullptr;
 };
 
 bool candidateBefore(const Candidate &a, const Candidate &b) {
   if (a.important != b.important) return a.important < b.important;
   if (a.specificity != b.specificity) return a.specificity < b.specificity;
-  return a.order < b.order;
+  if (a.order != b.order) return a.order < b.order;
+  return a.sequence < b.sequence;
 }
 
 
@@ -156,7 +161,9 @@ void inheritFrom(XtStyle *style, const XtStyle *parent) {
   style->color = parent->color;
   style->visible = parent->visible;
   style->pointer_events = parent->pointer_events;
-  style->variables = parent->variables;
+  /* Most documents define no custom properties; copying the (empty) map for
+   * every element is pure overhead. */
+  if (!parent->variables.empty()) style->variables = parent->variables;
   style->font_size = parent->font_size;
   style->font_weight = parent->font_weight;
   style->font_family = parent->font_family;
@@ -167,14 +174,12 @@ void inheritFrom(XtStyle *style, const XtStyle *parent) {
   style->text_shadow = parent->text_shadow;
 }
 
-bool ruleApplies(const Rule &rule, const ApplyContext &context) {
-  return rule.media.empty() ||
-         xt_css_media_matches(rule.media, context.viewportWidth, context.viewportHeight);
-}
-
 void applyCandidates(XtStyle *style, std::vector<Candidate> *candidates,
                      const ApplyContext &nodeContext) {
-  std::stable_sort(candidates->begin(), candidates->end(), candidateBefore);
+  /* `candidateBefore` is a total order now (the sequence breaks ties), so an
+   * unstable `std::sort` is equivalent to the old `stable_sort` without its
+   * temporary buffer. */
+  std::sort(candidates->begin(), candidates->end(), candidateBefore);
   /* Custom properties participate in the cascade first; their final values are
    * then available to every normal declaration on this element. */
   for (const Candidate &candidate : *candidates) {
@@ -332,11 +337,35 @@ void resetPseudoPointers(const Node *node) {
   for (const std::unique_ptr<Node> &child : node->children) resetPseudoPointers(child.get());
 }
 
+/** Per-computation scratch buffers. The cascade runs depth-first, so one
+ * candidate list (and one inline-declaration list) can be reused for every
+ * node — the old code allocated both per element. */
+struct ComputeScratch {
+  std::vector<Candidate> candidates;
+  std::vector<Declaration> inline_declarations;
+  int sequence = 0;
+  /** Set when any computed style declares a `transition` (including an inline
+   * `style="transition: …"`), so the document knows whether it needs the
+   * transition snapshot path at all. */
+  bool has_transitions = false;
+};
+
+void pushCandidates(std::vector<Candidate> *candidates, ComputeScratch *scratch,
+                    const Declaration &declaration, int important, int specificity, int order) {
+  Candidate candidate;
+  candidate.important = important;
+  candidate.specificity = specificity;
+  candidate.order = order;
+  candidate.sequence = scratch->sequence++;
+  candidate.declaration = &declaration;
+  candidates->push_back(candidate);
+}
+
 /** Compute one `::before`/`::after` style and attach its generated content. */
 void computePseudo(const Node *origin, PseudoElement side, const XtStyle &originStyle,
-                   const StyleSheet &sheet, std::unordered_map<const Node *, XtStyle> &out,
-                   const ApplyContext &context, const MatchState &state,
-                   PseudoNodeSet *pseudos) {
+                   const StyleSheet &sheet, const std::vector<char> &applies,
+                   std::unordered_map<const Node *, XtStyle> &out, const ApplyContext &context,
+                   const MatchState &state, PseudoNodeSet *pseudos, ComputeScratch *scratch) {
   if (pseudos == nullptr || originStyle.display == Display::None) return;
   Node *pseudo = pseudos->create(const_cast<Node *>(origin), side);
   if (side == PseudoElement::Before) const_cast<Node *>(origin)->pseudo_before = pseudo;
@@ -350,9 +379,11 @@ void computePseudo(const Node *origin, PseudoElement side, const XtStyle &origin
   nodeContext.parentFontSize = originStyle.font_size;
 
   std::string pseudoName = side == PseudoElement::Before ? "before" : "after";
-  std::vector<Candidate> candidates;
-  for (const Rule &rule : sheet.rules) {
-    if (!ruleApplies(rule, nodeContext)) continue;
+  std::vector<Candidate> &candidates = scratch->candidates;
+  candidates.clear();
+  for (size_t ruleIndex = 0; ruleIndex < sheet.rules.size(); ruleIndex++) {
+    if (applies[ruleIndex] == 0) continue;
+    const Rule &rule = sheet.rules[ruleIndex];
     for (const ComplexSelector &selector : rule.selectors) {
       if (selector.compounds.empty() || selector.compounds.back().pseudo_element != pseudoName)
         continue;
@@ -360,15 +391,17 @@ void computePseudo(const Node *origin, PseudoElement side, const XtStyle &origin
        * pseudo-element suffix removed: `.card.info::before` is `.card.info`. */
       ComplexSelector copy = selector;
       copy.compounds.back().pseudo_element.clear();
+      g_perf_frame.rulesEvaluated += 1;
       if (!xt_css_match(origin, copy, state)) continue;
       for (const Declaration &declaration : rule.declarations) {
-        candidates.push_back({declaration.important ? 1 : 0, selector.specificity, rule.order,
-                              &declaration});
+        pushCandidates(&candidates, scratch, declaration, declaration.important ? 1 : 0,
+                       selector.specificity, rule.order);
       }
     }
   }
   applyCandidates(&style, &candidates, nodeContext);
   finalizeStyle(&style, nodeContext);
+  if (!style.transitions.empty()) scratch->has_transitions = true;
 
   bool generated = false;
   std::string text;
@@ -380,8 +413,9 @@ void computePseudo(const Node *origin, PseudoElement side, const XtStyle &origin
 }
 
 void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &sheet,
-                 std::unordered_map<const Node *, XtStyle> &out, const ApplyContext &context,
-                 const MatchState &state, PseudoNodeSet *pseudos) {
+                 const std::vector<char> &applies, std::unordered_map<const Node *, XtStyle> &out,
+                 const ApplyContext &context, const MatchState &state, PseudoNodeSet *pseudos,
+                 ComputeScratch *scratch) {
   const XtStyle *childParent = parent;
   if (node->isElement() && !node->is_pseudo) {
     XtStyle style = xt_style_initial();
@@ -395,35 +429,48 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
     ApplyContext nodeContext = context;
     nodeContext.parentFontSize = (parent != nullptr) ? parent->font_size : context.rootFontSize;
 
-    std::vector<Candidate> candidates;
-    for (const Rule &rule : sheet.rules) {
-      if (!ruleApplies(rule, nodeContext)) continue;
+    std::vector<Candidate> &candidates = scratch->candidates;
+    candidates.clear();
+    for (size_t ruleIndex = 0; ruleIndex < sheet.rules.size(); ruleIndex++) {
+      if (applies[ruleIndex] == 0) continue;
+      const Rule &rule = sheet.rules[ruleIndex];
       for (const ComplexSelector &selector : rule.selectors) {
+        g_perf_frame.rulesEvaluated += 1;
         if (!xt_css_match(node, selector, state)) continue;
         for (const Declaration &declaration : rule.declarations) {
-          candidates.push_back({declaration.important ? 1 : 0, selector.specificity, rule.order, &declaration});
+          pushCandidates(&candidates, scratch, declaration, declaration.important ? 1 : 0,
+                         selector.specificity, rule.order);
         }
       }
     }
     const std::string *inlineStyle = node->attr("style");
-    std::vector<Declaration> inlineDeclarations;
     if (inlineStyle != nullptr) {
+      std::vector<Declaration> &inlineDeclarations = scratch->inline_declarations;
       inlineDeclarations = xt_css_parse_declarations(*inlineStyle);
       for (const Declaration &declaration : inlineDeclarations) {
-        candidates.push_back({declaration.important ? 1 : 0, 1 << 28, INT_MAX, &declaration});
+        pushCandidates(&candidates, scratch, declaration, declaration.important ? 1 : 0, 1 << 28,
+                       INT_MAX);
       }
     }
     applyCandidates(&style, &candidates, nodeContext);
     finalizeStyle(&style, nodeContext);
+    if (!style.transitions.empty()) scratch->has_transitions = true;
 
+    /* `emplace` keeps the address of an existing entry stable, which is what
+     * `box->style` pointers rely on. */
     out[node] = style;
     childParent = &out[node];
     const XtStyle &computed = out[node];
-    computePseudo(node, PseudoElement::Before, computed, sheet, out, context, state, pseudos);
-    computePseudo(node, PseudoElement::After, computed, sheet, out, context, state, pseudos);
+    if (pseudos != nullptr && sheet.has_pseudo_elements) {
+      computePseudo(node, PseudoElement::Before, computed, sheet, applies, out, context, state,
+                    pseudos, scratch);
+      computePseudo(node, PseudoElement::After, computed, sheet, applies, out, context, state,
+                    pseudos, scratch);
+    }
+    g_perf_frame.restyleNodes += 1;
   }
   for (const std::unique_ptr<Node> &child : node->children) {
-    computeNode(child.get(), childParent, sheet, out, context, state, pseudos);
+    computeNode(child.get(), childParent, sheet, applies, out, context, state, pseudos, scratch);
   }
 }
 
@@ -431,16 +478,40 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
 
 void xt_style_compute(const Node *root, const StyleSheet &sheet,
                       std::unordered_map<const Node *, XtStyle> &out, float viewportWidth,
-                      float viewportHeight, const MatchState &state, PseudoNodeSet *pseudos) {
+                      float viewportHeight, const MatchState &state, PseudoNodeSet *pseudos,
+                      bool *hasTransitions) {
   out.clear();
-  if (pseudos != nullptr && root != nullptr) {
+  bool wantsPseudo = pseudos != nullptr && sheet.has_pseudo_elements;
+  if (wantsPseudo && root != nullptr) {
     resetPseudoPointers(root);
     pseudos->clear();
   }
   ApplyContext context;
   context.viewportWidth = viewportWidth;
   context.viewportHeight = viewportHeight;
-  computeNode(root, nullptr, sheet, out, context, state, pseudos);
+  /* An `@media` prelude is evaluated once per rule (not once per rule *and*
+   * node): the query never depends on the element, so this was the engine's
+   * largest per-element cost on a large document. */
+  std::vector<char> applies(sheet.rules.size(), 0);
+  for (size_t i = 0; i < sheet.rules.size(); i++) {
+    const std::string &media = sheet.rules[i].media;
+    if (media.empty()) {
+      applies[i] = 1;
+      continue;
+    }
+    g_perf_frame.mediaEvaluated += 1;
+    applies[i] =
+        xt_css_media_matches(media, viewportWidth, viewportHeight) ? (char)1 : (char)0;
+  }
+  ComputeScratch scratch;
+  scratch.candidates.reserve(32);
+  if (root != nullptr) {
+    computeNode(root, nullptr, sheet, applies, out, context, state, wantsPseudo ? pseudos : nullptr,
+                &scratch);
+  }
+  if (hasTransitions != nullptr) {
+    *hasTransitions = *hasTransitions || scratch.has_transitions;
+  }
 }
 
 }  // namespace xtgui

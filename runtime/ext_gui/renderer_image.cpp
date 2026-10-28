@@ -12,6 +12,7 @@
 #include "canvas.h"
 #include "image.h"
 #include "media.h"
+#include "perf.h"
 #include "svg.h"
 #include "webgl.h"
 
@@ -40,7 +41,7 @@ static std::unordered_map<uint64_t, MediaTexture> g_canvas_textures;
  * this one is submitted before the frame that samples the texture, re-uploading
  * a texture that the previous frame drew is safe. */
 static bool uploadPixels(SDL_GPUDevice *device, SDL_GPUTexture *texture, int width, int height,
-                         const void *pixels, uint32_t bytes) {
+                         const void *pixels, uint32_t bytes, XtGuiUploadBatch *batch) {
   if (bytes == 0) return false;
   SDL_GPUTransferBufferCreateInfo transfer_info;
   memset(&transfer_info, 0, sizeof(transfer_info));
@@ -52,7 +53,7 @@ static bool uploadPixels(SDL_GPUDevice *device, SDL_GPUTexture *texture, int wid
   std::memcpy(mapped, pixels, bytes);
   SDL_UnmapGPUTransferBuffer(device, transfer);
 
-  SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(device);
+  SDL_GPUCommandBuffer *cmd = xtgui::renderer_detail::uploadCommand(device, batch);
   if (cmd == nullptr) {
     SDL_ReleaseGPUTransferBuffer(device, transfer);
     return false;
@@ -74,7 +75,7 @@ static bool uploadPixels(SDL_GPUDevice *device, SDL_GPUTexture *texture, int wid
   SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(cmd);
   SDL_UploadToGPUTexture(copy, &source, &destination, false);
   SDL_EndGPUCopyPass(copy);
-  SDL_SubmitGPUCommandBuffer(cmd);
+  xtgui::renderer_detail::uploadDone(cmd, batch);
   SDL_ReleaseGPUTransferBuffer(device, transfer);
   return true;
 }
@@ -107,7 +108,7 @@ static SDL_GPUTexture *ensureMediaTexture(SDL_GPUDevice *device, uint64_t media_
   }
   if (entry.generation != player->frame_generation()) {
     if (uploadPixels(device, entry.texture, entry.width, entry.height, image->pixels.data(),
-                     (uint32_t)image->pixels.size())) {
+                     (uint32_t)image->pixels.size(), nullptr)) {
       entry.generation = player->frame_generation();
     }
   }
@@ -146,7 +147,7 @@ static SDL_GPUTexture *ensureCanvasTexture(SDL_GPUDevice *device, uint64_t canva
   }
   if (entry.generation != canvas->generation()) {
     if (uploadPixels(device, entry.texture, entry.width, entry.height, image.pixels.data(),
-                     (uint32_t)image.pixels.size())) {
+                     (uint32_t)image.pixels.size(), nullptr)) {
       entry.generation = canvas->generation();
     }
   }
@@ -235,7 +236,8 @@ SDL_GPUGraphicsPipeline *createImagePipeline(SDL_GPUDevice *device, SDL_Window *
 
 /** Create an RGBA texture holding `image` and upload its pixels. Returns null
  * (after reporting the SDL error) when either step fails. */
-SDL_GPUTexture *createImageTexture(SDL_GPUDevice *device, const xtgui::Image &image) {
+SDL_GPUTexture *createImageTexture(SDL_GPUDevice *device, const xtgui::Image &image,
+                                   XtGuiUploadBatch *batch) {
   SDL_GPUTextureCreateInfo info;
   memset(&info, 0, sizeof(info));
   info.type = SDL_GPU_TEXTURETYPE_2D;
@@ -252,7 +254,7 @@ SDL_GPUTexture *createImageTexture(SDL_GPUDevice *device, const xtgui::Image &im
     return nullptr;
   }
   uint32_t bytes = (uint32_t)(image.pixels.size());
-  if (!uploadPixels(device, texture, image.width, image.height, image.pixels.data(), bytes)) {
+  if (!uploadPixels(device, texture, image.width, image.height, image.pixels.data(), bytes, batch)) {
     SDL_ReleaseGPUTexture(device, texture);
     return nullptr;
   }
@@ -263,7 +265,7 @@ SDL_GPUTexture *createImageTexture(SDL_GPUDevice *device, const xtgui::Image &im
  * rasterised at the drawn pixel size and cached by that size; bitmaps decode at
  * their intrinsic size and are cached by path. */
 SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src, int pixel_width,
-                                   int pixel_height) {
+                                   int pixel_height, XtGuiUploadBatch *batch) {
   bool vector_source = xtgui::xt_image_is_vector(src);
   std::string key =
       vector_source ? src + "@" + std::to_string(pixel_width) + "x" + std::to_string(pixel_height)
@@ -278,7 +280,7 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
     return nullptr;
   }
 
-  SDL_GPUTexture *texture = createImageTexture(device, *image);
+  SDL_GPUTexture *texture = createImageTexture(device, *image, batch);
   g_image_textures.emplace(key, texture);
   return texture;
 }
@@ -287,7 +289,8 @@ SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src
  * size and upload it. The markup is the cache key: a static document therefore
  * rasterises once per drawn size, and an edited one gets a fresh texture. */
 SDL_GPUTexture *ensureInlineSvgTexture(SDL_GPUDevice *device, const std::string &markup,
-                                       int pixel_width, int pixel_height) {
+                                       int pixel_width, int pixel_height,
+                                       XtGuiUploadBatch *batch) {
   std::string key = "inline-svg@" + std::to_string(pixel_width) + "x" +
                     std::to_string(pixel_height) + ":" + markup;
   auto found = g_image_textures.find(key);
@@ -300,7 +303,7 @@ SDL_GPUTexture *ensureInlineSvgTexture(SDL_GPUDevice *device, const std::string 
     return nullptr;
   }
 
-  SDL_GPUTexture *texture = createImageTexture(device, image);
+  SDL_GPUTexture *texture = createImageTexture(device, image, batch);
   g_image_textures.emplace(key, texture);
   return texture;
 }
@@ -309,7 +312,7 @@ SDL_GPUTexture *ensureInlineSvgTexture(SDL_GPUDevice *device, const std::string 
 }  // namespace xtgui
 
 void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
-                         const xtgui::DisplayList &list, float scale) {
+                         const xtgui::DisplayList &list, float scale, XtGuiUploadBatch *batch) {
   using namespace xtgui::renderer_detail;
   geometry->op_counts.assign(list.images.size(), 0);
   geometry->op_textures.assign(list.images.size(), nullptr);
@@ -318,7 +321,8 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     return;
   }
   if (scale <= 0.0f) scale = 1.0f;
-  std::vector<TextVertex> verts;
+  std::vector<TextVertex> &verts = g_image_staging;
+  verts.clear();
   verts.reserve(list.images.size() * 6);
   GlyphEntry full;
   full.u0 = 0.0f;
@@ -341,9 +345,9 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     } else if (image.media_id != 0) {
       texture = ensureMediaTexture(device, image.media_id);
     } else if (!image.svg.empty()) {
-      texture = ensureInlineSvgTexture(device, image.svg, pixel_width, pixel_height);
+      texture = ensureInlineSvgTexture(device, image.svg, pixel_width, pixel_height, batch);
     } else {
-      texture = ensureImageTexture(device, image.src, pixel_width, pixel_height);
+      texture = ensureImageTexture(device, image.src, pixel_width, pixel_height, batch);
     }
     if (texture == nullptr) continue;
     uint32_t count = pushGlyph(verts, image.x, image.y, image.width, image.height, full,
@@ -351,7 +355,7 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     geometry->op_counts[op.index] = count;
     geometry->op_textures[op.index] = texture;
   }
-  uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex));
+  uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex), batch);
 }
 
 void xt_gui_image_textures_destroy(SDL_GPUDevice *device) {
@@ -370,9 +374,11 @@ void xt_gui_image_textures_destroy(SDL_GPUDevice *device) {
   g_canvas_textures.clear();
 }
 
-void xt_gui_media_upload_frames(SDL_GPUDevice *device) {
+bool xt_gui_media_upload_frames(SDL_GPUDevice *device) {
   using namespace xtgui::renderer_detail;
+  uint64_t before = xtgui::g_perf_frame.uploadSubmits;
   for (auto &entry : g_media_textures) ensureMediaTexture(device, entry.first);
+  return xtgui::g_perf_frame.uploadSubmits != before;
 }
 
 void xt_gui_media_texture_release(SDL_GPUDevice *device, uint64_t media_id) {
@@ -383,9 +389,11 @@ void xt_gui_media_texture_release(SDL_GPUDevice *device, uint64_t media_id) {
   g_media_textures.erase(it);
 }
 
-void xt_gui_canvas_upload_frames(SDL_GPUDevice *device) {
+bool xt_gui_canvas_upload_frames(SDL_GPUDevice *device) {
   using namespace xtgui::renderer_detail;
+  uint64_t before = xtgui::g_perf_frame.uploadSubmits;
   for (auto &entry : g_canvas_textures) ensureCanvasTexture(device, entry.first);
+  return xtgui::g_perf_frame.uploadSubmits != before;
 }
 
 void xt_gui_canvas_texture_release(SDL_GPUDevice *device, uint64_t canvas_id) {

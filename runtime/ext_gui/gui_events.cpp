@@ -7,6 +7,7 @@
 #include "listener_options.h"
 
 #include "paint.h"
+#include "perf.h"
 
 #include <algorithm>
 #include <stdio.h>
@@ -69,6 +70,7 @@ void xt_gui_flush_dom(XtGuiWindow *win) {
   xt_gui_window_viewport(win, &width, &height);
   win->document->restyle(width, height);
   win->geometry.dirty = 1;
+  win->present_dirty = 1;
 }
 
 /* -- page scroll ---------------------------------------------------------- */
@@ -115,6 +117,7 @@ void xt_gui_scroll_to(XtGuiWindow *win, float x, float y) {
   win->scroll_x = x;
   win->scroll_y = y;
   win->geometry.dirty = 1;
+  win->present_dirty = 1;
   xt_gui_emit(win, "scroll");
 }
 
@@ -145,14 +148,21 @@ std::string xt_gui_hit_test(XtGuiWindow *win, float x, float y) {
   return node == nullptr ? std::string() : xtgui::xt_dom_describe(node);
 }
 
-/** Update the hovered element from the pointer position; marks paint dirty. */
-static void xt_gui_update_hover(XtGuiWindow *win, float x, float y) {
+/** Update the hovered element from an already resolved target node; marks paint
+ * dirty when the hover state (and therefore the styles) changed. */
+static void xt_gui_update_hover(XtGuiWindow *win, const xtgui::Node *node) {
   if (win->document == nullptr) return;
-  if (win->document->setHover(xt_gui_hit_node(win, x, y))) win->geometry.dirty = 1;
+  if (win->document->setHover(node)) {
+    win->geometry.dirty = 1;
+    win->present_dirty = 1;
+  }
 }
 
+/** Pointer payload. `node` is the hit-test result the caller already resolved,
+ * so one event does not walk the layout tree three times. */
 static xt_value xt_gui_pointer_payload(const char *type, XtGuiWindow *win, float x, float y,
-                                       int button, int clicks) {
+                                       int button, int clicks, const xtgui::Node *node) {
+  (void)win;
   xt_value payload = xt_object_new();
   xt_object_set(payload, xt_string_from_cstr("type"), xt_string_from_cstr(type));
   xt_object_set(payload, xt_string_from_cstr("x"), xt_number(x));
@@ -161,9 +171,12 @@ static xt_value xt_gui_pointer_payload(const char *type, XtGuiWindow *win, float
   xt_object_set(payload, xt_string_from_cstr("clientY"), xt_number(y));
   xt_object_set(payload, xt_string_from_cstr("button"), xt_number(button));
   xt_object_set(payload, xt_string_from_cstr("clicks"), xt_number(clicks));
-  std::string target = xt_gui_hit_test(win, x, y);
-  if (!target.empty()) {
-    xt_object_set(payload, xt_string_from_cstr("target"), xt_string_from_cstr(target.c_str()));
+  if (node != nullptr) {
+    std::string target = xtgui::xt_dom_describe(node);
+    if (!target.empty()) {
+      xt_object_set(payload, xt_string_from_cstr("target"),
+                    xt_string_from_cstr(target.c_str()));
+    }
   }
   return payload;
 }
@@ -171,22 +184,25 @@ static xt_value xt_gui_pointer_payload(const char *type, XtGuiWindow *win, float
 void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float y, int button,
                              int clicks) {
   if (win == NULL || !win->open) return;
-  xt_gui_update_hover(win, x, y);
   const xtgui::Node *node = xt_gui_hit_node(win, x, y);
+  xt_gui_update_hover(win, node);
   if (strcmp(type, "mousedown") == 0 && win->document != nullptr) {
-    if (win->document->setFocus(node)) win->geometry.dirty = 1;
+    if (win->document->setFocus(node)) {
+      win->geometry.dirty = 1;
+      win->present_dirty = 1;
+    }
   }
-  xt_value payload = xt_gui_pointer_payload(type, win, x, y, button, clicks);
+  xt_value payload = xt_gui_pointer_payload(type, win, x, y, button, clicks, node);
   if (node != nullptr) xt_gui_emit_dom_event(win, type, node, payload);
   xt_gui_emit_payload(win, type, payload);
 }
 
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y) {
   if (win == NULL || !win->open) return;
-  xt_value payload = xt_gui_pointer_payload("wheel", win, x, y, -1, 0);
+  const xtgui::Node *node = xt_gui_hit_node(win, x, y);
+  xt_value payload = xt_gui_pointer_payload("wheel", win, x, y, -1, 0, node);
   xt_object_set(payload, xt_string_from_cstr("deltaX"), xt_number(delta_x));
   xt_object_set(payload, xt_string_from_cstr("deltaY"), xt_number(delta_y));
-  const xtgui::Node *node = xt_gui_hit_node(win, x, y);
   if (node != nullptr) xt_gui_emit_dom_event(win, "wheel", node, payload);
   xt_gui_emit_payload(win, "wheel", payload);
   /* Default action: scroll the page (content that fits does not move). */
@@ -234,10 +250,20 @@ void handle_event(const SDL_Event *event) {
     win->height = event->window.data2;
     if (win->document != NULL) win->document->restyle((float)win->width, (float)win->height);
     win->geometry.dirty = 1;
+    win->present_dirty = 1;
     /* Web 'resize', so a document can re-measure on a window change in every
      * host (a browser already fires one). */
     xt_gui_emit(win, "resize");
     xt_gui_media_lists_notify(win);
+    return;
+  }
+  /* A window the compositor revealed (uncovered, restored, shown) must be
+   * redrawn even though nothing in the document changed: the frame loop only
+   * presents on demand. */
+  if (event->type == SDL_EVENT_WINDOW_EXPOSED || event->type == SDL_EVENT_WINDOW_SHOWN ||
+      event->type == SDL_EVENT_WINDOW_RESTORED) {
+    XtGuiWindow *win = xt_gui_find_by_window_id(event->window.windowID);
+    if (win != NULL) win->present_dirty = 1;
     return;
   }
 
@@ -309,6 +335,7 @@ void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms) {
 
 void xt_gui_render_window(XtGuiWindow *win) {
   if (win == NULL || !win->open || win->window == NULL || g_device == NULL) return;
+  xtgui::xt_perf_frame_begin();
   float viewport_width = 0;
   float viewport_height = 0;
   xt_gui_window_viewport(win, &viewport_width, &viewport_height);
@@ -318,77 +345,137 @@ void xt_gui_render_window(XtGuiWindow *win) {
   double delta = win->last_frame_ms > 0.0 ? now - win->last_frame_ms : 0.0;
   win->last_frame_ms = now;
   /* Animation-frame callbacks run before layout, so any DOM mutation they make
-   * is picked up by this same frame. */
+   * is picked up by this same frame. A page that asked for a frame expects it
+   * to be presented even when its callback changed nothing visible. */
+  if (!win->animation_frames.empty()) win->present_dirty = 1;
   xt_gui_run_animation_frames(win, now);
   /* A callback may have closed the window (directly or through the
    * auto-close guard): `xt_gui_quit_window` released the document and the GPU
    * geometry, so there is nothing left to lay out or paint. */
-  if (!win->open) return;
-  /* Reconcile decoders with the live DOM first, so this frame's layout sees the
-   * current sources and intrinsic sizes, then advance playback and fire the
-   * DOM media events. */
-  xt_gui_media_sync(win);
+  if (!win->open) {
+    xtgui::xt_perf_frame_end();
+    return;
+  }
+  /* Reconcile the decoder/canvas tables with the live DOM only when the
+   * document changed (or on the first frame): walking the whole tree every
+   * frame was a per-frame cost proportional to the element count even when a
+   * page had no `<video>` or `<canvas>` at all. */
+  bool dom_changed = win->struct_dirty != 0 || win->sync_dirty != 0 || !win->ready ||
+                     (win->document != nullptr && win->document->dirty());
+  if (dom_changed) {
+    xt_gui_media_sync(win);
+    xt_gui_canvas_sync(win);
+    win->sync_dirty = 0;
+  }
+  /* Playback advances every frame (it raises the media DOM events), but only a
+   * decoder that produced a frame asks to present. */
   xt_gui_media_tick(win, now);
-  /* Publish canvas bitmaps to the document (and create contexts for a canvas
-   * that has none) before this frame's layout. */
-  xt_gui_canvas_sync(win);
-  if (win->document != nullptr && win->document->advance(delta)) win->geometry.dirty = 1;
+  if (win->document != nullptr && win->document->advance(delta)) {
+    win->geometry.dirty = 1;
+    win->present_dirty = 1;
+    xtgui::g_perf_frame.transitionFrames += 1;
+  }
 
   /* A DOM mutation from a handler invalidates the tree: restyle/relayout
    * before (re)building the geometry. */
-  xt_gui_flush_dom(win);
+  {
+    xtgui::PerfScope scope(&xtgui::g_perf_frame_ms.restyle);
+    xt_gui_flush_dom(win);
+  }
 
   /* Rebuild the geometry only when the document or viewport changed. */
   bool can_paint = xt_gui_renderer_ensure(g_device, win->window);
   if (can_paint && win->geometry.dirty && win->document != nullptr) {
-    xtgui::DisplayList list;
-    xtgui::xt_paint_build(win->document->layout().root(), list, viewport_width, viewport_height);
-    xt_paint_translate(list, -win->scroll_x, -win->scroll_y);
-    xt_gui_geometry_upload(g_device, &win->geometry, list);
-    float density = SDL_GetWindowPixelDensity(win->window);
-    float text_scale = density > 0.0f ? density : 1.0f;
-    xt_gui_text_upload(g_device, &win->text_geometry, list, text_scale);
-    xt_gui_image_upload(g_device, &win->image_geometry, list, text_scale);
-    xt_gui_build_runs(&win->geometry, &win->text_geometry, &win->image_geometry, list);
+    {
+      xtgui::PerfScope scope(&xtgui::g_perf_frame_ms.paint);
+      /* Reuse the window's list: `clear()` keeps the payload vectors' capacity,
+       * so a repaint does not reallocate every array from zero. */
+      xtgui::DisplayList &list = win->display_list;
+      list.clear();
+      xtgui::xt_paint_build(win->document->layout().root(), list, viewport_width, viewport_height);
+      xt_paint_translate(list, -win->scroll_x, -win->scroll_y);
+      xtgui::g_perf_frame.paints += 1;
+      xtgui::g_perf_frame.paintOps += (uint64_t)list.ops.size();
+      {
+        xtgui::PerfScope upload_scope(&xtgui::g_perf_frame_ms.upload);
+        /* One command buffer for the frame's three vertex arrays (and the
+         * glyph atlas), instead of one submit per buffer. */
+        XtGuiUploadBatch uploads;
+        xt_gui_upload_begin(&uploads, g_device);
+        xt_gui_geometry_upload(g_device, &win->geometry, list, &uploads);
+        float density = SDL_GetWindowPixelDensity(win->window);
+        float text_scale = density > 0.0f ? density : 1.0f;
+        xt_gui_text_upload(g_device, &win->text_geometry, list, text_scale, &uploads);
+        xt_gui_image_upload(g_device, &win->image_geometry, list, text_scale, &uploads);
+        xt_gui_upload_end(&uploads);
+        xt_gui_build_runs(&win->geometry, &win->text_geometry, &win->image_geometry, list);
+      }
+      xtgui::g_perf_frame.drawRuns += (uint64_t)win->geometry.runs.size();
+    }
     win->geometry.dirty = 0;
   }
 
   /* Upload any new video frame before the render command buffer is recorded,
    * so the draw samples the frame that just arrived. */
-  xt_gui_media_upload_frames(g_device);
+  bool uploaded = xt_gui_media_upload_frames(g_device);
   /* Canvases are CPU-drawn: push any new bitmap without a relayout. */
-  xt_gui_canvas_upload_frames(g_device);
+  if (xt_gui_canvas_upload_frames(g_device)) uploaded = true;
   /* WebGL contexts record into their own command buffers; submit them first so
    * the page's render pass samples this frame's drawing-buffer contents. */
   xt_gui_webgl_submit_all();
-  SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(g_device);
-  if (cmd == NULL) return;
-  SDL_GPUTexture *swapchain = NULL;
-  SDL_AcquireGPUSwapchainTexture(cmd, win->window, &swapchain, NULL, NULL);
-  bool firstFrame = false;
-  if (swapchain != NULL) {
-    SDL_GPUColorTargetInfo target;
-    memset(&target, 0, sizeof(target));
-    target.texture = swapchain;
-    target.clear_color.r = win->background[0];
-    target.clear_color.g = win->background[1];
-    target.clear_color.b = win->background[2];
-    target.clear_color.a = win->background[3];
-    target.load_op = SDL_GPU_LOADOP_CLEAR;
-    target.store_op = SDL_GPU_STOREOP_STORE;
-    SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
-    if (can_paint) {
-      float density = SDL_GetWindowPixelDensity(win->window);
-      if (density <= 0.0f) density = 1.0f;
-      xt_gui_renderer_draw(cmd, pass, &win->geometry, &win->text_geometry, &win->image_geometry,
-                           viewport_width, viewport_height, density);
-    }
-    SDL_EndGPURenderPass(pass);
-    firstFrame = !win->ready;
-    win->ready = 1;
+  if (uploaded || !win->webgl_canvases.empty()) win->present_dirty = 1;
+
+  /* Present only when something happened. A static document otherwise burned a
+   * swapchain acquire and a full-scene draw every frame. `XT_GUI_ALWAYS_PRESENT`
+   * forces the old behaviour for debugging a missed invalidation. */
+  static int always_present = -1;
+  if (always_present < 0) {
+    const char *value = SDL_getenv("XT_GUI_ALWAYS_PRESENT");
+    always_present = (value != nullptr && value[0] != '\0' && strcmp(value, "0") != 0) ? 1 : 0;
   }
-  SDL_SubmitGPUCommandBuffer(cmd);
+  if (win->ready && win->present_dirty == 0 && always_present == 0) {
+    xtgui::g_perf_frame.skippedFrames += 1;
+    xtgui::xt_perf_frame_end();
+    return;
+  }
+  win->present_dirty = 0;
+
+  bool firstFrame = false;
+  {
+    /* Scoped: the timing must be recorded before `xt_perf_frame_end` copies
+     * the frame's phase timings. */
+    xtgui::PerfScope draw_scope(&xtgui::g_perf_frame_ms.draw);
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(g_device);
+    if (cmd != NULL) {
+      SDL_GPUTexture *swapchain = NULL;
+      SDL_AcquireGPUSwapchainTexture(cmd, win->window, &swapchain, NULL, NULL);
+      if (swapchain != NULL) {
+        xtgui::g_perf_frame.presents += 1;
+        SDL_GPUColorTargetInfo target;
+        memset(&target, 0, sizeof(target));
+        target.texture = swapchain;
+        target.clear_color.r = win->background[0];
+        target.clear_color.g = win->background[1];
+        target.clear_color.b = win->background[2];
+        target.clear_color.a = win->background[3];
+        target.load_op = SDL_GPU_LOADOP_CLEAR;
+        target.store_op = SDL_GPU_STOREOP_STORE;
+        SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &target, 1, NULL);
+        if (can_paint) {
+          float density = SDL_GetWindowPixelDensity(win->window);
+          if (density <= 0.0f) density = 1.0f;
+          xt_gui_renderer_draw(cmd, pass, &win->geometry, &win->text_geometry,
+                               &win->image_geometry, viewport_width, viewport_height, density);
+        }
+        SDL_EndGPURenderPass(pass);
+        firstFrame = !win->ready;
+        win->ready = 1;
+      }
+      SDL_SubmitGPUCommandBuffer(cmd);
+    }
+  }
   /* The first presented frame marks the window ready. Emitting after the
    * submit lets a `ready` handler safely close/destroy the window. */
   if (firstFrame) xt_gui_emit(win, "ready");
+  xtgui::xt_perf_frame_end();
 }

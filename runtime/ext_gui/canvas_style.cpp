@@ -144,6 +144,65 @@ void Canvas2D::set_global_alpha(float alpha) {
   state_.global_alpha = alpha;
 }
 
+void Canvas2D::set_global_composite_operation(const std::string &value) {
+  std::string lower = lower_ascii(value);
+  struct Entry {
+    const char *name;
+    int value;
+  };
+  static const Entry entries[] = {
+      {"source-over", kCanvasCompositeSourceOver},
+      {"source-in", kCanvasCompositeSourceIn},
+      {"source-out", kCanvasCompositeSourceOut},
+      {"source-atop", kCanvasCompositeSourceAtop},
+      {"destination-over", kCanvasCompositeDestinationOver},
+      {"destination-in", kCanvasCompositeDestinationIn},
+      {"destination-out", kCanvasCompositeDestinationOut},
+      {"destination-atop", kCanvasCompositeDestinationAtop},
+      {"lighter", kCanvasCompositeLighter},
+      {"copy", kCanvasCompositeCopy},
+      {"xor", kCanvasCompositeXor},
+      {"multiply", kCanvasCompositeMultiply},
+      {"screen", kCanvasCompositeScreen},
+      {"overlay", kCanvasCompositeOverlay},
+      {"darken", kCanvasCompositeDarken},
+      {"lighten", kCanvasCompositeLighten},
+      {"color-dodge", kCanvasCompositeColorDodge},
+      {"color-burn", kCanvasCompositeColorBurn},
+      {"hard-light", kCanvasCompositeHardLight},
+      {"soft-light", kCanvasCompositeSoftLight},
+      {"difference", kCanvasCompositeDifference},
+      {"exclusion", kCanvasCompositeExclusion},
+      {"hue", kCanvasCompositeHue},
+      {"saturation", kCanvasCompositeSaturation},
+      {"color", kCanvasCompositeColor},
+      {"luminosity", kCanvasCompositeLuminosity},
+  };
+  for (const Entry &entry : entries) {
+    if (lower == entry.name) {
+      state_.global_composite = entry.value;
+      state_.global_composite_string = entry.name;
+      return;
+    }
+  }
+}
+
+void Canvas2D::set_shadow_color(const std::string &css) {
+  parse_color_into(css, state_.shadow_color, &state_.shadow_color_string);
+}
+
+void Canvas2D::set_shadow_blur(float blur) {
+  if (!positive_finite(blur)) return;
+  state_.shadow_blur = blur;
+}
+
+void Canvas2D::set_image_smoothing_quality(const std::string &value) {
+  std::string lower = lower_ascii(value);
+  if (lower == "low" || lower == "medium" || lower == "high") {
+    state_.image_smoothing_quality = lower;
+  }
+}
+
 void Canvas2D::set_font(const std::string &font) {
   state_.font = parse_font_string(font);
   state_.font_string = font;

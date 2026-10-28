@@ -52,6 +52,18 @@ struct CanvasPoint {
   float y = 0.0f;
 };
 
+/** One clip region: per-pixel coverage (0 = fully clipped, 255 = kept). A clip
+ * is baked into device space when `clip()` runs, exactly like a browser. */
+struct CanvasClipMask {
+  std::vector<uint8_t> data;
+  int width = 0;
+  int height = 0;
+  uint8_t at(int x, int y) const {
+    if (x < 0 || y < 0 || x >= width || y >= height) return 0;
+    return data[(size_t)y * (size_t)width + (size_t)x];
+  }
+};
+
 /** One subpath of the current path (device space). */
 using CanvasSubpath = std::vector<CanvasPoint>;
 
@@ -94,6 +106,36 @@ class CanvasGradient {
 class CanvasGradient;
 class CanvasPattern;
 
+/** `globalCompositeOperation` values, in the order the DOM layer maps names. */
+enum CanvasComposite {
+  kCanvasCompositeSourceOver = 0,
+  kCanvasCompositeSourceIn,
+  kCanvasCompositeSourceOut,
+  kCanvasCompositeSourceAtop,
+  kCanvasCompositeDestinationOver,
+  kCanvasCompositeDestinationIn,
+  kCanvasCompositeDestinationOut,
+  kCanvasCompositeDestinationAtop,
+  kCanvasCompositeLighter,
+  kCanvasCompositeCopy,
+  kCanvasCompositeXor,
+  kCanvasCompositeMultiply,
+  kCanvasCompositeScreen,
+  kCanvasCompositeOverlay,
+  kCanvasCompositeDarken,
+  kCanvasCompositeLighten,
+  kCanvasCompositeColorDodge,
+  kCanvasCompositeColorBurn,
+  kCanvasCompositeHardLight,
+  kCanvasCompositeSoftLight,
+  kCanvasCompositeDifference,
+  kCanvasCompositeExclusion,
+  kCanvasCompositeHue,
+  kCanvasCompositeSaturation,
+  kCanvasCompositeColor,
+  kCanvasCompositeLuminosity,
+};
+
 /** What a fill or stroke paints with: a solid colour, a gradient sampled through
  * the inverse of the current transform, or a repeating image pattern. `color`
  * points into the canvas state and stays valid for one draw call. */
@@ -102,6 +144,8 @@ struct CanvasPaint {
   const CanvasGradient *gradient = nullptr;
   const CanvasPattern *pattern = nullptr;
   CanvasTransform inverse;
+  /** `globalCompositeOperation` as the `CanvasComposite` enum value. */
+  int composite = 0;
 };
 
 /**
@@ -187,6 +231,24 @@ class Canvas2D {
   float line_dash_offset() const { return state_.line_dash_offset; }
   void set_global_alpha(float alpha);
   float global_alpha() const { return state_.global_alpha; }
+  void set_global_composite_operation(const std::string &value);
+  const std::string &global_composite_operation() const {
+    return state_.global_composite_string;
+  }
+  void set_shadow_color(const std::string &css);
+  const std::string &shadow_color() const { return state_.shadow_color_string; }
+  void set_shadow_blur(float blur);
+  float shadow_blur() const { return state_.shadow_blur; }
+  void set_shadow_offset_x(float offset) { state_.shadow_offset_x = offset; }
+  float shadow_offset_x() const { return state_.shadow_offset_x; }
+  void set_shadow_offset_y(float offset) { state_.shadow_offset_y = offset; }
+  float shadow_offset_y() const { return state_.shadow_offset_y; }
+  void set_image_smoothing_enabled(bool enabled) { state_.image_smoothing = enabled; }
+  bool image_smoothing_enabled() const { return state_.image_smoothing; }
+  void set_image_smoothing_quality(const std::string &value);
+  const std::string &image_smoothing_quality() const {
+    return state_.image_smoothing_quality;
+  }
   void set_font(const std::string &font);
   const std::string &font() const { return state_.font_string; }
   void set_text_align(const std::string &value);
@@ -226,6 +288,15 @@ class Canvas2D {
    * space and are transformed with the current state, like the current path. */
   void fill_paths(const std::vector<CanvasSubpath> &paths, bool even_odd);
   void stroke_paths(const std::vector<CanvasSubpath> &paths);
+  /** Intersect the clip region with the current path (or a `Path2D`). */
+  void clip(bool even_odd = false);
+  void clip_paths(const std::vector<CanvasSubpath> &paths, bool even_odd);
+  /** Hit testing in the current user space. */
+  bool is_point_in_path(float x, float y, bool even_odd = false) const;
+  bool is_point_in_paths(const std::vector<CanvasSubpath> &paths, float x, float y,
+                         bool even_odd) const;
+  bool is_point_in_stroke(float x, float y) const;
+  bool is_point_in_stroke_paths(const std::vector<CanvasSubpath> &paths, float x, float y) const;
 
   /* -- rectangles -------------------------------------------------------- */
   void clear_rect(float x, float y, float width, float height);
@@ -286,6 +357,18 @@ class Canvas2D {
     uint64_t stroke_pattern = 0;
     std::string line_cap_string = "butt";
     std::string line_join_string = "miter";
+    int global_composite = kCanvasCompositeSourceOver;
+    std::string global_composite_string = "source-over";
+    float shadow_color[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    std::string shadow_color_string = "rgba(0, 0, 0, 0)";
+    float shadow_blur = 0.0f;
+    float shadow_offset_x = 0.0f;
+    float shadow_offset_y = 0.0f;
+    bool image_smoothing = true;
+    std::string image_smoothing_quality = "low";
+    /** Current clip region; `save`/`restore` share it (a later `clip` installs a
+     * new mask instead of mutating the saved one). */
+    std::shared_ptr<CanvasClipMask> clip;
   };
 
   /** Transform a user-space point into device space. */
@@ -314,8 +397,22 @@ class Canvas2D {
                      std::vector<CanvasSubpath> *out) const;
   void paint_text(const std::string &text, float x, float y, const CanvasPaint &paint,
                   bool stroke, float max_width);
+  /** True when the current state paints a shadow for a drawing operation. */
+  bool shadow_active() const;
+  /** Redirect the next draw into a scratch layer so its alpha can be turned
+   * into a shadow. Returns false while already inside the shadow layer (or when
+   * no shadow is active), in which case the caller draws directly. */
+  bool begin_shadow_layer();
+  void end_shadow_layer();
+  /** The current clip coverage, or null when the canvas is unclipped. */
+  const CanvasClipMask *clip_mask() const;
+  void composite_layer(const Image &layer);
+  void composite_shadow_layer(const Image &layer);
 
   Image image_;
+  /** Scratch bitmap a draw is rendered into while its shadow is built. */
+  Image shadow_layer_;
+  bool in_shadow_layer_ = false;
   bool alpha_ = true;
   uint64_t id_ = 0;
   uint64_t generation_ = 0;

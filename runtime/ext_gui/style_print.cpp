@@ -247,7 +247,13 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
     std::string out;
     for (const BackgroundLayer &layer : style.background_layers) {
       if (!out.empty()) out += ", ";
-      out += layer.kind == BackgroundKind::Linear ? "linear-gradient()" : "radial-gradient()";
+      if (layer.kind == BackgroundKind::Linear) {
+        out += "linear-gradient()";
+      } else if (layer.kind == BackgroundKind::Radial) {
+        out += "radial-gradient()";
+      } else {
+        out += "url(" + layer.image_src + ")";
+      }
     }
     return out;
   }

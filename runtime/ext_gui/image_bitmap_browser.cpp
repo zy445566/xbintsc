@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "image_bitmap.h"
+#include "canvas.h"
 #include "webgl.h"
 
 namespace {
@@ -45,6 +46,16 @@ bool source_pixels(xt_value source, xtgui::Image *out) {
     out->height = height;
     out->pixels.assign(bytes.begin(), bytes.begin() + (size_t)width * height * 4);
     return true;
+  }
+
+  if (XT_IS_OBJECT(source)) {
+    xt_value canvas_id = xt_object_get_cstr(source, "__xt_gui_canvas");
+    if (XT_IS_NUMBER(canvas_id)) {
+      xtgui::Canvas2D *canvas = xtgui::xt_canvas_by_id((uint64_t)xt_to_number(canvas_id));
+      if (canvas == nullptr || canvas->image().width <= 0) return false;
+      *out = canvas->image();
+      return true;
+    }
   }
 
   XtGuiWindow *win = nullptr;

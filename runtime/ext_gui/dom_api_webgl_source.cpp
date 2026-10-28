@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "dom_api_webgl_rt.h"
+#include "canvas.h"
 #include "image.h"
 #include "image_bitmap.h"
 #include "webgl.h"
@@ -96,6 +97,23 @@ bool webgl_read_source(xt_value source, int *width, int *height, std::vector<uin
                        rgba);
       } else {
         *rgba = bitmap->pixels;
+      }
+      return true;
+    }
+  }
+  if (XT_IS_OBJECT(source)) {
+    xt_value canvas_id = xt_object_get_cstr(source, "__xt_gui_canvas");
+    if (XT_IS_NUMBER(canvas_id)) {
+      xtgui::Canvas2D *canvas = xtgui::xt_canvas_by_id((uint64_t)xt_to_number(canvas_id));
+      if (canvas == nullptr || canvas->image().width <= 0) return false;
+      const xtgui::Image &image = canvas->image();
+      *width = image.width;
+      *height = image.height;
+      if (premultiply) {
+        webgl_convert_pixels(image.pixels.data(), image.width * image.height, GL_RGBA, true,
+                             rgba);
+      } else {
+        *rgba = image.pixels;
       }
       return true;
     }

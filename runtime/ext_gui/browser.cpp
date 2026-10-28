@@ -337,6 +337,7 @@ xt_value type_proto(const std::string &name) {
   if (name == "WebGLSync") return domapi::webgl_object_proto("sync");
   if (name == "WebGLTransformFeedback") return domapi::webgl_object_proto("transformfeedback");
   if (name == "Path2D") return domapi::path2d_proto();
+  if (name == "OffscreenCanvas") return domapi::offscreen_canvas_proto();
   if (name == "ImageBitmap") {
     /* A bitmap is a plain immutable object, not a DOM node: a node proto would
      * expose the element width/height accessors and answer 0. */
@@ -383,6 +384,7 @@ xt_value host_type_construct(xt_value self, xt_value env, int32_t argc, xt_value
     return domapi::event_construct(xt_arg(argc, argv, 0), xt_arg(argc, argv, 1));
   }
   if (name == "Path2D") return domapi::path2d_create(xt_arg(argc, argv, 0));
+  if (name == "OffscreenCanvas") return domapi::offscreen_canvas_create(argc, argv);
   xt_value target = xt_object_new_with_proto(type_proto(name));
   set_prop(target, "constructor", type_value(name));
   return target;
@@ -518,7 +520,7 @@ xt_value xt_browser_type(int32_t argc, xt_value *argv) {
   (void)argv;
   if (argc < 1) return XT_UNDEFINED;
   std::string name = cstr(xt_arg(argc, argv, 0));
-  if (name == "XRWebGLLayer" || name == "XRWebGLBinding" || name == "OffscreenCanvas" ||
+  if (name == "XRWebGLLayer" || name == "XRWebGLBinding" ||
       name == "ImageData" || name == "Response" ||
       name == "ReadableStream" || name == "Request" || name == "Headers" ||
       name == "DOMParser") {

@@ -111,6 +111,7 @@ xt_value node_proto() {
   define_method(proto, "pause", (void *)node_pause);
   define_method(proto, "load", (void *)node_load);
   define_method(proto, "getContext", (void *)node_get_context);
+  define_method(proto, "transferControlToOffscreen", (void *)canvas_transfer_control_to_offscreen);
   /* `toDataURL`/`toBlob` belong to the canvas *element*, as in the DOM. */
   define_method(proto, "toDataURL", (void *)canvas_to_data_url);
   define_method(proto, "toBlob", (void *)canvas_to_blob);
@@ -210,6 +211,20 @@ xt_value canvas_proto() {
   define_setter(proto, "lineWidth", (void *)canvas_line_width_set);
   define_getter(proto, "globalAlpha", (void *)canvas_global_alpha_get);
   define_setter(proto, "globalAlpha", (void *)canvas_global_alpha_set);
+  define_getter(proto, "globalCompositeOperation", (void *)canvas_global_composite_get);
+  define_setter(proto, "globalCompositeOperation", (void *)canvas_global_composite_set);
+  define_getter(proto, "shadowColor", (void *)canvas_shadow_color_get);
+  define_setter(proto, "shadowColor", (void *)canvas_shadow_color_set);
+  define_getter(proto, "shadowBlur", (void *)canvas_shadow_blur_get);
+  define_setter(proto, "shadowBlur", (void *)canvas_shadow_blur_set);
+  define_getter(proto, "shadowOffsetX", (void *)canvas_shadow_offset_x_get);
+  define_setter(proto, "shadowOffsetX", (void *)canvas_shadow_offset_x_set);
+  define_getter(proto, "shadowOffsetY", (void *)canvas_shadow_offset_y_get);
+  define_setter(proto, "shadowOffsetY", (void *)canvas_shadow_offset_y_set);
+  define_getter(proto, "imageSmoothingEnabled", (void *)canvas_image_smoothing_enabled_get);
+  define_setter(proto, "imageSmoothingEnabled", (void *)canvas_image_smoothing_enabled_set);
+  define_getter(proto, "imageSmoothingQuality", (void *)canvas_image_smoothing_quality_get);
+  define_setter(proto, "imageSmoothingQuality", (void *)canvas_image_smoothing_quality_set);
   define_getter(proto, "font", (void *)canvas_font_get);
   define_setter(proto, "font", (void *)canvas_font_set);
   define_getter(proto, "textAlign", (void *)canvas_text_align_get);
@@ -245,6 +260,9 @@ xt_value canvas_proto() {
   define_method(proto, "bezierCurveTo", (void *)canvas_bezier_curve_to);
   define_method(proto, "fill", (void *)canvas_fill);
   define_method(proto, "stroke", (void *)canvas_stroke);
+  define_method(proto, "clip", (void *)canvas_clip);
+  define_method(proto, "isPointInPath", (void *)canvas_is_point_in_path);
+  define_method(proto, "isPointInStroke", (void *)canvas_is_point_in_stroke);
   define_method(proto, "clearRect", (void *)canvas_clear_rect);
   define_method(proto, "fillRect", (void *)canvas_fill_rect);
   define_method(proto, "strokeRect", (void *)canvas_stroke_rect);

@@ -200,6 +200,21 @@ void paintRadial(const LayoutBox &box, const XtStyle &style, const BackgroundLay
   addEllipse(out, cx, cy, 0.6f, 0.6f, center, clip, box.world);
 }
 
+void paintImage(const LayoutBox &box, const BackgroundLayer &layer, const FilterChain &chain,
+                const PaintClip &clip, DisplayList &out) {
+  if (layer.image_src.empty() || box.width <= 0.0f || box.height <= 0.0f) return;
+  /* A `background-image: url(...)` layer fills the box. (CSS `background-size`
+   * is not modelled, so the intrinsic-size/tiling default becomes a stretch.) */
+  PaintImage image;
+  image.x = box.x;
+  image.y = box.y;
+  image.width = box.width;
+  image.height = box.height;
+  image.src = layer.image_src;
+  image.transform = box.world;
+  addImage(out, image, clip, chain);
+}
+
 }  // namespace
 
 void paintBackgrounds(DisplayList &out, const LayoutBox &box, const XtStyle &style,
@@ -219,8 +234,10 @@ void paintBackgrounds(DisplayList &out, const LayoutBox &box, const XtStyle &sty
     const BackgroundLayer &layer = style.background_layers[i];
     if (layer.kind == BackgroundKind::Linear) {
       paintLinear(box, layer, chain, layerClip, out);
-    } else {
+    } else if (layer.kind == BackgroundKind::Radial) {
       paintRadial(box, style, layer, chain, layerClip, viewportWidth, viewportHeight, out);
+    } else {
+      paintImage(box, layer, chain, layerClip, out);
     }
   }
 }

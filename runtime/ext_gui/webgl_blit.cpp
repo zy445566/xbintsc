@@ -19,10 +19,21 @@ namespace xtgui {
 
 bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4], int mask,
                                     int filter) {
-  if ((mask & GL_COLOR_BUFFER_BIT) == 0) return true;
+  const bool color_bit = (mask & GL_COLOR_BUFFER_BIT) != 0;
+  const bool depth_bit = (mask & GL_DEPTH_BUFFER_BIT) != 0;
+  if (!color_bit && !depth_bit) return true;
   end_pass();
   ensure_command();
   if (cmd_ == nullptr) return false;
+  if (depth_bit) {
+    /* SDL_GPU's blit API is colour-only; the depth copy is a sampling pass that
+     * writes `gl_FragDepth`. Stencil bits have no sampleable representation and
+     * are left untouched. */
+    blit_depth(read_framebuffer_, bound_framebuffer_, source, destination);
+    end_pass();
+    ensure_command();
+  }
+  if (!color_bit) return true;
   SDL_GPUTexture *source_texture = framebuffer_color(read_framebuffer_);
   SDL_GPUTexture *destination_texture = framebuffer_color(bound_framebuffer_);
   if (source_texture == nullptr || destination_texture == nullptr ||

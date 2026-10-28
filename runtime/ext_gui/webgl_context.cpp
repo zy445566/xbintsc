@@ -59,8 +59,12 @@ void WebGLContext::release_gpu_resources() {
     if (entry.second->sampler != nullptr) {
       SDL_ReleaseGPUSampler(guidev::g_device, entry.second->sampler);
     }
+    if (entry.second->compare_sampler != nullptr) {
+      SDL_ReleaseGPUSampler(guidev::g_device, entry.second->compare_sampler);
+    }
     entry.second->gpu = nullptr;
     entry.second->sampler = nullptr;
+    entry.second->compare_sampler = nullptr;
   }
   for (auto &entry : buffers_) {
     if (entry.second->gpu != nullptr) SDL_ReleaseGPUBuffer(guidev::g_device, entry.second->gpu);
@@ -94,6 +98,10 @@ void WebGLContext::release_gpu_resources() {
   if (fallback_sampler_ != nullptr) {
     SDL_ReleaseGPUSampler(guidev::g_device, fallback_sampler_);
     fallback_sampler_ = nullptr;
+  }
+  if (blit_sampler_ != nullptr) {
+    SDL_ReleaseGPUSampler(guidev::g_device, blit_sampler_);
+    blit_sampler_ = nullptr;
   }
   if (color_ != nullptr) {
     SDL_ReleaseGPUTexture(guidev::g_device, color_);
@@ -198,7 +206,8 @@ void WebGLContext::ensure_default_target() {
   info.sample_count = SDL_GPU_SAMPLECOUNT_1;
   if (color_ == nullptr) color_ = SDL_CreateGPUTexture(guidev::g_device, &info);
   info.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
-  info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+  /* SAMPLER too: `blitFramebuffer` may copy the default depth attachment. */
+  info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
   if (depth_ == nullptr) depth_ = SDL_CreateGPUTexture(guidev::g_device, &info);
 }
 
@@ -290,11 +299,15 @@ void WebGLContext::framebuffer_size(uint32_t id, int *width, int *height) {
 }
 
 SDL_GPUTexture *WebGLContext::target_depth() {
-  if (bound_framebuffer_ == 0) {
+  return framebuffer_depth(bound_framebuffer_);
+}
+
+SDL_GPUTexture *WebGLContext::framebuffer_depth(uint32_t id) {
+  if (id == 0) {
     ensure_default_target();
     return depth_;
   }
-  WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
+  WebGLFramebuffer *framebuffer = this->framebuffer(id);
   if (framebuffer == nullptr) return nullptr;
   if (framebuffer->depth_texture != 0) {
     WebGLTexture *texture = this->texture(framebuffer->depth_texture);

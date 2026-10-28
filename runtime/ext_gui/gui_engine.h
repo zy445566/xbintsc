@@ -206,6 +206,9 @@ struct XtGuiWindow {
    * initialises). Keyed by canvas id; moved into `canvases` when the pending
    * handle binds to the parsed element. */
   std::unordered_map<uint64_t, std::unique_ptr<xtgui::Canvas2D>> pending_canvases;
+  /** `new OffscreenCanvas(w, h)` bitmaps, keyed by their canvas id. They are
+   * not part of the DOM; they exist until the window closes. */
+  std::unordered_map<uint64_t, std::unique_ptr<xtgui::Canvas2D>> offscreen_canvases;
   /** The batch currently running: its callbacks have been swapped out of
    * `animation_frames`, and a collection triggered by one of them must still
    * see the rest. Kept on the record (not a local) so the GC root provider can

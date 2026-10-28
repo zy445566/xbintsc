@@ -60,7 +60,7 @@ struct BackgroundGradientStop {
   Color color;
 };
 
-enum class BackgroundKind { Linear, Radial };
+enum class BackgroundKind { Linear, Radial, Image };
 
 /** How a radial layer's radii are chosen when it has no explicit lengths. */
 enum class RadialSize { ClosestSide, FarthestSide, ClosestCorner, FarthestCorner, Explicit };
@@ -80,6 +80,8 @@ struct BackgroundLayer {
   Length center_y{50.0f, Unit::Percent};
   Length radius_x{0.0f, Unit::Auto};  // Explicit radii only
   Length radius_y{0.0f, Unit::Auto};
+  /** `BackgroundKind::Image`: the `url(...)` source (a path or data URL). */
+  std::string image_src;
   std::vector<BackgroundGradientStop> stops;
 };
 

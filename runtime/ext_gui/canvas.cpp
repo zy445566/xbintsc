@@ -85,6 +85,10 @@ void Canvas2D::resize(int width, int height) {
   image_.width = width;
   image_.height = height;
   image_.pixels.assign((size_t)width * (size_t)height * 4, 0);
+  /* The DOM resets the rendering context when the bitmap is resized; the clip
+   * region in particular has device-space dimensions and cannot survive. */
+  state_.clip.reset();
+  shadow_layer_.pixels.clear();
   if (!alpha_) {
     /* `{ alpha: false }`: the canvas has an opaque black backdrop, so cleared
      * pixels are black rather than transparent. */
@@ -320,6 +324,7 @@ CanvasPaint Canvas2D::make_paint(uint64_t gradient_id, uint64_t pattern_id,
   paint.gradient = gradient_id == 0 ? nullptr : find_gradient(gradient_id);
   paint.pattern = pattern_id == 0 ? nullptr : find_pattern(pattern_id);
   paint.inverse = state_.transform.inverted();
+  paint.composite = state_.global_composite;
   return paint;
 }
 
@@ -332,6 +337,11 @@ CanvasPaint Canvas2D::stroke_paint() const {
 }
 
 void Canvas2D::fill(bool even_odd) {
+  if (begin_shadow_layer()) {
+    fill(even_odd);
+    end_shadow_layer();
+    return;
+  }
   std::vector<CanvasSubpath> subpaths = device_subpaths();
   std::vector<CanvasSubpath> loops;
   for (CanvasSubpath &subpath : subpaths) {
@@ -340,11 +350,16 @@ void Canvas2D::fill(bool even_odd) {
   }
   if (loops.empty()) return;
   canvas_detail::fill_loops(image_.pixels, image_.width, image_.height, loops, fill_paint(),
-                            state_.global_alpha, even_odd);
+                            state_.global_alpha, even_odd, clip_mask());
   generation_++;
 }
 
 void Canvas2D::fill_paths(const std::vector<CanvasSubpath> &paths, bool even_odd) {
+  if (begin_shadow_layer()) {
+    fill_paths(paths, even_odd);
+    end_shadow_layer();
+    return;
+  }
   std::vector<CanvasSubpath> subpaths = device_subpaths_of(paths);
   std::vector<CanvasSubpath> loops;
   for (CanvasSubpath &subpath : subpaths) {
@@ -353,11 +368,16 @@ void Canvas2D::fill_paths(const std::vector<CanvasSubpath> &paths, bool even_odd
   }
   if (loops.empty()) return;
   canvas_detail::fill_loops(image_.pixels, image_.width, image_.height, loops, fill_paint(),
-                            state_.global_alpha, even_odd);
+                            state_.global_alpha, even_odd, clip_mask());
   generation_++;
 }
 
 void Canvas2D::stroke() {
+  if (begin_shadow_layer()) {
+    stroke();
+    end_shadow_layer();
+    return;
+  }
   std::vector<CanvasSubpath> subpaths = device_subpaths();
   const CanvasPaint paint = stroke_paint();
   for (const CanvasSubpath &subpath : subpaths) {
@@ -370,6 +390,11 @@ void Canvas2D::stroke() {
 }
 
 void Canvas2D::stroke_paths(const std::vector<CanvasSubpath> &paths) {
+  if (begin_shadow_layer()) {
+    stroke_paths(paths);
+    end_shadow_layer();
+    return;
+  }
   std::vector<CanvasSubpath> subpaths = device_subpaths_of(paths);
   const CanvasPaint paint = stroke_paint();
   for (const CanvasSubpath &subpath : subpaths) {
@@ -385,17 +410,23 @@ void Canvas2D::clear_rect(float x, float y, float width, float height) {
   float x0, y0, x1, y1;
   to_device(x, y, &x0, &y0);
   to_device(x + width, y + height, &x1, &y1);
-  canvas_detail::clear_rect(image_.pixels, image_.width, image_.height, x0, y0, x1, y1);
+  canvas_detail::clear_rect(image_.pixels, image_.width, image_.height, x0, y0, x1, y1,
+                            clip_mask());
   generation_++;
 }
 
 void Canvas2D::fill_rect(float x, float y, float width, float height) {
+  if (begin_shadow_layer()) {
+    fill_rect(x, y, width, height);
+    end_shadow_layer();
+    return;
+  }
   if (state_.transform.axis_aligned()) {
     float x0, y0, x1, y1;
     to_device(x, y, &x0, &y0);
     to_device(x + width, y + height, &x1, &y1);
     canvas_detail::fill_rect(image_.pixels, image_.width, image_.height, x0, y0, x1, y1,
-                             fill_paint(), state_.global_alpha);
+                             fill_paint(), state_.global_alpha, clip_mask());
   } else {
     CanvasSubpath loop;
     const float corners[4][2] = {
@@ -406,12 +437,17 @@ void Canvas2D::fill_rect(float x, float y, float width, float height) {
       loop.push_back(point);
     }
     canvas_detail::fill_loop(image_.pixels, image_.width, image_.height, loop, fill_paint(),
-                             state_.global_alpha);
+                             state_.global_alpha, false, clip_mask());
   }
   generation_++;
 }
 
 void Canvas2D::stroke_rect(float x, float y, float width, float height) {
+  if (begin_shadow_layer()) {
+    stroke_rect(x, y, width, height);
+    end_shadow_layer();
+    return;
+  }
   CanvasSubpath loop;
   const float corners[5][2] = {
       {x, y}, {x + width, y}, {x + width, y + height}, {x, y + height}, {x, y}};
@@ -490,7 +526,7 @@ void Canvas2D::paint_text(const std::string &text, float x, float y, const Canva
     if (xt_text_rasterize(face, glyph.glyph, image) && image.width > 0 && image.height > 0) {
       canvas_detail::blit_glyph(image_.pixels, image_.width, image_.height, image.pixels, image.width,
                                 image.height, image.left, image.top, deviceX, deviceY, horizontal,
-                                paint, state_.global_alpha);
+                                paint, state_.global_alpha, clip_mask());
     }
     penX += glyph.x_advance;
   }
@@ -499,25 +535,41 @@ void Canvas2D::paint_text(const std::string &text, float x, float y, const Canva
 }
 
 void Canvas2D::fill_text(const std::string &text, float x, float y, float max_width) {
+  if (begin_shadow_layer()) {
+    fill_text(text, x, y, max_width);
+    end_shadow_layer();
+    return;
+  }
   paint_text(text, x, y, fill_paint(), false, max_width);
 }
 
 void Canvas2D::stroke_text(const std::string &text, float x, float y, float max_width) {
+  if (begin_shadow_layer()) {
+    stroke_text(text, x, y, max_width);
+    end_shadow_layer();
+    return;
+  }
   paint_text(text, x, y, stroke_paint(), true, max_width);
 }
 
 void Canvas2D::draw_image(const Image &source, float dx, float dy, float dw, float dh, float sx,
                           float sy, float sw, float sh) {
+  if (begin_shadow_layer()) {
+    draw_image(source, dx, dy, dw, dh, sx, sy, sw, sh);
+    end_shadow_layer();
+    return;
+  }
   if (state_.transform.axis_aligned()) {
     float x0, y0, x1, y1;
     to_device(dx, dy, &x0, &y0);
     to_device(dx + dw, dy + dh, &x1, &y1);
     canvas_detail::draw_image(image_.pixels, image_.width, image_.height, source, x0, y0, x1 - x0,
-                              y1 - y0, sx, sy, sw, sh, state_.global_alpha);
+                              y1 - y0, sx, sy, sw, sh, state_.global_alpha,
+                              state_.image_smoothing, clip_mask());
   } else {
     canvas_detail::draw_image_affine(image_.pixels, image_.width, image_.height, source, dx, dy,
                                      dw, dh, sx, sy, sw, sh, state_.transform,
-                                     state_.global_alpha);
+                                     state_.global_alpha, state_.image_smoothing, clip_mask());
   }
   generation_++;
 }

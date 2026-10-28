@@ -56,7 +56,7 @@ void Canvas2D::stroke_polyline(const CanvasSubpath &points, bool closed, float h
 
   auto fill_loop = [&](const CanvasSubpath &loop) {
     canvas_detail::fill_loop(image_.pixels, image_.width, image_.height, loop, paint,
-                             state_.global_alpha);
+                             state_.global_alpha, false, clip_mask());
   };
   auto fill_disc = [&](const CanvasPoint &p) {
     CanvasSubpath disc;

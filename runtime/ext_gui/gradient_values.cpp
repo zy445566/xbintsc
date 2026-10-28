@@ -392,7 +392,7 @@ bool parseRadialGradient(const std::string &body, BackgroundLayer *layer) {
   return true;
 }
 
-/** Parse one layer, appending it when it is a supported gradient. */
+/** Parse one layer, appending it when it is a supported gradient or image. */
 bool parseLayer(const std::string &part, BackgroundLayer *layer) {
   std::string body;
   if (findCall(part, "linear-gradient", &body) ||
@@ -402,6 +402,17 @@ bool parseLayer(const std::string &part, BackgroundLayer *layer) {
   if (findCall(part, "radial-gradient", &body) ||
       findCall(part, "repeating-radial-gradient", &body)) {
     return parseRadialGradient(body, layer);
+  }
+  if (findCall(part, "url", &body)) {
+    std::string source = xt_css_trim(body);
+    if (source.size() >= 2 && (source.front() == '"' || source.front() == '\'') &&
+        source.back() == source.front()) {
+      source = source.substr(1, source.size() - 2);
+    }
+    if (source.empty()) return false;
+    layer->kind = BackgroundKind::Image;
+    layer->image_src = source;
+    return true;
   }
   return false;
 }

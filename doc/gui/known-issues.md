@@ -11,16 +11,17 @@
   glslang — consumed directly by the Vulkan backend, or cross-compiled to MSL by
   the bundled SPIRV-Cross for Metal — and the drawing buffer is an offscreen
   colour texture that the page composites without a readback. WebGL 2 adds VAOs,
-  instancing, integer attributes, sampler objects, `texStorage2D` and buffer
-  copies. Uniform blocks, transform feedback, cube maps, 3D textures,
-  float/depth textures, compressed textures, multiple render targets,
-  `blitFramebuffer`, MSAA and stencil operations are not implemented; `clear`
-  ignores the scissor rectangle. On an SDL_GPU backend that accepts neither
-  SPIR-V nor MSL (Direct3D 12, which would need DXIL) both context kinds are
-  `null`. The `.js` asset loader now patches only three.js's shader unroller;
-  `WebGLRenderer` runs on the real backend and there is no Canvas2D fallback.
-  Shadow maps (depth textures), cube textures/environment maps and HDR render
-  targets remain unsupported.
+  instancing, integer attributes, sampler objects, `texStorage2D`, buffer copies,
+  uniform blocks, cube/3D/array textures, float/depth/compressed textures,
+  multiple render targets and scissored clears. `blitFramebuffer` copies colour
+  and depth; transform feedback, MSAA and stencil blits are not implemented
+  (SDL_GPU has no transform-feedback stage, its Metal multisample resolve is
+  unreliable, and a stencil attachment is not sampleable). On an SDL_GPU backend
+  that accepts neither SPIR-V nor MSL (Direct3D 12, which would need DXIL) both
+  context kinds are `null`. The `.js` asset loader now patches only three.js's
+  shader unroller; `WebGLRenderer` runs on the real backend and there is no
+  Canvas2D fallback. Shadow maps (comparative `sampler2DShadow` targeting depth
+  textures), cube textures/environment maps and HDR render targets are supported.
 
 
 

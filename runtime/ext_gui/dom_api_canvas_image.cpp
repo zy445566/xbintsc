@@ -54,6 +54,15 @@ xt_value make_image_data(int width, int height, const std::vector<unsigned char>
 
 /** Decode a `createPattern` source: an `<img>` or another `<canvas>`. */
 bool source_image(XtGuiWindow *win, xt_value value, xtgui::Image *out) {
+  if (XT_IS_OBJECT(value)) {
+    xt_value canvas_id = xt_object_get_cstr(value, "__xt_gui_canvas");
+    if (XT_IS_NUMBER(canvas_id)) {
+      xtgui::Canvas2D *offscreen = xtgui::xt_canvas_by_id((uint64_t)xt_to_number(canvas_id));
+      if (offscreen == nullptr) return false;
+      *out = offscreen->image();
+      return out->width > 0 && out->height > 0;
+    }
+  }
   xtgui::Node *node = resolve_node(value, &win);
   if (node == nullptr || !node->isElement()) return false;
   if (node->isTag("img")) {

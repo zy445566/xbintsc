@@ -11,13 +11,15 @@
   [WebGL](./webgl.md)）：GLSL ES 着色器由内置 glslang 翻译为 SPIR-V——Vulkan
   后端直接消费，Metal 上再由内置 SPIRV-Cross 交叉编译为 MSL——绘图缓冲
   是一张离屏颜色纹理，页面直接合成而无须读回。WebGL 2 增加了 VAO、实例化、
-  整数属性、采样器对象、`texStorage2D` 与缓冲拷贝。Uniform 块、transform
-  feedback、立方体贴图、3D 纹理、浮点/深度纹理、压缩纹理、多渲染目标、
-  `blitFramebuffer`、MSAA 与模板操作尚未实现；`clear` 会忽略 scissor 矩形。
+  整数属性、采样器对象、`texStorage2D`、缓冲拷贝、Uniform 块、立方体/3D/数组
+  纹理、浮点/深度/压缩纹理、多渲染目标与 scissor 清除。`blitFramebuffer` 复制
+  颜色与深度；transform feedback、MSAA 与模板 blit 尚未实现（SDL_GPU 没有
+  transform feedback 阶段，其 Metal 多采样 resolve 不可靠，模板附件也无法采样）。
   在两种格式都不接受的 SDL_GPU 后端（Direct3D 12，需要 DXIL）上两种上下文都为
   `null`。`.js` 资源加载器现在只修补 three.js 的着色器循环展开；
   `WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。阴影贴图
-  （深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标仍未支持。
+  （比较型 `sampler2DShadow` 采样深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标
+  均已支持。
 
 
 - **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生

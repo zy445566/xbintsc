@@ -55,11 +55,48 @@ bool CanvasGradient::color_at(float x, float y, float out[4]) const {
       t = ((x - x0_) * dx + (y - y0_) * dy) / lengthSquared;
     }
   } else {
-    const float dx = x - x1_;
-    const float dy = y - y1_;
-    const float distance = std::sqrt(dx * dx + dy * dy);
+    /* Two-circle radial gradient (CSS/Canvas): find the smallest t >= 0 for
+     * which the point lies on the circle
+     *     centre = c0 + t * (c1 - c0),  radius = r0 + t * (r1 - r0).
+     * This reduces to a quadratic, and it makes a non-concentric inner circle
+     * produce the cone a browser draws. */
+    const float dx = x1_ - x0_;
+    const float dy = y1_ - y0_;
+    const float qx = x - x0_;
+    const float qy = y - y0_;
     const float radiusDelta = r1_ - r0_;
-    if (std::fabs(radiusDelta) > 1e-6f) t = (distance - r0_) / radiusDelta;
+    const float innerDistance = std::sqrt(qx * qx + qy * qy);
+    const float a = dx * dx + dy * dy - radiusDelta * radiusDelta;
+    const float b = -2.0f * (qx * dx + qy * dy + r0_ * radiusDelta);
+    const float c = qx * qx + qy * qy - r0_ * r0_;
+    if (innerDistance <= std::fabs(r0_) + 1e-4f) {
+      /* Inside the inner circle every ray starts at t = 0. */
+      t = 0.0f;
+    } else if (std::fabs(a) < 1e-6f) {
+      if (std::fabs(b) > 1e-6f) {
+        t = -c / b;
+      } else {
+        t = innerDistance < std::fabs(r0_) ? 0.0f : 1.0f;
+      }
+    } else {
+      const float discriminant = b * b - 4.0f * a * c;
+      if (discriminant < 0.0f) {
+        t = innerDistance < std::fabs(r0_) ? 0.0f : 1.0f;
+      } else {
+        const float root = std::sqrt(discriminant);
+        const float t0 = (-b - root) / (2.0f * a);
+        const float t1 = (-b + root) / (2.0f * a);
+        const float low = std::min(t0, t1);
+        const float high = std::max(t0, t1);
+        if (low >= 0.0f) {
+          t = low;
+        } else if (high >= 0.0f) {
+          t = high;
+        } else {
+          t = innerDistance < std::fabs(r0_) ? 0.0f : 1.0f;
+        }
+      }
+    }
   }
   t = clamp_unit(t);
   if (t <= stops_.front().offset) {

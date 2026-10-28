@@ -32,6 +32,7 @@
 
 #include "webgl_constants.h"
 #include "webgl2_constants.h"
+#include "webgl_draw_state.h"
 #include "webgl_glsl.h"
 #include "webgl_uniform_block.h"
 
@@ -56,6 +57,10 @@ struct WebGLUniform {
   std::string name;
   GlslBlockMember layout;
   bool sampler = false;
+  /** `sampler2DShadow`/`samplerCubeShadow`/`sampler2DArrayShadow`: SDL_GPU
+   * binds a comparison sampler, and the GLSL `texture()` call performs the
+   * hardware depth compare. */
+  bool compare = false;
   int unit = -1;
 };
 
@@ -119,6 +124,10 @@ struct WebGLTexture {
   int wrap_s = 0;
   int wrap_t = 0;
   SDL_GPUSampler *sampler = nullptr;
+  /** Comparison sampler for a `sampler2DShadow` binding. */
+  SDL_GPUSampler *compare_sampler = nullptr;
+  bool compare_mode = false;
+  int compare_func = GL_LEQUAL;
   bool dirty = false;
   bool defined = false;
 };
@@ -173,6 +182,10 @@ struct WebGLSampler {
   int mag_filter = 0;
   int wrap_s = 0;
   int wrap_t = 0;
+  /** `TEXTURE_COMPARE_MODE`/`TEXTURE_COMPARE_FUNC` (WebGL 2 sampler objects
+   * carry them too). */
+  bool compare_mode = false;
+  int compare_func = GL_LEQUAL;
   SDL_GPUSampler *gpu = nullptr;
 };
 
@@ -182,44 +195,6 @@ struct WebGLQuery {
 
 struct WebGLSync {
   uint32_t id = 0;
-};
-
-/** One face's stencil test and update state. */
-struct WebGLStencilFace {
-  int func = GL_ALWAYS;
-  int ref = 0;
-  uint32_t value_mask = 0xFFFFFFFFu;  // compare mask
-  uint32_t write_mask = 0xFFFFFFFFu;
-  int fail = GL_KEEP;
-  int zfail = GL_KEEP;
-  int zpass = GL_KEEP;
-};
-
-/** The fixed-function state a pipeline depends on. */
-struct WebGLDrawState {
-  bool blend = false;
-  int blend_src_rgb = GL_ONE;
-  int blend_dst_rgb = GL_ZERO;
-  int blend_src_alpha = GL_ONE;
-  int blend_dst_alpha = GL_ZERO;
-  int blend_eq_rgb = GL_FUNC_ADD;
-  int blend_eq_alpha = GL_FUNC_ADD;
-  bool depth_test = false;
-  bool depth_write = true;
-  int depth_func = GL_LESS;
-  bool stencil = false;
-  WebGLStencilFace stencil_front;
-  WebGLStencilFace stencil_back;
-  bool cull = false;
-  int cull_face = GL_BACK;
-  int front_face = GL_CCW;
-  bool color_mask[4] = {true, true, true, true};
-  /** Attachment formats of the bound target; pipelines are format-specific. */
-  int color_formats[kWebGLMaxDrawBuffers] = {
-      SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-      SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM};
-  int color_target_count = 1;
-  int depth_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
 };
 
 class WebGLContext {
@@ -416,6 +391,10 @@ class WebGLContext {
   void bind_framebuffer(int target, uint32_t id);
   uint32_t bound_read_framebuffer_id() const { return read_framebuffer_; }
   bool blit_framebuffer(const int source[4], const int destination[4], int mask, int filter);
+  /** Copy the depth attachment with a sampling pass (SDL_GPU's blit only copies
+   * colour); stencil bits are not copied. */
+  bool blit_depth(uint32_t source_framebuffer, uint32_t destination_framebuffer,
+                  const int source[4], const int destination[4]);
   bool framebuffer_texture(uint32_t framebuffer, uint32_t texture,
                            int attachment = GL_COLOR_ATTACHMENT0);
   bool framebuffer_texture_layer(uint32_t framebuffer, uint32_t texture, int attachment,
@@ -476,6 +455,7 @@ class WebGLContext {
   /** The 1×1 texture a scissored colour clear blits from. */
   SDL_GPUTexture *clear_color_texture();
   SDL_GPUTexture *framebuffer_color(uint32_t id);
+  SDL_GPUTexture *framebuffer_depth(uint32_t id);
   void framebuffer_size(uint32_t id, int *width, int *height);
   /** Release every GPU handle this context owns, keeping the CPU-side object
    * table. Used by the destructor and by `lose_context`. */
@@ -490,6 +470,7 @@ class WebGLContext {
   int draw_color_layer(int slot);
   SDL_GPUTexture *ensure_texture_gpu(WebGLTexture *texture, bool as_target);
   SDL_GPUSampler *sampler_for(WebGLTexture *texture);
+  SDL_GPUSampler *sampler_for_compare(WebGLTexture *texture);
   SDL_GPUBuffer *ensure_buffer_gpu(WebGLBuffer *buffer);
   void ensure_default_target();
   void rebuild_default_target();
@@ -528,6 +509,10 @@ class WebGLContext {
   /** Internal program/buffer for a scissored depth/stencil clear. */
   uint32_t clear_program_ = 0;
   uint32_t clear_buffer_ = 0;
+  /** Internal program/buffer/sampler for a depth blit. */
+  uint32_t blit_program_ = 0;
+  uint32_t blit_buffer_ = 0;
+  SDL_GPUSampler *blit_sampler_ = nullptr;
 
   float clear_color_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float clear_depth_ = 1.0f;

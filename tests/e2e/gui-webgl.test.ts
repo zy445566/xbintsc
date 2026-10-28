@@ -186,7 +186,7 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL", () => {
     expect(stderr).not.toContain("shader build");
   });
 
-  it("supports blend constants, dynamic buffers, vertex textures, gl_FragDepth diagnostics and context loss", () => {
+  it("supports blend constants, dynamic buffers, vertex textures, gl_FragDepth and context loss", () => {
     const { value, stderr } = harness.compileAndRun(
       "webgl-extra",
       `
@@ -300,7 +300,7 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL", () => {
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         label("vertex-texture", probe());
 
-        // --- shader-written depth is diagnosed -----------------------------
+        // --- shader-written depth is translated ----------------------------
         const depth_fs: any = gl.createShader(gl.FRAGMENT_SHADER);
         gl.shaderSource(depth_fs, "precision mediump float;" +
           "void main() { gl_FragDepth = 0.5; gl_FragColor = vec4(1.0); }");
@@ -341,8 +341,8 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL", () => {
     expect(value("vtex-vs")).toBe("true");
     expect(value("vtex-link")).toBe("true");
     expect(value("vertex-texture")).toBe("0,255,0,255");
-    expect(value("fragdepth")).toBe("false");
-    expect(value("fragdepth-log")).toContain("gl_FragDepth");
+    expect(value("fragdepth")).toBe("true");
+    expect(value("fragdepth-log")).not.toContain("gl_FragDepth is not supported");
     expect(value("lose-ext")).toBe("true");
     expect(value("lost")).toBe("true");
     expect(value("lost-error")).toBe("37442"); // GL_CONTEXT_LOST_WEBGL

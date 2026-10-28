@@ -80,6 +80,9 @@ std::string canvas_string_arg(int32_t argc, xt_value *argv, int32_t index) {
 METHOD(node_get_context) {
   (void)env;
   std::string mode = string_arg(argc, argv, 0);
+  /* After `transferControlToOffscreen` the element has no usable context; the
+   * OffscreenCanvas owns it. */
+  if (value_truthy(xt_object_get_cstr(self, "__xt_gui_offscreen"))) return XT_NULL;
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
   if (mode == "webgl" || mode == "experimental-webgl" || mode == "webgl2") {
@@ -466,8 +469,20 @@ METHOD(canvas_draw_image) {
   xtgui::Canvas2D *canvas = context_canvas(self);
   if (canvas == nullptr || argc < 3) return XT_UNDEFINED;
   XtGuiWindow *win = nullptr;
-  xtgui::Node *source = resolve_node(xt_arg(argc, argv, 0), &win);
+  xt_value source_value = xt_arg(argc, argv, 0);
   const xtgui::Image *image = nullptr;
+  /* An `OffscreenCanvas` (or a transferred one) has no DOM node; its bitmap is
+   * reachable through the process-wide canvas id. */
+  if (XT_IS_OBJECT(source_value)) {
+    xt_value canvas_id = xt_object_get_cstr(source_value, "__xt_gui_canvas");
+    if (XT_IS_NUMBER(canvas_id)) {
+      xtgui::Canvas2D *offscreen = xtgui::xt_canvas_by_id((uint64_t)xt_to_number(canvas_id));
+      if (offscreen != nullptr) {
+        image = &offscreen->image();
+      }
+    }
+  }
+  xtgui::Node *source = resolve_node(source_value, &win);
   if (source != nullptr && source->isElement() && source->isTag("img")) {
     const std::string *src = source->attr("src");
     if (src != nullptr) image = xtgui::xt_image_load(*src);

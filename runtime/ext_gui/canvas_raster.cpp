@@ -57,29 +57,18 @@ void paint_color_at(const CanvasPaint &paint, float x, float y, float out[4]) {
 }  // namespace
 
 void blend_pixel(unsigned char *pixel, const float color[4], float coverage, float alpha) {
-  /* Fully opaque source-over is a plain copy; this is the hot path for paper
-     textures, terrain and the opaque parts of every sprite. */
-  if (alpha >= 0.999f && coverage >= 0.999f && color[3] >= 0.999f) {
-    pixel[0] = (unsigned char)clamp_byte(color[0] * 255.0f);
-    pixel[1] = (unsigned char)clamp_byte(color[1] * 255.0f);
-    pixel[2] = (unsigned char)clamp_byte(color[2] * 255.0f);
-    pixel[3] = 255;
-    return;
+  blend_pixel_mode(pixel, color, coverage, alpha, kCanvasCompositeSourceOver);
+}
+
+/** Source-over with a clip mask applied to the coverage. */
+static void blend_clipped(unsigned char *pixel, const float color[4], float coverage, float alpha,
+                          const CanvasPaint &paint, const CanvasClipMask *clip, int x, int y) {
+  if (clip != nullptr) {
+    const float clipCoverage = clip->at(x, y) / 255.0f;
+    if (clipCoverage <= 0.0f) return;
+    coverage *= clipCoverage;
   }
-  float sa = color[3] * coverage * alpha;
-  if (sa <= 0.0f) return;
-  if (sa > 1.0f) sa = 1.0f;
-  float da = pixel[3] / 255.0f;
-  float out_a = sa + da * (1.0f - sa);
-  if (out_a <= 0.0f) {
-    pixel[0] = pixel[1] = pixel[2] = pixel[3] = 0;
-    return;
-  }
-  const float inv = 1.0f / out_a;
-  pixel[0] = (unsigned char)clamp_byte((color[0] * sa + (pixel[0] / 255.0f) * da * (1.0f - sa)) * inv * 255.0f);
-  pixel[1] = (unsigned char)clamp_byte((color[1] * sa + (pixel[1] / 255.0f) * da * (1.0f - sa)) * inv * 255.0f);
-  pixel[2] = (unsigned char)clamp_byte((color[2] * sa + (pixel[2] / 255.0f) * da * (1.0f - sa)) * inv * 255.0f);
-  pixel[3] = (unsigned char)clamp_byte(out_a * 255.0f);
+  blend_pixel_mode(pixel, color, coverage, alpha, paint.composite);
 }
 
 /** Add the horizontal span `[xa, xb)` into a bbox-relative coverage row. */
@@ -102,9 +91,11 @@ static void add_span(float *row, int rowOriginX, float xa, float xb, float weigh
   if (last > 0.0f) row[ib - rowOriginX] += last * weight;
 }
 
-void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
-                const std::vector<std::vector<CanvasPoint>> &loops, const CanvasPaint &paint,
-                float alpha, bool even_odd) {
+void compute_coverage(int width, int height,
+                      const std::vector<std::vector<CanvasPoint>> &loops, bool even_odd,
+                      CoverageGrid *out) {
+  out->x0 = out->y0 = out->x1 = out->y1 = 0;
+  out->values.clear();
   if (width <= 0 || height <= 0 || loops.empty()) return;
   bool havePoint = false;
   float minX = 0.0f, maxX = 0.0f, minY = 0.0f, maxY = 0.0f;
@@ -129,13 +120,17 @@ void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
   int y1 = std::min(height, (int)std::ceil(maxY));
   if (x1 <= x0 || y1 <= y0) return;
 
-  int boxWidth = x1 - x0;
-  std::vector<float> coverage((size_t)boxWidth * (size_t)(y1 - y0), 0.0f);
+  const int boxWidth = x1 - x0;
+  out->x0 = x0;
+  out->y0 = y0;
+  out->x1 = x1;
+  out->y1 = y1;
+  out->values.assign((size_t)boxWidth * (size_t)(y1 - y0), 0.0f);
   const float weight = 1.0f / (float)kSubSamples;
 
   std::vector<Crossing> crossings;
   for (int py = y0; py < y1; py++) {
-    float *row = coverage.data() + (size_t)(py - y0) * (size_t)boxWidth;
+    float *row = out->values.data() + (size_t)(py - y0) * (size_t)boxWidth;
     for (int sample = 0; sample < kSubSamples; sample++) {
       float sy = (float)py + ((float)sample + 0.5f) / (float)kSubSamples;
       crossings.clear();
@@ -175,30 +170,40 @@ void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
       }
     }
   }
+}
 
-  for (int py = y0; py < y1; py++) {
-    const float *row = coverage.data() + (size_t)(py - y0) * (size_t)boxWidth;
-    unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)x0) * 4;
+void fill_loops(std::vector<unsigned char> &pixels, int width, int height,
+                const std::vector<std::vector<CanvasPoint>> &loops, const CanvasPaint &paint,
+                float alpha, bool even_odd, const CanvasClipMask *clip) {
+  CoverageGrid coverage;
+  compute_coverage(width, height, loops, even_odd, &coverage);
+  if (coverage.empty()) return;
+  const int boxWidth = coverage.x1 - coverage.x0;
+  for (int py = coverage.y0; py < coverage.y1; py++) {
+    const float *row = coverage.values.data() + (size_t)(py - coverage.y0) * (size_t)boxWidth;
+    unsigned char *dst =
+        pixels.data() + ((size_t)py * (size_t)width + (size_t)coverage.x0) * 4;
     for (int px = 0; px < boxWidth; px++) {
       float c = row[px];
       if (c <= 0.0f) continue;
       if (c > 1.0f) c = 1.0f;
       float color[4];
-      paint_color_at(paint, (float)(x0 + px) + 0.5f, (float)py + 0.5f, color);
-      blend_pixel(dst + (size_t)px * 4, color, c, alpha);
+      paint_color_at(paint, (float)(coverage.x0 + px) + 0.5f, (float)py + 0.5f, color);
+      blend_clipped(dst + (size_t)px * 4, color, c, alpha, paint, clip, coverage.x0 + px, py);
     }
   }
 }
 
 void fill_loop(std::vector<unsigned char> &pixels, int width, int height,
                const std::vector<CanvasPoint> &loop, const CanvasPaint &paint, float alpha,
-               bool even_odd) {
+               bool even_odd, const CanvasClipMask *clip) {
   fill_loops(pixels, width, height, std::vector<std::vector<CanvasPoint>>{loop}, paint, alpha,
-             even_odd);
+             even_odd, clip);
 }
 
 void fill_rect(std::vector<unsigned char> &pixels, int width, int height, float x0, float y0,
-               float x1, float y1, const CanvasPaint &paint, float alpha) {
+               float x1, float y1, const CanvasPaint &paint, float alpha,
+               const CanvasClipMask *clip) {
   if (x1 < x0) std::swap(x0, x1);
   if (y1 < y0) std::swap(y0, y1);
   int ix0 = std::max(0, (int)std::floor(x0));
@@ -214,13 +219,13 @@ void fill_rect(std::vector<unsigned char> &pixels, int width, int height, float 
       if (cx <= 0.0f) continue;
       float color[4];
       paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);
-      blend_pixel(dst + (size_t)(px - ix0) * 4, color, cx * cy, alpha);
+      blend_clipped(dst + (size_t)(px - ix0) * 4, color, cx * cy, alpha, paint, clip, px, py);
     }
   }
 }
 
 void clear_rect(std::vector<unsigned char> &pixels, int width, int height, float x0, float y0,
-                float x1, float y1) {
+                float x1, float y1, const CanvasClipMask *clip) {
   if (x1 < x0) std::swap(x0, x1);
   if (y1 < y0) std::swap(y0, y1);
   int ix0 = std::max(0, (int)std::floor(x0));
@@ -235,7 +240,9 @@ void clear_rect(std::vector<unsigned char> &pixels, int width, int height, float
       float cx = std::min(x1, (float)(px + 1)) - std::max(x0, (float)px);
       if (cx <= 0.0f) continue;
       unsigned char *pixel = dst + (size_t)(px - ix0) * 4;
-      float keep = 1.0f - cx * cy;
+      float amount = cx * cy;
+      if (clip != nullptr) amount *= clip->at(px, py) / 255.0f;
+      float keep = 1.0f - amount;
       if (keep <= 0.0f) {
         pixel[0] = pixel[1] = pixel[2] = pixel[3] = 0;
       } else {
@@ -245,9 +252,55 @@ void clear_rect(std::vector<unsigned char> &pixels, int width, int height, float
   }
 }
 
+/** Sample one source image pixel at continuous coordinates (`0..width`).
+ * `smooth` selects bilinear filtering, otherwise the containing texel is used. */
+static void sample_source(const Image &source, float fx, float fy, bool smooth, float out[4]) {
+  auto texel_at = [&](int x, int y, float outPixel[4]) {
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x >= source.width) x = source.width - 1;
+    if (y >= source.height) y = source.height - 1;
+    const unsigned char *texel =
+        source.pixels.data() + ((size_t)y * (size_t)source.width + (size_t)x) * 4;
+    for (int i = 0; i < 4; i++) outPixel[i] = texel[i] / 255.0f;
+  };
+  if (!smooth) {
+    texel_at((int)fx, (int)fy, out);
+    return;
+  }
+  const float x = fx - 0.5f;
+  const float y = fy - 0.5f;
+  int x0 = (int)std::floor(x);
+  int y0 = (int)std::floor(y);
+  const float tx = x - (float)x0;
+  const float ty = y - (float)y0;
+  float top[4];
+  float bottom[4];
+  float a[4];
+  float b[4];
+  texel_at(x0, y0, a);
+  texel_at(x0 + 1, y0, b);
+  for (int i = 0; i < 4; i++) top[i] = a[i] + (b[i] - a[i]) * tx;
+  texel_at(x0, y0 + 1, a);
+  texel_at(x0 + 1, y0 + 1, b);
+  for (int i = 0; i < 4; i++) bottom[i] = a[i] + (b[i] - a[i]) * tx;
+  for (int i = 0; i < 4; i++) out[i] = top[i] + (bottom[i] - top[i]) * ty;
+}
+
+/** Source pixel centre for a destination pixel of `drawImage`. */
+static void draw_image_pixel(std::vector<unsigned char> &pixels, int width, const Image &source,
+                             const CanvasPaint &paint, int px, int py, float u, float v, float sx,
+                             float sy, float sw, float sh, float alpha, bool smooth,
+                             const CanvasClipMask *clip) {
+  float sampled[4];
+  sample_source(source, sx + u * sw, sy + v * sh, smooth, sampled);
+  unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4;
+  blend_clipped(dst, sampled, 1.0f, alpha, paint, clip, px, py);
+}
+
 void draw_image(std::vector<unsigned char> &pixels, int width, int height, const Image &source,
                 float dx, float dy, float dw, float dh, float sx, float sy, float sw, float sh,
-                float alpha) {
+                float alpha, bool smooth, const CanvasClipMask *clip) {
   if (source.width <= 0 || source.height <= 0 || dw <= 0.0f || dh <= 0.0f || sw <= 0.0f ||
       sh <= 0.0f)
     return;
@@ -255,30 +308,14 @@ void draw_image(std::vector<unsigned char> &pixels, int width, int height, const
   int ix1 = std::min(width, (int)std::ceil(dx + dw));
   int iy0 = std::max(0, (int)std::floor(dy));
   int iy1 = std::min(height, (int)std::ceil(dy + dh));
+  const CanvasPaint paint;
   for (int py = iy0; py < iy1; py++) {
     for (int px = ix0; px < ix1; px++) {
       float u = ((float)px + 0.5f - dx) / dw;
       float v = ((float)py + 0.5f - dy) / dh;
       if (u < 0.0f || u >= 1.0f || v < 0.0f || v >= 1.0f) continue;
-      int sxi = (int)(sx + u * sw);
-      int syi = (int)(sy + v * sh);
-      if (sxi < 0) sxi = 0;
-      if (syi < 0) syi = 0;
-      if (sxi >= source.width) sxi = source.width - 1;
-      if (syi >= source.height) syi = source.height - 1;
-      const unsigned char *texel =
-          source.pixels.data() + ((size_t)syi * (size_t)source.width + (size_t)sxi) * 4;
-      unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4;
-      if (alpha >= 0.999f) {
-        const unsigned char ta = texel[3];
-        if (ta == 255) {
-          dst[0] = texel[0]; dst[1] = texel[1]; dst[2] = texel[2]; dst[3] = 255;
-          continue;
-        }
-        if (ta == 0) continue;
-      }
-      float color[4] = {texel[0] / 255.0f, texel[1] / 255.0f, texel[2] / 255.0f, texel[3] / 255.0f};
-      blend_pixel(dst, color, 1.0f, alpha);
+      draw_image_pixel(pixels, width, source, paint, px, py, u, v, sx, sy, sw, sh, alpha, smooth,
+                       clip);
     }
   }
 }
@@ -287,7 +324,7 @@ void draw_image(std::vector<unsigned char> &pixels, int width, int height, const
 void draw_image_affine(std::vector<unsigned char> &pixels, int width, int height,
                        const Image &source, float dx, float dy, float dw, float dh, float sx,
                        float sy, float sw, float sh, const CanvasTransform &transform,
-                       float alpha) {
+                       float alpha, bool smooth, const CanvasClipMask *clip) {
   if (source.width <= 0 || source.height <= 0 || dw <= 0.0f || dh <= 0.0f || sw <= 0.0f ||
       sh <= 0.0f)
     return;
@@ -312,6 +349,7 @@ void draw_image_affine(std::vector<unsigned char> &pixels, int width, int height
   int ix1 = std::min(width, (int)std::ceil(maxX));
   int iy0 = std::max(0, (int)std::floor(minY));
   int iy1 = std::min(height, (int)std::ceil(maxY));
+  const CanvasPaint paint;
   for (int py = iy0; py < iy1; py++) {
     for (int px = ix0; px < ix1; px++) {
       float ux = 0.0f;
@@ -320,25 +358,8 @@ void draw_image_affine(std::vector<unsigned char> &pixels, int width, int height
       float u = (ux - dx) / dw;
       float v = (uy - dy) / dh;
       if (u < 0.0f || u >= 1.0f || v < 0.0f || v >= 1.0f) continue;
-      int sxi = (int)(sx + u * sw);
-      int syi = (int)(sy + v * sh);
-      if (sxi < 0) sxi = 0;
-      if (syi < 0) syi = 0;
-      if (sxi >= source.width) sxi = source.width - 1;
-      if (syi >= source.height) syi = source.height - 1;
-      const unsigned char *texel =
-          source.pixels.data() + ((size_t)syi * (size_t)source.width + (size_t)sxi) * 4;
-      unsigned char *dst = pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4;
-      if (alpha >= 0.999f) {
-        const unsigned char ta = texel[3];
-        if (ta == 255) {
-          dst[0] = texel[0]; dst[1] = texel[1]; dst[2] = texel[2]; dst[3] = 255;
-          continue;
-        }
-        if (ta == 0) continue;
-      }
-      float color[4] = {texel[0] / 255.0f, texel[1] / 255.0f, texel[2] / 255.0f, texel[3] / 255.0f};
-      blend_pixel(dst, color, 1.0f, alpha);
+      draw_image_pixel(pixels, width, source, paint, px, py, u, v, sx, sy, sw, sh, alpha, smooth,
+                       clip);
     }
   }
 }
@@ -346,7 +367,7 @@ void draw_image_affine(std::vector<unsigned char> &pixels, int width, int height
 void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
                 const std::vector<unsigned char> &glyph, int glyphWidth, int glyphHeight, int left,
                 int top, float x, float baselineY, float scale_x, const CanvasPaint &paint,
-                float alpha) {
+                float alpha, const CanvasClipMask *clip) {
   if (glyphWidth <= 0 || glyphHeight <= 0) return;
   if (scale_x <= 0.0f) scale_x = 1.0f;
   bool condense = scale_x < 0.999f;
@@ -366,8 +387,8 @@ void blit_glyph(std::vector<unsigned char> &pixels, int width, int height,
       if (coverage <= 0.0f) continue;
       float color[4];
       paint_color_at(paint, (float)px + 0.5f, (float)py + 0.5f, color);
-      blend_pixel(pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4, color, coverage,
-                  alpha);
+      blend_clipped(pixels.data() + ((size_t)py * (size_t)width + (size_t)px) * 4, color,
+                    coverage, alpha, paint, clip, px, py);
     }
   }
 }

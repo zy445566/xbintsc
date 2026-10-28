@@ -58,6 +58,27 @@ SDL_GPUSamplerAddressMode address_of(int wrap) {
   }
 }
 
+SDL_GPUCompareOp compare_of(int func) {
+  switch (func) {
+    case GL_NEVER:
+      return SDL_GPU_COMPAREOP_NEVER;
+    case GL_LESS:
+      return SDL_GPU_COMPAREOP_LESS;
+    case GL_EQUAL:
+      return SDL_GPU_COMPAREOP_EQUAL;
+    case GL_LEQUAL:
+      return SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+    case GL_GREATER:
+      return SDL_GPU_COMPAREOP_GREATER;
+    case GL_NOTEQUAL:
+      return SDL_GPU_COMPAREOP_NOT_EQUAL;
+    case GL_GEQUAL:
+      return SDL_GPU_COMPAREOP_GREATER_OR_EQUAL;
+    default:
+      return SDL_GPU_COMPAREOP_ALWAYS;
+  }
+}
+
 }  // namespace
 
 /* -- textures ------------------------------------------------------------ */
@@ -111,6 +132,9 @@ void WebGLContext::delete_texture(uint32_t id) {
     if (found->second->sampler != nullptr) {
       SDL_ReleaseGPUSampler(guidev::g_device, found->second->sampler);
     }
+    if (found->second->compare_sampler != nullptr) {
+      SDL_ReleaseGPUSampler(guidev::g_device, found->second->compare_sampler);
+    }
   }
   textures_.erase(found);
 }
@@ -159,10 +183,18 @@ bool WebGLContext::tex_parameter(uint32_t id, int pname, int value) {
   else if (pname == GL_TEXTURE_MAG_FILTER) record->mag_filter = value;
   else if (pname == GL_TEXTURE_WRAP_S) record->wrap_s = value;
   else if (pname == GL_TEXTURE_WRAP_T) record->wrap_t = value;
-  else return true;  // other parameters are accepted and ignored
+  else if (pname == GL_TEXTURE_COMPARE_MODE) {
+    record->compare_mode = value == GL_COMPARE_REF_TO_TEXTURE;
+  } else if (pname == GL_TEXTURE_COMPARE_FUNC) {
+    record->compare_func = value;
+  } else return true;  // other parameters are accepted and ignored
   if (record->sampler != nullptr && guidev::g_device != nullptr) {
     SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
     record->sampler = nullptr;
+  }
+  if (record->compare_sampler != nullptr && guidev::g_device != nullptr) {
+    SDL_ReleaseGPUSampler(guidev::g_device, record->compare_sampler);
+    record->compare_sampler = nullptr;
   }
   return true;
 }
@@ -170,6 +202,10 @@ bool WebGLContext::tex_parameter(uint32_t id, int pname, int value) {
 int WebGLContext::tex_parameter_value(uint32_t id, int pname) {
   WebGLTexture *record = texture(id);
   if (record == nullptr) return 0;
+  if (pname == GL_TEXTURE_COMPARE_MODE) {
+    return record->compare_mode ? GL_COMPARE_REF_TO_TEXTURE : GL_NONE;
+  }
+  if (pname == GL_TEXTURE_COMPARE_FUNC) return record->compare_func;
   if (pname == GL_TEXTURE_MIN_FILTER) return record->min_filter;
   if (pname == GL_TEXTURE_MAG_FILTER) return record->mag_filter;
   if (pname == GL_TEXTURE_WRAP_S) return record->wrap_s;
@@ -267,6 +303,25 @@ SDL_GPUSampler *WebGLContext::sampler_for(WebGLTexture *record) {
   }
   record->sampler = SDL_CreateGPUSampler(guidev::g_device, &info);
   return record->sampler;
+}
+
+SDL_GPUSampler *WebGLContext::sampler_for_compare(WebGLTexture *record) {
+  if (record == nullptr || guidev::g_device == nullptr) return nullptr;
+  if (record->compare_sampler != nullptr) return record->compare_sampler;
+  SDL_GPUSamplerCreateInfo info;
+  memset(&info, 0, sizeof(info));
+  info.min_filter = SDL_GPU_FILTER_LINEAR;
+  info.mag_filter = SDL_GPU_FILTER_LINEAR;
+  info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+  info.address_mode_u = address_of(record->wrap_s);
+  info.address_mode_v = address_of(record->wrap_t);
+  info.address_mode_w = address_of(record->wrap_t);
+  info.min_lod = 0.0f;
+  info.max_lod = record->has_mipmaps ? 1000.0f : 0.0f;
+  info.enable_compare = true;
+  info.compare_op = compare_of(record->compare_func);
+  record->compare_sampler = SDL_CreateGPUSampler(guidev::g_device, &info);
+  return record->compare_sampler;
 }
 
 int WebGLContext::texture_width(uint32_t id) {

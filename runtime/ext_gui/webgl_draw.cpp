@@ -515,20 +515,25 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       const int unit =
           uniform.unit >= 0 && uniform.unit < kWebGLMaxTextureUnits ? uniform.unit : 0;
       uint32_t texture_id = bound_textures_[unit];
-      if (uniform.layout.gl_type == GL_SAMPLER_CUBE) {
+      if (uniform.layout.gl_type == GL_SAMPLER_CUBE ||
+          uniform.layout.gl_type == GL_SAMPLER_CUBE_SHADOW) {
         texture_id = bound_cube_textures_[unit];
       } else if (uniform.layout.gl_type == GL_SAMPLER_3D) {
         texture_id = bound_3d_textures_[unit];
-      } else if (uniform.layout.gl_type == GL_SAMPLER_2D_ARRAY) {
+      } else if (uniform.layout.gl_type == GL_SAMPLER_2D_ARRAY ||
+                 uniform.layout.gl_type == GL_SAMPLER_2D_ARRAY_SHADOW) {
         texture_id = bound_array_textures_[unit];
       }
       WebGLTexture *sampled = texture(texture_id);
       SDL_GPUTexture *gpu = sampled != nullptr ? ensure_texture_gpu(sampled, sampled->as_target)
                                                : nullptr;
       WebGLSampler *sampler_object = this->sampler(bound_samplers_[unit]);
-      SDL_GPUSampler *sampler = sampler_object != nullptr
-                                    ? sampler_gpu(sampler_object)
-                                    : (sampled != nullptr ? sampler_for(sampled) : nullptr);
+      SDL_GPUSampler *sampler = nullptr;
+      if (sampler_object != nullptr) {
+        sampler = sampler_gpu(sampler_object);
+      } else if (sampled != nullptr) {
+        sampler = uniform.compare ? sampler_for_compare(sampled) : sampler_for(sampled);
+      }
       if (gpu == nullptr || sampler == nullptr) {
         gpu = fallback_texture_;
         sampler = fallback_sampler_;

@@ -238,6 +238,11 @@ bool WebGLContext::sampler_parameter(uint32_t id, int pname, int value) {
   else if (pname == GL_TEXTURE_MAG_FILTER) record->mag_filter = value;
   else if (pname == GL_TEXTURE_WRAP_S) record->wrap_s = value;
   else if (pname == GL_TEXTURE_WRAP_T) record->wrap_t = value;
+  else if (pname == GL_TEXTURE_COMPARE_MODE) {
+    record->compare_mode = value == GL_COMPARE_REF_TO_TEXTURE;
+  } else if (pname == GL_TEXTURE_COMPARE_FUNC) {
+    record->compare_func = value;
+  }
   if (record->gpu != nullptr && guidev::g_device != nullptr) {
     SDL_ReleaseGPUSampler(guidev::g_device, record->gpu);
     record->gpu = nullptr;
@@ -252,6 +257,10 @@ int WebGLContext::sampler_parameter_value(uint32_t id, int pname) {
   if (pname == GL_TEXTURE_MAG_FILTER) return record->mag_filter;
   if (pname == GL_TEXTURE_WRAP_S) return record->wrap_s;
   if (pname == GL_TEXTURE_WRAP_T) return record->wrap_t;
+  if (pname == GL_TEXTURE_COMPARE_MODE) {
+    return record->compare_mode ? GL_COMPARE_REF_TO_TEXTURE : GL_NONE;
+  }
+  if (pname == GL_TEXTURE_COMPARE_FUNC) return record->compare_func;
   return 0;
 }
 
@@ -270,6 +279,32 @@ SDL_GPUSampler *WebGLContext::sampler_gpu(WebGLSampler *record) {
   /* A sampler object has no texture, so it cannot know how many levels exist;
    * textures created by this engine always carry a full mip chain. */
   info.max_lod = 1000.0f;
+  if (record->compare_mode) {
+    info.enable_compare = true;
+    switch (record->compare_func) {
+      case GL_NEVER:
+        info.compare_op = SDL_GPU_COMPAREOP_NEVER;
+        break;
+      case GL_LESS:
+        info.compare_op = SDL_GPU_COMPAREOP_LESS;
+        break;
+      case GL_EQUAL:
+        info.compare_op = SDL_GPU_COMPAREOP_EQUAL;
+        break;
+      case GL_GREATER:
+        info.compare_op = SDL_GPU_COMPAREOP_GREATER;
+        break;
+      case GL_NOTEQUAL:
+        info.compare_op = SDL_GPU_COMPAREOP_NOT_EQUAL;
+        break;
+      case GL_GEQUAL:
+        info.compare_op = SDL_GPU_COMPAREOP_GREATER_OR_EQUAL;
+        break;
+      default:
+        info.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+        break;
+    }
+  }
   record->gpu = SDL_CreateGPUSampler(guidev::g_device, &info);
   return record->gpu;
 }

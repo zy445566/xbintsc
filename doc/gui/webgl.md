@@ -89,6 +89,8 @@ The translator (`runtime/ext_gui/webgl_glsl*.cpp`) handles GLSL ES 1.00 and
 | non-sampler uniforms | one `layout(std140) uniform XtUniforms { … }` block |
 | `uniform sampler2D u_tex` | `layout(set = 2, binding = N) uniform sampler2D u_tex` (fragment) or set 0 (vertex) |
 | `gl_FragData[0]` | `xt_FragColor` |
+| `gl_FragDepth` / `gl_FragDepthEXT` | kept (SPIR-V `DepthReplacing`; MSL `[[depth(any)]]`) |
+| `sampler2DShadow` / `samplerCubeShadow` / `sampler2DArrayShadow` | kept; bound as an SDL_GPU comparison sampler |
 | a missing `#version` / `#version 100` | `#version 310 es` |
 
 Non-sampler uniforms are merged across both stages and emitted as one block in
@@ -107,6 +109,14 @@ the `sampler2D shadowMap[ NUM_DIR_LIGHT_SHADOWS ]` / `shadowMap[ i ]` shape
 three.js emits becomes constant-indexed. Shader code inside `#ifdef` is fine;
 non-sampler uniform declarations are moved to the enclosing top-level position
 so the block stays unconditional.
+
+A fragment shader may write `gl_FragDepth`; glslang marks the SPIR-V module
+`DepthReplacing` and SPIRV-Cross emits `[[depth(any)]]`, so the write reaches the
+depth attachment on both backends. The comparative samplers
+(`sampler2DShadow`, `samplerCubeShadow`, `sampler2DArrayShadow`) use the same
+SDL_GPU sampler objects with `enable_compare` set; `TEXTURE_COMPARE_MODE` and
+`TEXTURE_COMPARE_FUNC` are read from the texture (or from a bound sampler
+object in WebGL 2).
 
 ### GLSL ES 3.00 (WebGL 2)
 
@@ -177,9 +187,10 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   `framebufferTexture2D` (`COLOR_ATTACHMENT0`, `DEPTH_ATTACHMENT`,
   `DEPTH_STENCIL_ATTACHMENT`), `checkFramebufferStatus`, `createRenderbuffer`,
   `bindRenderbuffer`, `renderbufferStorage` (depth or depth-stencil),
-  `framebufferRenderbuffer`, `delete*`, and `blitFramebuffer` (colour
-  attachment; depth/stencil bits are accepted but not copied). This is enough
-  for render-to-texture, shadow maps and post-processing passes.
+  `framebufferRenderbuffer`, `delete*`, and `blitFramebuffer` (colour through
+  SDL's blit; depth through a sampling pass that writes `gl_FragDepth`; stencil
+  bits are accepted but not copied). This is enough for render-to-texture,
+  shadow maps and post-processing passes.
 - **State**: `enable`/`disable`/`isEnabled` for `BLEND`, `DEPTH_TEST`,
   `CULL_FACE`, `SCISSOR_TEST` and `STENCIL_TEST`,
   `clearColor`/`clearDepth`/`clearStencil`, `clear` (with `SCISSOR_TEST` it
@@ -248,12 +259,17 @@ backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
 
 ## Not implemented
 
-Transform feedback (the entry points are no-ops) and MSAA/sample buffers
-(SDL_GPU's Metal multisample resolve returns undefined pixels with scissor
-tests and instanced draws, so contexts stay single-sampled). `blitFramebuffer`
-copies the colour attachment only; depth/stencil bits are accepted but not
-copied. Shaders that use built-in blocks or `gl_FragDepth` are rejected with a
-compile/link log.
+Transform feedback (the entry points are no-ops: SDL_GPU has no transform
+feedback stage) and MSAA/sample buffers (SDL_GPU 3.2 can resolve multisampled
+colour targets, but its Metal resolve returns undefined pixels with scissor
+tests and instanced draws, so contexts stay single-sampled and `SAMPLE_BUFFERS`
+reports 0). `blitFramebuffer` copies colour and depth; stencil bits are accepted
+but not copied because SDL_GPU cannot sample a stencil attachment.
+
+Shader limitations that remain: struct-typed uniforms and user uniform blocks
+are flattened, but built-in interface blocks (`gl_PerVertex` redeclarations) are
+not part of the translated subset. A shader that uses one still fails with a
+compile/link log rather than silently misbehaving.
 
 ## Platform
 
@@ -275,7 +291,10 @@ uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
 - `tests/e2e/gui-webgl.test.ts` compiles GLSL, draws a textured and a
   depth-tested quad, checks face culling and reads the pixels back; it also
   covers blend constants, dynamic buffer usage, vertex-shader texture sampling,
-  `gl_FragDepth` diagnostics, context loss/restore and cube maps.
+  `gl_FragDepth`, context loss/restore and cube maps.
+- `tests/e2e/gui-webgl2-shadow-sampler.test.ts` covers hardware
+  `sampler2DShadow` comparisons, a shader-written `gl_FragDepth` that occludes a
+  later draw, and a partial `blitFramebuffer` depth copy.
 - `tests/e2e/gui-webgl2.test.ts` covers the WebGL 2 shader/state additions:
   `#version 300 es` shaders, a VAO round trip, instanced draws with a divisor,
   `texStorage2D`, `clearBufferfv`, buffer copies, sampler objects, struct-uniform
@@ -317,9 +336,8 @@ Canvas2D fallback is bundled any more**. Verified with three.js r160 through SDL
 `Sprite`, `Line`, `Points` and `InstancedMesh`.
 
 Features outside this engine's subset still cannot be emulated: transform
-feedback and MSAA.
-Depth textures, float render targets and compressed textures are available, but
-three.js shadow maps still need comparative `sampler2DShadow` sampling, which
-is not translated yet. A scene that needs one of those will not render
-correctly; everything the previous Canvas2D fallback could show now goes
-through the GPU.
+feedback and MSAA. Depth textures, float render targets and compressed textures
+are available, and comparative `sampler2DShadow` sampling is translated, so
+three.js shadow maps can use the hardware depth compare on both backends. A
+scene that needs transform feedback or MSAA will not render correctly;
+everything the previous Canvas2D fallback could show now goes through the GPU.

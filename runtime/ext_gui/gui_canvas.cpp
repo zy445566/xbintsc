@@ -137,6 +137,8 @@ void xt_gui_canvas_shutdown(XtGuiWindow *win) {
   xt_gui_webgl_shutdown(win);
   for (auto &entry : win->canvases) releaseCanvasTexture(entry.second.get());
   win->canvases.clear();
+  for (auto &entry : win->offscreen_canvases) releaseCanvasTexture(entry.second.get());
+  win->offscreen_canvases.clear();
   /* `pending_canvases` survives `loadHTML`: a module that asked for a context
    * before the page existed still needs its bitmap when the parsed element
    * binds. They are released with the window record. */

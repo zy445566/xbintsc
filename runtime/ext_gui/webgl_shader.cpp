@@ -22,36 +22,8 @@
 namespace xtgui {
 namespace {
 
-int gl_type_of(const std::string &type) {
-  if (type == "float") return GL_FLOAT;
-  if (type == "vec2") return GL_FLOAT_VEC2;
-  if (type == "vec3") return GL_FLOAT_VEC3;
-  if (type == "vec4") return GL_FLOAT_VEC4;
-  if (type == "int" || type == "uint") return GL_INT;
-  if (type == "ivec2" || type == "uvec2") return GL_INT_VEC2;
-  if (type == "ivec3" || type == "uvec3") return GL_INT_VEC3;
-  if (type == "ivec4" || type == "uvec4") return GL_INT_VEC4;
-  if (type == "bool") return GL_BOOL;
-  if (type == "bvec2") return GL_BOOL_VEC2;
-  if (type == "bvec3") return GL_BOOL_VEC3;
-  if (type == "bvec4") return GL_BOOL_VEC4;
-  if (type == "mat2") return GL_FLOAT_MAT2;
-  if (type == "mat3") return GL_FLOAT_MAT3;
-  if (type == "mat4") return GL_FLOAT_MAT4;
-  if (type == "sampler2D") return GL_SAMPLER_2D;
-  if (type == "samplerCube") return GL_SAMPLER_CUBE;
-  if (type == "sampler3D") return GL_SAMPLER_3D;
-  if (type == "sampler2DArray") return GL_SAMPLER_2D_ARRAY;
-  return 0;
-}
-
-/** How many consecutive attribute/varying locations a type consumes. */
-int location_slots(const std::string &type) {
-  if (type == "mat2") return 2;
-  if (type == "mat3") return 3;
-  if (type == "mat4") return 4;
-  return 1;
-}
+using webgl_detail::gl_type_of;
+using webgl_detail::location_slots;
 
 /** Merge uniforms declared by both stages, in declaration order. */
 bool merge_uniforms(const GlslShaderInfo &vs, const GlslShaderInfo &fs,
@@ -442,14 +414,18 @@ bool WebGLContext::link_program(uint32_t id) {
 
   auto add_sampler = [](WebGLProgram *program, std::vector<int> *stage,
                         const GlslUniformDecl &decl) {
+    const bool compare = decl.type == "sampler2DShadow" || decl.type == "samplerCubeShadow" ||
+                         decl.type == "sampler2DArrayShadow";
     int index = -1;
     auto found = program->uniform_index.find(decl.name);
     if (found != program->uniform_index.end()) {
       index = found->second;
+      program->uniforms[(size_t)index].compare = compare;
     } else {
       WebGLUniform uniform;
       uniform.name = decl.name;
       uniform.sampler = true;
+      uniform.compare = compare;
       uniform.unit = 0;
       uniform.layout.gl_type = gl_type_of(decl.type);
       index = (int)program->uniforms.size();

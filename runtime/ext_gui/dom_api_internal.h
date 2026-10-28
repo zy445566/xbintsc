@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "gui_engine.h"
+#include "dom_api_webgl_internal.h"
 
 namespace domapi {
 
@@ -52,6 +53,23 @@ xt_value class_list_proto();
 xt_value style_proto();
 xt_value computed_style_proto();
 xt_value canvas_proto();
+/** The `getContextAttributes()` object for a freshly created 2D context. */
+xt_value canvas_context_attributes(xt_value requested, bool alpha);
+/** `OffscreenCanvas.prototype`. */
+xt_value offscreen_canvas_proto();
+/** `new OffscreenCanvas(width, height)`. */
+xt_value offscreen_canvas_create(int32_t argc, xt_value *argv);
+/** `canvas.transferControlToOffscreen()`. */
+xt_value canvas_transfer_control_to_offscreen(xt_value self, xt_value env, int32_t argc,
+                                              xt_value *argv);
+xt_value offscreen_get_context(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+xt_value offscreen_width_get(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+xt_value offscreen_width_set(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+xt_value offscreen_height_get(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+xt_value offscreen_height_set(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+xt_value offscreen_transfer_to_image_bitmap(xt_value self, xt_value env, int32_t argc,
+                                            xt_value *argv);
+xt_value offscreen_convert_to_blob(xt_value self, xt_value env, int32_t argc, xt_value *argv);
 xt_value canvas_gradient_proto();
 xt_value webgl_proto();
 xt_value webgl2_proto();
@@ -91,43 +109,7 @@ xt_value canvas_gradient_handle(xt_value context, const xtgui::Canvas2D *canvas,
 uint64_t canvas_gradient_id(xt_value handle, const xtgui::Canvas2D *canvas);
 
 /* -- WebGL helpers shared by `dom_api_webgl*.cpp` ------------------------- */
-
-/** The engine WebGL context behind a context handle, or null. */
-xtgui::WebGLContext *webgl_from_context(xt_value self);
-/** Like `webgl_from_context`, but null while the context is lost: every GL
- * entry point except `getError`/`isContextLost` is a no-op in that state. */
-xtgui::WebGLContext *webgl_live_context(xt_value self);
-/** The numeric context id stored on a context handle (0 when absent). */
-uint64_t webgl_context_id(xt_value self);
-/** Create the JavaScript handle for a canvas's WebGL context. */
-xt_value webgl_context_handle(xt_value element, xtgui::WebGLContext *context);
-/** The id stored on an object handle under `key`, or 0. */
-uint32_t webgl_object_id(xt_value handle, const char *key);
-/** Build an object handle (`{__xt_gl_context, __xt_gl_<key>}`). */
-xt_value webgl_make_object(xt_value context, const char *key, uint32_t id,
-                           const std::string &kind);
-double webgl_number(int32_t argc, xt_value *argv, int32_t index, double fallback);
-int webgl_int(int32_t argc, xt_value *argv, int32_t index, int fallback);
-std::string webgl_string(int32_t argc, xt_value *argv, int32_t index);
-/** Read an array/typed array of numbers. */
-std::vector<double> webgl_numbers(xt_value value);
-/** Read the raw bytes of a typed array / ArrayBuffer (or a byte array). */
-std::vector<uint8_t> webgl_bytes(xt_value value);
-/** Store `count` bytes into a typed array / array handle. */
-void webgl_write_bytes(xt_value target, const uint8_t *bytes, size_t count);
-/** Convert a source pixel array (RGBA/RGB/LUMINANCE/…) to RGBA8. */
-void webgl_convert_pixels(const uint8_t *source, int count, int format, bool premultiply,
-                          std::vector<uint8_t> *out);
-/** Decode a `texImage2D` source (`<img>`, `<canvas>`, `<video>`, `ImageData`,
- * `ImageBitmap`) into top-down RGBA8. */
-bool webgl_read_source(xt_value source, int *width, int *height,
-                       std::vector<uint8_t> *rgba, bool premultiply);
-/** Read the `UNPACK_FLIP_Y_WEBGL` / `UNPACK_PREMULTIPLY_ALPHA_WEBGL` flags set
- * through `pixelStorei`. */
-void webgl_unpack_flags(xt_value context, bool *flip_y, bool *premultiply);
-/** Extension object for a compressed-texture family (null when unsupported,
- * undefined when the name is not one of those extensions). */
-xt_value webgl_compressed_extension(const std::string &name, xtgui::WebGLContext *context);
+/* Declared in `dom_api_webgl_internal.h`, included above. */
 
 /** How a pending handle names the node it will bind to. */
 enum PendingKind { pending_by_id = 1, pending_by_selector = 2 };
@@ -285,6 +267,23 @@ METHOD(canvas_line_width_get);
 METHOD(canvas_line_width_set);
 METHOD(canvas_global_alpha_get);
 METHOD(canvas_global_alpha_set);
+METHOD(canvas_global_composite_get);
+METHOD(canvas_global_composite_set);
+METHOD(canvas_shadow_color_get);
+METHOD(canvas_shadow_color_set);
+METHOD(canvas_shadow_blur_get);
+METHOD(canvas_shadow_blur_set);
+METHOD(canvas_shadow_offset_x_get);
+METHOD(canvas_shadow_offset_x_set);
+METHOD(canvas_shadow_offset_y_get);
+METHOD(canvas_shadow_offset_y_set);
+METHOD(canvas_image_smoothing_enabled_get);
+METHOD(canvas_image_smoothing_enabled_set);
+METHOD(canvas_image_smoothing_quality_get);
+METHOD(canvas_image_smoothing_quality_set);
+METHOD(canvas_clip);
+METHOD(canvas_is_point_in_path);
+METHOD(canvas_is_point_in_stroke);
 METHOD(canvas_font_get);
 METHOD(canvas_font_set);
 METHOD(canvas_text_align_get);

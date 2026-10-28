@@ -199,6 +199,18 @@ struct XtGuiWindow {
    * clear, so a static page does no GPU work at all; `XT_GUI_ALWAYS_PRESENT=1`
    * disables the gate. */
   int present_dirty = 1;
+  /** Set when the window system asked for a redraw (map/expose/restore) since
+   * the last frame. Several such events coalesce into one present, so the frame
+   * loop charges at most one `exposes` counter per frame — that way
+   * `presents - exposes - deferred` is the work the page caused, and a present
+   * can be attributed to the compositor rather than to the document (a window
+   * server delivers its first `Expose` whenever it maps the window, which no
+   * test can schedule). */
+  int expose_pending = 0;
+  /** Set when a frame could not get a swapchain image and left its present
+   * pending (see `xt_gui_render_window`). The present that finally happens
+   * carries that earlier frame's work, so it is charged to `deferred`. */
+  int present_deferred = 0;
   /** Set when the media/canvas tables must be reconciled with the document
    * without a restyle (a replaced document, for example): the frame loop then
    * runs the DOM walk once even though no style changed. */

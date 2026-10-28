@@ -31,8 +31,13 @@ queued animation frame, a running transition, a new video/canvas frame, an
 expose/resize event, or the first frame. A static document therefore performs no
 swapchain acquire and no draw while the loop keeps servicing events, timers and
 promises; `XT_GUI_ALWAYS_PRESENT=1` restores the old always-present behaviour
-when debugging a missed invalidation. `XT_GUI_PERF=1` prints what each frame did
-(see [Performance](./rendering.md#performance-m20)).
+when debugging a missed invalidation. An expose/shown/restore event is the one
+present the *window system* asks for rather than the document, so it is counted
+as `exposes` in `win.stats()`; a present a starved frame had to postpone (no
+swapchain image was available) is counted as `deferred`, and
+`presents - exposes - deferred` is the work the page caused. `XT_GUI_PERF=1`
+prints what each frame did (see
+[Performance](./rendering.md#performance-m20)).
 
 The `xt_loop_set_main` hook remains available for hosts that want to own the
 loop themselves.

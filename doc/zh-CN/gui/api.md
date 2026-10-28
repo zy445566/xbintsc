@@ -204,7 +204,7 @@ win.stats()                            // 引擎/运行时计数器（内存排�
 | 字段 | 含义 |
 | --- | --- |
 | `frameMs`、`restyleMs`、`layoutMs`、`paintMs`、`uploadMs`、`drawMs` | 上一帧各阶段耗时（毫秒） |
-| `frames`、`presents`、`skippedFrames`、`transitionFrames` | 帧循环活动（`presents` 是提交呈现的帧数；`skippedFrames` 是无需提交的帧数） |
+| `frames`、`presents`、`exposes`、`deferred`、`skippedFrames`、`starvedFrames`、`transitionFrames` | 帧循环活动：`presents` 是提交呈现的帧数，`exposes` 是窗口系统用 expose/shown/restore 事件要求的呈现帧数，`deferred` 是取不到可绘制目标而被推迟的呈现帧数，`skippedFrames` 是无需提交的帧数，`starvedFrames` 是要求呈现却拿不到可绘制目标的帧数 |
 | `restyles`、`restyleNodes`、`rulesEvaluated`、`mediaEvaluated`、`layouts`、`layoutBoxes` | 层叠与布局的工作量 |
 | `textShapeCalls`、`textShapeHits`、`textCacheBytes`、`textCacheEntries` | 整形缓存的未命中/命中与占用 |
 | `paints`、`paintOps`、`drawRuns`、`drawCalls`、`uploadSubmits`、`vertices`、`syncNodes` | 显示列表、绘制调用与上传的工作量 |
@@ -213,8 +213,12 @@ win.stats()                            // 引擎/运行时计数器（内存排�
 
 除 `*Ms` 时间外，所有字段都是累计值，因此两次快照相减即得到一帧的工作量。
 `restyleMs` 覆盖层叠**以及**它触发的布局过程（布局过程本身也单独报告为
-`layoutMs`）。`XT_GUI_PERF=1` 会把同样的数字打印到 stderr（逐帧一行；
-`XT_GUI_PERF=<N>` 则每 N 帧取平均）。
+`layoutMs`）。`presents - exposes - deferred` 才是仅由页面要求的呈现帧数：
+expose/shown/restore 事件表示窗口内容已丢失、必须重绘，而具体时机由窗口服务器
+决定；deferred 呈现则是重放某一帧在取不到交换链图像时已经构建好的内容，
+`starvedFrames` 统计这些帧（该值持续增长说明窗口完全没有被更新）。
+`XT_GUI_PERF=1` 会把同样的数字打印到 stderr（逐帧一行；`XT_GUI_PERF=<N>` 则每
+N 帧取平均）。
 
 它们被 `tests/e2e/gui-*.test.ts` 用来断言解析、选择器匹配、特异性、继承、
 `!important` 与布局几何。它们在之后仍可用于调试。

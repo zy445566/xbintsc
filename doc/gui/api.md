@@ -219,7 +219,7 @@ program has done in total, which is how rendering cost is measured (see
 | Field | Meaning |
 | --- | --- |
 | `frameMs`, `restyleMs`, `layoutMs`, `paintMs`, `uploadMs`, `drawMs` | phase timings of the last frame (milliseconds) |
-| `frames`, `presents`, `skippedFrames`, `transitionFrames` | frame loop activity (presents count swapchain frames; `skippedFrames` counts frames nothing needed) |
+| `frames`, `presents`, `exposes`, `deferred`, `skippedFrames`, `starvedFrames`, `transitionFrames` | frame loop activity: `presents` counts swapchain frames, `exposes` the presents the window system asked for with an expose/shown/restore event, `deferred` the presents a starved frame postponed, `skippedFrames` the frames nothing needed and `starvedFrames` the frames that asked to present and got no drawable target |
 | `restyles`, `restyleNodes`, `rulesEvaluated`, `mediaEvaluated`, `layouts`, `layoutBoxes` | cascade and layout work |
 | `textShapeCalls`, `textShapeHits`, `textCacheBytes`, `textCacheEntries` | shaping cache misses/hits and its occupancy |
 | `paints`, `paintOps`, `drawRuns`, `drawCalls`, `uploadSubmits`, `vertices`, `syncNodes` | display-list, draw-call and upload work |
@@ -228,9 +228,14 @@ program has done in total, which is how rendering cost is measured (see
 
 Every field except the `*Ms` timings is cumulative, so subtract two snapshots to
 get one frame. `restyleMs` covers the cascade **and** the layout pass it
-triggers (which is also reported on its own as `layoutMs`). `XT_GUI_PERF=1`
-prints the same numbers on stderr (one line per frame; `XT_GUI_PERF=<N>`
-averages over N frames).
+triggers (which is also reported on its own as `layoutMs`).
+`presents - exposes - deferred` counts the presents only the page asked for: an
+expose/shown/restore event means the window has no contents and must be redrawn,
+at a time the window server chooses, and a deferred present replays work an
+earlier frame built when no swapchain image was available (`starvedFrames` counts
+those frames — a climbing value means the window is not being updated at all).
+`XT_GUI_PERF=1` prints the same numbers on stderr (one line per frame;
+`XT_GUI_PERF=<N>` averages over N frames).
 
 They are used by `tests/e2e/gui-*.test.ts` to assert parsing, selector matching,
 specificity, inheritance, `!important` and layout geometry. They will stay useful

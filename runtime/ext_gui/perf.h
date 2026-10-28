@@ -26,6 +26,27 @@ namespace xtgui {
 struct PerfCounters {
   uint64_t frames = 0;
   uint64_t presents = 0;
+  /** Presents the *window system* asked for (a map/expose/restore event), not
+   * the page. They are real work — the compositor lost the contents — but a
+   * quiet page must not be blamed for them: a window server sends its first
+   * `Expose` whenever it gets around to mapping the window, which on a busy CI
+   * runner can land long after the first frames. At most one is charged per
+   * frame (the events coalesce into a single present), so
+   * `presents - exposes - deferred` counts the presents only the page asked
+   * for. */
+  uint64_t exposes = 0;
+  /** Presents a starved frame had to defer: no swapchain image was available
+   * then (the GPU still held it, or the window was minimized), so the frame's
+   * paint was presented on a later frame. Those presents replay work built in
+   * an earlier frame, so they are not this frame's page work either. */
+  uint64_t deferred = 0;
+  /** Frames that asked to present and got no drawable target at all: SDL's
+   * non-blocking swapchain acquire had no image (the GPU still held it) or the
+   * device gave no command buffer. The invalidation stays pending (see
+   * `deferred`), so the content is presented on a later frame rather than lost;
+   * a climbing value means the compositor keeps refusing images and the window
+   * is not being updated. */
+  uint64_t starvedFrames = 0;
   uint64_t skippedFrames = 0;
   uint64_t restyles = 0;
   uint64_t restyleNodes = 0;

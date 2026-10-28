@@ -259,11 +259,15 @@ void handle_event(const SDL_Event *event) {
   }
   /* A window the compositor revealed (uncovered, restored, shown) must be
    * redrawn even though nothing in the document changed: the frame loop only
-   * presents on demand. */
+   * presents on demand. The request is charged to `exposes` (below) so
+   * `stats()` can separate it from a present the page caused. */
   if (event->type == SDL_EVENT_WINDOW_EXPOSED || event->type == SDL_EVENT_WINDOW_SHOWN ||
       event->type == SDL_EVENT_WINDOW_RESTORED) {
     XtGuiWindow *win = xt_gui_find_by_window_id(event->window.windowID);
-    if (win != NULL) win->present_dirty = 1;
+    if (win != NULL) {
+      win->present_dirty = 1;
+      win->expose_pending = 1;
+    }
     return;
   }
 
@@ -336,6 +340,12 @@ void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms) {
 void xt_gui_render_window(XtGuiWindow *win) {
   if (win == NULL || !win->open || win->window == NULL || g_device == NULL) return;
   xtgui::xt_perf_frame_begin();
+  /* The events were dispatched before the frame began. A redraw the window
+   * system asked for is charged to `exposes` once this frame actually presents
+   * (several expose events coalesce into one present); the flag is consumed
+   * here because only this frame may claim it. */
+  bool window_requested = win->expose_pending != 0;
+  win->expose_pending = 0;
   float viewport_width = 0;
   float viewport_height = 0;
   xt_gui_window_viewport(win, &viewport_width, &viewport_height);
@@ -451,6 +461,15 @@ void xt_gui_render_window(XtGuiWindow *win) {
       SDL_GPUTexture *swapchain = NULL;
       SDL_AcquireGPUSwapchainTexture(cmd, win->window, &swapchain, NULL, NULL);
       if (swapchain != NULL) {
+        /* Attribute the present: a redraw the window system asked for, one a
+         * starved frame had to defer, or this frame's own work. Both foreign
+         * kinds carry work that was *not* done in this frame. */
+        if (window_requested) {
+          xtgui::g_perf_frame.exposes += 1;
+        } else if (win->present_deferred != 0) {
+          xtgui::g_perf_frame.deferred += 1;
+        }
+        win->present_deferred = 0;
         xtgui::g_perf_frame.presents += 1;
         SDL_GPUColorTargetInfo target;
         memset(&target, 0, sizeof(target));
@@ -471,8 +490,25 @@ void xt_gui_render_window(XtGuiWindow *win) {
         SDL_EndGPURenderPass(pass);
         firstFrame = !win->ready;
         win->ready = 1;
+      } else {
+        /* No swapchain image this frame: SDL's non-blocking acquire skips a
+         * frame (rather than blocking) when the GPU still holds the image, and
+         * a minimized or hidden window has none at all. Dropping the frame here
+         * would leave the window showing the previous frame until something
+         * else dirtied the page, so keep the invalidation pending and present
+         * it on the next frame — the paint, the uploads and the run list are
+         * already built and retained, so the retry only re-records the draws. */
+        win->present_dirty = 1;
+        win->present_deferred = 1;
+        xtgui::g_perf_frame.starvedFrames += 1;
       }
       SDL_SubmitGPUCommandBuffer(cmd);
+    } else {
+      /* No command buffer from the device: same treatment as a starved frame —
+       * keep the invalidation so the page is shown once the device recovers. */
+      win->present_dirty = 1;
+      win->present_deferred = 1;
+      xtgui::g_perf_frame.starvedFrames += 1;
     }
   }
   /* The first presented frame marks the window ready. Emitting after the

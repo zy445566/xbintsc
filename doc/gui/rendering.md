@@ -187,6 +187,13 @@ is what `tests/e2e/gui-perf.test.ts` asserts on.
   frame. A frame presents only when something happened — a mutation, a scroll,
   an animation frame, a transition, a new video/canvas frame, an expose/resize
   event — so a static page performs no swapchain acquire and no draw at all.
+  An expose is the one present the window system asks for rather than the page,
+  and `exposes` counts those frames, so `presents - exposes - deferred` stays
+  the document's own work even when a window server maps the window late.
+  A frame that cannot get a swapchain image (SDL's non-blocking acquire skips a
+  frame while the GPU still holds the image, and a minimized window has none)
+  keeps its invalidation pending instead of dropping it, so the paint is
+  presented on the next frame; those presents are counted as `deferred`.
   `XT_GUI_ALWAYS_PRESENT=1` restores the old always-present behaviour when
   debugging a missed invalidation.
 - **Paint and upload.** The display list and the vertex staging arrays are kept

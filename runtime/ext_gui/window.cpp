@@ -507,6 +507,9 @@ static xt_value win_stats(xt_value self, xt_value env, int32_t argc, xt_value *a
   };
   setCounter("frames", counters.frames);
   setCounter("presents", counters.presents);
+  setCounter("exposes", counters.exposes);
+  setCounter("deferred", counters.deferred);
+  setCounter("starvedFrames", counters.starvedFrames);
   setCounter("skippedFrames", counters.skippedFrames);
   setCounter("restyles", counters.restyles);
   setCounter("restyleNodes", counters.restyleNodes);

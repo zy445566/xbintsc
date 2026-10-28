@@ -40,6 +40,9 @@ void readMode() {
 void addCounters(PerfCounters *target, const PerfCounters &value) {
   target->frames += value.frames;
   target->presents += value.presents;
+  target->exposes += value.exposes;
+  target->deferred += value.deferred;
+  target->starvedFrames += value.starvedFrames;
   target->skippedFrames += value.skippedFrames;
   target->restyles += value.restyles;
   target->restyleNodes += value.restyleNodes;
@@ -81,7 +84,8 @@ void printLine(uint64_t frames, const PerfTimings &ms, const PerfCounters &count
                "xt_gui perf frames=%llu ms=%.3f restyle=%.3f layout=%.3f paint=%.3f "
                "upload=%.3f draw=%.3f restyles=%llu nodes=%llu rules=%llu media=%llu "
                "layouts=%llu boxes=%llu text=%llu textHit=%llu ops=%llu runs=%llu "
-               "draws=%llu uploads=%llu verts=%llu sync=%llu presents=%llu skip=%llu "
+               "draws=%llu uploads=%llu verts=%llu sync=%llu presents=%llu exposes=%llu "
+               "deferred=%llu starved=%llu skip=%llu "
                "cdraw=%llu cups=%llu cbytes=%llu gldraw=%llu passes=%llu gmiss=%llu "
                "gbytes=%llu\n",
                (unsigned long long)frames, ms.frame / divisor, ms.restyle / divisor,
@@ -95,6 +99,9 @@ void printLine(uint64_t frames, const PerfTimings &ms, const PerfCounters &count
                (unsigned long long)counters.drawRuns, (unsigned long long)counters.drawCalls,
                (unsigned long long)counters.uploadSubmits, (unsigned long long)counters.vertices,
                (unsigned long long)counters.syncNodes, (unsigned long long)counters.presents,
+               (unsigned long long)counters.exposes,
+               (unsigned long long)counters.deferred,
+               (unsigned long long)counters.starvedFrames,
                (unsigned long long)counters.skippedFrames,
                (unsigned long long)counters.canvasDraws,
                (unsigned long long)counters.canvasUploads,

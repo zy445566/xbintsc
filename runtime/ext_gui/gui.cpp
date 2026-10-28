@@ -255,6 +255,8 @@ static XtGuiWindow *create_window_record(const char *title, int width, int heigh
   record->open = 1;
   record->ready = 0;
   record->present_dirty = 1;
+  record->expose_pending = 0;
+  record->present_deferred = 0;
   record->sync_dirty = 1;
   record->width = width;
   record->height = height;

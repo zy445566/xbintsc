@@ -28,9 +28,12 @@ GUI 引擎既可以通过 `xt_loop_set_main` 注册自己的循环，也可以�
 
 只有**确实发生了事情**帧才会呈现：DOM 变更、滚动、已排队的动画帧、正在运行的
 过渡、新的视频/画布帧、expose/resize 事件，或首帧。因此静态文档不会获取
-swapchain、也不会绘制，而循环仍在处理事件、定时器与 promise；调试"漏掉的失效"
-时可用 `XT_GUI_ALWAYS_PRESENT=1` 恢复旧的每帧提交行为。`XT_GUI_PERF=1` 会打印
-每一帧做了哪些工作（见[性能](./rendering.md#性能m20)）。
+swapchain、也不会绘制，而循环仍在处理事件、定时器与 promise。expose/shown/restore
+事件是唯一由窗口系统（而非文档）要求的呈现，它们在 `win.stats()` 中计为
+`exposes`；取不到交换链图像而被推迟的呈现计为 `deferred`，`presents - exposes -
+deferred` 才是页面自身造成的工作。调试"漏掉的失效"时可用
+`XT_GUI_ALWAYS_PRESENT=1` 恢复旧的每帧提交行为。`XT_GUI_PERF=1` 会打印每一帧
+做了哪些工作（见[性能](./rendering.md#性能m20)）。
 
 `xt_loop_set_main` 钩子仍保留给希望自行掌控循环的宿主。
 

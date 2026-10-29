@@ -314,8 +314,8 @@ Event 的 `target` 是句柄，其描述符（`toString`）与同一 `div#id.cla
   导入的资产会）。如有需要，M9d 会处理。
 - **外部 `<script src>` 文件之间的 import 绑定冲突。** 会被检测并报告
   （给 import 起别名）；之后可以做到带引用重写的按脚本重命名。
-- **资产。** `<script src>` 相对 HTML 资产解析；URL `src` 值被忽略。没有
-  fetch/网络加载。
+- **资产。** `<script src>` 相对 HTML 资产解析；URL `src` 值被忽略。
+  加载器不会请求网络 URL；运行时全局 `fetch` 是另一套 API。
 
 ## 测试
 

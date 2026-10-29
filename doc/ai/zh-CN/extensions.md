@@ -99,9 +99,10 @@ AudioParam 自动化，`decodeAudioData` 引擎内解码 WAV，压缩格式则�
 并通过 SDL_GPU 绘制；页面直接合成颜色纹理而无须 CPU 读回，WebGL 2 还增加
 VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷贝（见
 [../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。WebXR、未启用
-`media` 时的 `<video>`/`<audio>`、`fetch` 与流式接口**尚未实现**：`typeof` 会回答
-`"undefined"`，让页面走自己的降级分支。
-见 [../../zh-CN/gui/api.md](../../zh-CN/gui/api.md)。
+`media` 时的 `<video>`/`<audio>` 与流式接口**尚未实现**：`typeof` 会回答
+`"undefined"`，让页面走自己的降级分支。`fetch` 不是 GUI 扩展的功能——它由核心
+运行时提供（`http://`，以及本地 `file://` 与相对路径；不支持 HTTPS 与流式），
+因此 GUI 程序同样可用。见 [../../implemented/fetch.md](../../implemented/fetch.md)。
 
 ### `media` —— 视频/音频解码
 

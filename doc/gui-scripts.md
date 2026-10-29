@@ -334,7 +334,8 @@ legacy `target` field over the handle.
 - **Top-level `await`** inside a deferred `<script src>` module is not
   supported: the module body is wrapped in a synchronous init function.
 - **Assets.** `<script src>` is resolved relative to the HTML asset; URL `src`
-  values are ignored. There is no fetch/network loading.
+  values are ignored. The loader does not fetch network URLs; the runtime's
+  global `fetch` is a separate API.
 
 ## Testing
 

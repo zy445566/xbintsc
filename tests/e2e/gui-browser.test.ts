@@ -47,6 +47,8 @@ describe.skipIf(!guiAvailable)("gui extension — browser globals", () => {
       console.log("buffer=" + buffer.length + ":" + samples[3] + ":" + buffer.numberOfChannels);
       // A renderer-only type answers \`undefined\`, so feature probes fall back.
       console.log("webgl=" + (typeof WebGLRenderingContext));
+      // fetch is a core runtime global, not a gui extension export.
+      console.log("fetch=" + typeof fetch);
 
       const win = createWindow({ title: "page", width: 320, height: 240 });
       console.log("adopt=" + (window === win) + ":" + (document.defaultView === win));
@@ -85,6 +87,7 @@ describe.skipIf(!guiAvailable)("gui extension — browser globals", () => {
     expect(value("audio")).toBe("48000:running:0.5");
     expect(value("buffer")).toBe("8:0.25:1");
     expect(value("webgl")).toBe("function");
+    expect(value("fetch")).toBe("function");
     expect(value("adopt")).toBe("true:true");
     expect(value("bound")).toBe("hi:hi");
     expect(value("title")).toBe("ropes page:complete:false");

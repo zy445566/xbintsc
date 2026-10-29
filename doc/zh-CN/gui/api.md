@@ -88,12 +88,13 @@ requestAnimationFrame(frame);
 | `navigator` | `userAgent`（以 `xbintsc` 结尾的桌面 Chrome 字符串）、`platform`、`vendor`、`language(s)`、`hardwareConcurrency`、`maxTouchPoints`、`onLine`、`vibrate()` |
 | `localStorage` | 内存中的 `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` |
 | `AudioContext`、`webkitAudioContext` | 带真实混音器与解码器的 Web Audio 图（见下） |
+| `fetch(input, init)` | 核心运行时的 HTTP/1.1 客户端，GUI 程序同样可用：支持 `http://`、本地 `file://` 与相对路径；不支持 `https://` 与流式响应。见[已实现的 fetch](../../implemented/fetch.md)。 |
 | `Event`、`CustomEvent`、`ProgressEvent`、`MouseEvent`、`KeyboardEvent`、`PointerEvent`、`WheelEvent`、`FocusEvent`、`InputEvent`、`SubmitEvent` | 事件构造器；`init` 参数按原样保留（`detail`、`composed`、鼠标/键盘字段等） |
 | `AbortController`、`AbortSignal` | 真实的 controller/signal 对，用于 `{ signal }` 移除监听器，支持 `abort()`、`aborted`、`reason`、`onabort` 与 `throwIfAborted()` |
 | `HTMLCanvasElement`、`HTMLImageElement`、`WebGLRenderingContext`、`WebGL2RenderingContext`、`WebGLBuffer`/`WebGLTexture`/`WebGLShader`/`WebGLProgram`/`WebGLFramebuffer`/`WebGLRenderbuffer`/`WebGLUniformLocation`/`WebGLActiveInfo`/`WebGLVertexArrayObject`/`WebGLSampler`/`WebGLQuery`/`WebGLSync`/`WebGLTransformFeedback` | 真实的构造函数值。`canvas.getContext("webgl")` 与 `getContext("webgl2")` 返回 GPU 上下文（见 [WebGL](./webgl.md)）。 |
 | `ImageBitmap`、`createImageBitmap(source)` | 由已解码像素支撑的不可变位图（`<img>`、`<canvas>`、`<video>` 帧、`OffscreenCanvas` 与 `ImageData` 形状）；promise 立即 settle，`texImage2D` 可直接接受该对象 |
 | `OffscreenCanvas` | 真正的 2D 离屏位图，带 `getContext("2d")`、`width`/`height`、`transferToImageBitmap()` 与 `convertToBlob()`；`canvas.transferControlToOffscreen()` 会把元素位图交给它（见 [Canvas](./canvas.md)）。离屏 WebGL 上下文不提供。 |
-| `ImageData`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（没有 XR/fetch/流式后端），让页面走自己的“不支持”分支，而不是调用空壳。Three.js 页面在本后端上使用真实渲染器（见[已知问题](./known-issues.md)）。 |
+| `ImageData`、`XRWebGL*`、`Request`、`Headers`、`Response`、`ReadableStream`、`DOMParser` | `typeof` 探测返回 `"undefined"`（没有 XR、DOM 解析器或流式后端），让页面走自己的“不支持”分支，而不是调用空壳。`fetch` 仍然可用，并返回 response 形状的对象，但没有 `Response` 构造函数，且 `response.arrayBuffer()` 目前返回字节数组而不是 `ArrayBuffer`。Three.js 页面在本后端上使用真实渲染器（见[已知问题](./known-issues.md)）。 |
 | `requestAnimationFrame` / `cancelAnimationFrame` | 排入窗口的动画帧列表，见[运行时集成](./runtime.md) |
 | `alert` / `confirm` / `prompt`、`matchMedia`、`getComputedStyle`、`escape` | 宿主实现。`matchMedia` 返回**实时**列表（按查询缓存）：`matches` 在窗口尺寸变化时重新求值，翻转时触发 `change` 监听器。`confirm`/`prompt` 仅在 `XT_GUI_DIALOGS=1` 时使用原生对话框，否则把消息写到 stderr 并返回文档化的默认值（Annex B `escape` 按 UTF-16 码元编码，与 `decodeURIComponent(escape(bytes))` 一致） |
 

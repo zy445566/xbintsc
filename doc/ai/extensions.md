@@ -110,9 +110,11 @@ SPIRV-Cross on Metal — and drawn through SDL_GPU; the page composites the colo
 texture without a CPU readback, and WebGL 2 adds VAOs, instancing, integer
 attributes, sampler objects, `texStorage2D` and buffer copies (see
 [../gui/webgl.md](../gui/webgl.md)). WebXR, `<video>`/`<audio>` without
-`media`, `fetch` and streaming are **not** implemented:
-`typeof` answers `"undefined"` so a page takes its own fallback branch. See
-[../gui/api.md](../gui/api.md#browser-globals).
+`media`, and streaming are **not** implemented:
+`typeof` answers `"undefined"` so a page takes its own fallback branch. `fetch`
+is **not** a GUI extension feature: the core runtime provides it (`http://`,
+plus local `file://` and relative paths; no HTTPS or streaming), so GUI
+programs can use it too. See [../implemented/fetch.md](../implemented/fetch.md).
 
 ### `media` — video/audio decoding
 

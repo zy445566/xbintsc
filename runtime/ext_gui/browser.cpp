@@ -393,7 +393,7 @@ xt_value host_type_construct(xt_value self, xt_value env, int32_t argc, xt_value
 /** Host constructors are window members too — a page writes
  * `new window.AudioContext()` as often as `new AudioContext()`. */
 void install_window_globals(xt_value win) {
-  if (xt_seq(win, g_installed_window)) return;
+  if (xt_truthy(xt_seq(win, g_installed_window))) return;
   g_installed_window = win;
   xt_gc_add_root(&g_installed_window);
   if (XT_IS_OBJECT(g_navigator)) set_prop(win, "navigator", g_navigator);
@@ -479,7 +479,7 @@ xt_value xt_browser_document(int32_t argc, xt_value *argv) {
   xt_value win = xt_browser_window(0, NULL);
   if (XT_IS_UNDEFINED(win)) return XT_UNDEFINED;
   xt_value doc = xt_gui_document_handle(xt_gui_window_from_this(win));
-  if (!xt_seq(doc, g_document_global)) {
+  if (!xt_truthy(xt_seq(doc, g_document_global))) {
     g_document_global = doc;
     xt_gc_add_root(&g_document_global);
   }

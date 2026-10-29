@@ -314,6 +314,15 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y);
 /** Synthesise a key event (`keydown`/`keyup`). */
 void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code);
+/** Translate one physical key (SDL scancode/keycode + modifiers) to the browser
+ * `key`/`code` names and dispatch it to the DOM and window listeners. */
+void xt_gui_dispatch_physical_key(XtGuiWindow *win, const char *type, int scancode, int keycode,
+                                  bool repeat, bool ctrl, bool shift, bool alt, bool meta,
+                                  bool caps_lock);
+/** Close every AudioContext's device and drop its graph. Called before
+ * `SDL_Quit` so an AudioMixer's destructor never touches an SDL stream after
+ * the audio subsystem was shut down. */
+void xt_gui_audio_shutdown(void);
 
 /** The decoder for one media element, opening it (and its `src`) on first use.
  * Returns `nullptr` for a non-media element or an unreadable source. */

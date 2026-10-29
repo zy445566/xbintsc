@@ -65,6 +65,33 @@ describe.skipIf(!guiAvailable)("gui extension — Web Audio", () => {
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());
 
+  it("shuts an open context down before SDL quits", () => {
+    const { value } = harness.compileAndRun(
+      "audio-exit",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "audio-exit", width: 200, height: 150 });
+      win.on("ready", () => {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        osc.connect(ctx.destination);
+        osc.start();
+        window.setTimeout(() => {
+          console.log("state=" + ctx.state);
+          win.close();
+        }, 100);
+      });
+      win.loadHTML("<div>audio</div>");
+      run();
+      `,
+      { autocloseMs: 2000 },
+    );
+    // The window closed with the graph still live: the engine must destroy the
+    // SDL audio stream before SDL_Quit, or the process crashes on exit.
+    expect(value("state")).toBe("running");
+  });
+
   it("exposes the standard AudioContext surface", () => {
     const { value } = harness.compileAndRun(
       "audio-surface",

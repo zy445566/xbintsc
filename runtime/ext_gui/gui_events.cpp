@@ -4,6 +4,7 @@
  */
 
 #include "gui_internal.h"
+#include "gui_keymap.h"
 #include "listener_options.h"
 
 #include "paint.h"
@@ -216,19 +217,62 @@ static xt_value xt_gui_key_payload(const char *type, const char *key, const char
   xt_object_set(payload, xt_string_from_cstr("key"), xt_string_from_cstr(key));
   xt_object_set(payload, xt_string_from_cstr("code"), xt_string_from_cstr(code));
   xt_object_set(payload, xt_string_from_cstr("repeat"), repeat ? XT_TRUE : XT_FALSE);
+  /* Legacy DOM fields and their current `*Key` spellings: a page may read
+   * either, and WheelEvent/MouseEvent already expose both where they apply. */
   xt_object_set(payload, xt_string_from_cstr("ctrl"), ctrl ? XT_TRUE : XT_FALSE);
   xt_object_set(payload, xt_string_from_cstr("shift"), shift ? XT_TRUE : XT_FALSE);
   xt_object_set(payload, xt_string_from_cstr("alt"), alt ? XT_TRUE : XT_FALSE);
   xt_object_set(payload, xt_string_from_cstr("meta"), meta ? XT_TRUE : XT_FALSE);
+  xt_object_set(payload, xt_string_from_cstr("ctrlKey"), ctrl ? XT_TRUE : XT_FALSE);
+  xt_object_set(payload, xt_string_from_cstr("shiftKey"), shift ? XT_TRUE : XT_FALSE);
+  xt_object_set(payload, xt_string_from_cstr("altKey"), alt ? XT_TRUE : XT_FALSE);
+  xt_object_set(payload, xt_string_from_cstr("metaKey"), meta ? XT_TRUE : XT_FALSE);
   return payload;
 }
 
-void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code) {
+static const xtgui::Node *xt_gui_find_body(const xtgui::Node *node) {
+  if (node == nullptr) return nullptr;
+  if (node->isElement() && node->tag == "body") return node;
+  for (const std::unique_ptr<xtgui::Node> &child : node->children) {
+    if (const xtgui::Node *found = xt_gui_find_body(child.get())) return found;
+  }
+  return nullptr;
+}
+
+/** The element a keyboard event targets when nothing is focused: `<body>`,
+ * like a browser, or the document root for a page without one. */
+static const xtgui::Node *xt_gui_key_target(XtGuiWindow *win) {
+  if (win->document == nullptr) return nullptr;
+  if (const xtgui::Node *focused = win->document->focus()) return focused;
+  const xtgui::Node *root = win->document->root();
+  if (const xtgui::Node *body = xt_gui_find_body(root)) return body;
+  return root;
+}
+
+/** Deliver one fully built keyboard payload to the DOM (bubbling from the
+ * focused element / body to `document`) and then to `window` listeners. */
+static void xt_gui_dispatch_key_payload(XtGuiWindow *win, const char *type, xt_value payload) {
   if (win == NULL || !win->open) return;
-  xt_value payload = xt_gui_key_payload(type, key, code, false, false, false, false, false);
-  const xtgui::Node *node = win->document != nullptr ? win->document->focus() : nullptr;
+  const xtgui::Node *node = xt_gui_key_target(win);
   if (node != nullptr) xt_gui_emit_dom_event(win, type, node, payload);
   xt_gui_emit_payload(win, type, payload);
+}
+
+void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code) {
+  xt_value payload = xt_gui_key_payload(type, key, code, false, false, false, false, false);
+  xt_gui_dispatch_key_payload(win, type, payload);
+}
+
+void xt_gui_dispatch_physical_key(XtGuiWindow *win, const char *type, int scancode, int keycode,
+                                  bool repeat, bool ctrl, bool shift, bool alt, bool meta,
+                                  bool caps_lock) {
+  std::string key;
+  std::string code;
+  xt_gui_key_names(static_cast<SDL_Scancode>(scancode), static_cast<SDL_Keycode>(keycode), shift,
+                   caps_lock, &key, &code);
+  xt_value payload = xt_gui_key_payload(type, key.c_str(), code.c_str(), repeat, ctrl, shift, alt,
+                                        meta);
+  xt_gui_dispatch_key_payload(win, type, payload);
 }
 
 namespace guidev {
@@ -306,13 +350,11 @@ void handle_event(const SDL_Event *event) {
     XtGuiWindow *win = xt_gui_find_by_window_id(event->key.windowID);
     if (win == NULL || !win->open) return;
     const char *type = event->type == SDL_EVENT_KEY_DOWN ? "keydown" : "keyup";
-    xt_gui_emit_payload(win, type,
-                        xt_gui_key_payload(type, SDL_GetKeyName(event->key.key),
-                                           SDL_GetScancodeName(event->key.scancode),
-                                           event->key.repeat, (event->key.mod & SDL_KMOD_CTRL) != 0,
-                                           (event->key.mod & SDL_KMOD_SHIFT) != 0,
-                                           (event->key.mod & SDL_KMOD_ALT) != 0,
-                                           (event->key.mod & SDL_KMOD_GUI) != 0));
+    xt_gui_dispatch_physical_key(
+        win, type, static_cast<int>(event->key.scancode), static_cast<int>(event->key.key),
+        event->key.repeat, (event->key.mod & SDL_KMOD_CTRL) != 0,
+        (event->key.mod & SDL_KMOD_SHIFT) != 0, (event->key.mod & SDL_KMOD_ALT) != 0,
+        (event->key.mod & SDL_KMOD_GUI) != 0, (event->key.mod & SDL_KMOD_CAPS) != 0);
     return;
   }
 }

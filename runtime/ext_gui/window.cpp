@@ -413,7 +413,8 @@ static xt_value win_hit_test(xt_value self, xt_value env, int32_t argc, xt_value
 /** Test/debug hook: synthesise an input event and deliver it to handlers.
  * `win.sendEvent("click", { x, y, button, clicks })`,
  * `win.sendEvent("wheel", { x, y, deltaX, deltaY })` or
- * `win.sendEvent("keydown", { key, code })`. */
+ * `win.sendEvent("keydown", { key, code })`. A key event may instead name the
+ * SDL `scancode`/`keycode` plus modifiers to exercise a real-keyboard path. */
 static xt_value win_send_event(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
   XtGuiWindow *win = xt_gui_window_from_this(self);
@@ -439,6 +440,14 @@ static xt_value win_send_event(xt_value self, xt_value env, int32_t argc, xt_val
     return XT_TRUE;
   }
   if (name == "keydown" || name == "keyup") {
+    if (XT_IS_OBJECT(options) && XT_IS_NUMBER(xt_object_get_cstr(options, "scancode"))) {
+      int scancode = (int)xt_gui_number_or(xt_object_get_cstr(options, "scancode"), 0);
+      int keycode = (int)xt_gui_number_or(xt_object_get_cstr(options, "keycode"), 0);
+      auto flag = [options](const char *key) { return xt_truthy(xt_object_get_cstr(options, key)); };
+      xt_gui_dispatch_physical_key(win, type, scancode, keycode, flag("repeat"), flag("ctrl"),
+                                   flag("shift"), flag("alt"), flag("meta"), flag("caps"));
+      return XT_TRUE;
+    }
     const char *key = "";
     const char *code = "";
     if (XT_IS_OBJECT(options)) {

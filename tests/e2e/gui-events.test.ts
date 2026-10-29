@@ -217,4 +217,83 @@ describe.skipIf(!guiAvailable)("gui extension — events", () => {
     // dispatched object keeps its identity and gains its target.
     expect(value("path")).toBe("capture1:true|target2:true:identity=true:target=true");
   });
+
+  it("installs the browser host globals on window", () => {
+    const { value } = harness.compileAndRun(
+      "window-globals",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "globals", width: 300, height: 200 });
+      win.on("ready", () => {
+        const w: any = window;
+        console.log("audio=" + typeof w.AudioContext);
+        console.log("image=" + typeof w.Image);
+        console.log("event=" + typeof w.Event);
+        console.log("secure=" + w.isSecureContext);
+        // The game-facing spelling: a page feature-detects through window.
+        const Ctor = w.AudioContext;
+        const ctx = new Ctor({ __offline: true });
+        console.log("ctx=" + (ctx != null) + ":" + (ctx instanceof AudioContext));
+        ctx.close();
+        win.close();
+      });
+      win.loadHTML("<div>globals</div>");
+      run();
+      `,
+    );
+
+    expect(value("audio")).toBe("function");
+    expect(value("image")).toBe("function");
+    expect(value("event")).toBe("function");
+    expect(value("secure")).toBe("true");
+    expect(value("ctx")).toBe("true:true");
+  });
+
+  it("delivers physical keys to document and window with browser names", () => {
+    const { value } = harness.compileAndRun(
+      "keyboard-dom",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "keys", width: 300, height: 200 });
+      win.on("ready", () => {
+        // No element is focused: a browser targets <body>, and the event still
+        // bubbles to the document listener a game binds to.
+        const seen: string[] = [];
+        document.addEventListener("keydown", (e: any) => {
+          seen.push(e.code + ":" + e.key + ":" + e.shiftKey);
+        });
+        // A listener on the event target (body when nothing is focused) runs
+        // too: the engine must pick the real body, not the document root.
+        let bodySeen = 0;
+        document.body.addEventListener("keydown", () => { bodySeen += 1; });
+
+        // SDL scancodes: A = 4, Up = 82, Space = 44, P = 19.
+        win.sendEvent("keydown", { scancode: 4 });
+        win.sendEvent("keydown", { scancode: 82 });
+        win.sendEvent("keydown", { scancode: 4, shift: true });
+        win.sendEvent("keydown", { scancode: 44 });
+        win.sendEvent("keyup", { scancode: 4 });
+        console.log("dom=" + seen.join(","));
+        console.log("body=" + bodySeen);
+
+        let windowKey = "";
+        win.on("keydown", (e: any) => { windowKey = e.code + ":" + e.key; });
+        win.sendEvent("keydown", { scancode: 19 });
+        console.log("window=" + windowKey);
+        win.close();
+      });
+      win.loadHTML("<html><body><div id='box'>x</div></body></html>");
+      run();
+      `,
+    );
+
+    // `code` is the physical key ("KeyA"), `key` the produced value ("a"/"A").
+    expect(value("dom")).toBe(
+      "KeyA:a:false,ArrowUp:ArrowUp:false,KeyA:A:true,Space: :false",
+    );
+    expect(value("body")).toBe("4");
+    expect(value("window")).toBe("KeyP:p");
+  });
 });

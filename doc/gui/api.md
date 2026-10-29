@@ -187,7 +187,7 @@ win.queryCount(selector)               // number of matching elements
 win.getBoundingClientRect(selector)    // { x, y, width, height } (border box, transformed)
 win.documentTree()                     // serialized DOM (debugging)
 win.layoutTree()                       // serialized layout boxes (debugging)
-win.paintCount()                       // number of shapes in the display list
+win.paintCount()                       // number of filled rectangles in the display list
 win.paintList()                        // serialized display list (debugging)
 win.inlineSvg(selector)                // serialized inline <svg>: { markup, width, height, shapes }
 win.measureText(text, fontSize?, family?)  // shaped advance width in pixels

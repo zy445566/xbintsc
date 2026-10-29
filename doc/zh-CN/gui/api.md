@@ -175,7 +175,7 @@ win.queryCount(selector)               // 匹配元素的数量
 win.getBoundingClientRect(selector)    // { x, y, width, height }（边框盒，含变换）
 win.documentTree()                     // 序列化的 DOM（调试用）
 win.layoutTree()                       // 序列化的布局盒（调试用）
-win.paintCount()                       // 显示列表中图形的数量
+win.paintCount()                       // 显示列表中填充矩形的数量
 win.paintList()                        // 序列化的显示列表（调试用）
 win.inlineSvg(selector)                // 序列化的内联 <svg>：{ markup, width, height, shapes }
 win.measureText(text, fontSize?, family?)  // 整形后的推进宽度（像素）

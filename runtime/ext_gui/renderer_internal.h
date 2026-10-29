@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "image.h"
 #include "paint.h"
 #include "renderer.h"
 
@@ -147,12 +148,33 @@ void layerRendererDestroy(SDL_GPUDevice *device);
 /* -- images --------------------------------------------------------------- */
 
 SDL_GPUGraphicsPipeline *createImagePipeline(SDL_GPUDevice *device, SDL_Window *reference);
+/** Create an RGBA texture holding `image` and upload its pixels. Returns null
+ * (after reporting the SDL error) when either step fails. */
+SDL_GPUTexture *createImageTexture(SDL_GPUDevice *device, const xtgui::Image &image,
+                                   XtGuiUploadBatch *batch);
 /** Decode `src` (cached) and upload it as an RGBA texture. `pixel_width` /
  * `pixel_height` are the drawn size in device pixels; vector sources (SVG) are
  * rasterised at that size, raster sources ignore it. The texture cache is keyed
  * by the resulting pixel size, so an SVG drawn at two sizes gets two textures. */
 SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src, int pixel_width,
                                    int pixel_height, XtGuiUploadBatch *batch);
+
+/* -- background gradients ------------------------------------------------- */
+
+/** Rasterise a `PaintImage` radial gradient into an RGBA texture and cache it by
+ * the paint pass's key. The ramp is resolved per device pixel, so a translucent
+ * gradient composites once instead of once per band. Bracket a frame's uploads
+ * with `beginGradientUpload`/`finishGradientUpload` so textures the frame no
+ * longer draws can be reclaimed; returns null when it cannot be created. */
+SDL_GPUTexture *ensureGradientTexture(SDL_GPUDevice *device, const xtgui::PaintImage &image,
+                                      int pixel_width, int pixel_height, XtGuiUploadBatch *batch);
+/** Mark every cached gradient unused; `ensureGradientTexture` marks the ones the
+ * upload pass draws. */
+void beginGradientUpload();
+/** Release cached gradients the pass did not draw, keeping the cache bounded. */
+void finishGradientUpload(SDL_GPUDevice *device);
+/** Release every rasterised gradient texture. */
+void releaseGradientTextures(SDL_GPUDevice *device);
 
 }  // namespace renderer_detail
 }  // namespace xtgui

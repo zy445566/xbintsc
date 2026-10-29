@@ -14,6 +14,7 @@
 #define XT_GUI_PAINT_H
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,35 @@
 #include "transform.h"
 
 namespace xtgui {
+
+/** One resolved colour stop of a gradient. `offset` is a fraction of the
+ * gradient line and non-decreasing, as in CSS. */
+struct GradientStop {
+  float offset = 0.0f;
+  Color color;
+};
+
+/** A radial `background-image` layer resolved by the paint pass: the renderer
+ * rasterises it into one RGBA texture and draws that as a single image quad.
+ *
+ * Nesting translucent bands instead composites every band's alpha once per band
+ * — each band covers the whole interior — so a vignette whose stops fade to
+ * `transparent` turns into an opaque disc that hides the scene behind it.
+ * Resolving the ramp per pixel composites it exactly once. */
+struct PaintGradient {
+  std::vector<GradientStop> stops;
+  /** Centre in box-local logical pixels; the drawn quad spans the whole box. */
+  float center_x = 0.0f;
+  float center_y = 0.0f;
+  float radius_x = 0.0f;
+  float radius_y = 0.0f;
+  /** `repeating-radial-gradient()`: the stop pattern restarts every `period`
+   * (the last stop's offset) instead of clamping at the outer ellipse. */
+  bool repeating = false;
+  float period = 1.0f;
+  /** Identity of the ramp (stops and geometry) for the renderer's texture cache. */
+  std::string key;
+};
 
 /** A solid, optionally rounded, rectangle. Coordinates are viewport-relative. */
 struct PaintRect {
@@ -71,6 +101,10 @@ struct PaintImage {
   /** Modulating colour for the image shader (white normally; a filter's
    * multiplicative effect may tint it). */
   Color tint{1.0f, 1.0f, 1.0f, 1.0f};
+  /** A `background-image` radial gradient: the renderer rasterises it into the
+   * quad instead of loading `src`/`svg`. Its stops already carry the colour
+   * functions of the filter chain; `tint` still carries brightness/opacity. */
+  std::shared_ptr<const PaintGradient> gradient;
 };
 
 /** One triangle of a clip path in device-space logical pixels. The paint pass
@@ -143,6 +177,18 @@ struct DisplayList {
   /** Human-readable dump, one shape per line, in painter order (diagnostics/tests). */
   std::string dump() const;
 };
+
+namespace paint_detail {
+
+/** Interpolate a gradient's colour at `t` (a fraction of the gradient line; any
+ * value when `repeating`). Stops interpolate in premultiplied alpha, as CSS
+ * does, so a `transparent` stop does not darken the ramp towards an opaque
+ * colour; the result is converted back to straight alpha, which is what both the
+ * band and the texture paths blend. */
+Color gradientColorAt(const std::vector<GradientStop> &stops, bool repeating, float period,
+                      float t);
+
+}  // namespace paint_detail
 
 /** Build the display list for a laid-out tree and append it to `out`. The
  * viewport size resolves `vw`/`vh` units inside `clip-path` and shadows; pass 0

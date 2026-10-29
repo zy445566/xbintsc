@@ -336,8 +336,9 @@ engine were Rust.
     - Generated content: `::before`/`::after` selectors, inherited pseudo styles,
       `content` strings/escapes/`attr()`, and synthetic layout boxes that never
       leak into DOM traversal.
-    - Multi-layer `background-image` with linear and radial gradients, painted
-      bottom-up as solid bands (18 strips / 32 concentric ellipses).
+    - Multi-layer `background-image` with linear gradients painted bottom-up as
+      solid bands (18 strips) and radial gradients rasterised per pixel into one
+      image texture (`renderer_gradient.cpp`).
     - `text-shadow` as shadow text runs, including a nine-tap blur approximate.
     - `clip-path` polygons (`inset`/`circle`/`ellipse`/`polygon`) resolved to
       device space, ear-clipped and intersected with shape geometry in
@@ -503,8 +504,10 @@ engine were Rust.
   pseudo styles into a per-restyle arena, resolves `content`, and layout inserts
   their boxes before/after the DOM children. `gradient_values.cpp` models a
   background layer list (linear/radial, shape/size/position/stops),
-  `paint_background.cpp` paints it, `paint_effects.cpp` applies filter colour
-  functions plus nine-tap blur/drop-shadow and emits `text-shadow` runs, and
+  `paint_background.cpp` resolves and paints it (radial layers become one
+  `PaintGradient`, which `renderer_gradient.cpp` rasterises into a texture),
+  `paint_effects.cpp` applies filter colour functions plus nine-tap
+  blur/drop-shadow and emits `text-shadow` runs, and
   `paint_clip.cpp`/`renderer_clip.cpp` clip geometry against triangulated
   `clip-path` polygons. E2E: `tests/e2e/gui-effects.test.ts`.
 - **M20** ✅ rendering performance. `@media` is evaluated once per rule per

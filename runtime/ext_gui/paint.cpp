@@ -380,7 +380,22 @@ std::string DisplayList::dump() const {
     } else {
       const PaintImage &image = images[op.index];
       suffix = transformSuffix(image.transform);
-      if (image.media_id != 0) {
+      if (image.gradient != nullptr) {
+        const PaintGradient &gradient = *image.gradient;
+        std::snprintf(buffer, sizeof(buffer),
+                      "image x=%.1f y=%.1f w=%.1f h=%.1f gradient=%s center=%.1f,%.1f "
+                      "radius=%.1f,%.1f stops=",
+                      image.x, image.y, image.width, image.height,
+                      gradient.repeating ? "repeating-radial" : "radial", gradient.center_x,
+                      gradient.center_y, gradient.radius_x, gradient.radius_y);
+        text += prefix + buffer;
+        for (size_t stop = 0; stop < gradient.stops.size(); stop++) {
+          std::snprintf(buffer, sizeof(buffer), "%s%s@%.4f", stop == 0 ? "" : ",",
+                        formatColor(gradient.stops[stop].color).c_str(),
+                        gradient.stops[stop].offset);
+          text += buffer;
+        }
+      } else if (image.media_id != 0) {
         std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f media=%llu",
                       image.x, image.y, image.width, image.height,
                       (unsigned long long)image.media_id);

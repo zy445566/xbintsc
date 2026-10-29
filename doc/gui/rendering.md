@@ -87,12 +87,16 @@ topmost), and both gradient kinds are supported:
   length (`px`/`em`/…) offsets, the `color <start> <end>` shorthand and
   multi-stop colours work (the band walk is axis-aligned, so an oblique angle
   uses the nearest axis);
-- a **radial** gradient is 32 concentric ellipses (64 when repeating). Each is a
-  unit-radius rounded rectangle mapped through the shape pipeline's transform
-  slot, so a circle or ellipse keeps the distance-field antialiasing.
-  Shape/size keywords (`circle`/`ellipse`, `closest-side`/`farthest-side`/
-  `closest-corner`/`farthest-corner`, explicit radii) and `at <position>` are
-  parsed.
+- a **radial** gradient is resolved per pixel in `renderer_gradient.cpp` into one
+  RGBA texture that is drawn as a single image quad (`PaintGradient`). Nesting the
+  bands instead would composite their alpha once per band — since every band
+  covers the whole interior — so a vignette whose stops fade to `transparent`
+  painted an opaque disc over the scene. Shape/size keywords
+  (`circle`/`ellipse`, `closest-side`/`farthest-side`/`closest-corner`/
+  `farthest-corner`, explicit radii) and `at <position>` are parsed; a
+  keyword-sized ellipse keeps the box's aspect ratio and is scaled until it meets
+  the side or corner, as CSS does. Stops interpolate in premultiplied alpha, and
+  the last stop extends past the ending shape over the rest of the box.
 
 `repeating-linear-gradient()` and `repeating-radial-gradient()` tile the stop
 pattern from 0 to the last stop's offset across the whole box; the stop list is
@@ -101,8 +105,8 @@ gradient whose last stop is below 100% holds that colour for the rest of the box
 as in CSS.
 
 The background colour sits under every layer. Gradients are partially
-transparent if their stops are, and the band approximation can show banding and
-alpha stacking on a very translucent multi-stop gradient.
+transparent if their stops are; a radial gradient is exact per pixel, while a
+linear one still samples 18 bands and can show banding on a large soft ramp.
 
 **Generated content** needs no new display-list kind: `::before`/`::after` are
 ordinary layout boxes owned by the per-restyle arena in `style.cpp`, so their

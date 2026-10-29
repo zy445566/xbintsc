@@ -262,8 +262,8 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
       特性）；`matchMedia()` 使用同一个求值器。
     - 生成内容：`::before`/`::after` 选择器、继承的伪样式、`content` 字符串/
       转义/`attr()`，以及不会泄漏到 DOM 遍历的合成布局盒。
-    - 多层 `background-image` 的线性与径向渐变，自下而上按纯色带绘制
-      （线性 18 条、径向 32 个同心椭圆）。
+    - 多层 `background-image`：线性渐变自下而上按纯色带绘制（18 条），径向渐变
+      逐像素光栅化成一张图像纹理（`renderer_gradient.cpp`）。
     - `text-shadow` 作为阴影文本 run，并带九次采样模糊近似。
     - `clip-path` 多边形（`inset`/`circle`/`ellipse`/`polygon`）解析到设备空间，
       用耳切法三角化，并在 `renderer_clip.cpp` 中与图形几何求交——不需要模板/
@@ -408,9 +408,10 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
   识别 `::before`/`::after`。`style.cpp` 把伪样式算进每次重算样式时重建的
   arena、解析 `content`，布局在真实子元素前后插入它们的盒子。
   `gradient_values.cpp` 建模背景层列表（线性/径向、形状/尺寸/位置/色标），
-  `paint_background.cpp` 绘制它，`paint_effects.cpp` 应用滤镜颜色函数与九次
-  采样模糊/投影并生成 `text-shadow` run，`paint_clip.cpp`/`renderer_clip.cpp`
-  对三角化的 `clip-path` 多边形裁剪几何。e2e 见
+  `paint_background.cpp` 解算并绘制它（径向层变成一个 `PaintGradient`，由
+  `renderer_gradient.cpp` 光栅化成纹理），`paint_effects.cpp` 应用滤镜颜色函数
+  与九次采样模糊/投影并生成 `text-shadow` run，`paint_clip.cpp`/
+  `renderer_clip.cpp` 对三角化的 `clip-path` 多边形裁剪几何。e2e 见
   `tests/e2e/gui-effects.test.ts`。
 - **M20** ✅ 渲染性能。`@media` 每次重算样式时每条规则只求值一次；没有
   `::before`/`::after` 的样式表完全跳过生成内容；只有样式表包含

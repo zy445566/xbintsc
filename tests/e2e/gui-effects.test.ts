@@ -145,13 +145,60 @@ describe.skipIf(!guiAvailable)("gui extension — effects", () => {
     const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
     expect(value("image")).toContain("radial-gradient()");
     expect(value("image")).toContain("linear-gradient()");
-    // Both layers are painted: the red radial core and its green outer ring
-    // (the linear blue layer is underneath them).
+    // The radial layer is one rasterised gradient carrying its stops; the linear
+    // layer is still painted as solid bands.
+    expect(list).toContain("gradient=radial");
     expect(list).toContain("#ff0000ff");
     expect(list).toContain("#00ff00ff");
     expect(list).toMatch(/#0000[0-9a-f]{2}ff/);
-    // Radial bands plus the linear strips.
-    expect(Number(value("count"))).toBeGreaterThan(30);
+    // Eighteen linear strips plus the background colour: the gradient image is
+    // not a stack of rectangles.
+    expect(Number(value("count"))).toBe(19);
+  });
+
+  it("rasterises a translucent radial vignette as one gradient image", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "vignette",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #scene { position: relative; width: 200px; height: 100px; background: #3366cc; }
+        #dim {
+          position: absolute; inset: -5%; z-index: 2; pointer-events: none;
+          background: radial-gradient(ellipse at center,
+            transparent 45%, rgba(0, 0, 0, 0.46) 76%, rgba(0, 0, 0, 0.88) 100%);
+        }
+      </style></head><body>
+        <div id="scene"><div id="dim"></div></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "vignette", width: 400, height: 300 });
+      win.on("ready", () => {
+        console.log("image=" + win.computedStyle("#dim", "background-image"));
+        console.log("count=" + win.paintCount());
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    expect(value("image")).toContain("radial-gradient()");
+    // A single op whose stops keep the alpha ramp. Painting this as nested
+    // translucent ellipses composited the alpha once per band and turned the
+    // whole scene solid black.
+    expect((list.match(/gradient=radial/g) ?? []).length).toBe(1);
+    expect(list).toContain("#00000000@0.4500");
+    expect(list).toContain("#000000e0@1.0000");
+    // Only the scene background is a rectangle; the vignette is not bands.
+    expect(value("count")).toBe("1");
   });
 
   it("tiles repeating gradients across the whole box", () => {
@@ -258,6 +305,7 @@ describe.skipIf(!guiAvailable)("gui extension — effects", () => {
     );
     const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
     expect(value("image")).toBe("repeating-radial-gradient()");
+    expect(list).toContain("gradient=repeating-radial");
     expect(list).toContain("#ff0000ff");
     expect(list).toContain("#0000ffff");
   });

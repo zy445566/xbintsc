@@ -72,18 +72,21 @@
   `to <side>`、`deg`/`grad`/`rad`/`turn`、百分比或长度（`px`/`em`/…）偏移、
   `color <start> <end>` 简写与多色标（色带沿最近轴行走，因此斜角会退化为
   最近的轴向）；
-- **径向**渐变是 32 个同心椭圆（重复渐变 64 个）。每个都是单位半径的圆角矩形，
-  经图形管线的 transform 槽映射，因此圆/椭圆仍保留距离场抗锯齿。支持形状/尺寸
-  关键字（`circle`/`ellipse`、`closest-side`/`farthest-side`/`closest-corner`/
-  `farthest-corner`、显式半径）与 `at <position>`。
+- **径向**渐变由 `renderer_gradient.cpp` 逐像素解算成一张 RGBA 纹理，作为单个
+  图像四边形绘制（`PaintGradient`）。若沿用嵌套色带，由于每条色带都会覆盖整个
+  内部区域，alpha 会叠加多次——淡出到 `transparent` 的暗角会把整个场景涂成实心
+  黑盘。支持形状/尺寸关键字（`circle`/`ellipse`、`closest-side`/`farthest-side`/
+  `closest-corner`/`farthest-corner`、显式半径）与 `at <position>`；关键字尺寸
+  的椭圆保持盒子的宽高比并缩放到刚好接触对应边或角，与 CSS 一致。色标在预乘
+  alpha 空间中插值，最后一个色标会延伸覆盖结束形状之外的剩余盒子。
 
 `repeating-linear-gradient()` 与 `repeating-radial-gradient()` 会在整个盒子上
 从 0 平铺到最后一个色标的偏移量；色标列表不会被强制结束在 100%，因此
 `red 0%, blue 10%` 每 10% 重复一次。普通渐变的最后一个色标若小于 100%，则剩余
 区域保持该颜色，与 CSS 一致。
 
-背景色位于所有层下方。若渐变色标带透明度，渐变也会半透明；色带近似可能产生
-轻微条带，非常透明的多色标渐变会出现 alpha 叠加。
+背景色位于所有层下方。若渐变色标带透明度，渐变也会半透明；径向渐变逐像素精确，
+线性渐变仍采样 18 条色带，较大的柔和渐变可能出现条带。
 
 **生成内容**不需要新的显示列表类型：`::before`/`::after` 是 `style.cpp` 中
 每次重算样式时重建的普通布局盒，因此其背景、边框、文本与 transform 都走同一条

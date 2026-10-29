@@ -13,6 +13,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdio>
 #include <vector>
 
 namespace xtgui {
@@ -39,14 +40,23 @@ bool AudioMixer::start_device() {
   if (stream_ != nullptr) return true;
   if (device_tried_) return false;
   device_tried_ = true;
-  if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) return false;
+  if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+    /* A missing device is not fatal (the page keeps its graph and clock), but
+     * silently staying quiet is indistinguishable from a broken mixer. */
+    std::fprintf(stderr, "xt_gui: audio subsystem unavailable: %s\n", SDL_GetError());
+    return false;
+  }
   SDL_AudioSpec spec;
   spec.format = SDL_AUDIO_F32;
   spec.channels = kAudioMixChannels;
   spec.freq = kAudioMixRate;
   stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, stream_callback,
                                       this);
-  if (stream_ == nullptr) return false;
+  if (stream_ == nullptr) {
+    std::fprintf(stderr, "xt_gui: could not open the default audio device: %s\n",
+                 SDL_GetError());
+    return false;
+  }
   SDL_ResumeAudioStreamDevice(stream_);
   return true;
 }

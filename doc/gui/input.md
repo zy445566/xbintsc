@@ -13,6 +13,13 @@ follows the artwork, not the box flow left behind.
 
 - SDL pointer/wheel/key events are routed to the owning window, hit tested, and
 delivered to the handlers registered with `on`. `mousedown` also moves focus.
+- Keyboard events also follow the DOM path: the target is the focused element (or
+  `<body>` when nothing is focused), the event bubbles through its ancestors to
+  `document`, and finally reaches `window` listeners. This is what lets a page
+  written for a browser use `document.addEventListener("keydown", …)`. The
+  payload carries browser `KeyboardEvent` spellings — `code` is the physical key
+  (`"KeyW"`, `"ArrowUp"`, `"Space"`) and `key` the produced value (`"w"`, `"W"`,
+  `" "`) — not SDL's scancode/key names.
 - `:hover` matches the hovered element **and its ancestors** (so hovering a child
   lights up its parents); `:focus` matches the focused element. When either
   changes, `XtDocument::setHover`/`setFocus` recompute styles and layout and mark

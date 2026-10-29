@@ -12,6 +12,11 @@
 
 - SDL 指针/滚轮/键盘事件会被路由到所属窗口，进行命中测试，并投递给用 `on`
   注册的处理器。`mousedown` 还会移动焦点。
+- 键盘事件同时走 DOM 路径：目标为聚焦元素（没有焦点时为 `<body>`），事件沿祖先
+  冒泡到 `document`，最后到达 `window` 监听器。因此按浏览器写的
+  `document.addEventListener("keydown", …)` 可以直接工作。负载使用浏览器
+  `KeyboardEvent` 的写法：`code` 是物理键（`"KeyW"`、`"ArrowUp"`、`"Space"`），
+  `key` 是产生的值（`"w"`、`"W"`、`" "`），而不是 SDL 的扫描码/键名。
 - `:hover` 匹配悬停元素**及其祖先**（因此悬停子元素会点亮其父元素）；
   `:focus` 匹配聚焦元素。当任一改变时，`XtDocument::setHover`/`setFocus`
   重新计算样式与布局，并把窗口几何标记为脏，因此改动会在下一帧绘制。

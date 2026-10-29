@@ -500,6 +500,24 @@ uint64_t audio_context_id(xt_value object) {
 
 xt_value xt_gui_audio_proto(void) { return audio_proto(); }
 
+/** Close every live context before `SDL_Quit`. The mixers hold SDL audio
+ * streams whose destructors must not run after the audio subsystem (and its
+ * device objects) were torn down; keeping the registry alive until static
+ * destruction was a crash on exit for every program that played a sound. */
+void xt_gui_audio_shutdown(void) {
+  std::vector<std::shared_ptr<AudioMixer>> mixers;
+  {
+    std::lock_guard<std::mutex> lock(g_registry_mutex);
+    mixers.reserve(g_mixers.size());
+    for (const auto &entry : g_mixers) mixers.push_back(entry.second);
+    g_mixers.clear();
+  }
+  for (const std::shared_ptr<AudioMixer> &mixer : mixers) {
+    mixer->close_device();
+    mixer->shutdown();
+  }
+}
+
 xt_value xt_gui_audio_create(int32_t argc, xt_value *argv) {
   bool offline = false;
   xt_value options = xt_arg(argc, argv, 0);

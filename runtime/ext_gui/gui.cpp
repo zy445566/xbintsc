@@ -460,6 +460,10 @@ extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
     SDL_DestroyGPUDevice(device);
     g_device = NULL;
   }
+  /* Audio streams belong to SDL, so close them before quitting the audio
+   * subsystem; otherwise a still-live AudioMixer's destructor runs after
+   * `SDL_Quit` and touches freed SDL state. */
+  xt_gui_audio_shutdown();
   if (g_sdl_initialized) {
     SDL_Quit();
     g_sdl_initialized = 0;
@@ -478,5 +482,8 @@ extern "C" xt_value xt_gui_quit(int32_t argc, xt_value *argv) {
   for (int i = 0; i < g_window_count; i++) {
     if (g_windows[i].open) xt_gui_quit_window(&g_windows[i]);
   }
+  /* A browser-style page never enters `xt_gui_run`, so stop its audio here
+   * too instead of leaving the device open until process exit. */
+  xt_gui_audio_shutdown();
   return XT_UNDEFINED;
 }

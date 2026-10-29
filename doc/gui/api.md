@@ -163,8 +163,14 @@ Input handlers receive a single payload object (lifecycle handlers receive none)
 ```ts
 win.on("click", (e) => console.log(e.x, e.y, e.button, e.target));
 win.on("wheel", (e) => console.log(e.deltaX, e.deltaY));
-win.on("keydown", (e) => console.log(e.key, e.code, e.ctrl, e.shift, e.alt, e.meta));
+win.on("keydown", (e) => console.log(e.key, e.code, e.ctrlKey, e.shiftKey));
 ```
+
+`document.addEventListener("keydown", handler)` receives the same event after it
+bubbles from the focused element or `<body>`, before the window listeners run.
+`code` is the physical key and uses the browser spelling (`"KeyW"`,
+`"ArrowUp"`, `"Space"`); `key` is the produced value (`"w"`/`"W"`, `"ArrowUp"`,
+`" "`). See [input.md](./input.md).
 
 | Field | Events | Meaning |
 | --- | --- | --- |
@@ -172,8 +178,9 @@ win.on("keydown", (e) => console.log(e.key, e.code, e.ctrl, e.shift, e.alt, e.me
 | `button` | pointer | `0` left, `1` middle, `2` right (`-1` for move) |
 | `clicks` | pointer | click count reported by the OS |
 | `deltaX`, `deltaY` | wheel | scroll amount (`deltaY` positive = down) |
-| `key`, `code` | keyboard | key name and physical scancode name |
-| `repeat`, `ctrl`, `shift`, `alt`, `meta` | keyboard | modifiers |
+| `key`, `code` | keyboard | browser `KeyboardEvent` spellings: produced value and physical key |
+| `repeat`, `ctrl`, `shift`, `alt`, `meta` | keyboard | modifiers (the legacy DOM spellings) |
+| `ctrlKey`, `shiftKey`, `altKey`, `metaKey` | keyboard | modifiers (the current DOM spellings) |
 | `target` | pointer, wheel | deepest element under the point as a CSS-like descriptor (`div#main.card`), or absent |
 
 ## Diagnostics

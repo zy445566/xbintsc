@@ -152,8 +152,13 @@ const samples = ctx.__render(480);   // 交错立体声 Float32Array
 ```ts
 win.on("click", (e) => console.log(e.x, e.y, e.button, e.target));
 win.on("wheel", (e) => console.log(e.deltaX, e.deltaY));
-win.on("keydown", (e) => console.log(e.key, e.code, e.ctrl, e.shift, e.alt, e.meta));
+win.on("keydown", (e) => console.log(e.key, e.code, e.ctrlKey, e.shiftKey));
 ```
+
+`document.addEventListener("keydown", handler)` 会在事件从聚焦元素或 `<body>`
+冒泡后收到同一个事件，早于 window 监听器。`code` 是物理键并采用浏览器写法
+（`"KeyW"`、`"ArrowUp"`、`"Space"`）；`key` 是产生的值（`"w"`/`"W"`、
+`"ArrowUp"`、`" "`）。见 [input.md](./input.md)。
 
 | 字段 | 事件 | 含义 |
 | --- | --- | --- |
@@ -161,8 +166,9 @@ win.on("keydown", (e) => console.log(e.key, e.code, e.ctrl, e.shift, e.alt, e.me
 | `button` | pointer | `0` 左键、`1` 中键、`2` 右键（移动时为 `-1`） |
 | `clicks` | pointer | 操作系统报告的点击次数 |
 | `deltaX`、`deltaY` | wheel | 滚动量（`deltaY` 为正表示向下） |
-| `key`、`code` | keyboard | 键名与物理扫描码名 |
-| `repeat`、`ctrl`、`shift`、`alt`、`meta` | keyboard | 修饰键 |
+| `key`、`code` | keyboard | 浏览器 `KeyboardEvent` 写法：产生的值与物理键 |
+| `repeat`、`ctrl`、`shift`、`alt`、`meta` | keyboard | 修饰键（旧版 DOM 写法） |
+| `ctrlKey`、`shiftKey`、`altKey`、`metaKey` | keyboard | 修饰键（现行 DOM 写法） |
 | `target` | pointer、wheel | 该点下最深的元素，表示为类 CSS 描述符（`div#main.card`），可能缺省 |
 
 ## 诊断

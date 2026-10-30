@@ -22,8 +22,13 @@
 
 namespace xtgui {
 
-/** The four translation/reflection entry points the engine calls on demand. */
+/** The GLSL preprocessing/translation/reflection entry points the engine calls
+ * on demand. */
 struct GpuShaderApi {
+  std::string (*unroll_glsl_pragmas)(const std::string &source);
+  void (*scan_glsl)(const std::string &source, bool fragment, GlslShaderInfo *info);
+  std::string (*rewrite_glsl)(const std::string &source, bool fragment,
+                              const GlslLinkLayout &layout, const GlslShaderInfo &info);
   bool (*compile_glsl)(const std::string &source, bool fragment,
                        std::vector<uint32_t> *spirv, std::string *log);
   bool (*reflect_uniform_block)(const std::vector<uint32_t> &spirv,

@@ -290,8 +290,14 @@ METHOD(node_width_get) {
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || !node->isElement()) return xt_number(0);
   if (node->isTag("canvas")) {
-    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
-      return xt_number(webgl->width());
+    if (const XtWebglApi *webgl = xt_webgl_api()) {
+      if (void *context = webgl->find(win, node)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgl->info(context, &width, &height, &id);
+        return xt_number(width);
+      }
     }
     xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
     if (canvas != nullptr) return xt_number(canvas->width());
@@ -310,16 +316,22 @@ METHOD(node_width_set) {
   if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
   double value = canvas_number_arg(argc, argv, 0, 0.0);
   if (node->isTag("canvas")) {
-    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
-      webgl->resize((int)value, webgl->height());
-      /* A resize replaces the colour texture; the page has to re-upload the
-       * image op even when the box size did not change. */
-      mark_dirty(win);
-      if (win != nullptr && win->document != nullptr) {
-        win->document->setCanvasInfo(node, (float)webgl->width(), (float)webgl->height(),
-                                     webgl->id());
+    if (const XtWebglApi *webgl = xt_webgl_api()) {
+      if (void *context = webgl->find(win, node)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgl->info(context, &width, &height, &id);
+        webgl->resize(context, (int)value, (int)height);
+        /* A resize replaces the colour texture; the page has to re-upload the
+         * image op even when the box size did not change. */
+        mark_dirty(win);
+        if (win->document != nullptr) {
+          webgl->info(context, &width, &height, &id);
+          win->document->setCanvasInfo(node, width, height, id);
+        }
+        return XT_UNDEFINED;
       }
-      return XT_UNDEFINED;
     }
     xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
     if (canvas != nullptr) {
@@ -355,8 +367,14 @@ METHOD(node_height_get) {
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || !node->isElement()) return xt_number(0);
   if (node->isTag("canvas")) {
-    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
-      return xt_number(webgl->height());
+    if (const XtWebglApi *webgl = xt_webgl_api()) {
+      if (void *context = webgl->find(win, node)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgl->info(context, &width, &height, &id);
+        return xt_number(height);
+      }
     }
     xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
     if (canvas != nullptr) return xt_number(canvas->height());
@@ -374,14 +392,20 @@ METHOD(node_height_set) {
   if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
   double value = canvas_number_arg(argc, argv, 0, 0.0);
   if (node->isTag("canvas")) {
-    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
-      webgl->resize(webgl->width(), (int)value);
-      mark_dirty(win);
-      if (win != nullptr && win->document != nullptr) {
-        win->document->setCanvasInfo(node, (float)webgl->width(), (float)webgl->height(),
-                                     webgl->id());
+    if (const XtWebglApi *webgl = xt_webgl_api()) {
+      if (void *context = webgl->find(win, node)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgl->info(context, &width, &height, &id);
+        webgl->resize(context, (int)width, (int)value);
+        mark_dirty(win);
+        if (win->document != nullptr) {
+          webgl->info(context, &width, &height, &id);
+          win->document->setCanvasInfo(node, width, height, id);
+        }
+        return XT_UNDEFINED;
       }
-      return XT_UNDEFINED;
     }
     xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
     if (canvas != nullptr) {

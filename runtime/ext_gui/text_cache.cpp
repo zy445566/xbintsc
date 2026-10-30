@@ -3,7 +3,7 @@
  *
  * Layout measures every word of the document on every layout pass, and the
  * renderer shapes every text run again to place its glyphs. Without a cache a
- * document with a few thousand words runs thousands of HarfBuzz shapes per
+ * document with a few thousand words runs thousands of shaping calls per
  * frame, which is what made a large page unusable. This module memoises
  * `(face, text) -> glyphs + advance` behind a two-generation cache: when the
  * budget is exceeded the *spare* generation is dropped and becomes the current

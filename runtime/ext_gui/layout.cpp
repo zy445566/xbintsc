@@ -6,13 +6,15 @@
  *   - Block flow: consecutive inline-level children form an anonymous inline
  *     formatting context; block-level children are stacked vertically.
  *   - Inline flow: greedy, word-based line breaking with `text-align`; text is
- *     measured with the HarfBuzz/FreeType stack in `text.h`.
+ *     measured with the stb_truetype stack in `text.h`.
  *   - Flexbox: single-line row/column with grow/shrink, gap, justify-content
  *     and align-items.
  * Margins do not collapse yet, and only static positioning is honoured.
  */
 
 #include "layout_internal.h"
+
+#include "image_api.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -51,6 +53,7 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
   box->node = node;
   box->style = style;
   box->display = style != nullptr ? style->display : Display::Block;
+  const XtImageApi *images = xt_image_api();
   if (node->isElement() && node->isTag("img")) {
     box->is_image = true;
     const std::string *src = node->attr("src");
@@ -58,7 +61,7 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
       box->image_src = *src;
       int width = 0;
       int height = 0;
-      if (xt_image_size(*src, &width, &height)) {
+      if (images != nullptr && images->size(*src, &width, &height)) {
         box->intrinsic_width = (float)width;
         box->intrinsic_height = (float)height;
       }
@@ -113,12 +116,14 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
      * let paint/rasterisation handle the children — the normal box walk must
      * not descend into them. */
     box->is_inline_svg = true;
-    box->svg_markup = xt_inline_svg_serialize(node);
-    int width = 0;
-    int height = 0;
-    if (xt_svg_markup_size(box->svg_markup, &width, &height)) {
-      box->intrinsic_width = (float)width;
-      box->intrinsic_height = (float)height;
+    if (images != nullptr) {
+      box->svg_markup = images->inline_serialize(node);
+      int width = 0;
+      int height = 0;
+      if (images->svg_markup_size(box->svg_markup, &width, &height)) {
+        box->intrinsic_width = (float)width;
+        box->intrinsic_height = (float)height;
+      }
     }
     if (box->intrinsic_width <= 0.0f) box->intrinsic_width = 300.0f;
     if (box->intrinsic_height <= 0.0f) box->intrinsic_height = 150.0f;

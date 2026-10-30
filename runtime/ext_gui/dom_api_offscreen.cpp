@@ -200,7 +200,9 @@ METHOD(canvas_transfer_control_to_offscreen) {
   if (win == nullptr || node == nullptr || !node->isElement() || !node->isTag("canvas")) {
     return XT_NULL;
   }
-  if (xt_gui_webgl_find(win, node) != nullptr) return XT_NULL;
+  if (const XtWebglApi *webgl = xt_webgl_api()) {
+    if (webgl->find(win, node) != nullptr) return XT_NULL;
+  }
   xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
   if (canvas == nullptr) return XT_NULL;
   xt_value handle = make_offscreen(canvas, win->object);

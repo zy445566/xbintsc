@@ -48,7 +48,7 @@ const win = createWindow({ title: "link features", width: 120, height: 80 });
 describe.skipIf(!guiAvailable)("link features are selected per program", () => {
   it("leaves FFmpeg and glslang out of a DOM-only program", () => {
     const binary = buildBinary("dom", `${WINDOW}win.loadHTML("<div>hello</div>");`);
-    expect(contains(binary, "glslang Khronos")).toBe(false);
+    expect(contains(binary, "glslang initialization failed")).toBe(false);
     expect(contains(binary, "matroska")).toBe(false);
   });
 
@@ -59,7 +59,7 @@ describe.skipIf(!guiAvailable)("link features are selected per program", () => {
 canvas.getContext("webgl2");
 `,
     );
-    expect(contains(binary, "glslang Khronos")).toBe(true);
+    expect(contains(binary, "glslang initialization failed")).toBe(true);
   });
 
   it("links FFmpeg when the program may play a media element", () => {

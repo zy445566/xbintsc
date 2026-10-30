@@ -16,7 +16,8 @@
 
 #include "image_bitmap.h"
 #include "canvas.h"
-#include "webgl.h"
+#include "image_api.h"
+#include "webgl_api.h"
 
 namespace {
 
@@ -63,7 +64,9 @@ bool source_pixels(xt_value source, xtgui::Image *out) {
   if (node == nullptr || !node->isElement()) return false;
   if (node->isTag("img")) {
     const std::string *src = node->attr("src");
-    const xtgui::Image *image = src != nullptr ? xtgui::xt_image_load(*src) : nullptr;
+    const XtImageApi *images = xt_image_api();
+    const xtgui::Image *image =
+        src != nullptr && images != nullptr ? images->load(*src, 0, 0) : nullptr;
     if (image == nullptr) return false;
     *out = *image;
     return true;
@@ -73,16 +76,22 @@ bool source_pixels(xt_value source, xtgui::Image *out) {
       *out = canvas->image();
       return true;
     }
-    if (xtgui::WebGLContext *context = xt_gui_webgl_find(win, node)) {
-      out->width = context->width();
-      out->height = context->height();
-      out->pixels.resize((size_t)out->width * out->height * 4);
-      if (!context->read_pixels(0, 0, out->width, out->height, out->pixels.data())) {
-        return false;
+    if (const XtWebglApi *webgl = xt_webgl_api()) {
+      if (void *context = webgl->find(win, node)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgl->info(context, &width, &height, &id);
+        out->width = (int)width;
+        out->height = (int)height;
+        out->pixels.resize((size_t)out->width * out->height * 4);
+        if (!webgl->read_pixels(context, 0, 0, out->width, out->height, out->pixels.data())) {
+          return false;
+        }
+        /* readPixels is GL-ordered (bottom-up); bitmaps are stored top-down. */
+        flip_rows(&out->pixels, out->width, out->height);
+        return true;
       }
-      /* readPixels is GL-ordered (bottom-up); bitmaps are stored top-down. */
-      flip_rows(&out->pixels, out->width, out->height);
-      return true;
     }
     return false;
   }

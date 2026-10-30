@@ -16,7 +16,9 @@
 #include "canvas.h"
 #include "image.h"
 #include "image_bitmap.h"
+#include "image_api.h"
 #include "webgl.h"
+#include "webgl_feature.h"
 
 namespace domapi {
 namespace {
@@ -121,10 +123,11 @@ bool webgl_read_source(xt_value source, int *width, int *height, std::vector<uin
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(source, &win);
   const xtgui::Image *image = nullptr;
+  const XtImageApi *images = xt_image_api();
   std::vector<uint8_t> owned;
   if (node != nullptr && node->isElement() && node->isTag("img")) {
     const std::string *src = node->attr("src");
-    if (src != nullptr) image = xtgui::xt_image_load(*src);
+    if (src != nullptr && images != nullptr) image = images->load(*src, 0, 0);
   } else if (node != nullptr && node->isElement() && node->isTag("video")) {
     xtgui::MediaPlayer *player = xt_gui_media_player(win, node);
     if (player != nullptr) image = player->frame();
@@ -161,7 +164,7 @@ bool webgl_read_source(xt_value source, int *width, int *height, std::vector<uin
     xt_value src = xt_object_get_cstr(source, "src");
     if (XT_IS_STRING(src)) {
       const char *path = xt_string_data(xt_to_string(src));
-      if (path != nullptr && path[0] != '\0') image = xtgui::xt_image_load(path);
+      if (path != nullptr && path[0] != '\0' && images != nullptr) image = images->load(path, 0, 0);
     }
   }
   if (image == nullptr || image->width <= 0 || image->height <= 0) return false;

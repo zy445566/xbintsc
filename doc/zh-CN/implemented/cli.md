@@ -28,7 +28,7 @@ xbintsc help                        帮助
     --emit <kind>     exe | obj | ir（默认 exe）
 -O0..-O3              优化级别（默认 -O2）
     --ext <names>     逗号分隔扩展（如 node）
-    --feature <names> 强制开启可选链接特性（media,gpu,all）
+    --feature <names> 强制开启可选链接特性（media,gpu,images,webgl,all）
     --no-feature <n>  即使检测到也不链接该可选特性
     --ext-native <m>  从 JSON manifest 注册 C++/Rust 扩展
     --config <path>   使用项目配置（默认自动查找 xbintsc.config.json）

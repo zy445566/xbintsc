@@ -13,7 +13,7 @@
 
 #include <algorithm>
 
-#include "inline_svg.h"
+#include "image_api.h"
 #include "paint.h"
 #include "perf.h"
 #include "text.h"
@@ -252,17 +252,17 @@ static xt_value win_inline_svg(xt_value self, xt_value env, int32_t argc, xt_val
   const char *selector = xt_string_data(selectorValue);
   if (selector == nullptr) return XT_UNDEFINED;
   const xtgui::Node *node = win->document->querySelector(selector);
-  if (!xtgui::xt_inline_svg_is_root(node)) return XT_UNDEFINED;
-  std::string markup = xtgui::xt_inline_svg_serialize(node);
-  int width = 0;
-  int height = 0;
-  xtgui::xt_svg_markup_size(markup, &width, &height);
+  const XtImageApi *images = xt_image_api();
+  if (images == nullptr || !images->inline_is_root(node)) return XT_UNDEFINED;
+  std::string markup = images->inline_serialize(node);
+  int width = 0, height = 0;
+  images->svg_markup_size(markup, &width, &height);
   xt_value object = xt_object_new();
   xt_object_set(object, xt_string_from_cstr("markup"), xt_string_from_cstr(markup.c_str()));
   xt_object_set(object, xt_string_from_cstr("width"), xt_number(width));
   xt_object_set(object, xt_string_from_cstr("height"), xt_number(height));
   xt_object_set(object, xt_string_from_cstr("shapes"),
-                xt_number(xtgui::xt_svg_markup_shapes(markup)));
+                xt_number(images->svg_markup_shapes(markup)));
   return object;
 }
 

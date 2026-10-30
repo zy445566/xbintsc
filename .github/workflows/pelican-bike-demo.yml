@@ -83,23 +83,19 @@ jobs:
 
       - run: npm ci
 
-      # Building SDL3/FreeType/HarfBuzz from source is the slow part of the GUI
+      # Building SDL3 from source is the slow part of the GUI
       # archive; cache them, keyed by the build script (which pins the versions).
       # The SDL3 *build* tree is deliberately absent: a CMake build tree records
       # the machine it was configured on, so a cached one restored here carries
       # that machine's compiler path and its `SDL_X11`/`SDL_WAYLAND` choices into
       # a configure that must make its own. `scripts/build-gui.ts` keeps it at
-      # `vendor/sdl-build`, outside every cached path.
+      # `vendor/sdl-build-lean`, outside every cached path.
       - name: Cache the GUI vendored libraries
         if: runner.os != 'Windows'
         uses: actions/cache@v5
         with:
           path: |
             vendor/SDL
-            vendor/freetype
-            vendor/freetype-build
-            vendor/harfbuzz
-            vendor/harfbuzz-build
           key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts') }}
 
       # The `gui` extension links a prebuilt `runtime/lib/<os>-<arch>/gui.a`;

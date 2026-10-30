@@ -77,7 +77,8 @@ xtgui::Canvas2D *xt_gui_canvas_get(XtGuiWindow *win, const xtgui::Node *node) {
 
 void xt_gui_canvas_forget(XtGuiWindow *win, const xtgui::Node *node) {
   if (win == nullptr || node == nullptr) return;
-  xt_gui_webgl_forget(win, node);
+  const XtWebglApi *webgl = xt_webgl_api();
+  if (webgl != nullptr) webgl->forget(win, node);
   auto found = win->canvases.find(node);
   if (found == win->canvases.end()) return;
   releaseCanvasTexture(found->second.get());
@@ -88,11 +89,17 @@ void xt_gui_canvas_sync(XtGuiWindow *win) {
   if (win == nullptr || win->document == nullptr) return;
   std::vector<const xtgui::Node *> nodes;
   collectCanvases(win->document->root(), &nodes);
+  const XtWebglApi *webgl = xt_webgl_api();
   for (const xtgui::Node *node : nodes) {
-    if (xtgui::WebGLContext *webgl = xt_gui_webgl_find(win, node)) {
-      win->document->setCanvasInfo(node, (float)webgl->width(), (float)webgl->height(),
-                                   webgl->id());
-      continue;
+    if (webgl != nullptr) {
+      if (void *context = webgl->find(win, node)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgl->info(context, &width, &height, &id);
+        win->document->setCanvasInfo(node, width, height, id);
+        continue;
+      }
     }
     xtgui::Canvas2D *canvas = xt_gui_canvas_find(win, node);
     if (canvas != nullptr) {
@@ -136,7 +143,8 @@ void xt_gui_canvas_bind_pending(XtGuiWindow *win, const xtgui::Node *node, xt_va
 
 void xt_gui_canvas_shutdown(XtGuiWindow *win) {
   if (win == nullptr) return;
-  xt_gui_webgl_shutdown(win);
+  const XtWebglApi *webgl = xt_webgl_api();
+  if (webgl != nullptr) webgl->shutdown(win);
   for (auto &entry : win->canvases) releaseCanvasTexture(entry.second.get());
   win->canvases.clear();
   for (auto &entry : win->offscreen_canvases) releaseCanvasTexture(entry.second.get());

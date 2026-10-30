@@ -22,7 +22,7 @@ with absolute (viewport-relative) geometry:
   Each line shrinks to the band left free by any floats (`float: left|right`)
   that overlap it, so later lines wrap around them.
   Each text fragment remembers the run it covers, so paint can shape it. Text is
-  measured with the HarfBuzz/FreeType stack (see [Text stack](./rendering.md#text-stack-m4b)).
+  measured with the stb_truetype stack (see [Text stack](./rendering.md#text-stack-m4b)).
 - **Flexbox** — `row`/`column` (and the `-reverse` variants) with `gap`,
   `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and `align-items`
   (including `stretch` when the cross size is definite). `flex-wrap: wrap`

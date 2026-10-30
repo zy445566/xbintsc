@@ -205,7 +205,7 @@ jobs:
 
       - run: npm ci
 
-      # Building SDL3/FreeType/HarfBuzz/glslang/SPIRV-Cross (and FFmpeg for the
+      # Building SDL3/glslang/SPIRV-Cross (and FFmpeg for the
       # media archive) from source is the slow part; cache the sources, keyed by
       # both build scripts (which pin the versions). actions/cache v5+ runs on
       # node24 (v4 still targets the deprecated node20). The *build* trees are
@@ -213,7 +213,7 @@ jobs:
       # configured on, so a cached one restored here carries that machine's
       # compiler path and its `SDL_X11`/`SDL_WAYLAND` choices into a configure
       # that must make its own. `scripts/build-gui.ts` keeps them at
-      # `vendor/sdl-build`, `vendor/glslang-build` and `vendor/spirv-cross-build`,
+      # `vendor/sdl-build-lean`, `vendor/glslang-build-lean` and `vendor/spirv-cross-build-lean`,
       # outside every cached path.
       - name: Cache the GUI and media vendored libraries
         if: runner.os != 'Windows'
@@ -221,10 +221,6 @@ jobs:
         with:
           path: |
             vendor/SDL
-            vendor/freetype
-            vendor/freetype-build
-            vendor/harfbuzz
-            vendor/harfbuzz-build
             vendor/glslang
             vendor/spirv-cross
             vendor/ffmpeg
@@ -241,8 +237,6 @@ jobs:
         with:
           path: |
             vendor/SDL
-            vendor/freetype
-            vendor/harfbuzz
             vendor/glslang
             vendor/spirv-cross
             vendor/ffmpeg
@@ -292,7 +286,7 @@ jobs:
       - name: Run the Rust native extension example
         run: npx tsx src/cli/main.ts run examples/extensions/rust/demo.ts --ext-native examples/extensions/rust/xbintsc.manifest.json --out build/examples
 
-      # The GUI engine statically links SDL3 + FreeType + HarfBuzz into
+      # The GUI engine statically links SDL3 + glslang into
       # `runtime/lib/<os>-<arch>/gui.a`. Building compiles those libraries from
       # source, so it is slower (they are cached per OS/arch).
       - name: Build the GUI archive (Linux/macOS)
@@ -307,7 +301,7 @@ jobs:
         run: npm run media
 
       # Windows x64 compiles both archives too. Building needs no GPU: gui.lib is
-      # SDL3/FreeType/HarfBuzz for the MSVC ABI, and media.lib adds FFmpeg
+      # SDL3/glslang for the MSVC ABI, and media.lib adds FFmpeg
       # compiled with clang-cl. Running them still needs a Vulkan driver, which
       # the hosted runner lacks, so the example run below stays provisional — but
       # a GUI+media *link* is checked here, which is what catches an unresolved
@@ -532,10 +526,6 @@ jobs:
         with:
           path: |
             vendor/SDL
-            vendor/freetype
-            vendor/freetype-build
-            vendor/harfbuzz
-            vendor/harfbuzz-build
             vendor/glslang
             vendor/spirv-cross
             vendor/ffmpeg
@@ -547,8 +537,6 @@ jobs:
         with:
           path: |
             vendor/SDL
-            vendor/freetype
-            vendor/harfbuzz
             vendor/glslang
             vendor/spirv-cross
             vendor/ffmpeg

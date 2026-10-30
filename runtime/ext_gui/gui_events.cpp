@@ -475,8 +475,9 @@ void xt_gui_render_window(XtGuiWindow *win) {
   xt_gui_upload_end(&uploads);
   /* WebGL contexts record into their own command buffers; submit them first so
    * the page's render pass samples this frame's drawing-buffer contents. */
-  xt_gui_webgl_submit_all();
-  if (uploaded || !win->webgl_canvases.empty()) win->present_dirty = 1;
+  const XtWebglApi *webgl = xt_webgl_api();
+  const bool webgl_live = webgl != nullptr && webgl->submit_all();
+  if (uploaded || webgl_live) win->present_dirty = 1;
 
   /* Present only when something happened. A static document otherwise burned a
    * swapchain acquire and a full-scene draw every frame. `XT_GUI_ALWAYS_PRESENT`

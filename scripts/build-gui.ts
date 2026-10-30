@@ -12,24 +12,26 @@
  * Steps:
  *   1. fetch the pinned SDL3 source into `vendor/SDL` (gitignored),
  *   2. build `libSDL3.a` with CMake,
- *   2b. fetch + build static FreeType and HarfBuzz for text,
- *   2c. fetch + build static glslang (GLSL ES -> SPIR-V) and SPIRV-Cross
+ *   2b. fetch + build static glslang (GLSL ES -> SPIR-V) and SPIRV-Cross
  *       (SPIR-V -> Metal Shading Language),
- *   3. compile the engine translation units,
+ *   3. compile the engine translation units (text uses the bundled
+ *      stb_truetype, so no FreeType/HarfBuzz build),
  *   4. merge everything into `gui.a` (libtool on macOS, `ar -M` elsewhere;
  *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
  *
- * Media decoding is *not* part of this archive: it lives in the separate
- * `media` extension (`npm run media`, `runtime/ext_media/`), so a program that
- * only renders HTML/CSS never links FFmpeg.
+ * Media decoding is *not* part of this archive: it is an optional link feature
+ * of the `gui` extension (`npm run media`, `runtime/ext_media/`), so a program
+ * that only renders HTML/CSS never links FFmpeg.
+ *
+ * Every library and every engine object is compiled with function/data sections;
+ * SDL is configured without the subsystems the engine never calls. The linker's
+ * dead-section pass can then drop whatever a particular program does not reach.
  *
  * Environment:
  *   xbintsc_CXX    C++ compiler override (default: clang++ next to the resolved clang)
  *   xbintsc_CMAKE  CMake override (default: a vendored CMake, then `cmake`)
  *   xbintsc_AR     archiver override (default: llvm-ar next to clang, then llvm-ar)
  *   SDL3_TAG       SDL3 git tag to check out (default: release-3.2.10)
- *   FREETYPE_VERSION  FreeType version (default: 2.13.3)
- *   HARFBUZZ_VERSION  HarfBuzz version (default: 10.1.0)
  *   SPIRV_CROSS_VERSION  SPIRV-Cross tag (default: vulkan-sdk-1.4.313.0)
  *
  * The C/C++ compiler is the same clang the driver resolves (see
@@ -46,14 +48,20 @@ import { fileURLToPath } from "node:url";
 import { platformSlug } from "../src/driver/paths.js";
 import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js";
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
+import {
+  cmakeToolchainArgs,
+  LEAN_SDL_OPTIONS,
+  SECTION_CMAKE_FLAGS,
+  SECTION_FLAGS,
+} from "./gui-build-options.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeDir = join(root, "runtime");
 const engineDir = join(runtimeDir, "ext_gui");
 const vendorDir = join(root, "vendor");
 const sdlSrc = join(vendorDir, "SDL");
-/* SDL's build tree is a *sibling* of its source, like FreeType's and HarfBuzz's,
- * never inside it: the CI cache keyed on a vendored library ships the whole
+/* SDL's build tree is a *sibling* of its source, like glslang's, never inside
+ * it: the CI cache keyed on a vendored library ships the whole
  * `vendor/SDL` tree, and a CMake build tree is not relocatable across machines
  * or platforms. `CMakeCache.txt` records the host's compiler and probes, and
  * SDL's video options are `option()`s — the first configure to run wins, so a
@@ -61,22 +69,18 @@ const sdlSrc = join(vendorDir, "SDL");
  * default is OFF) survives into a Linux configure and SDL then aborts with
  * "SDL could not find X11 or Wayland development libraries". Keeping the build
  * tree out of the cached source path makes each machine configure its own. */
-const sdlBuild = join(vendorDir, "sdl-build");
-const freetypeSrc = join(vendorDir, "freetype");
-const freetypeBuild = join(vendorDir, "freetype-build");
-const harfbuzzSrc = join(vendorDir, "harfbuzz");
-const harfbuzzBuild = join(vendorDir, "harfbuzz-build");
+const sdlBuild = join(vendorDir, "sdl-build-lean");
 /* glslang translates the GLSL ES that WebGL programs supply at run time; it is
  * built statically and merged into the archive, so a compiled binary needs no
  * Vulkan SDK. The SPIR-V headers are its only external dependency. */
 const glslangSrc = join(vendorDir, "glslang");
-const glslangBuild = join(vendorDir, "glslang-build");
+const glslangBuild = join(vendorDir, "glslang-build-lean");
 const spirvHeadersSrc = join(glslangSrc, "External", "spirv-headers");
 /* SPIRV-Cross turns the same SPIR-V into the Metal Shading Language that
  * SDL_GPU's Metal backend consumes at run time (macOS). It needs no external
  * headers: its own parser reads the module that glslang produced. */
 const spirvCrossSrc = join(vendorDir, "spirv-cross");
-const spirvCrossBuild = join(vendorDir, "spirv-cross-build");
+const spirvCrossBuild = join(vendorDir, "spirv-cross-build-lean");
 const objDir = join(root, "build", "gui-obj");
 const outDir = join(runtimeDir, "lib", platformSlug());
 
@@ -84,49 +88,10 @@ const isWindows = process.platform === "win32";
 const objectSuffix = isWindows ? ".obj" : ".o";
 const output = join(outDir, isWindows ? "gui.lib" : "gui.a");
 
-/* CMake generator and ABI settings used for every vendored library. Ninja is
- * selected on Windows because the Visual Studio generator imports the
- * machine-wide MSBuild/vcpkg integration, whose `LIBPATH` shadows the Windows
- * SDK and makes the compiler probe fail with
- * `LNK1104: cannot open file 'ucrtd.lib'`.
- *
- * `CMAKE_MSVC_RUNTIME_LIBRARY` is pinned to the *static* CRT (`MultiThreaded`),
- * which is clang's Windows default (`-defaultlib:libcmt`) and what xbintsc uses
- * for its own runtime objects. Building the vendored libraries against the DLL
- * CRT instead fails the final link with
- * `LNK2038: mismatch detected for 'RuntimeLibrary'`. The variable only takes
- * effect when policy CMP0091 is NEW, but FreeType and HarfBuzz declare
- * `cmake_minimum_required` below 3.15, which defaults the policy to OLD and
- * silently ignores it — hence `CMAKE_POLICY_DEFAULT_CMP0091`.
- *
- * The tool paths are absolute and come from the same clang the driver resolves
- * (on Windows, the LLVM bundled with Visual Studio when no newer one is on
- * `PATH`), so every object merged into the archive shares one ABI and one
- * optimization behaviour. Never leave these as bare `clang`/`clang++`: an older
- * compiler earlier on `PATH` may be picked up at build time. */
-function cmakeToolchainArgs(): string[] {
-  const compilers = [
-    `-DCMAKE_C_COMPILER=${clang}`,
-    `-DCMAKE_CXX_COMPILER=${clangxx}`,
-  ];
-  if (!isWindows) return compilers;
-  return [
-    "-G", "Ninja",
-    "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
-    "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW",
-    ...compilers,
-    `-DCMAKE_AR=${llvmAr}`,
-  ];
-}
-
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
-const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
-const HARFBUZZ_VERSION = process.env.HARFBUZZ_VERSION || "10.1.0";
 const GLSLANG_VERSION = process.env.GLSLANG_VERSION || "16.6.0";
 const SPIRV_HEADERS_VERSION = process.env.SPIRV_HEADERS_VERSION || "vulkan-sdk-1.4.363.0";
 const SPIRV_CROSS_VERSION = process.env.SPIRV_CROSS_VERSION || "vulkan-sdk-1.4.313.0";
-const FREETYPE_URL = `https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.xz`;
-const HARFBUZZ_URL = `https://github.com/harfbuzz/harfbuzz/releases/download/${HARFBUZZ_VERSION}/harfbuzz-${HARFBUZZ_VERSION}.tar.xz`;
 const GLSLANG_URL = `https://codeload.github.com/KhronosGroup/glslang/tar.gz/refs/tags/${GLSLANG_VERSION}`;
 const SPIRV_HEADERS_URL = `https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/refs/tags/${SPIRV_HEADERS_VERSION}`;
 const SPIRV_CROSS_URL = `https://codeload.github.com/KhronosGroup/SPIRV-Cross/tar.gz/refs/tags/${SPIRV_CROSS_VERSION}`;
@@ -274,7 +239,7 @@ function configureCmake(
     rmSync(build, { recursive: true, force: true });
   }
   const cmake = findCmake();
-  run(cmake, ["-S", source, "-B", build, ...cmakeToolchainArgs(), ...extraArgs]);
+  run(cmake, ["-S", source, "-B", build, ...cmakeToolchainArgs({ clang, clangxx, llvmAr, isWindows }), ...extraArgs]);
   return cmake;
 }
 
@@ -318,7 +283,7 @@ function firstExisting(candidates: readonly string[]): string | undefined {
 }
 
 /** Locate a library CMake produced, accepting the POSIX and MSVC names and
- * falling back to a version-suffixed MSVC name (e.g. `freetype-2.13.3.lib`). */
+ * falling back to a version-suffixed MSVC name. */
 function builtLibrary(buildDir: string, names: readonly string[], pattern?: RegExp): string | undefined {
   const candidates: string[] = [];
   for (const name of names) {
@@ -339,12 +304,6 @@ function builtLibrary(buildDir: string, names: readonly string[], pattern?: RegE
 
 function sdlArchive(): string | undefined {
   return builtLibrary(sdlBuild, ["libSDL3.a", "SDL3-static.lib", "SDL3.lib"], /^SDL3[-\w.]*\.lib$/);
-}
-function freetypeArchive(): string | undefined {
-  return builtLibrary(freetypeBuild, ["libfreetype.a", "freetype.lib"], /^freetype[-\d.]*\.lib$/);
-}
-function harfbuzzArchive(): string | undefined {
-  return builtLibrary(harfbuzzBuild, ["libharfbuzz.a", "harfbuzz.lib"], /^harfbuzz[-\d.]*\.lib$/);
 }
 function glslangArchive(): string | undefined {
   return builtLibrary(join(glslangBuild, "glslang"), ["libglslang.a", "glslang.lib"]);
@@ -398,14 +357,14 @@ if (!existingSdlArchive) {
     "-DSDL_STATIC=ON",
     "-DSDL_TESTS=OFF",
     "-DSDL_EXAMPLES=OFF",
+    ...LEAN_SDL_OPTIONS,
+    ...SECTION_CMAKE_FLAGS,
   ]);
   console.log(`xbintsc: building static SDL3 with ${cmake}`);
   run(cmake, ["--build", sdlBuild, "--config", "Release", "--target", "SDL3-static", "--parallel"]);
 } else {
   console.log(`xbintsc: reusing existing ${existingSdlArchive}`);
 }
-
-/* -- 2b. FreeType + HarfBuzz (text) --------------------------------------- */
 
 /** Download a release tarball into `vendor/` and extract it under `name`.
  * Release tarballs are used (not git clones) because they ship generated
@@ -427,45 +386,7 @@ function ensureTarballSource(name: string, url: string, extractedName: string, m
   return destination;
 }
 
-ensureTarballSource("freetype", FREETYPE_URL, `freetype-${FREETYPE_VERSION}`);
-ensureTarballSource("harfbuzz", HARFBUZZ_URL, `harfbuzz-${HARFBUZZ_VERSION}`);
-
-if (!existsSync(freetypeArchive() ?? "")) {
-  const cmake = configureCmake("FreeType", freetypeSrc, freetypeBuild, [
-    "-DCMAKE_BUILD_TYPE=Release",
-    "-DBUILD_SHARED_LIBS=OFF",
-    /* We only need TrueType/OpenType outlines; skip the optional codecs. */
-    "-DFT_DISABLE_ZLIB=TRUE",
-    "-DFT_DISABLE_BZIP2=TRUE",
-    "-DFT_DISABLE_PNG=TRUE",
-    "-DFT_DISABLE_HARFBUZZ=TRUE",
-    "-DFT_DISABLE_BROTLI=TRUE",
-  ]);
-  console.log("xbintsc: building static FreeType");
-  run(cmake, ["--build", freetypeBuild, "--config", "Release", "--parallel"]);
-} else {
-  console.log(`xbintsc: reusing existing ${freetypeArchive()}`);
-}
-
-if (!existsSync(harfbuzzArchive() ?? "")) {
-  const cmake = configureCmake("HarfBuzz", harfbuzzSrc, harfbuzzBuild, [
-    "-DCMAKE_BUILD_TYPE=Release",
-    "-DBUILD_SHARED_LIBS=OFF",
-    "-DHB_BUILD_UTILS=OFF",
-    "-DHB_BUILD_TESTS=OFF",
-    "-DHB_BUILD_SUBSET=OFF",
-    "-DHB_HAVE_FREETYPE=OFF",
-    "-DHB_HAVE_GLIB=OFF",
-    "-DHB_HAVE_ICU=OFF",
-    "-DHB_HAVE_GRAPHITE2=OFF",
-  ]);
-  console.log("xbintsc: building static HarfBuzz");
-  run(cmake, ["--build", harfbuzzBuild, "--config", "Release", "--parallel"]);
-} else {
-  console.log(`xbintsc: reusing existing ${harfbuzzArchive()}`);
-}
-
-/* -- 2c. glslang (WebGL GLSL ES -> SPIR-V) -------------------------------- */
+/* -- 2b. glslang (WebGL GLSL ES -> SPIR-V) -------------------------------- */
 
 ensureTarballSource("glslang", GLSLANG_URL, `glslang-${GLSLANG_VERSION}`);
 ensureTarballSource(join("glslang", "External", "spirv-headers"), SPIRV_HEADERS_URL,
@@ -479,6 +400,7 @@ if (!existsSync(glslangArchive() ?? "")) {
     "-DENABLE_HLSL=OFF",
     "-DENABLE_GLSLANG_BINARIES=OFF",
     "-DGLSLANG_TESTS=OFF",
+    ...SECTION_CMAKE_FLAGS,
   ]);
   console.log("xbintsc: building static glslang");
   run(cmake, ["--build", glslangBuild, "--config", "Release", "--parallel"]);
@@ -510,6 +432,7 @@ if (metalBackend) {
       "-DSPIRV_CROSS_ENABLE_REFLECT=OFF",
       "-DSPIRV_CROSS_ENABLE_UTIL=OFF",
       "-DSPIRV_CROSS_ENABLE_C_API=OFF",
+      ...SECTION_CMAKE_FLAGS,
     ]);
     console.log("xbintsc: building static SPIRV-Cross");
     run(cmake, ["--build", spirvCrossBuild, "--config", "Release", "--parallel"]);
@@ -524,9 +447,6 @@ mkdirSync(objDir, { recursive: true });
 const includeFlags = [
   "-I", runtimeDir,
   "-I", join(sdlSrc, "include"),
-  "-I", join(freetypeSrc, "include"),
-  "-I", join(freetypeBuild, "include"),
-  "-I", join(harfbuzzSrc, "src"),
   "-I", glslangSrc,
   "-I", join(spirvHeadersSrc, "include"),
   ...(metalBackend ? ["-I", spirvCrossSrc] : []),
@@ -536,7 +456,7 @@ const sources = readdirSync(engineDir)
   .sort();
 
 const objects: string[] = [];
-const cxxFlags = ["-std=c++17", "-O2", "-Wall", "-Wextra", ...includeFlags];
+const cxxFlags = ["-std=c++17", "-O2", "-Wall", "-Wextra", ...SECTION_FLAGS, ...includeFlags];
 /* The engine is C++ and the MSVC C++ runtime must match the static C CRT that
  * clang links by default, so let every engine object record `libcpmt` as a
  * default library. The extension itself only contributes the DLL import library
@@ -555,20 +475,18 @@ for (const source of sources) {
 /* -- 4. merge into gui.a / gui.lib ---------------------------------------- */
 
 const sdl = sdlArchive();
-const freetype = freetypeArchive();
-const harfbuzz = harfbuzzArchive();
 const glslang = glslangArchive();
 const glslangLimits = glslangLimitsArchive();
 const spirvCrossCore = metalBackend ? spirvCrossArchive("spirv-cross-core") : undefined;
 const spirvCrossGlsl = metalBackend ? spirvCrossArchive("spirv-cross-glsl") : undefined;
 const spirvCrossMsl = metalBackend ? spirvCrossArchive("spirv-cross-msl") : undefined;
-if (!sdl || !freetype || !harfbuzz || !glslang || !glslangLimits ||
+if (!sdl || !glslang || !glslangLimits ||
     (metalBackend && (!spirvCrossCore || !spirvCrossGlsl || !spirvCrossMsl))) {
-  fail(`one of the SDL3/FreeType/HarfBuzz/glslang${metalBackend ? "/SPIRV-Cross" : ""} ` +
+  fail(`one of the SDL3/glslang${metalBackend ? "/SPIRV-Cross" : ""} ` +
     "archives was not found after building");
 }
 const libraries = [
-  sdl, freetype, harfbuzz, glslang, glslangLimits,
+  sdl, glslang, glslangLimits,
   ...(spirvCrossCore && spirvCrossGlsl && spirvCrossMsl
     ? [spirvCrossCore, spirvCrossGlsl, spirvCrossMsl]
     : []),

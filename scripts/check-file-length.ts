@@ -38,6 +38,7 @@ const IGNORED_DIRECTORIES = new Set([
 /** Vendored third-party sources that ship verbatim and are not ours to split. */
 const VENDORED_FILES = new Set([
   join("runtime", "ext_gui", "stb_image.h"),
+  join("runtime", "ext_gui", "stb_truetype.h"),
   join("runtime", "ext_gui", "nanosvg.h"),
   join("runtime", "ext_gui", "nanosvgrast.h"),
 ]);

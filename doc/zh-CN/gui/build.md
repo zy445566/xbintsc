@@ -7,15 +7,21 @@
 - 源码位于 `runtime/ext_gui/`（C/C++），外加 `vendor/` 下的 vendored 库
   （被 gitignore；按需获取）。媒体解码位于 `runtime/ext_media/`，单独构建。
 - `npm run gui`（`scripts/build-gui.ts`）获取固定版本的 SDL3（`SDL3_TAG`，
-  默认 `release-3.2.10`），构建静态 SDL3，获取并构建静态 FreeType
-  （`FREETYPE_VERSION`）与 HarfBuzz（`HARFBUZZ_VERSION`），并获取、构建静态
+  默认 `release-3.2.10`），构建静态 SDL3，并获取、构建静态
   **glslang**（`GLSLANG_VERSION`，默认 `16.6.0`）、固定版本的 SPIR-V 头文件
   （`SPIRV_HEADERS_VERSION`）以及——**仅 macOS**——**SPIRV-Cross**
   （`SPIRV_CROSS_VERSION`，默认 `vulkan-sdk-1.4.313.0`）。glslang 是 WebGL
   背后的运行时 GLSL ES 编译器，SPIRV-Cross 把它的 SPIR-V 转成 Metal 后端使用的
   MSL（见 [WebGL](./webgl.md)），两者都与其他库一样合并进归档。Metal 是唯一消费
   MSL 的 SDL_GPU 后端，因此 Windows/Linux 上脚本既不获取也不合并 SPIRV-Cross：
-  那里的 `webgl_msl.cpp` 编译为空，合并进来只会多出约 2.5 MiB 不可达代码。随后编译引擎，并把
+  那里的 `webgl_msl.cpp` 编译为空，合并进来只会多出约 2.5 MiB 不可达代码。
+  文本使用内置的 **stb_truetype**（`runtime/ext_gui/stb_truetype.h`），因此不再
+  构建 FreeType/HarfBuzz。每个库（SDL3、glslang、SPIRV-Cross 与引擎）都用
+  `-ffunction-sections -fdata-sections` 编译；SDL 关闭引擎从不调用的子系统
+  （`SDL_JOYSTICK`、`SDL_HAPTIC`、`SDL_SENSOR`、`SDL_CAMERA`、`SDL_RENDER`、
+  `SDL_OPENGL`/`SDL_OPENGLES`、`SDL_OFFSCREEN`、`SDL_HIDAPI`）。链接器随后丢弃
+  不可达函数（`--gc-sections`、`-dead_strip` 或 link.exe 默认的 `/OPT:REF`）。
+  随后编译引擎，并把
   所有内容合并到 `runtime/lib/<os>-<arch>/gui.a`（Windows 上 MSVC ABI 则为
   `gui.lib`），与 `core.a` 采用相同约定，静态打包这些库。合并使用 macOS 上的
   `libtool` 与其他平台上的 `ar -M`（GNU/LLVM）；CMake 归档会在构建根目录或
@@ -30,7 +36,7 @@
 - `src/extensions/gui/index.ts` 通过 `nativeObjects()` 暴露引擎归档（经由
   `findRuntimeLibrary`，因此 `.a`/`.lib` 都可用），并通过 `linkerFlags()`
   暴露操作系统框架。它的 `linkFeatures()`（位于
-  `src/extensions/gui/features.ts`）声明 `media` 与 `gpu`；driver 只在该特性
+  `src/extensions/gui/features.ts`）声明 `media`、`gpu`、`images` 与 `webgl`；driver 只在该特性
   启用时编译对应的 bridge。
 - glslang（以及 macOS 上的 SPIRV-Cross）与 SDL3 一样合并进 `gui.a`，但引擎只
   通过 `gpu` 特性的分发表访问它；从不编译 GLSL 的程序不会取出这些归档成员。
@@ -58,7 +64,7 @@
 - CI 在组装发布归档之前构建 `gui.a`/`gui.lib` 与 `media.a`/`media.lib`，因此它们
   会随 `runtime/lib/<slug>/` 一起发布（发布 tarball 会复制整个 `runtime/` 树）。
   同一批目录还会打进可选的 `@xbintsc/<slug>` npm 包，因此发布覆盖的宿主平台从
-  npm 安装后也能使用 `--ext gui`（`media`/`gpu` 自动选择）。归档在 Linux（Xvfb 下，使用
+  npm 安装后也能使用 `--ext gui`（`media`/`gpu`/`images`/`webgl` 自动选择）。归档在 Linux（Xvfb 下，使用
   lavapipe 软件 Vulkan 驱动）与 macOS 上构建并运行
   示例；Windows x64 也会构建两个归档并链接一个会触发 `media` 特性的 `gui` 程序
   （另有一条显式 `--feature media` 的构建），因此 MSVC
@@ -75,8 +81,8 @@
   configure/make 构建树本身不缓存（其中记录了另一台机器的绝对路径与编译选项）。
 - 现有的缓存指纹已经会对 `nativeObjects()` 的内容与 `runtimeSources()` 的内容
   做哈希，因此重建任一归档都会自动使缓存二进制失效。
-- CMake 构建树位于其源码**旁边**（`vendor/sdl-build`、`vendor/freetype-build`、
-  `vendor/harfbuzz-build`），绝不放在源码内部：`CMakeCache.txt` 记录的是配置它
+- CMake 构建树位于其源码**旁边**（`vendor/sdl-build-lean`、`vendor/glslang-build-lean`、
+  `vendor/spirv-cross-build-lean`），绝不放在源码内部：`CMakeCache.txt` 记录的是配置它
   的那台机器，而 SDL 的视频后端是 `option()`，因此先运行的那次配置会一直生效。
   所以一个同时携带 `build/` 的 `vendor/SDL` 缓存树，会把某台机器的
   `SDL_X11`/`SDL_WAYLAND` 选择带进另一台机器的配置——即使头文件已安装，SDL 也会
@@ -87,17 +93,19 @@
 
 ## 链接特性
 
-用户只启用一个 `gui` 扩展，但其中两块重型部分是可选的**链接特性**，按程序选择：
+用户只启用一个 `gui` 扩展，但其中的重型部分是可选的**链接特性**，按程序选择：
 
 | 特性 | 链接什么 | 程序可能用到时 |
 | --- | --- | --- |
 | `media` | `media_bridge.c` + `media.a`（FFmpeg） | HTML 里有 `<video>`/`<audio>`、`createElement("video"/"audio")`、`new Audio()`、`decodeAudioData`，或运行时拼出的 HTML |
 | `gpu` | `gpu_bridge.c`（实现本身已在 `gui.a`） | `getContext("webgl"/"webgl2"/"experimental-webgl")`（或运行时决定的 kind）、任意 `webgl` 字符串、`mix-blend-mode`/`mixBlendMode`，或运行时拼出的 HTML |
+| `images` | `image_bridge.c`（实现本身已在 `gui.a`） | `<img>`、内联 `<svg>`、`background-image`/`url(...)`、`.svg` 路径、`drawImage`/`createImageBitmap`/`Image`，或运行时拼出的 HTML |
+| `webgl` | `webgl_bridge.c`（实现本身已在 `gui.a`，依赖 `gpu`） | WebGL 的 `getContext(...)`、`webgl` 字符串，或运行时拼出的 HTML |
 
 driver 会扫描打包后的 AST（`src/driver/usage.ts`）：所有字符串字面量（包括导入的
 `.html` 与内联进来的 CSS）、标识符与属性名、每个 `getContext(...)` 的 kind，以及
 HTML/CSS 是否可能来自编译器看不见的数据。简单的 `const` 别名会被解析；无法解析的
-markup 会让程序按“动态 markup”保守处理，启用两个特性。
+markup 会让程序按“动态 markup”保守处理，启用可选特性。
 
 特性启用时，driver 只为本构建编译它的 C **bridge**，并链接在 `gui.a` 之前：
 
@@ -106,18 +114,47 @@ markup 会让程序按“动态 markup”保守处理，启用两个特性。
 - `gpu` → `runtime/ext_gui/gpu_bridge.c`；构造函数调用 `gpu_feature.cpp` 里的
   `xt_gpu_feature_register`，安装 `XtGpuShaderApi` 表并引用 `compile_glsl` /
   `cross_compile_msl` / 反射函数，从而取出 glslang（macOS 上还有 SPIRV-Cross）。
+- `images` → `runtime/ext_gui/image_bridge.c`；构造函数通过 `image_feature.cpp`
+  安装 `XtImageApi`，其引用取出 stb_image 与 NanoSVG。layout、paint、canvas
+  `drawImage` 与应用图标都走这张表，因此纯文本页面不链接这两个解码器。
+- `webgl` → `runtime/ext_gui/webgl_bridge.c`；构造函数通过 `webgl_feature.cpp` 安装
+  `XtWebglApi`，其引用取出 WebGL context 与 DOM 绑定。core 的 `getContext`、
+  canvas 宽高 setter、`createImageBitmap`、host type 与 renderer 都走这张表，因此
+  不用 WebGL 的页面不链接任何 `webgl_*`/`dom_api_webgl*`。
 
 bridge 就是让链接器搜索归档的“强引用”；没有 bridge 时引擎的表保持 null，
 实现成员永不被取出。因此大库可以留在现有归档里，不需要新的包布局。
 
-覆盖方式：`--feature media,gpu`（或 `all`）强制开启；`--no-feature media`
-即使检测到也不链接。`--ext media` 是 `--ext gui --feature media` 的弃用别名。
+覆盖方式：`--feature media,gpu,images,webgl`（或 `all`）强制开启；
+`--no-feature media` 即使检测到也不链接。`webgl` 依赖 `gpu`，resolver 会一起
+激活；配置应用图标会强制 `images`，因为图标走同一条解码管线。`--ext media` 是
+`--ext gui --feature media` 的弃用别名。
 自动检测到的特性归档缺失时构建打印 warning 并继续（元素/上下文按文档降级）；
 显式强制的特性则报错。
 
 > 检测是静态的。用 `fetch`、`readFileSync` 等运行时数据拼 HTML/CSS 的页面应传
 > `--feature all`（或具体特性）。`--verbose` 会打印选中的集合，例如
 > `xbintsc: link features: none`。
+
+### 二进制体积
+
+DOM-only 程序的小体积来自上述 lean 构建。Windows x64 上，一个 `hello` 规模的程序
+从约 6.4 MiB 降到约 3.1 MiB：SDL 按上面的选项配置，function/data sections 让
+`/OPT:REF` 丢弃页面触达不到的函数，WebGL/图片链接特性保持关闭，文本改用内置
+stb_truetype 而不是 HarfBuzz + FreeType。剩余重量主要是静态 CRT、lean SDL
+（约 1 MiB）、stb_truetype（约 0.1 MiB）以及 DOM/CSS/layout/paint 引擎本身
+（约 1.2 MiB）。Linux 与 macOS 使用各自的链接器 section（`--gc-sections`/
+`-dead_strip`），数字会有差异，但相对排序相同。
+
+WebGL 与图片/SVG 是链接特性（约 0.4 MiB 的 WebGL context/DOM 代码与 0.23 MiB 的
+stb_image/NanoSVG，DOM-only 页面不链接）。Canvas2D、Web Audio 与
+`mix-blend-mode` 合成器尚未按需化；不使用它们的程序仍要付出其 API 面积（每项大约
+0.1–0.2 MiB）。
+
+文本替换是有意的取舍：stb_truetype 只接受 TrueType 轮廓，整形是逐码点映射加字体的
+`kern` 表，因此 CFF/OTF 与可变字体、OpenType 连字以及复杂文种（阿拉伯/印度/泰文）
+整形不可用；fallback 链仍会在主字体缺字时切换到其他字体。恢复 HarfBuzz/FreeType
+会加回约 1.2 MiB；若必须恢复完整整形，平台文本栈（DirectWrite/CoreText）是另一条路。
 
 ## 运行示例
 

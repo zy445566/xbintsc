@@ -65,6 +65,8 @@ export interface LinkFeature {
   nativeObjects?(): readonly string[];
   /** Extra linker flags contributed only when the feature is active. */
   linkerFlags?(): readonly string[];
+  /** Other link features this one needs (activated with it). */
+  readonly requires?: readonly string[];
   /** Whether the program may use this feature. */
   used(usage: ProgramUsage): boolean;
 }

@@ -124,31 +124,39 @@ shader 合成到场景上。全部十六种 CSS 模式（`multiply`、`screen`�
 
 ## 文本技术栈（M4b）
 
-`runtime/ext_gui/text.{h,cpp}` 封装 **HarfBuzz**（整形）与 **FreeType**（度量
-与最终光栅化）。两者都静态构建，并由 `scripts/build-gui.ts` 链接进 `gui.a`。
+`runtime/ext_gui/text.{h,cpp}` 封装内置的 **stb_truetype**（整形与光栅化）。
+它由 `runtime/ext_gui/stb_truetype.h` 直接编译进 `gui.a`，不再需要
+FreeType/HarfBuzz 构建。
 
 - 字体从常见系统路径解析（macOS 上的 Helvetica/Arial、Linux 上的
   DejaVu/Liberation、Windows 上的 Segoe UI/Arial），可用 `XT_GUI_FONT`
   （以及 `XT_GUI_FONT_MONO`）覆盖，并按 `(字体类别, 字号)` 缓存。目前只使用
   常规直立字面；字重/斜体选择是后续细化。
+- 默认候选优先选择 **CJK 覆盖的 TrueType/TTC** 字面（Windows 的 Microsoft
+  YaHei、macOS 的 PingFang/STHeiti、Linux 的 Noto Sans CJK/WenQuanYi），
+  再是纯拉丁字面。stb_truetype 无法解析的候选（例如 CFF/OTF 集合）会被跳过，
+  继续尝试下一个。
 - **主字面缺少的码点会回退到其他字面。** 引擎维护一条小的回退链——先平台的
   符号字体（Segoe UI Symbol、Apple Symbols、Noto Sans Symbols、DejaVu Sans），
   再是另一字体类别——并为每个码点解析出回退链中第一个拥有该字形的字面。
   run 以每个字面一段的方式整形，因此混合 run（拉丁文加箭头、制表符或几何图形，
   或 CJK 中的拉丁文）会绘制每个字形，而不是把缺失的字形当作 `.notdef` 丢弃。
-  这正是让诸如 `▮`/`▯`（U+25AE/U+25AF，鹈鹕自行车速度条所用）这样的字符在
-  CJK 主字面没有几何图形时仍能显示的原因。每个整形后的字形携带自己的字面
-  （`ShapedGlyph::font`），渲染器据此从正确的图集条目光栅化；`xt_text_scale`
-  把字面映射到显示的缩放系数。
-- `xt_text_measure_width` 用 HarfBuzz 对 run 整形（因此字距调整与连字会生效），
-  `xt_text_metrics` 返回 FreeType 的 ascent / descent / 正常行高。当找不到
-  字体文件时，模块回退到确定性的逐字节近似，因此布局仍可工作。
+  每个整形后的字形携带自己的字面（`ShapedGlyph::font`），渲染器据此从正确的
+  图集条目光栅化；`xt_text_scale` 把字面映射到显示的缩放系数。
+- `xt_text_measure_width` 把每个码点映射为字形并累加 advance 与字体的 `kern`
+  表；`xt_text_metrics` 返回 stb_truetype 的 ascent / descent / 正常行高。
+  当找不到字体文件时，模块回退到确定性的逐字节近似，因此布局仍可工作。
 - `xt_text_shape_run` 返回定位后的字形，`xt_text_rasterize` 渲染 8 位位图；
   渲染器把它们打包进图集。在 HiDPI 显示器上，字形以
   `font_size * SDL_GetWindowPixelDensity` 光栅化，而四边形以逻辑像素定位，
   因此文本保持清晰。
 - 布局使用这些真实度量进行文本宽度、断行与 `line-height: normal` 计算；
   `measureText`/`fontMetrics` 把它们暴露给测试。
+
+整形取舍：这是简单整形器，不是完整的 OpenType 引擎。它覆盖拉丁/CJK/西里尔/
+希腊文、基础字距与逐码点回退，但不执行连字或复杂文种（阿拉伯/印度/泰文）整形，
+且 stb_truetype 只接受 TrueType 轮廓，不支持 CFF/OTF 或可变字体。该选择让
+DOM-only 二进制约 3 MiB；恢复 HarfBuzz + FreeType 会加回约 1.2 MiB。
 
 ## 性能（M20）
 

@@ -73,7 +73,7 @@ import { createWindow, run } from "gui";
 直接使用真实的 WebGL 2 后端（只修补其着色器循环展开，不再打包 Canvas2D 回退）。
 `<img>` 由引擎自身解码；`<video>`/`<audio>` 解码（FFmpeg）与 GLSL 翻译（glslang）
 是**可选的链接特性**，由程序自动选择——见
-[可选链接特性](#可选链接特性media-gpu)。也支持 `<canvas>`：
+[可选链接特性](#可选链接特性media-gpu-images-webgl)。也支持 `<canvas>`：
 `getContext("2d")` 返回的上下文，其填充、路径、
 渐变、文本与 `drawImage` 由自研 CPU 光栅器处理（另有线段端点/连接、虚线描边、
 `ellipse` 与 `roundRect`），元素句柄还暴露 `width`/`height`。CSS
@@ -106,9 +106,9 @@ VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷�
 运行时提供（`http://`，以及本地 `file://` 与相对路径；不支持 HTTPS 与流式），
 因此 GUI 程序同样可用。见 [../../implemented/fetch.md](../../implemented/fetch.md)。
 
-### 可选链接特性（media、gpu）
+### 可选链接特性（media、gpu、images、webgl）
 
-`gui` 仍然只有一个扩展，但其中两块重型部分是可选的**链接特性**。编译器扫描打包后的
+`gui` 仍然只有一个扩展，但其中的重型部分是可选的**链接特性**。编译器扫描打包后的
 HTML/CSS/TS（导入的 `.html` 与内联 CSS 都属于 bundle），按程序自动选择；不需要额外
 扩展参数：
 
@@ -119,10 +119,16 @@ HTML/CSS/TS（导入的 `.html` 与内联 CSS 都属于 bundle），按程序自
 - **`gpu`** —— WebGL 与 `mix-blend-mode` 共用的 glslang/SPIRV-Cross GLSL 翻译器。
   由 `getContext("webgl"/"webgl2"/…)`（或运行时决定的 kind）、任意 `webgl` 字符串、
   `mix-blend-mode` 触发。
+- **`images`** —— `<img>`、内联 `<svg>`、CSS `background-image`/`url(...)`、
+  `drawImage`/`createImageBitmap`/`Image` 与应用图标所需的 stb_image/NanoSVG 解码。
+  纯文本页面两个解码器都不链接。
+- **`webgl`** —— WebGL context 与 DOM 绑定。由 WebGL 的 `getContext(...)` 或
+  `webgl` 字符串触发；它依赖 `gpu`，两者一起激活。不用 WebGL 的页面两者都不链接。
 
-用 `--feature media,gpu`（或 `all`）覆盖扫描，用 `--no-feature media` 强制不链接。
-`--verbose` 会打印选中的集合。只渲染 HTML/CSS/2D canvas 的程序既不链接 FFmpeg 也
-不链接 glslang；用运行时数据拼 HTML/CSS 的页面应传 `--feature all`，因为扫描看不到它。
+用 `--feature media,gpu,images,webgl`（或 `all`）覆盖扫描，用 `--no-feature media`
+强制不链接。`--verbose` 会打印选中的集合。只渲染 HTML/CSS/2D canvas 的程序既不链接
+FFmpeg、glslang，也不链接图片解码器或 WebGL context；用运行时数据拼 HTML/CSS 的
+页面应传 `--feature all`，因为扫描看不到它。
 自动检测到的特性归档缺失时构建打印 warning，能力在运行时降级（媒体元素触发
 `error`）；显式强制的特性则报错。
 

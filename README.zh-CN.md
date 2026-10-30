@@ -230,7 +230,7 @@ run();                          // 主循环，直到所有窗口关闭
 ```
 
 ```bash
-# 源码检出：先构建一次引擎归档（会获取并构建 SDL3、FreeType 与 HarfBuzz），
+# 源码检出：先构建一次引擎归档（会获取并构建 SDL3 与 glslang；文本使用内置 stb_truetype），
 # 然后运行仓库自带示例
 npm run gui
 npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui

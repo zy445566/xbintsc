@@ -4,7 +4,7 @@
  * `LayoutTree::compute` turns the styled DOM into a tree of `LayoutBox`es with
  * absolute (viewport-relative) geometry. It implements the slice a UI needs:
  * block flow, a simple inline formatting context with greedy line breaking
- * (text metrics come from the HarfBuzz/FreeType stack) and single-line
+ * (text metrics come from the stb_truetype stack) and single-line
  * Flexbox. `<img>` is a replaced element sized from its intrinsic dimensions.
  *
  * Coordinates are absolute: `x`/`y` is the border-box origin measured from the
@@ -140,7 +140,7 @@ class LayoutTree {
   XtStyle root_style_;
 };
 
-/** Text width under `style` (shaped with the HarfBuzz/FreeType stack). */
+/** Text width under `style` (shaped with the stb_truetype stack). */
 float xt_layout_text_width(const std::string &text, const XtStyle &style);
 
 /** The box's border box in device space: its layout rectangle pushed through

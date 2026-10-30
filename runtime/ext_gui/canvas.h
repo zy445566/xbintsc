@@ -9,7 +9,7 @@
  *
  * The rasteriser is deliberately small and self-written (no Skia/Cairo): it
  * fills rectangles, polygons and flattened arcs with sub-scanline coverage
- * anti-aliasing, and blits FreeType glyph bitmaps for `fillText`. The pieces
+ * anti-aliasing, and blits stb_truetype glyph bitmaps for `fillText`. The pieces
  * live in `canvas_raster.cpp`; this header only exposes the object model.
  *
  * Canvas pixels are *not* touched by the garbage collector: a canvas is owned

@@ -70,7 +70,7 @@ If npm skips the optional package (`--omit=optional`, a package manager that
 does not install optional dependencies, or a host the release does not build
 for), the driver falls back to compiling the C runtime from the shipped sources
 and caches the objects; that build works but is slower, and `--ext gui` (plus
-the auto-selected `media`/`gpu` link features) needs the archive to be present.
+the auto-selected `media`/`gpu`/`images`/`webgl` link features) needs the archive to be present.
 
 ## Requirements
 

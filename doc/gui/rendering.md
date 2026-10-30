@@ -153,33 +153,31 @@ compiler here — keep painting the group with ordinary source-over blending.
 
 ## Text stack (M4b)
 
-`runtime/ext_gui/text.{h,cpp}` wraps **HarfBuzz** (shaping) and **FreeType**
-(metrics + eventual rasterisation). Both are built statically and linked into
-`gui.a` by `scripts/build-gui.ts`.
+`runtime/ext_gui/text.{h,cpp}` wraps the bundled **stb_truetype** (shaping and
+rasterisation). It is compiled into `gui.a` from
+`runtime/ext_gui/stb_truetype.h`; no FreeType/HarfBuzz build is needed.
 
 - Fonts are resolved from well-known system paths (Helvetica/Arial on macOS,
   DejaVu/Liberation on Linux, Segoe UI/Arial on Windows), overridable with
   `XT_GUI_FONT` (and `XT_GUI_FONT_MONO`), and cached per `(family class, size)`.
   Only regular upright faces are used for now; weight/italic selection is a
   later refinement.
-- The default candidates prefer a **CJK-capable** face (Microsoft YaHei on
-  Windows, PingFang/STHeiti on macOS, Noto Sans CJK/WenQuanYi on Linux) before
-  the Latin-only ones. Setting `XT_GUI_FONT` to a Latin-only face gives its
-  Latin design instead (at the cost of CJK coverage).
+- The default candidates prefer a **CJK-capable TrueType/TTC** face (Microsoft
+  YaHei on Windows, PingFang/STHeiti on macOS, Noto Sans CJK/WenQuanYi on Linux)
+  before the Latin-only ones. A candidate that stb_truetype cannot parse (for
+  example a CFF/OTF collection) is skipped in favour of the next one.
 - **Codepoints the primary face lacks fall back to another face.** The engine
   keeps a small fallback chain — the platform's symbol face (Segoe UI Symbol,
   Apple Symbols, Noto Sans Symbols, DejaVu Sans) first, then the other family
   class — and resolves each codepoint to the first face in it that has the
   glyph. The run is shaped in segments, one per face, so a mixed run (Latin
   plus an arrow, box-drawing or geometric shape, or Latin inside CJK) draws
-  every glyph instead of dropping the missing ones as `.notdef`. This is what
-  makes a character such as `▮`/`▯` (U+25AE/U+25AF, used by the pelican-bike
-  speed bar) visible even when the CJK primary has no geometric shapes. Each
-  shaped glyph carries its face (`ShapedGlyph::font`) so the renderer rasterises
-  it from the right atlas entry; `xt_text_scale` maps a face to the display's
-  scale factor.
-- `xt_text_measure_width` shapes the run with HarfBuzz (so kerning and
-  ligatures are honoured), `xt_text_metrics` returns FreeType's ascent /
+  every glyph instead of dropping the missing ones as `.notdef`. Each shaped
+  glyph carries its face (`ShapedGlyph::font`) so the renderer rasterises it
+  from the right atlas entry; `xt_text_scale` maps a face to the display's scale
+  factor.
+- `xt_text_measure_width` maps each codepoint to a glyph and adds its advance
+  plus the font's `kern` table; `xt_text_metrics` returns stb_truetype's ascent /
   descent / normal line height. When no font file can be found the module falls
   back to a deterministic per-byte approximation, so layout still works.
 - `xt_text_shape_run` returns positioned glyphs and `xt_text_rasterize` renders
@@ -188,6 +186,12 @@ compiler here — keep painting the group with ordinary source-over blending.
   are positioned in logical pixels, so text stays crisp.
 - Layout uses these real metrics for text widths, line breaking and
   `line-height: normal`; `measureText`/`fontMetrics` expose them to tests.
+
+Shape trade-off: this is a simple shaper, not a full OpenType engine. It handles
+Latin/CJK/Cyrillic/Greek, basic kerning and per-codepoint fallback, but it does
+not run ligatures or complex-script shaping (Arabic/Indic/Thai), and stb_truetype
+only accepts TrueType outlines, not CFF/OTF or variable fonts. The choice keeps a
+DOM-only binary near 3 MiB; restoring HarfBuzz + FreeType adds about 1.2 MiB.
 
 ## Performance (M20)
 

@@ -1,7 +1,7 @@
 /*
  * xbintsc GUI engine — Canvas2D text drawing.
  *
- * `fillText`/`strokeText` shape a run with HarfBuzz and blit FreeType glyph
+ * `fillText`/`strokeText` shape a run with the shaper and blit stb_truetype glyph
  * coverage through the rasteriser. The state and path live in `canvas.h`; this
  * unit only owns the text entry points and the optional `maxWidth` condense.
  */

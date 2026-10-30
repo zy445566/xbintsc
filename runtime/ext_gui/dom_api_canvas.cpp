@@ -15,6 +15,7 @@
 
 #include "canvas.h"
 #include "css.h"
+#include "image_api.h"
 
 #define METHOD(name) xt_value name(xt_value self, xt_value env, int32_t argc, xt_value *argv)
 
@@ -87,6 +88,8 @@ METHOD(node_get_context) {
   xtgui::Node *node = resolve_node(self, &win);
   if (mode == "webgl" || mode == "experimental-webgl" || mode == "webgl2") {
     const bool webgl2 = mode == "webgl2";
+    const XtWebglApi *webgl = xt_webgl_api();
+    if (webgl == nullptr) return XT_NULL;
     if (node == nullptr) return XT_NULL;
     if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
     if (xt_gui_canvas_find(win, node) != nullptr) return XT_NULL;  // already a 2D canvas
@@ -95,13 +98,14 @@ METHOD(node_get_context) {
       const bool cached_webgl2 = value_truthy(xt_object_get_cstr(cached, "__xt_gl_webgl2"));
       return cached_webgl2 == webgl2 ? cached : XT_NULL;
     }
-    xtgui::WebGLContext *context = xt_gui_webgl_get(win, node, webgl2);
-    return webgl_context_handle(self, context);
+    void *context = webgl->get(win, node, webgl2);
+    return webgl->handle(self, context);
   }
   if (mode != "2d") return XT_NULL;
   if (node == nullptr) return xt_canvas_pending_context(self, win);
   if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
-  if (xt_gui_webgl_find(win, node) != nullptr) return XT_NULL;  // already a WebGL canvas
+  const XtWebglApi *webgl_api = xt_webgl_api();
+  if (webgl_api != nullptr && webgl_api->find(win, node) != nullptr) return XT_NULL;  // already WebGL
   xt_value cached = xt_object_get_cstr(self, "__xt_gui_ctx");
   if (XT_IS_OBJECT(cached)) return cached;
   xtgui::Canvas2D *canvas = xt_gui_canvas_get(win, node);
@@ -483,12 +487,15 @@ METHOD(canvas_draw_image) {
   XtGuiWindow *win = nullptr;
   xt_value source_value = xt_arg(argc, argv, 0);
   const xtgui::Image *image = nullptr;
+  const XtImageApi *images = xt_image_api();
   if (XT_IS_STRING(source_value)) {
     /* Engine extension: the source may be a path or a `data:` URL itself, so a
      * data-URL bitmap/SVG can be drawn without an `<img>` element. */
     const std::string source_url(xt_string_data(source_value));
-    image = xtgui::xt_image_load(source_url, raster_target(destination_width),
-                                 raster_target(destination_height));
+    if (images != nullptr) {
+      image = images->load(source_url, raster_target(destination_width),
+                           raster_target(destination_height));
+    }
   } else {
     /* An `OffscreenCanvas` (or a transferred one) has no DOM node; its bitmap
      * is reachable through the process-wide canvas id. */
@@ -503,9 +510,9 @@ METHOD(canvas_draw_image) {
       xtgui::Node *source = resolve_node(source_value, &win);
       if (source != nullptr && source->isElement() && source->isTag("img")) {
         const std::string *src = source->attr("src");
-        if (src != nullptr) {
-          image = xtgui::xt_image_load(*src, raster_target(destination_width),
-                                       raster_target(destination_height));
+        if (src != nullptr && images != nullptr) {
+          image = images->load(*src, raster_target(destination_width),
+                               raster_target(destination_height));
         }
       } else if (source != nullptr) {
         xtgui::Canvas2D *other = xt_gui_canvas_find(win, source);

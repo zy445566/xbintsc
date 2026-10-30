@@ -15,7 +15,13 @@ vi.mock("../../src/driver/paths.js", () => ({
 }));
 
 import { guiExtension } from "../../src/extensions/gui/index.js";
-import { guiLinkFeatures, hasGpuUsage, hasMediaUsage } from "../../src/extensions/gui/features.js";
+import {
+  guiLinkFeatures,
+  hasGpuUsage,
+  hasImageUsage,
+  hasMediaUsage,
+  hasWebglUsage,
+} from "../../src/extensions/gui/features.js";
 import type { ProgramUsage } from "../../src/extensions/link-feature.js";
 
 afterEach(() => {
@@ -37,13 +43,22 @@ function usage(overrides: Partial<ProgramUsage> = {}): ProgramUsage {
 /** The features in declaration order. */
 const media = guiLinkFeatures.find((feature) => feature.name === "media")!;
 const gpu = guiLinkFeatures.find((feature) => feature.name === "gpu")!;
+const images = guiLinkFeatures.find((feature) => feature.name === "images")!;
+const webgl = guiLinkFeatures.find((feature) => feature.name === "webgl")!;
 
 describe("gui link features", () => {
-  it("declares media and gpu as optional halves of gui", () => {
+  it("declares media, gpu, images and webgl as optional halves of gui", () => {
     expect(guiExtension.linkFeatures?.()).toBe(guiLinkFeatures);
-    expect(guiLinkFeatures.map((feature) => feature.name)).toEqual(["media", "gpu"]);
+    expect(guiLinkFeatures.map((feature) => feature.name)).toEqual([
+      "media",
+      "gpu",
+      "images",
+      "webgl",
+    ]);
     expect(media.description).toMatch(/FFmpeg/);
     expect(gpu.description).toMatch(/glslang|GLSL/);
+    expect(images.description).toMatch(/stb_image|NanoSVG/);
+    expect(webgl.requires).toEqual(["gpu"]);
   });
 
   it("links the media bridge and the prebuilt archive", () => {
@@ -56,6 +71,16 @@ describe("gui link features", () => {
   it("links the gpu bridge without an archive (the code is in gui.a)", () => {
     expect(gpu.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_gui", "gpu_bridge.c")]);
     expect(gpu.nativeObjects?.()).toBeUndefined();
+  });
+
+  it("links the images bridge without an archive", () => {
+    expect(images.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_gui", "image_bridge.c")]);
+    expect(images.nativeObjects?.()).toBeUndefined();
+  });
+
+  it("links the webgl bridge without an archive", () => {
+    expect(webgl.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_gui", "webgl_bridge.c")]);
+    expect(webgl.nativeObjects?.()).toBeUndefined();
   });
 
   it("fails with an actionable message when the media archive is missing", () => {
@@ -115,5 +140,41 @@ describe("gpu usage detection", () => {
 
   it("turns on for dynamic markup", () => {
     expect(hasGpuUsage(usage({ dynamicMarkup: true }))).toBe(true);
+  });
+});
+
+describe("webgl usage detection", () => {
+  it("turns on only for a WebGL context or a webgl string", () => {
+    expect(hasWebglUsage(usage({ getContext: ["webgl2"] }))).toBe(true);
+    expect(hasWebglUsage(usage({ strings: ["webgl2"] }))).toBe(true);
+    expect(hasWebglUsage(usage({ getContext: [undefined] }))).toBe(true);
+  });
+
+  it("stays off for a 2D canvas, blend-only CSS and plain DOM", () => {
+    expect(hasWebglUsage(usage({ getContext: ["2d"] }))).toBe(false);
+    expect(hasWebglUsage(usage({ strings: ["mix-blend-mode: multiply"] }))).toBe(false);
+    expect(hasWebglUsage(usage({ strings: ["<canvas id=c></canvas>"] }))).toBe(false);
+  });
+
+  it("turns on for dynamic markup", () => {
+    expect(hasWebglUsage(usage({ dynamicMarkup: true }))).toBe(true);
+  });
+});
+
+describe("image usage detection", () => {
+  it("turns on for <img>, CSS backgrounds, SVG and drawImage", () => {
+    expect(hasImageUsage(usage({ strings: ["<img src=a.png>"] }))).toBe(true);
+    expect(hasImageUsage(usage({ strings: ["background-image: url(a.png)"] }))).toBe(true);
+    expect(hasImageUsage(usage({ strings: ["<svg viewBox='0 0 10 10'></svg>"] }))).toBe(true);
+    expect(hasImageUsage(usage({ identifiers: new Set(["drawImage"]) }))).toBe(true);
+  });
+
+  it("stays off for text-only DOM", () => {
+    expect(hasImageUsage(usage({ strings: ["<div>Hello</div>"] }))).toBe(false);
+    expect(hasImageUsage(usage({ getContext: ["2d"] }))).toBe(false);
+  });
+
+  it("turns on for dynamic markup", () => {
+    expect(hasImageUsage(usage({ dynamicMarkup: true }))).toBe(true);
   });
 });

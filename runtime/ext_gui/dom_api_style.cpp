@@ -56,6 +56,11 @@ static void set_style_property(XtGuiWindow *win, xtgui::Node *node, const std::s
   bool found = false;
   for (xtgui::Declaration &decl : decls) {
     if (decl.property == name) {
+      /* Assigning the value that is already there must not dirty the document:
+       * a restyle costs O(nodes × rules) and HUD code rewrites the same width /
+       * transform / offset every frame. Rewriting the attribute is also a
+       * parse-and-rebuild of the whole inline style string. */
+      if (decl.value == value && decl.important == important) return;
       decl.value = value;
       decl.important = important;
       found = true;
@@ -102,6 +107,8 @@ static void remove_style_property(XtGuiWindow *win, xtgui::Node *node, const std
   for (const xtgui::Declaration &decl : decls) {
     if (decl.property != name) kept.push_back(decl);
   }
+  /* Removing a property that was never set is a no-op, exactly like the CSSOM. */
+  if (kept.size() == decls.size()) return;
   write_declarations(node, kept);
   mark_dirty(win);
 }

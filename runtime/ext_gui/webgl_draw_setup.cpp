@@ -142,6 +142,42 @@ int type_size(int type) {
   }
 }
 
+/** Content hash of the vertex input state a pipeline bakes in.
+ *
+ * `WebGLDrawKey` carries `attribs_version_`/`framebuffer_version_`, which are
+ * *monotonic counters*: every VAO bind and every framebuffer switch bumps them.
+ * A page that binds several VAOs per frame (three.js does, once per geometry)
+ * therefore produced a new pipeline key for every draw on every frame, and the
+ * per-program pipeline cache never hit — measured at ~250
+ * `SDL_CreateGPUGraphicsPipeline` calls per frame, several milliseconds of the
+ * frame on its own, with a cache that grew by that many entries every frame.
+ * The pipeline only depends on the layout itself, so key it by the layout's
+ * content: the same layout stays cached across frames and is shared by every
+ * object that uses it. */
+uint64_t vertex_layout_hash(const std::vector<SDL_GPUVertexAttribute> &attributes,
+                            const std::vector<SDL_GPUVertexBufferDescription> &buffers) {
+  uint64_t hash = 1469598103934665603ull;
+  auto mix = [&hash](uint64_t value) {
+    hash ^= value;
+    hash *= 1099511628211ull;
+    hash ^= hash >> 29;
+  };
+  mix(attributes.size());
+  for (const SDL_GPUVertexAttribute &attribute : attributes) {
+    mix(attribute.location);
+    mix(attribute.buffer_slot);
+    mix((uint64_t)(uint32_t)attribute.format);
+    mix(attribute.offset);
+  }
+  mix(buffers.size());
+  for (const SDL_GPUVertexBufferDescription &buffer : buffers) {
+    mix(buffer.slot);
+    mix(buffer.pitch);
+    mix((uint64_t)(uint32_t)buffer.input_rate);
+  }
+  return hash;
+}
+
 }  // namespace
 
 void WebGLContext::draw_state_hash(uint64_t *first, uint64_t *second) const {
@@ -298,10 +334,15 @@ const WebGLDrawSetup *WebGLContext::prepare_draw(const WebGLDrawKey &key) {
   /* The pipeline depends on the vertex layout and fixed-function state, not on
    * which GPU buffer happens to hold the data (a buffer can be recreated after
    * a grow) nor on the element-buffer binding. Normalise those fields out so a
-   * dynamic buffer does not create a fresh pipeline. */
+   * dynamic buffer does not create a fresh pipeline. The monotonic version
+   * counters are replaced by the layout's content hash (and zero): they change
+   * on every VAO bind / framebuffer switch without changing the pipeline, so
+   * keying on them re-created every pipeline once per frame. */
   WebGLDrawKey pipeline_key = key;
   pipeline_key.gpu_version = 0;
   pipeline_key.element_buffer = 0;
+  pipeline_key.attribs_version = vertex_layout_hash(setup.attributes, setup.buffers);
+  pipeline_key.framebuffer_version = 0;
   auto cached = program_->pipeline_cache.find(pipeline_key);
   if (cached != program_->pipeline_cache.end()) {
     setup.pipeline = cached->second;

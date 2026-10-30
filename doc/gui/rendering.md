@@ -211,6 +211,14 @@ is what `tests/e2e/gui-perf.test.ts` asserts on.
   and becomes current, so the hot path has no LRU bookkeeping. A word is shaped
   once and reused by every later layout pass and repaint that draws it. Primary
   face lookups are cached by (family class, size) as well.
+- **No-op writes.** `textContent` and `style.<property>` do nothing when the
+  node already shows that value: the document is not dirtied, so no restyle,
+  relayout, repaint or upload follows. A HUD that assigns the same clock string,
+  the same bar width or the same transform every frame therefore costs nothing —
+  before this each assignment rebuilt a text node (an allocation, and one the
+  collector then had to sweep) or re-serialized the inline style, and dirtied
+  the document for a full restyle. `classList` and `removeAttribute` already
+  behaved this way; `setAttribute` still dirties unconditionally.
 - **Frame loop.** The media/canvas tables are reconciled with the DOM only when
   the document changed (or on the first frame) instead of walking the tree every
   frame. A frame presents only when something happened — a mutation, a scroll,

@@ -28,6 +28,8 @@ xt_value g_tick = XT_UNDEFINED;
 int g_tick_pending = 0;
 double g_tick_started_ms = 0;
 double g_tick_deadline_ms = 0;
+/** When the frame being served started, for the next tick's delay. */
+double g_tick_frame_started_ms = 0;
 
 xt_value browser_tick(xt_value self, xt_value env, int32_t argc, xt_value *argv);
 
@@ -39,7 +41,16 @@ void arm_tick(void) {
     g_tick = xt_closure_new((void *)browser_tick, 0, NULL);
     xt_gc_add_root(&g_tick);
   }
-  xt_value args[2] = {g_tick, xt_number(16)};
+  /* Keep the frame *period* at 16 ms, measured from the start of the frame like
+   * a browser's vsync: scheduling 16 ms from the end made every frame cost its
+   * own duration on top of the delay, so a 10 ms frame ran at 38 fps and a
+   * 90 ms frame at 9 — with no way to ever catch up to the display. */
+  double elapsed = g_tick_frame_started_ms > 0.0
+                       ? (double)SDL_GetTicks() - g_tick_frame_started_ms
+                       : 16.0;
+  double delay = 16.0 - elapsed;
+  if (delay < 0.0) delay = 0.0;
+  xt_value args[2] = {g_tick, xt_number(delay)};
   g_tick_pending = 1;
   xt_set_timeout(2, args);
 }
@@ -50,6 +61,7 @@ xt_value browser_tick(xt_value self, xt_value env, int32_t argc, xt_value *argv)
   (void)argc;
   (void)argv;
   g_tick_pending = 0;
+  g_tick_frame_started_ms = (double)SDL_GetTicks();
   if (xt_gui_run_active()) return XT_UNDEFINED;
   if (g_tick_deadline_ms > 0 && (double)SDL_GetTicks() >= g_tick_deadline_ms) {
     /* Shared with `run()`: stop animating and let the program exit instead of

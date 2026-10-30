@@ -153,9 +153,11 @@ compiler here — keep painting the group with ordinary source-over blending.
 
 ## Text stack (M4b)
 
-`runtime/ext_gui/text.{h,cpp}` wraps the bundled **stb_truetype** (shaping and
-rasterisation). It is compiled into `gui.a` from
-`runtime/ext_gui/stb_truetype.h`; no FreeType/HarfBuzz build is needed.
+`runtime/ext_gui/text.{h,cpp}` is the front-end; it dispatches through a small
+backend table. The default backend is the bundled **stb_truetype**
+(`text_stb.cpp`, `runtime/ext_gui/stb_truetype.h`). The optional **`shaping`**
+link feature installs `text_hb.cpp`, a HarfBuzz + FreeType backend, and is
+selected automatically for non-ASCII text.
 
 - Fonts are resolved from well-known system paths (Helvetica/Arial on macOS,
   DejaVu/Liberation on Linux, Segoe UI/Arial on Windows), overridable with
@@ -187,11 +189,14 @@ rasterisation). It is compiled into `gui.a` from
 - Layout uses these real metrics for text widths, line breaking and
   `line-height: normal`; `measureText`/`fontMetrics` expose them to tests.
 
-Shape trade-off: this is a simple shaper, not a full OpenType engine. It handles
-Latin/CJK/Cyrillic/Greek, basic kerning and per-codepoint fallback, but it does
-not run ligatures or complex-script shaping (Arabic/Indic/Thai), and stb_truetype
-only accepts TrueType outlines, not CFF/OTF or variable fonts. The choice keeps a
-DOM-only binary near 3 MiB; restoring HarfBuzz + FreeType adds about 1.2 MiB.
+Shape trade-off: the default is a simple shaper, not a full OpenType engine. It
+handles Latin/CJK/Cyrillic/Greek, basic kerning and per-codepoint fallback, but
+it does not run ligatures or complex-script shaping (Arabic/Indic/Thai), and
+stb_truetype only accepts TrueType outlines, not CFF/OTF or variable fonts. The
+choice keeps a DOM-only binary near 3 MiB. The optional **`shaping`** link
+feature installs the HarfBuzz + FreeType backend instead (about 1.2 MiB) and
+restores full OpenType shaping and CFF/OTF/variable-font support; it is selected
+automatically for non-ASCII text and can be forced with `--feature shaping`.
 
 ## Performance (M20)
 

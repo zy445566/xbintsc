@@ -51,7 +51,7 @@ export interface BuildOptions {
   /** Profile directory (default: `<outDir>/pgo`). */
   readonly pgoDir?: string;
   /**
-   * Optional link features to force on (`media`, `gpu`, or `all`). Features are
+   * Optional link features to force on (`media`, `gpu`, `images`, `shaping`, `webgl`, or `all`). Features are
    * otherwise selected from a static scan of the bundled program; forcing one
    * is the escape hatch for HTML/CSS built from runtime data.
    */

@@ -65,6 +65,17 @@ export function hasImageUsage(usage: ProgramUsage): boolean {
   );
 }
 
+/** True when the program may need full OpenType shaping (non-Latin text). */
+export function hasShapingUsage(usage: ProgramUsage): boolean {
+  if (usage.dynamicMarkup) return true;
+  return usage.strings.some((value) => {
+    for (const character of value) {
+      if ((character.codePointAt(0) ?? 0) > 0x7f) return true;
+    }
+    return /\\u\{[0-9a-fA-F]+\}|\\u[0-9a-fA-F]{4}|&#(?:x[0-9a-fA-F]+|\d+);/.test(value);
+  });
+}
+
 /** Absolute path to the per-platform prebuilt media archive. */
 function mediaArchive(): string {
   return join(runtimeLibDir(), process.platform === "win32" ? "media.lib" : "media.a");
@@ -124,6 +135,17 @@ export const guiLinkFeatures: readonly LinkFeature[] = [
      */
     runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "image_bridge.c")],
     used: hasImageUsage,
+  },
+  {
+    name: "shaping",
+    description: "HarfBuzz/FreeType shaping for complex scripts and CFF/OTF fonts",
+    /**
+     * `text_bridge.c` installs `TextApi` and references `text_hb.cpp`, pulling
+     * HarfBuzz and FreeType out of `gui.a`. A Latin-only page keeps the faster
+     * stb_truetype path and links neither library.
+     */
+    runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "text_bridge.c")],
+    used: hasShapingUsage,
   },
   {
     name: "webgl",

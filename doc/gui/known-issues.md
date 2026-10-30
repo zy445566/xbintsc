@@ -115,14 +115,15 @@
   Greek with basic `kern` and per-codepoint fallback, but it does not run
   OpenType ligatures or complex-script shaping (Arabic/Indic/Thai), and it only
   accepts TrueType outlines (no CFF/OTF or variable fonts). Colour emoji are not
-  rendered as colour. This is the price of the ~3 MiB DOM-only binary; restore
-  HarfBuzz + FreeType or use a platform text stack if full shaping is required.
-- **Link-feature detection is static.** `media`/`gpu`/`images`/`webgl` are selected from the
+  rendered as colour. This is the price of the ~3 MiB DOM-only binary; the
+  optional `shaping` feature restores HarfBuzz + FreeType (and full
+  complex-script shaping).
+- **Link-feature detection is static.** `media`/`gpu`/`images`/`shaping`/`webgl` are selected from the
   bundled HTML/CSS/TS (including imported `.html` and the CSS inlined from it).
   A page that builds markup or CSS from runtime data (`fetch`, `readFileSync`,
   a value returned by a function) cannot be seen; the scanner falls back to
   enabling both when it can prove the sink is dynamic, but an opaque value that
-  it cannot classify needs an explicit `--feature media`/`gpu`/`images`/`webgl` (or `all`).
+  it cannot classify needs an explicit `--feature media`/`gpu`/`images`/`shaping`/`webgl` (or `all`).
   `--verbose` prints the selected set. See
   [Link features](./build.md#link-features).
 

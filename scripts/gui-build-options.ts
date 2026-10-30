@@ -59,6 +59,40 @@ export const SECTION_CMAKE_FLAGS = [
 ];
 
 /**
+ * HarfBuzz APIs the engine never uses (draw/paint/color/name/style/metrics/…).
+ * `HB_NO_CFF`, `HB_NO_OPEN`, `HB_NO_VAR` and `HB_NO_HINTING` are deliberately
+ * *not* set: the shaping backend must load files and keep CFF/OTF and
+ * variable-font shaping. `HB_NO_MT` is safe because text is shaped on the main
+ * thread.
+ */
+export const HB_LEAN_DEFINES = [
+  "-DHB_NO_DRAW",
+  "-DHB_NO_PAINT",
+  "-DHB_NO_COLOR",
+  "-DHB_NO_NAME",
+  "-DHB_NO_STYLE",
+  "-DHB_NO_METRICS",
+  "-DHB_NO_MATH",
+  "-DHB_NO_META",
+  "-DHB_NO_BITMAP",
+  "-DHB_NO_VERTICAL",
+  "-DHB_NO_BUFFER_SERIALIZE",
+  "-DHB_NO_BUFFER_VERIFY",
+  "-DHB_NO_FACE_COLLECT_UNICODES",
+  "-DHB_NO_MMAP",
+  "-DHB_NO_OT_FONT_GLYPH_NAMES",
+  "-DHB_NO_LAYOUT_FEATURE_PARAMS",
+  "-DHB_NO_LAYOUT_COLLECT_GLYPHS",
+  "-DHB_NO_ERRNO",
+  "-DHB_NO_LANGUAGE_LONG",
+  "-DHB_NO_LANGUAGE_PRIVATE_SUBTAG",
+  "-DHB_NO_MT",
+  "-DHB_NO_ATEXIT",
+  "-DHB_NO_GETENV",
+  "-DHB_NO_SETLOCALE",
+];
+
+/**
  * SDL subsystems the GUI engine never calls. Disabling them removes whole
  * translation units (joystick/gamepad/HIDAPI, haptics, sensors, camera, the
  * SDL_Render software blitter and the OpenGL/offscreen video drivers) from the

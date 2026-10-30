@@ -63,7 +63,7 @@ TypeScript 编译器。
 
 如果 npm 跳过了这个可选包（`--omit=optional`、不安装可选依赖的包管理器，或发布
 未覆盖的宿主平台），驱动会回退到从随包源码编译 C 运行时并缓存目标文件；这样仍能
-工作，但首次构建更慢，`--ext gui`（以及自动选择的 `media`/`gpu`/`images`/`webgl` 链接特性）也需要
+工作，但首次构建更慢，`--ext gui`（以及自动选择的 `media`/`gpu`/`images`/`shaping`/`webgl` 链接特性）也需要
 归档存在。
 
 ## 环境要求

@@ -102,7 +102,7 @@ pages above.
 | 4 | The engine is **not self-hosted** (it is C/C++, not TS), but must not affect the compiler's platform-agnostic design. Delivered as a per-platform prebuilt archive linked via `nativeObjects`. |
 | 5 | The **event loop is generic**: the runtime exposes a generic main-loop hook and a poll primitive; nothing GUI-specific enters `runtime/`. |
 | 6 | **Multiple windows** are supported by the core object model. |
-| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3, glslang and (on macOS only) SPIRV-Cross; text uses the bundled stb_truetype. glslang and SPIRV-Cross are only *extracted* when the compiler selects the **`gpu` link feature**; Metal is the only SDL_GPU backend that consumes MSL, so merging SPIRV-Cross elsewhere would add ~2.5 MiB no driver can ask for. The WebGL context/DOM code is the **`webgl` feature** (requires `gpu`), and stb_image/NanoSVG are the **`images` feature**. The optional `media.a` carries FFmpeg and is linked only when the **`media` link feature** is selected. All features are chosen from the program's static usage; `--feature`/`--no-feature` override the scan. |
+| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3, FreeType/HarfBuzz for the optional `shaping` feature, glslang and (on macOS only) SPIRV-Cross; the default text path uses the bundled stb_truetype. glslang and SPIRV-Cross are only *extracted* when the compiler selects the **`gpu` link feature**; Metal is the only SDL_GPU backend that consumes MSL, so merging SPIRV-Cross elsewhere would add ~2.5 MiB no driver can ask for. The WebGL context/DOM code is the **`webgl` feature** (requires `gpu`), and stb_image/NanoSVG are the **`images` feature**. The optional `media.a` carries FFmpeg and is linked only when the **`media` link feature** is selected. All features are chosen from the program's static usage; `--feature`/`--no-feature` override the scan. |
 | 8 | **Heavy optional halves are link features, not extensions.** FFmpeg and glslang are selected by what the bundled HTML/CSS/TS may use, and a small C bridge (linked only when active) installs the feature's dispatch table and forces the linker to extract the implementation. This keeps one user-facing `gui` extension while a DOM-only program pays for neither stack. |
 
 ## Architecture
@@ -137,16 +137,19 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | --- | --- | --- |
 | Window + input + multi-window | **SDL3** | cross-platform windows, HiDPI, IME, clipboard, DnD, close/hide events |
 | GPU | **SDL_GPU** (SDL3) | one render path over Metal / Vulkan / D3D12; avoids three backends |
-| Text shaping | **stb_truetype** simple shaper | per-codepoint mapping + `kern`; keeps the DOM-only binary near 3 MiB, but no ligatures or complex-script shaping |
-| Glyph raster | **stb_truetype** | TrueType outlines → grayscale atlas; no FreeType dependency |
+| Text shaping | **stb_truetype** simple shaper; optional **`shaping`** feature links HarfBuzz + FreeType | default keeps the DOM-only binary near 3 MiB; `shaping` restores ligatures and complex-script shaping |
+| Glyph raster | **stb_truetype**; FreeType only under `shaping` | TrueType outlines → grayscale atlas by default |
 | Images | **stb_image** (vendored header) for bitmaps, **NanoSVG** (vendored headers) for SVG | single headers to start; SVG files rasterise on demand |
 | Video + audio | **FFmpeg** (statically vendored, minimal build, optional `media` link feature) | decodes the common container/codec set; no WebView or platform media framework |
 
-Pinned versions: SDL3 `release-3.2.10`, glslang `16.6.0`,
-SPIRV-Cross `vulkan-sdk-1.4.313.0`, FFmpeg `7.1` for the optional `media`
-archive (overridable with `SDL3_TAG` / `GLSLANG_VERSION` /
-`SPIRV_CROSS_VERSION` / `FFMPEG_VERSION`). The text stack is the bundled
-`stb_truetype.h`; it accepts TrueType outlines (not CFF/OTF or variable fonts).
+Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`
+(for the optional `shaping` feature), glslang `16.6.0`, SPIRV-Cross
+`vulkan-sdk-1.4.313.0`, FFmpeg `7.1` for the optional `media` archive
+(overridable with `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
+`GLSLANG_VERSION` / `SPIRV_CROSS_VERSION` / `FFMPEG_VERSION`). The default text
+backend is the bundled `stb_truetype.h`; it accepts TrueType outlines (not
+CFF/OTF or variable fonts). The `shaping` feature swaps in HarfBuzz + FreeType
+for full OpenType shaping.
 
 Alternative if SDL3 is rejected: **GLFW + OpenGL 3.3** (simpler, but OpenGL is
 deprecated on macOS and gives no modern GPU abstraction). **wgpu-native** if the
@@ -205,7 +208,7 @@ engine were Rust.
      (`package-release` copies all of `runtime/`) and inside the optional
      `@xbintsc/<os>-<arch>` npm package. Windows x64 is included; Windows arm64
      still skips them.
-   - `vendor/` (SDL3/glslang for the GUI archive, FFmpeg for `media`)
+   - `vendor/` (SDL3/FreeType/HarfBuzz/glslang for the GUI archive, FFmpeg for `media`)
      is cached per OS/arch, keyed by `scripts/build-gui.ts` /
      `scripts/build-media.ts`. Windows x64 gets its own source cache plus the
      installed `vendor/ffmpeg-build-msvc/dist` prefix.

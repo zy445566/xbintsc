@@ -100,7 +100,7 @@ pages above.
 | 4 | The engine is **not self-hosted** (it is C/C++, not TS), but must not affect the compiler's platform-agnostic design. Delivered as a per-platform prebuilt archive linked via `nativeObjects`. |
 | 5 | The **event loop is generic**: the runtime exposes a generic main-loop hook and a poll primitive; nothing GUI-specific enters `runtime/`. |
 | 6 | **Multiple windows** are supported by the core object model. |
-| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3/FreeType/HarfBuzz, and the optional `media.a` carries FFmpeg and is linked only with `--ext media`. |
+| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3/FreeType/HarfBuzz/glslang, plus SPIRV-Cross **on macOS only** — Metal is the only SDL_GPU backend that consumes MSL, so merging it elsewhere would add ~2.5 MiB of code no driver can ask for. The optional `media.a` carries FFmpeg and is linked only with `--ext media`. |
 
 ## Architecture
 

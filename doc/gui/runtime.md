@@ -55,6 +55,11 @@ that case with a single 16 ms `xt_set_timeout` tick:
   queued animation-frame callbacks before layout, so a page can stop itself),
 - it re-arms **only while callbacks remain**, so an idle page lets the event
   loop drain and the process exit — the browser-tab lifecycle;
+- it schedules the next tick for *frame start + 16 ms*, not 16 ms after the
+  frame finished: the frame's own duration is not added to the interval, so a
+  10 ms frame runs at a 16 ms period instead of 26 ms, and a page slower than
+  16 ms runs as fast as it can instead of falling a frame's worth of time
+  further behind on every frame;
 - it stands aside while `xt_gui_run_active()` is set (the program called
   `run()`), so the same window is not rendered twice per tick;
 - `XT_GUI_AUTOCLOSE_MS=n` makes the pump quit after `n` milliseconds, which is

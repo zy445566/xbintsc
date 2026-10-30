@@ -137,6 +137,16 @@ METHOD(node_text_content_set) {
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
   std::string text = argc >= 1 ? to_string_value(xt_arg(argc, argv, 0)) : "";
+  /* Writing the value the node already shows is a no-op. Rebuilding the subtree
+   * would drop and re-allocate a text node, dirty the document and force a full
+   * restyle — and HUD-style code assigns the same string every frame (a clock
+   * that only changes once a second, a health label that does not move). */
+  if (node->children.empty()) {
+    if (text.empty()) return XT_UNDEFINED;
+  } else if (node->children.size() == 1 && node->children[0]->isText() &&
+             node->children[0]->text == text) {
+    return XT_UNDEFINED;
+  }
   std::vector<xtgui::Node *> existing;
   for (const std::unique_ptr<xtgui::Node> &child : node->children) existing.push_back(child.get());
   for (xtgui::Node *child : existing) win->document->removeChild(node, child);

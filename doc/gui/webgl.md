@@ -48,8 +48,19 @@ reports the type as well.
   `readPixels` flips rows back, and the compositor sees an upright texture.
 - A fixed-function state change (`blendFunc`, `depthFunc`, `cullFace`,
   `colorMask`, …) changes which `SDL_GPUGraphicsPipeline` is needed, so
-  pipelines are created lazily per (program, vertex layout, state) and cached on
-  the program.
+  pipelines are created lazily and cached on the program. The key is the
+  *content* of the draw: the program, the primitive mode, a hash of the vertex
+  layout (attribute locations, formats, offsets, buffer pitches and input rates),
+  the reflected fixed-function state and the attachment formats. It deliberately
+  excludes the context's monotonic version counters (`attribs_version_`,
+  `framebuffer_version_`) and the GPU buffer handles: those advance on every VAO
+  bind, framebuffer switch or buffer re-creation without changing the pipeline,
+  and keying on them re-created every pipeline once per frame in a scene that
+  binds several layouts per frame — three.js does, and measured 248
+  `SDL_CreateGPUGraphicsPipeline` calls per frame while the per-program cache
+  grew without bound. `tests/e2e/gui-webgl-pipeline-cache.test.ts` pins the
+  steady state: two draws with the same layout and different buffers create no
+  pipeline after the first frame.
 
 ## Shaders: GLSL ES to SPIR-V (and on to MSL)
 

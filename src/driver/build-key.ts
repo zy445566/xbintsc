@@ -31,6 +31,8 @@ export interface CacheKeyInput {
   readonly check?: boolean;
   readonly pgo?: PgoMode;
   readonly pgoDir: string;
+  /** Active optional link features; they change which objects/archives link. */
+  readonly features?: readonly string[];
 }
 
 /** Hash every input that can change the produced binary. */
@@ -54,5 +56,6 @@ export function buildCacheKey(input: CacheKeyInput): string {
     String(input.check !== false),
     pgo ?? "",
     pgo ? input.pgoDir : "",
+    [...(input.features ?? [])].sort().join(","),
   ]);
 }

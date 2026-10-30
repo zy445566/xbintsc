@@ -137,7 +137,8 @@ evaluated per sample, so a ramp keeps moving while the page is idle.
 procedurally. `decodeAudioData(bytes)` returns a promise for a decoded
 AudioBuffer: WAV (PCM 8/16/24/32-bit, IEEE float 32/64, A-law and µ-law) is
 decoded by the engine itself; MP3, AAC/M4A, Vorbis, Opus and FLAC need the
-optional `media` extension (`--ext gui,media`), whose FFmpeg decoder is used as
+optional `media` link feature (auto-selected when the program calls
+`decodeAudioData`), whose FFmpeg decoder is used as
 the fallback. `bytes` may be an ArrayBuffer, a typed array, a Node `Buffer`, or
 the raw byte string `fs.readFileSync` returns (this runtime has no dedicated
 binary type, and that string's storage is exactly the file bytes). The result

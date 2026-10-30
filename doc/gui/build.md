@@ -28,13 +28,17 @@
   minimal static build with only the demuxers/parsers/decoders the media
   elements need, compiles `runtime/ext_media/media.cpp` against it and merges
   everything into `runtime/lib/<os>-<arch>/media.a` (`media.lib` with the MSVC
-  ABI on Windows). `gui.a` does **not** link FFmpeg: a program enables playback
-  explicitly with `--ext media`.
+  ABI on Windows). `gui.a` does **not** link FFmpeg: the compiler selects the
+  `media` link feature for a program that may play media and only then links
+  `media.a` (see [Link features](#link-features)).
 - `src/extensions/gui/index.ts` exposes the engine archive through
   `nativeObjects()` (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the
-  OS frameworks through `linkerFlags()`. `src/extensions/media/index.ts` does
-  the same for `media.a`/`media.lib` and compiles the registration bridge
-  (`runtime/ext_media/media_bridge.c`) as a normal runtime source.
+  OS frameworks through `linkerFlags()`. Its `linkFeatures()` (in
+  `src/extensions/gui/features.ts`) declares `media` and `gpu`; the driver
+  compiles their bridges only when a feature is active.
+- glslang (and SPIRV-Cross on macOS) is merged into `gui.a` like SDL3, but the
+  engine reaches it only through the `gpu` feature's dispatch table. A program
+  that never compiles GLSL does not extract those archive members.
 - `scripts/build-gui.ts` compiles with the *same* clang the driver resolves
   (`src/driver/toolchain-provider.ts`); on Windows that is the MSVC-targeting
   LLVM bundled with Visual Studio, and its sibling `clang++`/`llvm-ar` are used
@@ -62,11 +66,12 @@
 - CI builds `gui.a`/`gui.lib` and `media.a`/`media.lib` before assembling the
   release archive so they ship inside `runtime/lib/<slug>/` (the release tarball
   copies the whole `runtime/` tree). The same folders are packed into the
-  optional `@xbintsc/<slug>` npm package, so `--ext gui`/`--ext media` work from
+  optional `@xbintsc/<slug>` npm package, so `--ext gui` (with automatic
+  `media`/`gpu` selection) works from
   an npm install on the hosts the release builds for. The archives are built and
   the examples are run on Linux (under Xvfb, with the lavapipe software Vulkan
   driver) and macOS;
-  the Windows x64 job builds both archives and links a `gui,media` program, so
+  the Windows x64 job builds both archives and links a `gui` program, so
   the MSVC build is validated even though *running* the examples there stays
   provisional (the hosted runner has no GPU/Vulkan driver). The macOS run is
   provisional too: the Intel runner's virtualised GPU lacks
@@ -97,6 +102,50 @@
   Debian/Ubuntu and reports the missing development packages by name (set
   `xbintsc_SKIP_HEADER_CHECK=1` when they live under a prefix that check does
   not know).
+
+## Link features
+
+`gui` is the only user-facing extension, but two heavy halves are **optional link
+features** selected per program:
+
+| Feature | What it links | Selected when the program may use it |
+| --- | --- | --- |
+| `media` | `media_bridge.c` + `media.a` (FFmpeg) | an HTML `<video>`/`<audio>` tag, `createElement("video"/"audio")`, `new Audio()`, `decodeAudioData`, or runtime-built markup |
+| `gpu` | `gpu_bridge.c` (the implementation is already in `gui.a`) | a `getContext("webgl"/"webgl2"/"experimental-webgl")` (or a kind decided at run time), any `webgl` string, `mix-blend-mode`/`mixBlendMode`, or runtime-built markup |
+
+The driver scans the bundled AST (`src/driver/usage.ts`): every string literal
+(including imported `.html` and the CSS inlined from it), identifiers and
+property names, each `getContext(...)` kind, and whether HTML/CSS can be built
+from data the compiler cannot see. Simple `const` aliases are resolved;
+anything unresolved makes the program “dynamic markup” and enables both features
+conservatively.
+
+When a feature is active, the driver compiles its C **bridge only for that
+build** and links it before `gui.a`:
+
+- `media` → `runtime/ext_media/media_bridge.c`; its constructor installs the
+  decoder table and references `xt_media_backend_*`, which is what extracts the
+  FFmpeg members from `media.a`.
+- `gpu` → `runtime/ext_gui/gpu_bridge.c`; its constructor calls
+  `xt_gpu_feature_register` in `gpu_feature.cpp`, which installs the
+  `XtGpuShaderApi` table and references `compile_glsl` / `cross_compile_msl` /
+  the reflection helpers, extracting glslang (and SPIRV-Cross on macOS).
+
+A bridge is the “strong reference” that makes the linker search the archive; with
+no bridge, the engine's table stays null and the implementation members are never
+extracted. That is why the large libraries can stay in the existing archives
+without a new package layout.
+
+Overrides: `--feature media,gpu` (or `all`) forces a feature on;
+`--no-feature media` keeps it out even when detection finds a use. `--ext media`
+is a deprecated alias for `--ext gui --feature media`. If an auto-detected
+feature's archive is missing, the build warns and continues (the element/context
+degrades as documented); a forced feature makes it an error.
+
+> Detection is static by design. A page that builds HTML/CSS from `fetch`,
+> `readFileSync` or other runtime data should pass `--feature all` (or the
+> specific feature). `--verbose` prints the selected set, e.g.
+> `xbintsc: link features: none`.
 
 ## Running the example
 
@@ -136,10 +185,11 @@ its README for controls and the geometry report it prints.
 
 `media.ts` (with `media.html`) demonstrates `<video>`/`<audio>`: it overlays a
 CSS progress bar on the video and drives playback with `play()` / `pause()` /
-`currentTime` / `volume`. It needs the separate `media` extension, so build and
-enable both. Media `src` paths resolve relative to the process working
+`currentTime` / `volume`. The compiler sees the elements in `media.html` and
+links the `media` feature automatically; build `media.a` once with
+`npm run media`. Media `src` paths resolve relative to the process working
 directory, so run it from the repository root:
-`xbintsc run examples/gui/media.ts --ext gui,media`.
+`xbintsc run examples/gui/media.ts --ext gui`.
 
 Set `XT_GUI_AUTOCLOSE_MS=<n>` to close all windows after `n` milliseconds,
 which the e2e test (`tests/e2e/gui-*.test.ts`) uses to run headlessly.

@@ -44,6 +44,8 @@ export enum DiagnosticCode {
   ToolchainError = 6003,
   IncrementalCacheError = 6004,
   CircularDependency = 6005,
+  /** An optional link feature was requested but its archive is unavailable. */
+  LinkFeatureUnavailable = 6006,
 }
 
 export interface Diagnostic {

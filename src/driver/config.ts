@@ -44,6 +44,10 @@ export interface ProjectConfig {
   readonly pgoDir?: string;
   readonly extensions?: readonly string[];
   readonly extNative?: readonly string[];
+  /** Optional link features to force on (`media`, `gpu`, `all`). */
+  readonly features?: readonly string[];
+  /** Optional link features to keep out even when auto-detection finds a use. */
+  readonly noFeatures?: readonly string[];
   readonly force?: boolean;
   readonly app?: AppConfig;
 }
@@ -135,6 +139,8 @@ export function parseProjectConfig(text: string, where: string = CONFIG_FILE_NAM
     pgoDir: readString(root, "pgoDir", where),
     extensions: readStringArray(root, "extensions", where),
     extNative: readStringArray(root, "extNative", where),
+    features: readStringArray(root, "features", where),
+    noFeatures: readStringArray(root, "noFeatures", where),
     force: readBoolean(root, "force", where),
     app,
   };

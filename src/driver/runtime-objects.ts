@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { ExtensionRegistry } from "../extensions/registry.js";
+import type { ResolvedLinkFeature } from "./link-features.js";
 import { hashParts } from "./cache.js";
 import { findRuntimeLibrary } from "./runtime-lib.js";
 import { compileC, optimizationFlags, RUNTIME_CFLAGS, type PgoMode, type Runner } from "./toolchain.js";
@@ -46,6 +47,8 @@ export const RUNTIME_SOURCES = [
 export interface RuntimeObjects {
   readonly runtimeObjects: readonly string[];
   readonly extensionObjects: readonly string[];
+  /** Objects/archives contributed by active optional link features. */
+  readonly featureObjects: readonly string[];
   /** Pre-built C++/Rust objects and archives contributed by native extensions. */
   readonly nativeObjects: readonly string[];
 }
@@ -61,6 +64,8 @@ export interface RuntimeObjectsOptions {
   readonly lto: boolean;
   readonly pgo: PgoMode | undefined;
   readonly pgoDir: string;
+  /** Optional link features selected for this program. */
+  readonly features?: readonly ResolvedLinkFeature[];
 }
 
 /**
@@ -131,5 +136,25 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
     }
   }
   // A native archive may be shared by several manifests; link each once.
-  return { runtimeObjects, extensionObjects, nativeObjects: [...new Set(registry.nativeObjects())] };
+  const featureObjects: string[] = [];
+  for (const feature of options.features ?? []) {
+    /* Feature bridges are always compiled: they are not part of any prebuilt
+     * archive, and their references are what make the linker extract the
+     * feature's implementation. */
+    for (const sourcePath of feature.runtimeSources) {
+      const dedupeKey = resolve(sourcePath);
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      extensionObjects.push(
+        compileOne(sourcePath, `feature_${feature.name}_${basename(sourcePath, ".c")}`),
+      );
+    }
+    featureObjects.push(...feature.nativeObjects);
+  }
+  return {
+    runtimeObjects,
+    extensionObjects,
+    featureObjects: [...new Set(featureObjects)],
+    nativeObjects: [...new Set(registry.nativeObjects())],
+  };
 }

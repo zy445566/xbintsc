@@ -296,8 +296,12 @@ still work.
 
 glslang is fetched and built by `npm run gui` and merged into `gui.a` /
 `gui.lib`; SPIRV-Cross is merged **on macOS only**, because no other SDL_GPU
-backend consumes MSL (see [Packaging and build](./build.md)). A program that only
-uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
+backend consumes MSL (see [Packaging and build](./build.md)). Both are reached
+through the optional **`gpu` link feature**: the compiler selects it when the
+program may call `getContext("webgl…")` or use `mix-blend-mode`, and only then
+does the feature bridge pull the translator members out of `gui.a`. A program
+that only uses the 2D canvas or the DOM links neither glslang nor SPIRV-Cross
+(see [Link features](./build.md#link-features)).
 
 ## Testing
 

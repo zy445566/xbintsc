@@ -111,6 +111,15 @@
   bottleneck. Inline `style="…"` attributes are re-parsed on each restyle of
   the element that carries them.
 
+- **Link-feature detection is static.** `media`/`gpu` are selected from the
+  bundled HTML/CSS/TS (including imported `.html` and the CSS inlined from it).
+  A page that builds markup or CSS from runtime data (`fetch`, `readFileSync`,
+  a value returned by a function) cannot be seen; the scanner falls back to
+  enabling both when it can prove the sink is dynamic, but an opaque value that
+  it cannot classify needs an explicit `--feature media`/`gpu` (or `all`).
+  `--verbose` prints the selected set. See
+  [Link features](./build.md#link-features).
+
 ## Open questions
 
 - Whether Linux ships X11, Wayland, or both in the first cut. (Decision:
@@ -130,7 +139,8 @@
 - Windows: an MSVC-compatible `gui.lib` (COFF objects + `ar -M`/`llvm-ar`) is
   produced by `scripts/build-gui.ts`. The Windows x64 CI job builds it with the
   Visual Studio toolchain (`.github/actions/vs-toolchain` imports `vcvarsall`
-  and uses VS's bundled LLVM), links a `gui,media` program, and ships it in the
+  and uses VS's bundled LLVM), links a `gui` program that exercises the `media`
+  link feature, and ships it in the
   x64 release. *Running* the examples on the hosted runner stays provisional
   because it has no GPU/Vulkan driver (SDL_GPU selects the **Vulkan** backend
   there, so no DXIL/`dxc` toolchain is needed). Windows arm64 still skips both
@@ -139,12 +149,14 @@
 - **Windows: x64 builds in CI, arm64 and runtime validation stay provisional.**
   `media.lib` is produced by `scripts/build-media.ts` with FFmpeg's MSVC
   toolchain (`--toolchain=msvc --cc=clang-cl`) so its COFF objects and static CRT
-  match `gui.lib`, and `--ext media` links and plays there. Building it needs a
+  match `gui.lib`, and the auto-selected `media` feature links and plays there.
+  Building it needs a
   POSIX shell to run FFmpeg's `configure` and GNU make; the shell comes from Git
   for Windows (already needed to clone SDL3), and make is a native GNU make
   (Chocolatey's `make`, or `xbintsc_MAKE`). CI installs make explicitly,
   builds `gui.lib` + `media.lib` on Windows x64 (using the same Visual Studio
-  `vcvarsall` + bundled LLVM as a local build), links a `gui,media` program, and
+  `vcvarsall` + bundled LLVM as a local build), links a `gui` program that
+  exercises the feature, and
   ships both archives in the Windows x64 release; the example *run* remains
   provisional because hosted runners have no GPU/Vulkan driver. Windows arm64
   still skips both archives, and `<video controls>` is likewise deferred — the

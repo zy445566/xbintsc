@@ -11,6 +11,8 @@
  * extensions they need before invoking the driver.
  */
 
+import type { LinkFeature } from "./link-feature.js";
+
 export interface BuiltinFunction {
   /** Exported C symbol, called as `xt_value symbol(int32_t argc, xt_value *argv)`. */
   readonly symbol: string;
@@ -109,7 +111,7 @@ export interface Extension {
   /**
    * Other extensions this one needs. The registry rejects a build that enables
    * it without them, so a dependent extension fails with an actionable message
-   * instead of an unresolved symbol at link time (e.g. `media` needs `gui`).
+   * instead of an unresolved symbol at link time.
    */
   readonly requires?: readonly string[];
   /** C/asm sources compiled and linked alongside the generated module. */
@@ -144,6 +146,19 @@ export interface Extension {
    * learns about any particular asset format.
    */
   assetLoaders?(): Readonly<Record<string, AssetLoader>>;
+  /**
+   * Optional heavy capabilities this extension can contribute only when a
+   * program may use them (`media`, `gpu`, …). The driver selects among them
+   * from the bundled source and links their registration source and archives
+   * only when active; see {@link LinkFeature}.
+   */
+  linkFeatures?(): readonly LinkFeature[];
+}
+
+/** A link feature together with the extension that declared it. */
+export interface LinkFeatureDeclaration {
+  readonly feature: LinkFeature;
+  readonly extension: string;
 }
 
 export class ExtensionRegistry {
@@ -190,11 +205,13 @@ export class ExtensionRegistry {
   }
 
   /**
-   * Throw when a registered extension requires one that is not registered.
-   * Called before a build so `--ext media` without `--ext gui` reports which
-   * flags to pass instead of failing later with an unresolved symbol.
+   * Throw when a registered extension requires one that is not registered, or
+   * when two extensions declare the same link feature.
+   * Called before a build so a missing dependency reports which flags to pass
+   * instead of failing later with an unresolved symbol.
    */
   validate(): this {
+    const features = new Map<string, string>();
     for (const extension of this.extensions.values()) {
       for (const dependency of extension.requires ?? []) {
         if (this.extensions.has(dependency)) continue;
@@ -202,6 +219,15 @@ export class ExtensionRegistry {
           `extension '${extension.name}' requires the '${dependency}' extension; ` +
             `pass --ext ${dependency},${extension.name}`,
         );
+      }
+      for (const feature of extension.linkFeatures?.() ?? []) {
+        const owner = features.get(feature.name);
+        if (owner !== undefined && owner !== extension.name) {
+          throw new Error(
+            `link feature '${feature.name}' is declared by both '${owner}' and '${extension.name}'`,
+          );
+        }
+        features.set(feature.name, extension.name);
       }
     }
     return this;
@@ -268,6 +294,21 @@ export class ExtensionRegistry {
       if (loaders) Object.assign(merged, loaders);
     }
     return merged;
+  }
+
+  /**
+   * Every optional link feature declared by the registered extensions, paired
+   * with its provider. Features of extensions that are not enabled are absent,
+   * so a program cannot accidentally link `media` through `node`.
+   */
+  linkFeatures(): readonly LinkFeatureDeclaration[] {
+    const declarations: LinkFeatureDeclaration[] = [];
+    for (const extension of this.extensions.values()) {
+      for (const feature of extension.linkFeatures?.() ?? []) {
+        declarations.push({ feature, extension: extension.name });
+      }
+    }
+    return declarations;
   }
 
   runtimeSources(): readonly string[] {

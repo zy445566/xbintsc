@@ -128,7 +128,8 @@ requestAnimationFrame(frame);
 `getChannelData(i)` 是真正的 `Float32Array`，可以用代码逐样本填充。
 `decodeAudioData(bytes)` 返回解码后的 AudioBuffer Promise：WAV（PCM 8/16/24/32 位、
 IEEE float 32/64、A-law 与 µ-law）由引擎自身解码；MP3、AAC/M4A、Vorbis、Opus 与 FLAC
-需要可选的 `media` 扩展（`--ext gui,media`），以其中的 FFmpeg 解码器作为回退。
+需要可选的 `media` 链接特性（程序调用 `decodeAudioData` 时自动选中），以其中的
+FFmpeg 解码器作为回退。
 `bytes` 可以是 ArrayBuffer、类型化数组、Node `Buffer`，或 `fs.readFileSync`
 返回的原始字节字符串（本运行时没有专门的二进制类型，而该字符串的存储正是文件字节）。
 解码结果会重采样到上下文的 48 kHz，因此 `buffer.sampleRate` 与

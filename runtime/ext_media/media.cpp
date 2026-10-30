@@ -1,5 +1,5 @@
 /*
- * xbintsc media extension — `<video>`/`<audio>` decoding.
+ * xbintsc media link feature — `<video>`/`<audio>` decoding.
  *
  * This translation unit is the only place that knows about FFmpeg. It is
  * compiled into the prebuilt `media.a`/`media.lib` by `scripts/build-media.ts` and linked

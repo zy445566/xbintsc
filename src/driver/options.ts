@@ -50,6 +50,14 @@ export interface BuildOptions {
   readonly pgo?: PgoMode;
   /** Profile directory (default: `<outDir>/pgo`). */
   readonly pgoDir?: string;
+  /**
+   * Optional link features to force on (`media`, `gpu`, or `all`). Features are
+   * otherwise selected from a static scan of the bundled program; forcing one
+   * is the escape hatch for HTML/CSS built from runtime data.
+   */
+  readonly features?: readonly string[];
+  /** Optional link features to keep out even when the scan detects a use. */
+  readonly noFeatures?: readonly string[];
 }
 
 /** One phase of a build, in milliseconds (reported by `--time`). */
@@ -68,6 +76,8 @@ export interface BuildResult {
   readonly bundlePath?: string;
   /** Per-phase timings, collected for `xbintsc build --time`. */
   readonly timings?: readonly PhaseTiming[];
+  /** Active optional link features (only for a linked `exe` build). */
+  readonly features?: readonly string[];
 }
 
 export interface CompileStringResult {

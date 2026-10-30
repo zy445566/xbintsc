@@ -30,10 +30,11 @@ export {
   numberLiteral,
   booleanLiteral,
 } from "./codegen/values.js";
-export { ExtensionRegistry, createDefaultRegistry, coreExtension, type Extension, type ExtensionModule, type ModuleExport, type ModuleExports, type AssetLoader, type AssetLoadResult } from "./extensions/registry.js";
+export { ExtensionRegistry, createDefaultRegistry, coreExtension, type Extension, type ExtensionModule, type ModuleExport, type ModuleExports, type AssetLoader, type AssetLoadResult, type LinkFeatureDeclaration } from "./extensions/registry.js";
+export type { LinkFeature, ProgramUsage } from "./extensions/link-feature.js";
+export type { LinkFeatureRequest, ResolvedLinkFeature } from "./driver/link-features.js";
 export { bundledExtensions } from "./extensions/catalog.js";
 export { nodeExtension } from "./extensions/node/index.js";
-export { mediaExtension } from "./extensions/media/index.js";
 export type { NodeModule } from "./extensions/node/module.js";
 export {
   NativeExtensionError,

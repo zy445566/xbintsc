@@ -1,8 +1,10 @@
-# Extensions: Node modules, GUI, media, C++/Rust libraries
+# Extensions: Node modules, GUI, link features, C++/Rust libraries
 
 The compiler core is platform-agnostic. Anything platform-specific — Node's
 `fs`, an HTML/CSS renderer, your own C++ library — arrives as an **extension**
 that contributes module bindings plus the C/C++ sources or objects to link.
+Heavy optional halves of an extension (FFmpeg, glslang) are **link features**
+selected from the program instead of separate extension flags.
 
 ## The rule that trips people up
 
@@ -74,8 +76,9 @@ blocks, because the runtime parser only reads inline `<style>`; and it rewrites
 a bundled three.js module's `WebGLRenderer` to use the real WebGL 2 backend:
 only its shader unroller is patched, and no Canvas2D fallback is bundled. It
 ships as a per-platform prebuilt `gui.a`/`gui.lib` because it is C++. `<img>` decodes through the engine
-itself; `<video>`/`<audio>` do **not** work with `gui` alone — they need the
-separate [`media`](#media--videoaudio-decoding) extension. `<canvas>` is
+itself; `<video>`/`<audio>` decoding (FFmpeg) and GLSL translation (glslang) are
+**optional link features** selected from the program — see
+[Optional link features](#optional-link-features-media-gpu). `<canvas>` is
 supported too: `getContext("2d")` returns a context whose fills, paths,
 gradients, text and `drawImage` are rasterised by a self-written CPU rasteriser
 (plus line caps/joins, dashed strokes, `ellipse` and `roundRect`), and element
@@ -101,7 +104,7 @@ Pages written for the browser also get the browser globals they reach for —
 (`AudioContext` with gain, oscillator, buffer-source, biquad, compressor,
 stereo-panner, constant-source and delay nodes, a real 48 kHz mixer, per-sample
 AudioParam automation, and `decodeAudioData` for WAV in-engine plus compressed
-formats through `media`) — plus a frame pump that
+formats through the `media` feature) — plus a frame pump that
 starts at `loadHTML` and re-arms only while animation-frame callbacks remain, so
 a page that never calls `run()` still paints and then exits. **WebGL 1.0 and 2.0 are implemented**: `canvas.getContext("webgl")` /
 `"webgl2"` return a GPU context whose GLSL ES shaders are compiled to SPIR-V by
@@ -109,19 +112,35 @@ a bundled glslang — consumed by Vulkan, or cross-compiled to MSL by bundled
 SPIRV-Cross on Metal — and drawn through SDL_GPU; the page composites the colour
 texture without a CPU readback, and WebGL 2 adds VAOs, instancing, integer
 attributes, sampler objects, `texStorage2D` and buffer copies (see
-[../gui/webgl.md](../gui/webgl.md)). WebXR, `<video>`/`<audio>` without
-`media`, and streaming are **not** implemented:
-`typeof` answers `"undefined"` so a page takes its own fallback branch. `fetch`
+[../gui/webgl.md](../gui/webgl.md)). WebXR and streaming are **not**
+implemented: `typeof` answers `"undefined"` so a page takes its own fallback
+branch. `fetch`
 is **not** a GUI extension feature: the core runtime provides it (`http://`,
 plus local `file://` and relative paths; no HTTPS or streaming), so GUI
 programs can use it too. See [../implemented/fetch.md](../implemented/fetch.md).
 
-### `media` — video/audio decoding
+### Optional link features (`media`, `gpu`)
 
-Enable with `--ext media` **together with** `gui` (`--ext gui,media`; the
-registry rejects `media` on its own). It links a separate FFmpeg-backed
-`media.a`/`media.lib`, so adding `<video>`/`<audio>` playback does not make a
-GUI-only binary any larger.
+`gui` is one extension, but two heavy halves are optional **link features**. The
+compiler scans the bundled HTML/CSS/TS (imported `.html` assets and their inlined
+CSS are part of the bundle) and selects them per program; you do not pass an
+extension flag:
+
+- **`media`** — FFmpeg decoding for `<video>`/`<audio>` and compressed
+  `decodeAudioData`. Selected by a `<video>`/`<audio>` element,
+  `createElement("video"/"audio")`, `new Audio()`, `decodeAudioData`, or markup
+  built at run time. Links the FFmpeg-backed `media.a`/`media.lib`.
+- **`gpu`** — the glslang/SPIRV-Cross GLSL translator shared by WebGL and
+  `mix-blend-mode`. Selected by `getContext("webgl"/"webgl2"/…)` (or a context
+  kind decided at run time), any `webgl` string, or `mix-blend-mode`.
+
+Override the scan with `--feature media,gpu` (or `all`) and keep a feature out
+with `--no-feature media`. `--verbose` prints the selected set. A program that
+only renders HTML/CSS/2D canvas links neither FFmpeg nor glslang; a page that
+builds HTML/CSS from runtime data should pass `--feature all` because the scan
+cannot see it. If an auto-detected feature's archive is missing, the build warns
+and the capability degrades at run time (media elements fire `error`); a forced
+feature makes it an error.
 
 The DOM API is the same as for any HTML media element: `play()` / `pause()` /
 `load()`, the `paused` / `ended` / `duration` / `currentTime` / `volume` /
@@ -129,16 +148,11 @@ The DOM API is the same as for any HTML media element: `play()` / `pause()` /
 `src` properties, and `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/
 `error` events. There are no built-in controls — draw your own chrome with
 elements and CSS (see `examples/gui/media.ts`). Video frames and audio PCM are
-decoded on the main thread; video goes through the image texture path. Without
-the extension, opening a media source fails and fires `error` (the element and
-its API still exist). The archive is built for every host: POSIX produces
-`media.a`, while Windows produces `media.lib` from FFmpeg compiled with the
-MSVC-targeting `clang-cl`, so it links with `gui.lib`. Building it on Windows
-needs a POSIX shell (Git for Windows' bundled bash) and a native GNU make
-(Chocolatey `make`, or `xbintsc_MAKE`). See
-[../gui/build.md](../gui/build.md). Without the archive, or on a host where
-`npm run media` has not run, media elements report `error`; see
-[../gui/known-issues.md](../gui/known-issues.md).
+decoded on the main thread; video goes through the image texture path. Building
+the archive on Windows needs a POSIX shell (Git for Windows' bundled bash) and a
+native GNU make (Chocolatey `make`, or `xbintsc_MAKE`). See
+[../gui/build.md](../gui/build.md) and
+[../gui/media.md](../gui/media.md).
 
 ## Third-party npm packages
 

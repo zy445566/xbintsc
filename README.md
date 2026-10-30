@@ -293,10 +293,11 @@ npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 # A release archive or an npm install already ships the engine:
 xbintsc run app.ts --ext gui
 
-# <video>/<audio> playback is a separate opt-in archive, so GUI-only binaries
-# stay FFmpeg-free:
+# <video>/<audio> decoding is an optional link feature: the compiler sees the
+# elements in the page and links the FFmpeg archive for that build only, so a
+# GUI-only binary stays FFmpeg-free.
 npm run media
-xbintsc run examples/gui/media.ts --ext gui,media
+xbintsc run examples/gui/media.ts --ext gui
 ```
 
 A document's `<script>` bodies are **AOT-compiled** by xbintsc into the binary —

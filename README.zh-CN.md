@@ -238,9 +238,10 @@ npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 # 发布包或 npm 安装都已经内含该引擎：
 xbintsc run app.ts --ext gui
 
-# <video>/<audio> 播放是单独的可选归档，因此只做界面的二进制不会链接 FFmpeg：
+# <video>/<audio> 解码是可选的链接特性：编译器从页面里扫到元素后只为本次构建
+# 链接 FFmpeg 归档，因此只做界面的二进制不会链接 FFmpeg：
 npm run media
-xbintsc run examples/gui/media.ts --ext gui,media
+xbintsc run examples/gui/media.ts --ext gui
 ```
 
 文档里的 `<script>` 脚本会被 xbintsc **提前编译（AOT）**进二进制——内联脚本

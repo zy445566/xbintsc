@@ -31,9 +31,7 @@ import {
   toolchainPointer,
   UNEXPECTED_FAILURE_HINT,
 } from "./hints.js";
-import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
-import { bundledExtensions } from "../extensions/catalog.js";
-import { nativeExtensionFromManifest } from "../extensions/native.js";
+import { buildRegistry, normalizeExtensions } from "./extensions.js";
 import { resolveResourceCompiler } from "../driver/win-icon.js";
 import {
   CONFIG_FILE_NAME,
@@ -80,6 +78,8 @@ const VALUE_FLAGS = new Set([
   "optimize",
   "ext",
   "ext-native",
+  "feature",
+  "no-feature",
   "config",
   "icon",
   "app-id",
@@ -136,27 +136,6 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
     }
   }
   return { command: positionals.shift(), positionals, flags, passthrough };
-}
-
-function buildRegistry(extNames: readonly string[], nativeManifests: readonly string[]): ExtensionRegistry {
-  const registry = createDefaultRegistry();
-  const bundled = bundledExtensions();
-  for (const name of extNames) {
-    const extension = bundled.find((candidate) => candidate.name === name);
-    if (!extension) throw new Error(`Unknown extension '${name}'`);
-    registry.register(extension);
-  }
-  // Each manifest describes a pre-built C++ or Rust library.
-  for (const manifest of nativeManifests) {
-    registry.register(nativeExtensionFromManifest(manifest));
-  }
-  // Hint the extensions that ship with xbintsc but were not enabled, so a
-  // missing `import` of a known module points at the flag that enables it
-  // (`pass --ext node`) instead of failing later with a confusing error.
-  for (const extension of bundled) {
-    if (!registry.has(extension.name)) registry.hintExtension(extension);
-  }
-  return registry;
 }
 
 function printDiagnostics(diagnostics: readonly Diagnostic[], fileName: string, io: CliIo): void {
@@ -404,7 +383,8 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     }
     const extNames = listFlag(args.flags, "ext") ?? resolved.config.extensions ?? [];
     const nativeManifests = listFlag(args.flags, "ext-native") ?? resolved.config.extNative ?? [];
-    const registry = buildRegistry(extNames, nativeManifests);
+    const { extensions: registryExtensions } = normalizeExtensions(extNames, io);
+    const registry = buildRegistry(registryExtensions, nativeManifests);
     /* Front-end only: parse, bundle, check and lower far enough to report
      * semantic / unsupported-feature diagnostics, but never invoke clang or
      * write output. The checker is on unless `--no-check` is passed. */
@@ -458,7 +438,8 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     }
     const extNames = listFlag(args.flags, "ext") ?? resolved.config.extensions ?? [];
     const nativeManifests = listFlag(args.flags, "ext-native") ?? resolved.config.extNative ?? [];
-    const registry = buildRegistry(extNames, nativeManifests);
+    const { extensions: registryExtensions } = normalizeExtensions(extNames, io);
+    const registry = buildRegistry(registryExtensions, nativeManifests);
     const { ir, diagnostics } = compileEntry(entry, registry, {
       debug: Boolean(args.flags.get("debug")),
       check: !args.flags.has("no-check"),
@@ -490,7 +471,13 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     const optimize = (args.flags.get("optimize") as string | undefined) ?? config.optimize ?? "2";
     const extNames = listFlag(args.flags, "ext") ?? config.extensions ?? [];
     const nativeManifests = listFlag(args.flags, "ext-native") ?? config.extNative ?? [];
-    const registry = buildRegistry(extNames, nativeManifests);
+    const normalized = normalizeExtensions(extNames, io);
+    const registry = buildRegistry(normalized.extensions, nativeManifests);
+    const features = [
+      ...normalized.features,
+      ...(listFlag(args.flags, "feature") ?? config.features ?? []),
+    ];
+    const noFeatures = listFlag(args.flags, "no-feature") ?? config.noFeatures ?? [];
     const pgoGenerate = args.flags.get("pgo-generate");
     const pgoUse = args.flags.get("pgo-use");
     if (pgoGenerate !== undefined && pgoUse !== undefined) {
@@ -524,6 +511,8 @@ function dispatch(argv: readonly string[], io: CliIo): number {
       lto: Boolean(args.flags.get("lto")) || config.lto === true,
       ...(pgo ? { pgo } : {}),
       ...(pgoDir ? { pgoDir } : {}),
+      ...(features.length > 0 ? { features } : {}),
+      ...(noFeatures.length > 0 ? { noFeatures } : {}),
     });
 
     if (result.diagnostics.some((d) => d.category === "error")) {
@@ -534,6 +523,11 @@ function dispatch(argv: readonly string[], io: CliIo): number {
       printDiagnostics(result.diagnostics, entry, io);
       return 1;
     }
+
+    /* A detected-but-unavailable feature is a warning, not a failure: the
+     * program still links and the capability degrades at run time. */
+    const warnings = result.diagnostics.filter((d) => d.category === "warning");
+    if (warnings.length > 0) printDiagnostics(warnings, entry, io);
 
     if (args.flags.has("time") && result.timings) printTimings(result.timings, io);
 

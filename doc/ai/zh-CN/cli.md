@@ -40,7 +40,9 @@
     --out <dir>       输出目录（默认 build/）
     --emit <kind>     exe | obj | ir（默认 exe）
 -O0 .. -O3            传给 clang 的优化级别（默认 -O2）
-    --ext <names>     开启内置扩展，逗号分隔（如 node,gui,media）
+    --ext <names>     开启内置扩展，逗号分隔（如 node,gui）
+    --feature <names> 强制开启可选链接特性（media,gpu,all）
+    --no-feature <n>  即使检测到也不链接该可选特性
     --ext-native <m>  通过 JSON 清单注册 C++/Rust 扩展（多个用逗号分隔）
     --config <path>   使用指定项目配置，不做自动发现
     --no-config       完全不读取项目配置
@@ -102,6 +104,8 @@ profile 数据可能独立于源码变化。
 | `pgoDir` | string | Profile 目录（默认 `<outDir>/pgo`） |
 | `extensions` | string[] | 开启的内置扩展，如 `["node"]` |
 | `extNative` | string[] | 原生扩展清单路径 |
+| `features` | string[] | 强制开启的可选链接特性，如 `["media"]` / `["all"]` |
+| `noFeatures` | string[] | 即使检测到也保持关闭的可选链接特性 |
 | `force` | boolean | 忽略增量缓存 |
 | `app.name` / `app.icon` / `app.bundle` / `app.bundleId` | | 应用元信息（[icon.md](../../zh-CN/icon.md)） |
 

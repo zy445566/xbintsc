@@ -69,8 +69,8 @@ The package does **not** contain:
 If npm skips the optional package (`--omit=optional`, a package manager that
 does not install optional dependencies, or a host the release does not build
 for), the driver falls back to compiling the C runtime from the shipped sources
-and caches the objects; that build works but is slower, and `--ext gui` /
-`--ext media` need the archive to be present.
+and caches the objects; that build works but is slower, and `--ext gui` (plus
+the auto-selected `media`/`gpu` link features) needs the archive to be present.
 
 ## Requirements
 
@@ -398,7 +398,7 @@ jobs:
 | --- | --- | --- |
 | Needs Node.js | Yes, 22+ | No |
 | First build | Links the prebuilt runtime from the optional platform package | Links the prebuilt runtime |
-| GUI / media extensions | Included on Linux/macOS and Windows x64 (the hosts the release builds them for) | Included in Linux/macOS and Windows x64 archives |
+| GUI engine + media archive | Included on Linux/macOS and Windows x64 (the hosts the release builds them for) | Included in Linux/macOS and Windows x64 archives |
 | Installation | `npm install` + lockfile / provenance | Download, verify `.sha256`, unpack |
 | Programmatic API | Yes | No (CLI only) |
 | Cross-compiles | No — host only | No — host only |
@@ -439,7 +439,7 @@ the same file under `node_modules/xbintsc/doc/ai/`.
 | The first build takes a long time | The optional `@xbintsc/<os>-<arch>` package was skipped (or this host has no prebuilt package), so the runtime C sources are compiled and cached. Check `npm ls @xbintsc/<os>-<arch>` and reinstall without `--omit=optional`; `--time` confirms. |
 | Permission errors writing `.xbintsc/` | Set `xbintsc_CACHE_DIR` to a writable directory, or run from a writable working directory. |
 | `module 'fs' is provided by the 'node' extension` | Add `--ext node`, or `"extensions": ["node"]` in the config. |
-| `GUI native library not found` / `media native library not found` | The optional platform package that ships `gui.a`/`gui.lib` or `media.a`/`media.lib` was skipped, or this host has no prebuilt GUI/media archive (Windows arm64). Reinstall without `--omit=optional`, use a Linux/macOS/Windows x64 release archive, or build the archive from a source checkout. |
+| `GUI native library not found` / `media native library not found` | The optional platform package that ships `gui.a`/`gui.lib` or `media.a`/`media.lib` was skipped, or this host has no prebuilt GUI/media archive (Windows arm64). Reinstall without `--omit=optional`, use a Linux/macOS/Windows x64 release archive, or build the archive from a source checkout. An auto-detected `media` feature with a missing archive only warns; `--feature media` makes it an error. |
 | `require("xbintsc")` fails | The package is ESM-only; use `import` (or dynamic `import()`). |
 | Windows link errors about missing MSVC libraries | Run from a Native Tools prompt, install the VS C++ build tools, and check `npx xbintsc doctor`. |
 | `npm ci --omit=dev` then the build cannot find `xbintsc` | Install devDependencies for the build stage, or move `xbintsc` to `dependencies`. |

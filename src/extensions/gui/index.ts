@@ -27,6 +27,7 @@ import { platformSlug } from "../../driver/paths.js";
 import { findRuntimeLibrary, runtimeLibDir } from "../../driver/runtime-lib.js";
 import { loadHtmlAsset } from "./html.js";
 import { loadScriptAsset } from "./three.js";
+import { guiLinkFeatures } from "./features.js";
 
 /** Top-level `gui` module bindings. */
 const guiModule: ExtensionModule = {
@@ -216,4 +217,10 @@ export const guiExtension: Extension = {
   globalValues: () => browserGlobals,
   /** Rewrite imported `.html` assets and patch three.js's shader unroller. */
   assetLoaders: () => ({ ".html": loadHtmlAsset, ".js": loadScriptAsset, ".mjs": loadScriptAsset }),
+  /**
+   * FFmpeg and glslang are optional halves of the engine, selected from the
+   * program (see `features.ts`). A program that only renders HTML/CSS never
+   * links either.
+   */
+  linkFeatures: () => guiLinkFeatures,
 };

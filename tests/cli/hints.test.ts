@@ -150,14 +150,12 @@ describe("documentation hints", () => {
     expect(output).not.toContain(DOC_LANGUAGE_SUPPORT);
   });
 
-  it("points a missing extension dependency at the extensions document", () => {
+  it("expands the deprecated --ext media to gui plus the media link feature", () => {
     const entry = temporaryFile("console.log(1);");
-    const { io, err } = capture();
-    expect(run(["build", entry, "--ext", "media"], io)).toBe(1);
-    const output = err.join("");
-    expect(output).toContain("requires the 'gui' extension");
-    expect(output).toContain(DOC_EXTENSIONS);
-    expect(output).not.toContain("internal error");
+    const { io, out, err } = capture();
+    expect(run(["emit", entry, "--ext", "media"], io)).toBe(0);
+    expect(err.join("")).toContain("'--ext media' is deprecated");
+    expect(out.join("")).toContain("define i32 @main");
   });
 
   it("classifies a missing extension archive as a setup failure", () => {

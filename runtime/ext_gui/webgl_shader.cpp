@@ -1,12 +1,9 @@
 /*
  * xbintsc GUI engine — WebGL shaders, programs, linking and uniforms.
  *
- * `compileShader` performs a standalone translation so `COMPILE_STATUS` and the
- * info log work before linking. `linkProgram` then translates both stages again
- * with one shared attribute/varying location map, compiles them with glslang
- * and reflects the std140 block out of the SPIR-V. The SDL_GPU shader then
- * takes whichever form the device accepts: the SPIR-V module itself on Vulkan,
- * or the same module cross-compiled to MSL by SPIRV-Cross on Metal.
+ * Translation/compilation goes through the optional `gpu` table (glslang);
+ * `linkProgram` shares attribute/varying locations between the stages and
+ * reflects the std140 block from the SPIR-V.
  */
 
 #include "webgl.h"
@@ -16,15 +13,13 @@
 #include <cstring>
 
 #include "gui_internal.h"
-#include "webgl_msl.h"
+#include "gpu_shader_api.h"
 #include "webgl_program_internal.h"
 
 namespace xtgui {
 namespace {
-
 using webgl_detail::gl_type_of;
 using webgl_detail::location_slots;
-
 /** Merge uniforms declared by both stages, in declaration order. */
 bool merge_uniforms(const GlslShaderInfo &vs, const GlslShaderInfo &fs,
                     std::vector<GlslUniformDecl> *out, std::string *error) {
@@ -80,17 +75,17 @@ struct StageCode {
   std::string text;
 };
 
-/**
- * Turn a compiled SPIR-V stage into the form the device consumes.
- *
- * Metal has no SPIR-V loader, so the module is cross-compiled to MSL; Vulkan
- * takes the SPIR-V directly. `code` points into `text` for MSL, so the caller
- * must keep the `StageCode` alive until `SDL_CreateGPUShader` has run.
- */
+/** Turn a SPIR-V stage into what the device consumes (SPIR-V or MSL text);
+ * `code` points into `text` for MSL, so `stage` must outlive the SDL shader. */
 bool prepare_stage(const std::vector<uint32_t> &spirv, bool fragment,
                    SDL_GPUShaderFormat formats, StageCode *stage, std::string *log) {
   if ((formats & SDL_GPU_SHADERFORMAT_MSL) != 0) {
-    if (!cross_compile_msl(spirv, fragment, &stage->text, &stage->entry, log)) return false;
+    const GpuShaderApi *api = gpu_shader_api();
+    if (api == nullptr) {
+      *log = "shader translation was not linked (the 'gpu' link feature is inactive)";
+      return false;
+    }
+    if (!api->cross_compile_msl(spirv, fragment, &stage->text, &stage->entry, log)) return false;
     stage->format = SDL_GPU_SHADERFORMAT_MSL;
     stage->code = (const Uint8 *)stage->text.data();
     stage->code_size = stage->text.size();
@@ -146,6 +141,12 @@ bool WebGLContext::compile_shader(uint32_t id) {
   WebGLShader *record = shader(id);
   if (record == nullptr) return false;
   const bool fragment = record->type == GL_FRAGMENT_SHADER;
+  const GpuShaderApi *api = gpu_shader_api();
+  if (api == nullptr) {
+    record->log = "shader translation was not linked (the 'gpu' link feature is inactive)";
+    record->compiled = false;
+    return false;
+  }
   /* Expand three.js's pragma-marked light loops first: a sampler-array index
    * must be constant in Vulkan GLSL, and the expansion is the only place that
    * knows the loop bounds. Scanning and rewriting then share one text. */
@@ -164,7 +165,7 @@ bool WebGLContext::compile_shader(uint32_t id) {
   layout.block_members = info.uniforms;
   const std::string source = rewrite_glsl(prepared, fragment, layout, info);
   std::vector<uint32_t> spirv;
-  record->compiled = compile_glsl(source, fragment, &spirv, &record->log);
+  record->compiled = api->compile_glsl(source, fragment, &spirv, &record->log);
   return record->compiled;
 }
 
@@ -268,6 +269,13 @@ bool WebGLContext::link_program(uint32_t id) {
     return false;
   }
 
+  const GpuShaderApi *api = gpu_shader_api();
+  if (api == nullptr) {
+    record->log = "shader translation was not linked (the 'gpu' link feature is inactive)";
+    record->linked = false;
+    return false;
+  }
+
   const std::string prepared_vertex = unroll_glsl_pragmas(vertex->source);
   const std::string prepared_fragment = unroll_glsl_pragmas(fragment->source);
   GlslShaderInfo vs_info;
@@ -347,12 +355,12 @@ bool WebGLContext::link_program(uint32_t id) {
   std::vector<uint32_t> vs_spirv;
   std::vector<uint32_t> fs_spirv;
   std::string log;
-  if (!compile_glsl(vs_source, false, &vs_spirv, &log)) {
+  if (!api->compile_glsl(vs_source, false, &vs_spirv, &log)) {
     record->log = "vertex shader:\n" + log;
     record->linked = false;
     return false;
   }
-  if (!compile_glsl(fs_source, true, &fs_spirv, &log)) {
+  if (!api->compile_glsl(fs_source, true, &fs_spirv, &log)) {
     record->log = "fragment shader:\n" + log;
     record->linked = false;
     return false;
@@ -360,9 +368,9 @@ bool WebGLContext::link_program(uint32_t id) {
 
   /* Reflect the std140 block (members survive even when unused). */
   std::vector<GlslBlockMember> members;
-  reflect_uniform_block(vs_spirv, &members);
+  api->reflect_uniform_block(vs_spirv, &members);
   std::vector<GlslBlockMember> fragment_members;
-  reflect_uniform_block(fs_spirv, &fragment_members);
+  api->reflect_uniform_block(fs_spirv, &fragment_members);
   /* Keep members declared by either stage: a uniform block may only be read by
    * the fragment shader while the vertex stage contributes other uniforms. */
   for (const GlslBlockMember &member : fragment_members) {
@@ -380,7 +388,7 @@ bool WebGLContext::link_program(uint32_t id) {
    * declarations, so the source scan over-reports; use the reflection and keep
    * the declaration order from the source for stable `getActiveAttrib` order. */
   std::unordered_map<std::string, int> active_attributes;
-  reflect_attributes(vs_spirv, &active_attributes);
+  api->reflect_attributes(vs_spirv, &active_attributes);
   if (!active_attributes.empty()) {
     std::vector<std::pair<int, GlslUniformDecl>> ordered;
     for (const GlslUniformDecl &decl : vs_info.attributes) {

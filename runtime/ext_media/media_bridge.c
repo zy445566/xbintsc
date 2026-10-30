@@ -1,19 +1,19 @@
 /*
- * xbintsc media extension — registration bridge.
+ * xbintsc media link feature — registration bridge.
  *
  * The decoders live in `media.a` (`media.lib` with the MSVC ABI on Windows), a
  * prebuilt C++ archive. A static archive is
  * only searched for members that satisfy an undefined symbol, so a backend that
  * merely had a constructor would never be extracted. This tiny C translation
- * unit is compiled and linked *directly* (it is the media extension's
- * `runtimeSources()` entry): its constructor references every backend entry
+ * unit is compiled and linked *directly* — but only when the compiler selects
+ * the `media` feature (it is the feature's `runtimeSources()` entry): its
+ * constructor references every backend entry
  * point, which pulls the archive member in, and installs the table into the GUI
  * engine before `main` runs.
  *
- * The bridge is intentionally C-only and has no FFmpeg (or SDL) dependency. If
- * the `gui` extension is not enabled, `xt_media_install` is unresolved; the
- * registry rejects that combination first with a "media requires gui"
- * diagnostic (see `src/extensions/registry.ts`).
+ * The bridge is intentionally C-only and has no FFmpeg (or SDL) dependency. The
+ * feature belongs to `gui`, so it is only ever compiled with `gui` enabled;
+ * `xt_media_install` therefore always resolves.
  */
 
 #include "../ext_gui/media_api.h"

@@ -24,7 +24,10 @@
   （`SDL_JOYSTICK`、`SDL_HAPTIC`、`SDL_SENSOR`、`SDL_CAMERA`、`SDL_RENDER`、
   `SDL_OPENGL`/`SDL_OPENGLES`、`SDL_OFFSCREEN`、`SDL_HIDAPI`）；HarfBuzz 关闭
   整形后端从不使用的 API（`HB_NO_DRAW`/`PAINT`/`COLOR`/`NAME`/`STYLE`/`METRICS`/…，
-  但保留 `CFF`/`OPEN`/`VAR` 以支持 OTF 与可变字体）。链接器随后丢弃
+  但保留 `CFF`/`OPEN`/`VAR` 以支持 OTF 与可变字体），并以
+  `HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR` 编译：`src/hb.hh` 会把自身警告集提升为
+  错误，而两个精简宏（`HB_NO_MMAP` 与 `HB_NO_OT_FONT_GLYPH_NAMES`）会让
+  macOS/CoreText 的辅助函数变成未引用。链接器随后丢弃
   不可达函数（`--gc-sections`、`-dead_strip` 或 link.exe 默认的 `/OPT:REF`）。
   随后编译引擎，并把
   所有内容合并到 `runtime/lib/<os>-<arch>/gui.a`（Windows 上 MSVC ABI 则为

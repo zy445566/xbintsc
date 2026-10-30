@@ -64,8 +64,17 @@ export const SECTION_CMAKE_FLAGS = [
  * *not* set: the shaping backend must load files and keep CFF/OTF and
  * variable-font shaping. `HB_NO_MT` is safe because text is shaped on the main
  * thread.
+ *
+ * `HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR` is needed because HarfBuzz raises its
+ * "should never happen" warning set to errors inside `src/hb.hh`, *after* the
+ * command line, so a lean define that leaves a helper unreferenced becomes a
+ * hard compile error. macOS is where that bites: `HB_NO_MMAP` leaves
+ * `_open_resource_fork` unused (`hb-blob.cc`) and `HB_NO_OT_FONT_GLYPH_NAMES`
+ * leaves the CoreText glyph-name helpers unused (`hb-coretext-font.cc`). With
+ * this define they are warnings again; every other lean define still applies.
  */
 export const HB_LEAN_DEFINES = [
+  "-DHB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR",
   "-DHB_NO_DRAW",
   "-DHB_NO_PAINT",
   "-DHB_NO_COLOR",

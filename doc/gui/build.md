@@ -28,7 +28,10 @@
   `SDL_SENSOR`, `SDL_CAMERA`, `SDL_RENDER`, `SDL_OPENGL`/`SDL_OPENGLES`,
   `SDL_OFFSCREEN`, `SDL_HIDAPI`). HarfBuzz omits the APIs the shaping backend
   never uses (`HB_NO_DRAW`/`PAINT`/`COLOR`/`NAME`/`STYLE`/`METRICS`/…, while
-  keeping `CFF`/`OPEN`/`VAR` for OTF and variable fonts). The linker then drops
+  keeping `CFF`/`OPEN`/`VAR` for OTF and variable fonts) and is built with
+  `HB_NO_PRAGMA_GCC_DIAGNOSTIC_ERROR`, because `src/hb.hh` raises its warning
+  set to errors and two lean defines leave macOS/CoreText helpers unreferenced
+  (`HB_NO_MMAP` and `HB_NO_OT_FONT_GLYPH_NAMES`). The linker then drops
   the unreachable functions (`--gc-sections`, `-dead_strip`, or link.exe's
   default `/OPT:REF`). The
   script then compiles the engine and

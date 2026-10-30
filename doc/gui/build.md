@@ -10,11 +10,14 @@
   default `release-3.2.10`), builds a static SDL3, fetches and builds static
   FreeType (`FREETYPE_VERSION`) and HarfBuzz (`HARFBUZZ_VERSION`), and fetches
   and builds static **glslang** (`GLSLANG_VERSION`, default `16.6.0`) against
-  the pinned SPIR-V headers (`SPIRV_HEADERS_VERSION`), and **SPIRV-Cross**
-  (`SPIRV_CROSS_VERSION`, default `vulkan-sdk-1.4.313.0`). glslang is the
-  runtime GLSL ES compiler behind WebGL and SPIRV-Cross turns its SPIR-V into
-  MSL for the Metal backend (see [WebGL](./webgl.md)); both are merged into the
-  archive like the other libraries. The script then compiles the engine and
+  the pinned SPIR-V headers (`SPIRV_HEADERS_VERSION`), and — **on macOS only** —
+  **SPIRV-Cross** (`SPIRV_CROSS_VERSION`, default `vulkan-sdk-1.4.313.0`).
+  glslang is the runtime GLSL ES compiler behind WebGL and SPIRV-Cross turns its
+  SPIR-V into MSL for the Metal backend (see [WebGL](./webgl.md)); both are
+  merged into the archive like the other libraries. Metal is the only SDL_GPU
+  backend that consumes MSL, so on Windows/Linux the script neither fetches nor
+  merges SPIRV-Cross: `webgl_msl.cpp` compiles to nothing there and the ~2.5 MiB
+  it contributes would be unreachable. The script then compiles the engine and
   merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
   `gui.lib` with the MSVC ABI on Windows), same convention as `core.a`,
   statically bundling all three. The merge uses `libtool` on macOS and

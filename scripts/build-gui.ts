@@ -488,25 +488,34 @@ if (!existsSync(glslangArchive() ?? "")) {
 
 /* -- 2d. SPIRV-Cross (SPIR-V -> Metal Shading Language) ------------------- */
 
-ensureTarballSource("spirv-cross", SPIRV_CROSS_URL, `SPIRV-Cross-${SPIRV_CROSS_VERSION}`);
+/* Metal is the only SDL_GPU backend that consumes MSL; Vulkan takes the SPIR-V
+ * module directly and D3D12 falls back to the ordinary painter. A non-Apple
+ * build therefore never calls `cross_compile_msl` (`webgl_msl.cpp` compiles to
+ * nothing there), so fetching and merging the archive would only add ~2.5 MiB
+ * of unreachable code to every Windows/Linux product. */
+const metalBackend = process.platform === "darwin";
 
-if (!existsSync(spirvCrossArchive("spirv-cross-msl") ?? "")) {
-  const cmake = configureCmake("SPIRV-Cross", spirvCrossSrc, spirvCrossBuild, [
-    "-DCMAKE_BUILD_TYPE=Release",
-    "-DSPIRV_CROSS_CLI=OFF",
-    "-DSPIRV_CROSS_ENABLE_TESTS=OFF",
-    /* Only the MSL target is used; skip the C++, HLSL, reflection and C APIs
-     * so the archive stays small. MSL links against the GLSL base class. */
-    "-DSPIRV_CROSS_ENABLE_HLSL=OFF",
-    "-DSPIRV_CROSS_ENABLE_CPP=OFF",
-    "-DSPIRV_CROSS_ENABLE_REFLECT=OFF",
-    "-DSPIRV_CROSS_ENABLE_UTIL=OFF",
-    "-DSPIRV_CROSS_ENABLE_C_API=OFF",
-  ]);
-  console.log("xbintsc: building static SPIRV-Cross");
-  run(cmake, ["--build", spirvCrossBuild, "--config", "Release", "--parallel"]);
-} else {
-  console.log(`xbintsc: reusing existing ${spirvCrossArchive("spirv-cross-msl")}`);
+if (metalBackend) {
+  ensureTarballSource("spirv-cross", SPIRV_CROSS_URL, `SPIRV-Cross-${SPIRV_CROSS_VERSION}`);
+
+  if (!existsSync(spirvCrossArchive("spirv-cross-msl") ?? "")) {
+    const cmake = configureCmake("SPIRV-Cross", spirvCrossSrc, spirvCrossBuild, [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DSPIRV_CROSS_CLI=OFF",
+      "-DSPIRV_CROSS_ENABLE_TESTS=OFF",
+      /* Only the MSL target is used; skip the C++, HLSL, reflection and C APIs
+       * so the archive stays small. MSL links against the GLSL base class. */
+      "-DSPIRV_CROSS_ENABLE_HLSL=OFF",
+      "-DSPIRV_CROSS_ENABLE_CPP=OFF",
+      "-DSPIRV_CROSS_ENABLE_REFLECT=OFF",
+      "-DSPIRV_CROSS_ENABLE_UTIL=OFF",
+      "-DSPIRV_CROSS_ENABLE_C_API=OFF",
+    ]);
+    console.log("xbintsc: building static SPIRV-Cross");
+    run(cmake, ["--build", spirvCrossBuild, "--config", "Release", "--parallel"]);
+  } else {
+    console.log(`xbintsc: reusing existing ${spirvCrossArchive("spirv-cross-msl")}`);
+  }
 }
 
 /* -- 3. engine objects ---------------------------------------------------- */
@@ -520,7 +529,7 @@ const includeFlags = [
   "-I", join(harfbuzzSrc, "src"),
   "-I", glslangSrc,
   "-I", join(spirvHeadersSrc, "include"),
-  "-I", spirvCrossSrc,
+  ...(metalBackend ? ["-I", spirvCrossSrc] : []),
 ];
 const sources = readdirSync(engineDir)
   .filter((entry) => entry.endsWith(".cpp"))
@@ -550,16 +559,19 @@ const freetype = freetypeArchive();
 const harfbuzz = harfbuzzArchive();
 const glslang = glslangArchive();
 const glslangLimits = glslangLimitsArchive();
-const spirvCrossCore = spirvCrossArchive("spirv-cross-core");
-const spirvCrossGlsl = spirvCrossArchive("spirv-cross-glsl");
-const spirvCrossMsl = spirvCrossArchive("spirv-cross-msl");
+const spirvCrossCore = metalBackend ? spirvCrossArchive("spirv-cross-core") : undefined;
+const spirvCrossGlsl = metalBackend ? spirvCrossArchive("spirv-cross-glsl") : undefined;
+const spirvCrossMsl = metalBackend ? spirvCrossArchive("spirv-cross-msl") : undefined;
 if (!sdl || !freetype || !harfbuzz || !glslang || !glslangLimits ||
-    !spirvCrossCore || !spirvCrossGlsl || !spirvCrossMsl) {
-  fail("one of the SDL3/FreeType/HarfBuzz/glslang/SPIRV-Cross archives was not found after building");
+    (metalBackend && (!spirvCrossCore || !spirvCrossGlsl || !spirvCrossMsl))) {
+  fail(`one of the SDL3/FreeType/HarfBuzz/glslang${metalBackend ? "/SPIRV-Cross" : ""} ` +
+    "archives was not found after building");
 }
 const libraries = [
   sdl, freetype, harfbuzz, glslang, glslangLimits,
-  spirvCrossCore, spirvCrossGlsl, spirvCrossMsl,
+  ...(spirvCrossCore && spirvCrossGlsl && spirvCrossMsl
+    ? [spirvCrossCore, spirvCrossGlsl, spirvCrossMsl]
+    : []),
 ];
 
 mkdirSync(outDir, { recursive: true });

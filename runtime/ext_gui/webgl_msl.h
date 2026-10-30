@@ -8,6 +8,12 @@
  * cross-compiles it to MSL while keeping the binding indices the rewriter
  * assigned — one std140 block at buffer 0 and stage-local samplers at
  * binding N, which is exactly the slot layout SDL_GPU's Metal backend binds.
+ *
+ * Only a macOS build links SPIRV-Cross (`scripts/build-gui.ts` skips the
+ * archive elsewhere); on every other platform the same function is a stub that
+ * reports the missing backend. No driver outside Apple platforms consumes MSL,
+ * so the stub is unreachable — keeping the declaration unconditional just means
+ * the callers need no `#if`.
  */
 #ifndef XT_GUI_WEBGL_MSL_H
 #define XT_GUI_WEBGL_MSL_H

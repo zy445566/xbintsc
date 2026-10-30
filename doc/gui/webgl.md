@@ -294,8 +294,9 @@ format — Direct3D 12, which would need DXIL — `getContext("webgl")` and
 `getContext("webgl2")` both answer `null`; the 2D canvas and the rest of the page
 still work.
 
-glslang and SPIRV-Cross are fetched and built by `npm run gui` and merged into
-`gui.a` / `gui.lib` (see [Packaging and build](./build.md)); a program that only
+glslang is fetched and built by `npm run gui` and merged into `gui.a` /
+`gui.lib`; SPIRV-Cross is merged **on macOS only**, because no other SDL_GPU
+backend consumes MSL (see [Packaging and build](./build.md)). A program that only
 uses the 2D canvas or the DOM pays no run-time cost beyond the archive size.
 
 ## Testing

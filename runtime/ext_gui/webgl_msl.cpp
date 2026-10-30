@@ -6,9 +6,16 @@
  * share one GLSL front end: the Vulkan path hands the SPIR-V to SDL_GPU
  * directly, the Metal path cross-compiles it to MSL text that SDL_GPU's Metal
  * backend compiles at run time.
+ *
+ * Metal is the only SDL_GPU backend that consumes MSL, so `scripts/build-gui.ts`
+ * merges SPIRV-Cross into `gui.a` on macOS only; the rest of this file is a stub
+ * (the `#else` branch) so no caller needs an `#if`. Including the archive
+ * everywhere would instead add ~2.5 MiB of code no driver can ever ask for.
  */
 
 #include "webgl_msl.h"
+
+#if defined(__APPLE__)
 
 #include <exception>
 
@@ -64,3 +71,28 @@ bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
 }
 
 }  // namespace xtgui
+
+#else /* !__APPLE__ */
+
+namespace xtgui {
+
+/**
+ * Non-Metal builds carry no SPIRV-Cross, so there is nothing to translate with.
+ *
+ * No SDL_GPU backend outside Apple platforms reports MSL, so no driver can reach
+ * this; it exists so the callers keep one unconditional branch and a device that
+ * ever did advertise MSL fails with an actionable log instead of a wrong shader.
+ */
+bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
+                       std::string *source, std::string *entry, std::string *log) {
+  (void)spirv;
+  (void)fragment;
+  source->clear();
+  entry->clear();
+  *log = "this build has no MSL backend (SPIRV-Cross is macOS-only)";
+  return false;
+}
+
+}  // namespace xtgui
+
+#endif /* __APPLE__ */

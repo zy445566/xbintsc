@@ -74,8 +74,9 @@ clip paths are not rendered (see [Known issues](./known-issues.md)).
 
 ## Video & audio (M13)
 
-Media playback is split across two extensions so a GUI program does not pay for
-a decoder it never uses:
+Media playback is split inside the `gui` extension so a GUI program does not pay
+for a decoder it never uses. Decoding is an optional **`media` link feature**,
+not a separate extension:
 
 - **`gui`** (`gui.a`/`gui.lib`) owns the `<video>`/`<audio>` elements, the DOM
   API, the renderer integration and the SDL audio sink, but contains **no
@@ -85,13 +86,18 @@ a decoder it never uses:
 - **`media`** (`media.a`, or `media.lib` with the MSVC ABI on Windows;
   `runtime/ext_media/`) is the optional decoder backend:
   `runtime/ext_media/media.cpp` wraps a statically vendored **FFmpeg** build,
-  and `runtime/ext_media/media_bridge.c` registers it with the engine. Enable it
-  with `--ext media` (or `--ext gui,media`). `media` requires `gui`; the
-  registry rejects the combination in the wrong order.
+  and `runtime/ext_media/media_bridge.c` registers it with the engine. The
+  compiler selects the feature when the program may use it (a `<video>`/`<audio>`
+  element in imported HTML, `createElement("video"/"audio")`, `new Audio()`,
+  `decodeAudioData`, or runtime-built markup) and only then compiles the bridge
+  and links `media.a`. `--feature media` forces it and `--no-feature media`
+  keeps it out; see [Link features](./build.md#link-features).
 
-Without the `media` extension the element still exists and its DOM API is
+Without the feature the element still exists and its DOM API is
 callable, but opening a source fails and fires `error`. The same happens on any
-host where the archive has not been built (run `npm run media`); Windows is no
+host where the archive has not been built (run `npm run media`) — an
+auto-detected feature with no archive produces a build warning and degrades this
+way, while `--feature media` fails the build. Windows is no
 longer special: `media.lib` is FFmpeg compiled with clang-cl for the MSVC ABI,
 so it links against `gui.lib` and plays normally. There is no WebView and no
 platform media framework in the path either way.

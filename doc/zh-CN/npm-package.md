@@ -63,7 +63,8 @@ TypeScript 编译器。
 
 如果 npm 跳过了这个可选包（`--omit=optional`、不安装可选依赖的包管理器，或发布
 未覆盖的宿主平台），驱动会回退到从随包源码编译 C 运行时并缓存目标文件；这样仍能
-工作，但首次构建更慢，`--ext gui` / `--ext media` 也需要归档存在。
+工作，但首次构建更慢，`--ext gui`（以及自动选择的 `media`/`gpu` 链接特性）也需要
+归档存在。
 
 ## 环境要求
 
@@ -372,7 +373,7 @@ jobs:
 | --- | --- | --- |
 | 需要 Node.js | 是，22+ | 否 |
 | 首次构建 | 链接可选平台包里的预编译运行时 | 直接链接预编译运行时 |
-| GUI / media 扩展 | Linux/macOS 与 Windows x64（发布为这些平台构建）包含 | Linux/macOS 与 Windows x64 压缩包包含 |
+| GUI 引擎 + media 归档 | Linux/macOS 与 Windows x64（发布为这些平台构建）包含 | Linux/macOS 与 Windows x64 压缩包包含 |
 | 安装方式 | `npm install` + lockfile / provenance | 下载、校验 `.sha256`、解压 |
 | 编程 API | 有 | 无（仅 CLI） |
 | 交叉编译 | 否——只构建宿主平台 | 否——只构建宿主平台 |
@@ -407,7 +408,7 @@ npm 包通过可选平台包获得同一套预编译运行时，只有在跳过�
 | 第一次构建很慢 | 可选包 `@xbintsc/<os>-<arch>` 被跳过（或该宿主没有预编译包），正在编译并缓存运行时 C 源码。用 `npm ls @xbintsc/<os>-<arch>` 检查，并去掉 `--omit=optional` 重新安装；`--time` 可确认。 |
 | 写 `.xbintsc/` 权限错误 | 用 `xbintsc_CACHE_DIR` 指向可写目录，或在可写目录中运行。 |
 | `module 'fs' is provided by the 'node' extension` | 加 `--ext node`，或在配置里写 `"extensions": ["node"]`。 |
-| `GUI native library not found` / `media native library not found` | 携带 `gui.a`/`gui.lib` 或 `media.a`/`media.lib` 的可选平台包被跳过，或该宿主没有预编译的 GUI/media 归档（Windows arm64）。去掉 `--omit=optional` 重新安装，或使用 Linux/macOS/Windows x64 发布压缩包，或从源码检出构建。 |
+| `GUI native library not found` / `media native library not found` | 携带 `gui.a`/`gui.lib` 或 `media.a`/`media.lib` 的可选平台包被跳过，或该宿主没有预编译的 GUI/media 归档（Windows arm64）。去掉 `--omit=optional` 重新安装，或使用 Linux/macOS/Windows x64 发布压缩包，或从源码检出构建。自动检测到的 `media` 特性缺归档只会 warning；`--feature media` 才会报错。 |
 | `require("xbintsc")` 失败 | 包只提供 ESM；使用 `import`（或动态 `import()`）。 |
 | Windows 链接时报缺少 MSVC 库 | 在 Native Tools 命令提示符中运行，安装 VS C++ 生成工具，并检查 `npx xbintsc doctor`。 |
 | `npm ci --omit=dev` 后构建找不到 `xbintsc` | 在构建阶段安装 devDependencies，或把 `xbintsc` 移到 `dependencies`。 |

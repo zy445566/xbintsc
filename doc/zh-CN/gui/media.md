@@ -62,7 +62,8 @@ opacity、`display`——与任何其他元素一样。盒子内部的艺术内�
 
 ## 视频与音频（M13）
 
-媒体播放横跨两个扩展，因此只做界面的 GUI 程序不必为用不到的解码器付出体积：
+媒体播放拆在 `gui` 扩展内部，因此只做界面的 GUI 程序不必为用不到的解码器付出
+体积。解码是可选的 **`media` 链接特性**，不是独立扩展：
 
 - **`gui`**（`gui.a`/`gui.lib`）负责 `<video>`/`<audio>` 元素、DOM API、渲染器
   集成与 SDL 音频 sink，但**不含 FFmpeg**。`runtime/ext_gui/media.{h,cpp}`
@@ -71,12 +72,16 @@ opacity、`display`——与任何其他元素一样。盒子内部的艺术内�
 - **`media`**（`media.a`，Windows 上 MSVC ABI 则为 `media.lib`；
   `runtime/ext_media/`）是可选的解码后端：`runtime/ext_media/media.cpp`
   封装静态 vendored 的 **FFmpeg** 构建，`runtime/ext_media/media_bridge.c`
-  把它注册进引擎。用 `--ext media`（或 `--ext gui,media`）启用。`media`
-  依赖 `gui`；注册表会拒绝错误的组合。
+  把它注册进引擎。编译器在程序可能用到媒体时（导入 HTML 里的
+  `<video>`/`<audio>`、`createElement("video"/"audio")`、`new Audio()`、
+  `decodeAudioData`，或运行时拼出的 HTML）自动选中该特性，只在那时才编译
+  bridge 并链接 `media.a`。`--feature media` 强制开启，`--no-feature media`
+  保持关闭；见[链接特性](./build.md#链接特性)。
 
-没有 `media` 扩展时，元素仍然存在、DOM API 仍可调用，但打开源会失败并触发
-`error`。任何没有构建该归档的宿主（先运行 `npm run media`）都是如此；
-Windows 已不再特殊：`media.lib` 是用 clang-cl 为 MSVC ABI 编译的 FFmpeg，
+没有 `media` 特性时，元素仍然存在、DOM API 仍可调用，但打开源会失败并触发
+`error`。任何没有构建该归档的宿主（先运行 `npm run media`）都是如此——自动
+检测到但归档缺失时构建给出 warning 并按此降级，显式 `--feature media` 则直接
+报错。Windows 已不再特殊：`media.lib` 是用 clang-cl 为 MSVC ABI 编译的 FFmpeg，
 因此可以和 `gui.lib` 一起链接并正常播放。两条路径都没有 WebView，也没有平台
 媒体框架。
 

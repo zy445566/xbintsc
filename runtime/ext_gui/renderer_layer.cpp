@@ -22,9 +22,9 @@
 #include <string>
 #include <vector>
 
+#include "gpu_shader_api.h"
 #include "perf.h"
 #include "webgl_glsl.h"
-#include "webgl_msl.h"
 
 namespace xtgui {
 namespace renderer_detail {
@@ -154,6 +154,11 @@ void pushMode(SDL_GPUCommandBuffer *cmd, int mode) {
 bool prepareStage(const std::string &source, bool fragment, SDL_GPUShaderFormat formats,
                   std::vector<uint32_t> *spirv, std::string *text, const Uint8 **code,
                   size_t *code_size, std::string *entry, std::string *log) {
+  const GpuShaderApi *api = gpu_shader_api();
+  if (api == nullptr) {
+    *log = "shader translation was not linked (the 'gpu' link feature is inactive)";
+    return false;
+  }
   GlslShaderInfo info;
   scan_glsl(source, fragment, &info);
   if (!info.unsupported.empty()) {
@@ -168,10 +173,10 @@ bool prepareStage(const std::string &source, bool fragment, SDL_GPUShaderFormat 
     layout.block_members = info.uniforms;
   }
   const std::string rewritten = rewrite_glsl(source, fragment, layout, info);
-  if (!compile_glsl(rewritten, fragment, spirv, log)) return false;
+  if (!api->compile_glsl(rewritten, fragment, spirv, log)) return false;
 
   if ((formats & SDL_GPU_SHADERFORMAT_MSL) != 0) {
-    if (!cross_compile_msl(*spirv, fragment, text, entry, log)) return false;
+    if (!api->cross_compile_msl(*spirv, fragment, text, entry, log)) return false;
     *code = (const Uint8 *)text->data();
     *code_size = text->size();
     return true;

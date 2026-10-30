@@ -79,6 +79,12 @@
   `win.stats()` 的 `textCacheBytes`/`textShapeHits` 能看出它是否成为瓶颈。
   元素自带的 `style="…"` 内联属性在该元素每次重算样式时都会重新解析。
 
+- **链接特性检测是静态的。** `media`/`gpu` 从打包后的 HTML/CSS/TS（包括导入的
+  `.html` 与其内联 CSS）里选择。用运行时数据（`fetch`、`readFileSync`、函数返回值）
+  拼 HTML/CSS 的页面无法被看到；扫描器在能证明 sink 是动态时会保守地启用两者，
+  但对于它无法分类的不透明值，需要显式 `--feature media`/`gpu`（或 `all`）。
+  `--verbose` 会打印选中的集合。见[链接特性](./build.md#链接特性)。
+
 ## 待决问题
 
 - Linux 首发是只发布 X11、Wayland，还是两者都发布。（决定：先 X11，
@@ -97,7 +103,8 @@
 - Windows：`scripts/build-gui.ts` 会生成 MSVC 兼容的 `gui.lib`
   （COFF 对象 + `ar -M`/`llvm-ar`）。Windows x64 的 CI job 使用 Visual Studio
   工具链（`.github/actions/vs-toolchain` 导入 `vcvarsall` 并采用 VS 自带的
-  LLVM）构建它、链接一个 `gui,media` 程序，并随 x64 发布归档一起发布。示例在
+  LLVM）构建它、链接一个会触发 `media` 链接特性的 `gui` 程序，并随 x64 发布归档
+  一起发布。示例在
   托管 runner 上的*运行*仍为试验性，因为那里没有 GPU/Vulkan 驱动（SDL_GPU 在
   Windows 上选择 **Vulkan** 后端，因此不需要 DXIL/`dxc` 工具链）。Windows
   arm64 仍跳过两个归档。在开发者机器上构建并运行
@@ -105,12 +112,12 @@
 - **Windows：x64 在 CI 中构建，arm64 与运行时验证仍为试验性。**
   `scripts/build-media.ts` 用 FFmpeg 的 MSVC 工具链
   （`--toolchain=msvc --cc=clang-cl`）生成 `media.lib`，其 COFF 对象与静态 CRT
-  和 `gui.lib` 一致，`--ext media` 在 Windows 上可以正常链接并播放。构建它需要
+  和 `gui.lib` 一致，自动选中的 `media` 特性在 Windows 上可以正常链接并播放。构建它需要
   POSIX shell 运行 FFmpeg 的 `configure` 以及 GNU make；shell 来自 Git for
   Windows（克隆 SDL3 本来就需要 Git），make 是原生 GNU make（Chocolatey 的
   `make`，或 `xbintsc_MAKE`）。CI 会显式安装 make，在
   Windows x64 上使用与本地构建相同的 Visual Studio `vcvarsall` + 自带 LLVM
-  构建 `gui.lib` 与 `media.lib`，链接 `gui,media` 程序，并把两个归档放进
+  构建 `gui.lib` 与 `media.lib`，链接一个会触发该特性的 `gui` 程序，并把两个归档放进
   Windows x64 发布包；示例的*运行*仍因托管 runner 没有 GPU/Vulkan 驱动而保持
   试验性。Windows arm64 仍跳过两个归档；`<video controls>` 同样推迟——预期模式
   是 TS + CSS 叠层，如 `examples/gui/media.ts`。

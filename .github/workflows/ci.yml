@@ -299,8 +299,9 @@ jobs:
         if: runner.os != 'Windows'
         run: npm run gui
 
-      # Media decoding is a separate opt-in archive (media.a). Building it makes
-      # the media e2e suite run; the GUI-only suite covers the no-media path.
+      # Media decoding is an optional link feature of gui (media.a). Building
+      # the archive makes the media e2e suite run; the GUI-only suite covers the
+      # no-media path.
       - name: Build the media archive (Linux/macOS)
         if: runner.os != 'Windows'
         run: npm run media
@@ -318,8 +319,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "GUI archive build failed" }
           npm run media
           if ($LASTEXITCODE -ne 0) { throw "media archive build failed" }
-          npx tsx src/cli/main.ts build examples/gui/media.ts --ext gui,media --out build/examples
+          npx tsx src/cli/main.ts build examples/gui/media.ts --ext gui --out build/examples
           if ($LASTEXITCODE -ne 0) { throw "GUI+media link failed" }
+          npx tsx src/cli/main.ts build examples/gui/media.ts --ext gui --feature media --out build/examples-forced
+          if ($LASTEXITCODE -ne 0) { throw "forced media link failed" }
+          npx tsx src/cli/main.ts build examples/gui/hello.ts --ext gui --out build/examples-gui
+          if ($LASTEXITCODE -ne 0) { throw "GUI-only link failed" }
 
       # Linux runs the example and the GUI e2e suite headlessly under Xvfb with
       # the lavapipe software Vulkan driver; this path is validated.

@@ -55,8 +55,12 @@ export interface GuiRunResult {
 export interface GuiRunOptions {
   /** Extra files written into the work directory before the build. */
   files?: Record<string, string>;
-  /** Additional extensions to register next to `gui` (e.g. `media`). */
+  /** Additional extensions to register next to `gui` (e.g. `node`). */
   extensions?: readonly Extension[];
+  /** Optional link features to force on (`media`, `gpu`, `all`). */
+  features?: readonly string[];
+  /** Optional link features to keep out even when auto-detection finds a use. */
+  noFeatures?: readonly string[];
   /**
    * Milliseconds the frame loop may run before `XT_GUI_AUTOCLOSE_MS` closes
    * every window. A program whose handlers close the window does not need this
@@ -133,6 +137,8 @@ export function createGuiHarness(): GuiHarness {
       cacheDir: join(workdir, `.cache-${name}`),
       extensions,
       app: options.console === true ? { console: true } : undefined,
+      ...(options.features !== undefined ? { features: options.features } : {}),
+      ...(options.noFeatures !== undefined ? { noFeatures: options.noFeatures } : {}),
     });
     expect(result.diagnostics.filter((diagnostic) => diagnostic.category === "error")).toEqual([]);
     const executed = spawnSync(result.outputPath, [], {

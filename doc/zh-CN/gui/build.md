@@ -25,12 +25,15 @@
   demuxer/parser/decoder 的最小静态构建，用它编译
   `runtime/ext_media/media.cpp`，并把所有内容合并到
   `runtime/lib/<os>-<arch>/media.a`（Windows 上 MSVC ABI 则为 `media.lib`）。
-  `gui.a` **不会**链接 FFmpeg：程序通过 `--ext media` 显式启用播放能力。
+  `gui.a` **不会**链接 FFmpeg：编译器为可能播放媒体的程序选中 `media` 链接特性后
+  才链接 `media.a`（见[链接特性](#链接特性)）。
 - `src/extensions/gui/index.ts` 通过 `nativeObjects()` 暴露引擎归档（经由
   `findRuntimeLibrary`，因此 `.a`/`.lib` 都可用），并通过 `linkerFlags()`
-  暴露操作系统框架。`src/extensions/media/index.ts` 对 `media.a`/`media.lib`
-  做同样的暴露，并把注册桥（`runtime/ext_media/media_bridge.c`）作为普通
-  runtime 源编译。
+  暴露操作系统框架。它的 `linkFeatures()`（位于
+  `src/extensions/gui/features.ts`）声明 `media` 与 `gpu`；driver 只在该特性
+  启用时编译对应的 bridge。
+- glslang（以及 macOS 上的 SPIRV-Cross）与 SDL3 一样合并进 `gui.a`，但引擎只
+  通过 `gpu` 特性的分发表访问它；从不编译 GLSL 的程序不会取出这些归档成员。
 - `scripts/build-gui.ts` 使用与驱动**相同**的 clang
   （`src/driver/toolchain-provider.ts`）；Windows 上就是 Visual Studio 自带的、
   面向 MSVC 的 LLVM，并配套使用其同目录下的 `clang++`/`llvm-ar` 来配置 CMake、
@@ -55,9 +58,10 @@
 - CI 在组装发布归档之前构建 `gui.a`/`gui.lib` 与 `media.a`/`media.lib`，因此它们
   会随 `runtime/lib/<slug>/` 一起发布（发布 tarball 会复制整个 `runtime/` 树）。
   同一批目录还会打进可选的 `@xbintsc/<slug>` npm 包，因此发布覆盖的宿主平台从
-  npm 安装后也能使用 `--ext gui`/`--ext media`。归档在 Linux（Xvfb 下，使用
+  npm 安装后也能使用 `--ext gui`（`media`/`gpu` 自动选择）。归档在 Linux（Xvfb 下，使用
   lavapipe 软件 Vulkan 驱动）与 macOS 上构建并运行
-  示例；Windows x64 也会构建两个归档并链接一个 `gui,media` 程序，因此 MSVC
+  示例；Windows x64 也会构建两个归档并链接一个会触发 `media` 特性的 `gui` 程序
+  （另有一条显式 `--feature media` 的构建），因此 MSVC
   构建在 CI 中得到验证，只是*运行*示例仍为试验性（托管 runner 没有 GPU/Vulkan
   驱动）。macOS 的运行同样是试验性的：Intel runner 的虚拟 GPU 缺少
   `MTLGPUFamilyMac2`，引擎会以 **77**（“此机器无法运行 GUI”）退出，任务记录为跳过，
@@ -80,6 +84,40 @@
   OS/arch 区分键值，且不包含构建树；`npm run gui` 还会在 Debian/Ubuntu 上提前
   检查 X11/Wayland 头文件，并按名称报告缺失的开发包（当头文件位于该检查未知的
   前缀下时，可设置 `xbintsc_SKIP_HEADER_CHECK=1`）。
+
+## 链接特性
+
+用户只启用一个 `gui` 扩展，但其中两块重型部分是可选的**链接特性**，按程序选择：
+
+| 特性 | 链接什么 | 程序可能用到时 |
+| --- | --- | --- |
+| `media` | `media_bridge.c` + `media.a`（FFmpeg） | HTML 里有 `<video>`/`<audio>`、`createElement("video"/"audio")`、`new Audio()`、`decodeAudioData`，或运行时拼出的 HTML |
+| `gpu` | `gpu_bridge.c`（实现本身已在 `gui.a`） | `getContext("webgl"/"webgl2"/"experimental-webgl")`（或运行时决定的 kind）、任意 `webgl` 字符串、`mix-blend-mode`/`mixBlendMode`，或运行时拼出的 HTML |
+
+driver 会扫描打包后的 AST（`src/driver/usage.ts`）：所有字符串字面量（包括导入的
+`.html` 与内联进来的 CSS）、标识符与属性名、每个 `getContext(...)` 的 kind，以及
+HTML/CSS 是否可能来自编译器看不见的数据。简单的 `const` 别名会被解析；无法解析的
+markup 会让程序按“动态 markup”保守处理，启用两个特性。
+
+特性启用时，driver 只为本构建编译它的 C **bridge**，并链接在 `gui.a` 之前：
+
+- `media` → `runtime/ext_media/media_bridge.c`；构造函数安装解码表并引用
+  `xt_media_backend_*`，从而把 FFmpeg 成员从 `media.a` 里取出。
+- `gpu` → `runtime/ext_gui/gpu_bridge.c`；构造函数调用 `gpu_feature.cpp` 里的
+  `xt_gpu_feature_register`，安装 `XtGpuShaderApi` 表并引用 `compile_glsl` /
+  `cross_compile_msl` / 反射函数，从而取出 glslang（macOS 上还有 SPIRV-Cross）。
+
+bridge 就是让链接器搜索归档的“强引用”；没有 bridge 时引擎的表保持 null，
+实现成员永不被取出。因此大库可以留在现有归档里，不需要新的包布局。
+
+覆盖方式：`--feature media,gpu`（或 `all`）强制开启；`--no-feature media`
+即使检测到也不链接。`--ext media` 是 `--ext gui --feature media` 的弃用别名。
+自动检测到的特性归档缺失时构建打印 warning 并继续（元素/上下文按文档降级）；
+显式强制的特性则报错。
+
+> 检测是静态的。用 `fetch`、`readFileSync` 等运行时数据拼 HTML/CSS 的页面应传
+> `--feature all`（或具体特性）。`--verbose` 会打印选中的集合，例如
+> `xbintsc: link features: none`。
 
 ## 运行示例
 
@@ -119,9 +157,10 @@ Chocolatey/独立 LLVM，CI、本地构建与预编译归档共用同一条编�
 
 `examples/gui/media.ts`（配合 `media.html`）演示 `<video>`/`<audio>`：它在
 `<video>` 上叠一个 CSS 进度条，并用 `play()`/`pause()`/`currentTime`/
-`volume` 驱动播放。它需要单独的可选 `media` 扩展，因此要构建并同时启用两者。
+`volume` 驱动播放。编译器从 `media.html` 里看到这些元素后会自动选中 `media`
+特性；先用 `npm run media` 构建一次 `media.a`。
 媒体 `src` 相对于进程工作目录解析，因此从仓库根目录运行：
-`xbintsc run examples/gui/media.ts --ext gui,media`。几何报告见该目录的 README。
+`xbintsc run examples/gui/media.ts --ext gui`。几何报告见该目录的 README。
 
 这些测试套件在 Windows 上默认跳过（归档可以在本机通过 Vulkan 运行，但 CI
 runner 没有可用的 GPU 驱动）。如果本机有 `gui.lib` 与可用的 GPU，可用

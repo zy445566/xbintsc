@@ -88,7 +88,7 @@ src/binder                         scopes, symbols, closures
 src/checker                        opt-out names, redeclarations, arity, structural types
 src/codegen                        AST -> LLVM IR text (values.ts defines the value model)
 src/driver                         build orchestration, clang invocation, incremental cache
-src/extensions                     optional compile modules (node/, gui/, media/, native C++/Rust)
+src/extensions                     optional compile modules (node/, gui/, native C++/Rust) + link features
 src/diagnostics                    diagnostic codes and rendering
 src/cli/main.ts                    the CLI (`build` / `run` / `emit` / `doctor`)
 runtime/                           the C runtime: values, containers, stdlib, GC, event loop

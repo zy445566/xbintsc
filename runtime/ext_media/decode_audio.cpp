@@ -1,5 +1,5 @@
 /*
- * xbintsc media extension — in-memory audio decoding.
+ * xbintsc media link feature — in-memory audio decoding.
  *
  * `AudioContext.decodeAudioData` hands over bytes, not a path, so the file
  * oriented `MediaPlayer` cannot be reused. This unit opens the bytes through a

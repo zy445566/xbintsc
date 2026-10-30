@@ -78,9 +78,9 @@ const THROWN_FAILURES: readonly ThrownFailure[] = [
     },
   },
   {
-    /* A dependent extension (`media` needs `gui`) or a missing prebuilt archive
-     * (`gui.a`/`media.a`) both mean "the extension set is not ready", and the
-     * extensions guide explains both the flags and `npm run gui`/`media`. */
+    /* A dependent extension or a missing prebuilt archive (`gui.a`/`media.a`)
+     * both mean "the extension set is not ready", and the extensions guide
+     * explains both the flags and `npm run gui`/`media`. */
     match: /requires the '.*' extension|native library not found/i,
     code: DiagnosticCode.IOError,
     pointer: {
@@ -165,6 +165,12 @@ export function documentationFor(diagnostic: Diagnostic): DocumentationPointer |
       return {
         text: "the incremental cache could not be trusted; retry with `--force` or remove the cache directory",
         path: DOC_CLI,
+      };
+
+    case DiagnosticCode.LinkFeatureUnavailable:
+      return {
+        text: "check the link-feature name, and build its prebuilt archive (`npm run gui` / `npm run media`) if it is missing; choose features with --feature / --no-feature",
+        path: DOC_EXTENSIONS,
       };
 
     case DiagnosticCode.CircularDependency:

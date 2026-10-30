@@ -6,16 +6,17 @@
  *
  * The engine knows how to model `<video>`/`<audio>` elements and how to draw
  * their frames, but it deliberately contains no decoder: FFmpeg lives in the
- * separate `media` compile extension (`runtime/ext_media/`, linked as
+ * optional `media` link feature (`runtime/ext_media/`, linked as
  * `media.a`, or `media.lib` with the MSVC ABI on Windows). Keeping the boundary C-only means the backend can be a prebuilt
  * C++ archive that is compiled independently of the engine.
  *
  * Registration is push-based: the backend's bridge translation unit is linked
- * directly (it is a `runtimeSources()` entry of the media extension), and a
+ * only when the compiler selects the feature (it is the feature's
+ * `runtimeSources()` entry), and a
  * constructor calls `xt_media_install` with its function table. The GUI's
- * dispatch layer (`media.cpp`) starts with a null table, so a program built
- * with `--ext gui` alone still links and simply reports that media support was
- * not enabled.
+ * dispatch layer (`media.cpp`) starts with a null table, so a program that does
+ * not use media still links and simply reports that media support was
+ * not linked.
  *
  * `audio_sink` is an opaque `xtgui::AudioSink*` owned by the caller until the
  * open call; the backend takes ownership whether the open succeeds or not.
@@ -72,7 +73,7 @@ void xt_media_install(const XtMediaApi *api);
 
 /** Decoder backend entry points, implemented by `runtime/ext_media/media.cpp`
  * (inside `media.a`/`media.lib`). The bridge references them, which is what makes the
- * linker extract the archive member when the media extension is enabled. */
+ * linker extract the archive member when the `media` feature is selected. */
 XtMediaPlayerHandle xt_media_backend_open(const char *path, char *error,
                                           size_t error_size, void *audio_sink);
 XtMediaPlayerHandle xt_media_backend_by_id(uint64_t id);

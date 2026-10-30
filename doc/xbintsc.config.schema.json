@@ -48,6 +48,16 @@
       "items": { "type": "string" },
       "description": "Paths to native C++/Rust extension manifests."
     },
+    "features": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional link features to force on, e.g. [\"media\", \"gpu\"] or [\"all\"]."
+    },
+    "noFeatures": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional link features to keep out even when auto-detection finds a use."
+    },
     "force": {
       "type": "boolean",
       "description": "Ignore the incremental cache."

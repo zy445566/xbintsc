@@ -33,7 +33,9 @@ namespace xtgui {
 std::unique_ptr<MediaPlayer> MediaPlayer::open(const std::string& path, std::string* error,
                                                std::unique_ptr<AudioSink> audio) {
   if (g_api == nullptr || g_api->open == nullptr) {
-    if (error) *error = "media support requires the 'media' extension (pass --ext media)";
+    if (error) {
+      *error = "media support was not linked; rebuild with '--feature media' (or make the media use visible to the compiler)";
+    }
     return nullptr;
   }
   char message[kErrorSize] = {0};
@@ -59,7 +61,7 @@ bool xt_media_decode_audio(const uint8_t* data, size_t size, DecodedAudio* out,
                            std::string* error) {
   if (g_api == nullptr || g_api->decode_audio == nullptr) {
     if (error) {
-      *error = "cannot decode this audio format; enable the 'media' extension (pass --ext media)";
+      *error = "cannot decode this audio format; rebuild with '--feature media' (the FFmpeg backend was not linked)";
     }
     return false;
   }

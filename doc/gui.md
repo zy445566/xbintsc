@@ -21,13 +21,15 @@ what `examples/gui/pelican-bike` — a playable 2D game — is built on. **M12**
 DOM node lifetime explicit (what a mutation releases, what it keeps) and gives the
 engine bounded memory: see [Node lifetime](./gui/dom.md#node-lifetime) and
 [Memory & GC](./gui/runtime.md#memory--gc). **M13** plays real
-`<video>`/`<audio>` — the optional `media` extension decodes them on the main
-thread with a vendored minimal FFmpeg, video frames go through the image texture
-path and audio to an SDL stream, with the DOM media API exposing
-`play`/`pause`/`currentTime`/… and media events. Enabling `gui` alone does not
+`<video>`/`<audio>` — the optional **`media` link feature** decodes them on the
+main thread with a vendored minimal FFmpeg, video frames go through the image
+texture path and audio to an SDL stream, with the DOM media API exposing
+`play`/`pause`/`currentTime`/… and media events. The compiler selects the
+feature from the program (a `<video>`/`<audio>` element, `new Audio()`,
+`decodeAudioData`, or markup built at run time), so a DOM/CSS program does not
 link FFmpeg. The browser globals also get a real `AudioContext`: a 48 kHz mixer
 in `runtime/ext_gui/audio_mixer.cpp` plus `decodeAudioData` (WAV in-engine,
-compressed formats through `media`) — see
+compressed formats through the `media` feature) — see
 [GUI API](./gui/api.md#web-audio).
 **M14** adds `<canvas>` with a self-written 2D software rasteriser (anti-aliased
 fills, paths, text and `drawImage`) uploaded through the image texture path —
@@ -38,7 +40,7 @@ them) can be translated, scaled and rotated without reflowing anything — and
 `transition: transform`, so those poses animate. See
 [Layout](./gui/layout.md#transforms-m15) and
 [Animation](./gui/animation.md#css-transforms-m15).
-**M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang (and to MSL by the bundled SPIRV-Cross on Metal) and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md).
+**M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang (and to MSL by the bundled SPIRV-Cross on Metal) and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md). glslang is an optional **`gpu` link feature** shared with `mix-blend-mode`: a DOM/2D-canvas page does not link it.
 **M19** fills in the decorative CSS layer: `@media` queries, generated content
 (`::before`/`::after`), multi-layer linear/radial/repeating backgrounds,
 `text-shadow`, `clip-path`, `mix-blend-mode` (through an offscreen compositor)
@@ -100,7 +102,8 @@ pages above.
 | 4 | The engine is **not self-hosted** (it is C/C++, not TS), but must not affect the compiler's platform-agnostic design. Delivered as a per-platform prebuilt archive linked via `nativeObjects`. |
 | 5 | The **event loop is generic**: the runtime exposes a generic main-loop hook and a poll primitive; nothing GUI-specific enters `runtime/`. |
 | 6 | **Multiple windows** are supported by the core object model. |
-| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3/FreeType/HarfBuzz/glslang, plus SPIRV-Cross **on macOS only** — Metal is the only SDL_GPU backend that consumes MSL, so merging it elsewhere would add ~2.5 MiB of code no driver can ask for. The optional `media.a` carries FFmpeg and is linked only with `--ext media`. |
+| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3/FreeType/HarfBuzz, plus glslang and (on macOS only) SPIRV-Cross. Those two are only *extracted* when the compiler selects the **`gpu` link feature**; Metal is the only SDL_GPU backend that consumes MSL, so merging SPIRV-Cross elsewhere would add ~2.5 MiB no driver can ask for. The optional `media.a` carries FFmpeg and is linked only when the **`media` link feature** is selected. Both features are chosen from the program's static usage; `--feature`/`--no-feature` override the scan. |
+| 8 | **Heavy optional halves are link features, not extensions.** FFmpeg and glslang are selected by what the bundled HTML/CSS/TS may use, and a small C bridge (linked only when active) installs the feature's dispatch table and forces the linker to extract the implementation. This keeps one user-facing `gui` extension while a DOM-only program pays for neither stack. |
 
 ## Architecture
 
@@ -137,7 +140,7 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | Text shaping | **HarfBuzz** | correct complex-script shaping |
 | Glyph raster | **FreeType** | glyph outlines → GPU atlas / SDF |
 | Images | **stb_image** (vendored header) for bitmaps, **NanoSVG** (vendored headers) for SVG | single headers to start; SVG files rasterise on demand |
-| Video + audio | **FFmpeg** (statically vendored, minimal build, optional `media` extension) | decodes the common container/codec set; no WebView or platform media framework |
+| Video + audio | **FFmpeg** (statically vendored, minimal build, optional `media` link feature) | decodes the common container/codec set; no WebView or platform media framework |
 
 Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`,
 FFmpeg `7.1` for the optional `media` archive (overridable with `SDL3_TAG` /
@@ -203,12 +206,13 @@ engine were Rust.
      is cached per OS/arch, keyed by `scripts/build-gui.ts` /
      `scripts/build-media.ts`. Windows x64 gets its own source cache plus the
      installed `vendor/ffmpeg-build-msvc/dist` prefix.
-   - Windows x64 builds both archives in CI and links a `gui,media` program,
-     using the same Visual Studio `vcvarsall` + bundled LLVM toolchain as a
-     local build (`.github/actions/vs-toolchain`); the host has no GPU/Vulkan
-     driver, so *running* the GUI/media examples there remains provisional (a
-     failure is logged without annotating the run). The Windows arm64 job still
-     skips both archives (see
+   - Windows x64 builds both archives in CI and links a `gui` program that
+     exercises the `media` link feature (plus an explicit `--feature media`
+     build), using the same Visual Studio `vcvarsall` + bundled LLVM toolchain
+     as a local build (`.github/actions/vs-toolchain`); the host has no
+     GPU/Vulkan driver, so *running* the GUI/media examples there remains
+     provisional (a failure is logged without annotating the run). The Windows
+     arm64 job still skips both archives (see
      [Open questions](./gui/known-issues.md#open-questions)).
 8. **M8 — interactive DOM** ✅
    - Element/document handles with stable identity, read/write properties via
@@ -260,15 +264,17 @@ engine were Rust.
       `tests/e2e/gui-retention.test.ts` (see [Memory & GC](./gui/runtime.md#memory--gc)).
 13. **M13 — video & audio** ✅
     - `<video>` / `<audio>` decode through a statically vendored minimal FFmpeg
-      in the optional `media` extension (`runtime/ext_media/media.cpp`), frames
+      in the optional `media` link feature (`runtime/ext_media/media.cpp`); the
+      compiler selects it from the program and only then compiles the bridge and
+      links `media.a`. Frames
       upload to GPU textures through the existing image pipeline, audio is
       pushed to an SDL stream on the main thread by the GUI's audio sink, and
       the DOM media API plus `loadedmetadata`/`play`/`pause`/`ended`/
       `timeupdate`/`error` events are exposed on element handles
       (`dom_api_media.cpp`, `dom_api_proto.cpp`). Controlled from TS + CSS;
       there are no built-in controls. Example in `examples/gui/media.*`, e2e in
-      `tests/e2e/gui-media.test.ts` (with the `media` extension) and
-      `tests/e2e/gui-media-disabled.test.ts` (without it).
+      `tests/e2e/gui-media.test.ts` (auto-selected) and
+      `tests/e2e/gui-media-disabled.test.ts` (`--no-feature media`).
 14. **M14 — `<canvas>` 2D** ✅
     - `<canvas>` is a replaced element (`xtgui::Canvas2D`, `layout.*`), the
       `getContext("2d")` handle and drawing API live in `dom_api_canvas.cpp`,
@@ -430,17 +436,19 @@ engine were Rust.
   ratcheting upwards. `win.stats()` exposes the engine counters and
   `tests/e2e/gui-retention.test.ts` pins them; a game loop rewriting its sprite
   every frame now runs in constant memory (see [Memory & GC](./gui/runtime.md#memory--gc)).
-- **M13** ✅ `<video>` / `<audio>` support. The optional `media` extension
+- **M13** ✅ `<video>` / `<audio>` support. The optional `media` **link feature**
   vendors and builds a minimal static FFmpeg (`scripts/build-media.ts`) and
   merges it into `media.a` (or `media.lib` from clang-cl/MSVC objects on
-  Windows); `runtime/ext_media/media.cpp` decodes video to RGBA
+  Windows). The compiler selects the feature from the program and only then
+  compiles `media_bridge.c` and links `media.a`; a DOM/CSS program never links
+  FFmpeg. `runtime/ext_media/media.cpp` decodes video to RGBA
   frames and audio to 48 kHz stereo PCM on the main thread,
   `runtime/ext_gui/gui_media.cpp` owns the players, implements the SDL audio
   sink and pumps the media clock and events each frame,
   `renderer_image.cpp` uploads each new video frame through the image texture
   path, and `dom_api_media.cpp` exposes `play`/`pause`/`load` plus the media
-  properties on element handles. `gui.a` stays FFmpeg-free; enabling `media`
-  without `gui` is rejected by the registry. `examples/gui/media.*` demonstrates
+  properties on element handles. `gui.a` stays FFmpeg-free.
+  `examples/gui/media.*` demonstrates
   the TS-plus-CSS-controls pattern and `tests/e2e/gui-media.test.ts` pins it.
 - **M14** ✅ `<canvas>` support. A new replaced element (`layout.*`) carries an
   intrinsic size from its `width`/`height` attributes (default `300x150`),

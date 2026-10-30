@@ -29,6 +29,8 @@ default; `--no-check` skips it (and is part of the cache key). See
     --emit <kind>     exe | obj | ir (default: exe)
 -O0..-O3              Optimization level (default: -O2)
     --ext <names>     Comma separated extensions (e.g. node)
+    --feature <names> Force optional link features on (media,gpu,all)
+    --no-feature <n>  Keep optional link features out even when detected
     --ext-native <m>  Register a C++/Rust extension from a JSON manifest
     --config <path>   Use a project config (default: xbintsc.config.json)
     --no-config       Do not read any project config

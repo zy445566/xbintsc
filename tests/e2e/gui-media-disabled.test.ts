@@ -1,10 +1,11 @@
 /**
  * `<video>` / `<audio>` are part of the GUI DOM even when no decoder is linked.
  *
- * This suite compiles with `--ext gui` only (the harness never registers the
- * `media` extension), which is the whole point of the split: a GUI program does
- * not link FFmpeg unless it asks for it. The element still exists and its DOM
- * API is callable, but opening a source fails and fires `error`.
+ * This suite compiles with `--ext gui` and explicitly disables the `media` link
+ * feature (`noFeatures: ["media"]`), which is the escape hatch for a program
+ * that wants the DOM surface but not FFmpeg (or runs on a host without the
+ * archive). The element still exists and its DOM API is callable, but opening a
+ * source fails and fires `error`.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -15,7 +16,7 @@ describe.skipIf(!guiAvailable)("gui extension without media", () => {
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());
 
-  it("reports error instead of decoding when the media extension is off", () => {
+  it("reports error instead of decoding when the media feature is off", () => {
     const { stdout } = harness.compileAndRun(
       "media-off",
       `
@@ -39,7 +40,7 @@ describe.skipIf(!guiAvailable)("gui extension without media", () => {
 
       run();
       `,
-      { autocloseMs: 1500 },
+      { autocloseMs: 1500, noFeatures: ["media"] },
     );
 
     expect(stdout).toContain("media-error");

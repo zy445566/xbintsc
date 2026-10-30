@@ -7,8 +7,8 @@
  * The engine owns the DOM integration (one `MediaPlayer` per element, owned by
  * the window) and the renderer uploads decoded frames as GPU textures. The
  * decoder itself is optional: `MediaPlayer::open` dispatches through the table
- * the `media` extension installs at startup (see `media_api.h`). A program built
- * with `--ext gui` alone therefore links without FFmpeg and reports an `error`
+ * the `media` link feature installs at startup (see `media_api.h`). A program
+ * that does not use media therefore links without FFmpeg and reports an `error`
  * event when a media element is opened.
  *
  * A `MediaPlayer` owns one demux/decode pipeline for a single source file. It
@@ -25,7 +25,7 @@
  * engine already runs a frame loop, so there is no separate media thread and no
  * interaction with the garbage collector.
  *
- * The FFmpeg headers stay inside the media extension's `media.cpp`; this header
+ * The FFmpeg headers stay inside the media feature's `media.cpp`; this header
  * only exposes value types so the rest of the engine (and `gui_engine.h`) can
  * hold a player without pulling in libav*.
  */

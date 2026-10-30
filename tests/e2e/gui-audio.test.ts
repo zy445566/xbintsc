@@ -17,14 +17,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { findRuntimeLibrary } from "../../src/driver/runtime-lib.js";
-import { mediaExtension } from "../../src/extensions/media/index.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
 import { createGuiHarness, guiAvailable } from "./gui-helpers.js";
 
 const harness = createGuiHarness();
 
 /* A 20 ms 440 Hz Ogg/Vorbis tone. The engine's WAV decoder rejects it, so the
- * test exercises the FFmpeg memory decoder behind the optional media extension.
+ * test exercises the FFmpeg memory decoder behind the optional media link
+ * feature.
  * Stored as base64 because the test work directory only takes text files. */
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 const oggFixture = join(fixtureDir, "tiny-ogg.b64");
@@ -313,7 +313,7 @@ describe.skipIf(!guiAvailable)("gui extension — Web Audio", () => {
   });
 
   it.skipIf(!mediaAvailable || OGG_BASE64.length === 0)(
-    "decodes compressed audio through the media extension",
+    "decodes compressed audio through the media link feature",
     () => {
       const { value } = harness.compileAndRun(
         "audio-media",
@@ -332,7 +332,7 @@ describe.skipIf(!guiAvailable)("gui extension — Web Audio", () => {
         }
         main();
         `,
-        { extensions: [mediaExtension, nodeExtension], console: true },
+        { extensions: [nodeExtension], console: true },
       );
 
       expect(value("bytes")).toBe("2707");

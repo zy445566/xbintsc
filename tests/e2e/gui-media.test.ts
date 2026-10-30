@@ -1,10 +1,11 @@
 /**
  * End-to-end tests for `<video>` / `<audio>` support.
  *
- * These exercise the real decoding path (the `media` extension's vendored
- * FFmpeg + the GUI's SDL audio sink) and the DOM media API. They are skipped
- * unless both the `gui` and `media` archives exist: the `gui` extension alone
- * is deliberately decoder-free. The fixtures live in `examples/resources`; when
+ * These exercise the real decoding path (the `media` link feature's vendored
+ * FFmpeg + the GUI's SDL audio sink) and the DOM media API. The compiler selects
+ * the feature from the program, so no `--ext media` is involved. They are
+ * skipped unless both the `gui` and `media` archives exist: `gui.a` is
+ * deliberately decoder-free. The fixtures live in `examples/resources`; when
  * they are absent (a trim checkout) the suite is skipped rather than failing.
  */
 
@@ -17,7 +18,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
-import { mediaExtension } from "../../src/extensions/media/index.js";
 import { findRuntimeLibrary } from "../../src/driver/runtime-lib.js";
 import { createGuiHarness, guiAvailable } from "./gui-helpers.js";
 import { readTextFile, toPosixPath } from "../platform.js";
@@ -44,7 +44,7 @@ const resourcesAvailable = existsSync(moviePath) && existsSync(soundPath);
  */
 const mediaAvailable = findRuntimeLibrary("media") !== undefined;
 
-describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui + media extensions", () => {
+describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui with the media link feature", () => {
   const harness = createGuiHarness();
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());
@@ -96,7 +96,7 @@ describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui + 
 
       run();
       `,
-      { autocloseMs: 8000, extensions: [mediaExtension] },
+      { autocloseMs: 8000 },
     );
 
     expect(stdout).not.toContain("video-error");
@@ -186,7 +186,7 @@ describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui + 
 
       run();
       `,
-      { autocloseMs: 10000, extensions: [mediaExtension] },
+      { autocloseMs: 10000 },
     );
 
     expect(stdout).not.toContain("video-error");
@@ -200,7 +200,7 @@ describe.skipIf(!guiAvailable || !resourcesAvailable || !mediaAvailable)("gui + 
     try {
       writeFileSync(join(workdir, "media.html"), readTextFile(join(exampleDir, "media.html")));
       writeFileSync(join(workdir, "media.ts"), readTextFile(join(exampleDir, "media.ts")));
-      const extensions = createDefaultRegistry().register(guiExtension).register(mediaExtension);
+      const extensions = createDefaultRegistry().register(guiExtension);
       const result = build(join(workdir, "media.ts"), {
         emit: "exe",
         outDir: join(workdir, "out"),

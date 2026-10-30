@@ -1,8 +1,9 @@
-# 扩展：Node 模块、GUI、媒体、C++/Rust 库
+# 扩展：Node 模块、GUI、链接特性、C++/Rust 库
 
 编译器核心与平台无关。任何与平台相关的东西——Node 的 `fs`、一个 HTML/CSS 渲染器、
 你自己的 C++ 库——都以**扩展**的形式接入：它既贡献模块绑定，也贡献要一起编译/链接的
-C/C++ 源码或目标文件。
+C/C++ 源码或目标文件。扩展里的重型可选部分（FFmpeg、glslang）做成**链接特性**，
+由程序用法选择，而不是单独的扩展开关。
 
 ## 最容易踩的规则
 
@@ -70,8 +71,9 @@ import { createWindow, run } from "gui";
 `<style>` 块（运行时解析器只读取内联 `<style>`）；并让随包引入的 Three.js 的
 `WebGLRenderer` 先探测 WebGL 上下文：引擎有上下文时使用 Three.js 自己的渲染器，
 直接使用真实的 WebGL 2 后端（只修补其着色器循环展开，不再打包 Canvas2D 回退）。
-`<img>` 由引擎自身解码；而 `<video>`/`<audio>` 在只启用 `gui` 时**不可用**
-——它们需要单独的 [`media`](#media--视频音频解码) 扩展。也支持 `<canvas>`：
+`<img>` 由引擎自身解码；`<video>`/`<audio>` 解码（FFmpeg）与 GLSL 翻译（glslang）
+是**可选的链接特性**，由程序自动选择——见
+[可选链接特性](#可选链接特性media-gpu)。也支持 `<canvas>`：
 `getContext("2d")` 返回的上下文，其填充、路径、
 渐变、文本与 `drawImage` 由自研 CPU 光栅器处理（另有线段端点/连接、虚线描边、
 `ellipse` 与 `roundRect`），元素句柄还暴露 `width`/`height`。CSS
@@ -91,38 +93,48 @@ import { createWindow, run } from "gui";
 `getComputedStyle`、`alert`/`prompt`、`escape`、`Event` 家族，以及可用的 Web Audio
 实现（`AudioContext` 提供 gain、oscillator、buffer-source、biquad、compressor、
 stereo-panner、constant-source 与 delay 节点、真实的 48 kHz 混音器、逐采样的
-AudioParam 自动化，`decodeAudioData` 引擎内解码 WAV，压缩格式则通过 `media`）—— 另外还有帧泵：
+AudioParam 自动化，`decodeAudioData` 引擎内解码 WAV，压缩格式则通过 `media` 特性）—— 另外还有帧泵：
 它在 `loadHTML` 时启动，仅在仍有动画帧回调时重新排程，因此从不调用 `run()` 的页面
 也能绘制并最终退出。**WebGL 1.0 与 2.0 已实现**：`canvas.getContext("webgl")` /
 `"webgl2"` 返回 GPU 上下文，其 GLSL ES 着色器由内置 glslang 编译为 SPIR-V
 （Vulkan 直接消费，Metal 上由内置 SPIRV-Cross 转成 MSL），
 并通过 SDL_GPU 绘制；页面直接合成颜色纹理而无须 CPU 读回，WebGL 2 还增加
 VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷贝（见
-[../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。WebXR、未启用
-`media` 时的 `<video>`/`<audio>` 与流式接口**尚未实现**：`typeof` 会回答
+[../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。WebXR 与流式接口**尚未实现**：
+`typeof` 会回答
 `"undefined"`，让页面走自己的降级分支。`fetch` 不是 GUI 扩展的功能——它由核心
 运行时提供（`http://`，以及本地 `file://` 与相对路径；不支持 HTTPS 与流式），
 因此 GUI 程序同样可用。见 [../../implemented/fetch.md](../../implemented/fetch.md)。
 
-### `media` —— 视频/音频解码
+### 可选链接特性（media、gpu）
 
-用 `--ext media` **与 `gui` 一起**开启（`--ext gui,media`；注册表会拒绝单独启用
-`media`）。它链接单独的 FFmpeg 后端 `media.a`/`media.lib`，因此加入
-`<video>`/`<audio>` 播放不会让只做界面的二进制变大。
+`gui` 仍然只有一个扩展，但其中两块重型部分是可选的**链接特性**。编译器扫描打包后的
+HTML/CSS/TS（导入的 `.html` 与内联 CSS 都属于 bundle），按程序自动选择；不需要额外
+扩展参数：
+
+- **`media`** —— `<video>`/`<audio>` 与压缩格式 `decodeAudioData` 的 FFmpeg 解码。
+  由 `<video>`/`<audio>` 元素、`createElement("video"/"audio")`、`new Audio()`、
+  `decodeAudioData` 或运行时拼出的 markup 触发，链接 FFmpeg 后端
+  `media.a`/`media.lib`。
+- **`gpu`** —— WebGL 与 `mix-blend-mode` 共用的 glslang/SPIRV-Cross GLSL 翻译器。
+  由 `getContext("webgl"/"webgl2"/…)`（或运行时决定的 kind）、任意 `webgl` 字符串、
+  `mix-blend-mode` 触发。
+
+用 `--feature media,gpu`（或 `all`）覆盖扫描，用 `--no-feature media` 强制不链接。
+`--verbose` 会打印选中的集合。只渲染 HTML/CSS/2D canvas 的程序既不链接 FFmpeg 也
+不链接 glslang；用运行时数据拼 HTML/CSS 的页面应传 `--feature all`，因为扫描看不到它。
+自动检测到的特性归档缺失时构建打印 warning，能力在运行时降级（媒体元素触发
+`error`）；显式强制的特性则报错。
 
 DOM API 与普通 HTML 媒体元素一致：`play()` / `pause()` / `load()`，以及
 `paused` / `ended` / `duration` / `currentTime` / `volume` / `muted` / `loop` /
 `autoplay` / `videoWidth` / `videoHeight` / `readyState` / `src` 属性，还有
 `loadedmetadata`/`play`/`pause`/`ended`/`timeupdate`/`error` 事件。没有内置
 控件——用元素和 CSS 自绘控件（见 `examples/gui/media.ts`）。视频帧与音频 PCM
-都在主线程解码；视频走图像纹理路径。没有该扩展时，打开媒体源会失败并触发
-`error`（元素与 API 仍然存在）。归档会为每个宿主平台构建：POSIX 产出
-`media.a`，Windows 则用面向 MSVC 的 `clang-cl` 编译 FFmpeg 并产出 `media.lib`，
-因此可与 `gui.lib` 链接。Windows 上构建它需要 POSIX shell（Git for Windows
-自带的 bash）与原生 GNU make（Chocolatey `make`，或 `xbintsc_MAKE`）。见
-[../../zh-CN/gui/build.md](../../zh-CN/gui/build.md)。
-没有归档、或宿主上还没运行 `npm run media` 时，媒体元素会触发 `error`；见
-[../../zh-CN/gui/known-issues.md](../../zh-CN/gui/known-issues.md)。
+都在主线程解码；视频走图像纹理路径。Windows 上构建归档需要 POSIX shell（Git for
+Windows 自带的 bash）与原生 GNU make（Chocolatey `make`，或 `xbintsc_MAKE`）。见
+[../../zh-CN/gui/build.md](../../zh-CN/gui/build.md) 与
+[../../zh-CN/gui/media.md](../../zh-CN/gui/media.md)。
 
 ## 第三方 npm 包
 

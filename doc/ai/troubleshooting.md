@@ -123,15 +123,18 @@ optional `@xbintsc/<os>-<arch>` npm package ships it (reinstall without
 
 ### `media native library not found at …`
 
-`<video>`/`<audio>` playback needs the optional `media` archive (`media.a`, or
-`media.lib` on Windows). The `@xbintsc/<os>-<arch>` npm package ships it where
-the release builds it; otherwise build it separately with `npm run media`. Build
-it, or drop `--ext media`; a GUI-only build still links and media elements simply fire
-`error`. The `media` extension also requires `gui`, and `--ext media` alone is
-rejected with the flags to pass. On Windows the FFmpeg build additionally needs
+`<video>`/`<audio>` decoding needs the optional `media` link feature and its
+archive (`media.a`, or `media.lib` on Windows). The `@xbintsc/<os>-<arch>` npm
+package ships it where the release builds it; otherwise build it with
+`npm run media`. When the feature is selected automatically and the archive is
+missing, the build prints a **warning** and continues; media elements then simply
+fire `error`. An explicit `--feature media` (or the deprecated `--ext media`)
+makes it a hard error instead. Use `--no-feature media` to opt out on purpose.
+On Windows the FFmpeg build additionally needs
 a POSIX shell (Git for Windows' bash) and a native GNU make (Chocolatey `make`,
 or `xbintsc_MAKE`). The script names whichever is missing. See
-[../gui/build.md](../gui/build.md).
+[../gui/build.md](../gui/build.md) and
+[../gui/build.md#link-features](../gui/build.md#link-features).
 
 ### `Icon file not found` / icon tools missing
 

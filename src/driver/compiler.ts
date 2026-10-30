@@ -28,6 +28,8 @@ import { parseEntry } from "./frontend.js";
 import { ensureRuntimeObjects } from "./runtime-objects.js";
 import { ensureAppArtifacts } from "./app-artifacts.js";
 import { buildCacheKey } from "./build-key.js";
+import { collectUsage } from "./usage.js";
+import { resolveLinkFeatures, type ResolvedLinkFeature } from "./link-features.js";
 import type { BuildOptions, BuildResult, EmitKind, PhaseTiming } from "./options.js";
 
 export { COMPILER_VERSION } from "./version.js";
@@ -102,6 +104,22 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, cached: false, diagnostics: diagnostics.diagnostics, timings };
   }
 
+  /* Optional link features are selected from the bundled program before the
+   * cache key: they change which registration objects and archives link. Only
+   * a linked `exe` has features; `emit obj`/`ir` produce toolchain input that
+   * the caller may link itself. */
+  const linkFeatures: readonly ResolvedLinkFeature[] =
+    emit === "exe"
+      ? resolveLinkFeatures(registry, collectUsage(parsed.sourceFile), options, diagnostics)
+      : [];
+  if (diagnostics.hasErrors) {
+    return { outputPath, cached: false, diagnostics: diagnostics.diagnostics, timings };
+  }
+  if (options.verbose) {
+    const names = linkFeatures.map((feature) => feature.name);
+    process.stderr.write(`xbintsc: link features: ${names.length > 0 ? names.join(", ") : "none"}\n`);
+  }
+
   const app: AppConfig = options.app ?? {};
   const iconPath = options.icon ?? app.icon;
   let icon: IconInfo | undefined;
@@ -131,6 +149,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     check: options.check !== false,
     pgo,
     pgoDir,
+    features: linkFeatures.map((feature) => feature.name),
   });
 
   // A `.app` bundle is deterministic from the output path and name, so it can be
@@ -144,7 +163,14 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   /* PGO profile data can change without the cache key changing, so always
    * rebuild a `--pgo-use` binary; it is an explicit optimization step. */
   if (!options.force && pgo !== "use" && !diagnostics.hasErrors && cache.isFresh(cacheKey, outputs)) {
-    return { outputPath, cached: true, diagnostics: [], timings, ...(bundle ? { bundlePath: bundle } : {}) };
+    return {
+      outputPath,
+      cached: true,
+      diagnostics: [],
+      timings,
+      features: linkFeatures.map((feature) => feature.name),
+      ...(bundle ? { bundlePath: bundle } : {}),
+    };
   }
 
   const codegenStarted = Date.now();
@@ -220,7 +246,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   }
 
   const runtimeStarted = Date.now();
-  const { runtimeObjects, extensionObjects, nativeObjects } = ensureRuntimeObjects({
+  const { runtimeObjects, extensionObjects, featureObjects, nativeObjects } = ensureRuntimeObjects({
     runner,
     clang,
     runtimeDir,
@@ -231,6 +257,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     lto,
     pgo,
     pgoDir,
+    features: linkFeatures,
   });
   timings.push({ phase: "runtime", ms: Date.now() - runtimeStarted });
 
@@ -254,17 +281,25 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     clang,
     objectPaths: [
       objectPath,
-      ...runtimeObjects,
-      ...extensionObjects,
-      ...nativeObjects,
-      ...(artifacts.entryObject !== undefined ? [artifacts.entryObject] : []),
-      ...artifacts.iconObjects,
+      /* Feature archives come after their bridges (which reference the
+       * implementation) and before the extensions' own archives (`gui.a`
+       * provides symbols the bridges call back into). `Set` keeps that order
+       * and drops an archive two features or an extension share. */
+      ...new Set([
+        ...runtimeObjects,
+        ...extensionObjects,
+        ...featureObjects,
+        ...nativeObjects,
+        ...(artifacts.entryObject !== undefined ? [artifacts.entryObject] : []),
+        ...artifacts.iconObjects,
+      ]),
     ],
     outputPath,
     linkerFlags: [
       ...toolchain.linkerArgs,
       ...(process.platform === "win32" ? ["-lws2_32"] : ["-lm", "-pthread"]),
       ...registry.linkerFlags(),
+      ...linkFeatures.flatMap((feature) => feature.linkerFlags),
       /* A GUI program is a Windows-subsystem executable: no console window is
        * created when it is launched. Console output (stdout/stderr) is lost in
        * that subsystem, so a program that wants to report things opts back in
@@ -292,7 +327,16 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   cache.record(cacheKey, outputs);
   cache.save();
-  return { outputPath, irPath, cached: false, diagnostics: [], ir, timings, ...(bundlePath ? { bundlePath } : {}) };
+  return {
+    outputPath,
+    irPath,
+    cached: false,
+    diagnostics: [],
+    ir,
+    timings,
+    features: linkFeatures.map((feature) => feature.name),
+    ...(bundlePath ? { bundlePath } : {}),
+  };
 }
 
 /** Default `CFBundleIdentifier` for a bundle when none is configured. */

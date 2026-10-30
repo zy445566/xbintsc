@@ -113,14 +113,15 @@ npm 包会提供它（去掉 `--omit=optional` 重新安装），但普通源码
 
 ### `media native library not found at …`
 
-`<video>`/`<audio>` 播放需要可选的 `media` 归档（`media.a`，Windows 上是
+`<video>`/`<audio>` 解码需要可选的 `media` 链接特性及其归档（`media.a`，Windows 上是
 `media.lib`）。发布为其构建时，`@xbintsc/<os>-<arch>` npm 包会提供它；否则用
-`npm run media` 单独构建。构建它，或去掉 `--ext media`；
-仅启用 `gui` 的构建仍可链接，媒体元素只会触发 `error`。`media` 扩展还依赖
-`gui`，单独 `--ext media` 会被拒绝并提示应传的 flag。Windows 上 FFmpeg 的
+`npm run media` 构建。自动选中该特性而归档缺失时，构建打印 **warning** 后继续，
+媒体元素只会触发 `error`；显式 `--feature media`（或弃用的 `--ext media`）则直接
+报错。可以用 `--no-feature media` 主动关闭。Windows 上 FFmpeg 的
 构建还需要 POSIX shell（Git for Windows 的 bash）与原生 GNU make
 （Chocolatey `make`，或 `xbintsc_MAKE`）。脚本会指出缺失的是哪一个。见
-[../../zh-CN/gui/build.md](../../zh-CN/gui/build.md)。
+[../../zh-CN/gui/build.md](../../zh-CN/gui/build.md) 与
+[../../zh-CN/gui/build.md#链接特性](../../zh-CN/gui/build.md#链接特性)。
 
 ### `Icon file not found` / 图标工具缺失
 

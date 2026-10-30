@@ -356,6 +356,7 @@ Canvas2D fallback is bundled any more**. Verified with three.js r160 through SDL
 Features outside this engine's subset still cannot be emulated: transform
 feedback and MSAA. Depth textures, float render targets and compressed textures
 are available, and comparative `sampler2DShadow` sampling is translated, so
-three.js shadow maps can use the hardware depth compare on both backends. A
+three.js shadow maps can use the hardware depth compare on both backends (see
+[known issues](./known-issues.md) for an Intel-Mac driver caveat). A
 scene that needs transform feedback or MSAA will not render correctly;
 everything the previous Canvas2D fallback could show now goes through the GPU.

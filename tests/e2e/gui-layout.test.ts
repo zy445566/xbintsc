@@ -132,7 +132,10 @@ describe.skipIf(!guiAvailable)("gui extension — layout", () => {
     const autoY = Number(auto[1]);
     const autoW = Number(auto[2]);
     const autoH = Number(auto[3]);
-    expect(autoY + autoH).toBe(140);
+    // The height comes from the real font metrics and the offsets are floats,
+    // so `y + height` lands a few ULPs away from 140 (139.999997… on macOS):
+    // compare the pinned bottom edge with a sub-pixel tolerance.
+    expect(autoY + autoH).toBeCloseTo(140, 3);
     expect(autoH).toBeGreaterThan(8);
     expect(autoW).toBeGreaterThan(10);
     expect(autoW).toBeLessThan(60);

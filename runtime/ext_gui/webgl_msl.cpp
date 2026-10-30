@@ -17,6 +17,8 @@
 
 #if defined(__APPLE__)
 
+#include <cstdio>
+#include <cstdlib>
 #include <exception>
 
 #include <spirv_msl.hpp>
@@ -49,6 +51,13 @@ bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
     options.msl_version = spirv_cross::CompilerMSL::Options::make_msl_version(2, 0);
     compiler.set_msl_options(options);
     *source = compiler.compile();
+    /* The GLSL dump (`XT_WEBGL_DUMP_GLSL`) stops at the SPIR-V front end; this
+     * one shows what SPIRV-Cross handed the Metal backend, which is where a
+     * backend-only sampling difference (depth/comparison samplers) shows up. */
+    if (getenv("XT_WEBGL_DUMP_MSL") != nullptr) {
+      fprintf(stderr, "--- MSL %s ---\n%s\n---\n", fragment ? "fragment" : "vertex",
+              source->c_str());
+    }
     *entry = compiler.get_cleansed_entry_point_name(
         "main", fragment ? spv::ExecutionModelFragment : spv::ExecutionModelVertex);
     if (entry->empty()) {

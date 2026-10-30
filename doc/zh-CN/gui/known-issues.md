@@ -20,6 +20,15 @@
   `WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。阴影贴图
   （比较型 `sampler2DShadow` 采样深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标
   均已支持。
+- **部分 Intel Mac 上比较型采样器会被错误编译。** 在 Intel GPU（在 Intel Iris
+  Plus Graphics + macOS 26 上观察到）上，Metal 着色器编译器会丢弃调用
+  `sample_compare` 的片元函数：绘制不产生任何像素，于是
+  `texture(sampler2DShadow, …)` 读到黑色，阴影贴图消失。MSL 本身是正确的
+  （`depth2d<float>` + `sample_compare`），采样器也带比较操作，而同一个程序在
+  打开 Metal GPU 着色器校验后渲染正常——在这类机器上以
+  `MTL_SHADER_VALIDATION=1` 运行即可让
+  `tests/e2e/gui-webgl2-shadow-sampler.test.ts` 通过。这指向驱动的着色器编译器
+  而非引擎，因此以环境变量作为绕过办法；其他 Apple GPU 未必存在该问题。
 
 
 - **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生

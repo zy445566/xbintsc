@@ -297,7 +297,10 @@ describe.skipIf(!guiAvailable)("gui extension — paint", () => {
     expect(list).toContain("color=#ff0000ff");
     expect(list).toContain("color=#00ff00ff");
     // The offscreen blend pipeline and its runtime-compiled shader must not
-    // fall back on this GPU backend.
-    expect(stderr).not.toContain("mix-blend-mode");
+    // fall back on this GPU backend. Match the engine's own prefix: the
+    // program is also called `mix-blend-mode`, so a debug env var that makes
+    // macOS log `<process name>[pid:tid] ...` to stderr (Metal shader
+    // validation does) contains the bare word without an engine warning.
+    expect(stderr).not.toContain("xt_gui: mix-blend-mode");
   });
 });

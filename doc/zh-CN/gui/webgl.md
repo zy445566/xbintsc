@@ -140,4 +140,4 @@ transform feedback（入口为空操作：SDL_GPU 没有 transform feedback 阶�
 
 着色器改写器会把 three.js 的 `#pragma unroll_loop_start` 循环展开为常量索引（否则其采样器数组无法通过 Vulkan GLSL），`.js` 资源加载器则避免渲染器自带的展开器重复处理。`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
 
-本引擎子集之外的能力仍无法模拟：transform feedback 与 MSAA。立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标、压缩纹理与比较型 `sampler2DShadow` 采样都已可用（three.js 阴影贴图可在两个后端使用硬件深度比较）。需要 transform feedback 或 MSAA 的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。
+本引擎子集之外的能力仍无法模拟：transform feedback 与 MSAA。立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标、压缩纹理与比较型 `sampler2DShadow` 采样都已可用（three.js 阴影贴图可在两个后端使用硬件深度比较，Intel Mac 上的驱动问题见[已知问题](./known-issues.md)）。需要 transform feedback 或 MSAA 的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。

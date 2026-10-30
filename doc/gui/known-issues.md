@@ -22,6 +22,16 @@
   shader unroller; `WebGLRenderer` runs on the real backend and there is no
   Canvas2D fallback. Shadow maps (comparative `sampler2DShadow` targeting depth
   textures), cube textures/environment maps and HDR render targets are supported.
+- **Comparative samplers can miscompile on Intel Macs.** On an Intel GPU (seen
+  on Intel Iris Plus Graphics with macOS 26), the Metal shader compiler drops a
+  fragment function that calls `sample_compare`: the draw produces no pixels at
+  all, so `texture(sampler2DShadow, …)` reads black and shadow maps disappear.
+  The MSL is correct (`depth2d<float>` + `sample_compare`), the sampler carries
+  the comparison op, and the same program renders correctly once Metal GPU
+  shader validation is enabled — running with `MTL_SHADER_VALIDATION=1` makes
+  `tests/e2e/gui-webgl2-shadow-sampler.test.ts` pass on such a machine. That
+  points at the driver's shader compiler rather than the engine, so the
+  workaround is the environment variable; other Apple GPUs may not show it.
 
 
 

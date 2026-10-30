@@ -96,6 +96,8 @@ jobs:
         with:
           path: |
             vendor/SDL
+            vendor/freetype
+            vendor/harfbuzz
           key: gui-vendor-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts') }}
 
       # The `gui` extension links a prebuilt `runtime/lib/<os>-<arch>/gui.a`;

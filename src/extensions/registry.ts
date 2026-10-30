@@ -148,7 +148,7 @@ export interface Extension {
   assetLoaders?(): Readonly<Record<string, AssetLoader>>;
   /**
    * Optional heavy capabilities this extension can contribute only when a
-   * program may use them (`media`, `gpu`, …). The driver selects among them
+   * program may use them (`media`, `gpu`, `images`, `shaping`, `webgl`, …). The driver selects among them
    * from the bundled source and links their registration source and archives
    * only when active; see {@link LinkFeature}.
    */

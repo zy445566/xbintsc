@@ -20,6 +20,7 @@ import {
   hasGpuUsage,
   hasImageUsage,
   hasMediaUsage,
+  hasShapingUsage,
   hasWebglUsage,
 } from "../../src/extensions/gui/features.js";
 import type { ProgramUsage } from "../../src/extensions/link-feature.js";
@@ -44,20 +45,23 @@ function usage(overrides: Partial<ProgramUsage> = {}): ProgramUsage {
 const media = guiLinkFeatures.find((feature) => feature.name === "media")!;
 const gpu = guiLinkFeatures.find((feature) => feature.name === "gpu")!;
 const images = guiLinkFeatures.find((feature) => feature.name === "images")!;
+const shaping = guiLinkFeatures.find((feature) => feature.name === "shaping")!;
 const webgl = guiLinkFeatures.find((feature) => feature.name === "webgl")!;
 
 describe("gui link features", () => {
-  it("declares media, gpu, images and webgl as optional halves of gui", () => {
+  it("declares media, gpu, images, shaping and webgl as optional halves of gui", () => {
     expect(guiExtension.linkFeatures?.()).toBe(guiLinkFeatures);
     expect(guiLinkFeatures.map((feature) => feature.name)).toEqual([
       "media",
       "gpu",
       "images",
+      "shaping",
       "webgl",
     ]);
     expect(media.description).toMatch(/FFmpeg/);
     expect(gpu.description).toMatch(/glslang|GLSL/);
     expect(images.description).toMatch(/stb_image|NanoSVG/);
+    expect(shaping.description).toMatch(/HarfBuzz|FreeType/);
     expect(webgl.requires).toEqual(["gpu"]);
   });
 
@@ -76,6 +80,11 @@ describe("gui link features", () => {
   it("links the images bridge without an archive", () => {
     expect(images.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_gui", "image_bridge.c")]);
     expect(images.nativeObjects?.()).toBeUndefined();
+  });
+
+  it("links the shaping bridge without an archive", () => {
+    expect(shaping.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_gui", "text_bridge.c")]);
+    expect(shaping.nativeObjects?.()).toBeUndefined();
   });
 
   it("links the webgl bridge without an archive", () => {
@@ -176,5 +185,22 @@ describe("image usage detection", () => {
 
   it("turns on for dynamic markup", () => {
     expect(hasImageUsage(usage({ dynamicMarkup: true }))).toBe(true);
+  });
+});
+
+describe("shaping usage detection", () => {
+  it("turns on for non-ASCII text and escaped/encoded codepoints", () => {
+    expect(hasShapingUsage(usage({ strings: ["<p>中文测试</p>"] }))).toBe(true);
+    expect(hasShapingUsage(usage({ strings: ["café"] }))).toBe(true);
+    expect(hasShapingUsage(usage({ strings: ["\\u4e2d\\u6587"] }))).toBe(true);
+    expect(hasShapingUsage(usage({ strings: ["&#20013;&#25991;"] }))).toBe(true);
+  });
+
+  it("stays off for ASCII-only text", () => {
+    expect(hasShapingUsage(usage({ strings: ["<div>Hello</div>"] }))).toBe(false);
+  });
+
+  it("turns on for dynamic markup", () => {
+    expect(hasShapingUsage(usage({ dynamicMarkup: true }))).toBe(true);
   });
 });

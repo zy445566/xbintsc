@@ -57,7 +57,7 @@ export interface GuiRunOptions {
   files?: Record<string, string>;
   /** Additional extensions to register next to `gui` (e.g. `node`). */
   extensions?: readonly Extension[];
-  /** Optional link features to force on (`media`, `gpu`, `images`, `webgl`, `all`). */
+  /** Optional link features to force on (`media`, `gpu`, `images`, `shaping`, `webgl`, `all`). */
   features?: readonly string[];
   /** Optional link features to keep out even when auto-detection finds a use. */
   noFeatures?: readonly string[];

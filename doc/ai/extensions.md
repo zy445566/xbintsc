@@ -78,7 +78,7 @@ only its shader unroller is patched, and no Canvas2D fallback is bundled. It
 ships as a per-platform prebuilt `gui.a`/`gui.lib` because it is C++. `<img>` decodes through the engine
 itself; `<video>`/`<audio>` decoding (FFmpeg) and GLSL translation (glslang) are
 **optional link features** selected from the program — see
-[Optional link features](#optional-link-features-media-gpu-images-webgl). `<canvas>` is
+[Optional link features](#optional-link-features-media-gpu-images-shaping-webgl). `<canvas>` is
 supported too: `getContext("2d")` returns a context whose fills, paths,
 gradients, text and `drawImage` are rasterised by a self-written CPU rasteriser
 (plus line caps/joins, dashed strokes, `ellipse` and `roundRect`), and element
@@ -119,7 +119,7 @@ is **not** a GUI extension feature: the core runtime provides it (`http://`,
 plus local `file://` and relative paths; no HTTPS or streaming), so GUI
 programs can use it too. See [../implemented/fetch.md](../implemented/fetch.md).
 
-### Optional link features (`media`, `gpu`, `images`, `webgl`)
+### Optional link features (`media`, `gpu`, `images`, `shaping`, `webgl`)
 
 `gui` is one extension, but its heavy halves are optional **link features**. The
 compiler scans the bundled HTML/CSS/TS (imported `.html` assets and their inlined
@@ -136,14 +136,18 @@ extension flag:
 - **`images`** — stb_image/NanoSVG decoding for `<img>`, inline `<svg>`, CSS
   `background-image`/`url(...)`, `drawImage`/`createImageBitmap`/`Image`, and an
   app icon. A text-only page links neither decoder.
+- **`shaping`** — HarfBuzz + FreeType for full OpenType shaping (ligatures,
+  complex scripts) and CFF/OTF/variable fonts. Selected automatically for
+  non-ASCII text (or an escaped/entity codepoint); a Latin-only page keeps the
+  stb_truetype backend and links neither library.
 - **`webgl`** — the WebGL context and DOM bindings. Selected by a WebGL
   `getContext(...)` or a `webgl` string; it requires `gpu`, so both activate
   together. A page that never asks for WebGL links neither.
 
-Override the scan with `--feature media,gpu,images,webgl` (or `all`) and keep a
+Override the scan with `--feature media,gpu,images,shaping,webgl` (or `all`) and keep a
 feature out with `--no-feature media`. `--verbose` prints the selected set. A
 program that only renders HTML/CSS/2D canvas links no FFmpeg, glslang, image
-decoder or WebGL context; a page that
+decoder, HarfBuzz/FreeType or WebGL context; a page that
 builds HTML/CSS from runtime data should pass `--feature all` because the scan
 cannot see it. If an auto-detected feature's archive is missing, the build warns
 and the capability degrades at run time (media elements fire `error`); a forced

@@ -12,10 +12,11 @@
  * Steps:
  *   1. fetch the pinned SDL3 source into `vendor/SDL` (gitignored),
  *   2. build `libSDL3.a` with CMake,
+ *   2a. fetch + build static HarfBuzz and FreeType for the optional `shaping`
+ *       feature; the default text path uses the bundled stb_truetype,
  *   2b. fetch + build static glslang (GLSL ES -> SPIR-V) and SPIRV-Cross
  *       (SPIR-V -> Metal Shading Language),
- *   3. compile the engine translation units (text uses the bundled
- *      stb_truetype, so no FreeType/HarfBuzz build),
+ *   3. compile the engine translation units,
  *   4. merge everything into `gui.a` (libtool on macOS, `ar -M` elsewhere;
  *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
  *
@@ -32,6 +33,8 @@
  *   xbintsc_CMAKE  CMake override (default: a vendored CMake, then `cmake`)
  *   xbintsc_AR     archiver override (default: llvm-ar next to clang, then llvm-ar)
  *   SDL3_TAG       SDL3 git tag to check out (default: release-3.2.10)
+ *   FREETYPE_VERSION  FreeType version (default: 2.13.3)
+ *   HARFBUZZ_VERSION  HarfBuzz version (default: 10.1.0)
  *   SPIRV_CROSS_VERSION  SPIRV-Cross tag (default: vulkan-sdk-1.4.313.0)
  *
  * The C/C++ compiler is the same clang the driver resolves (see
@@ -50,6 +53,7 @@ import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 import {
   cmakeToolchainArgs,
+  HB_LEAN_DEFINES,
   LEAN_SDL_OPTIONS,
   SECTION_CMAKE_FLAGS,
   SECTION_FLAGS,
@@ -70,6 +74,13 @@ const sdlSrc = join(vendorDir, "SDL");
  * "SDL could not find X11 or Wayland development libraries". Keeping the build
  * tree out of the cached source path makes each machine configure its own. */
 const sdlBuild = join(vendorDir, "sdl-build-lean");
+/* HarfBuzz + FreeType are only linked when the optional `shaping` feature is
+ * active; the archive is still built once so the default text path needs no
+ * external dependency. */
+const freetypeSrc = join(vendorDir, "freetype");
+const freetypeBuild = join(vendorDir, "freetype-build-lean");
+const harfbuzzSrc = join(vendorDir, "harfbuzz");
+const harfbuzzBuild = join(vendorDir, "harfbuzz-build-lean");
 /* glslang translates the GLSL ES that WebGL programs supply at run time; it is
  * built statically and merged into the archive, so a compiled binary needs no
  * Vulkan SDK. The SPIR-V headers are its only external dependency. */
@@ -89,9 +100,13 @@ const objectSuffix = isWindows ? ".obj" : ".o";
 const output = join(outDir, isWindows ? "gui.lib" : "gui.a");
 
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
+const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
+const HARFBUZZ_VERSION = process.env.HARFBUZZ_VERSION || "10.1.0";
 const GLSLANG_VERSION = process.env.GLSLANG_VERSION || "16.6.0";
 const SPIRV_HEADERS_VERSION = process.env.SPIRV_HEADERS_VERSION || "vulkan-sdk-1.4.363.0";
 const SPIRV_CROSS_VERSION = process.env.SPIRV_CROSS_VERSION || "vulkan-sdk-1.4.313.0";
+const FREETYPE_URL = `https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VERSION}.tar.xz`;
+const HARFBUZZ_URL = `https://github.com/harfbuzz/harfbuzz/releases/download/${HARFBUZZ_VERSION}/harfbuzz-${HARFBUZZ_VERSION}.tar.xz`;
 const GLSLANG_URL = `https://codeload.github.com/KhronosGroup/glslang/tar.gz/refs/tags/${GLSLANG_VERSION}`;
 const SPIRV_HEADERS_URL = `https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/refs/tags/${SPIRV_HEADERS_VERSION}`;
 const SPIRV_CROSS_URL = `https://codeload.github.com/KhronosGroup/SPIRV-Cross/tar.gz/refs/tags/${SPIRV_CROSS_VERSION}`;
@@ -305,6 +320,12 @@ function builtLibrary(buildDir: string, names: readonly string[], pattern?: RegE
 function sdlArchive(): string | undefined {
   return builtLibrary(sdlBuild, ["libSDL3.a", "SDL3-static.lib", "SDL3.lib"], /^SDL3[-\w.]*\.lib$/);
 }
+function freetypeArchive(): string | undefined {
+  return builtLibrary(freetypeBuild, ["libfreetype.a", "freetype.lib"], /^freetype[-\d.]*\.lib$/);
+}
+function harfbuzzArchive(): string | undefined {
+  return builtLibrary(harfbuzzBuild, ["libharfbuzz.a", "harfbuzz.lib"], /^harfbuzz[-\d.]*\.lib$/);
+}
 function glslangArchive(): string | undefined {
   return builtLibrary(join(glslangBuild, "glslang"), ["libglslang.a", "glslang.lib"]);
 }
@@ -364,6 +385,49 @@ if (!existingSdlArchive) {
   run(cmake, ["--build", sdlBuild, "--config", "Release", "--target", "SDL3-static", "--parallel"]);
 } else {
   console.log(`xbintsc: reusing existing ${existingSdlArchive}`);
+}
+
+/* -- 2a. HarfBuzz + FreeType (optional `shaping` feature) ---------------- */
+
+ensureTarballSource("freetype", FREETYPE_URL, `freetype-${FREETYPE_VERSION}`);
+ensureTarballSource("harfbuzz", HARFBUZZ_URL, `harfbuzz-${HARFBUZZ_VERSION}`);
+
+if (!existsSync(freetypeArchive() ?? "")) {
+  const cmake = configureCmake("FreeType", freetypeSrc, freetypeBuild, [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBUILD_SHARED_LIBS=OFF",
+    /* We only need TrueType/OpenType outlines; skip the optional codecs. */
+    "-DFT_DISABLE_ZLIB=TRUE",
+    "-DFT_DISABLE_BZIP2=TRUE",
+    "-DFT_DISABLE_PNG=TRUE",
+    "-DFT_DISABLE_HARFBUZZ=TRUE",
+    "-DFT_DISABLE_BROTLI=TRUE",
+    ...SECTION_CMAKE_FLAGS,
+  ]);
+  console.log("xbintsc: building static FreeType");
+  run(cmake, ["--build", freetypeBuild, "--config", "Release", "--parallel"]);
+} else {
+  console.log(`xbintsc: reusing existing ${freetypeArchive()}`);
+}
+
+if (!existsSync(harfbuzzArchive() ?? "")) {
+  const cmake = configureCmake("HarfBuzz", harfbuzzSrc, harfbuzzBuild, [
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBUILD_SHARED_LIBS=OFF",
+    "-DHB_BUILD_UTILS=OFF",
+    "-DHB_BUILD_TESTS=OFF",
+    "-DHB_BUILD_SUBSET=OFF",
+    "-DHB_HAVE_FREETYPE=OFF",
+    "-DHB_HAVE_GLIB=OFF",
+    "-DHB_HAVE_ICU=OFF",
+    "-DHB_HAVE_GRAPHITE2=OFF",
+    `-DCMAKE_C_FLAGS=${SECTION_FLAGS.join(" ")}`,
+    `-DCMAKE_CXX_FLAGS=${[...HB_LEAN_DEFINES, ...SECTION_FLAGS].join(" ")}`,
+  ]);
+  console.log("xbintsc: building static HarfBuzz");
+  run(cmake, ["--build", harfbuzzBuild, "--config", "Release", "--parallel"]);
+} else {
+  console.log(`xbintsc: reusing existing ${harfbuzzArchive()}`);
 }
 
 /** Download a release tarball into `vendor/` and extract it under `name`.
@@ -447,6 +511,9 @@ mkdirSync(objDir, { recursive: true });
 const includeFlags = [
   "-I", runtimeDir,
   "-I", join(sdlSrc, "include"),
+  "-I", join(freetypeSrc, "include"),
+  "-I", join(freetypeBuild, "include"),
+  "-I", join(harfbuzzSrc, "src"),
   "-I", glslangSrc,
   "-I", join(spirvHeadersSrc, "include"),
   ...(metalBackend ? ["-I", spirvCrossSrc] : []),
@@ -475,18 +542,20 @@ for (const source of sources) {
 /* -- 4. merge into gui.a / gui.lib ---------------------------------------- */
 
 const sdl = sdlArchive();
+const freetype = freetypeArchive();
+const harfbuzz = harfbuzzArchive();
 const glslang = glslangArchive();
 const glslangLimits = glslangLimitsArchive();
 const spirvCrossCore = metalBackend ? spirvCrossArchive("spirv-cross-core") : undefined;
 const spirvCrossGlsl = metalBackend ? spirvCrossArchive("spirv-cross-glsl") : undefined;
 const spirvCrossMsl = metalBackend ? spirvCrossArchive("spirv-cross-msl") : undefined;
-if (!sdl || !glslang || !glslangLimits ||
+if (!sdl || !freetype || !harfbuzz || !glslang || !glslangLimits ||
     (metalBackend && (!spirvCrossCore || !spirvCrossGlsl || !spirvCrossMsl))) {
-  fail(`one of the SDL3/glslang${metalBackend ? "/SPIRV-Cross" : ""} ` +
+  fail(`one of the SDL3/FreeType/HarfBuzz/glslang${metalBackend ? "/SPIRV-Cross" : ""} ` +
     "archives was not found after building");
 }
 const libraries = [
-  sdl, glslang, glslangLimits,
+  sdl, freetype, harfbuzz, glslang, glslangLimits,
   ...(spirvCrossCore && spirvCrossGlsl && spirvCrossMsl
     ? [spirvCrossCore, spirvCrossGlsl, spirvCrossMsl]
     : []),

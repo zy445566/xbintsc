@@ -124,9 +124,10 @@ shader 合成到场景上。全部十六种 CSS 模式（`multiply`、`screen`�
 
 ## 文本技术栈（M4b）
 
-`runtime/ext_gui/text.{h,cpp}` 封装内置的 **stb_truetype**（整形与光栅化）。
-它由 `runtime/ext_gui/stb_truetype.h` 直接编译进 `gui.a`，不再需要
-FreeType/HarfBuzz 构建。
+`runtime/ext_gui/text.{h,cpp}` 是前端，通过一个小型后端表分发。默认后端是内置的
+**stb_truetype**（`text_stb.cpp`、`runtime/ext_gui/stb_truetype.h`）。可选的
+**`shaping`** 链接特性会安装 `text_hb.cpp`（HarfBuzz + FreeType 后端），非 ASCII
+文本会自动选中它。
 
 - 字体从常见系统路径解析（macOS 上的 Helvetica/Arial、Linux 上的
   DejaVu/Liberation、Windows 上的 Segoe UI/Arial），可用 `XT_GUI_FONT`
@@ -153,10 +154,12 @@ FreeType/HarfBuzz 构建。
 - 布局使用这些真实度量进行文本宽度、断行与 `line-height: normal` 计算；
   `measureText`/`fontMetrics` 把它们暴露给测试。
 
-整形取舍：这是简单整形器，不是完整的 OpenType 引擎。它覆盖拉丁/CJK/西里尔/
+整形取舍：默认是简单整形器，不是完整的 OpenType 引擎。它覆盖拉丁/CJK/西里尔/
 希腊文、基础字距与逐码点回退，但不执行连字或复杂文种（阿拉伯/印度/泰文）整形，
 且 stb_truetype 只接受 TrueType 轮廓，不支持 CFF/OTF 或可变字体。该选择让
-DOM-only 二进制约 3 MiB；恢复 HarfBuzz + FreeType 会加回约 1.2 MiB。
+DOM-only 二进制约 3 MiB。可选的 **`shaping`** 链接特性会安装 HarfBuzz + FreeType
+后端（约 1.2 MiB），恢复完整 OpenType 整形与 CFF/OTF/可变字体支持；非 ASCII 文本
+会自动选中，也可用 `--feature shaping` 强制。
 
 ## 性能（M20）
 

@@ -7,23 +7,30 @@
   (gitignored; fetched on demand). Media decoding lives in
   `runtime/ext_media/` and is built separately.
 - `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
-  default `release-3.2.10`), builds a static SDL3, and fetches and builds static
-  **glslang** (`GLSLANG_VERSION`, default `16.6.0`) against the pinned SPIR-V
-  headers (`SPIRV_HEADERS_VERSION`), and — **on macOS only** — **SPIRV-Cross**
-  (`SPIRV_CROSS_VERSION`, default `vulkan-sdk-1.4.313.0`). glslang is the
-  runtime GLSL ES compiler behind WebGL and SPIRV-Cross turns its SPIR-V into
-  MSL for the Metal backend (see [WebGL](./webgl.md)); both are merged into the
-  archive like the other libraries. Metal is the only SDL_GPU backend that
-  consumes MSL, so on Windows/Linux the script neither fetches nor merges
-  SPIRV-Cross: `webgl_msl.cpp` compiles to nothing there and the ~2.5 MiB it
-  contributes would be unreachable. Text uses the bundled **stb_truetype**
-  (`runtime/ext_gui/stb_truetype.h`), so there is no FreeType/HarfBuzz build.
-  Every library (SDL3, glslang, SPIRV-Cross and the engine) is compiled with
-  `-ffunction-sections -fdata-sections`, and SDL is configured without the
-  subsystems the engine never calls (`SDL_JOYSTICK`, `SDL_HAPTIC`, `SDL_SENSOR`,
-  `SDL_CAMERA`, `SDL_RENDER`, `SDL_OPENGL`/`SDL_OPENGLES`, `SDL_OFFSCREEN`,
-  `SDL_HIDAPI`). The linker then drops the unreachable functions
-  (`--gc-sections`, `-dead_strip`, or link.exe's default `/OPT:REF`). The
+  default `release-3.2.10`), builds a static SDL3, fetches and builds static
+  **FreeType** (`FREETYPE_VERSION`, default `2.13.3`) and **HarfBuzz**
+  (`HARFBUZZ_VERSION`, default `10.1.0`) for the optional `shaping` feature,
+  and fetches and builds static **glslang** (`GLSLANG_VERSION`, default
+  `16.6.0`) against the pinned SPIR-V headers (`SPIRV_HEADERS_VERSION`), and —
+  **on macOS only** — **SPIRV-Cross** (`SPIRV_CROSS_VERSION`, default
+  `vulkan-sdk-1.4.313.0`). glslang is the runtime GLSL ES compiler behind WebGL
+  and SPIRV-Cross turns its SPIR-V into MSL for the Metal backend (see
+  [WebGL](./webgl.md)); both are merged into the archive like the other
+  libraries. Metal is the only SDL_GPU backend that consumes MSL, so on
+  Windows/Linux the script neither fetches nor merges SPIRV-Cross:
+  `webgl_msl.cpp` compiles to nothing there and the ~2.5 MiB it contributes
+  would be unreachable. The default text path uses the bundled
+  **stb_truetype** (`runtime/ext_gui/stb_truetype.h`); HarfBuzz + FreeType are
+  only extracted when the `shaping` feature is active.
+  Every library (SDL3, FreeType, HarfBuzz, glslang, SPIRV-Cross and the engine)
+  is compiled with `-ffunction-sections -fdata-sections`, and SDL is configured
+  without the subsystems the engine never calls (`SDL_JOYSTICK`, `SDL_HAPTIC`,
+  `SDL_SENSOR`, `SDL_CAMERA`, `SDL_RENDER`, `SDL_OPENGL`/`SDL_OPENGLES`,
+  `SDL_OFFSCREEN`, `SDL_HIDAPI`). HarfBuzz omits the APIs the shaping backend
+  never uses (`HB_NO_DRAW`/`PAINT`/`COLOR`/`NAME`/`STYLE`/`METRICS`/…, while
+  keeping `CFF`/`OPEN`/`VAR` for OTF and variable fonts). The linker then drops
+  the unreachable functions (`--gc-sections`, `-dead_strip`, or link.exe's
+  default `/OPT:REF`). The
   script then compiles the engine and
   merges everything into `runtime/lib/<os>-<arch>/gui.a` (or
   `gui.lib` with the MSVC ABI on Windows), same convention as `core.a`,
@@ -41,7 +48,7 @@
 - `src/extensions/gui/index.ts` exposes the engine archive through
   `nativeObjects()` (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the
   OS frameworks through `linkerFlags()`. Its `linkFeatures()` (in
-  `src/extensions/gui/features.ts`) declares `media`, `gpu`, `images` and `webgl`; the driver
+  `src/extensions/gui/features.ts`) declares `media`, `gpu`, `images`, `shaping` and `webgl`; the driver
   compiles their bridges only when a feature is active.
 - glslang (and SPIRV-Cross on macOS) is merged into `gui.a` like SDL3, but the
   engine reaches it only through the `gpu` feature's dispatch table. A program
@@ -74,7 +81,7 @@
   release archive so they ship inside `runtime/lib/<slug>/` (the release tarball
   copies the whole `runtime/` tree). The same folders are packed into the
   optional `@xbintsc/<slug>` npm package, so `--ext gui` (with automatic
-  `media`/`gpu`/`images`/`webgl` selection) works from
+  `media`/`gpu`/`images`/`shaping`/`webgl` selection) works from
   an npm install on the hosts the release builds for. The archives are built and
   the examples are run on Linux (under Xvfb, with the lavapipe software Vulkan
   driver) and macOS;
@@ -98,6 +105,7 @@
   `runtimeSources()` content, so rebuilding either archive invalidates cached
   binaries automatically.
 - CMake build trees live *next to* their sources (`vendor/sdl-build-lean`,
+  `vendor/freetype-build-lean`, `vendor/harfbuzz-build-lean`,
   `vendor/glslang-build-lean`, `vendor/spirv-cross-build-lean`), never inside them: a
   `CMakeCache.txt` records the machine it was configured on, and SDL's video
   backends are `option()`s, so the first configure to run wins. A cached
@@ -120,6 +128,7 @@ features** selected per program:
 | `media` | `media_bridge.c` + `media.a` (FFmpeg) | an HTML `<video>`/`<audio>` tag, `createElement("video"/"audio")`, `new Audio()`, `decodeAudioData`, or runtime-built markup |
 | `gpu` | `gpu_bridge.c` (the implementation is already in `gui.a`) | a `getContext("webgl"/"webgl2"/"experimental-webgl")` (or a kind decided at run time), any `webgl` string, `mix-blend-mode`/`mixBlendMode`, or runtime-built markup |
 | `images` | `image_bridge.c` (the implementation is already in `gui.a`) | `<img>`, inline `<svg>`, `background-image`/`url(...)`, a `.svg` path, `drawImage`/`createImageBitmap`/`Image`, or runtime-built markup |
+| `shaping` | `text_bridge.c` (the implementation is already in `gui.a`) | non-ASCII text (CJK/Cyrillic/Greek/…), an escaped/entity codepoint, or runtime-built markup |
 | `webgl` | `webgl_bridge.c` (the implementation is already in `gui.a`; requires `gpu`) | a WebGL `getContext(...)`, a `webgl` string, or runtime-built markup |
 
 The driver scans the bundled AST (`src/driver/usage.ts`): every string literal
@@ -143,6 +152,10 @@ build** and links it before `gui.a`:
   `XtImageApi` via `image_feature.cpp`, which references stb_image and NanoSVG.
   Layout, paint, the canvas `drawImage` path and the app-icon path call through
   that table, so a text-only page links neither decoder.
+- `shaping` → `runtime/ext_gui/text_bridge.c`; its constructor installs
+  `TextApi` via `text_hb.cpp`, which references HarfBuzz and FreeType. Without
+  it the engine uses the built-in stb_truetype backend, so a Latin-only page
+  links neither library.
 - `webgl` → `runtime/ext_gui/webgl_bridge.c`; its constructor installs
   `XtWebglApi` via `webgl_feature.cpp`, which references the WebGL context and
   DOM bindings. The core reaches `getContext`, the canvas width/height setters,
@@ -154,10 +167,10 @@ no bridge, the engine's table stays null and the implementation members are neve
 extracted. That is why the large libraries can stay in the existing archives
 without a new package layout.
 
-Overrides: `--feature media,gpu,images,webgl` (or `all`) forces a feature on;
-`--no-feature media` keeps it out even when detection finds a use. `webgl`
-requires `gpu`, and the resolver activates both together. An app icon forces
-`images` because the icon is decoded through the same pipeline. `--ext media`
+Overrides: `--feature media,gpu,images,shaping,webgl` (or `all`) forces a
+feature on; `--no-feature media` keeps it out even when detection finds a use.
+`webgl` requires `gpu`, and the resolver activates both together. An app icon
+forces `images` because the icon is decoded through the same pipeline. `--ext media`
 is a deprecated alias for `--ext gui --feature media`. If an auto-detected
 feature's archive is missing, the build warns and continues (the element/context
 degrades as documented); a forced feature makes it an error.
@@ -185,13 +198,15 @@ Canvas2D, Web Audio and the `mix-blend-mode` compositor are not gated yet; a
 program that uses none of them still pays for their API surface (roughly
 0.1–0.2 MiB each).
 
-The text trade-off is deliberate: stb_truetype only accepts TrueType outlines
-and the shaper is a per-codepoint mapping plus the font's `kern` table, so CFF/OTF
-and variable fonts, OpenType ligatures and complex-script shaping
+The text trade-off is deliberate. The default backend is stb_truetype: only
+TrueType outlines and a per-codepoint mapping plus the font's `kern` table, so
+CFF/OTF and variable fonts, OpenType ligatures and complex-script shaping
 (Arabic/Indic/Thai) are not available. The fallback chain still selects another
-face for codepoints the primary lacks. Restoring HarfBuzz/FreeType would add
-their ~1.2 MiB back; a platform text stack (DirectWrite/CoreText) is the
-alternative if full shaping must return.
+face for codepoints the primary lacks. Selecting the optional **`shaping`**
+feature (automatically for non-ASCII text, or with `--feature shaping`) links
+HarfBuzz + FreeType back in (~1.2 MiB) and restores full OpenType shaping and
+CFF/OTF/variable-font support. A Latin-only DOM page therefore stays near
+3.1 MiB; a Chinese/complex-script page is closer to 4.3 MiB.
 
 ## Running the example
 

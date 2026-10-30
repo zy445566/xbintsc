@@ -44,7 +44,7 @@ export interface ProjectConfig {
   readonly pgoDir?: string;
   readonly extensions?: readonly string[];
   readonly extNative?: readonly string[];
-  /** Optional link features to force on (`media`, `gpu`, `all`). */
+  /** Optional link features to force on (`media`, `gpu`, `images`, `shaping`, `webgl`, `all`). */
   readonly features?: readonly string[];
   /** Optional link features to keep out even when auto-detection finds a use. */
   readonly noFeatures?: readonly string[];

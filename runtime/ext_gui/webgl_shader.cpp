@@ -150,9 +150,9 @@ bool WebGLContext::compile_shader(uint32_t id) {
   /* Expand three.js's pragma-marked light loops first: a sampler-array index
    * must be constant in Vulkan GLSL, and the expansion is the only place that
    * knows the loop bounds. Scanning and rewriting then share one text. */
-  const std::string prepared = unroll_glsl_pragmas(record->source);
+  const std::string prepared = api->unroll_glsl_pragmas(record->source);
   GlslShaderInfo info;
-  scan_glsl(prepared, fragment, &info);
+  api->scan_glsl(prepared, fragment, &info);
   if (!info.unsupported.empty()) {
     record->log = info.unsupported;
     record->compiled = false;
@@ -163,7 +163,7 @@ bool WebGLContext::compile_shader(uint32_t id) {
   assign_locations(info.varyings, {}, &layout.varyings);
   assign_locations(info.samplers, {}, &layout.samplers);
   layout.block_members = info.uniforms;
-  const std::string source = rewrite_glsl(prepared, fragment, layout, info);
+  const std::string source = api->rewrite_glsl(prepared, fragment, layout, info);
   std::vector<uint32_t> spirv;
   record->compiled = api->compile_glsl(source, fragment, &spirv, &record->log);
   return record->compiled;
@@ -276,12 +276,12 @@ bool WebGLContext::link_program(uint32_t id) {
     return false;
   }
 
-  const std::string prepared_vertex = unroll_glsl_pragmas(vertex->source);
-  const std::string prepared_fragment = unroll_glsl_pragmas(fragment->source);
+  const std::string prepared_vertex = api->unroll_glsl_pragmas(vertex->source);
+  const std::string prepared_fragment = api->unroll_glsl_pragmas(fragment->source);
   GlslShaderInfo vs_info;
   GlslShaderInfo fs_info;
-  scan_glsl(prepared_vertex, false, &vs_info);
-  scan_glsl(prepared_fragment, true, &fs_info);
+  api->scan_glsl(prepared_vertex, false, &vs_info);
+  api->scan_glsl(prepared_fragment, true, &fs_info);
   if (!vs_info.unsupported.empty() || !fs_info.unsupported.empty()) {
     record->log = vs_info.unsupported.empty() ? fs_info.unsupported : vs_info.unsupported;
     record->linked = false;
@@ -350,8 +350,8 @@ bool WebGLContext::link_program(uint32_t id) {
   }
   fs_layout.varyings = vs_layout.varyings;
 
-  const std::string vs_source = rewrite_glsl(prepared_vertex, false, vs_layout, vs_info);
-  const std::string fs_source = rewrite_glsl(prepared_fragment, true, fs_layout, fs_info);
+  const std::string vs_source = api->rewrite_glsl(prepared_vertex, false, vs_layout, vs_info);
+  const std::string fs_source = api->rewrite_glsl(prepared_fragment, true, fs_layout, fs_info);
   std::vector<uint32_t> vs_spirv;
   std::vector<uint32_t> fs_spirv;
   std::string log;

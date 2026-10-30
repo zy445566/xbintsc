@@ -1,7 +1,7 @@
 /*
  * xbintsc GUI engine — cached glyph bitmaps.
  *
- * `xt_text_rasterize` runs FreeType for one glyph. Canvas `fillText` used to
+ * `xt_text_rasterize` runs stb_truetype for one glyph. Canvas `fillText` used to
  * call it for every glyph of every draw, so a redrawn label paid the whole
  * rasterisation cost again on every frame. This unit keeps the bitmaps in two
  * bounded generations, the same policy as the shaped-run cache in
@@ -71,7 +71,7 @@ const GlyphImage *xt_text_glyph_cached(Font *font, uint32_t glyph) {
     cache.spare_bytes -= image.pixels.size();
     cache.spare.erase(spare);
   } else if (!xt_text_rasterize(font, glyph, image)) {
-    /* Cache the miss too: a space (or .notdef) would otherwise retry FreeType
+    /* Cache the miss too: a space (or .notdef) would otherwise retry stb_truetype
      * on every `fillText`. */
     image.width = 0;
     image.height = 0;

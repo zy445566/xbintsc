@@ -111,12 +111,18 @@
   bottleneck. Inline `style="…"` attributes are re-parsed on each restyle of
   the element that carries them.
 
-- **Link-feature detection is static.** `media`/`gpu` are selected from the
+- **Text shaping is a simple shaper.** stb_truetype handles Latin/CJK/Cyrillic/
+  Greek with basic `kern` and per-codepoint fallback, but it does not run
+  OpenType ligatures or complex-script shaping (Arabic/Indic/Thai), and it only
+  accepts TrueType outlines (no CFF/OTF or variable fonts). Colour emoji are not
+  rendered as colour. This is the price of the ~3 MiB DOM-only binary; restore
+  HarfBuzz + FreeType or use a platform text stack if full shaping is required.
+- **Link-feature detection is static.** `media`/`gpu`/`images`/`webgl` are selected from the
   bundled HTML/CSS/TS (including imported `.html` and the CSS inlined from it).
   A page that builds markup or CSS from runtime data (`fetch`, `readFileSync`,
   a value returned by a function) cannot be seen; the scanner falls back to
   enabling both when it can prove the sink is dynamic, but an opaque value that
-  it cannot classify needs an explicit `--feature media`/`gpu` (or `all`).
+  it cannot classify needs an explicit `--feature media`/`gpu`/`images`/`webgl` (or `all`).
   `--verbose` prints the selected set. See
   [Link features](./build.md#link-features).
 

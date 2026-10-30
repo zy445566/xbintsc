@@ -118,7 +118,7 @@ transform feedback（入口为空操作：SDL_GPU 没有 transform feedback 阶�
 
 管线按 SDL_GPU 设备接受的着色器格式创建：Vulkan 上用 **SPIR-V**（`SDL_GPU_SHADERFORMAT_SPIRV`，Windows/Linux 选择的后端），macOS 上用 **MSL**（`SDL_GPU_SHADERFORMAT_MSL`，Metal 后端）。两个后端共用同一个 GLSL 前端，因此在一个后端能编译的着色器在另一个上也能编译。如果设备的后端两种格式都不接受——Direct3D 12 需要 DXIL——`getContext("webgl")` 与 `getContext("webgl2")` 都会返回 `null`；2D canvas 与页面其余部分仍然正常。
 
-`npm run gui` 会拉取并构建 glslang 并合并进 `gui.a` / `gui.lib`；SPIRV-Cross **只在 macOS 上**合并，因为其他 SDL_GPU 后端都不消费 MSL（见[打包与构建](./build.md)）。两者都通过可选的 **`gpu` 链接特性**访问：编译器在程序可能调用 `getContext("webgl…")` 或使用 `mix-blend-mode` 时选中它，只有那时 bridge 才会把翻译器成员从 `gui.a` 里取出。只用 2D canvas 或 DOM 的程序既不链接 glslang 也不链接 SPIRV-Cross（见[链接特性](./build.md#链接特性)）。
+`npm run gui` 会拉取并构建 glslang 并合并进 `gui.a` / `gui.lib`；SPIRV-Cross **只在 macOS 上**合并，因为其他 SDL_GPU 后端都不消费 MSL（见[打包与构建](./build.md)）。两者都通过可选的 **`gpu` 链接特性**访问：编译器在程序可能调用 `getContext("webgl…")` 或使用 `mix-blend-mode` 时选中它，只有那时 bridge 才会把翻译器成员从 `gui.a` 里取出。WebGL context 与 DOM 绑定是单独的 **`webgl` 特性**，它依赖 `gpu`；只用 2D canvas 或 DOM 的程序既不链接 glslang、SPIRV-Cross，也不链接任何 `webgl_*` 成员（见[链接特性](./build.md#链接特性)）。
 
 ## 测试
 

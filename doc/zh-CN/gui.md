@@ -14,7 +14,7 @@
 渲染器，因此盒子（以及其中的文本、图像与子元素）可以被平移、缩放与旋转而
 不触发任何重排——再加上 `transition: transform`，这些姿态可以动画（自绘的示例
 `examples/gui/pelican-svg` 正是用它让矢量画动起来）。参见
-[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V（Metal 上再由内置 SPIRV-Cross 转成 MSL）并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向/重复多层背景、`text-shadow`、`clip-path`、`mix-blend-mode`（通过离屏合成器）与 `filter` 颜色/阴影效果。`backdrop-filter` 仍需要背景快照，真正的组模糊也仍是近似——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。**M20** 让大文档保持可交互：`@media` 每条规则只求值一次，布局与绘制共享一个有界的整形缓存，一帧只做（也只提交）变更所要求的工作——见[性能](./gui/rendering.md#性能m20)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
+[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V（Metal 上再由内置 SPIRV-Cross 转成 MSL）并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。glslang 是可选的 **`gpu` 链接特性**，与 `mix-blend-mode` 共享；WebGL context/DOM 绑定是单独的 **`webgl` 特性**（依赖 `gpu`），两者都不用时不链接。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向/重复多层背景、`text-shadow`、`clip-path`、`mix-blend-mode`（通过离屏合成器）与 `filter` 颜色/阴影效果。`backdrop-filter` 仍需要背景快照，真正的组模糊也仍是近似——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。**M20** 让大文档保持可交互：`@media` 每条规则只求值一次，布局与绘制共享一个有界的整形缓存，一帧只做（也只提交）变更所要求的工作——见[性能](./gui/rendering.md#性能m20)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
 
 ## 目录
 
@@ -54,7 +54,7 @@
 | 4 | 引擎**非自托管**（它是 C/C++，不是 TS），但不得影响编译器的平台无关设计。以按平台预构建的归档形式交付，通过 `nativeObjects` 链接。 |
 | 5 | **事件循环是通用的**：运行时暴露一个通用主循环钩子与一个轮询原语；任何 GUI 特定的东西都不会进入 `runtime/`。 |
 | 6 | 核心对象模型支持**多窗口**。 |
-| 7 | 第三方底层库**静态链接进扩展归档**，使发布版保持自包含；链接时只额外加入操作系统框架。`gui.a` 携带 SDL3/FreeType/HarfBuzz，以及 glslang 和（仅 macOS）SPIRV-Cross；后两者只有在编译器选中 **`gpu` 链接特性**时才会被从归档里取出。Metal 是唯一消费 MSL 的 SDL_GPU 后端，其他平台合并 SPIRV-Cross 只会多出约 2.5 MiB 没有任何驱动会请求的代码。可选的 `media.a` 携带 FFmpeg，仅在选中 **`media` 链接特性**时链接。两个特性都由程序的静态用法决定，可用 `--feature`/`--no-feature` 覆盖。 |
+| 7 | 第三方底层库**静态链接进扩展归档**，使发布版保持自包含；链接时只额外加入操作系统框架。`gui.a` 携带 SDL3、glslang 和（仅 macOS）SPIRV-Cross；文本使用内置 stb_truetype。glslang 与 SPIRV-Cross 只有在编译器选中 **`gpu` 链接特性**时才会被从归档里取出。Metal 是唯一消费 MSL 的 SDL_GPU 后端，其他平台合并 SPIRV-Cross 只会多出约 2.5 MiB 没有任何驱动会请求的代码。WebGL context/DOM 代码是 **`webgl` 特性**（依赖 `gpu`），stb_image/NanoSVG 是 **`images` 特性**。可选的 `media.a` 携带 FFmpeg，仅在选中 **`media` 链接特性**时链接。所有特性都由程序的静态用法决定，可用 `--feature`/`--no-feature` 覆盖。 |
 | 8 | **可选的重型部分做成链接特性，而不是独立扩展。** FFmpeg 与 glslang 由打包后的 HTML/CSS/TS 里可能用到的东西决定；只有特性启用时才会编译一个很小的 C bridge，它安装分发表并迫使链接器取出实现归档。这样用户仍然只看到 `gui` 一个扩展，而只做 DOM 的程序两套栈都不链接。 |
 
 ## 架构
@@ -75,7 +75,7 @@
                 │
                 ▼
         窗口 + 输入（SDL3）── 多窗口
-        文本（HarfBuzz + FreeType）── 字形图集 / SDF
+        文本（stb_truetype）── 字形图集
         图像（stb_image；SVG 经 NanoSVG）
         媒体 DOM + 音频 sink ── 可选的 media 链接特性（media.a / FFmpeg）安装解码器
 ```
@@ -89,14 +89,16 @@
 | --- | --- | --- |
 | 窗口 + 输入 + 多窗口 | **SDL3** | 跨平台窗口、HiDPI、IME、剪贴板、拖放、关闭/隐藏事件 |
 | GPU | **SDL_GPU**（SDL3） | 一条覆盖 Metal / Vulkan / D3D12 的渲染路径；避免三套后端 |
-| 文本整形 | **HarfBuzz** | 正确处理复杂文种的整形 |
-| 字形光栅化 | **FreeType** | 字形轮廓 → GPU 图集 / SDF |
+| 文本整形 | **stb_truetype** 简单整形 | 逐码点映射 + `kern`；让 DOM-only 二进制约 3 MiB，但没有连字/复杂文种整形 |
+| 字形光栅化 | **stb_truetype** | TrueType 轮廓 → 灰度图集；不依赖 FreeType |
 | 图像 | 位图用 **stb_image**（vendored 头文件），SVG 用 **NanoSVG**（vendored 头文件） | 起步阶段用单头文件；SVG 文件按需光栅化 |
 | 视频 + 音频 | **FFmpeg**（静态 vendored，最小化构建，可选 `media` 链接特性） | 解码常用容器/编码；不依赖 WebView 或平台媒体框架 |
 
-固定版本：SDL3 `release-3.2.10`、FreeType `2.13.3`、HarfBuzz `10.1.0`、
-FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
-`FREETYPE_VERSION` / `HARFBUZZ_VERSION` / `FFMPEG_VERSION` 覆盖）。
+固定版本：SDL3 `release-3.2.10`、glslang `16.6.0`、SPIRV-Cross
+`vulkan-sdk-1.4.313.0`、FFmpeg `7.1`（供可选的 `media` 归档使用；可用
+`SDL3_TAG` / `GLSLANG_VERSION` / `SPIRV_CROSS_VERSION` / `FFMPEG_VERSION` 覆盖）。
+文本栈是内置的 `stb_truetype.h`；它只接受 TrueType 轮廓（不支持 CFF/OTF 或
+可变字体）。
 
 如果否决 SDL3，备选是 **GLFW + OpenGL 3.3**（更简单，但 OpenGL 在 macOS 上
 已弃用，且不提供现代 GPU 抽象）。如果引擎用 Rust 编写，则用 **wgpu-native**。
@@ -122,10 +124,10 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
 4. **M4 — 绘制 + 文本 + 显示列表**
    - **M4a — 显示列表 + GPU 图形** ✅ 背景/边框显示列表、圆角矩形 SDL_GPU
      管线（`paint.*`、`renderer.*`）。
-   - **M4b-1 — 文本技术栈 + 度量** ✅ HarfBuzz + FreeType 链接进 `gui.a`、
-     字体解析/缓存、供布局使用的基于整形的文本度量
-     （`text.*`、`measureText`/`fontMetrics`）。
-   - **M4b-2 — 字形渲染** ✅ FreeType 光栅化、共享的 shelf 打包字形图集、
+   - **M4b-1 — 文本技术栈 + 度量** ✅ 文本模块（`text.*`）与字体解析/缓存、
+     供布局使用的基于整形的文本度量（`measureText`/`fontMetrics`）；最初用
+     HarfBuzz + FreeType，现在用内置 stb_truetype。
+   - **M4b-2 — 字形渲染** ✅ stb_truetype 光栅化、共享的 shelf 打包字形图集、
      显示列表中的带纹理文本四边形与感知 HiDPI 的光栅缩放。渐变仍待完成。
 5. **M5 — 输入 + 事件** ✅
    - 命中测试（`LayoutTree::hitTest`）、带负载投递给 TS 处理器的指针/滚轮/
@@ -148,7 +150,7 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
      因此两者都会随现有 runtime 归档一起发布（`package-release` 复制整个
      `runtime/`），也会打进可选的 `@xbintsc/<os>-<arch>` npm 包。Windows x64
      已包含；Windows arm64 仍跳过。
-   - `vendor/`（GUI 归档的 SDL3/FreeType/HarfBuzz，以及 `media` 的 FFmpeg，
+   - `vendor/`（GUI 归档的 SDL3/glslang，以及 `media` 的 FFmpeg，
      缓慢的部分）按 OS/arch 缓存，以 `scripts/build-gui.ts` /
      `scripts/build-media.ts` 为键。Windows x64 有独立的源码 + FFmpeg 安装前缀
      缓存。
@@ -302,9 +304,9 @@ FFmpeg `7.1`（供可选的 `media` 归档使用；可用 `SDL3_TAG` /
   Flexbox、`getBoundingClientRect`/`layoutTree`、e2e 覆盖。
 - **M4a** ✅ 显示列表（`paint.*`）与带 MSL 圆角矩形管线的 SDL_GPU 2D 渲染器
   （`renderer.*`）、`paintList`/`paintCount`、e2e 覆盖。
-- **M4b-1** ✅ FreeType + HarfBuzz 获取/构建/合并进 `gui.a`、带字体解析的文本
-  模块（`text.*`）、HarfBuzz 整形与 FreeType 度量、布局中的真实文本度量、
-  `measureText`/`fontMetrics`、e2e 覆盖。
+- **M4b-1** ✅ 文本模块（`text.*`）、字体解析、整形与度量、布局中的真实文本度量、
+  `measureText`/`fontMetrics`、e2e 覆盖。最初用 FreeType + HarfBuzz，现在用
+  stb_truetype（见技术栈表与 [构建](./gui/build.md#二进制体积)中的体积取舍）。
 - **M4b-2** ✅ `renderer.*` 中的字形图集 + 带纹理文本管线、`paint.*` 中的
   整形文本 run、`text.*` 中的 `xt_text_shape_run`/`xt_text_rasterize`、
   HiDPI 光栅缩放、e2e 覆盖。

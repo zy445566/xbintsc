@@ -156,7 +156,7 @@ canvas 由脚本重绘而不是引擎重绘，因此开销按绘制调用计。�
 （奇数长度列表会复制一遍，负数/非有限值会被忽略，全零列表表示实线）。
 
 文本：`measureText(text)`（返回 `{ width }`）、`fillText(text, x, y, maxWidth?)` 与
-`strokeText(text, x, y, maxWidth?)`。文本经 HarfBuzz 排版、FreeType 光栅化（与 HTML
+`strokeText(text, x, y, maxWidth?)`。文本经 stb_truetype 整形与光栅化（与 HTML
 文本相同的技术栈），按变换的近似缩放绘制。正的 `maxWidth` 会按比例压缩步进与字形位图，
 使文本宽度不超过该值（与 canvas API 一致），而不是忽略该参数。**仅支持平移与均匀
 缩放**——旋转或斜切变换仍会把每个字形放到其变换后的基线点，但不会旋转字形位图。

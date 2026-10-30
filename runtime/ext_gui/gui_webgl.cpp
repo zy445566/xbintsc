@@ -7,11 +7,20 @@
  */
 
 #include <memory>
+#include <unordered_map>
 
 #include "gui_engine.h"
 #include "gui_internal.h"
+#include "webgl_feature.h"
 
 namespace {
+
+/** WebGL contexts are owned here rather than on `XtGuiWindow` so the core
+ * window type does not need `webgl.h`. Entries are dropped by
+ * `xt_gui_webgl_shutdown` when a window closes or reloads its document. */
+std::unordered_map<XtGuiWindow *,
+                   std::unordered_map<const xtgui::Node *, std::unique_ptr<xtgui::WebGLContext>>>
+    g_webgl;
 
 bool isCanvasElement(const xtgui::Node *node) {
   return node != nullptr && node->isElement() && node->isTag("canvas");
@@ -29,8 +38,10 @@ uint64_t next_webgl_id() {
 
 xtgui::WebGLContext *xt_gui_webgl_find(XtGuiWindow *win, const xtgui::Node *node) {
   if (win == nullptr || node == nullptr) return nullptr;
-  auto found = win->webgl_canvases.find(node);
-  return found == win->webgl_canvases.end() ? nullptr : found->second.get();
+  auto found = g_webgl.find(win);
+  if (found == g_webgl.end()) return nullptr;
+  auto entry = found->second.find(node);
+  return entry == found->second.end() ? nullptr : entry->second.get();
 }
 
 xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node, bool webgl2) {
@@ -57,7 +68,7 @@ xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node,
   auto context = std::make_unique<xtgui::WebGLContext>(
       next_webgl_id(), (int)(width + 0.5f), (int)(height + 0.5f), webgl2);
   xtgui::WebGLContext *raw = context.get();
-  win->webgl_canvases[node] = std::move(context);
+  g_webgl[win][node] = std::move(context);
   if (win->document != nullptr) {
     win->document->setCanvasInfo(node, (float)raw->width(), (float)raw->height(), raw->id());
   }
@@ -66,18 +77,22 @@ xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node,
 
 void xt_gui_webgl_forget(XtGuiWindow *win, const xtgui::Node *node) {
   if (win == nullptr || node == nullptr) return;
-  win->webgl_canvases.erase(node);
+  auto found = g_webgl.find(win);
+  if (found != g_webgl.end()) found->second.erase(node);
 }
 
 void xt_gui_webgl_shutdown(XtGuiWindow *win) {
   if (win == nullptr) return;
-  win->webgl_canvases.clear();
+  g_webgl.erase(win);
 }
 
-void xt_gui_webgl_submit_all() {
-  for (int i = 0; i < XT_GUI_MAX_WINDOWS; i++) {
-    XtGuiWindow &win = guidev::g_windows[i];
-    if (!win.open) continue;
-    for (auto &entry : win.webgl_canvases) entry.second->submit();
+bool xt_gui_webgl_submit_all() {
+  bool any = false;
+  for (auto &window : g_webgl) {
+    for (auto &entry : window.second) {
+      entry.second->submit();
+      any = true;
+    }
   }
+  return any;
 }

@@ -14,6 +14,9 @@
 namespace {
 
 const xtgui::GpuShaderApi kGpuShaderApi = {
+    xtgui::unroll_glsl_pragmas,
+    xtgui::scan_glsl,
+    xtgui::rewrite_glsl,
     xtgui::compile_glsl,
     xtgui::reflect_uniform_block,
     xtgui::reflect_attributes,

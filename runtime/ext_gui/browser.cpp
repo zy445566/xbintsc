@@ -321,21 +321,28 @@ xt_value type_proto(const std::string &name) {
     return domapi::event_proto();
   }
   if (name == "AudioContext" || name == "webkitAudioContext") return xt_gui_audio_proto();
-  if (name == "WebGLRenderingContext") return domapi::webgl_proto();
-  if (name == "WebGL2RenderingContext") return domapi::webgl2_proto();
-  if (name == "WebGLBuffer") return domapi::webgl_object_proto("buffer");
-  if (name == "WebGLTexture") return domapi::webgl_object_proto("texture");
-  if (name == "WebGLShader") return domapi::webgl_object_proto("shader");
-  if (name == "WebGLProgram") return domapi::webgl_object_proto("program");
-  if (name == "WebGLFramebuffer") return domapi::webgl_object_proto("framebuffer");
-  if (name == "WebGLRenderbuffer") return domapi::webgl_object_proto("renderbuffer");
-  if (name == "WebGLUniformLocation") return domapi::webgl_object_proto("uniform");
-  if (name == "WebGLActiveInfo") return domapi::webgl_object_proto("info");
-  if (name == "WebGLVertexArrayObject") return domapi::webgl_object_proto("vertexarray");
-  if (name == "WebGLSampler") return domapi::webgl_object_proto("sampler");
-  if (name == "WebGLQuery") return domapi::webgl_object_proto("query");
-  if (name == "WebGLSync") return domapi::webgl_object_proto("sync");
-  if (name == "WebGLTransformFeedback") return domapi::webgl_object_proto("transformfeedback");
+  if (name == "WebGLRenderingContext" || name == "WebGL2RenderingContext") {
+    const XtWebglApi *webgl = xt_webgl_api();
+    return webgl != nullptr ? webgl->proto(name == "WebGL2RenderingContext") : XT_UNDEFINED;
+  }
+  if (const XtWebglApi *webgl = xt_webgl_api(); webgl != nullptr) {
+    if (name == "WebGLBuffer") return webgl->object_proto("buffer");
+    if (name == "WebGLTexture") return webgl->object_proto("texture");
+    if (name == "WebGLShader") return webgl->object_proto("shader");
+    if (name == "WebGLProgram") return webgl->object_proto("program");
+    if (name == "WebGLFramebuffer") return webgl->object_proto("framebuffer");
+    if (name == "WebGLRenderbuffer") return webgl->object_proto("renderbuffer");
+    if (name == "WebGLUniformLocation") return webgl->object_proto("uniform");
+    if (name == "WebGLActiveInfo") return webgl->object_proto("info");
+    if (name == "WebGLVertexArrayObject") return webgl->object_proto("vertexarray");
+    if (name == "WebGLSampler") return webgl->object_proto("sampler");
+    if (name == "WebGLQuery") return webgl->object_proto("query");
+    if (name == "WebGLSync") return webgl->object_proto("sync");
+    if (name == "WebGLTransformFeedback") return webgl->object_proto("transformfeedback");
+  }
+  /* A WebGL host type with no linked WebGL feature is undefined, so feature
+   * probes take their fallback branch. */
+  if (name.rfind("WebGL", 0) == 0) return XT_UNDEFINED;
   if (name == "Path2D") return domapi::path2d_proto();
   if (name == "OffscreenCanvas") return domapi::offscreen_canvas_proto();
   if (name == "ImageBitmap") {

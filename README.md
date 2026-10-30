@@ -285,8 +285,8 @@ run();                          // main loop, until every window closes
 ```
 
 ```bash
-# Source checkout: build the engine archive once (fetches and builds SDL3,
-# FreeType and HarfBuzz), then run the bundled example
+# Source checkout: build the engine archive once (fetches and builds SDL3
+# and glslang; text uses the bundled stb_truetype), then run the bundled example
 npm run gui
 npx tsx src/cli/main.ts run examples/gui/hello.ts --ext gui
 

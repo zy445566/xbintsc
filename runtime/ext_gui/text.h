@@ -1,9 +1,11 @@
 /*
  * xbintsc GUI engine — text stack (M4).
  *
- * Text is shaped with HarfBuzz and rasterised with FreeType. Both libraries
- * are statically linked into `gui.a`; this module hides them behind a small
- * interface so layout and paint do not see the third-party types.
+ * Text is shaped and rasterised with the bundled stb_truetype; this module
+ * hides it behind a small interface so layout and paint do not see the
+ * third-party types. The shaper is a per-codepoint mapping plus the font's
+ * `kern` table: no OpenType ligatures or complex-script shaping, and only
+ * TrueType outlines (not CFF/OTF or variable fonts).
  *
  * Fonts are resolved lazily from well-known system locations (or a path in
  * `XT_GUI_FONT` / `XT_GUI_FONT_MONO`) and cached per size. Only regular
@@ -46,7 +48,7 @@ struct ShapedRun {
   std::vector<ShapedGlyph> glyphs;
 };
 
-/** An 8-bit grayscale glyph bitmap, as produced by FreeType. */
+/** An 8-bit grayscale glyph bitmap, as produced by stb_truetype. */
 struct GlyphImage {
   int width = 0;
   int height = 0;
@@ -87,7 +89,7 @@ Font *xt_text_scale(Font *font, float pixel_size);
 bool xt_text_rasterize(Font *font, uint32_t glyph, GlyphImage &out);
 
 /** `xt_text_rasterize` through a bounded, two-generation cache. A canvas that
- * redraws the same text every frame otherwise runs FreeType for every glyph of
+ * redraws the same text every frame otherwise rasterises with stb_truetype for every glyph of
  * every `fillText`. The pointer stays valid for the rest of the frame (until a
  * later call fills a generation and drops the spare one); callers must not hold
  * it across frames. Returns null for a glyph without a bitmap. */

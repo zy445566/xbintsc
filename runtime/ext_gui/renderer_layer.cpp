@@ -160,7 +160,7 @@ bool prepareStage(const std::string &source, bool fragment, SDL_GPUShaderFormat 
     return false;
   }
   GlslShaderInfo info;
-  scan_glsl(source, fragment, &info);
+  api->scan_glsl(source, fragment, &info);
   if (!info.unsupported.empty()) {
     *log = info.unsupported;
     return false;
@@ -172,7 +172,7 @@ bool prepareStage(const std::string &source, bool fragment, SDL_GPUShaderFormat 
     layout.samplers["u_layer"] = 1;
     layout.block_members = info.uniforms;
   }
-  const std::string rewritten = rewrite_glsl(source, fragment, layout, info);
+  const std::string rewritten = api->rewrite_glsl(source, fragment, layout, info);
   if (!api->compile_glsl(rewritten, fragment, spirv, log)) return false;
 
   if ((formats & SDL_GPU_SHADERFORMAT_MSL) != 0) {

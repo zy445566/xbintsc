@@ -142,9 +142,8 @@ export const guiExtension: Extension = {
   },
   /**
    * System libraries the archive itself depends on. The vendored third-party
-   * libraries (GPU backend, HarfBuzz, FreeType, ...) are linked *into* `gui.a`
-   * by its build script, so only OS frameworks remain here. TODO(gui): confirm
-   * the exact set once the GPU backend is chosen (see doc/gui.md).
+   * libraries (GPU backend, stb_truetype, stb_image/NanoSVG, ...) are linked
+   * *into* `gui.a` by its build script, so only OS frameworks remain here.
    */
   linkerFlags: () => {
     if (process.platform === "darwin") {
@@ -163,7 +162,7 @@ export const guiExtension: Extension = {
         "-framework", "GameController",
         "-framework", "Metal",
         "-framework", "QuartzCore",
-        /* HarfBuzz's CoreText shaper (macOS system fonts). */
+        /* Cocoa/system text and graphics services used by SDL. */
         "-framework", "CoreText",
         "-framework", "CoreGraphics",
         "-framework", "CoreFoundation",

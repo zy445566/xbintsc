@@ -78,7 +78,7 @@ only its shader unroller is patched, and no Canvas2D fallback is bundled. It
 ships as a per-platform prebuilt `gui.a`/`gui.lib` because it is C++. `<img>` decodes through the engine
 itself; `<video>`/`<audio>` decoding (FFmpeg) and GLSL translation (glslang) are
 **optional link features** selected from the program — see
-[Optional link features](#optional-link-features-media-gpu). `<canvas>` is
+[Optional link features](#optional-link-features-media-gpu-images-webgl). `<canvas>` is
 supported too: `getContext("2d")` returns a context whose fills, paths,
 gradients, text and `drawImage` are rasterised by a self-written CPU rasteriser
 (plus line caps/joins, dashed strokes, `ellipse` and `roundRect`), and element
@@ -119,9 +119,9 @@ is **not** a GUI extension feature: the core runtime provides it (`http://`,
 plus local `file://` and relative paths; no HTTPS or streaming), so GUI
 programs can use it too. See [../implemented/fetch.md](../implemented/fetch.md).
 
-### Optional link features (`media`, `gpu`)
+### Optional link features (`media`, `gpu`, `images`, `webgl`)
 
-`gui` is one extension, but two heavy halves are optional **link features**. The
+`gui` is one extension, but its heavy halves are optional **link features**. The
 compiler scans the bundled HTML/CSS/TS (imported `.html` assets and their inlined
 CSS are part of the bundle) and selects them per program; you do not pass an
 extension flag:
@@ -133,10 +133,17 @@ extension flag:
 - **`gpu`** — the glslang/SPIRV-Cross GLSL translator shared by WebGL and
   `mix-blend-mode`. Selected by `getContext("webgl"/"webgl2"/…)` (or a context
   kind decided at run time), any `webgl` string, or `mix-blend-mode`.
+- **`images`** — stb_image/NanoSVG decoding for `<img>`, inline `<svg>`, CSS
+  `background-image`/`url(...)`, `drawImage`/`createImageBitmap`/`Image`, and an
+  app icon. A text-only page links neither decoder.
+- **`webgl`** — the WebGL context and DOM bindings. Selected by a WebGL
+  `getContext(...)` or a `webgl` string; it requires `gpu`, so both activate
+  together. A page that never asks for WebGL links neither.
 
-Override the scan with `--feature media,gpu` (or `all`) and keep a feature out
-with `--no-feature media`. `--verbose` prints the selected set. A program that
-only renders HTML/CSS/2D canvas links neither FFmpeg nor glslang; a page that
+Override the scan with `--feature media,gpu,images,webgl` (or `all`) and keep a
+feature out with `--no-feature media`. `--verbose` prints the selected set. A
+program that only renders HTML/CSS/2D canvas links no FFmpeg, glslang, image
+decoder or WebGL context; a page that
 builds HTML/CSS from runtime data should pass `--feature all` because the scan
 cannot see it. If an auto-detected feature's archive is missing, the build warns
 and the capability degrades at run time (media elements fire `error`); a forced

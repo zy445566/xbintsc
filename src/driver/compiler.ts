@@ -108,9 +108,22 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
    * cache key: they change which registration objects and archives link. Only
    * a linked `exe` has features; `emit obj`/`ir` produce toolchain input that
    * the caller may link itself. */
+  const app: AppConfig = options.app ?? {};
+  const iconPath = options.icon ?? app.icon;
+  /* An app icon is decoded through the image pipeline, so force `images` even
+   * when the bundled HTML has no `<img>` — but only when the enabled extensions
+   * actually declare that feature (a non-GUI program may still embed an icon). */
+  const hasImagesFeature = registry.linkFeatures().some((entry) => entry.feature.name === "images");
+  const featureRequest = {
+    features: [
+      ...(options.features ?? []),
+      ...(iconPath !== undefined && hasImagesFeature ? ["images"] : []),
+    ],
+    noFeatures: options.noFeatures,
+  };
   const linkFeatures: readonly ResolvedLinkFeature[] =
     emit === "exe"
-      ? resolveLinkFeatures(registry, collectUsage(parsed.sourceFile), options, diagnostics)
+      ? resolveLinkFeatures(registry, collectUsage(parsed.sourceFile), featureRequest, diagnostics)
       : [];
   if (diagnostics.hasErrors) {
     return { outputPath, cached: false, diagnostics: diagnostics.diagnostics, timings };
@@ -120,8 +133,6 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     process.stderr.write(`xbintsc: link features: ${names.length > 0 ? names.join(", ") : "none"}\n`);
   }
 
-  const app: AppConfig = options.app ?? {};
-  const iconPath = options.icon ?? app.icon;
   let icon: IconInfo | undefined;
   if (iconPath) {
     try {

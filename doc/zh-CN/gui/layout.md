@@ -18,7 +18,7 @@
   基于单词的断行、`text-align` 与 `line-height`。行内元素获得其后代几何信息
   的并集；`display: inline-block` 以 shrink-to-fit 宽度原子化布局。每一行会收缩到
   与之重叠的浮动（`float: left|right`）所留出的空白带，因此后续行会绕开它们。
-  每个文本片段会记住它覆盖的 run，以便绘制时对它整形。文本使用 HarfBuzz/FreeType
+  每个文本片段会记住它覆盖的 run，以便绘制时对它整形。文本使用 stb_truetype
   技术栈测量（见[文本技术栈](./rendering.md)）。
 - **Flexbox** —— `row`/`column`（以及 `-reverse` 变体），支持 `gap`、
   `flex-basis`/`flex-grow`/`flex-shrink`、`justify-content` 与 `align-items`

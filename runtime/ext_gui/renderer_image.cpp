@@ -11,10 +11,11 @@
 
 #include "canvas.h"
 #include "image.h"
+#include "image_api.h"
 #include "media.h"
 #include "perf.h"
 #include "svg.h"
-#include "webgl.h"
+#include "webgl_api.h"
 
 #include "renderer_shaders.h"
 
@@ -157,8 +158,10 @@ static SDL_GPUTexture *ensureMediaTexture(SDL_GPUDevice *device, uint64_t media_
  * directly and nothing is copied through the CPU. */
 static SDL_GPUTexture *ensureCanvasTexture(SDL_GPUDevice *device, uint64_t canvas_id,
                                           XtGuiUploadBatch *batch) {
-  if (xtgui::WebGLContext *webgl = xtgui::xt_webgl_by_id(canvas_id)) {
-    return webgl->color_texture();
+  if (const XtWebglApi *webgl = xt_webgl_api()) {
+    if (void *texture = webgl->color_texture(canvas_id)) {
+      return static_cast<SDL_GPUTexture *>(texture);
+    }
   }
   xtgui::Canvas2D *canvas = xtgui::xt_canvas_by_id(canvas_id);
   if (canvas == nullptr) return nullptr;
@@ -316,14 +319,16 @@ SDL_GPUTexture *createImageTexture(SDL_GPUDevice *device, const xtgui::Image &im
  * their intrinsic size and are cached by path. */
 SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src, int pixel_width,
                                    int pixel_height, XtGuiUploadBatch *batch) {
-  bool vector_source = xtgui::xt_image_is_vector(src);
+  const XtImageApi *images = xt_image_api();
+  if (images == nullptr) return nullptr;
+  bool vector_source = images->is_vector(src);
   std::string key =
       vector_source ? src + "@" + std::to_string(pixel_width) + "x" + std::to_string(pixel_height)
                     : src;
   auto found = g_image_textures.find(key);
   if (found != g_image_textures.end()) return found->second;
 
-  const xtgui::Image *image = xtgui::xt_image_load(src, pixel_width, pixel_height);
+  const xtgui::Image *image = images->load(src, pixel_width, pixel_height);
   if (image == nullptr || image->width <= 0 || image->height <= 0) {
     fprintf(stderr, "xt_gui: could not decode image '%s'\n", src.c_str());
     g_image_textures.emplace(key, nullptr);
@@ -346,8 +351,10 @@ SDL_GPUTexture *ensureInlineSvgTexture(SDL_GPUDevice *device, const std::string 
   auto found = g_image_textures.find(key);
   if (found != g_image_textures.end()) return found->second;
 
+  const XtImageApi *images = xt_image_api();
+  if (images == nullptr) return nullptr;
   xtgui::Image image;
-  if (!xtgui::xt_svg_markup_render(markup, pixel_width, pixel_height, &image)) {
+  if (!images->svg_markup_render(markup, pixel_width, pixel_height, &image)) {
     fprintf(stderr, "xt_gui: could not rasterise inline SVG\n");
     g_image_textures.emplace(key, nullptr);
     return nullptr;

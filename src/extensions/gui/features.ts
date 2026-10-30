@@ -47,6 +47,24 @@ export function hasGpuUsage(usage: ProgramUsage): boolean {
   return usage.strings.some((value) => GPU_TOKEN.test(value));
 }
 
+/** True when the program may ask for a WebGL context (not just blending). */
+export function hasWebglUsage(usage: ProgramUsage): boolean {
+  if (usage.dynamicMarkup) return true;
+  if (usage.getContext.some((kind) => kind === undefined || /webgl/i.test(kind))) return true;
+  return usage.strings.some((value) => /webgl/i.test(value));
+}
+
+/** True when the program may draw a bitmap or SVG. */
+export function hasImageUsage(usage: ProgramUsage): boolean {
+  if (usage.dynamicMarkup) return true;
+  for (const name of ["Image", "ImageBitmap", "createImageBitmap", "drawImage"]) {
+    if (usage.identifiers.has(name)) return true;
+  }
+  return usage.strings.some((value) =>
+    /<img\b|<svg\b|background-image|url\(|\.svg\b|drawImage|createImageBitmap/i.test(value),
+  );
+}
+
 /** Absolute path to the per-platform prebuilt media archive. */
 function mediaArchive(): string {
   return join(runtimeLibDir(), process.platform === "win32" ? "media.lib" : "media.a");
@@ -95,5 +113,28 @@ export const guiLinkFeatures: readonly LinkFeature[] = [
      */
     runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "gpu_bridge.c")],
     used: hasGpuUsage,
+  },
+  {
+    name: "images",
+    description: "stb_image/NanoSVG decoding for <img>, CSS backgrounds and inline <svg>",
+    /**
+     * `image_bridge.c` installs `XtImageApi` and references the decoders; a page
+     * with no `<img>`/SVG/`background-image`/`drawImage` links neither
+     * stb_image nor NanoSVG.
+     */
+    runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "image_bridge.c")],
+    used: hasImageUsage,
+  },
+  {
+    name: "webgl",
+    description: "WebGL context and DOM API (requires gpu)",
+    requires: ["gpu"],
+    /**
+     * `webgl_bridge.c` installs `XtWebglApi` and references the WebGL context
+     * and DOM bindings, pulling them out of `gui.a`. A page that never asks for
+     * WebGL therefore links none of `webgl_*`/`dom_api_webgl*`.
+     */
+    runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "webgl_bridge.c")],
+    used: hasWebglUsage,
   },
 ];

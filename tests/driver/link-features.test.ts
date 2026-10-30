@@ -12,7 +12,11 @@ const EMPTY_USAGE: ProgramUsage = {
 };
 
 /** A feature that is used when `needle` appears in a string literal. */
-function feature(name: string, needle: string, options: { unavailable?: boolean } = {}): LinkFeature {
+function feature(
+  name: string,
+  needle: string,
+  options: { unavailable?: boolean; requires?: readonly string[] } = {},
+): LinkFeature {
   return {
     name,
     description: `${name} feature`,
@@ -23,6 +27,7 @@ function feature(name: string, needle: string, options: { unavailable?: boolean 
         }
       : () => [`/runtime/${name}.a`],
     linkerFlags: () => (name === "media" ? ["-lm"] : []),
+    ...(options.requires ? { requires: options.requires } : {}),
     used: (usage) => usage.strings.some((value) => value.includes(needle)),
   };
 }
@@ -66,6 +71,17 @@ describe("resolveLinkFeatures", () => {
     expect(
       resolve(registry, EMPTY_USAGE, { features: ["media"], noFeatures: ["all"] }).names,
     ).toEqual(["media"]);
+  });
+
+  it("activates required features and rejects a blocked dependency", () => {
+    const registry = registryWith(
+      feature("gpu", "webgl"),
+      feature("webgl", "webgl", { requires: ["gpu"] }),
+    );
+    expect(resolve(registry, EMPTY_USAGE, { features: ["webgl"] }).names).toEqual(["gpu", "webgl"]);
+    const blocked = resolve(registry, EMPTY_USAGE, { features: ["webgl"], noFeatures: ["gpu"] });
+    expect(blocked.bag.hasErrors).toBe(true);
+    expect(blocked.bag.diagnostics[0]!.message).toContain("requires 'gpu'");
   });
 
   it("rejects contradictory or unknown names", () => {

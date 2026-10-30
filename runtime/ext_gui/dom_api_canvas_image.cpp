@@ -15,6 +15,7 @@
 
 #include "canvas.h"
 #include "image.h"
+#include "image_api.h"
 
 namespace domapi {
 
@@ -68,7 +69,8 @@ bool source_image(XtGuiWindow *win, xt_value value, xtgui::Image *out) {
   if (node->isTag("img")) {
     const std::string *src = node->attr("src");
     if (src == nullptr) return false;
-    const xtgui::Image *image = xtgui::xt_image_load(*src);
+    const XtImageApi *images = xt_image_api();
+    const xtgui::Image *image = images != nullptr ? images->load(*src, 0, 0) : nullptr;
     if (image == nullptr || image->width <= 0 || image->height <= 0) return false;
     *out = *image;
     return true;

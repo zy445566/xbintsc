@@ -14,6 +14,10 @@
 
 #include "gui_engine.h"
 
+namespace xtgui {
+class WebGLContext;
+}
+
 namespace domapi {
 
 /** The engine WebGL context behind a context handle, or null. */

@@ -191,7 +191,7 @@ non-finite entries are ignored, an all-zero list means a solid line).
 
 Text: `measureText(text)` (returns `{ width }`), `fillText(text, x, y,
 maxWidth?)` and `strokeText(text, x, y, maxWidth?)`. Text is shaped with
-HarfBuzz and rasterised with FreeType (the same stack as HTML text) at the
+stb_truetype (shaped and rasterised) (the same stack as HTML text) at the
 transform's approximate scale. A positive `maxWidth` condenses advances and
 glyph bitmaps horizontally so the run is at most that wide (as the canvas API
 specifies) instead of being ignored.

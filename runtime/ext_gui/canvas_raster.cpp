@@ -5,7 +5,7 @@
  * nonzero winding rule and vertical sub-scanline sampling (4 samples per pixel
  * row) plus analytic horizontal coverage, which gives cheap anti-aliasing
  * without a full analytic rasteriser. Rectangles take a faster axis-aligned
- * path, and glyphs are composited from their FreeType coverage masks.
+ * path, and glyphs are composited from their stb_truetype coverage masks.
  */
 
 #include "canvas_internal.h"

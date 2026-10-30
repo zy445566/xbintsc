@@ -77,22 +77,60 @@ export function resolveLinkFeatures(
 
   const forceAll = requested.has(ALL);
   const disableAll = disabled.has(ALL);
-  const resolved: ResolvedLinkFeature[] = [];
 
+  /* Start from the explicitly forced set, then pull in `requires`. A specific
+   * `--no-feature` wins over `--feature all`, so it is excluded from the base
+   * set; a dependency it blocks is an error rather than a silent omission. */
+  const forced = new Set<string>();
   for (const { feature } of declarations) {
-    const specificForced = requested.has(feature.name);
-    const specificBlocked = disabled.has(feature.name);
-    if (specificForced && specificBlocked) {
+    const specificallyForced = requested.has(feature.name);
+    const specificallyBlocked = disabled.has(feature.name);
+    if (specificallyForced && specificallyBlocked) {
       diagnostics.error(
         DiagnosticCode.LinkFeatureUnavailable,
         `link feature '${feature.name}' is both forced (--feature) and disabled (--no-feature)`,
       );
       continue;
     }
-    const forced = specificForced || (forceAll && !specificBlocked);
-    const blocked = specificBlocked || (disableAll && !specificForced);
-    if (!forced && blocked) continue;
-    if (!forced && !feature.used(usage)) continue;
+    if (specificallyForced || (forceAll && !specificallyBlocked)) forced.add(feature.name);
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const { feature } of declarations) {
+      if (!forced.has(feature.name)) continue;
+      for (const dependency of feature.requires ?? []) {
+        if (!byName.has(dependency)) {
+          diagnostics.error(
+            DiagnosticCode.LinkFeatureUnavailable,
+            `link feature '${feature.name}' requires unknown feature '${dependency}'`,
+          );
+          continue;
+        }
+        if (disabled.has(dependency)) {
+          diagnostics.error(
+            DiagnosticCode.LinkFeatureUnavailable,
+            `link feature '${feature.name}' requires '${dependency}', which --no-feature disables`,
+          );
+          continue;
+        }
+        if (!forced.has(dependency)) {
+          forced.add(dependency);
+          changed = true;
+        }
+      }
+    }
+  }
+  if (diagnostics.hasErrors) return [];
+
+  const resolved: ResolvedLinkFeature[] = [];
+
+  for (const { feature } of declarations) {
+    const specificallyBlocked = disabled.has(feature.name);
+    const forcedHere = forced.has(feature.name);
+    const blocked = specificallyBlocked || (disableAll && !requested.has(feature.name) && !forcedHere);
+    if (!forcedHere && blocked) continue;
+    if (!forcedHere && !feature.used(usage)) continue;
 
     let runtimeSources: readonly string[];
     let nativeObjects: readonly string[];
@@ -101,7 +139,7 @@ export function resolveLinkFeatures(
       nativeObjects = feature.nativeObjects?.() ?? [];
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (forced) {
+      if (forcedHere) {
         diagnostics.error(DiagnosticCode.LinkFeatureUnavailable, message);
       } else {
         diagnostics.warning(

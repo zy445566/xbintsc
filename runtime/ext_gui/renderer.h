@@ -5,7 +5,7 @@
  *   - a shape pipeline that draws every `PaintRect` as triangles, using a
  *     rounded-rectangle distance field for antialiased fills;
  *   - a text pipeline that draws glyphs as textured quads from a shared
- *     grayscale glyph atlas (FreeType rasterises, this file packs/upload);
+ *     grayscale glyph atlas (stb_truetype rasterises, this file packs/upload);
  *   - an image pipeline that draws `PaintImage` quads sampling per-file RGBA
  *     textures decoded by `image.*`.
  *

@@ -51,7 +51,7 @@
     "features": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Optional link features to force on, e.g. [\"media\", \"gpu\"] or [\"all\"]."
+      "description": "Optional link features to force on, e.g. [\"media\", \"gpu\", \"images\", \"webgl\"] or [\"all\"]."
     },
     "noFeatures": {
       "type": "array",

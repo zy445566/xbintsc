@@ -40,7 +40,7 @@ them) can be translated, scaled and rotated without reflowing anything — and
 `transition: transform`, so those poses animate. See
 [Layout](./gui/layout.md#transforms-m15) and
 [Animation](./gui/animation.md#css-transforms-m15).
-**M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang (and to MSL by the bundled SPIRV-Cross on Metal) and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md). glslang is an optional **`gpu` link feature** shared with `mix-blend-mode`: a DOM/2D-canvas page does not link it.
+**M17** adds real **WebGL 1.0**, and **M18** adds **WebGL 2.0**: `<canvas>.getContext("webgl2")` accepts `#version 300 es` shaders, vertex-array objects, instanced draws and sampler objects, all compiled to SPIR-V by the bundled glslang (and to MSL by the bundled SPIRV-Cross on Metal) and rendered through SDL_GPU. Geometry, lighting, texture sampling and blending run on the GPU and the page composites the colour texture without a readback — see [WebGL](./gui/webgl.md). glslang is an optional **`gpu` link feature** shared with `mix-blend-mode`; the WebGL context/DOM bindings are the separate **`webgl` feature**, which requires `gpu`. A DOM/2D-canvas page links neither.
 **M19** fills in the decorative CSS layer: `@media` queries, generated content
 (`::before`/`::after`), multi-layer linear/radial/repeating backgrounds,
 `text-shadow`, `clip-path`, `mix-blend-mode` (through an offscreen compositor)
@@ -102,7 +102,7 @@ pages above.
 | 4 | The engine is **not self-hosted** (it is C/C++, not TS), but must not affect the compiler's platform-agnostic design. Delivered as a per-platform prebuilt archive linked via `nativeObjects`. |
 | 5 | The **event loop is generic**: the runtime exposes a generic main-loop hook and a poll primitive; nothing GUI-specific enters `runtime/`. |
 | 6 | **Multiple windows** are supported by the core object model. |
-| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3/FreeType/HarfBuzz, plus glslang and (on macOS only) SPIRV-Cross. Those two are only *extracted* when the compiler selects the **`gpu` link feature**; Metal is the only SDL_GPU backend that consumes MSL, so merging SPIRV-Cross elsewhere would add ~2.5 MiB no driver can ask for. The optional `media.a` carries FFmpeg and is linked only when the **`media` link feature** is selected. Both features are chosen from the program's static usage; `--feature`/`--no-feature` override the scan. |
+| 7 | Third-party low-level libs are **statically linked into the extension archives** so releases stay self-contained; only OS frameworks are added at link time. `gui.a` carries SDL3, glslang and (on macOS only) SPIRV-Cross; text uses the bundled stb_truetype. glslang and SPIRV-Cross are only *extracted* when the compiler selects the **`gpu` link feature**; Metal is the only SDL_GPU backend that consumes MSL, so merging SPIRV-Cross elsewhere would add ~2.5 MiB no driver can ask for. The WebGL context/DOM code is the **`webgl` feature** (requires `gpu`), and stb_image/NanoSVG are the **`images` feature**. The optional `media.a` carries FFmpeg and is linked only when the **`media` link feature** is selected. All features are chosen from the program's static usage; `--feature`/`--no-feature` override the scan. |
 | 8 | **Heavy optional halves are link features, not extensions.** FFmpeg and glslang are selected by what the bundled HTML/CSS/TS may use, and a small C bridge (linked only when active) installs the feature's dispatch table and forces the linker to extract the implementation. This keeps one user-facing `gui` extension while a DOM-only program pays for neither stack. |
 
 ## Architecture
@@ -123,7 +123,7 @@ pages above.
                 │
                 ▼
         windowing + input (SDL3) ── multiple windows
-        text (HarfBuzz + FreeType) ── glyph atlas / SDF
+        text (stb_truetype) ── glyph atlas
         images (stb_image; SVG via NanoSVG)
         media DOM + audio sink ── optional media.a (FFmpeg) installs the decoder
 ```
@@ -137,14 +137,16 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | --- | --- | --- |
 | Window + input + multi-window | **SDL3** | cross-platform windows, HiDPI, IME, clipboard, DnD, close/hide events |
 | GPU | **SDL_GPU** (SDL3) | one render path over Metal / Vulkan / D3D12; avoids three backends |
-| Text shaping | **HarfBuzz** | correct complex-script shaping |
-| Glyph raster | **FreeType** | glyph outlines → GPU atlas / SDF |
+| Text shaping | **stb_truetype** simple shaper | per-codepoint mapping + `kern`; keeps the DOM-only binary near 3 MiB, but no ligatures or complex-script shaping |
+| Glyph raster | **stb_truetype** | TrueType outlines → grayscale atlas; no FreeType dependency |
 | Images | **stb_image** (vendored header) for bitmaps, **NanoSVG** (vendored headers) for SVG | single headers to start; SVG files rasterise on demand |
 | Video + audio | **FFmpeg** (statically vendored, minimal build, optional `media` link feature) | decodes the common container/codec set; no WebView or platform media framework |
 
-Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`,
-FFmpeg `7.1` for the optional `media` archive (overridable with `SDL3_TAG` /
-`FREETYPE_VERSION` / `HARFBUZZ_VERSION` / `FFMPEG_VERSION`).
+Pinned versions: SDL3 `release-3.2.10`, glslang `16.6.0`,
+SPIRV-Cross `vulkan-sdk-1.4.313.0`, FFmpeg `7.1` for the optional `media`
+archive (overridable with `SDL3_TAG` / `GLSLANG_VERSION` /
+`SPIRV_CROSS_VERSION` / `FFMPEG_VERSION`). The text stack is the bundled
+`stb_truetype.h`; it accepts TrueType outlines (not CFF/OTF or variable fonts).
 
 Alternative if SDL3 is rejected: **GLFW + OpenGL 3.3** (simpler, but OpenGL is
 deprecated on macOS and gives no modern GPU abstraction). **wgpu-native** if the
@@ -172,10 +174,11 @@ engine were Rust.
 4. **M4 — paint + text + display list**
    - **M4a — display list + GPU shapes** ✅ background/border display list,
      rounded-rect SDL_GPU pipeline (`paint.*`, `renderer.*`).
-   - **M4b-1 — text stack + metrics** ✅ HarfBuzz + FreeType linked into
-     `gui.a`, font resolution/caching, shaping-based text metrics used by
-     layout (`text.*`, `measureText`/`fontMetrics`).
-   - **M4b-2 — glyph rendering** ✅ FreeType rasterisation, a shared shelf-packed
+   - **M4b-1 — text stack + metrics** ✅ the text module (`text.*`) with font
+     resolution/caching and shaping-based metrics used by layout
+     (`measureText`/`fontMetrics`); originally HarfBuzz + FreeType, now the
+     bundled stb_truetype.
+   - **M4b-2 — glyph rendering** ✅ stb_truetype rasterisation, a shared shelf-packed
      glyph atlas, textured text quads in the display list and HiDPI-aware raster
      scaling. Gradients remain.
 5. **M5 — input + events** ✅
@@ -202,7 +205,7 @@ engine were Rust.
      (`package-release` copies all of `runtime/`) and inside the optional
      `@xbintsc/<os>-<arch>` npm package. Windows x64 is included; Windows arm64
      still skips them.
-   - `vendor/` (SDL3/FreeType/HarfBuzz for the GUI archive, FFmpeg for `media`)
+   - `vendor/` (SDL3/glslang for the GUI archive, FFmpeg for `media`)
      is cached per OS/arch, keyed by `scripts/build-gui.ts` /
      `scripts/build-media.ts`. Windows x64 gets its own source cache plus the
      installed `vendor/ffmpeg-build-msvc/dist` prefix.
@@ -379,9 +382,10 @@ engine were Rust.
   coverage.
 - **M4a** ✅ display list (`paint.*`) and the SDL_GPU 2D renderer with an MSL
   rounded-rect pipeline (`renderer.*`), `paintList`/`paintCount`, e2e coverage.
-- **M4b-1** ✅ FreeType + HarfBuzz fetched/built/merged into `gui.a`, the text
-  module (`text.*`) with font resolution, HarfBuzz shaping and FreeType metrics,
-  real text metrics in layout, `measureText`/`fontMetrics`, e2e coverage.
+- **M4b-1** ✅ the text module (`text.*`) with font resolution, shaping and
+  metrics, real text metrics in layout, `measureText`/`fontMetrics`, e2e
+  coverage. Originally HarfBuzz + FreeType; now stb_truetype (see the stack
+  table and the size trade-off in [build](./gui/build.md#binary-size)).
 - **M4b-2** ✅ glyph atlas + textured text pipeline in `renderer.*`, shaped text
   runs in `paint.*`, `xt_text_shape_run`/`xt_text_rasterize` in `text.*`, HiDPI
   raster scaling, e2e coverage.

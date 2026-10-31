@@ -142,8 +142,9 @@ extension flag:
   app icon. A text-only page links neither decoder.
 - **`shaping`** — HarfBuzz + FreeType for full OpenType shaping (ligatures,
   complex scripts) and CFF/OTF/variable fonts. Selected automatically for
-  non-ASCII text (or an escaped/entity codepoint); a Latin-only page keeps the
-  stb_truetype backend and links neither library.
+  non-ASCII text (or an escaped/entity codepoint) or an author `@font-face`
+  rule; a Latin-only page keeps the stb_truetype backend and links neither
+  library.
 - **`webgl`** — the WebGL context and DOM bindings. Selected by a WebGL
   `getContext(...)` or a `webgl` string; it requires `gpu`, so both activate
   together. A page that never asks for WebGL links neither.

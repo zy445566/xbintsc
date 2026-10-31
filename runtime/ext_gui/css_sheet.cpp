@@ -10,6 +10,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+#include <utility>
 
 namespace xtgui {
 
@@ -158,6 +160,139 @@ void parseKeyframesBlock(const std::string &block, const std::string &prelude,
   sheet->keyframes.push_back(std::move(rule));
 }
 
+/** Locate `name(` in a lower-cased value, returning the index of `(`. A match
+ * inside another identifier (`myurl(`) is rejected. */
+size_t findFunction(const std::string &lower, const char *name, size_t from) {
+  const size_t length = std::strlen(name);
+  size_t pos = lower.find(name, from);
+  while (pos != std::string::npos) {
+    const bool boundary =
+        pos == 0 || !(std::isalnum((unsigned char)lower[pos - 1]) || lower[pos - 1] == '-' ||
+                      lower[pos - 1] == '_');
+    size_t open = pos + length;
+    while (open < lower.size() && std::isspace((unsigned char)lower[open])) open++;
+    if (boundary && open < lower.size() && lower[open] == '(') return open;
+    pos = lower.find(name, pos + length);
+  }
+  return std::string::npos;
+}
+
+/** Extract the argument of a function whose `(` is at `open_paren`. Handles
+ * quotes and nested parentheses; trims the result. */
+bool functionArgument(const std::string &text, size_t open_paren, std::string *out,
+                      size_t *close_paren) {
+  int depth = 0;
+  char quote = 0;
+  for (size_t i = open_paren; i < text.size(); i++) {
+    const char c = text[i];
+    if (quote != 0) {
+      if (c == quote && (i == 0 || text[i - 1] != '\\')) quote = 0;
+      continue;
+    }
+    if (c == '"' || c == '\'') {
+      quote = c;
+    } else if (c == '(') {
+      depth++;
+    } else if (c == ')') {
+      depth--;
+      if (depth == 0) {
+        *out = xt_css_trim(text.substr(open_paren + 1, i - open_paren - 1));
+        *close_paren = i;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** Parse the `src` descriptor: keep every `url(...)` source in order and drop
+ * `local(...)`. The `format(...)` hint is retained for diagnostics/future
+ * format selection; the runtime simply tries the sources in order. */
+void parseFontFaceSources(const std::string &value, FontFaceRule *rule) {
+  rule->sources.clear();
+  for (const std::string &part : xt_css_split_commas(value)) {
+    const std::string lower = xt_css_lower(part);
+    const size_t open = findFunction(lower, "url", 0);
+    if (open == std::string::npos) continue;
+    std::string url;
+    size_t close = 0;
+    if (!functionArgument(part, open, &url, &close)) continue;
+    url = unquote(url);
+    if (url.empty()) continue;
+    FontFaceSource source;
+    source.url = url;
+    const size_t format_open = findFunction(lower, "format", close + 1);
+    if (format_open != std::string::npos) {
+      std::string format;
+      size_t format_close = 0;
+      if (functionArgument(part, format_open, &format, &format_close)) {
+        source.format = unquote(format);
+      }
+    }
+    rule->sources.push_back(std::move(source));
+  }
+}
+
+/** `font-weight: normal | bold | <number> [<number>]`, with the range clamped. */
+bool parseFontWeightDescriptor(const std::string &value, int *minimum, int *maximum) {
+  const std::string text = xt_css_lower(xt_css_trim(value));
+  if (text.empty()) return false;
+  if (text == "normal") {
+    *minimum = 400;
+    *maximum = 400;
+    return true;
+  }
+  if (text == "bold") {
+    *minimum = 700;
+    *maximum = 700;
+    return true;
+  }
+  std::vector<int> weights;
+  for (const std::string &token : xt_css_split_whitespace(text)) {
+    float number = 0.0f;
+    if (!xt_css_parse_number(token, &number)) continue;
+    int weight = (int)(number + 0.5f);
+    weights.push_back(std::min(1000, std::max(1, weight)));
+  }
+  if (weights.empty()) return false;
+  *minimum = weights.front();
+  *maximum = weights.back();
+  if (*minimum > *maximum) std::swap(*minimum, *maximum);
+  return true;
+}
+
+/** Parse one `@font-face` block. A rule without a family name or a local source
+ * is ignored. */
+void parseFontFaceBlock(const std::string &block, StyleSheet *sheet) {
+  FontFaceRule rule;
+  for (const Declaration &declaration : xt_css_parse_declarations(block)) {
+    if (declaration.property == "font-family") {
+      rule.family = unquote(xt_css_trim(declaration.value));
+    } else if (declaration.property == "src") {
+      parseFontFaceSources(declaration.value, &rule);
+    } else if (declaration.property == "font-weight") {
+      int minimum = 400;
+      int maximum = 400;
+      if (parseFontWeightDescriptor(declaration.value, &minimum, &maximum)) {
+        rule.has_weight = true;
+        rule.weight_min = minimum;
+        rule.weight_max = maximum;
+      }
+    } else if (declaration.property == "font-style") {
+      const std::string text = xt_css_lower(xt_css_trim(declaration.value));
+      if (text == "normal") {
+        rule.has_italic = true;
+        rule.italic = false;
+      } else if (text == "italic" || text.rfind("oblique", 0) == 0) {
+        rule.has_italic = true;
+        rule.italic = true;
+      }
+    }
+  }
+  if (rule.family.empty() || rule.sources.empty()) return;
+  sheet->font_faces.push_back(std::move(rule));
+}
+
 /** Parse one rule list, carrying the enclosing `@media` prelude. */
 void parseRules(const std::string &text, const std::string &media, int *order,
                 StyleSheet *sheet) {
@@ -182,12 +317,14 @@ void parseRules(const std::string &text, const std::string &media, int *order,
           std::string query = xt_css_trim(text.substr(nameEnd, brace - nameEnd));
           std::string nested = combineMedia(media, query);
           parseRules(text.substr(brace + 1, close - brace - 1), nested, order, sheet);
+        } else if (name == "font-face") {
+          parseFontFaceBlock(text.substr(brace + 1, close - brace - 1), sheet);
         } else if (name.size() >= 9 && name.compare(name.size() - 9, 9, "keyframes") == 0) {
           parseKeyframesBlock(text.substr(brace + 1, close - brace - 1),
                               text.substr(nameEnd, brace - nameEnd), sheet);
         }
-        /* Other block at-rules (`@supports`, `@font-face`, …) are not part of
-         * the engine's subset: ignore the whole block. */
+        /* Other block at-rules (`@supports`, …) are not part of the engine's
+         * subset: ignore the whole block. */
         index = close + 1;
       } else {
         index = (semi == std::string::npos) ? text.size() : semi + 1;

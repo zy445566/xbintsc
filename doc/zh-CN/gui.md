@@ -128,8 +128,9 @@
      管线（`paint.*`、`renderer.*`）。
    - **M4b-1 — 文本技术栈 + 度量** ✅ 文本模块（`text.*`）与字体解析/缓存、
      供布局使用的基于整形的文本度量（`measureText`/`fontMetrics`）；CSS 族名列表、
-     字重和斜体样式会选择真实安装的字面。最初用 HarfBuzz + FreeType，现在用内置
-     stb_truetype。
+     字重和斜体样式会选择真实安装的字面，作者的 `@font-face` 规则会加载本地字体
+     文件（相对 URL 按 `file:` 路径相对进程工作目录解析）。最初用 HarfBuzz +
+     FreeType，现在用内置 stb_truetype。
    - **M4b-2 — 字形渲染** ✅ stb_truetype 光栅化、共享的 shelf 打包字形图集、
      显示列表中的带纹理文本四边形与感知 HiDPI 的光栅缩放。渐变仍待完成。
 5. **M5 — 输入 + 事件** ✅

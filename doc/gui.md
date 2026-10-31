@@ -184,8 +184,9 @@ engine were Rust.
    - **M4b-1 — text stack + metrics** ✅ the text module (`text.*`) with font
      resolution/caching and shaping-based metrics used by layout
      (`measureText`/`fontMetrics`); the CSS family list, weight and italic style
-     select real installed faces. Originally HarfBuzz + FreeType, now the
-     bundled stb_truetype.
+     select real installed faces, and author `@font-face` rules load local font
+     files (relative URLs resolve as `file:` paths against the process working
+     directory). Originally HarfBuzz + FreeType, now the bundled stb_truetype.
    - **M4b-2 — glyph rendering** ✅ stb_truetype rasterisation, a shared shelf-packed
      glyph atlas, textured text quads in the display list and HiDPI-aware raster
      scaling. Gradients remain.

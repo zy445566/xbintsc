@@ -109,7 +109,7 @@
 | `media` | `media_bridge.c` + `media.a`（FFmpeg） | HTML 里有 `<video>`/`<audio>`、`createElement("video"/"audio")`、`new Audio()`、`decodeAudioData`，或运行时拼出的 HTML |
 | `gpu` | `gpu_bridge.c`（实现本身已在 `gui.a`） | `getContext("webgl"/"webgl2"/"experimental-webgl")`（或运行时决定的 kind）、任意 `webgl` 字符串、`mix-blend-mode`/`mixBlendMode`，或运行时拼出的 HTML |
 | `images` | `image_bridge.c`（实现本身已在 `gui.a`） | `<img>`、内联 `<svg>`、`background-image`/`url(...)`、`.svg` 路径、`drawImage`/`createImageBitmap`/`Image`，或运行时拼出的 HTML |
-| `shaping` | `text_bridge.c`（实现本身已在 `gui.a`） | 非 ASCII 文本（CJK/西里尔/希腊文等）、转义或实体码点，或运行时拼出的 HTML |
+| `shaping` | `text_bridge.c`（实现本身已在 `gui.a`） | 非 ASCII 文本（CJK/西里尔/希腊文等）、转义或实体码点、作者的 `@font-face` 规则（自定义字体可能是 CFF/OTF），或运行时拼出的 HTML |
 | `webgl` | `webgl_bridge.c`（实现本身已在 `gui.a`，依赖 `gpu`） | WebGL 的 `getContext(...)`、`webgl` 字符串，或运行时拼出的 HTML |
 
 driver 会扫描打包后的 AST（`src/driver/usage.ts`）：所有字符串字面量（包括导入的
@@ -167,10 +167,10 @@ stb_image/NanoSVG，DOM-only 页面不链接）。Canvas2D、Web Audio 与
 文本替换是有意的取舍。默认后端是 stb_truetype：只接受 TrueType 轮廓，整形是逐码点
 映射加字体的 `kern` 表，因此 CFF/OTF 与可变字体、OpenType 连字以及复杂文种
 （阿拉伯/印度/泰文）整形不可用；fallback 链仍会在主字体缺字时切换到其他字体。
-选中可选的 **`shaping`** 特性（非 ASCII 文本会自动选中，也可用
-`--feature shaping`）会重新链接 HarfBuzz + FreeType（约 1.2 MiB），恢复完整的
-OpenType 整形与 CFF/OTF/可变字体支持。纯拉丁 DOM 页面因此保持约 3.1 MiB；
-中文/复杂文种页面更接近 4.3 MiB。
+选中可选的 **`shaping`** 特性（非 ASCII 文本或作者的 `@font-face` 规则会自动
+选中，也可用 `--feature shaping`）会重新链接 HarfBuzz + FreeType（约 1.2 MiB），
+恢复完整的 OpenType 整形与 CFF/OTF/可变字体支持。纯拉丁 DOM 页面因此保持约
+3.1 MiB；中文/复杂文种页面更接近 4.3 MiB。
 
 ## 运行示例
 

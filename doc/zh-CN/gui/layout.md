@@ -35,6 +35,17 @@
   `align/justify-self`（含 `place-items`/`place-self`）。隐式行/列由项目撑开；
   单单元格网格配合 `place-items: center` 可把卡片居中到整个覆盖层。项目测量是
   两遍布局（先固有尺寸、再最终放置），因此两遍之间会清空文本片段。
+- **行内级容器、自动外边距与宽高比** —— `display: inline-flex`/`inline-grid`
+  仍用 flex/grid 算法排列子元素，但作为单个原子行内盒参与父级行流
+  （`vertical-align` 的长度值会平移它）。块级盒的 `margin-left: auto` /
+  `margin-right: auto` 会吸收行内剩余空间（双 auto 则居中）；flex 项主轴的 auto
+  外边距在 `justify-content` 之前吸收该行剩余空间，因此可把页脚或按钮提示推到
+  末端。`aspect-ratio` 在 `height: auto` 时由已用宽度推导高度（反向的由高推宽
+  未实现）。`border-radius` 支持百分比，并按 border box 较小边解析。
+- **竖排书写模式** —— `writing-mode: vertical-rl|vertical-lr` 按每列一个字符
+  步进排字：CJK/假名/谚文字符保持直立，其他文字在绘制时旋转 90°。高度确定时
+  另起一列；flex 容器的 row/column 轴随书写模式互换。这是面向文本的实现：
+  竖排容器中的嵌套块与横竖混排内容仍回退为横排。
 - **CSS 值函数与自定义属性** —— `calc()` 算术（含嵌套 `calc()` 以及其它函数
   内部的 `calc()`）、`clamp(min, value, max)`、`min(...)` 与 `max(...)` 在计算
   样式中保留表达式，布局时结合元素字号与视口（`vw`/`vh`）求值；桌面窗口中

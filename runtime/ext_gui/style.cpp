@@ -136,6 +136,18 @@ static bool substituteVariables(const std::string &value,
 }
 
 void finalizeStyle(XtStyle *style, const ApplyContext &context) {
+  /* `letter-spacing` is resolved against the element's own font size. */
+  if (style->letter_spacing.unit != Unit::Px && style->letter_spacing.unit != Unit::Number) {
+    style->letter_spacing.value = xt_style_resolve_absolute(
+        style->letter_spacing, style->font_size, style->font_size, context.rootFontSize,
+        context.viewportWidth, context.viewportHeight);
+    style->letter_spacing.unit = Unit::Px;
+  }
+  /* `outline-color` defaults to the element's `color`. */
+  if (style->outline_style != BorderStyle::None && !style->has_outline_color) {
+    style->outline_color = style->color;
+    style->has_outline_color = true;
+  }
   switch (style->line_height.unit) {
     case Unit::Em:
     case Unit::Percent:
@@ -173,6 +185,11 @@ void inheritFrom(XtStyle *style, const XtStyle *parent) {
   style->text_align = parent->text_align;
   style->white_space = parent->white_space;
   style->text_shadow = parent->text_shadow;
+  style->text_transform = parent->text_transform;
+  style->letter_spacing = parent->letter_spacing;
+  style->font_variant_numeric = parent->font_variant_numeric;
+  style->writing_mode = parent->writing_mode;
+  style->cursor = parent->cursor;
 }
 
 void applyCandidates(XtStyle *style, std::vector<Candidate> *candidates,
@@ -188,15 +205,43 @@ void applyCandidates(XtStyle *style, std::vector<Candidate> *candidates,
       style->variables[candidate.declaration->property] = candidate.declaration->value;
     }
   }
-  for (const Candidate &candidate : *candidates) {
-    if (isCustomProperty(candidate.declaration->property)) continue;
-    std::string value = candidate.declaration->value;
-    if (value.find("var(") != std::string::npos) {
+  auto resolvedValue = [&](const Candidate &candidate, std::string *out) {
+    *out = candidate.declaration->value;
+    if (out->find("var(") != std::string::npos) {
       std::string resolved;
-      if (!substituteVariables(value, style->variables, 0, &resolved)) continue;
-      value = resolved;
+      if (!substituteVariables(*out, style->variables, 0, &resolved)) return false;
+      *out = resolved;
     }
-    xt_style_apply_declaration(style, candidate.declaration->property, value, nodeContext);
+    return true;
+  };
+  /* `color` is computed before the other declarations: `currentColor` in them
+   * refers to this element's final colour regardless of source order. */
+  for (const Candidate &candidate : *candidates) {
+    if (isCustomProperty(candidate.declaration->property) ||
+        candidate.declaration->property != "color") {
+      continue;
+    }
+    std::string value;
+    if (!resolvedValue(candidate, &value)) continue;
+    if (value == "inherit") {
+      xt_style_apply_inherit(style, nodeContext.parent, "color");
+      continue;
+    }
+    xt_style_apply_declaration(style, "color", value, nodeContext);
+  }
+  for (const Candidate &candidate : *candidates) {
+    const std::string &property = candidate.declaration->property;
+    if (isCustomProperty(property) || property == "color") continue;
+    std::string value;
+    if (!resolvedValue(candidate, &value)) continue;
+    if (value == "inherit") {
+      xt_style_apply_inherit(style, nodeContext.parent, property);
+      continue;
+    }
+    if (xt_css_lower(value).find("current") != std::string::npos) {
+      value = xt_style_replace_current_color(value, style->color);
+    }
+    xt_style_apply_declaration(style, property, value, nodeContext);
   }
 }
 
@@ -379,6 +424,7 @@ void computePseudo(const Node *origin, PseudoElement side, const XtStyle &origin
 
   ApplyContext nodeContext = context;
   nodeContext.parentFontSize = originStyle.font_size;
+  nodeContext.parent = &originStyle;
 
   std::string pseudoName = side == PseudoElement::Before ? "before" : "after";
   std::vector<Candidate> &candidates = scratch->candidates;
@@ -431,6 +477,7 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
 
     ApplyContext nodeContext = context;
     nodeContext.parentFontSize = (parent != nullptr) ? parent->font_size : context.rootFontSize;
+    nodeContext.parent = parent;
 
     std::vector<Candidate> &candidates = scratch->candidates;
     candidates.clear();

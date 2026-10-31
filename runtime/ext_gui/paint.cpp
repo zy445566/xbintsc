@@ -9,6 +9,7 @@
 #include "paint.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdio>
 #include <utility>
@@ -46,6 +47,7 @@ FontSpec specOf(const XtStyle &style) {
   spec.pixel_size = style.font_size;
   spec.weight = style.font_weight;
   spec.italic = style.font_style == FontStyle::Italic;
+  spec.letter_spacing = style.letter_spacing.unit == Unit::Px ? style.letter_spacing.value : 0.0f;
   return spec;
 }
 
@@ -145,11 +147,34 @@ void addTextRuns(const LayoutBox *box, const XtStyle &style, DisplayList &out,
   xt_text_metrics(spec, &ascent, nullptr, nullptr);
   if (ascent <= 0.0f) ascent = style.font_size * 0.8f;
   Color base = paint_detail::filterColor(chain, style.color);
+  constexpr float kQuarterTurn = 1.57079632679f;
   for (const TextFragment &fragment : box->fragments) {
     if (fragment.text.empty()) continue;
-    paint_detail::addTextRun(out, fragment.x, fragment.y + ascent, fragment.width,
-                             fragment.height, fragment.text, spec, base, box->world, clip, style,
-                             chain, viewportWidth, viewportHeight);
+    if (!fragment.vertical) {
+      paint_detail::addTextRun(out, fragment.x, fragment.y + ascent, fragment.width,
+                               fragment.height, fragment.text, spec, base, box->world, clip, style,
+                               chain, viewportWidth, viewportHeight);
+      continue;
+    }
+    if (fragment.upright) {
+      /* CJK-style upright glyph centred in its column cell. */
+      float glyphWidth = fragment.height;
+      float x = fragment.x + (fragment.width - glyphWidth) / 2.0f;
+      float baseline = fragment.y + (fragment.height - style.font_size) / 2.0f + ascent;
+      paint_detail::addTextRun(out, x, baseline, glyphWidth, fragment.width, fragment.text, spec,
+                               base, box->world, clip, style, chain, viewportWidth, viewportHeight);
+      continue;
+    }
+    /* Rotate the horizontal run 90° clockwise about its column's top edge. */
+    float pivotX = fragment.x + ascent;
+    float pivotY = fragment.y;
+    Matrix2D turn = Matrix2D::translate(pivotX, pivotY)
+                        .multiply(Matrix2D::rotate(kQuarterTurn))
+                        .multiply(Matrix2D::translate(-pivotX, -pivotY));
+    Matrix2D transform = box->world.multiply(turn);
+    paint_detail::addTextRun(out, pivotX, pivotY + ascent, fragment.height, fragment.width,
+                             fragment.text, spec, base, transform, clip, style, chain,
+                             viewportWidth, viewportHeight);
   }
 }
 
@@ -219,6 +244,7 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
       }
       paint_detail::addBoxShadows(out, *box, *style, chain, own, true, viewportWidth,
                                   viewportHeight);
+      paint_detail::addOutline(out, *box, *style, chain, own, viewportWidth, viewportHeight);
       if (box->is_canvas && box->canvas_id != 0 && box->content_width > 0.0f &&
           box->content_height > 0.0f) {
         PaintImage image;

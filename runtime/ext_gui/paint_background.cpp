@@ -356,11 +356,52 @@ void paintRadial(const LayoutBox &box, const XtStyle &style, const BackgroundLay
   addImage(out, std::move(image), clip, chain);
 }
 
-void paintImage(const LayoutBox &box, const BackgroundLayer &layer, const FilterChain &chain,
-                const PaintClip &clip, DisplayList &out) {
+void paintImage(const LayoutBox &box, const BackgroundLayer &layer, const XtStyle &style,
+                size_t index, const FilterChain &chain, const PaintClip &clip, DisplayList &out,
+                float viewportWidth, float viewportHeight) {
   if (layer.image_src.empty() || box.width <= 0.0f || box.height <= 0.0f) return;
-  /* A `background-image: url(...)` layer fills the box. (CSS `background-size`
-   * is not modelled, so the intrinsic-size/tiling default becomes a stretch.) */
+  const BackgroundSize *size =
+      index < style.background_sizes.size() ? &style.background_sizes[index] : nullptr;
+  if (size != nullptr) {
+    bool width_auto = size->width.unit == Unit::Auto || size->width.unit == Unit::Invalid ||
+                      size->width.unit == Unit::None;
+    bool height_auto = size->height.unit == Unit::Auto || size->height.unit == Unit::Invalid ||
+                       size->height.unit == Unit::None;
+    float tile_width =
+        width_auto ? box.width
+                   : resolveLength(size->width, box.width, style.font_size, viewportWidth,
+                                   viewportHeight);
+    float tile_height =
+        height_auto ? box.height
+                    : resolveLength(size->height, box.height, style.font_size, viewportWidth,
+                                    viewportHeight);
+    if (tile_width > 0.0f && tile_height > 0.0f) {
+      /* The default `background-repeat` is `repeat`; the size is per layer. */
+      int columns = (int)std::ceil(box.width / tile_width);
+      int rows = (int)std::ceil(box.height / tile_height);
+      if (columns < 1) columns = 1;
+      if (rows < 1) rows = 1;
+      const int kMaxTiles = 4096;
+      if (columns * rows > kMaxTiles) {
+        columns = 1;
+        rows = 1;
+      }
+      for (int row = 0; row < rows; row++) {
+        for (int column = 0; column < columns; column++) {
+          PaintImage image;
+          image.x = box.x + (float)column * tile_width;
+          image.y = box.y + (float)row * tile_height;
+          image.width = tile_width;
+          image.height = tile_height;
+          image.src = layer.image_src;
+          image.transform = box.world;
+          addImage(out, image, clip, chain);
+        }
+      }
+      return;
+    }
+  }
+  /* No `background-size`: keep the historical stretch to the box. */
   PaintImage image;
   image.x = box.x;
   image.y = box.y;
@@ -382,7 +423,7 @@ void paintBackgrounds(DisplayList &out, const LayoutBox &box, const XtStyle &sty
     /* The rectangle is already the border box, so the incoming clip is enough;
      * narrowing it to the box again would only change the reported clip (and
      * would clip a filtered/rounded fill differently from before M19). */
-    addRectFiltered(out, box.x, box.y, box.width, box.height, style.border_radius,
+    addRectFiltered(out, box.x, box.y, box.width, box.height, box.border_radius,
                     style.background, clip, box.world, chain);
   }
   /* CSS paints the first layer on top, so walk the list backwards. */
@@ -393,7 +434,7 @@ void paintBackgrounds(DisplayList &out, const LayoutBox &box, const XtStyle &sty
     } else if (layer.kind == BackgroundKind::Radial) {
       paintRadial(box, style, layer, chain, layerClip, viewportWidth, viewportHeight, out);
     } else {
-      paintImage(box, layer, chain, layerClip, out);
+      paintImage(box, layer, style, i, chain, layerClip, out, viewportWidth, viewportHeight);
     }
   }
 }

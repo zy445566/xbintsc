@@ -72,6 +72,11 @@ void paintBackgrounds(DisplayList &out, const LayoutBox &box, const XtStyle &sty
                       const FilterChain &chain, const PaintClip &clip, float viewportWidth,
                       float viewportHeight);
 
+/** Append the `outline` edge rectangles (after the border, before content). */
+void addOutline(DisplayList &out, const LayoutBox &box, const XtStyle &style,
+                const FilterChain &chain, const PaintClip &clip, float viewportWidth,
+                float viewportHeight);
+
 /** Append the drop-shadow silhouettes of a box (once, before its content). */
 void addBoxDropShadows(DisplayList &out, const LayoutBox &box, const XtStyle &style,
                        const FilterChain &chain, const PaintClip &clip);

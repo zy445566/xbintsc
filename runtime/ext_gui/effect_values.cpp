@@ -136,6 +136,8 @@ static void parseTransitionShorthand(const std::string &value, std::vector<Trans
         spec.timing = timing;
       } else {
         spec.property = xt_css_lower(token);
+        /* The shorthand animates its colour component. */
+        if (spec.property == "background") spec.property = "background-color";
       }
     }
     out->push_back(spec);
@@ -425,7 +427,11 @@ bool xt_style_apply_transition(XtStyle *style, const std::string &property,
   if (property == "transition-property") {
     std::vector<std::string> parts = splitCommas(value);
     style->transitions.resize(parts.size());
-    for (size_t i = 0; i < parts.size(); i++) style->transitions[i].property = xt_css_lower(parts[i]);
+    for (size_t i = 0; i < parts.size(); i++) {
+      style->transitions[i].property = xt_css_lower(parts[i]);
+      if (style->transitions[i].property == "background")
+        style->transitions[i].property = "background-color";
+    }
     return true;
   }
   if (property == "transition-duration" || property == "transition-delay") {

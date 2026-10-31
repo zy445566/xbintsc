@@ -121,6 +121,10 @@ TransformOp identityTransform(TransformKind kind) {
     case TransformKind::Rotate:
       op.angle = 0.0f;
       break;
+    case TransformKind::Skew:
+    case TransformKind::SkewX:
+    case TransformKind::SkewY:
+      break;
   }
   return op;
 }
@@ -179,11 +183,10 @@ bool isColorProperty(const std::string &property) {
   return property == "color" || property == "background-color" || property == "border-color";
 }
 
-bool isNumberProperty(const std::string &property) {
-  return property == "opacity" || property == "border-radius";
-}
+bool isNumberProperty(const std::string &property) { return property == "opacity"; }
 
 Length *lengthField(XtStyle *style, const std::string &property) {
+  if (property == "border-radius") return &style->border_radius;
   if (property == "width") return &style->width;
   if (property == "height") return &style->height;
   if (property == "min-width") return &style->min_width;
@@ -245,7 +248,7 @@ bool readAnimatable(const XtStyle &style, const std::string &property, Animatabl
   }
   if (isNumberProperty(property)) {
     out->kind = AnimatableKind::Number;
-    out->number = property == "opacity" ? style.opacity : style.border_radius;
+    out->number = style.opacity;
     return true;
   }
   if (const Length *length = lengthField(style, property)) {
@@ -314,7 +317,6 @@ void writeAnimatable(XtStyle *style, const std::string &property, const Animatab
       break;
     case AnimatableKind::Number:
       if (property == "opacity") style->opacity = value.number;
-      else if (property == "border-radius") style->border_radius = value.number;
       break;
     case AnimatableKind::Length:
       if (property == "font-size") {

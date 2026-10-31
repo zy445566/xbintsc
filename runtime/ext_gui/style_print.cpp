@@ -233,8 +233,16 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   static const char *const floatNames[] = {"none", "left", "right"};
   static const char *const clearNames[] = {"none", "left", "right", "both"};
   static const char *const alignTextNames[] = {"start", "center", "end", "justify"};
+  static const char *const textTransformNames[] = {"none", "uppercase", "lowercase", "capitalize"};
+  static const char *const writingModeNames[] = {"horizontal-tb", "vertical-rl", "vertical-lr"};
+  static const char *const cursorNames[] = {"auto", "default", "pointer", "text", "move",
+                                            "wait", "help", "not-allowed", "crosshair"};
+  static const char *const borderStyleNames[] = {"none", "solid", "dashed", "dotted"};
 
-  if (property == "display") return displayNames[(int)style.display];
+  if (property == "display") {
+    if (style.inline_level) return style.display == Display::Grid ? "inline-grid" : "inline-flex";
+    return displayNames[(int)style.display];
+  }
   if (property == "position") return positionNames[(int)style.position];
   if (property == "color") return formatColor(style.color);
   if (property == "background-color" || property == "background") {
@@ -265,6 +273,34 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
     return style.line_height.unit == Unit::Auto ? "normal" : formatLength(style.line_height);
   }
   if (property == "text-align") return alignTextNames[(int)style.text_align];
+  if (property == "text-transform") return textTransformNames[(int)style.text_transform];
+  if (property == "letter-spacing") return formatLength(style.letter_spacing);
+  if (property == "writing-mode") return writingModeNames[(int)style.writing_mode];
+  if (property == "vertical-align") return formatLength(style.vertical_align);
+  if (property == "font-variant-numeric") return style.font_variant_numeric ? "tabular-nums" : "normal";
+  if (property == "cursor") return cursorNames[(int)style.cursor];
+  if (property == "aspect-ratio") return style.aspect_ratio > 0 ? formatNumber(style.aspect_ratio) : "auto";
+  if (property == "grid-area") {
+    return formatNumber((float)style.grid_row_start) + " / " +
+           formatNumber((float)style.grid_column_start) + " / " +
+           formatNumber((float)style.grid_row_end) + " / " +
+           formatNumber((float)style.grid_column_end);
+  }
+  if (property == "outline-width") return formatLength(style.outline_width);
+  if (property == "outline-style") return borderStyleNames[(int)style.outline_style];
+  if (property == "outline-color") {
+    return style.has_outline_color ? formatColor(style.outline_color) : "currentcolor";
+  }
+  if (property == "outline-offset") return formatLength(style.outline_offset);
+  if (property == "background-size") {
+    if (style.background_sizes.empty()) return "auto";
+    std::string out;
+    for (const BackgroundSize &size : style.background_sizes) {
+      if (!out.empty()) out += ", ";
+      out += formatLength(size.width) + " " + formatLength(size.height);
+    }
+    return out;
+  }
   if (property == "flex-direction") return flexNames[(int)style.flex_direction];
   if (property == "flex-wrap") return wrapNames[(int)style.flex_wrap];
   if (property == "justify-content") return justifyNames[(int)style.justify_content];
@@ -278,7 +314,7 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "flex-grow") return formatNumber(style.flex_grow);
   if (property == "flex-shrink") return formatNumber(style.flex_shrink);
   if (property == "flex-basis") return formatLength(style.flex_basis);
-  if (property == "border-radius") return formatNumber(style.border_radius) + "px";
+  if (property == "border-radius") return formatLength(style.border_radius);
   if (property == "opacity") return formatNumber(style.opacity);
   if (property == "mix-blend-mode") {
     static const char *const names[] = {

@@ -35,6 +35,7 @@ void XtDocument::load(const std::string &html, float viewportWidth, float viewpo
   dirty_ = false;
   hover_ = nullptr;
   focus_ = nullptr;
+  active_ = nullptr;
   styles_.clear();
   display_.clear();
   transitions_.clear();
@@ -56,6 +57,7 @@ void XtDocument::restyle(float viewportWidth, float viewportHeight) {
     MatchState state;
     state.hover = hover_;
     state.focus = focus_;
+    state.active = active_;
     bool hasTransitions = sheet_.has_transitions;
     bool hasAnimations = sheet_.has_animations;
     xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight, state, &pseudos_,
@@ -81,6 +83,14 @@ bool XtDocument::setFocus(const Node *node) {
   if (focus_ == node) return false;
   focus_ = node;
   if (!sheet_.has_focus) return false;
+  restyle(viewportWidth_, viewportHeight_);
+  return true;
+}
+
+bool XtDocument::setActive(const Node *node) {
+  if (active_ == node) return false;
+  active_ = node;
+  if (!sheet_.has_active) return false;
   restyle(viewportWidth_, viewportHeight_);
   return true;
 }

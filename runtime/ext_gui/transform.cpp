@@ -143,6 +143,24 @@ bool applyFunction(const std::string &name, const std::vector<std::string> &args
     op->kind = TransformKind::Rotate;
     return parseAngleArg(args[0], &op->angle);
   }
+  if (name == "skew") {
+    if (args.empty() || args.size() > 2) return false;
+    op->kind = TransformKind::Skew;
+    if (!parseAngleArg(args[0], &op->skew_x)) return false;
+    op->skew_y = 0.0f;
+    if (args.size() > 1 && !parseAngleArg(args[1], &op->skew_y)) return false;
+    return true;
+  }
+  if (name == "skewx") {
+    if (args.size() != 1) return false;
+    op->kind = TransformKind::SkewX;
+    return parseAngleArg(args[0], &op->skew_x);
+  }
+  if (name == "skewy") {
+    if (args.size() != 1) return false;
+    op->kind = TransformKind::SkewY;
+    return parseAngleArg(args[0], &op->skew_y);
+  }
   if (name == "matrix") {
     if (args.size() != 6) return false;
     op->kind = TransformKind::Matrix;
@@ -151,7 +169,7 @@ bool applyFunction(const std::string &name, const std::vector<std::string> &args
     }
     return true;
   }
-  return false;  // skew/perspective/… are not supported yet
+  return false;  // perspective/… are not supported yet
 }
 
 float resolveLength(const Length &length, float base, float em, float vw, float vh) {
@@ -185,6 +203,12 @@ bool sameOp(const TransformOp &left, const TransformOp &right) {
       return left.scale_y == right.scale_y;
     case TransformKind::Rotate:
       return left.angle == right.angle;
+    case TransformKind::Skew:
+      return left.skew_x == right.skew_x && left.skew_y == right.skew_y;
+    case TransformKind::SkewX:
+      return left.skew_x == right.skew_x;
+    case TransformKind::SkewY:
+      return left.skew_y == right.skew_y;
     case TransformKind::Matrix:
       for (int i = 0; i < 6; i++) {
         if (left.matrix[i] != right.matrix[i]) return false;
@@ -342,6 +366,16 @@ bool xt_transform_interpolate(const std::vector<TransformOp> &from,
       case TransformKind::Rotate:
         op.angle = left.angle + (right.angle - left.angle) * t;
         break;
+      case TransformKind::Skew:
+        op.skew_x = left.skew_x + (right.skew_x - left.skew_x) * t;
+        op.skew_y = left.skew_y + (right.skew_y - left.skew_y) * t;
+        break;
+      case TransformKind::SkewX:
+        op.skew_x = left.skew_x + (right.skew_x - left.skew_x) * t;
+        break;
+      case TransformKind::SkewY:
+        op.skew_y = left.skew_y + (right.skew_y - left.skew_y) * t;
+        break;
       case TransformKind::Matrix:
         for (int entry = 0; entry < 6; entry++) {
           op.matrix[entry] = left.matrix[entry] + (right.matrix[entry] - left.matrix[entry]) * t;
@@ -382,6 +416,16 @@ Matrix2D xt_transform_matrix(const std::vector<TransformOp> &ops, float percent_
         break;
       case TransformKind::Rotate:
         step = Matrix2D::rotate(op.angle);
+        break;
+      case TransformKind::Skew:
+        step.c = std::tan(op.skew_x);
+        step.b = std::tan(op.skew_y);
+        break;
+      case TransformKind::SkewX:
+        step.c = std::tan(op.skew_x);
+        break;
+      case TransformKind::SkewY:
+        step.b = std::tan(op.skew_y);
         break;
       case TransformKind::Matrix:
         step.a = op.matrix[0];
@@ -427,6 +471,26 @@ std::string xt_transform_to_string(const std::vector<TransformOp> &ops) {
       case TransformKind::Rotate: {
         char buffer[64];
         std::snprintf(buffer, sizeof(buffer), "rotate(%.4gdeg)", (double)(op.angle * 180.0f / kPi));
+        text += buffer;
+        break;
+      }
+      case TransformKind::Skew: {
+        char buffer[96];
+        std::snprintf(buffer, sizeof(buffer), "skew(%.4gdeg, %.4gdeg)",
+                      (double)(op.skew_x * 180.0f / kPi),
+                      (double)(op.skew_y * 180.0f / kPi));
+        text += buffer;
+        break;
+      }
+      case TransformKind::SkewX: {
+        char buffer[64];
+        std::snprintf(buffer, sizeof(buffer), "skewX(%.4gdeg)", (double)(op.skew_x * 180.0f / kPi));
+        text += buffer;
+        break;
+      }
+      case TransformKind::SkewY: {
+        char buffer[64];
+        std::snprintf(buffer, sizeof(buffer), "skewY(%.4gdeg)", (double)(op.skew_y * 180.0f / kPi));
         text += buffer;
         break;
       }

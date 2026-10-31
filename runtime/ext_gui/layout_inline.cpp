@@ -15,6 +15,10 @@ void Layouter::flattenInline(LayoutBox *box, float contentWidth,
                              std::vector<InlineItem> &out) const {
   const XtStyle &style = *box->style;
   if (box->is_text) {
+    if (style.writing_mode != WritingMode::HorizontalTB) {
+      flattenVerticalText(box, out);
+      return;
+    }
     float height = lineHeightOf(style);
     float ascent = ascentOf(style);
     const std::string &text = box->text;
@@ -45,7 +49,8 @@ void Layouter::flattenInline(LayoutBox *box, float contentWidth,
     }
     return;
   }
-  if (box->display == Display::InlineBlock) {
+  if (box->display == Display::InlineBlock || style.inline_level ||
+      style.writing_mode != WritingMode::HorizontalTB) {
     float available = contentWidth;
     float intrinsic = preferredContentWidth(box, available);
     setContainingBlock(box, containingBlockAncestor(box));
@@ -56,6 +61,13 @@ void Layouter::flattenInline(LayoutBox *box, float contentWidth,
     item.atomic = true;
     item.width = box->margin_left + box->width + box->margin_right;
     item.height = box->margin_top + box->height + box->margin_bottom;
+    float shift = 0.0f;
+    if (!isAuto(style.vertical_align)) {
+      shift = px(style.vertical_align, available, style.font_size, 0.0f);
+    }
+    /* A positive `vertical-align` raises the atomic box above the baseline;
+     * the line box keeps its own ascent so the shift is purely visual. */
+    item.shift = shift;
     item.ascent = item.height;
     out.push_back(std::move(item));
     return;
@@ -68,6 +80,13 @@ void Layouter::flattenInline(LayoutBox *box, float contentWidth,
 }
 
 void Layouter::computeInlineGeometry(LayoutBox *box) const {
+  /* An atomic inline box already has geometry from its own formatting context;
+   * replacing it with the union of its descendants would shrink an inline-grid
+   * to its text (and an inline-block to its content). */
+  if (!box->is_text && box->style != nullptr &&
+      (box->display == Display::InlineBlock || box->style->inline_level)) {
+    return;
+  }
   if (box->is_text) {
     if (box->fragments.empty()) return;
     float minx = kHuge, miny = kHuge, maxx = -kHuge, maxy = -kHuge;
@@ -119,6 +138,11 @@ float Layouter::layoutInlineRun(LayoutBox *container, const std::vector<LayoutBo
   if (items.empty()) return 0;
 
   const XtStyle &containerStyle = *container->style;
+  if (containerStyle.writing_mode != WritingMode::HorizontalTB) {
+    float height = layoutVerticalRun(container, items, contentWidth, y);
+    for (LayoutBox *box : run) computeInlineGeometry(box);
+    return height;
+  }
   float cursorY = y;
   std::vector<InlineItem *> line;
   float lineWidth = 0;
@@ -159,7 +183,7 @@ float Layouter::layoutInlineRun(LayoutBox *container, const std::vector<LayoutBo
          * `layoutBlock`, so it must not be moved back onto the line. */
         if (!isAbsoluteChild(item->box)) {
           float dx = x + item->box->margin_left - item->box->x;
-          float dy = cursorY + item->box->margin_top - item->box->y;
+          float dy = cursorY + item->box->margin_top - item->box->y - item->shift;
           translate(item->box, dx, dy);
           /* `position: relative` on an inline-block shifts it after line
            * placement, so the line box keeps the space it reserved. */

@@ -10,6 +10,7 @@
 #ifndef XT_GUI_STYLE_H
 #define XT_GUI_STYLE_H
 
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -36,6 +37,28 @@ enum class WhiteSpace { Normal, NoWrap, Pre, PreWrap, PreLine };
 enum class Overflow { Visible, Hidden, Scroll, Auto };
 enum class BorderStyle { None, Solid, Dashed, Dotted };
 enum class FontStyle { Normal, Italic };
+
+/** CSS `text-transform`; only plain ASCII case mapping is applied. */
+enum class TextTransform { None, Uppercase, Lowercase, Capitalize };
+
+/** CSS `writing-mode`. Only text-level vertical layout is implemented. */
+enum class WritingMode { HorizontalTB, VerticalRL, VerticalLR };
+
+/** CSS `cursor` values the engine maps to an SDL system cursor. */
+enum class CursorShape { Auto, Default, Pointer, Text, Move, Wait, Help, NotAllowed, Crosshair };
+
+/** Apply a computed `text-transform` to a text node's UTF-8 contents. */
+std::string xt_apply_text_transform(const std::string &text, TextTransform transform);
+
+/** Resolve a `border-radius` against a border box (percent uses min(w, h)). */
+float xt_style_border_radius_px(const Length &radius, float width, float height, float em,
+                                float root, float vw, float vh);
+
+/** One `background-size` entry for an image layer. */
+struct BackgroundSize {
+  Length width{0.0f, Unit::Auto};
+  Length height{0.0f, Unit::Auto};
+};
 
 /** A CSS timing function. `Ease`/`Linear`/… are the keywords; `CubicBezier` and
  * the two `Steps` kinds carry their parameters. */
@@ -224,12 +247,20 @@ struct XtStyle {
   std::unordered_map<std::string, std::string> variables;
   Position position = Position::Static;
   Edges margin;
+  /** Which margins were explicitly declared `auto` (the `Edges` default unit is
+   * Auto, so the raw value cannot distinguish "unset" from "auto"). */
+  bool margin_left_auto = false;
+  bool margin_right_auto = false;
+  bool margin_top_auto = false;
+  bool margin_bottom_auto = false;
   Edges padding;
   Edges border_width;
   BorderStyle border_style = BorderStyle::None;
   Color border_color;
   bool has_border_color = false;
-  float border_radius = 0.0f;
+  /** `border-radius` stays symbolic so a `50%` radius can resolve against the
+   * box in layout (the engine has one radius, so percentages use min(w, h)). */
+  Length border_radius{0.0f, Unit::Px};
 
   Length width;
   Length height;
@@ -249,6 +280,8 @@ struct XtStyle {
   bool has_background = false;
   /** `background-image` layers, in declaration order (first = topmost). */
   std::vector<BackgroundLayer> background_layers;
+  /** Per-layer `background-size`; empty keeps the historical stretch. */
+  std::vector<BackgroundSize> background_sizes;
   /** `clip-path`; `Type::None` leaves the box unclipped. */
   ClipPathSpec clip_path;
   /** `filter` / `backdrop-filter` function lists (not inherited). */
@@ -272,6 +305,14 @@ struct XtStyle {
 
   TextAlign text_align = TextAlign::Start;  // inherited
   WhiteSpace white_space = WhiteSpace::Normal;  // inherited
+  TextTransform text_transform = TextTransform::None;  // inherited
+  /** Resolved to pixels in the cascade (em is the element's own font size). */
+  Length letter_spacing{0.0f, Unit::Px};  // inherited
+  bool font_variant_numeric = false;  // inherited; accepted, no OpenType features
+  WritingMode writing_mode = WritingMode::HorizontalTB;  // inherited
+  Length vertical_align;  // not inherited; atomic inline boxes only
+  /** `aspect-ratio` as width / height, or 0 when unset. */
+  float aspect_ratio = 0.0f;
 
   FlexDirection flex_direction = FlexDirection::Row;
   FlexWrap flex_wrap = FlexWrap::NoWrap;
@@ -299,6 +340,21 @@ struct XtStyle {
   Length flex_basis;
 
   float opacity = 1.0f;
+  /** `display: inline-flex` / `inline-grid`: a flex/grid container that is
+   * still inline-level (laid out atomically by its line box). */
+  bool inline_level = false;
+  /** `isolation`: parsed for compatibility; group isolation is not modelled. */
+  bool isolation = false;
+  CursorShape cursor = CursorShape::Auto;
+  /** `outline` (painted outside the border box). */
+  Length outline_width;
+  BorderStyle outline_style = BorderStyle::None;
+  Color outline_color;
+  bool has_outline_color = false;
+  Length outline_offset;
+  /** Computed SVG presentation properties (`fill`, `stroke`, …) injected into
+   * serialized inline `<svg>` markup. Only populated on SVG elements. */
+  std::map<std::string, std::string> svg_props;
   /** `mix-blend-mode` (not inherited: it creates a compositing group). */
   MixBlendMode mix_blend_mode = MixBlendMode::Normal;
   Overflow overflow = Overflow::Visible;

@@ -57,11 +57,15 @@ class XtDocument {
    * when the dynamic state (and therefore the styles) changed. */
   bool setHover(const Node *node);
   bool setFocus(const Node *node);
+  /** Element held down by the primary pointer (`:active`). */
+  bool setActive(const Node *node);
   const Node *hover() const { return hover_; }
   const Node *focus() const { return focus_; }
+  const Node *active() const { return active_; }
 
   const Node *root() const { return root_.get(); }
   const StyleSheet &sheet() const { return sheet_; }
+  const std::unordered_map<const Node *, XtStyle> &styles() const { return styles_; }
   const XtStyle *styleOf(const Node *node) const;
   const LayoutBox *boxOf(const Node *node) const;
   const LayoutTree &layout() const { return layout_; }
@@ -147,6 +151,7 @@ class XtDocument {
   LayoutTree layout_;
   const Node *hover_ = nullptr;
   const Node *focus_ = nullptr;
+  const Node *active_ = nullptr;
   float viewportWidth_ = 0.0f;
   float viewportHeight_ = 0.0f;
 };

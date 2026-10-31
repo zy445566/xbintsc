@@ -4,6 +4,7 @@
 #include <string>
 
 struct XtStyle;
+struct ApplyContext;
 
 namespace xtgui {
 
@@ -33,6 +34,24 @@ bool xt_style_apply_transition(XtStyle *style, const std::string &property,
 /** Apply an `animation`/`animation-*` declaration. */
 bool xt_style_apply_animation(XtStyle *style, const std::string &property,
                               const std::string &value);
+
+/** Apply text declarations (`letter-spacing`, `text-transform`,
+ * `writing-mode`, `vertical-align`, the `font` shorthand, …). */
+bool xt_style_apply_text_property(XtStyle *style, const std::string &property,
+                                  const std::string &value, const ApplyContext &context);
+
+/** Apply UI/interaction declarations (`outline`, `cursor`, `isolation`, and
+ * the platform hints the engine accepts but does not act on). */
+bool xt_style_apply_ui_property(XtStyle *style, const std::string &property,
+                                const std::string &value);
+
+/** Record an SVG presentation property (`fill`, `stroke`, …) for the inline
+ * `<svg>` serializer. Returns false for unrelated properties. */
+bool xt_style_apply_svg_property(XtStyle *style, const std::string &property,
+                                 const std::string &value);
+
+/** Apply `background-size` (a comma-separated list, one per layer). */
+bool xt_style_apply_background_size(XtStyle *style, const std::string &value);
 
 }  // namespace xtgui
 

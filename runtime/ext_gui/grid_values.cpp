@@ -223,6 +223,29 @@ bool xt_style_apply_grid_property(XtStyle *style, const std::string &property,
     parseGridLine(value, &style->grid_row_start, &style->grid_row_end);
     return true;
   }
+  if (property == "grid-area") {
+    std::vector<std::string> parts;
+    std::string current;
+    int depth = 0;
+    for (char c : value) {
+      if (c == '(') depth++;
+      if (c == ')') depth--;
+      if (c == '/' && depth == 0) {
+        parts.push_back(xt_css_trim(current));
+        current.clear();
+      } else {
+        current.push_back(c);
+      }
+    }
+    parts.push_back(xt_css_trim(current));
+    style->grid_row_start = style->grid_column_start = 0;
+    style->grid_row_end = style->grid_column_end = 0;
+    if (parts.size() >= 1) parseGridLineNumber(parts[0], &style->grid_row_start);
+    if (parts.size() >= 2) parseGridLineNumber(parts[1], &style->grid_column_start);
+    if (parts.size() >= 3) parseGridLineNumber(parts[2], &style->grid_row_end);
+    if (parts.size() >= 4) parseGridLineNumber(parts[3], &style->grid_column_end);
+    return true;
+  }
 
   return false;
 }

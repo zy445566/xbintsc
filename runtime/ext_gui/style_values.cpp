@@ -156,15 +156,31 @@ static bool assignColor(Color *target, bool *has, const std::string &value) {
 
 /* -- declaration application ---------------------------------------------- */
 
-void xt_style_apply_declaration(XtStyle *style, const std::string &property,
+void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
                                 const std::string &rawValue, const ApplyContext &context) {
   std::string value = xt_css_trim(rawValue);
+  /* Vendor aliases of properties the engine does implement. */
+  std::string property = rawProperty;
+  if (property == "-webkit-backdrop-filter") property = "backdrop-filter";
+  else if (property == "-webkit-user-select") property = "user-select";
 
   if (property == "display") {
+    std::string text = xt_css_lower(value);
+    style->inline_level = false;
+    if (text == "inline-flex") {
+      style->display = Display::Flex;
+      style->inline_level = true;
+      return;
+    }
+    if (text == "inline-grid") {
+      style->display = Display::Grid;
+      style->inline_level = true;
+      return;
+    }
     static const char *const names[] = {"none", "block", "inline", "inline-block", "flex", "grid",
                                         "list-item"};
     int index = 0;
-    if (parseEnum(value, names, 7, &index)) style->display = (Display)index;
+    if (parseEnum(text, names, 7, &index)) style->display = (Display)index;
     return;
   }
   if (property == "visibility") {
@@ -208,12 +224,36 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     return;
   }
 
-  if (property == "margin") { parseEdgeLengths(value, &style->margin); return; }
+  if (property == "margin") {
+    if (parseEdgeLengths(value, &style->margin)) {
+      style->margin_top_auto = style->margin.top.unit == Unit::Auto;
+      style->margin_right_auto = style->margin.right.unit == Unit::Auto;
+      style->margin_bottom_auto = style->margin.bottom.unit == Unit::Auto;
+      style->margin_left_auto = style->margin.left.unit == Unit::Auto;
+    }
+    return;
+  }
   if (property == "padding") { parseEdgeLengths(value, &style->padding); return; }
-  if (property == "margin-top") { setEdge(&style->margin, "top", xt_css_parse_length(value)); return; }
-  if (property == "margin-right") { setEdge(&style->margin, "right", xt_css_parse_length(value)); return; }
-  if (property == "margin-bottom") { setEdge(&style->margin, "bottom", xt_css_parse_length(value)); return; }
-  if (property == "margin-left") { setEdge(&style->margin, "left", xt_css_parse_length(value)); return; }
+  if (property == "margin-top") {
+    setEdge(&style->margin, "top", xt_css_parse_length(value));
+    style->margin_top_auto = style->margin.top.unit == Unit::Auto;
+    return;
+  }
+  if (property == "margin-right") {
+    setEdge(&style->margin, "right", xt_css_parse_length(value));
+    style->margin_right_auto = style->margin.right.unit == Unit::Auto;
+    return;
+  }
+  if (property == "margin-bottom") {
+    setEdge(&style->margin, "bottom", xt_css_parse_length(value));
+    style->margin_bottom_auto = style->margin.bottom.unit == Unit::Auto;
+    return;
+  }
+  if (property == "margin-left") {
+    setEdge(&style->margin, "left", xt_css_parse_length(value));
+    style->margin_left_auto = style->margin.left.unit == Unit::Auto;
+    return;
+  }
   if (property == "padding-top") { setEdge(&style->padding, "top", xt_css_parse_length(value)); return; }
   if (property == "padding-right") { setEdge(&style->padding, "right", xt_css_parse_length(value)); return; }
   if (property == "padding-bottom") { setEdge(&style->padding, "bottom", xt_css_parse_length(value)); return; }
@@ -225,15 +265,11 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   if (property == "border-bottom-width") { setEdge(&style->border_width, "bottom", xt_css_parse_length(value)); return; }
   if (property == "border-left-width") { setEdge(&style->border_width, "left", xt_css_parse_length(value)); return; }
   if (property == "border-radius") {
+    /* `%` stays symbolic: layout resolves it against the box's smaller side. */
     Length length = xt_css_parse_length(value);
-    if (length.unit == Unit::Px || length.unit == Unit::Number) {
-      style->border_radius = length.value;
-    } else if (length.unit == Unit::Calc) {
-      /* A `calc()` radius is a paint-time scalar here (the engine has no
-       * per-corner percentages), so resolve it against the viewport/font now. */
-      style->border_radius = xt_style_resolve_absolute(length, 0.0f, context.parentFontSize,
-                                                       context.rootFontSize, context.viewportWidth,
-                                                       context.viewportHeight);
+    if (length.unit != Unit::Invalid && length.unit != Unit::Auto &&
+        length.unit != Unit::None) {
+      style->border_radius = length;
     }
     return;
   }
@@ -280,6 +316,7 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     return;
   }
   if (property == "background-color") { assignColor(&style->background, &style->has_background, value); return; }
+  if (property == "background-size") { xt_style_apply_background_size(style, value); return; }
   if (property == "background-image") {
     xt_style_apply_background_image(style, value);
     return;
@@ -370,6 +407,9 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     if (parseEnum(value, names, 5, &index)) style->white_space = (WhiteSpace)index;
     return;
   }
+  if (xt_style_apply_text_property(style, property, value, context)) return;
+  if (xt_style_apply_ui_property(style, property, value)) return;
+  if (xt_style_apply_svg_property(style, property, value)) return;
 
   if (xt_style_apply_grid_property(style, property, value)) return;
 

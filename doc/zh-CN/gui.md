@@ -2,7 +2,7 @@
 
 > 语言 / Language：[English](../gui.md) | **简体中文**
 
-状态：**M20** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
+状态：**M22** —— 功能（M1–M15）已全部完成：HTML 解析、CSS 选择器匹配、层叠（cascade）、计算样式与布局（块级、行内、Flexbox 与 CSS 定位）均已就位，引擎还会**绘制**：它构建一个由矩形、图像与排版后的文本 run 组成的显示列表，并通过 SDL_GPU 渲染。输入事件会经过命中测试并投递给原生 TS 处理器，`:hover`/`:focus` 会被动态匹配，`<img>` 依据其固有尺寸确定大小并从纹理绘制——位图（PNG/JPEG/…）与 SVG 文件皆可，后者按绘制尺寸光栅化，因此矢量图保持清晰——CSS transition 会为绘制属性做动画。**M16** 让内联 `<svg>` 子树获得同样的处理：子树被序列化回 SVG 文档，并按绘制设备尺寸光栅化，因此图标不再需要单独的文件。**M8** 增加了交互式 DOM：具有稳定标识的元素句柄、变更操作（`appendChild`、`textContent`、`classList`、`style` 等）以及支持捕获/冒泡的元素级事件。**M9** 会提前编译 `<script>` 主体（内联与 `<script src>`）——参见 `gui-scripts.md`。**M10** 增加 `requestAnimationFrame` 以及若干 DOM 辅助方法。**M11** 增加 `position: relative`/`absolute`/`fixed` 及其偏移，`examples/gui/pelican-bike`（一个可玩的 2D 游戏）就构建在它之上。**M12** 明确了 DOM 节点生命周期（哪些变更释放、哪些保留），并让引擎内存有界：参见[节点生命周期](./gui/dom.md)与[内存与 GC](./gui/runtime.md)。**M13** 真正播放
 `<video>`/`<audio>`——可选的 **`media` 链接特性**用 vendored 的最小 FFmpeg 在主线程解码，
 视频帧走图像纹理路径、音频进入 SDL 流，DOM 媒体 API 暴露
 `play`/`pause`/`currentTime`/… 与媒体事件。编译器会从程序里判断是否需要它
@@ -308,6 +308,14 @@
       opacity、布局长度、box-shadow 以及
       `cubic-bezier()`/`steps()`/`step-start`/`step-end`。
     - e2e：`tests/e2e/gui-css-features.test.ts`。
+22. **M22 — 拳击界面的 CSS 覆盖** ✅
+    - `letter-spacing`、`text-transform`、`font` 简写、长度形式的
+      `vertical-align`、`writing-mode`（仅文本竖排）、百分比 `border-radius`、
+      `inline-flex`/`inline-grid`、`grid-area`、`aspect-ratio`、自动外边距、
+      `outline` + `:focus-visible`/`:active`、`currentColor`、`skewX()`/
+      `skewY()`、`url()` 图层的 `background-size` 平铺，以及 SVG 子元素上的
+      文档 CSS（`fill`/`stroke`/…）均已生效。
+    - e2e：`tests/e2e/gui-css-coverage.test.ts`。
 
 ## 进度日志
 
@@ -441,6 +449,13 @@
   `paint_backdrop.cpp` + `renderer_layer.cpp` 合成 `backdrop-filter`，
   `paint_clip.cpp`/`renderer_clip.cpp` 对三角化的 `clip-path` 多边形裁剪几何。
   e2e 见 `tests/e2e/gui-effects.test.ts`。
+- **M22** ✅ 拳击界面的 CSS 覆盖。层叠/声明解析新增 `letter-spacing`、
+  `text-transform`、`font` 简写、`vertical-align`、`writing-mode`、百分比
+  `border-radius`、`outline`、`background-size`、`currentColor` 与 SVG 表现
+  属性；布局新增行内级 flex/grid、`grid-area`、`aspect-ratio`、自动外边距与
+  仅文本竖排；绘制新增 outline 边框条、按尺寸平铺的图像背景与旋转的竖排文字；
+  `:focus-visible` 目前等同 `:focus`，`:active` 由指针按下/抬起驱动。e2e：
+  `tests/e2e/gui-css-coverage.test.ts`。
 - **M21** ✅ CSS 取值/动画完整性。`calc()` 被解析为未求值表达式树，由布局/
   绘制求解；`box-shadow` 与带模糊的 `text-shadow` 使用可缓存为纹理的可分离
   高斯掩码；`backdrop-filter` 获得离屏快照通道；`@keyframes`（含全部

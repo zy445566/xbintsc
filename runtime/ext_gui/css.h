@@ -124,6 +124,7 @@ struct StyleSheet {
   bool has_pseudo_elements = false;
   bool has_hover = false;
   bool has_focus = false;
+  bool has_active = false;
   bool has_transitions = false;
   bool has_animations = false;
 };
@@ -136,6 +137,8 @@ const KeyframesRule *xt_css_find_keyframes(const StyleSheet &sheet, const std::s
 struct MatchState {
   const Node *hover = nullptr;
   const Node *focus = nullptr;
+  /** The element currently held down by the primary pointer (`:active`). */
+  const Node *active = nullptr;
 };
 
 StyleSheet xt_css_parse_stylesheet(const std::string &text);

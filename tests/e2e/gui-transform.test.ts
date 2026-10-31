@@ -122,8 +122,9 @@ describe.skipIf(!guiAvailable)("gui extension — transform", () => {
     );
     // `translate3d`/`scale3d` keep their x/y and drop `z`; `rotateZ` is `rotate`.
     expect(value("a")).toBe("translate(10px, 4px) scale(2, 3) rotate(180deg)");
-    // An unsupported function invalidates the whole declaration.
-    expect(value("b")).toBe("none");
+    // `skewX()` is supported (an unsupported function would still invalidate
+    // the whole declaration).
+    expect(value("b")).toBe("skewX(10deg)");
     // Percentages stay unresolved in the computed value and resolve in layout.
     expect(value("c")).toBe("translate(50%, 50%)");
     expect(value("c-rect")).toBe("150.0,125.0");

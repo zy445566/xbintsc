@@ -27,7 +27,9 @@ struct XtImageApi {
   bool (*svg_markup_render)(const std::string &markup, int width, int height, xtgui::Image *out);
   int (*svg_markup_shapes)(const std::string &markup);
   bool (*inline_is_root)(const void *node);
-  std::string (*inline_serialize)(const void *node);
+  /** Serialize an inline `<svg>`; `styles` is the document's computed-style map
+   * (`const std::unordered_map<const Node*, XtStyle>*`, or null). */
+  std::string (*inline_serialize)(const void *node, const void *styles);
   /** Set the window icon from the embedded PNG (a no-op without an icon). */
   void (*apply_icon)(void *window);
 };

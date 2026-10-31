@@ -40,7 +40,8 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
     auto box = std::make_unique<LayoutBox>();
     box->node = node;
     box->is_text = true;
-    box->text = node->text;
+    box->text = inherited != nullptr ? xt_apply_text_transform(node->text, inherited->text_transform)
+                                     : node->text;
     box->style = inherited;
     box->display = Display::Inline;
     return box;
@@ -117,7 +118,7 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
      * not descend into them. */
     box->is_inline_svg = true;
     if (images != nullptr) {
-      box->svg_markup = images->inline_serialize(node);
+      box->svg_markup = images->inline_serialize(node, &styles);
       int width = 0;
       int height = 0;
       if (images->svg_markup_size(box->svg_markup, &width, &height)) {

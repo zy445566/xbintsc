@@ -254,7 +254,7 @@ static xt_value win_inline_svg(xt_value self, xt_value env, int32_t argc, xt_val
   const xtgui::Node *node = win->document->querySelector(selector);
   const XtImageApi *images = xt_image_api();
   if (images == nullptr || !images->inline_is_root(node)) return XT_UNDEFINED;
-  std::string markup = images->inline_serialize(node);
+  std::string markup = images->inline_serialize(node, &win->document->styles());
   int width = 0, height = 0;
   images->svg_markup_size(markup, &width, &height);
   xt_value object = xt_object_new();

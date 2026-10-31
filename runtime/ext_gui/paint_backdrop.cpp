@@ -185,7 +185,7 @@ bool addBackdropFilter(DisplayList &out, const LayoutBox &box, const XtStyle &st
   float y = box.y;
   float width = box.width;
   float height = box.height;
-  backdrop.radius = style.border_radius;
+  backdrop.radius = box.border_radius;
   if (box.has_transform) {
     LayoutRect bounds = xt_layout_transform_rect(box.world, x, y, width, height);
     x = bounds.x;

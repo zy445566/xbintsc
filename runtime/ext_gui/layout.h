@@ -51,6 +51,10 @@ struct TextFragment {
   float width = 0;
   float height = 0;
   std::string text;
+  /** A vertical-writing-mode run: `x`/`y`/`width`/`height` are its column box.
+   * `upright` is a CJK-style glyph; otherwise the run is rotated 90° clockwise. */
+  bool vertical = false;
+  bool upright = false;
 };
 
 /** A viewport-relative rectangle (`getBoundingClientRect` result). */
@@ -65,6 +69,8 @@ struct LayoutBox {
   bool is_text = false;
   std::string text;               // only for text boxes
   std::vector<TextFragment> fragments;
+  /** `border-radius` resolved against this border box (percent supported). */
+  float border_radius = 0.0f;
 
   /* Replaced element (currently `<img>`): source + intrinsic pixel size. */
   bool is_image = false;

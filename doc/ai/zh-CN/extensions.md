@@ -83,7 +83,10 @@ import { createWindow, run } from "gui";
 `examples/gui/pelican-svg`）。CSS 子集还覆盖 `@media`、`::before`/`::after`
 生成内容、线性/径向多层背景、`calc()`、真正的 `text-shadow`/`box-shadow`
 高斯模糊、`clip-path`、`filter` 颜色效果、`backdrop-filter` 合成、
-`@keyframes` 与 `transition`/`animation` 时间函数。`filter: blur()`
+`@keyframes` 与 `transition`/`animation` 时间函数、`letter-spacing`、
+`text-transform`、行内级 `flex`/`grid`、`grid-area`、`aspect-ratio`、自动
+外边距、百分比 `border-radius`、`outline`、`url()` 图层的平铺
+`background-size`、SVG 子元素上的文档 CSS，以及仅文本的竖排书写模式。`filter: blur()`
 仍是有文档说明的近似。
 因为主体是 C++，它以各平台预编译的 `gui.a`/`gui.lib` 形式分发。如果该
 平台的归档不存在，构建会以明确的提示失败；设计与路线图见 [../../zh-CN/gui.md](../../zh-CN/gui.md)（总览；引擎按功能拆分在 [`doc/zh-CN/gui/`](../../zh-CN/gui/) 下），

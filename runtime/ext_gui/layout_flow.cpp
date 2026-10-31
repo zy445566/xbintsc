@@ -46,13 +46,19 @@ float Layouter::preferredContentWidth(const LayoutBox *box, float available) con
   if (!isAuto(style.width)) return px(style.width, available, style.font_size, 0.0f);
   if ((box->is_image || box->is_canvas || box->is_inline_svg) && box->intrinsic_width > 0)
     return box->intrinsic_width;
-  if (box->is_text) return textWidth(box->text, style);
+  if (box->is_text) {
+    if (style.writing_mode != WritingMode::HorizontalTB) return lineHeightOf(style);
+    return textWidth(box->text, style);
+  }
   /* A row flex container's intrinsic width is the sum of its items (and gaps);
    * taking the widest child would make a shrink-to-fit toolbar narrower than
    * its buttons and then shrink every button to zero. */
-  if (style.display == Display::Flex &&
-      (style.flex_direction == FlexDirection::Row ||
-       style.flex_direction == FlexDirection::RowReverse)) {
+  bool flex_row = style.flex_direction == FlexDirection::Row ||
+                  style.flex_direction == FlexDirection::RowReverse;
+  /* In a vertical writing mode the flex row axis is vertical, so the intrinsic
+   * width is the widest item rather than the sum of the row. */
+  if (style.writing_mode != WritingMode::HorizontalTB) flex_row = !flex_row;
+  if (style.display == Display::Flex && flex_row) {
     float total = 0;
     int count = 0;
     for (const std::unique_ptr<LayoutBox> &child : box->children) {
@@ -70,7 +76,11 @@ float Layouter::preferredContentWidth(const LayoutBox *box, float available) con
     /* Out-of-flow children do not contribute to the parent's intrinsic width. */
     if (isAbsoluteChild(child.get())) continue;
     if (child->is_text) {
-      best = std::max(best, textWidth(child->text, *child->style));
+      if (child->style->writing_mode != WritingMode::HorizontalTB) {
+        best = std::max(best, lineHeightOf(*child->style));
+      } else {
+        best = std::max(best, textWidth(child->text, *child->style));
+      }
     } else {
       best = std::max(best,
                       preferredContentWidth(child.get(), available) + horizontalEdges(child.get()));
@@ -204,6 +214,9 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
    * `display:grid`), and `layoutChildren` would otherwise give them no geometry
    * or fragment at all — the glyph then silently disappears from paint. */
   if (box->is_text) {
+    if (style.writing_mode != WritingMode::HorizontalTB) {
+      return layoutVerticalTextBox(box, x, y, lineHeightOf(style));
+    }
     float textW = textWidth(box->text, style);
     float textH = lineHeightOf(style);
     box->x = x;
@@ -260,6 +273,24 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
   box->content_width = contentWidth;
   box->width =
       box->border_left + box->padding_left + contentWidth + box->padding_right + box->border_right;
+  /* Block-level horizontal auto margins absorb the leftover inline space; two
+   * auto margins centre the box. */
+  bool autoLeft = style.margin_left_auto;
+  bool autoRight = style.margin_right_auto;
+  if (!outOfFlow && (autoLeft || autoRight)) {
+    float free = availableWidth - box->width - (autoLeft ? 0.0f : box->margin_left) -
+                 (autoRight ? 0.0f : box->margin_right);
+    if (free < 0.0f) free = 0.0f;
+    if (autoLeft && autoRight) {
+      box->margin_left = box->margin_right = free / 2.0f;
+    } else if (autoLeft) {
+      box->margin_left = free;
+    } else {
+      box->margin_right = free;
+    }
+    box->x = x + box->margin_left;
+    box->content_x = box->x + box->border_left + box->padding_left;
+  }
 
   float definiteHeight = -1;
   if (!isAuto(style.height) && !(style.height.unit == Unit::Percent && availableHeight < 0)) {
@@ -276,6 +307,17 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
     float top = px(style.top, box->cb_height, em);
     float bottom = px(style.bottom, box->cb_height, em);
     definiteHeight = box->cb_height - top - bottom - verticalEdges(box);
+    if (definiteHeight < 0) definiteHeight = 0;
+  }
+  /* `aspect-ratio` derives the content height from the used width when the
+   * height is auto. (Height-to-width derivation is not implemented: no page in
+   * the target corpus needs it.) */
+  if (definiteHeight < 0 && forcedContentHeight < 0 && style.aspect_ratio > 0.0f) {
+    float borderWidth = box->border_left + box->padding_left + contentWidth +
+                        box->padding_right + box->border_right;
+    float borderHeight = borderWidth / style.aspect_ratio;
+    definiteHeight = borderHeight - box->border_top - box->border_bottom - box->padding_top -
+                     box->padding_bottom;
     if (definiteHeight < 0) definiteHeight = 0;
   }
 
@@ -304,6 +346,8 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
   box->content_height = contentHeight;
   box->height =
       box->border_top + box->padding_top + contentHeight + box->padding_bottom + box->border_bottom;
+  box->border_radius = xt_style_border_radius_px(style.border_radius, box->width, box->height,
+                                                 em, rootFontSize, vw, vh);
   box->baseline = box->height;
   /* Now that this box has its final size, its padding box is the containing
    * block its own children resolve against — and only now can an out-of-flow
@@ -318,8 +362,11 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
 }
 
 bool Layouter::isAbsoluteChild(const LayoutBox *box) {
-  return box->style != nullptr && (box->style->position == Position::Absolute ||
-                                   box->style->position == Position::Fixed);
+  /* A text box shares its element's style pointer, but a text node can never be
+   * out of flow: treating it as absolute dropped direct text out of an
+   * absolutely positioned box (and made a shrink-to-fit width zero). */
+  return box != nullptr && !box->is_text && box->style != nullptr &&
+         (box->style->position == Position::Absolute || box->style->position == Position::Fixed);
 }
 
 void Layouter::layoutAbsoluteChildren(LayoutBox *block, float contentWidth,
@@ -423,6 +470,10 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
     }
     if (display == Display::Block || display == Display::ListItem || display == Display::Flex ||
         display == Display::Grid || child->style == nullptr) {
+      if (childStyle != nullptr && childStyle->inline_level) {
+        inlineRun.push_back(child.get());
+        continue;
+      }
       flush();
       resolveEdges(child.get(), contentWidth);
       /* Adjacent vertical margins collapse: the gap is the collapsed value of

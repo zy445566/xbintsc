@@ -78,4 +78,15 @@ float xt_style_resolve_absolute(const Length &length, float base, float em, floa
   }
 }
 
+float xt_style_border_radius_px(const Length &radius, float width, float height, float em,
+                                float root, float vw, float vh) {
+  float base = width < height ? width : height;
+  if (base < 0.0f) base = 0.0f;
+  float value = xt_style_resolve_absolute(radius, base, em, root, vw, vh);
+  if (value < 0.0f) value = 0.0f;
+  float half = (width < height ? width : height) / 2.0f;
+  if (half < 0.0f) half = 0.0f;
+  return value > half ? half : value;
+}
+
 }  // namespace xtgui

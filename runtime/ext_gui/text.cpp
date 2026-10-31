@@ -11,6 +11,7 @@
 #include "text_api.h"
 
 #include "perf.h"
+#include "text_fonts.h"
 
 namespace xtgui {
 
@@ -63,6 +64,7 @@ void xt_text_shutdown() {
   xt_text_cache_clear();
   xt_text_glyph_cache_clear();
   xt_text_api()->shutdown();
+  xt_font_db_shutdown();
 }
 
 }  // namespace xtgui

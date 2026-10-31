@@ -182,22 +182,32 @@ unavailable it is skipped while the rest of the page still paints.
 backend table. The default backend is the bundled **stb_truetype**
 (`text_stb.cpp`, `runtime/ext_gui/stb_truetype.h`). The optional **`shaping`**
 link feature installs `text_hb.cpp`, a HarfBuzz + FreeType backend, and is
-selected automatically for non-ASCII text.
+selected automatically for non-ASCII text. Both backends share the font
+database in `text_fonts.cpp` (family/weight/style matching and fallbacks) and
+the sfnt metadata reader in `text_font_sfnt.cpp`, so a CSS style resolves to the
+same real face whichever shaper is linked.
 
-- Fonts are resolved from well-known system paths (Helvetica/Arial on macOS,
-  DejaVu/Liberation on Linux, Segoe UI/Arial on Windows), overridable with
-  `XT_GUI_FONT` (and `XT_GUI_FONT_MONO`), and cached per `(family class, size)`.
-  Only regular upright faces are used for now; weight/italic selection is a
-  later refinement.
+- Fonts are resolved from the installed system faces. The `font-family` list is
+  matched case-insensitively; `sans-serif`, `serif`, `monospace` (and the
+  `system-ui`/`ui-*` aliases) map to platform defaults, while any other family
+  name discovers the platform font directories once. `font-weight` (1–1000) and
+  `font-style: italic` select that family's real bold/italic face using the CSS
+  Fonts weight-matching order; a missing weight picks the nearest face and a
+  family without an italic face uses its upright face — there is no synthetic
+  bold or oblique. Faces are cached per `(file, collection index, size)`.
+  `XT_GUI_FONT` / `XT_GUI_FONT_MONO` still override the generic defaults.
 - The default candidates prefer a **CJK-capable TrueType/TTC** face (Microsoft
   YaHei on Windows, PingFang/STHeiti on macOS, Noto Sans CJK/WenQuanYi on Linux)
-  before the Latin-only ones. A candidate that stb_truetype cannot parse (for
-  example a CFF/OTF collection) is skipped in favour of the next one.
+  before the Latin-only ones. A family's weight/style variants are resolved
+  across its files, and a candidate stb_truetype cannot parse (for example a
+  CFF/OTF collection) is skipped in favour of the next one; the `shaping`
+  backend loads it instead.
 - **Codepoints the primary face lacks fall back to another face.** The engine
   keeps a small fallback chain — the platform's symbol face (Segoe UI Symbol,
-  Apple Symbols, Noto Sans Symbols, DejaVu Sans) first, then the other family
-  class — and resolves each codepoint to the first face in it that has the
-  glyph. The run is shaped in segments, one per face, so a mixed run (Latin
+  Apple Symbols, Noto Sans Symbols, DejaVu Sans) first, then the default sans,
+  serif and monospace faces — and resolves each codepoint to the first face in
+  it that has the glyph. The run is shaped in segments, one per face, so a mixed
+  run (Latin
   plus an arrow, box-drawing or geometric shape, or Latin inside CJK) draws
   every glyph instead of dropping the missing ones as `.notdef`. Each shaped
   glyph carries its face (`ShapedGlyph::font`) so the renderer rasterises it
@@ -244,7 +254,9 @@ is what `tests/e2e/gui-perf.test.ts` asserts on.
   glyphs / 8,192 entries; when a generation is full the *spare* one is dropped
   and becomes current, so the hot path has no LRU bookkeeping. A word is shaped
   once and reused by every later layout pass and repaint that draws it. Primary
-  face lookups are cached by (family class, size) as well.
+  face lookups are cached by (family, weight, style, size) as well; the font
+  database itself scans the platform directories only once, on the first
+  non-generic family request.
 - **No-op writes.** `textContent` and `style.<property>` do nothing when the
   node already shows that value: the document is not dirtied, so no restyle,
   relayout, repaint or upload follows. A HUD that assigns the same clock string,

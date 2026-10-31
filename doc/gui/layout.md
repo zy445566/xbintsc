@@ -25,7 +25,10 @@ with absolute (viewport-relative) geometry:
   measured with the stb_truetype stack (see [Text stack](./rendering.md#text-stack-m4b)).
 - **Flexbox** — `row`/`column` (and the `-reverse` variants) with `gap`,
   `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and `align-items`
-  (including `stretch` when the cross size is definite). `flex-wrap: wrap`
+  (including `stretch` when the cross size is definite). On both axes the main
+  size comes from `flex-basis` (or the measured size when it is `auto`), positive
+  free space is split by `flex-grow` and a deficit by `flex-shrink`, and an
+  item's `align-self` overrides the container's `align-items`. `flex-wrap: wrap`
   breaks items into several lines, `align-content`
   (`stretch`/`flex-start`/`flex-end`/`center`/`space-between`/`space-around`)
   distributes the lines on the cross axis and `wrap-reverse` flips that axis.
@@ -37,7 +40,10 @@ with absolute (viewport-relative) geometry:
   `row-gap` / `column-gap`, row-major auto-placement, simple `grid-column` /
   `grid-row` line placement, and `align/justify-items` plus
   `align/justify-self` (including `place-items` / `place-self`). Implicit rows
-  and columns grow from the items; a single-cell grid with `place-items: center` centres a card in the whole overlay. Item measurement is a two-pass
+  and columns grow from the items; a definite grid height is shared across `fr`
+  rows after the fixed and auto rows are sized, so `aspect-ratio` can drive a
+  `repeat(n, 1fr)` grid. A single-cell grid with `place-items: center` centres a
+  card in the whole overlay. Item measurement is a two-pass
   layout (intrinsic size, then final placement), so text fragments are cleared
   between passes.
 - **Inline-level containers, auto margins and aspect ratio** — `display:

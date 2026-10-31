@@ -218,8 +218,9 @@ float Layouter::layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox 
     float cursor = container->content_x + offset;
     for (size_t k = 0; k < line.size(); k++) {
       size_t i = reverse ? line[line.size() - 1 - k] : line[k];
-      bool stretch = containerStyle.align_items == AlignItems::Stretch &&
-                     isAuto(items[i]->style->height) &&
+      AlignItems align = items[i]->style->has_align_self ? items[i]->style->align_self
+                                                         : containerStyle.align_items;
+      bool stretch = align == AlignItems::Stretch && isAuto(items[i]->style->height) &&
                      (definiteHeight >= 0 || lines.size() > 1);
       if (stretch) {
         float contentH = lineCross[li] - verticalEdges(items[i]);
@@ -229,7 +230,7 @@ float Layouter::layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox 
                     definiteHeight, contentW, contentH);
         cross[i] = lineCross[li];
       }
-      float crossOffset = crossOffsetFor(containerStyle.align_items, lineCross[li], cross[i]);
+      float crossOffset = crossOffsetFor(align, lineCross[li], cross[i]);
       float dx = cursor + items[i]->margin_left - items[i]->x;
       float dy =
           container->content_y + lineStart + crossOffset + items[i]->margin_top - items[i]->y;
@@ -261,26 +262,55 @@ float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutB
     outer[i] = verticalEdges(items[i]) + items[i]->height;
   }
 
+  /* Main-axis basis: `flex-basis` when set, otherwise the measured height. A
+   * percentage basis needs a definite container height; with `height: auto` it
+   * behaves like `auto`, as on the row axis. */
+  std::vector<float> basis(count, 0.0f);
+  for (size_t i = 0; i < count; i++) {
+    const XtStyle &style = *items[i]->style;
+    float base = outer[i];
+    if (!isAuto(style.flex_basis)) {
+      float resolved = -1.0f;
+      if (style.flex_basis.unit != Unit::Percent || definiteHeight >= 0)
+        resolved = px(style.flex_basis, definiteHeight >= 0 ? definiteHeight : contentWidth,
+                      style.font_size, -1.0f);
+      if (resolved >= 0) base = resolved + verticalEdges(items[i]);
+    }
+    basis[i] = base;
+  }
+
   if (!wrap) {
     float mainSize = definiteHeight >= 0 ? definiteHeight : -1;
-    std::vector<float> mainSizes = outer;
+    std::vector<float> mainSizes = basis;
     if (mainSize >= 0) {
-      float free = mainSize - sumOf(outer) - mainGap * (float)(count - 1);
+      float free = mainSize - sumOf(basis) - mainGap * (float)(count - 1);
       if (free > 0) {
         float totalGrow = 0;
         for (LayoutBox *item : items) totalGrow += item->style->flex_grow;
-        if (totalGrow > 0) {
-          for (size_t i = 0; i < count; i++) {
+        if (totalGrow > 0)
+          for (size_t i = 0; i < count; i++)
             mainSizes[i] += free * items[i]->style->flex_grow / totalGrow;
-            float contentH = mainSizes[i] - verticalEdges(items[i]);
-            if (contentH < 0) contentH = 0;
-            layoutBlock(items[i], container->content_x, container->content_y, contentWidth,
-                        definiteHeight, -1, contentH);
+      } else if (free < 0) {
+        float totalShrink = 0;
+        for (size_t i = 0; i < count; i++)
+          totalShrink += items[i]->style->flex_shrink * basis[i];
+        if (totalShrink > 0)
+          for (size_t i = 0; i < count; i++) {
+            mainSizes[i] += free * (items[i]->style->flex_shrink * basis[i]) / totalShrink;
+            if (mainSizes[i] < 0) mainSizes[i] = 0;
           }
-        }
       }
     } else {
-      mainSize = sumOf(outer) + mainGap * (float)(count - 1);
+      mainSize = sumOf(basis) + mainGap * (float)(count - 1);
+    }
+    /* Re-lay every item out at its used height: the basis, grow and shrink
+     * passes above all change it. */
+    for (size_t i = 0; i < count; i++) {
+      float contentH = mainSizes[i] - verticalEdges(items[i]);
+      if (contentH < 0) contentH = 0;
+      setContainingBlock(items[i], containingBlockAncestor(items[i]));
+      layoutBlock(items[i], container->content_x, container->content_y, contentWidth,
+                  definiteHeight, -1, contentH);
     }
     float freeSpace = mainSize - (sumOf(mainSizes) + mainGap * (float)(count - 1));
     float offset = 0;
@@ -292,7 +322,11 @@ float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutB
     float cursor = container->content_y + offset;
     for (size_t k = 0; k < count; k++) {
       size_t i = reverse ? (count - 1 - k) : k;
-      float dx = container->content_x + items[i]->margin_left - items[i]->x;
+      AlignItems align = items[i]->style->has_align_self ? items[i]->style->align_self
+                                                         : containerStyle.align_items;
+      float crossSize = horizontalEdges(items[i]) + items[i]->width;
+      float crossOffset = crossOffsetFor(align, contentWidth, crossSize);
+      float dx = container->content_x + crossOffset + items[i]->margin_left - items[i]->x;
       float dy = cursor + items[i]->margin_top - items[i]->y;
       translate(items[i], dx, dy);
       float auto_extra = 0.0f;
@@ -304,20 +338,28 @@ float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutB
   }
 
   /* Wrapped columns: lines run top-to-bottom and are placed side by side. */
-  std::vector<std::vector<size_t>> lines = breakIntoLines(outer, definiteHeight, mainGap, true);
+  std::vector<std::vector<size_t>> lines = breakIntoLines(basis, definiteHeight, mainGap, true);
   std::vector<float> mainSizes(count, 0.0f);
   std::vector<float> lineCross(lines.size(), 0.0f);
   for (size_t li = 0; li < lines.size(); li++) {
     const std::vector<size_t> &line = lines[li];
     float sumBase = 0;
-    for (size_t i : line) sumBase += outer[i];
-    for (size_t i : line) mainSizes[i] = outer[i];
+    for (size_t i : line) sumBase += basis[i];
+    for (size_t i : line) mainSizes[i] = basis[i];
     float free = definiteHeight - sumBase - mainGap * (float)(line.size() - 1);
     if (free > 0) {
       float totalGrow = 0;
       for (size_t i : line) totalGrow += items[i]->style->flex_grow;
       if (totalGrow > 0)
         for (size_t i : line) mainSizes[i] += free * items[i]->style->flex_grow / totalGrow;
+    } else if (free < 0) {
+      float totalShrink = 0;
+      for (size_t i : line) totalShrink += items[i]->style->flex_shrink * basis[i];
+      if (totalShrink > 0)
+        for (size_t i : line) {
+          mainSizes[i] += free * (items[i]->style->flex_shrink * basis[i]) / totalShrink;
+          if (mainSizes[i] < 0) mainSizes[i] = 0;
+        }
     }
     for (size_t i : line) {
       float contentH = mainSizes[i] - verticalEdges(items[i]);
@@ -367,7 +409,12 @@ float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutB
     float cursor = container->content_y + offset;
     for (size_t k = 0; k < line.size(); k++) {
       size_t i = reverse ? line[line.size() - 1 - k] : line[k];
-      float dx = container->content_x + lineStart + items[i]->margin_left - items[i]->x;
+      AlignItems align = items[i]->style->has_align_self ? items[i]->style->align_self
+                                                         : containerStyle.align_items;
+      float crossSize = horizontalEdges(items[i]) + items[i]->width;
+      float crossOffset = crossOffsetFor(align, lineCross[li], crossSize);
+      float dx =
+          container->content_x + lineStart + crossOffset + items[i]->margin_left - items[i]->x;
       float dy = cursor + items[i]->margin_top - items[i]->y;
       translate(items[i], dx, dy);
       float auto_extra = 0.0f;

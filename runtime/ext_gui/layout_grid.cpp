@@ -301,6 +301,37 @@ float Layouter::layoutGrid(LayoutBox *container, float contentWidth,
     }
   }
 
+  /* A definite container height is the free space an `fr` row divides, exactly
+   * like an `fr` column above. Size the fixed/auto rows first, then share what
+   * is left by flex fraction; without this a grid whose only height comes from
+   * `aspect-ratio` collapses its `repeat(n, 1fr)` rows to their content. */
+  float rowFr = 0;
+  for (const GridTrack &row : rows) rowFr += row.fr;
+  if (rowFr > 0 && definiteHeight >= 0) {
+    float fixedRows = gapY * (float)(rows.size() - 1);
+    for (size_t r = 0; r < rows.size(); r++)
+      if (rows[r].fr <= 0) fixedRows += rowHeight[r];
+    float remaining = definiteHeight - fixedRows;
+    if (remaining < 0) remaining = 0;
+    for (int pass = 0; pass < 2; pass++) {
+      float used = 0;
+      for (size_t r = 0; r < rows.size(); r++) {
+        if (rows[r].fr <= 0) continue;
+        float share = remaining * rows[r].fr / rowFr;
+        float minimum = trackPx(*this, rows[r], false, contentWidth, style.font_size);
+        if (minimum > share) share = minimum;
+        rowHeight[r] = share;
+        used += share;
+      }
+      if (used <= remaining + 0.01f) break;
+      /* An intrinsic minimum forced a deficit; shrink the fr share back. */
+      float scale = remaining / used;
+      for (size_t r = 0; r < rows.size(); r++)
+        if (rows[r].fr > 0) rowHeight[r] *= scale;
+      break;
+    }
+  }
+
   float totalHeight = gapY * (float)(rows.size() - 1);
   for (float value : rowHeight) totalHeight += value;
   if (rows.size() == 1 && definiteHeight >= 0 && definiteHeight > totalHeight)

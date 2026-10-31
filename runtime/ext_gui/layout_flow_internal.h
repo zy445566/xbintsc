@@ -132,6 +132,23 @@ inline float toPx(const Length &length, float base, float em, float root, float 
       }
       return first ? fallback : best;
     }
+    case Unit::Calc: {
+      if (length.args.size() < 2) return fallback;
+      float left = toPx(length.args[0], base, em, root, vw, vh, fallback);
+      float right = toPx(length.args[1], base, em, root, vw, vh, fallback);
+      switch (length.op) {
+        case '+':
+          return left + right;
+        case '-':
+          return left - right;
+        case '*':
+          return left * right;
+        case '/':
+          return right == 0.0f ? fallback : left / right;
+        default:
+          return left;
+      }
+    }
     case Unit::Px:
     case Unit::Number:
       return length.value;

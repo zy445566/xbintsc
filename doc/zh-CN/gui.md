@@ -14,7 +14,7 @@
 渲染器，因此盒子（以及其中的文本、图像与子元素）可以被平移、缩放与旋转而
 不触发任何重排——再加上 `transition: transform`，这些姿态可以动画（自绘的示例
 `examples/gui/pelican-svg` 正是用它让矢量画动起来）。参见
-[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V（Metal 上再由内置 SPIRV-Cross 转成 MSL）并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。glslang 是可选的 **`gpu` 链接特性**，与 `mix-blend-mode` 共享；WebGL context/DOM 绑定是单独的 **`webgl` 特性**（依赖 `gpu`），两者都不用时不链接。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向/重复多层背景、`text-shadow`、`clip-path`、`mix-blend-mode`（通过离屏合成器）与 `filter` 颜色/阴影效果。`backdrop-filter` 仍需要背景快照，真正的组模糊也仍是近似——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。**M20** 让大文档保持可交互：`@media` 每条规则只求值一次，布局与绘制共享一个有界的整形缓存，一帧只做（也只提交）变更所要求的工作——见[性能](./gui/rendering.md#性能m20)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
+[布局](./gui/layout.md#变换m15)与[动画](./gui/animation.md#css-transformm15)。**M17** 增加了真正的 **WebGL 1.0**，**M18** 增加了 **WebGL 2.0**：`<canvas>.getContext("webgl2")` 接受 `#version 300 es` 着色器、顶点数组对象、实例化绘制与采样器对象，全部由内置 glslang 编译为 SPIR-V（Metal 上再由内置 SPIRV-Cross 转成 MSL）并通过 SDL_GPU 渲染，几何、光照、纹理采样与混合都在 GPU 上完成，页面直接合成颜色纹理而无须读回——见 [WebGL](./gui/webgl.md)。glslang 是可选的 **`gpu` 链接特性**，与 `mix-blend-mode` 共享；WebGL context/DOM 绑定是单独的 **`webgl` 特性**（依赖 `gpu`），两者都不用时不链接。**M19** 补齐 CSS 装饰层：`@media` 查询、生成内容（`::before`/`::after`）、线性/径向/重复多层背景、`text-shadow`、`clip-path`、`mix-blend-mode`（通过离屏合成器）与 `filter` 颜色效果——见[绘制](./gui/rendering.md#背景生成内容与特效m19)。**M20** 让大文档保持可交互：`@media` 每条规则只求值一次，布局与绘制共享一个有界的整形缓存，一帧只做（也只提交）变更所要求的工作——见[性能](./gui/rendering.md#性能m20)。**M21** 补齐取值/动画缺口：凡接受长度处都支持 `calc()` 算术、真正的 `text-shadow`/`box-shadow` 高斯模糊、背景合成、`@keyframes` 与完整的 transition 时间函数——见[绘制](./gui/rendering.md#背景生成内容与特效m19)与[动画](./gui/animation.md#css-动画keyframes)。本总览记录了锁定决策、架构、里程碑计划与当前进度；引擎本身按功能拆分在以上各页中。
 
 ## 目录
 
@@ -140,9 +140,9 @@
    - **M6a — 图像** ✅ stb_image 解码（位图）与 NanoSVG 光栅化（SVG 文件，按
      绘制像素尺寸）、`<img>` 替换元素布局、按文件 GPU 纹理与带纹理四边形
      （`image.*`、`svg.*`、`paint.*`、`renderer.*`）。
-   - **M6b — transition/动画** ✅ `transition` 简写 + 长写、对
-     `background-color`/`color`/`border-color`/`border-radius` 的动画、重定向
-     与 `win.advance(ms)`。`@keyframes` 仍待完成。
+   - **M6b — transition/动画** ✅ `transition` 简写 + 长写、重定向、
+     `cubic-bezier()`/`steps()`、`win.advance(ms)` 与（M21）`@keyframes`
+     及全部动画长写。
 7. **M7 — CI 与发布** ✅（Linux/macOS 构建） / 🚧（运行 + Windows arm64）
    - `compile-examples` 在 Linux 与 macOS 上构建 `gui.a` 与 `media.a`（必需），
      然后在 Linux 上的 Xvfb + lavapipe 下运行示例与 `tests/e2e/gui-*.test.ts`
@@ -275,13 +275,14 @@
       转义/`attr()`，以及不会泄漏到 DOM 遍历的合成布局盒。
     - 多层 `background-image`：线性渐变自下而上按纯色带绘制（18 条），径向渐变
       逐像素光栅化成一张图像纹理（`renderer_gradient.cpp`）。
-    - `text-shadow` 作为阴影文本 run，并带九次采样模糊近似。
+    - `text-shadow` 与 `box-shadow`（外/内阴影、spread、多层）用形状掩码上的
+      真正可分离高斯模糊（M21）。
     - `clip-path` 多边形（`inset`/`circle`/`ellipse`/`polygon`）解析到设备空间，
       用耳切法三角化，并在 `renderer_clip.cpp` 中与图形几何求交——不需要模板/
       shader 改动。
     - `filter` 颜色函数、九次采样 `blur()` 与轮廓 `drop-shadow()`；
-      `backdrop-filter` 会解析并参与层叠，但需要离屏背景通道（见
-      [已知问题](./gui/known-issues.md)）。
+      `backdrop-filter` 对场景做快照、应用高斯与一个合并颜色矩阵，再通过
+      边框盒掩码合成（M21）。
     - e2e 覆盖见 `tests/e2e/gui-effects.test.ts`；参见
       [绘制](./gui/rendering.md#背景生成内容与特效m19)。
 20. **M20 — 渲染性能** ✅
@@ -294,6 +295,19 @@
       冗余的渲染状态绑定。
     - `win.stats()`/`XT_GUI_PERF` 计数器与 `tests/e2e/gui-perf.test.ts`；参见
       [性能](./gui/rendering.md#性能m20)。
+21. **M21 — CSS 取值/动画完整性** ✅
+    - `calc()` 被解析为未求值表达式树，由布局（`toPx`）与绘制共同求解；支持
+      嵌套算术、`min`/`max`/`clamp` 内的 `calc()`，以及阴影/transform/filter
+      中的 calc。
+    - `box-shadow`（外/内阴影、spread、多层）与带模糊的 `text-shadow` 被
+      光栅化为高斯掩码，缓存后作为一个带色调的图像四边形合成。
+    - `backdrop-filter` 对已绘制场景做快照，用运行时编译的 shader 通过边框盒
+      掩码合成高斯 + 颜色矩阵。
+    - `@keyframes` 与全部 `animation-*` 长写（延迟、迭代、方向、填充模式、
+      paused/running）与 transition 共享属性插值器；transition 现在还覆盖
+      opacity、布局长度、box-shadow 以及
+      `cubic-bezier()`/`steps()`/`step-start`/`step-end`。
+    - e2e：`tests/e2e/gui-css-features.test.ts`。
 
 ## 进度日志
 
@@ -423,9 +437,16 @@
   `gradient_values.cpp` 建模背景层列表（线性/径向、形状/尺寸/位置/色标），
   `paint_background.cpp` 解算并绘制它（径向层变成一个 `PaintGradient`，由
   `renderer_gradient.cpp` 光栅化成纹理），`paint_effects.cpp` 应用滤镜颜色函数
-  与九次采样模糊/投影并生成 `text-shadow` run，`paint_clip.cpp`/
-  `renderer_clip.cpp` 对三角化的 `clip-path` 多边形裁剪几何。e2e 见
-  `tests/e2e/gui-effects.test.ts`。
+  与九次采样模糊/投影，`paint_shadow.cpp` 光栅化高斯文字/盒子阴影，
+  `paint_backdrop.cpp` + `renderer_layer.cpp` 合成 `backdrop-filter`，
+  `paint_clip.cpp`/`renderer_clip.cpp` 对三角化的 `clip-path` 多边形裁剪几何。
+  e2e 见 `tests/e2e/gui-effects.test.ts`。
+- **M21** ✅ CSS 取值/动画完整性。`calc()` 被解析为未求值表达式树，由布局/
+  绘制求解；`box-shadow` 与带模糊的 `text-shadow` 使用可缓存为纹理的可分离
+  高斯掩码；`backdrop-filter` 获得离屏快照通道；`@keyframes`（含全部
+  `animation-*` 长写、延迟、迭代、方向与填充模式）与 transition 共享属性插值器，
+  transition 现在还覆盖 opacity、布局长度、box-shadow 以及
+  `cubic-bezier()`/`steps()`。e2e 见 `tests/e2e/gui-css-features.test.ts`。
 - **M20** ✅ 渲染性能。`@media` 每次重算样式时每条规则只求值一次；没有
   `::before`/`::after` 的样式表完全跳过生成内容；只有样式表包含
   `:hover`/`:focus` 规则时才因这两个状态重算样式（`style.cpp`、

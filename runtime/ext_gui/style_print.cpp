@@ -18,6 +18,21 @@ static std::string formatNumber(float number) {
   return buffer;
 }
 
+static std::string formatCalcBody(const Length &length);
+static std::string formatLength(const Length &length);
+
+/** A nested `calc()` operand is parenthesised instead of spelling `calc(calc(…))`,
+ * except where operator precedence already groups it the same way. */
+static std::string formatCalcOperand(const Length &length, char parent_op) {
+  if (length.unit == Unit::Calc) {
+    int parent_precedence = (parent_op == '*' || parent_op == '/') ? 2 : 1;
+    int own_precedence = (length.op == '*' || length.op == '/') ? 2 : 1;
+    if (own_precedence > parent_precedence) return formatCalcBody(length);
+    return "(" + formatCalcBody(length) + ")";
+  }
+  return formatLength(length);
+}
+
 static std::string formatLength(const Length &length) {
   switch (length.unit) {
     case Unit::Auto:
@@ -50,9 +65,22 @@ static std::string formatLength(const Length &length) {
       text += ")";
       return text;
     }
+    case Unit::Calc:
+      return "calc(" + formatCalcBody(length) + ")";
     default:
       return "";
   }
+}
+
+static std::string formatCalcBody(const Length &length) {
+  if (length.args.size() < 2) return "";
+  char op = length.op != 0 ? length.op : '?';
+  std::string text = formatCalcOperand(length.args[0], op);
+  text += " ";
+  text.push_back(op);
+  text += " ";
+  text += formatCalcOperand(length.args[1], op);
+  return text;
 }
 
 static std::string formatColor(const Color &color) {
@@ -119,6 +147,22 @@ static std::string formatFilterList(const std::vector<FilterOp> &filters) {
         out += ")";
         break;
     }
+  }
+  return out;
+}
+
+static std::string formatBoxShadows(const std::vector<BoxShadow> &shadows) {
+  if (shadows.empty()) return "none";
+  std::string out;
+  for (const BoxShadow &shadow : shadows) {
+    if (!out.empty()) out += ", ";
+    if (shadow.inset) out += "inset ";
+    out += formatLength(shadow.dx) + " " + formatLength(shadow.dy);
+    bool zeroBlur = shadow.blur.unit == Unit::Px && shadow.blur.value == 0.0f;
+    bool zeroSpread = shadow.spread.unit == Unit::Px && shadow.spread.value == 0.0f;
+    if (!zeroBlur || !zeroSpread) out += " " + formatLength(shadow.blur);
+    if (!zeroSpread) out += " " + formatLength(shadow.spread);
+    if (shadow.has_color) out += " " + formatColor(shadow.color);
   }
   return out;
 }
@@ -250,6 +294,7 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "filter") return formatFilterList(style.filters);
   if (property == "backdrop-filter") return formatFilterList(style.backdrop_filters);
   if (property == "text-shadow") return formatTextShadows(style.text_shadow);
+  if (property == "box-shadow") return formatBoxShadows(style.box_shadow);
   if (property == "background-image") {
     if (style.background_layers.empty()) return "none";
     std::string out;

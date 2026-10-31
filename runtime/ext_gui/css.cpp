@@ -112,6 +112,163 @@ static std::vector<std::string> splitFunctionArgs(const std::string &text) {
   return args;
 }
 
+/** A scalar token (`12px`, `50%`, `1.5`) as a `Length`. Absolute lengths are
+ * converted to pixels here; relative units stay symbolic so layout can resolve
+ * them against the element that uses them. */
+static Length makeScalarLength(double number, const std::string &rawUnit) {
+  Length length;
+  std::string unit = xt_css_lower(xt_css_trim(rawUnit));
+  length.value = (float)number;
+  if (unit.empty() || unit == "px") length.unit = Unit::Px;
+  else if (unit == "%") length.unit = Unit::Percent;
+  else if (unit == "em") length.unit = Unit::Em;
+  else if (unit == "rem") length.unit = Unit::Rem;
+  else if (unit == "vw") length.unit = Unit::Vw;
+  else if (unit == "vh") length.unit = Unit::Vh;
+  else if (unit == "pt") { length.value = (float)number * (96.0f / 72.0f); length.unit = Unit::Px; }
+  else if (unit == "pc") { length.value = (float)number * 16.0f; length.unit = Unit::Px; }
+  else if (unit == "in") { length.value = (float)number * 96.0f; length.unit = Unit::Px; }
+  else if (unit == "cm") { length.value = (float)number * (96.0f / 2.54f); length.unit = Unit::Px; }
+  else if (unit == "mm") { length.value = (float)number * (96.0f / 25.4f); length.unit = Unit::Px; }
+  else if (unit == "q") { length.value = (float)number * (96.0f / 101.6f); length.unit = Unit::Px; }
+  else length.unit = Unit::Invalid;
+  return length;
+}
+
+static Length parseFunctionLength(const std::string &name, const std::string &inner);
+static bool parseMathExpression(const std::string &text, Length *out);
+
+/** Recursive-descent parser for `calc()` arithmetic (`+ - * /`, parentheses,
+ * nested `calc`/`min`/`max`/`clamp` and unit-bearing numbers). The expression
+ * tree stays unresolved: `xt_style_resolve_absolute` walks it once the
+ * containing block and font size are known. */
+struct MathParser {
+  explicit MathParser(const std::string &text) : text_(text) {}
+
+  bool parse(Length *out) {
+    if (!parseSum(out)) return false;
+    skip();
+    return index_ == text_.size();
+  }
+
+ private:
+  void skip() {
+    while (index_ < text_.size() && xt_is_css_space(text_[index_])) index_++;
+  }
+
+  bool parseSum(Length *out) {
+    Length left;
+    if (!parseProduct(&left)) return false;
+    for (;;) {
+      skip();
+      if (index_ >= text_.size() || (text_[index_] != '+' && text_[index_] != '-')) break;
+      char op = text_[index_++];
+      Length right;
+      if (!parseProduct(&right)) return false;
+      Length node;
+      node.unit = Unit::Calc;
+      node.op = op;
+      node.args.push_back(left);
+      node.args.push_back(right);
+      left = node;
+    }
+    *out = left;
+    return true;
+  }
+
+  bool parseProduct(Length *out) {
+    Length left;
+    if (!parseOperand(&left)) return false;
+    for (;;) {
+      skip();
+      if (index_ >= text_.size() || (text_[index_] != '*' && text_[index_] != '/')) break;
+      char op = text_[index_++];
+      Length right;
+      if (!parseOperand(&right)) return false;
+      Length node;
+      node.unit = Unit::Calc;
+      node.op = op;
+      node.args.push_back(left);
+      node.args.push_back(right);
+      left = node;
+    }
+    *out = left;
+    return true;
+  }
+
+  bool parseOperand(Length *out) {
+    skip();
+    if (index_ >= text_.size()) return false;
+    if (text_[index_] == '(') {
+      index_++;
+      if (!parseSum(out)) return false;
+      skip();
+      if (index_ >= text_.size() || text_[index_] != ')') return false;
+      index_++;
+      return true;
+    }
+    if (std::isalpha((unsigned char)text_[index_])) return parseFunction(out);
+    return parseNumber(out);
+  }
+
+  bool parseFunction(Length *out) {
+    size_t nameStart = index_;
+    while (index_ < text_.size() &&
+           (std::isalpha((unsigned char)text_[index_]) || text_[index_] == '-'))
+      index_++;
+    std::string name = xt_css_lower(text_.substr(nameStart, index_ - nameStart));
+    skip();
+    if (index_ >= text_.size() || text_[index_] != '(') return false;
+    size_t open = index_;
+    int depth = 0;
+    size_t close = std::string::npos;
+    for (; index_ < text_.size(); index_++) {
+      if (text_[index_] == '(') depth++;
+      else if (text_[index_] == ')') {
+        depth--;
+        if (depth == 0) {
+          close = index_;
+          break;
+        }
+      }
+    }
+    if (close == std::string::npos) return false;
+    std::string inner = text_.substr(open + 1, close - open - 1);
+    index_ = close + 1;
+    if (name == "calc") return parseMathExpression(inner, out);
+    if (name == "min" || name == "max" || name == "clamp" || name == "env") {
+      *out = parseFunctionLength(name, inner);
+      return out->unit != Unit::Invalid;
+    }
+    return false;
+  }
+
+  bool parseNumber(Length *out) {
+    skip();
+    const char *begin = text_.c_str() + index_;
+    char *end = nullptr;
+    double number = std::strtod(begin, &end);
+    if (end == begin || end == nullptr) return false;
+    index_ = (size_t)(end - text_.c_str());
+    size_t unitStart = index_;
+    while (index_ < text_.size() &&
+           (std::isalpha((unsigned char)text_[index_]) || text_[index_] == '%'))
+      index_++;
+    std::string unit = text_.substr(unitStart, index_ - unitStart);
+    *out = makeScalarLength(number, unit);
+    if (unit.empty()) out->unit = Unit::Number;
+    return out->unit != Unit::Invalid;
+  }
+
+  const std::string &text_;
+  size_t index_ = 0;
+};
+
+static bool parseMathExpression(const std::string &text, Length *out) {
+  MathParser parser(text);
+  return parser.parse(out);
+}
+
 /** `clamp(min, value, max)`, `min(...)` and `max(...)` over lengths. The
  * arguments stay unresolved; layout resolves them against the element's em and
  * the viewport. `env(safe-area-inset-*)` has no notch information in a desktop
@@ -135,8 +292,8 @@ static Length parseFunctionLength(const std::string &name, const std::string &in
   }
   result.unit = name == "clamp" ? Unit::Clamp : (name == "min" ? Unit::Min : Unit::Max);
   for (const std::string &arg : args) {
-    Length value = xt_css_parse_length(arg);
-    if (value.unit == Unit::Invalid) {
+    Length value;
+    if (!parseMathExpression(arg, &value)) {
       result.unit = Unit::Invalid;
       result.args.clear();
       return result;
@@ -163,34 +320,28 @@ Length xt_css_parse_length(const std::string &value) {
   }
   size_t open = text.find('(');
   if (open != std::string::npos && !text.empty() && text.back() == ')') {
-    std::string name = text.substr(0, open);
+    std::string name = xt_css_trim(text.substr(0, open));
+    std::string inner = text.substr(open + 1, text.size() - open - 2);
+    if (name == "calc") {
+      Length parsed;
+      if (!parseMathExpression(inner, &parsed)) parsed.unit = Unit::Invalid;
+      return parsed;
+    }
     if (name == "clamp" || name == "min" || name == "max" || name == "env") {
-      return parseFunctionLength(name, text.substr(open + 1, text.size() - open - 2));
+      return parseFunctionLength(name, inner);
     }
   }
+  /* A scalar keeps the historical `px` default for a unitless token; only
+   * arithmetic treats `2` as a number. */
   char *end = nullptr;
-  float number = strtof(text.c_str(), &end);
-  if (end == text.c_str()) {
+  double number = std::strtod(text.c_str(), &end);
+  if (end == text.c_str() || end == nullptr) {
     length.unit = Unit::Invalid;
     return length;
   }
   std::string unit = end;
   while (!unit.empty() && xt_is_css_space(unit[0])) unit.erase(unit.begin());
-  length.value = number;
-  if (unit.empty() || unit == "px") length.unit = Unit::Px;
-  else if (unit == "%") length.unit = Unit::Percent;
-  else if (unit == "em") length.unit = Unit::Em;
-  else if (unit == "rem") length.unit = Unit::Rem;
-  else if (unit == "vw") length.unit = Unit::Vw;
-  else if (unit == "vh") length.unit = Unit::Vh;
-  else if (unit == "pt") { length.value = number * (96.0f / 72.0f); length.unit = Unit::Px; }
-  else if (unit == "pc") { length.value = number * 16.0f; length.unit = Unit::Px; }
-  else if (unit == "in") { length.value = number * 96.0f; length.unit = Unit::Px; }
-  else if (unit == "cm") { length.value = number * (96.0f / 2.54f); length.unit = Unit::Px; }
-  else if (unit == "mm") { length.value = number * (96.0f / 25.4f); length.unit = Unit::Px; }
-  else if (unit == "q") { length.value = number * (96.0f / 101.6f); length.unit = Unit::Px; }
-  else length.unit = Unit::Invalid;
-  return length;
+  return makeScalarLength(number, unit);
 }
 
 namespace {

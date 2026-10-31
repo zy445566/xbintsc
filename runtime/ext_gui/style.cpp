@@ -145,6 +145,7 @@ void finalizeStyle(XtStyle *style, const ApplyContext &context) {
     case Unit::Clamp:
     case Unit::Min:
     case Unit::Max:
+    case Unit::Calc:
       style->line_height.value = xt_style_resolve_absolute(
           style->line_height, style->font_size, style->font_size, context.rootFontSize,
           context.viewportWidth, context.viewportHeight);
@@ -348,6 +349,7 @@ struct ComputeScratch {
    * `style="transition: …"`), so the document knows whether it needs the
    * transition snapshot path at all. */
   bool has_transitions = false;
+  bool has_animations = false;
 };
 
 void pushCandidates(std::vector<Candidate> *candidates, ComputeScratch *scratch,
@@ -402,6 +404,7 @@ void computePseudo(const Node *origin, PseudoElement side, const XtStyle &origin
   applyCandidates(&style, &candidates, nodeContext);
   finalizeStyle(&style, nodeContext);
   if (!style.transitions.empty()) scratch->has_transitions = true;
+  if (!style.animations.empty()) scratch->has_animations = true;
 
   bool generated = false;
   std::string text;
@@ -455,6 +458,7 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
     applyCandidates(&style, &candidates, nodeContext);
     finalizeStyle(&style, nodeContext);
     if (!style.transitions.empty()) scratch->has_transitions = true;
+    if (!style.animations.empty()) scratch->has_animations = true;
 
     /* `emplace` keeps the address of an existing entry stable, which is what
      * `box->style` pointers rely on. */
@@ -479,7 +483,7 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
 void xt_style_compute(const Node *root, const StyleSheet &sheet,
                       std::unordered_map<const Node *, XtStyle> &out, float viewportWidth,
                       float viewportHeight, const MatchState &state, PseudoNodeSet *pseudos,
-                      bool *hasTransitions) {
+                      bool *hasTransitions, bool *hasAnimations) {
   out.clear();
   bool wantsPseudo = pseudos != nullptr && sheet.has_pseudo_elements;
   if (wantsPseudo && root != nullptr) {
@@ -511,6 +515,9 @@ void xt_style_compute(const Node *root, const StyleSheet &sheet,
   }
   if (hasTransitions != nullptr) {
     *hasTransitions = *hasTransitions || scratch.has_transitions;
+  }
+  if (hasAnimations != nullptr) {
+    *hasAnimations = *hasAnimations || scratch.has_animations;
   }
 }
 

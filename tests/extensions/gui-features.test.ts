@@ -137,9 +137,11 @@ describe("gpu usage detection", () => {
     expect(hasGpuUsage(usage({ getContext: [undefined] }))).toBe(true);
   });
 
-  it("turns on for mix-blend-mode in HTML/CSS or the style property", () => {
+  it("turns on for mix-blend-mode/backdrop-filter in HTML/CSS or the style property", () => {
     expect(hasGpuUsage(usage({ strings: ["style=\"mix-blend-mode: multiply\""] }))).toBe(true);
     expect(hasGpuUsage(usage({ identifiers: new Set(["mixBlendMode"]) }))).toBe(true);
+    expect(hasGpuUsage(usage({ strings: ["backdrop-filter: blur(4px)"] }))).toBe(true);
+    expect(hasGpuUsage(usage({ identifiers: new Set(["backdropFilter"]) }))).toBe(true);
   });
 
   it("stays off for a 2D canvas and plain DOM", () => {

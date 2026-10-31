@@ -8,14 +8,15 @@
  *     The DOM media surface lives in `gui.a`; only decoding is optional, and an
  *     element without the backend still exists and fires `error`.
  *   - `gpu` — glslang (+ SPIRV-Cross on macOS), the GLSL→SPIR-V translator used
- *     by WebGL *and* by the `mix-blend-mode` offscreen compositor. The engine's
- *     own shaders are precompiled, so a DOM/2D-canvas page never needs it.
+ *     by WebGL *and* by the `mix-blend-mode` / `backdrop-filter` offscreen
+ *     compositor. The engine's own shaders are precompiled, so a DOM page
+ *     never needs it.
  *
  * Detection is static: the compiler sees imported `.html`/`.css` assets and all
  * bundled modules, so it can recognise `<video>`/`<audio>`, `getContext("webgl")`
- * and `mix-blend-mode`. When markup can be built at run time the usage collector
- * sets `dynamicMarkup`, which conservatively enables both features; users who
- * know better can shrink the binary with `--no-feature`.
+ * and `mix-blend-mode`/`backdrop-filter`. When markup can be built at run time
+ * the usage collector sets `dynamicMarkup`, which conservatively enables both
+ * features; users who know better can shrink the binary with `--no-feature`.
  */
 
 import { join } from "node:path";
@@ -28,7 +29,7 @@ const MEDIA_TAG = /<(?:video|audio)\b/i;
 /** A literal tag name handed to `createElement("video")`. */
 const MEDIA_TAG_NAME = /^(?:video|audio)$/i;
 /** Anything that needs the GLSL translator. */
-const GPU_TOKEN = /webgl|mix-blend-mode|mixBlendMode/i;
+const GPU_TOKEN = /webgl|mix-blend-mode|mixBlendMode|backdrop-filter|backdropFilter/i;
 
 /** True when the program may create or drive a media element. */
 export function hasMediaUsage(usage: ProgramUsage): boolean {
@@ -42,7 +43,7 @@ export function hasMediaUsage(usage: ProgramUsage): boolean {
 /** True when the program may compile GLSL at run time (WebGL or blending). */
 export function hasGpuUsage(usage: ProgramUsage): boolean {
   if (usage.dynamicMarkup) return true;
-  if (usage.identifiers.has("mixBlendMode")) return true;
+  if (usage.identifiers.has("mixBlendMode") || usage.identifiers.has("backdropFilter")) return true;
   if (usage.getContext.some((kind) => kind === undefined || /webgl/i.test(kind))) return true;
   return usage.strings.some((value) => GPU_TOKEN.test(value));
 }
@@ -113,7 +114,7 @@ export const guiLinkFeatures: readonly LinkFeature[] = [
   },
   {
     name: "gpu",
-    description: "GLSL translation (WebGL and mix-blend-mode) via glslang",
+    description: "GLSL translation (WebGL, mix-blend-mode and backdrop-filter) via glslang",
     /**
      * `gpu_bridge.c` is linked only when the feature is active. It calls into
      * `gpu_feature.cpp` inside `gui.a`, which installs the shader-translation

@@ -33,7 +33,8 @@ style as a list of operations plus two (unresolved) origin lengths; an
 unsupported function invalidates the whole declaration
 ([Layout](./layout.md#transforms-m15)). M19 adds `background-image` layer lists
 (linear/radial), `clip-path` (`inset`/`circle`/`ellipse`/`polygon`), the
-`filter`/`backdrop-filter` function lists, `text-shadow` and `content`.
+`filter`/`backdrop-filter` function lists, `text-shadow`, `box-shadow` and
+`content`.
 
 **Cascade & computed style** (`runtime/ext_gui/style.{h,cpp}`): a small built-in
 UA stylesheet, author rules sorted by `(!important, specificity, source order)`,

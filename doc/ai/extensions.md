@@ -88,9 +88,10 @@ text, images and children in it) can be translated, scaled and rotated without
 reflowing anything — animate it per frame from `requestAnimationFrame` or with
 `transition: transform` (see `examples/gui/pelican-svg`). The CSS subset also
 covers `@media`, `::before`/`::after` generated content, multi-layer linear/radial
-backgrounds, `text-shadow`, `clip-path` and `filter` colour/shadow effects;
-`backdrop-filter` and true group blur are documented approximations or
-unsupported. If the archive is
+backgrounds, `calc()`, `text-shadow`/`box-shadow` with a true Gaussian blur,
+`clip-path`, `filter` colour effects, `backdrop-filter` compositing,
+`@keyframes` and `transition`/`animation` timing functions. `filter: blur()` is
+still a documented approximation. If the archive is
 missing for your platform, the build fails with an actionable message; design
 and roadmap live in [../gui.md](../gui.md) (overview; the engine is documented by
 function under [`doc/gui/`](../gui/)), and the scripting surface in

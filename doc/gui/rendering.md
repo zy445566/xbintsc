@@ -113,10 +113,26 @@ ordinary layout boxes owned by the per-restyle arena in `style.cpp`, so their
 background, border, text and transforms flow through the same paint walk.
 `content` is resolved from strings, `attr()` and open/close quotes.
 
-**`text-shadow`** is emitted as shadow `PaintText` runs *before* the real run, so
-the text pipeline draws them without a new shader. A blurred shadow is nine
-translucent copies spread around the offset (the same approximation `filter:
-blur()` uses).
+**`text-shadow`** with no blur is emitted as shadow `PaintText` runs *before* the
+real run, so the text pipeline draws it crisply. A blurred shadow is a real
+Gaussian: `paint_shadow.cpp` rasterises the glyph coverage, convolves it with a
+separable kernel (`sigma = blur / 2`, cropped at ±3σ), and emits one tinted image
+quad. The mask is cached by text/font/blur, so an animated colour only changes
+the quad's tint.
+
+**`box-shadow`** uses the same Gaussian mask: the rounded-rectangle silhouette is
+rasterised (spread expands or shrinks it), convolved, and composited behind the
+background; `inset` shadows invert the mask, crop it to the padding box and paint
+above the background. A zero-blur outer shadow stays an exact rounded rect. The
+declaration list is painted last-layer-first, matching CSS.
+
+**`backdrop-filter`** is composited by the same offscreen machinery as
+`mix-blend-mode`: when the painter reaches the box, the renderer copies the
+scene painted so far into a scratch texture, applies the Gaussian and one
+combined colour matrix (brightness/contrast/grayscale/sepia/invert/saturate/
+hue-rotate/opacity multiplied together) in a full-screen shader, and composites
+the result back through the box's rounded border-box mask. A `backdrop-filter`
+therefore shows as a `backdrop …` op in `paintList()`.
 
 **`clip-path`** is resolved in `paint_clip.cpp` to a device-space polygon (the
 box transform is applied to every point), triangulated with ear clipping, and
@@ -133,8 +149,8 @@ colour, so a box and its descendants see the filter. `blur()` and
 `drop-shadow()` are approximations at the display-list level: blur spreads nine
 translucent copies per shape, drop-shadow is a box/text silhouette. This keeps
 the ordinary painter single-pass at the cost of group semantics: overlapping
-descendants of a blurred/filtered group can darken, and `backdrop-filter` cannot
-sample what is behind the element, so it parses and cascades but paints nothing.
+descendants of a blurred/filtered group can darken. `backdrop-filter` is the
+exception — it has its own offscreen snapshot/filter pass (see above).
 
 **`mix-blend-mode`** is the exception that does need an offscreen layer. A box
 with a non-`normal` mode is wrapped in `LayerBegin`/`LayerEnd` markers (visible
@@ -149,7 +165,8 @@ SPIRV-Cross (Metal); the two scene textures per nesting level are reused across
 frames and ping-pong so the backdrop stays sampleable while it is written.
 Backends that consume neither format — the D3D12/DXIL path, which has no shader
 compiler here — keep painting the group with ordinary source-over blending.
-`backdrop-filter` still paints nothing.
+`backdrop-filter` uses the same runtime-compiled path; when the shader backend is
+unavailable it is skipped while the rest of the page still paints.
 
 ## Text stack (M4b)
 

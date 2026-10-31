@@ -135,6 +135,16 @@ void drawRuns(SDL_GPURenderPass *pass, const std::vector<XtGuiDrawRun> &runs, si
  * SPIR-V or MSL). D3D12/DXIL has no shader compiler here, so it falls back to
  * the ordinary single-pass painter. */
 bool layerRendererReady(SDL_GPUDevice *device);
+/** True when the `backdrop-filter` snapshot/filter pipeline was created. */
+bool backdropRendererReady(SDL_GPUDevice *device);
+/** Filter `source` into the active scene pass inside the element's rounded
+ * border box. No-op when the pipeline is unavailable. */
+void drawBackdropPass(SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass,
+                      SDL_GPUTexture *source, const xtgui::DisplayList &list,
+                      const XtGuiDrawRun &run, int target_width, int target_height,
+                      float pixel_density);
+/** Release the backdrop pipeline and sampler. */
+void backdropRendererDestroy(SDL_GPUDevice *device);
 /** Render `list` through the offscreen layer compositor into `swapchain`.
  * Returns false before recording any pass when the scene textures cannot be
  * created, so the caller can fall back to the ordinary painter. */
@@ -158,6 +168,17 @@ SDL_GPUTexture *createImageTexture(SDL_GPUDevice *device, const xtgui::Image &im
  * by the resulting pixel size, so an SVG drawn at two sizes gets two textures. */
 SDL_GPUTexture *ensureImageTexture(SDL_GPUDevice *device, const std::string &src, int pixel_width,
                                    int pixel_height, XtGuiUploadBatch *batch);
+
+/* -- CPU-rasterised shadows ---------------------------------------------- */
+
+/** Upload (once) the blurred mask of a `box-shadow`/`text-shadow` layer and
+ * return its cached texture. Bracket the frame's image upload with
+ * `beginBitmapUpload`/`finishBitmapUpload` so stale masks are reclaimed. */
+SDL_GPUTexture *ensureBitmapTexture(SDL_GPUDevice *device, const xtgui::PaintBitmap &bitmap,
+                                    XtGuiUploadBatch *batch);
+void beginBitmapUpload();
+void finishBitmapUpload(SDL_GPUDevice *device);
+void releaseBitmapTextures(SDL_GPUDevice *device);
 
 /* -- background gradients ------------------------------------------------- */
 

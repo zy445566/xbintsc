@@ -30,6 +30,10 @@ bool xt_style_apply_grid_property(XtStyle *style, const std::string &property,
 bool xt_style_apply_transition(XtStyle *style, const std::string &property,
                                const std::string &value);
 
+/** Apply an `animation`/`animation-*` declaration. */
+bool xt_style_apply_animation(XtStyle *style, const std::string &property,
+                              const std::string &value);
+
 }  // namespace xtgui
 
 #endif /* XT_GUI_STYLE_VALUES_INTERNAL_H */

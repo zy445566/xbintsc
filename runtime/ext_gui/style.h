@@ -36,7 +36,42 @@ enum class WhiteSpace { Normal, NoWrap, Pre, PreWrap, PreLine };
 enum class Overflow { Visible, Hidden, Scroll, Auto };
 enum class BorderStyle { None, Solid, Dashed, Dotted };
 enum class FontStyle { Normal, Italic };
-enum class TimingFunction { Linear, Ease, EaseIn, EaseOut, EaseInOut };
+
+/** A CSS timing function. `Ease`/`Linear`/… are the keywords; `CubicBezier` and
+ * the two `Steps` kinds carry their parameters. */
+struct TimingFunction {
+  enum class Kind {
+    Linear,
+    Ease,
+    EaseIn,
+    EaseOut,
+    EaseInOut,
+    CubicBezier,
+    StepsStart,
+    StepsEnd
+  };
+  Kind kind = Kind::Ease;
+  float x1 = 0.25f;
+  float y1 = 0.1f;
+  float x2 = 0.25f;
+  float y2 = 1.0f;
+  int steps = 1;
+};
+
+enum class AnimationDirection { Normal, Reverse, Alternate, AlternateReverse };
+enum class AnimationFillMode { None, Forwards, Backwards, Both };
+
+/** One `animation` entry: a `@keyframes` name plus how it runs. */
+struct AnimationSpec {
+  std::string name = "none";
+  float duration = 0.0f;   // seconds
+  float delay = 0.0f;      // seconds
+  float iterations = 1.0f; // `infinite` is stored as -1
+  TimingFunction timing;
+  AnimationDirection direction = AnimationDirection::Normal;
+  AnimationFillMode fill = AnimationFillMode::None;
+  bool paused = false;
+};
 
 /** CSS `mix-blend-mode`. The order matches the composite shader's `u_mode`
  * enum and the keyword table in `style_values.cpp`. */
@@ -64,7 +99,7 @@ struct TransitionSpec {
   std::string property = "all";
   float duration = 0.0f;  // seconds
   float delay = 0.0f;     // seconds
-  TimingFunction timing = TimingFunction::Ease;
+  TimingFunction timing;
 };
 
 /** One track of a `grid-template-columns` / `grid-template-rows` list.
@@ -161,6 +196,17 @@ struct TextShadow {
   bool has_color = false;
 };
 
+/** One `box-shadow` entry (`inset` keyword, spread included). */
+struct BoxShadow {
+  Length dx;
+  Length dy;
+  Length blur;
+  Length spread;
+  Color color;  // `has_color == false` means currentColor
+  bool has_color = false;
+  bool inset = false;
+};
+
 struct Edges {
   Length top;
   Length right;
@@ -210,6 +256,8 @@ struct XtStyle {
   std::vector<FilterOp> backdrop_filters;
   /** `text-shadow` entries (inherited, as in CSS). */
   std::vector<TextShadow> text_shadow;
+  /** `box-shadow` entries (not inherited); declaration order = topmost first. */
+  std::vector<BoxShadow> box_shadow;
   /** Generated `content` of a `::before`/`::after` box. The cascade resolves
    * `attr()` and string escapes before layout; `has_content` distinguishes
    * `content: ""` from no generated box. */
@@ -268,6 +316,8 @@ struct XtStyle {
 
   /** `transition` specs; not inherited. Applied by `XtDocument`. */
   std::vector<TransitionSpec> transitions;
+  /** `animation` specs; not inherited. Applied by `XtDocument`. */
+  std::vector<AnimationSpec> animations;
 };
 
 /** Initial (non-inherited) style; inherited fields are overridden from the parent. */
@@ -297,7 +347,8 @@ class PseudoNodeSet {
 void xt_style_compute(const Node *root, const StyleSheet &sheet,
                       std::unordered_map<const Node *, XtStyle> &out, float viewportWidth,
                       float viewportHeight, const MatchState &state = MatchState(),
-                      PseudoNodeSet *pseudos = nullptr, bool *hasTransitions = nullptr);
+                      PseudoNodeSet *pseudos = nullptr, bool *hasTransitions = nullptr,
+                      bool *hasAnimations = nullptr);
 
 /** Format a computed property for diagnostics/tests (`computedStyle(sel, prop)`). */
 std::string xt_style_property_to_string(const XtStyle &style, const std::string &property);

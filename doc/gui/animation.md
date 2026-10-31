@@ -30,27 +30,56 @@ running transition is recorded and re-applied every frame until it finishes;
 the engine advances the clock with real frame deltas (`XtDocument::advance`),
 and `win.advance(ms)` lets tests step it deterministically.
 
-- Supported properties: `background-color`, `color`, `border-color`,
-  `border-radius` and `transform`; `transition: all` covers them. A
-  layout-affecting property (width, position, …) is still not animated — that
-  would reflow every frame — but `transform` is paint-time, so animating it costs
-  one matrix per animated box per frame ([Layout](./layout.md#transforms-m15)).
+- Supported properties: `background-color`, `color`, `border-color`, `opacity`,
+  `border-radius`, `transform`, `text-shadow`, `box-shadow`, every box offset
+  and size length (`width`/`height`/`top`/`left`/`margin-*`/`padding-*`/…), the
+  gap/flex-basis lengths and `filter` (matching filter lists interpolate their
+  blur lengths, amounts and drop-shadow colours). `transition: all` covers the
+  whole list. Lengths
+  interpolate when their units line up (a mixed-unit change is CSS's discrete
+  fallback); `opacity`, colours and `transform` interpolate normally.
 - Both the `transition` shorthand and the `transition-property` / `-duration` /
   `-delay` / `-timing-function` longhands are parsed; time values accept `s` and
-  `ms`; timing functions are `linear`, `ease`, `ease-in`, `ease-out` and
-  `ease-in-out` (`ease` is a smoothstep approximation).
+  `ms`; `calc()` is accepted inside the shorthand and longhands.
+- Timing functions are `linear`, `ease`, `ease-in`, `ease-out`, `ease-in-out`,
+  `cubic-bezier(x1, y1, x2, y2)`, `steps(n, start|end)` and their `jump-*`
+  spellings. The engine solves the cubic Bézier numerically; keyword curves use
+  the CSS control points.
 - Retargeting mid-flight starts a new transition from the current interpolated
   value, so reversing a hover animates smoothly from wherever it was.
 - `computedStyle()` reports the displayed (interpolated) value, so transitions
   are directly observable in tests.
 
-`transform` lists interpolate **element-wise** (`document.cpp`,
+`transform` lists interpolate **element-wise** (`animation_values.cpp`,
 `xt_transform_interpolate`), which is what makes the common pair
 `translateY(-4px) rotate(-0.35deg)` <-> `none` glide instead of jumping: the
 missing side is filled with identity ops of the same kind. Two lists whose shapes
 or units do not line up (`rotate(10deg)` vs `rotate(10rad)`, or a different number
 of functions) are not interpolated at all — the transition snaps to the target,
 which is CSS's discrete fallback rather than a wrong-looking sweep.
+
+## CSS animations (`@keyframes`)
+
+`@keyframes` rules are parsed into `StyleSheet::keyframes` (offsets from
+`from`/`to`/percent selectors, sorted). `animation` and every `animation-*`
+longhand are supported: name, duration, delay, timing function, iteration count
+(including `infinite`), direction (`normal`/`reverse`/`alternate`/
+`alternate-reverse`), fill mode (`none`/`forwards`/`backwards`/`both`) and
+`paused`/`running`.
+
+`XtDocument` starts one active animation per element/name when the computed
+style first declares it, restarts it when the shorthand changes, and leaves it
+alone across unrelated restyles. Each frame it resolves the local time to an
+iteration progress, applies the timing function **per keyframe interval**, and
+interpolates every animatable property. A property that a middle keyframe does
+not mention keeps interpolating between the nearest keyframes that do declare
+it (so a transform declared at 0% and 100% runs straight through a 50% step that
+only changes `opacity`). Missing 0%/100% steps use the element's underlying
+style. `forwards`/`backwards` hold the edge value outside the active time, and
+`computedStyle()` reports the animated value.
+
+Animations and transitions share `animation_values.cpp`, so both understand the
+same property set, shadow lists and `transform` identity filling.
 
 ## CSS transforms (M15)
 
@@ -93,5 +122,6 @@ Both are exercised by `examples/gui/pelican-svg` (per-frame sway plus a
 hover transition on the caption) and pinned by
 `tests/e2e/gui-transform.test.ts`.
 
-Still to do for animation: `@keyframes` animations and `cubic-bezier(...)`.
+`calc()` can be used in any animated length (for example
+`transition: width 300ms ease-out; width: calc(100% - 20px)`).
 

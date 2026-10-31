@@ -44,13 +44,17 @@ them) can be translated, scaled and rotated without reflowing anything — and
 **M19** fills in the decorative CSS layer: `@media` queries, generated content
 (`::before`/`::after`), multi-layer linear/radial/repeating backgrounds,
 `text-shadow`, `clip-path`, `mix-blend-mode` (through an offscreen compositor)
-and the `filter` colour/shadow effects. `backdrop-filter` still needs a backdrop
-snapshot, and true group blur remains an approximation — see
+and the `filter` colour effects. See
 [Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19).
 **M20** makes large documents interactive: `@media` is evaluated once per rule,
 layout and paint share a bounded shaping cache, and a frame only does (and
 presents) the work a change requires — see
 [Performance](./gui/rendering.md#performance-m20).
+**M21** completes the value/animation gaps: `calc()` arithmetic everywhere a
+length is accepted, true Gaussian `text-shadow`/`box-shadow`, backdrop
+compositing, `@keyframes` and the full transition timing-function set. See
+[Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19)
+and [Animation](./gui/animation.md#css-animations-keyframes).
 This overview records the locked decisions, the architecture, the milestone plan
 and the current progress; the engine itself is documented by function in the
 pages above.
@@ -195,8 +199,8 @@ engine were Rust.
      per-file GPU textures and textured quads (`image.*`, `svg.*`, `paint.*`,
      `renderer.*`).
    - **M6b — transitions/animations** ✅ `transition` shorthand + longhands,
-     animated `background-color`/`color`/`border-color`/`border-radius`, retargeting
-     and `win.advance(ms)`. `@keyframes` remain.
+     retargeting, `cubic-bezier()`/`steps()`, `win.advance(ms)` and (M21)
+     `@keyframes` with every animation longhand.
 7. **M7 — CI & releases** ✅ (Linux/macOS/Windows x64 build) / 🚧 (run + Windows arm64)
    - `compile-examples` builds `gui.a` and `media.a` on Linux and macOS
      (required), then runs the examples and `tests/e2e/gui-*.test.ts` under
@@ -351,13 +355,15 @@ engine were Rust.
     - Multi-layer `background-image` with linear gradients painted bottom-up as
       solid bands (18 strips) and radial gradients rasterised per pixel into one
       image texture (`renderer_gradient.cpp`).
-    - `text-shadow` as shadow text runs, including a nine-tap blur approximate.
+    - `text-shadow` and `box-shadow` (outer/inset, spread, multiple layers),
+      blurred with a true separable Gaussian over the shape mask (M21).
     - `clip-path` polygons (`inset`/`circle`/`ellipse`/`polygon`) resolved to
       device space, ear-clipped and intersected with shape geometry in
       `renderer_clip.cpp` — no stencil/shader change.
     - `filter` colour functions, nine-tap `blur()` and silhouette
-      `drop-shadow()`; `backdrop-filter` parses and cascades but needs an
-      offscreen backdrop pass (see [Known issues](./gui/known-issues.md)).
+      `drop-shadow()`; `backdrop-filter` snapshots the scene, applies a Gaussian
+      and one combined colour matrix, and composites through the border-box mask
+      (M21).
     - E2E coverage in `tests/e2e/gui-effects.test.ts`; see
       [Rendering](./gui/rendering.md#backgrounds-generated-content-and-effects-m19).
 20. **M20 — rendering performance** ✅
@@ -372,6 +378,20 @@ engine were Rust.
       dirty frame, and redundant render-state binds removed.
     - `win.stats()`/`XT_GUI_PERF` counters and `tests/e2e/gui-perf.test.ts`; see
       [Performance](./gui/rendering.md#performance-m20).
+21. **M21 — CSS value/animation completeness** ✅
+    - `calc()` is parsed as an unresolved expression tree and resolved by both
+      layout (`toPx`) and paint; nested arithmetic, `calc()` inside
+      `min`/`max`/`clamp`, and calc in shadows/transforms/filters are covered.
+    - `box-shadow` (outer/inset, spread, multiple layers) and blurred
+      `text-shadow` are rasterised into a Gaussian mask, cached and composited
+      as one tinted image quad.
+    - `backdrop-filter` snapshots the painted scene and composites a Gaussian +
+      colour matrix through the border-box mask in a runtime-compiled shader.
+    - `@keyframes` plus every `animation-*` longhand (delay, iterations,
+      direction, fill mode, paused/running) share the property interpolator with
+      transitions; transitions now cover opacity, layout lengths, box shadows
+      and `cubic-bezier()`/`steps()`/`step-start`/`step-end`.
+    - E2E: `tests/e2e/gui-css-features.test.ts`.
 
 ## Progress log
 
@@ -522,9 +542,18 @@ engine were Rust.
   `paint_background.cpp` resolves and paints it (radial layers become one
   `PaintGradient`, which `renderer_gradient.cpp` rasterises into a texture),
   `paint_effects.cpp` applies filter colour functions plus nine-tap
-  blur/drop-shadow and emits `text-shadow` runs, and
+  blur/drop-shadow, `paint_shadow.cpp` rasterises Gaussian text/box shadows,
+  `paint_backdrop.cpp` + `renderer_layer.cpp` composite `backdrop-filter`, and
   `paint_clip.cpp`/`renderer_clip.cpp` clip geometry against triangulated
   `clip-path` polygons. E2E: `tests/e2e/gui-effects.test.ts`.
+- **M21** ✅ CSS value/animation completeness. `calc()` is parsed as an
+  unresolved expression tree and resolved by layout/paint; `box-shadow` and
+  blurred `text-shadow` use a separable Gaussian mask cached as a texture;
+  `backdrop-filter` gets an offscreen snapshot pass; `@keyframes` (plus every
+  `animation-*` longhand, delay, iteration, direction and fill mode) shares the
+  property interpolator with transitions, which now also cover opacity, layout
+  lengths, box shadows and `cubic-bezier()`/`steps()`. E2E:
+  `tests/e2e/gui-css-features.test.ts`.
 - **M20** ✅ rendering performance. `@media` is evaluated once per rule per
   restyle, generated content is skipped for sheets without `::before`/`::after`,
   and `:hover`/`:focus` only restyle when the sheet tracks them

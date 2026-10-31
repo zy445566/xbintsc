@@ -124,52 +124,15 @@ static bool assignLength(Length *target, const std::string &value) {
 }
 
 
-float xt_style_resolve_absolute(const Length &length, float base, float em, float root, float vw,
-                                float vh) {
-  switch (length.unit) {
-    case Unit::Clamp: {
-      if (length.args.size() < 3) return 0.0f;
-      float low = xt_style_resolve_absolute(length.args[0], base, em, root, vw, vh);
-      float value = xt_style_resolve_absolute(length.args[1], base, em, root, vw, vh);
-      float high = xt_style_resolve_absolute(length.args[2], base, em, root, vw, vh);
-      return value < low ? low : (value > high ? high : value);
-    }
-    case Unit::Min: {
-      float best = 0.0f;
-      bool first = true;
-      for (const Length &arg : length.args) {
-        float value = xt_style_resolve_absolute(arg, base, em, root, vw, vh);
-        if (first || value < best) best = value;
-        first = false;
-      }
-      return best;
-    }
-    case Unit::Max: {
-      float best = 0.0f;
-      bool first = true;
-      for (const Length &arg : length.args) {
-        float value = xt_style_resolve_absolute(arg, base, em, root, vw, vh);
-        if (first || value > best) best = value;
-        first = false;
-      }
-      return best;
-    }
-    case Unit::Px:
-    case Unit::Number:
-      return length.value;
-    case Unit::Percent:
-      return base * length.value / 100.0f;
-    case Unit::Em:
-      return em * length.value;
-    case Unit::Rem:
-      return root * length.value;
-    case Unit::Vw:
-      return vw * length.value / 100.0f;
-    case Unit::Vh:
-      return vh * length.value / 100.0f;
-    default:
-      return 0.0f;
-  }
+/** A unitless declaration value, accepting `calc()` arithmetic (which resolves
+ * against the element's font and the viewport). */
+static bool parseNumeric(const std::string &value, const ApplyContext &context, float *out) {
+  if (xt_css_parse_number(value, out)) return true;
+  Length length = xt_css_parse_length(value);
+  if (length.unit != Unit::Calc) return false;
+  *out = xt_style_resolve_absolute(length, 0.0f, context.parentFontSize, context.rootFontSize,
+                                   context.viewportWidth, context.viewportHeight);
+  return true;
 }
 
 static bool parseEnum(const std::string &value, const char *const *names, int count, int *out) {
@@ -263,7 +226,15 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   if (property == "border-left-width") { setEdge(&style->border_width, "left", xt_css_parse_length(value)); return; }
   if (property == "border-radius") {
     Length length = xt_css_parse_length(value);
-    if (length.unit == Unit::Px || length.unit == Unit::Number) style->border_radius = length.value;
+    if (length.unit == Unit::Px || length.unit == Unit::Number) {
+      style->border_radius = length.value;
+    } else if (length.unit == Unit::Calc) {
+      /* A `calc()` radius is a paint-time scalar here (the engine has no
+       * per-corner percentages), so resolve it against the viewport/font now. */
+      style->border_radius = xt_style_resolve_absolute(length, 0.0f, context.parentFontSize,
+                                                       context.rootFontSize, context.viewportWidth,
+                                                       context.viewportHeight);
+    }
     return;
   }
   if (property == "border-style" || property == "border-top-style" || property == "border-right-style" ||
@@ -280,9 +251,10 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   }
   if (property == "border" || property == "border-top" || property == "border-right" ||
       property == "border-bottom" || property == "border-left") {
-    for (const std::string &token : xt_css_split_whitespace(value)) {
+    for (const std::string &token : splitEdgeTokens(value)) {
       Length length = xt_css_parse_length(token);
-      if (length.unit == Unit::Px || length.unit == Unit::Number) {
+      if (length.unit != Unit::Invalid && length.unit != Unit::Auto &&
+          length.unit != Unit::None) {
         if (property == "border") style->border_width.set(length);
         else setEdge(&style->border_width, property.substr(7), length);
         continue;
@@ -447,12 +419,12 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   if (property == "column-gap") { assignLength(&style->column_gap, value); return; }
   if (property == "flex-grow") {
     float number = 0;
-    if (xt_css_parse_number(value, &number)) style->flex_grow = number;
+    if (parseNumeric(value, context, &number)) style->flex_grow = number;
     return;
   }
   if (property == "flex-shrink") {
     float number = 0;
-    if (xt_css_parse_number(value, &number)) style->flex_shrink = number;
+    if (parseNumeric(value, context, &number)) style->flex_shrink = number;
     return;
   }
   if (property == "flex-basis") { assignLength(&style->flex_basis, value); return; }
@@ -476,7 +448,7 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
       style->flex_basis = {0.0f, Unit::Auto};
       return;
     }
-    std::vector<std::string> parts = xt_css_split_whitespace(text);
+    std::vector<std::string> parts = splitEdgeTokens(text);
     style->flex_grow = 0;
     style->flex_shrink = 1;
     style->flex_basis = {0.0f, Unit::Auto};
@@ -504,7 +476,7 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     /* One or two values plus an optional z offset (ignored: the engine is 2D).
      * The keywords carry an axis, so `top` alone means `center top` and
      * `top center` is the same as `center top`. */
-    std::vector<std::string> parts = xt_css_split_whitespace(value);
+    std::vector<std::string> parts = splitEdgeTokens(value);
     Length values[2] = {Length{50.0f, Unit::Percent}, Length{50.0f, Unit::Percent}};
     bool vertical[2] = {false, false};
     size_t used = 0;
@@ -540,7 +512,8 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   }
   if (property == "opacity") {
     float number = 0;
-    if (xt_css_parse_number(value, &number)) style->opacity = number < 0 ? 0 : (number > 1 ? 1 : number);
+    if (parseNumeric(value, context, &number))
+      style->opacity = number < 0 ? 0 : (number > 1 ? 1 : number);
     return;
   }
   if (property == "mix-blend-mode") {
@@ -561,7 +534,7 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
   }
   if (property == "z-index") {
     float number = 0;
-    if (xt_css_parse_number(value, &number)) {
+    if (parseNumeric(value, context, &number)) {
       style->z_index = (int)number;
       style->has_z_index = true;
     }
@@ -580,6 +553,7 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &property,
     return;
   }
   if (xt_style_apply_transition(style, property, value)) return;
+  if (xt_style_apply_animation(style, property, value)) return;
 
 }
 

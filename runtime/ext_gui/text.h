@@ -7,9 +7,13 @@
  * `kern` table: no OpenType ligatures or complex-script shaping, and only
  * TrueType outlines (not CFF/OTF or variable fonts).
  *
- * Fonts are resolved lazily from well-known system locations (or a path in
- * `XT_GUI_FONT` / `XT_GUI_FONT_MONO`) and cached per size. Only regular
- * upright faces are used today; weight/italic selection is a later refinement.
+ * Fonts are resolved from the installed system faces: the CSS family list is
+ * matched case-insensitively, generic `sans-serif`/`serif`/`monospace` map to
+ * platform defaults, and `font-weight` / `font-style: italic` select the real
+ * bold/italic face of the chosen family (falling back to the nearest weight and
+ * to the requested family's other styles). `XT_GUI_FONT` / `XT_GUI_FONT_MONO`
+ * override the generic defaults, and faces are cached per size and collection
+ * index.
  */
 #ifndef XT_GUI_TEXT_H
 #define XT_GUI_TEXT_H

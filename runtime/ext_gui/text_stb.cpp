@@ -10,19 +10,21 @@
  * ligatures or complex-script shaping (Arabic/Indic/Thai) and it only accepts
  * TrueType outlines, not CFF/OTF or variable fonts. The fallback chain still
  * switches faces for codepoints the primary lacks.
+ *
+ * Faces are selected by `text_fonts.cpp`: the CSS family list, weight and style
+ * resolve to a `(path, collection index)` pair, and only the ordered candidates
+ * this backend can actually load (TrueType outlines) are tried.
  */
 
 #include "text_api.h"
+#include "text_fonts.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
-#include <cstring>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -38,7 +40,7 @@ struct Font {
    * pointers into it, so it must outlive this face. */
   std::shared_ptr<const std::vector<unsigned char>> data;
   std::string path;
-  bool monospace = false;
+  int face_index = 0;
   float pixel_size = 16.0f;
   float scale = 1.0f;
   float ascent = 0;
@@ -48,75 +50,11 @@ struct Font {
 
 namespace {
 
-const char *const kSansCandidates[] = {
-    /* Explicit override wins (also checked per family class below). */
-    nullptr,
-    /* Fonts with CJK coverage come first: the default face is a single face, so
-     * it has to be able to render Chinese/Japanese/Korean text as well as
-     * Latin. */
-    "C:\\Windows\\Fonts\\msyh.ttc",      /* Microsoft YaHei (Win 8.1+) */
-    "C:\\Windows\\Fonts\\msyh.ttf",      /* Microsoft YaHei (Win 7) */
-    "C:\\Windows\\Fonts\\Deng.ttf",      /* DengXian */
-    "C:\\Windows\\Fonts\\simsun.ttc",    /* SimSun */
-    "/System/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/STHeiti Light.ttc",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/System/Library/Fonts/Supplemental/Verdana.ttf",
-    "/Library/Fonts/Arial.ttf",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/usr/share/fonts/TTF/DejaVuSans.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-    "C:\\Windows\\Fonts\\segoeui.ttf",
-    "C:\\Windows\\Fonts\\arial.ttf",
-};
-
-const char *const kMonoCandidates[] = {
-    nullptr,
-    "C:\\Windows\\Fonts\\msyh.ttc",      /* CJK-capable fallback (see above) */
-    "/System/Library/Fonts/PingFang.ttc",
-    "/System/Library/Fonts/Menlo.ttc",
-    "/System/Library/Fonts/Supplemental/Courier New.ttf",
-    "/System/Library/Fonts/Courier.ttc",
-    "/Library/Fonts/Courier New.ttf",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
-    "C:\\Windows\\Fonts\\consola.ttf",
-    "C:\\Windows\\Fonts\\cour.ttf",
-};
-
-/* Faces tried after the primary one for codepoints it does not cover. Symbol
- * faces come first (shape/arrow/box-drawing coverage), then the other family
- * class so a monospace run still gets CJK and a sans run still gets
- * monospace-only codepoints. The primary and duplicates are skipped. */
-const char *const kSymbolCandidates[] = {
-    nullptr,
-    "C:\\Windows\\Fonts\\seguisym.ttf",  /* Segoe UI Symbol */
-    "C:\\Windows\\Fonts\\arialuni.ttf",  /* Arial Unicode MS */
-    "/System/Library/Fonts/Apple Symbols.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSansSymbols2-Regular.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf",
-    "/usr/share/fonts/truetype/ancient-scripts/Symbola_hint.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-};
-
 struct Engine {
-  bool initialized = false;
-  bool font_loaded = false;
-  std::string sans_path;
-  std::string mono_path;
-  std::vector<std::string> sans_fallbacks;
-  std::vector<std::string> mono_fallbacks;
   std::unordered_map<std::string, std::shared_ptr<const std::vector<unsigned char>>> data;
   std::unordered_map<std::string, std::unique_ptr<Font>> cache;  // key -> face (may be null)
-  std::unordered_map<std::string, std::vector<Font *>> fallbacks;  // class+size -> faces
-  std::unordered_map<std::string, Font *> primary;
+  std::unordered_map<std::string, std::vector<Font *>> fallbacks;  // face+size -> faces
+  std::unordered_map<std::string, Font *> primary;  // spec -> face (may be null)
 };
 
 Engine &engine() {
@@ -124,15 +62,6 @@ Engine &engine() {
   return instance;
 }
 
-bool fileExists(const char *path) {
-  FILE *file = fopen(path, "rb");
-  if (file == nullptr) return false;
-  fclose(file);
-  return true;
-}
-
-/* Deliberately crude, deterministic per-byte advance (fraction of the font
- * size). Used only when no font file can be loaded. */
 /* Decode one UTF-8 sequence starting at `index`; advances `index`. */
 uint32_t decodeUtf8(const std::string &text, size_t &index) {
   unsigned char first = (unsigned char)text[index];
@@ -171,70 +100,6 @@ uint32_t decodeUtf8(const std::string &text, size_t &index) {
   return code_point;
 }
 
-bool isMonospaceFamily(const std::string &family) {
-  return family.find("mono") != std::string::npos || family.find("courier") != std::string::npos ||
-         family.find("consol") != std::string::npos || family.find("menlo") != std::string::npos ||
-         family.find("code") != std::string::npos;
-}
-
-const char *firstExisting(const char *const *candidates, size_t count) {
-  for (size_t i = 0; i < count; i++) {
-    if (candidates[i] != nullptr && fileExists(candidates[i])) return candidates[i];
-  }
-  return nullptr;
-}
-
-void addFallbackPath(std::vector<std::string> &paths, const char *path) {
-  if (path == nullptr || !fileExists(path)) return;
-  for (const std::string &entry : paths) {
-    if (entry == path) return;
-  }
-  paths.push_back(path);
-}
-
-/* The chain for a primary face: every existing symbol face, then the other
- * family class (CJK coverage for a monospace primary and vice versa). The
- * primary itself is skipped because it is tried first, per codepoint. */
-void buildFallbackChain(std::vector<std::string> &paths, const std::string &primary,
-                        const std::string &otherClass) {
-  for (const char *candidate : kSymbolCandidates) {
-    if (candidate != nullptr && primary != candidate) addFallbackPath(paths, candidate);
-  }
-  if (!otherClass.empty() && otherClass != primary) addFallbackPath(paths, otherClass.c_str());
-}
-
-void ensureInitialized() {
-  Engine &e = engine();
-  if (e.initialized) return;
-  e.initialized = true;
-
-  const size_t sansCount = sizeof(kSansCandidates) / sizeof(kSansCandidates[0]);
-  const size_t monoCount = sizeof(kMonoCandidates) / sizeof(kMonoCandidates[0]);
-
-  const char *env = std::getenv("XT_GUI_FONT");
-  if (env != nullptr && env[0] != '\0' && fileExists(env)) e.sans_path = env;
-  if (e.sans_path.empty()) {
-    const char *path = firstExisting(kSansCandidates, sansCount);
-    if (path != nullptr) e.sans_path = path;
-  }
-
-  const char *envMono = std::getenv("XT_GUI_FONT_MONO");
-  if (envMono != nullptr && envMono[0] != '\0' && fileExists(envMono)) {
-    e.mono_path = envMono;
-  } else if (env != nullptr && env[0] != '\0' && fileExists(env) && isMonospaceFamily(env)) {
-    e.mono_path = env;
-  }
-  if (e.mono_path.empty()) {
-    const char *path = firstExisting(kMonoCandidates, monoCount);
-    if (path != nullptr) e.mono_path = path;
-  }
-  /* No dedicated monospace face: reuse the sans face so metrics stay real. */
-  if (e.mono_path.empty()) e.mono_path = e.sans_path;
-
-  buildFallbackChain(e.sans_fallbacks, e.sans_path, e.mono_path);
-  buildFallbackChain(e.mono_fallbacks, e.mono_path, e.sans_path);
-}
-
 /* Read a font file once and share the bytes across every pixel size. */
 std::shared_ptr<const std::vector<unsigned char>> fontData(const std::string &path) {
   Engine &e = engine();
@@ -261,13 +126,12 @@ std::shared_ptr<const std::vector<unsigned char>> fontData(const std::string &pa
   return shared;
 }
 
-std::unique_ptr<Font> createFont(const std::string &path, float pixel_size, bool monospace) {
-  Engine &e = engine();
+std::unique_ptr<Font> createFont(const std::string &path, int face_index, float pixel_size) {
   if (path.empty()) return nullptr;
   std::shared_ptr<const std::vector<unsigned char>> data = fontData(path);
   if (data == nullptr || data->empty()) return nullptr;
 
-  const int offset = stbtt_GetFontOffsetForIndex(data->data(), 0);
+  const int offset = stbtt_GetFontOffsetForIndex(data->data(), face_index);
   if (offset < 0) return nullptr;
   stbtt_fontinfo info;
   if (!stbtt_InitFont(&info, data->data(), offset)) return nullptr;
@@ -276,7 +140,7 @@ std::unique_ptr<Font> createFont(const std::string &path, float pixel_size, bool
   font->info = info;
   font->data = std::move(data);
   font->path = path;
-  font->monospace = monospace;
+  font->face_index = face_index;
   font->pixel_size = pixel_size;
   font->scale = stbtt_ScaleForPixelHeight(&font->info, pixel_size);
 
@@ -287,46 +151,49 @@ std::unique_ptr<Font> createFont(const std::string &path, float pixel_size, bool
   font->ascent = (float)ascent * font->scale;
   font->descent = (float)-descent * font->scale;
   font->line_height = (float)(ascent - descent + line_gap) * font->scale;
-  e.font_loaded = true;
   return font;
 }
 
-/* Resolve one face by path, keyed by path+class+size so the primary resolved
- * through a `FontSpec` and the same face resolved as a fallback share one
- * `Font` (and one glyph-atlas key). */
-Font *resolveFacePath(const std::string &path, float pixel_size, bool monospace) {
+/* Resolve one face by path+index, keyed by path+collection index+size so the
+ * primary resolved through a `FontSpec` and the same face resolved as a
+ * fallback share one `Font` (and one glyph-atlas key). */
+Font *resolveFacePath(const std::string &path, int face_index, float pixel_size) {
   Engine &e = engine();
   if (path.empty()) return nullptr;
-  char key[512];
-  std::snprintf(key, sizeof(key), "p|%c|%.2f|%s", monospace ? 'm' : 's', (double)pixel_size,
-                path.c_str());
+  char header[64];
+  std::snprintf(header, sizeof(header), "p|%d|%.2f|", face_index, (double)pixel_size);
+  std::string key = header;
+  key += path;
   auto it = e.cache.find(key);
   if (it != e.cache.end()) return it->second.get();
-  std::unique_ptr<Font> font = createFont(path, pixel_size, monospace);
+  std::unique_ptr<Font> font = createFont(path, face_index, pixel_size);
   Font *raw = font.get();
-  e.cache.emplace(key, std::move(font));
+  e.cache.emplace(std::move(key), std::move(font));
   return raw;
 }
 
-/* The resolved fallback faces for a primary, in order, cached per class+size. */
+/* The resolved fallback faces for a primary, in order, cached per face+size. */
 const std::vector<Font *> &fallbackFaces(Font *font) {
   static const std::vector<Font *> kEmpty;
   if (font == nullptr) return kEmpty;
   Engine &e = engine();
-  char key[80];
-  std::snprintf(key, sizeof(key), "f|%c|%.2f", font->monospace ? 'm' : 's',
-                (double)font->pixel_size);
+  char header[64];
+  std::snprintf(header, sizeof(header), "f|%.2f|", (double)font->pixel_size);
+  std::string key = header;
+  key += font->path;
+  key += '#';
+  key += std::to_string(font->face_index);
   auto it = e.fallbacks.find(key);
   if (it != e.fallbacks.end()) return it->second;
 
-  const std::vector<std::string> &paths =
-      font->monospace ? e.mono_fallbacks : e.sans_fallbacks;
+  std::vector<FontFaceRef> candidates;
+  xt_font_fallback_faces(FontFaceRef{font->path, font->face_index}, true, candidates);
   std::vector<Font *> faces;
-  for (const std::string &path : paths) {
-    Font *face = resolveFacePath(path, font->pixel_size, font->monospace);
+  for (const FontFaceRef &ref : candidates) {
+    Font *face = resolveFacePath(ref.path, ref.index, font->pixel_size);
     if (face != nullptr) faces.push_back(face);
   }
-  return e.fallbacks.emplace(key, std::move(faces)).first->second;
+  return e.fallbacks.emplace(std::move(key), std::move(faces)).first->second;
 }
 
 /* The face that draws `code_point`: the primary when it has the glyph, else the
@@ -378,35 +245,29 @@ float shapeSegment(const std::string &segment, Font *font, std::vector<ShapedGly
 }  // namespace
 
 Font *xt_text_stb_resolve(const FontSpec &spec) {
-  ensureInitialized();
   Engine &e = engine();
-
-  bool mono = isMonospaceFamily(spec.family);
-  char key[48];
-  std::snprintf(key, sizeof(key), "%c|%.4f", mono ? 'm' : 's', (double)spec.pixel_size);
+  char suffix[80];
+  std::snprintf(suffix, sizeof(suffix), "|%d|%d|%.4f", spec.weight, spec.italic ? 1 : 0,
+                (double)spec.pixel_size);
+  std::string key = spec.family;
+  key += suffix;
   auto cached = e.primary.find(key);
   if (cached != e.primary.end()) return cached->second;
 
-  const std::string &path = mono ? e.mono_path : e.sans_path;
-  Font *font = path.empty() ? nullptr : resolveFacePath(path, spec.pixel_size, mono);
-  /* A candidate can exist but not be loadable (a CFF/OTF collection, for
-   * example). Walk the class's remaining candidates before giving up. */
-  if (font == nullptr) {
-    const char *const *candidates = mono ? kMonoCandidates : kSansCandidates;
-    const size_t count = mono ? sizeof(kMonoCandidates) / sizeof(kMonoCandidates[0])
-                              : sizeof(kSansCandidates) / sizeof(kSansCandidates[0]);
-    for (size_t i = 0; i < count && font == nullptr; i++) {
-      if (candidates[i] == nullptr || path == candidates[i]) continue;
-      font = resolveFacePath(candidates[i], spec.pixel_size, mono);
-    }
+  std::vector<FontFaceRef> faces;
+  xt_font_face_candidates(spec, true, faces);
+  Font *font = nullptr;
+  for (const FontFaceRef &ref : faces) {
+    font = resolveFacePath(ref.path, ref.index, spec.pixel_size);
+    if (font != nullptr) break;
   }
-  e.primary.emplace(key, font);
+  e.primary.emplace(std::move(key), font);
   return font;
 }
 
 Font *xt_text_stb_scale(Font *font, float pixel_size) {
   if (font == nullptr) return nullptr;
-  return resolveFacePath(font->path, pixel_size, font->monospace);
+  return resolveFacePath(font->path, font->face_index, pixel_size);
 }
 
 float xt_text_stb_shape(const std::string &utf8, Font *font, std::vector<ShapedGlyph> &out) {
@@ -475,8 +336,8 @@ void xt_text_stb_metrics(const FontSpec &spec, float *ascent, float *descent, fl
 }
 
 bool xt_text_stb_ready() {
-  ensureInitialized();
-  return engine().font_loaded;
+  FontSpec spec;
+  return xt_text_stb_resolve(spec) != nullptr;
 }
 
 void xt_text_stb_shutdown() {
@@ -486,15 +347,10 @@ void xt_text_stb_shutdown() {
   e.fallbacks.clear();
   e.cache.clear();
   e.data.clear();
-  e.font_loaded = false;
-  e.initialized = false;
-  e.sans_path.clear();
-  e.mono_path.clear();
-  e.sans_fallbacks.clear();
-  e.mono_fallbacks.clear();
 }
 
 }  // namespace xtgui
+
 namespace xtgui {
 
 const TextApi *xt_text_stb_api() {

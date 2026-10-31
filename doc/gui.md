@@ -183,7 +183,8 @@ engine were Rust.
      rounded-rect SDL_GPU pipeline (`paint.*`, `renderer.*`).
    - **M4b-1 — text stack + metrics** ✅ the text module (`text.*`) with font
      resolution/caching and shaping-based metrics used by layout
-     (`measureText`/`fontMetrics`); originally HarfBuzz + FreeType, now the
+     (`measureText`/`fontMetrics`); the CSS family list, weight and italic style
+     select real installed faces. Originally HarfBuzz + FreeType, now the
      bundled stb_truetype.
    - **M4b-2 — glyph rendering** ✅ stb_truetype rasterisation, a shared shelf-packed
      glyph atlas, textured text quads in the display list and HiDPI-aware raster

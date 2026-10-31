@@ -146,19 +146,25 @@ shader 合成到场景上。全部十六种 CSS 模式（`multiply`、`screen`�
 `runtime/ext_gui/text.{h,cpp}` 是前端，通过一个小型后端表分发。默认后端是内置的
 **stb_truetype**（`text_stb.cpp`、`runtime/ext_gui/stb_truetype.h`）。可选的
 **`shaping`** 链接特性会安装 `text_hb.cpp`（HarfBuzz + FreeType 后端），非 ASCII
-文本会自动选中它。
+文本会自动选中它。两个后端共享 `text_fonts.cpp` 中的字体数据库（族名/字重/样式
+匹配与回退）和 `text_font_sfnt.cpp` 中的 sfnt 元数据读取器，因此同一个 CSS 样式
+无论链接哪个整形后端都会解析到同一个真实字面。
 
-- 字体从常见系统路径解析（macOS 上的 Helvetica/Arial、Linux 上的
-  DejaVu/Liberation、Windows 上的 Segoe UI/Arial），可用 `XT_GUI_FONT`
-  （以及 `XT_GUI_FONT_MONO`）覆盖，并按 `(字体类别, 字号)` 缓存。目前只使用
-  常规直立字面；字重/斜体选择是后续细化。
+- 字体从已安装的系统字面解析。`font-family` 列表按大小写不敏感匹配；
+  `sans-serif`、`serif`、`monospace`（以及 `system-ui`/`ui-*` 别名）映射到平台
+  默认族，其他族名会一次性扫描平台字体目录。`font-weight`（1–1000）和
+  `font-style: italic` 按 CSS Fonts 的字重匹配顺序选择该族真实的粗体/斜体字面；
+  缺少对应字重时选择最接近的字面，族没有斜体字面时使用其直立字面——不做合成
+  粗体或斜体。字面按 `(文件, 集合索引, 字号)` 缓存。`XT_GUI_FONT` /
+  `XT_GUI_FONT_MONO` 仍可覆盖通用族的默认值。
 - 默认候选优先选择 **CJK 覆盖的 TrueType/TTC** 字面（Windows 的 Microsoft
   YaHei、macOS 的 PingFang/STHeiti、Linux 的 Noto Sans CJK/WenQuanYi），
-  再是纯拉丁字面。stb_truetype 无法解析的候选（例如 CFF/OTF 集合）会被跳过，
-  继续尝试下一个。
+  再是纯拉丁字面。同一族的字重/样式变体会跨文件解析；stb_truetype 无法解析的
+  候选（例如 CFF/OTF 集合）会被跳过，`shaping` 后端则会加载它。
 - **主字面缺少的码点会回退到其他字面。** 引擎维护一条小的回退链——先平台的
   符号字体（Segoe UI Symbol、Apple Symbols、Noto Sans Symbols、DejaVu Sans），
-  再是另一字体类别——并为每个码点解析出回退链中第一个拥有该字形的字面。
+  再是默认的 sans、serif 和 monospace 字面——并为每个码点解析出回退链中第一个
+  拥有该字形的字面。
   run 以每个字面一段的方式整形，因此混合 run（拉丁文加箭头、制表符或几何图形，
   或 CJK 中的拉丁文）会绘制每个字形，而不是把缺失的字形当作 `.notdef` 丢弃。
   每个整形后的字形携带自己的字面（`ShapedGlyph::font`），渲染器据此从正确的
@@ -197,7 +203,8 @@ DOM-only 二进制约 3 MiB。可选的 **`shaping`** 链接特性会安装 Harf
   `(face, text) -> 字形 + 前进宽度`。它使用两代、每代最多 2 MiB 字形 / 8,192 条
   条目；某一代写满时丢弃**备用**代并切换过去，因此热路径上没有 LRU 记账。
   一个词只整形一次，之后每次布局和重绘都复用它。主字体查找也按
-  （字体族类别，字号）缓存。
+  （字体族、字重、样式、字号）缓存；字体数据库本身只在第一次遇到非通用族名时
+  扫描一次平台目录。
 - **空写不生效。** 当节点已经显示该值时，`textContent` 与 `style.<属性>` 不做任何
   事：文档不会被标脏，也就没有重算样式、重新布局、重绘或上传。因此每帧都写入相同
   计时文本、相同血条宽度或相同 transform 的 HUD 不产生任何开销 —— 在此之前，每次

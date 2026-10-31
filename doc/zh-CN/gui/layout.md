@@ -22,7 +22,10 @@
   技术栈测量（见[文本技术栈](./rendering.md)）。
 - **Flexbox** —— `row`/`column`（以及 `-reverse` 变体），支持 `gap`、
   `flex-basis`/`flex-grow`/`flex-shrink`、`justify-content` 与 `align-items`
-  （当交叉轴尺寸确定时包括 `stretch`）。`flex-wrap: wrap` 会把项断成多行，
+  （当交叉轴尺寸确定时包括 `stretch`）。两个方向的主轴尺寸都先取
+  `flex-basis`（为 `auto` 时用测量尺寸）：有剩余空间按 `flex-grow` 分配，
+  空间不足按 `flex-shrink` 收缩；单个项的 `align-self` 可覆盖容器的
+  `align-items`。`flex-wrap: wrap` 会把项断成多行，
   `align-content`（`stretch`/`flex-start`/`flex-end`/`center`/`space-between`/
   `space-around`）在交叉轴上分配这些行，`wrap-reverse` 则翻转交叉轴。
   flex 项的外边距参与其外框尺寸，因此
@@ -33,7 +36,9 @@
   `repeat(...)`）、`gap`/`row-gap`/`column-gap`、按行自动放置、简单的
   `grid-column`/`grid-row` 线定位，以及 `align/justify-items` 与
   `align/justify-self`（含 `place-items`/`place-self`）。隐式行/列由项目撑开；
-  单单元格网格配合 `place-items: center` 可把卡片居中到整个覆盖层。项目测量是
+  网格高度确定时，先布置固定行与 auto 行，剩余高度再按 `fr` 分给 `fr` 行，
+  因此 `aspect-ratio` 可以驱动 `repeat(n, 1fr)` 网格。单单元格网格配合
+  `place-items: center` 可把卡片居中到整个覆盖层。项目测量是
   两遍布局（先固有尺寸、再最终放置），因此两遍之间会清空文本片段。
 - **行内级容器、自动外边距与宽高比** —— `display: inline-flex`/`inline-grid`
   仍用 flex/grid 算法排列子元素，但作为单个原子行内盒参与父级行流

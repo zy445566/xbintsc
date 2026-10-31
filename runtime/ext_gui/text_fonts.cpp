@@ -1,20 +1,19 @@
 /*
- * xbintsc GUI engine — CSS font matching (see text_fonts.h).
+ * xbintsc GUI engine — CSS family/weight/style matching.
+ *
+ * The process-wide face database lives in `text_font_db.cpp`; this unit parses
+ * a CSS `font-family` list, ranks the faces of a family by the CSS Fonts
+ * weight/style rules, and appends generic-family and fallback candidates. Both
+ * text backends (`text_stb.cpp` and `text_hb.cpp`) consume the same result.
  */
 
-#include "text_fonts.h"
+#include "text_fonts_internal.h"
 
 #include "text_font_paths.h"
-#include "text_font_sfnt.h"
 
 #include <algorithm>
-#include <array>
-#include <cctype>
-#include <cstdio>
 #include <cstdlib>
-#include <filesystem>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -22,234 +21,12 @@
 namespace xtgui {
 namespace {
 
-constexpr size_t kGenericCount = 5;
-
-struct FaceRecord {
-  FontFaceRef ref;
-  std::string primary_family;             // normalized
-  std::vector<std::string> families;      // normalized (legacy + typographic)
-  int weight = 400;
-  bool italic = false;
-  bool monospace = false;
-  bool truetype = true;
-};
-
-struct Database {
-  bool defaults_loaded = false;
-  bool scanned = false;
-  std::vector<FaceRecord> faces;
-  std::unordered_map<std::string, std::vector<size_t>> by_family;
-  std::unordered_map<std::string, std::vector<size_t>> by_compact;
-  std::unordered_map<std::string, std::vector<size_t>> by_path;
-  std::unordered_set<std::string> parsed_paths;
-  std::array<std::vector<std::string>, kGenericCount> defaults;
-};
-
-Database &database() {
-  static Database instance;
-  return instance;
-}
-
-size_t kindIndex(FontGeneric kind) { return (size_t)kind; }
-
-bool fileExists(const std::string &path) {
-  FILE *file = std::fopen(path.c_str(), "rb");
-  if (file == nullptr) return false;
-  std::fclose(file);
-  return true;
-}
-
 std::string lowerAscii(const std::string &text) {
   std::string out = text;
   for (char &c : out) {
     if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
   }
   return out;
-}
-
-/** CSS family names compare case-insensitively with whitespace collapsed. Only
- * ASCII is case-folded so non-ASCII names still match byte-for-byte. */
-std::string normalizeFamily(const std::string &name) {
-  std::string out;
-  bool pending_space = false;
-  for (unsigned char raw : name) {
-    if (raw <= 0x20 || raw == 0x7f) {
-      pending_space = !out.empty();
-      continue;
-    }
-    if (pending_space) {
-      out.push_back(' ');
-      pending_space = false;
-    }
-    char c = (char)raw;
-    if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
-    out.push_back(c);
-  }
-  return out;
-}
-
-std::string compactFamily(const std::string &normalized) {
-  std::string out;
-  for (unsigned char c : normalized) {
-    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) out.push_back((char)c);
-  }
-  return out;
-}
-
-std::string faceKey(const FontFaceRef &ref) {
-  return ref.path + '\x1f' + std::to_string(ref.index);
-}
-
-bool hasFontExtension(const std::string &path) {
-  const size_t dot = path.find_last_of('.');
-  if (dot == std::string::npos) return false;
-  const std::string ext = lowerAscii(path.substr(dot));
-  return ext == ".ttf" || ext == ".ttc" || ext == ".otf" || ext == ".otc";
-}
-
-void appendUnique(std::vector<std::string> &paths, const std::string &path) {
-  for (const std::string &entry : paths) {
-    if (entry == path) return;
-  }
-  paths.push_back(path);
-}
-
-/** The defaults list with an environment override at the front. The override is
- * only kept when the file exists, which mirrors the old `XT_GUI_FONT`
- * behaviour (a bad path was ignored). */
-std::vector<std::string> defaultPaths(FontGeneric kind) {
-  std::vector<std::string> paths;
-  const char *sans_env = std::getenv("XT_GUI_FONT");
-  const char *mono_env = std::getenv("XT_GUI_FONT_MONO");
-  if (kind == FontGeneric::Sans && sans_env != nullptr && fileExists(sans_env)) {
-    paths.push_back(sans_env);
-  }
-  if (kind == FontGeneric::Monospace) {
-    if (mono_env != nullptr && fileExists(mono_env)) {
-      paths.push_back(mono_env);
-    } else if (sans_env != nullptr && fileExists(sans_env) &&
-               lowerAscii(sans_env).find("mono") != std::string::npos) {
-      paths.push_back(sans_env);
-    }
-  }
-  for (const std::string &path : xt_font_default_paths(kind)) {
-    if (fileExists(path)) appendUnique(paths, path);
-  }
-  return paths;
-}
-
-void addFace(const SfntFace &raw, const std::string &path) {
-  Database &db = database();
-  const FontFaceRef ref{path, raw.index};
-  const std::string key = faceKey(ref);
-  const auto found = db.by_path.find(path);
-  if (found != db.by_path.end()) {
-    for (size_t index : found->second) {
-      if (faceKey(db.faces[index].ref) == key) return;
-    }
-  }
-
-  FaceRecord face;
-  face.ref = ref;
-  face.primary_family = normalizeFamily(raw.primary_family);
-  face.weight = std::min(1000, std::max(1, raw.weight));
-  face.italic = raw.italic;
-  face.monospace = raw.monospace;
-  face.truetype = raw.truetype;
-  for (const std::string &name : raw.families) {
-    const std::string normalized = normalizeFamily(name);
-    if (normalized.empty()) continue;
-    if (std::find(face.families.begin(), face.families.end(), normalized) ==
-        face.families.end()) {
-      face.families.push_back(normalized);
-    }
-  }
-  if (face.primary_family.empty() && !face.families.empty()) {
-    face.primary_family = face.families.front();
-  }
-
-  const size_t index = db.faces.size();
-  db.faces.push_back(std::move(face));
-  db.by_path[path].push_back(index);
-  for (const std::string &name : db.faces[index].families) {
-    db.by_family[name].push_back(index);
-    const std::string compact = compactFamily(name);
-    if (!compact.empty()) db.by_compact[compact].push_back(index);
-  }
-}
-
-void addFontFile(const std::string &path) {
-  Database &db = database();
-  if (!db.parsed_paths.insert(path).second) return;
-  std::vector<SfntFace> faces;
-  xt_sfnt_read_faces(path, faces);
-  for (const SfntFace &face : faces) addFace(face, path);
-  /* Keep an empty vector so `by_path[path]` distinguishes "parsed but no
-   * usable face" from "not parsed yet". */
-  db.by_path.emplace(path, std::vector<size_t>());
-}
-
-void ensureDefaults() {
-  Database &db = database();
-  if (db.defaults_loaded) return;
-  db.defaults_loaded = true;
-  for (int i = 0; i < (int)kGenericCount; i++) {
-    db.defaults[(size_t)i] = defaultPaths((FontGeneric)i);
-    for (const std::string &path : db.defaults[(size_t)i]) addFontFile(path);
-  }
-}
-
-void scanDirectory(const std::string &directory, std::vector<std::string> &paths) {
-  std::error_code error;
-  std::filesystem::recursive_directory_iterator iterator(
-      directory, std::filesystem::directory_options::skip_permission_denied, error);
-  const std::filesystem::recursive_directory_iterator end;
-  while (!error && iterator != end) {
-    const std::filesystem::directory_entry &entry = *iterator;
-    std::error_code entry_error;
-    if (entry.is_regular_file(entry_error)) {
-      std::string path = entry.path().string();
-      if (hasFontExtension(path)) paths.push_back(std::move(path));
-    }
-    iterator.increment(error);
-    if (error) break;
-  }
-}
-
-void ensureScanned() {
-  Database &db = database();
-  if (db.scanned) return;
-  db.scanned = true;
-  ensureDefaults();
-
-  std::vector<std::string> paths;
-  for (const std::string &directory : xt_font_search_directories()) {
-    scanDirectory(directory, paths);
-  }
-  /* A font supplied through XT_GUI_FONT may live outside the platform font
-   * directories; scanning its directory finds the bold/italic siblings. */
-  for (const char *variable : {"XT_GUI_FONT", "XT_GUI_FONT_MONO"}) {
-    const char *value = std::getenv(variable);
-    if (value == nullptr || !fileExists(value)) continue;
-    const std::filesystem::path parent = std::filesystem::path(value).parent_path();
-    if (!parent.empty()) scanDirectory(parent.string(), paths);
-  }
-  for (const std::string &path : paths) addFontFile(path);
-}
-
-std::vector<size_t> lookupFamily(const std::string &name) {
-  Database &db = database();
-  const std::string normalized = normalizeFamily(name);
-  if (!normalized.empty()) {
-    const auto found = db.by_family.find(normalized);
-    if (found != db.by_family.end()) return found->second;
-  }
-  const std::string compact = compactFamily(normalized);
-  if (!compact.empty()) {
-    const auto found = db.by_compact.find(compact);
-    if (found != db.by_compact.end()) return found->second;
-  }
-  return {};
 }
 
 std::vector<std::string> parseFamilyList(const std::string &text) {
@@ -346,7 +123,7 @@ void weightRanks(int desired, int ranks[1001]) {
 
 void appendOrdered(const std::vector<size_t> &indices, int weight, bool italic, bool truetype_only,
                    std::vector<FontFaceRef> &out) {
-  Database &db = database();
+  Database &db = fontDatabase();
   std::vector<const FaceRecord *> matching;
   std::vector<const FaceRecord *> opposite;
   for (size_t index : indices) {
@@ -363,10 +140,12 @@ void appendOrdered(const std::vector<size_t> &indices, int weight, bool italic, 
   if (matching.empty()) matching = std::move(opposite);
 
   int ranks[1001];
-  weightRanks(std::min(1000, std::max(1, weight)), ranks);
+  const int wanted = clampedWeight(weight);
+  weightRanks(wanted, ranks);
   std::stable_sort(matching.begin(), matching.end(),
-                   [&ranks](const FaceRecord *left, const FaceRecord *right) {
-                     return ranks[left->weight] < ranks[right->weight];
+                   [&ranks, wanted](const FaceRecord *left, const FaceRecord *right) {
+                     return ranks[effectiveWeight(*left, wanted)] <
+                            ranks[effectiveWeight(*right, wanted)];
                    });
   for (const FaceRecord *face : matching) out.push_back(face->ref);
 }
@@ -377,9 +156,10 @@ void appendOrdered(const std::vector<size_t> &indices, int weight, bool italic, 
  * can satisfy it above one that cannot. */
 int bestWeightRank(const std::vector<size_t> &indices, int weight, bool italic, bool truetype_only,
                    bool *style_exact) {
-  Database &db = database();
+  Database &db = fontDatabase();
   int ranks[1001];
-  weightRanks(std::min(1000, std::max(1, weight)), ranks);
+  const int wanted = clampedWeight(weight);
+  weightRanks(wanted, ranks);
   bool has_style = false;
   bool has_other = false;
   int best_style = 1000000;
@@ -387,12 +167,13 @@ int bestWeightRank(const std::vector<size_t> &indices, int weight, bool italic, 
   for (size_t index : indices) {
     const FaceRecord &face = db.faces[index];
     if (truetype_only && !face.truetype) continue;
+    const int rank = ranks[effectiveWeight(face, wanted)];
     if (face.italic == italic) {
       has_style = true;
-      best_style = std::min(best_style, ranks[face.weight]);
+      best_style = std::min(best_style, rank);
     } else {
       has_other = true;
-      best_other = std::min(best_other, ranks[face.weight]);
+      best_other = std::min(best_other, rank);
     }
   }
   *style_exact = has_style;
@@ -419,7 +200,7 @@ std::string forcedDefaultPath(FontGeneric kind) {
 
 void genericCandidates(FontGeneric kind, int weight, bool italic, bool truetype_only,
                        std::vector<FontFaceRef> &out) {
-  Database &db = database();
+  Database &db = fontDatabase();
   ensureDefaults();
   const std::string forced_path = forcedDefaultPath(kind);
 
@@ -500,10 +281,20 @@ void xt_font_face_candidates(const FontSpec &spec, bool truetype_only,
       accepted = true;
       break;
     }
+    /* An @font-face family resolves without scanning the system directories;
+     * only fall through to the scan when the author family is absent (or has no
+     * face this backend can load). */
+    std::vector<size_t> matches = lookupFamily(family);
+    size_t before = out.size();
+    if (!matches.empty()) appendOrdered(matches, spec.weight, spec.italic, truetype_only, out);
+    if (out.size() > before) {
+      accepted = true;
+      break;
+    }
     ensureScanned();
-    const std::vector<size_t> matches = lookupFamily(family);
+    matches = lookupFamily(family);
     if (matches.empty()) continue;
-    const size_t before = out.size();
+    before = out.size();
     appendOrdered(matches, spec.weight, spec.italic, truetype_only, out);
     if (out.size() > before) {
       accepted = true;
@@ -525,7 +316,7 @@ void xt_font_fallback_faces(const FontFaceRef &primary, bool truetype_only,
                             std::vector<FontFaceRef> &out) {
   out.clear();
   ensureDefaults();
-  Database &db = database();
+  Database &db = fontDatabase();
   std::vector<FontFaceRef> candidates;
   for (const std::string &path : xt_font_symbol_paths()) {
     if (!fileExists(path)) continue;
@@ -552,18 +343,6 @@ void xt_font_fallback_faces(const FontFaceRef &primary, bool truetype_only,
     if (out.size() >= 16) break;
     if (seen.insert(faceKey(ref)).second) out.push_back(ref);
   }
-}
-
-void xt_font_db_shutdown() {
-  Database &db = database();
-  db.defaults_loaded = false;
-  db.scanned = false;
-  db.faces.clear();
-  db.by_family.clear();
-  db.by_compact.clear();
-  db.by_path.clear();
-  db.parsed_paths.clear();
-  for (std::vector<std::string> &paths : db.defaults) paths.clear();
 }
 
 }  // namespace xtgui

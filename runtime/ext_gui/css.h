@@ -114,10 +114,36 @@ struct KeyframesRule {
   std::vector<Keyframe> keyframes;
 };
 
+/** One `@font-face` source: a local file URL plus the optional `format(...)`
+ * hint. `local(...)` sources are dropped at parse time (the runtime has no
+ * name-to-file font lookup for them). */
+struct FontFaceSource {
+  std::string url;
+  std::string format;
+};
+
+/** One author `@font-face` rule. The runtime resolves the sources to a real
+ * font file when the document loads; the declared family name is what CSS
+ * matches, even when it differs from the font's internal name. */
+struct FontFaceRule {
+  std::string family;
+  std::vector<FontFaceSource> sources;
+  /** `font-weight` descriptor. A range (`100 900`) is kept as min/max; when the
+   * descriptor is absent the font's OS/2 weight is used. */
+  bool has_weight = false;
+  int weight_min = 400;
+  int weight_max = 400;
+  /** `font-style` descriptor; absent means the font's own italic flag. */
+  bool has_italic = false;
+  bool italic = false;
+};
+
 struct StyleSheet {
   std::vector<Rule> rules;
   /** `@keyframes` blocks, in declaration order. */
   std::vector<KeyframesRule> keyframes;
+  /** `@font-face` blocks, in declaration order. */
+  std::vector<FontFaceRule> font_faces;
   /* Facts the cascade can act on once per sheet instead of once per element (a
    * `@media` block, a `::before` rule or a `transition` declaration used to be
    * discovered by scanning every rule for every node). */

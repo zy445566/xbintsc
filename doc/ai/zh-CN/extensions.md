@@ -128,8 +128,8 @@ HTML/CSS/TS（导入的 `.html` 与内联 CSS 都属于 bundle），按程序自
   `drawImage`/`createImageBitmap`/`Image` 与应用图标所需的 stb_image/NanoSVG 解码。
   纯文本页面两个解码器都不链接。
 - **`shaping`** —— HarfBuzz + FreeType 提供的完整 OpenType 整形（连字、复杂文种）
-  与 CFF/OTF/可变字体支持。非 ASCII 文本（或转义/实体码点）会自动选中；纯拉丁页面
-  保持 stb_truetype 后端，两个库都不链接。
+  与 CFF/OTF/可变字体支持。非 ASCII 文本（或转义/实体码点）或作者的
+  `@font-face` 规则会自动选中；纯拉丁页面保持 stb_truetype 后端，两个库都不链接。
 - **`webgl`** —— WebGL context 与 DOM 绑定。由 WebGL 的 `getContext(...)` 或
   `webgl` 字符串触发；它依赖 `gpu`，两者一起激活。不用 WebGL 的页面两者都不链接。
 

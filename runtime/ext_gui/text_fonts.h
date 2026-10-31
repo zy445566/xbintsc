@@ -30,6 +30,32 @@ struct FontFaceRef {
   int index = 0;
 };
 
+/** One source URL from an author `@font-face` rule. Relative paths are read as
+ * local files (the `file:` protocol) from the process working directory; remote
+ * URLs are ignored. */
+struct UserFontSource {
+  std::string url;
+  std::string format;
+};
+
+/** One resolved-author `@font-face` request. The declared `family` is matched
+ * by CSS even when it differs from the font file's internal family name. A
+ * missing weight/style descriptor (`has_* == false`) takes the value from the
+ * font file's own metadata. */
+struct UserFontFace {
+  std::string family;
+  std::vector<UserFontSource> sources;
+  bool has_weight = false;
+  int weight_min = 400;
+  int weight_max = 400;
+  bool has_italic = false;
+  bool italic = false;
+};
+
+/** Replace the document's author font faces. Every call clears the previous
+ * set, so `loadHTML` starts from the new document's `@font-face` rules. */
+void xt_font_set_user_faces(const std::vector<UserFontFace> &faces);
+
 /** Append the faces for `spec`, best match first. Named families are looked up
  * case-insensitively; generic families resolve to the platform defaults. Every
  * family in the CSS list is tried in order and later families are kept as

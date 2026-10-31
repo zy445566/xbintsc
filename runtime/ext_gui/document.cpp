@@ -6,10 +6,12 @@
 
 #include <cmath>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "perf.h"
 #include "style_internal.h"
+#include "text_fonts.h"
 
 namespace xtgui {
 
@@ -46,6 +48,26 @@ void XtDocument::load(const std::string &html, float viewportWidth, float viewpo
   std::string css;
   collectStyleText(root_.get(), &css);
   sheet_ = xt_css_parse_stylesheet(css);
+
+  /* Author `@font-face` families are global to the process's text stack, so a
+   * new document replaces the previous set before its first layout. */
+  std::vector<UserFontFace> user_faces;
+  user_faces.reserve(sheet_.font_faces.size());
+  for (const FontFaceRule &rule : sheet_.font_faces) {
+    UserFontFace face;
+    face.family = rule.family;
+    face.sources.reserve(rule.sources.size());
+    for (const FontFaceSource &source : rule.sources) {
+      face.sources.push_back(UserFontSource{source.url, source.format});
+    }
+    face.has_weight = rule.has_weight;
+    face.weight_min = rule.weight_min;
+    face.weight_max = rule.weight_max;
+    face.has_italic = rule.has_italic;
+    face.italic = rule.italic;
+    user_faces.push_back(std::move(face));
+  }
+  xt_font_set_user_faces(user_faces);
   restyle(viewportWidth, viewportHeight);
 }
 

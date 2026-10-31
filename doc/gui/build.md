@@ -131,7 +131,7 @@ features** selected per program:
 | `media` | `media_bridge.c` + `media.a` (FFmpeg) | an HTML `<video>`/`<audio>` tag, `createElement("video"/"audio")`, `new Audio()`, `decodeAudioData`, or runtime-built markup |
 | `gpu` | `gpu_bridge.c` (the implementation is already in `gui.a`) | a `getContext("webgl"/"webgl2"/"experimental-webgl")` (or a kind decided at run time), any `webgl` string, `mix-blend-mode`/`mixBlendMode`, or runtime-built markup |
 | `images` | `image_bridge.c` (the implementation is already in `gui.a`) | `<img>`, inline `<svg>`, `background-image`/`url(...)`, a `.svg` path, `drawImage`/`createImageBitmap`/`Image`, or runtime-built markup |
-| `shaping` | `text_bridge.c` (the implementation is already in `gui.a`) | non-ASCII text (CJK/Cyrillic/Greek/…), an escaped/entity codepoint, or runtime-built markup |
+| `shaping` | `text_bridge.c` (the implementation is already in `gui.a`) | non-ASCII text (CJK/Cyrillic/Greek/…), an escaped/entity codepoint, an author `@font-face` rule (custom fonts may be CFF/OTF), or runtime-built markup |
 | `webgl` | `webgl_bridge.c` (the implementation is already in `gui.a`; requires `gpu`) | a WebGL `getContext(...)`, a `webgl` string, or runtime-built markup |
 
 The driver scans the bundled AST (`src/driver/usage.ts`): every string literal
@@ -206,10 +206,11 @@ TrueType outlines and a per-codepoint mapping plus the font's `kern` table, so
 CFF/OTF and variable fonts, OpenType ligatures and complex-script shaping
 (Arabic/Indic/Thai) are not available. The fallback chain still selects another
 face for codepoints the primary lacks. Selecting the optional **`shaping`**
-feature (automatically for non-ASCII text, or with `--feature shaping`) links
-HarfBuzz + FreeType back in (~1.2 MiB) and restores full OpenType shaping and
-CFF/OTF/variable-font support. A Latin-only DOM page therefore stays near
-3.1 MiB; a Chinese/complex-script page is closer to 4.3 MiB.
+feature (automatically for non-ASCII text or an author `@font-face` rule, or
+with `--feature shaping`) links HarfBuzz + FreeType back in (~1.2 MiB) and
+restores full OpenType shaping and CFF/OTF/variable-font support. A Latin-only
+DOM page therefore stays near 3.1 MiB; a Chinese/complex-script page is closer
+to 4.3 MiB.
 
 ## Running the example
 

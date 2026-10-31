@@ -66,10 +66,13 @@ export function hasImageUsage(usage: ProgramUsage): boolean {
   );
 }
 
-/** True when the program may need full OpenType shaping (non-Latin text). */
+/** True when the program may need full OpenType shaping. Non-Latin text needs it
+ * for shaping, and an author `@font-face` often points at a CFF/OTF font that
+ * the default stb_truetype backend cannot outline. */
 export function hasShapingUsage(usage: ProgramUsage): boolean {
   if (usage.dynamicMarkup) return true;
   return usage.strings.some((value) => {
+    if (/@font-face\b/i.test(value)) return true;
     for (const character of value) {
       if ((character.codePointAt(0) ?? 0) > 0x7f) return true;
     }

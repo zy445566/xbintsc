@@ -198,6 +198,16 @@ describe("shaping usage detection", () => {
     expect(hasShapingUsage(usage({ strings: ["&#20013;&#25991;"] }))).toBe(true);
   });
 
+  it("turns on for author @font-face rules (custom fonts may be CFF/OTF)", () => {
+    expect(
+      hasShapingUsage(
+        usage({
+          strings: ['@font-face { font-family: "X"; src: url("./x.otf"); }'],
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("stays off for ASCII-only text", () => {
     expect(hasShapingUsage(usage({ strings: ["<div>Hello</div>"] }))).toBe(false);
   });

@@ -78,12 +78,17 @@ export interface GuiRunOptions {
    * way to report its result.
    */
   console?: boolean;
+  /** Working directory for the compiled program (defaults to the test process
+   * CWD). Relative image/font paths resolve against it. */
+  cwd?: string;
 }
 
 /** Enough for programs whose whole body runs in the first frame's `ready` handler. */
 const DEFAULT_AUTOCLOSE_MS = 400;
 
 export interface GuiHarness {
+  /** Absolute path of the per-suite temporary directory (`setup()` creates it). */
+  readonly workdir: string;
   /** Absolute path of the 4x4 test PNG written during `setup()`. */
   readonly logoPath: string;
   /**
@@ -142,6 +147,7 @@ export function createGuiHarness(): GuiHarness {
     });
     expect(result.diagnostics.filter((diagnostic) => diagnostic.category === "error")).toEqual([]);
     const executed = spawnSync(result.outputPath, [], {
+      cwd: options.cwd,
       encoding: "utf8",
       env: {
         ...process.env,
@@ -160,6 +166,9 @@ export function createGuiHarness(): GuiHarness {
   };
 
   return {
+    get workdir() {
+      return workdir;
+    },
     get logoPath() {
       return logoPath;
     },

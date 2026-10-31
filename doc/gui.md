@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M20** — features (M1–M15) are complete: HTML parsing, CSS selector
+Status: **M22** — features (M1–M15) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -392,6 +392,14 @@ engine were Rust.
       transitions; transitions now cover opacity, layout lengths, box shadows
       and `cubic-bezier()`/`steps()`/`step-start`/`step-end`.
     - E2E: `tests/e2e/gui-css-features.test.ts`.
+22. **M22 — CSS coverage for the boxing UI** ✅
+    - `letter-spacing`, `text-transform`, the `font` shorthand, length-form
+      `vertical-align`, `writing-mode` (text-only vertical layout), percentage
+      `border-radius`, `inline-flex`/`inline-grid`, `grid-area`, `aspect-ratio`,
+      auto margins, `outline` + `:focus-visible`/`:active`, `currentColor`,
+      `skewX()`/`skewY()`, `background-size` tiling for `url()` layers and
+      document CSS on SVG children (`fill`/`stroke`/…) are now honoured.
+    - E2E: `tests/e2e/gui-css-coverage.test.ts`.
 
 ## Progress log
 
@@ -546,6 +554,15 @@ engine were Rust.
   `paint_backdrop.cpp` + `renderer_layer.cpp` composite `backdrop-filter`, and
   `paint_clip.cpp`/`renderer_clip.cpp` clip geometry against triangulated
   `clip-path` polygons. E2E: `tests/e2e/gui-effects.test.ts`.
+- **M22** ✅ CSS coverage for the boxing UI. The cascade/declaration parser
+  gained `letter-spacing`, `text-transform`, the `font` shorthand,
+  `vertical-align`, `writing-mode`, percentage `border-radius`, `outline`,
+  `background-size`, `currentColor` and the SVG presentation properties;
+  layout gained inline-level flex/grid, `grid-area`, `aspect-ratio`, auto
+  margins and text-only vertical writing mode; paint gained outline edges,
+  sized/tiled image backgrounds and rotated vertical text; `:focus-visible` is
+  an alias of `:focus` and `:active` is tracked from pointer down/up. E2E:
+  `tests/e2e/gui-css-coverage.test.ts`.
 - **M21** ✅ CSS value/animation completeness. `calc()` is parsed as an
   unresolved expression tree and resolved by layout/paint; `box-shadow` and
   blurred `text-shadow` use a separable Gaussian mask cached as a texture;

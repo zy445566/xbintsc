@@ -67,6 +67,9 @@ enum class TransformKind {
   ScaleX,
   ScaleY,
   Rotate,
+  Skew,
+  SkewX,
+  SkewY,
   Matrix,
 };
 
@@ -79,6 +82,8 @@ struct TransformOp {
   float scale_x = 1.0f;        // scale x (a unitless factor)
   float scale_y = 1.0f;        // scale y
   float angle = 0.0f;          // rotate, in radians
+  float skew_x = 0.0f;         // skew X angle, in radians
+  float skew_y = 0.0f;         // skew Y angle, in radians
   float matrix[6] = {1, 0, 0, 1, 0, 0};  // a b c d e f
 };
 

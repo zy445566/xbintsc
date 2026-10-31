@@ -299,7 +299,8 @@ void xt_gui_text_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     if (glyph_scale < kMinGlyphScale) glyph_scale = kMinGlyphScale;
     if (glyph_scale > kMaxGlyphScale) glyph_scale = kMaxGlyphScale;
 
-    const xtgui::ShapedRun *shaped = xtgui::xt_text_shape_cached(run.text, logical);
+    const xtgui::ShapedRun *shaped =
+        xtgui::xt_text_shape_cached(run.text, logical, run.font.letter_spacing);
     if (shaped == nullptr) continue;
     float pen_x = run.x;
     uint32_t before = (uint32_t)verts.size();

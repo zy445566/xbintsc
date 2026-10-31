@@ -36,9 +36,9 @@ float xt_text_measure_width(const std::string &utf8, const FontSpec &spec) {
   if (font == nullptr) {
     /* No font file: keep layout deterministic (bytes rather than codepoints;
      * this path is only hit on hosts with no usable system font). */
-    return (float)utf8.size() * spec.pixel_size * 0.55f;
+    return (float)utf8.size() * (spec.pixel_size * 0.55f + spec.letter_spacing);
   }
-  const ShapedRun *run = xt_text_shape_cached(utf8, font);
+  const ShapedRun *run = xt_text_shape_cached(utf8, font, spec.letter_spacing);
   return run != nullptr ? run->width : 0.0f;
 }
 

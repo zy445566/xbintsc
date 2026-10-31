@@ -175,14 +175,15 @@ std::shared_ptr<const PaintBitmap> textShadowMask(const std::string &text, const
                                                   float blur) {
   if (text.empty() || blur <= 0.0f) return nullptr;
   char key_buffer[160];
-  std::snprintf(key_buffer, sizeof(key_buffer), "ts:%.2f:%.0f:%d:%d:", (double)blur,
-                (double)font.pixel_size, font.weight, font.italic ? 1 : 0);
+  std::snprintf(key_buffer, sizeof(key_buffer), "ts:%.2f:%.0f:%d:%d:%.3f:", (double)blur,
+                (double)font.pixel_size, font.weight, font.italic ? 1 : 0,
+                (double)font.letter_spacing);
   std::string key = key_buffer + font.family + "|" + text;
   if (std::shared_ptr<const PaintBitmap> cached = cachedShadow(key)) return cached;
 
   Font *logical = xt_text_resolve(font);
   if (logical == nullptr) return nullptr;
-  const ShapedRun *shaped = xt_text_shape_cached(text, logical);
+  const ShapedRun *shaped = xt_text_shape_cached(text, logical, font.letter_spacing);
   if (shaped == nullptr || shaped->glyphs.empty()) return nullptr;
 
   const float scale = kTextShadowScale;
@@ -284,7 +285,7 @@ void addBoxShadows(DisplayList &out, const LayoutBox &box, const XtStyle &style,
       float y = box.y + dy - spread;
       float width = box.width + spread * 2.0f;
       float height = box.height + spread * 2.0f;
-      float radius = style.border_radius + spread;
+      float radius = box.border_radius + spread;
       addRect(out, x, y, width, height, radius, color, clip, box.world);
       continue;
     }
@@ -293,7 +294,7 @@ void addBoxShadows(DisplayList &out, const LayoutBox &box, const XtStyle &style,
     const float padding = std::ceil(blur * 1.5f) + 2.0f;
     const std::string key =
         std::string("bs:") + (inset ? "i:" : "o:") + floatKey(box.width) + ":" +
-        floatKey(box.height) + ":" + floatKey(style.border_radius) + ":" + floatKey(blur) +
+        floatKey(box.height) + ":" + floatKey(box.border_radius) + ":" + floatKey(blur) +
         ":" + floatKey(spread) + ":" + floatKey(box.border_left) + ":" +
         floatKey(box.border_right) + ":" + floatKey(box.border_top) + ":" +
         floatKey(box.border_bottom) + ":" + floatKey(dx) + ":" + floatKey(dy);
@@ -306,7 +307,7 @@ void addBoxShadows(DisplayList &out, const LayoutBox &box, const XtStyle &style,
       if (!inset) {
         float shadow_width = std::max(0.0f, box.width + spread * 2.0f);
         float shadow_height = std::max(0.0f, box.height + spread * 2.0f);
-        float radius = std::max(0.0f, style.border_radius + spread);
+        float radius = std::max(0.0f, box.border_radius + spread);
         generated->width = std::max(1, (int)std::ceil(shadow_width + padding * 2.0f));
         generated->height = std::max(1, (int)std::ceil(shadow_height + padding * 2.0f));
         if ((long long)generated->width * generated->height > 16 * 1024 * 1024) continue;
@@ -324,7 +325,7 @@ void addBoxShadows(DisplayList &out, const LayoutBox &box, const XtStyle &style,
         float shape_local_y = padding + spread - box.border_top + dy;
         float shape_width = std::max(0.0f, box.width - spread * 2.0f);
         float shape_height = std::max(0.0f, box.height - spread * 2.0f);
-        float radius = std::max(0.0f, style.border_radius - spread);
+        float radius = std::max(0.0f, box.border_radius - spread);
         generated->width = std::max(1, (int)std::ceil(padding_box_width + padding * 2.0f));
         generated->height = std::max(1, (int)std::ceil(padding_box_height + padding * 2.0f));
         if ((long long)generated->width * generated->height > 16 * 1024 * 1024) continue;

@@ -157,6 +157,7 @@ static void xt_gui_update_hover(XtGuiWindow *win, const xtgui::Node *node) {
     win->geometry.dirty = 1;
     win->present_dirty = 1;
   }
+  guidev::applyCursor(win, node);
 }
 
 /** Pointer payload. `node` is the hit-test result the caller already resolved,
@@ -187,10 +188,21 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
   if (win == NULL || !win->open) return;
   const xtgui::Node *node = xt_gui_hit_node(win, x, y);
   xt_gui_update_hover(win, node);
-  if (strcmp(type, "mousedown") == 0 && win->document != nullptr) {
-    if (win->document->setFocus(node)) {
-      win->geometry.dirty = 1;
-      win->present_dirty = 1;
+  if (win->document != nullptr) {
+    if (strcmp(type, "mousedown") == 0) {
+      if (win->document->setFocus(node)) {
+        win->geometry.dirty = 1;
+        win->present_dirty = 1;
+      }
+      if (win->document->setActive(node)) {
+        win->geometry.dirty = 1;
+        win->present_dirty = 1;
+      }
+    } else if (strcmp(type, "mouseup") == 0) {
+      if (win->document->setActive(nullptr)) {
+        win->geometry.dirty = 1;
+        win->present_dirty = 1;
+      }
     }
   }
   xt_value payload = xt_gui_pointer_payload(type, win, x, y, button, clicks, node);

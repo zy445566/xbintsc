@@ -93,6 +93,10 @@ bool matchPseudo(const Node *node, const std::string &pseudo, const MatchState &
   if (pseudo == "root") return node->parent != nullptr && node->parent->isDocument();
   if (pseudo == "hover") return isHoverTarget(node, state.hover);
   if (pseudo == "focus") return node == state.focus;
+  /* The engine has no keyboard modality tracking, so focus-visible is the same
+   * as focus (a mouse click also shows the focus ring). */
+  if (pseudo == "focus-visible") return node == state.focus;
+  if (pseudo == "active") return isHoverTarget(node, state.active);
   if (pseudo == "empty") {
     for (const std::unique_ptr<Node> &child : node->children) {
       if (child->isElement()) return false;

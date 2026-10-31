@@ -19,8 +19,10 @@
 #define XT_GUI_INLINE_SVG_H
 
 #include <string>
+#include <unordered_map>
 
 #include "dom.h"
+#include "style.h"
 #include "svg.h"
 
 namespace xtgui {
@@ -34,7 +36,9 @@ bool xt_inline_svg_is_root(const Node *node);
  * expects. Text outside `<style>` is dropped (NanoSVG renders shapes, not
  * `<text>`), and HTML-only attributes are skipped. Returns an empty string when
  * `node` is not an `<svg>` element. */
-std::string xt_inline_svg_serialize(const Node *node);
+std::string xt_inline_svg_serialize(
+    const Node *node,
+    const std::unordered_map<const Node *, XtStyle> *styles = nullptr);
 
 }  // namespace xtgui
 

@@ -221,6 +221,7 @@ void computeSheetFlags(StyleSheet *sheet) {
         for (const std::string &pseudo : compound.pseudoClasses) {
           if (pseudo.find("hover") != std::string::npos) sheet->has_hover = true;
           if (pseudo.find("focus") != std::string::npos) sheet->has_focus = true;
+          if (pseudo == "active") sheet->has_active = true;
         }
       }
     }

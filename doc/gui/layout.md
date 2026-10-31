@@ -40,6 +40,22 @@ with absolute (viewport-relative) geometry:
   and columns grow from the items; a single-cell grid with `place-items: center` centres a card in the whole overlay. Item measurement is a two-pass
   layout (intrinsic size, then final placement), so text fragments are cleared
   between passes.
+- **Inline-level containers, auto margins and aspect ratio** — `display:
+  inline-flex`/`inline-grid` lay their children out with the flex/grid algorithm
+  but participate in the parent line as one atomic inline box (`vertical-align`
+  shifts it by its length value). A block-level box with `margin-left: auto` /
+  `margin-right: auto` absorbs the leftover inline space (both auto → centred);
+  a flex item's auto main-axis margins absorb the line's free space before
+  `justify-content`, which is what pushes a footer or button hint to the end.
+  `aspect-ratio` derives a `height: auto` box from its used width (the
+  width-from-height direction is not implemented). `border-radius` accepts a
+  percentage and resolves against the smaller border-box side.
+- **Vertical writing mode** — `writing-mode: vertical-rl|vertical-lr` lays text
+  out one character per column step: CJK/kana/Hangul glyphs stay upright and
+  other scripts are rotated 90° at paint time. A definite height starts a new
+  column; a flex container's row/column axes swap with the writing mode. This is
+  a text-focused implementation: nested blocks and mixed horizontal content in a
+  vertical container still fall back to horizontal layout.
 - **CSS value functions and custom properties** — `calc()` arithmetic (including
   nested `calc()` and `calc()` inside the other functions), `clamp(min, value,
   max)`, `min(...)` and `max(...)` keep their expression unresolved in the

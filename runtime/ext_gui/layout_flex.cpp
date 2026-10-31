@@ -12,6 +12,37 @@
 namespace xtgui {
 namespace layout_flow_detail {
 
+/** Give the line's free main-axis space to `auto` margins (CSS flexbox). Returns
+ * true when any item had one; the caller then skips `justify-content`. */
+static bool applyAutoMainMargins(const std::vector<LayoutBox *> &items,
+                                 const std::vector<size_t> &line, bool row, float freeSpace) {
+  int count = 0;
+  for (size_t i : line) {
+    const XtStyle &style = *items[i]->style;
+    if (row) {
+      if (style.margin_left_auto) count++;
+      if (style.margin_right_auto) count++;
+    } else {
+      if (style.margin_top_auto) count++;
+      if (style.margin_bottom_auto) count++;
+    }
+  }
+  if (count == 0) return false;
+  if (freeSpace < 0.0f) freeSpace = 0.0f;
+  float share = freeSpace / (float)count;
+  for (size_t i : line) {
+    const XtStyle &style = *items[i]->style;
+    if (row) {
+      if (style.margin_left_auto) items[i]->margin_left = share;
+      if (style.margin_right_auto) items[i]->margin_right = share;
+    } else {
+      if (style.margin_top_auto) items[i]->margin_top = share;
+      if (style.margin_bottom_auto) items[i]->margin_bottom = share;
+    }
+  }
+  return true;
+}
+
 /** Partition `basis` (outer main sizes) into lines, breaking before an item
  * that no longer fits on the current line. A single line is produced when
  * `wrap` is false. */
@@ -37,8 +68,19 @@ static std::vector<std::vector<size_t>> breakIntoLines(const std::vector<float> 
 
 float Layouter::layoutFlex(LayoutBox *container, float contentWidth, float definiteHeight) const {
   const XtStyle &containerStyle = *container->style;
-  bool isRow = containerStyle.flex_direction == FlexDirection::Row ||
-               containerStyle.flex_direction == FlexDirection::RowReverse;
+  /* In a vertical writing mode the inline axis is vertical, so a `row` flex
+   * container stacks its items top-to-bottom (and `column` lays them out
+   * horizontally). */
+  FlexDirection direction = containerStyle.flex_direction;
+  if (containerStyle.writing_mode != WritingMode::HorizontalTB) {
+    switch (direction) {
+      case FlexDirection::Row: direction = FlexDirection::Column; break;
+      case FlexDirection::RowReverse: direction = FlexDirection::ColumnReverse; break;
+      case FlexDirection::Column: direction = FlexDirection::Row; break;
+      case FlexDirection::ColumnReverse: direction = FlexDirection::RowReverse; break;
+    }
+  }
+  bool isRow = direction == FlexDirection::Row || direction == FlexDirection::RowReverse;
 
   /* An absolutely positioned child is out of flow: it takes no part in the flex
    * algorithm and is placed against the container's padding box instead. */
@@ -58,15 +100,17 @@ float Layouter::layoutFlex(LayoutBox *container, float contentWidth, float defin
       px(isRow ? containerStyle.row_gap : containerStyle.column_gap, contentWidth,
          containerStyle.font_size, 0.0f);
   if (isRow)
-    return layoutFlexRow(container, items, contentWidth, definiteHeight, mainGap, crossGap);
-  return layoutFlexColumn(container, items, contentWidth, definiteHeight, mainGap, crossGap);
+    return layoutFlexRow(container, items, contentWidth, definiteHeight, mainGap, crossGap,
+                         direction);
+  return layoutFlexColumn(container, items, contentWidth, definiteHeight, mainGap, crossGap,
+                          direction);
 }
 
 float Layouter::layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox *> &items,
                               float contentWidth, float definiteHeight, float mainGap,
-                              float crossGap) const {
+                              float crossGap, FlexDirection direction) const {
   const XtStyle &containerStyle = *container->style;
-  bool reverse = containerStyle.flex_direction == FlexDirection::RowReverse;
+  bool reverse = direction == FlexDirection::RowReverse;
   bool wrap = containerStyle.flex_wrap != FlexWrap::NoWrap;
   bool wrapReverse = containerStyle.flex_wrap == FlexWrap::WrapReverse;
   size_t count = items.size();
@@ -169,6 +213,7 @@ float Layouter::layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox 
     float freeSpace = mainSize - (sumMain + mainGap * (float)(line.size() - 1));
     float offset = 0;
     float between = mainGap;
+    if (applyAutoMainMargins(items, line, true, freeSpace)) freeSpace = 0.0f;
     applyJustify(containerStyle.justify_content, freeSpace, line.size(), &offset, &between);
     float cursor = container->content_x + offset;
     for (size_t k = 0; k < line.size(); k++) {
@@ -189,7 +234,10 @@ float Layouter::layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox 
       float dy =
           container->content_y + lineStart + crossOffset + items[i]->margin_top - items[i]->y;
       translate(items[i], dx, dy);
-      cursor += mainSizes[i] + between;
+      float auto_extra = 0.0f;
+      if (items[i]->style->margin_left_auto) auto_extra += items[i]->margin_left;
+      if (items[i]->style->margin_right_auto) auto_extra += items[i]->margin_right;
+      cursor += mainSizes[i] + between + auto_extra;
     }
     lineOffset += lineCross[li] + lineStep;
   }
@@ -198,9 +246,9 @@ float Layouter::layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox 
 
 float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutBox *> &items,
                                  float contentWidth, float definiteHeight, float mainGap,
-                                 float crossGap) const {
+                                 float crossGap, FlexDirection direction) const {
   const XtStyle &containerStyle = *container->style;
-  bool reverse = containerStyle.flex_direction == FlexDirection::ColumnReverse;
+  bool reverse = direction == FlexDirection::ColumnReverse;
   bool wrap = containerStyle.flex_wrap != FlexWrap::NoWrap && definiteHeight >= 0;
   bool wrapReverse = containerStyle.flex_wrap == FlexWrap::WrapReverse;
   size_t count = items.size();
@@ -237,6 +285,9 @@ float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutB
     float freeSpace = mainSize - (sumOf(mainSizes) + mainGap * (float)(count - 1));
     float offset = 0;
     float between = mainGap;
+    std::vector<size_t> all(count);
+    for (size_t i = 0; i < count; i++) all[i] = i;
+    if (applyAutoMainMargins(items, all, false, freeSpace)) freeSpace = 0.0f;
     applyJustify(containerStyle.justify_content, freeSpace, count, &offset, &between);
     float cursor = container->content_y + offset;
     for (size_t k = 0; k < count; k++) {
@@ -244,7 +295,10 @@ float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutB
       float dx = container->content_x + items[i]->margin_left - items[i]->x;
       float dy = cursor + items[i]->margin_top - items[i]->y;
       translate(items[i], dx, dy);
-      cursor += mainSizes[i] + between;
+      float auto_extra = 0.0f;
+      if (items[i]->style->margin_top_auto) auto_extra += items[i]->margin_top;
+      if (items[i]->style->margin_bottom_auto) auto_extra += items[i]->margin_bottom;
+      cursor += mainSizes[i] + between + auto_extra;
     }
     return mainSize;
   }
@@ -308,6 +362,7 @@ float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutB
     float freeSpace = definiteHeight - (sumMain + mainGap * (float)(line.size() - 1));
     float offset = 0;
     float between = mainGap;
+    if (applyAutoMainMargins(items, line, false, freeSpace)) freeSpace = 0.0f;
     applyJustify(containerStyle.justify_content, freeSpace, line.size(), &offset, &between);
     float cursor = container->content_y + offset;
     for (size_t k = 0; k < line.size(); k++) {
@@ -315,7 +370,10 @@ float Layouter::layoutFlexColumn(LayoutBox *container, const std::vector<LayoutB
       float dx = container->content_x + lineStart + items[i]->margin_left - items[i]->x;
       float dy = cursor + items[i]->margin_top - items[i]->y;
       translate(items[i], dx, dy);
-      cursor += mainSizes[i] + between;
+      float auto_extra = 0.0f;
+      if (items[i]->style->margin_top_auto) auto_extra += items[i]->margin_top;
+      if (items[i]->style->margin_bottom_auto) auto_extra += items[i]->margin_bottom;
+      cursor += mainSizes[i] + between + auto_extra;
     }
     lineOffset += lineCross[li] + lineStep;
   }

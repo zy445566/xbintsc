@@ -71,9 +71,17 @@
   generated content (`::before`/`::after`), multi-layer linear/radial
   backgrounds, `text-shadow` (true Gaussian), `box-shadow` (outer/inset, spread,
   multiple layers), `clip-path` (`inset`/`circle`/`ellipse`/`polygon`),
-  `filter` colour functions, `@keyframes` animations and the full `transition`
-  timing-function set are implemented. Known limits: `background-clip` and
-  `background-position`/`size`/`repeat` are not implemented; group `opacity` is
+  `filter` colour functions, `@keyframes` animations, the full `transition`
+  timing-function set, `letter-spacing`, `text-transform`, inline-level
+  `flex`/`grid`, `grid-area`, `aspect-ratio`, auto margins, percentage
+  `border-radius`, `outline`, `background-size` tiling for `url()` layers and
+  document CSS on SVG children (`fill`/`stroke`/…) are implemented. Known
+  limits: `background-clip`, `background-position` and `background-repeat`
+  remain unimplemented (`background-size` covers the tiled default);
+  `font-variant-numeric`, `text-wrap`, `text-rendering`, `touch-action`,
+  `user-select`, `overscroll-behavior`, `scroll-behavior`, `isolation` and
+  `vector-effect` are parsed but inert; vertical writing mode is text-only (nested/mixed content falls back to
+  horizontal); group `opacity` is
   a per-shape alpha rather than a true group composite; the blend and
   `backdrop-filter` compositors are unavailable on the D3D12/DXIL backend, where
   groups fall back to normal source-over painting and the backdrop filter is

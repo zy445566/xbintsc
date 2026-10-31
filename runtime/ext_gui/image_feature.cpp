@@ -65,8 +65,10 @@ bool inline_is_root(const void *node) {
   return xtgui::xt_inline_svg_is_root(static_cast<const xtgui::Node *>(node));
 }
 
-std::string inline_serialize(const void *node) {
-  return xtgui::xt_inline_svg_serialize(static_cast<const xtgui::Node *>(node));
+std::string inline_serialize(const void *node, const void *styles) {
+  using StyleMap = std::unordered_map<const xtgui::Node *, xtgui::XtStyle>;
+  return xtgui::xt_inline_svg_serialize(static_cast<const xtgui::Node *>(node),
+                                        static_cast<const StyleMap *>(styles));
 }
 
 void apply_icon(void *window) {

@@ -474,10 +474,34 @@ void xt_style_apply_background(XtStyle *style, const std::string &value) {
   std::vector<BackgroundLayer> layers;
   parseLayers(value, &layers, &color, &hasColor, true);
   style->background_layers = std::move(layers);
+  style->background_sizes.clear();
   if (hasColor) {
     style->background = color;
     style->has_background = true;
   }
+}
+
+bool xt_style_apply_background_size(XtStyle *style, const std::string &value) {
+  std::vector<BackgroundSize> sizes;
+  for (const std::string &part : splitCommas(value)) {
+    std::vector<std::string> tokens = splitTokens(part);
+    if (tokens.empty()) continue;
+    BackgroundSize size;
+    for (size_t i = 0; i < tokens.size() && i < 2; i++) {
+      std::string token = xt_css_lower(xt_css_trim(tokens[i]));
+      Length length{0.0f, Unit::Auto};
+      if (token != "auto" && token != "cover" && token != "contain") {
+        Length parsed = xt_css_parse_length(token);
+        if (parsed.unit != Unit::Invalid && parsed.unit != Unit::None) length = parsed;
+      }
+      if (i == 0) size.width = length;
+      else size.height = length;
+    }
+    if (tokens.size() == 1) size.height = Length{0.0f, Unit::Auto};
+    sizes.push_back(size);
+  }
+  style->background_sizes = std::move(sizes);
+  return true;
 }
 
 }  // namespace xtgui

@@ -76,6 +76,14 @@ divided back into logical units, exactly the way HiDPI scaling already worked.
 
 The window background (`setBackground`) is the render-pass clear colour.
 
+`background-size` on a `url()` layer emits one image quad per tile (default
+`repeat`, 4096-tile cap) instead of stretching the picture to the box;
+percentage sizes resolve against the box, `auto` keeps the box dimension.
+`outline` paints four edge rectangles outside the border box (offset included)
+after the border and before the content. A vertical-writing-mode text run is
+painted by rotating its glyph quads 90° (CJK glyphs stay upright and are centred
+in their column).
+
 ### Backgrounds, generated content and effects (M19)
 
 `background-color` and every `background-image` layer are painted. A

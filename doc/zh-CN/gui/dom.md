@@ -20,11 +20,24 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 （`=`、`~=`、`|=`、`^=`、`$=`、`*=`）、四种组合器（后代、子、相邻兄弟与
 通用兄弟）、伪类 `:first-child`、`:last-child`、`:only-child`、`:empty`、
 `:root`、`:not(...)`、`:nth-child(an+b)`、`:disabled`、`:checked`、有状态的
-`:hover` 与 `:focus`（见[输入](./input.md)），以及伪元素
+`:hover`、`:focus`、`:focus-visible`（目前等同 `:focus`）与 `:active`
+（见[输入](./input.md)），以及伪元素
 `::before`/`::after`（也接受旧式 `:before`/`:after`）。值：长度
 （`px`、`%`、`em`、`rem`、`vw`、`vh`、`pt`、`pc`、`in`、`cm`、`mm`、`q`）、
 颜色（十六进制、`rgb()`/`rgba()`、一个命名子集）、数字、关键字与简写
-（`margin`/`padding`/`border`/`flex`）。`transform`
+（`margin`/`padding`/`border`/`flex`/`font`/`outline`）。
+`display: inline-flex`/`inline-grid` 生成行内级 flex/grid 容器；`grid-area`、
+`aspect-ratio`、`letter-spacing`、`text-transform`、`writing-mode`
+（`vertical-rl`/`vertical-lr` 文本）、`vertical-align`（长度形式）、百分比
+`border-radius`、`background-size`（`url()` 图层按尺寸与默认 repeat 平铺）与
+`currentColor` 都已支持。`font-variant-numeric`、`text-wrap`、`text-rendering`、
+`touch-action`、`user-select`、`overscroll-behavior`、`scroll-behavior`、
+`isolation`、`vector-effect` 会被接受但不产生引擎行为（文本栈不暴露 OpenType 特性，引擎也没有触摸/选择/平滑滚动子系统）；
+`cursor` 映射到 SDL 系统光标。文档 CSS 可用 `fill`、`fill-opacity`、`fill-rule`、
+`stroke`、`stroke-opacity`、`stroke-width`、`stroke-dasharray`、
+`stroke-dashoffset`、`stroke-linecap`、`stroke-linejoin` 给 SVG 子元素上色；
+序列化器会把它们写成 NanoSVG 可读的内联样式。`skewX()`/`skewY()`/`skew()`
+变换函数也已支持。`transform`
 （`translate`/`translate3d`/`translateX`/`translateY`、
 `scale`/`scale3d`/`scaleX`/`scaleY`、`rotate`/`rotateZ`、`matrix`；`3d`
 拼写的 `z` 参数会被丢弃）与 `transform-origin`

@@ -21,11 +21,26 @@ commas, brackets or parentheses without splitting the list. Selectors: type,
 `.class`, `#id`, attribute (`=`, `~=`, `|=`, `^=`, `$=`, `*=`), the four
 combinators (descendant, child, adjacent and general sibling), the pseudo-classes
 `:first-child`, `:last-child`, `:only-child`, `:empty`, `:root`, `:not(...)`,
-`:nth-child(an+b)`, `:disabled`, `:checked`, plus the stateful `:hover` and
-`:focus` (see [Input](./input.md)), and the pseudo-elements `::before`/`::after`
+`:nth-child(an+b)`, `:disabled`, `:checked`, plus the stateful `:hover`,
+`:focus`, `:focus-visible` (currently an alias of `:focus`) and `:active` (see
+[Input](./input.md)), and the pseudo-elements `::before`/`::after`
 (legacy `:before`/`:after` too). Values: lengths (`px`, `%`, `em`, `rem`, `vw`,
 `vh`, `pt`, `pc`, `in`, `cm`, `mm`, `q`), colors (hex, `rgb()`/`rgba()`, a named
-subset), numbers, keywords and shorthands (`margin`/`padding`/`border`/`flex`).
+subset), numbers, keywords and shorthands (`margin`/`padding`/`border`/`flex`/
+`font`/`outline`). `display: inline-flex`/`inline-grid` make a flex/grid
+container inline-level; `grid-area`, `aspect-ratio`, `letter-spacing`,
+`text-transform`, `writing-mode` (`vertical-rl`/`vertical-lr` text),
+`vertical-align` (length form), percentage `border-radius`, `background-size`
+(size + default repeat for `url()` layers) and `currentColor` are parsed too.
+`font-variant-numeric`, `text-wrap`, `text-rendering`, `touch-action`,
+`user-select`, `overscroll-behavior`, `scroll-behavior`, `isolation` and
+`vector-effect` are accepted but have no engine behaviour (the text stack exposes no OpenType features and the engine
+has no touch/selection/smooth-scroll subsystem); `cursor` maps to the SDL system
+cursor. A document rule may style SVG children with the presentation properties
+`fill`, `fill-opacity`, `fill-rule`, `stroke`, `stroke-opacity`, `stroke-width`,
+`stroke-dasharray`, `stroke-dashoffset`, `stroke-linecap` and `stroke-linejoin`;
+the serializer writes them into the inline `<svg>` markup as NanoSVG-readable
+inline styles. `skewX()`/`skewY()`/`skew()` transform functions are supported.
 `transform` (`translate`/`translate3d`/`translateX`/`translateY`, `scale`/
 `scale3d`/`scaleX`/`scaleY`, `rotate`/`rotateZ`, `matrix`; the `3d` spellings'
 `z` argument is dropped) and `transform-origin` are parsed into the computed

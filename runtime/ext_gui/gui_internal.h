@@ -24,6 +24,9 @@ extern int g_window_count;
 /** Translate one SDL event into engine callbacks (defined in gui_events.cpp). */
 void handle_event(const SDL_Event *event);
 
+/** Apply the hovered element's CSS `cursor` to the window. */
+void applyCursor(XtGuiWindow *win, const xtgui::Node *node);
+
 }  // namespace guidev
 
 #endif /* XT_GUI_INTERNAL_H */

@@ -26,6 +26,8 @@ struct FontSpec {
   float pixel_size = 16.0f;
   int weight = 400;
   bool italic = false;
+  /** CSS `letter-spacing` in pixels; adds to each glyph's advance. */
+  float letter_spacing = 0.0f;
 };
 
 /** Opaque loaded face (defined in text.cpp). */
@@ -72,7 +74,8 @@ float xt_text_shape_run(const std::string &utf8, Font *font, std::vector<ShapedG
  * next cache generation is dropped); callers must not hold it across frames.
  * Layout and paint both go through this, so a word is shaped once instead of
  * once per layout pass and again per repaint. `nullptr` for a null face. */
-const ShapedRun *xt_text_shape_cached(const std::string &utf8, Font *font);
+const ShapedRun *xt_text_shape_cached(const std::string &utf8, Font *font,
+                                      float letter_spacing = 0.0f);
 
 /** Current cache occupancy (bytes of keys + glyphs, number of entries). */
 uint64_t xt_text_cache_bytes();

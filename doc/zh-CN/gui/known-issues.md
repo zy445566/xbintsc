@@ -54,8 +54,16 @@
   `@media` 查询、生成内容（`::before`/`::after`）、线性/径向多层背景、
   `text-shadow`（真正的高斯）、`box-shadow`（外阴影/内阴影、spread、多层）、
   `clip-path`（`inset`/`circle`/`ellipse`/`polygon`）、`filter` 颜色函数、
-  `@keyframes` 动画与完整的 `transition` 时间函数。仍有限制：`background-clip`
-  与 `background-position`/`size`/`repeat` 未实现；组 `opacity` 是按图形 alpha
+  `@keyframes` 动画、完整的 `transition` 时间函数、`letter-spacing`、
+  `text-transform`、行内级 `flex`/`grid`、`grid-area`、`aspect-ratio`、自动
+  外边距、百分比 `border-radius`、`outline`、`url()` 图层的 `background-size`
+  平铺，以及 SVG 子元素上的文档 CSS（`fill`/`stroke`/…）均已实现。仍有限制：
+  `background-clip`、`background-position`、`background-repeat` 未实现
+  （`background-size` 只覆盖默认平铺场景）；`font-variant-numeric`、
+  `text-wrap`、`text-rendering`、`touch-action`、`user-select`、
+  `overscroll-behavior`、`scroll-behavior`、`isolation`、`vector-effect`
+  可解析但不产生行为；竖排书写模式仅
+  支持文本（嵌套/混排内容回退横排）；组 `opacity` 是按图形 alpha
   近似而非真正的组合成；D3D12/DXIL 后端没有混合与 `backdrop-filter` 合成器，
   那里会退回普通 source-over 绘制并跳过背景滤镜。`filter: blur()` 仍是按图形做
   九次偏移的近似，而不是真正的组模糊，重叠的子元素会加深；`drop-shadow` 用盒子

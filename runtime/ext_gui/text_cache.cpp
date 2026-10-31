@@ -35,9 +35,10 @@ constexpr uint64_t kMaxEntries = 8192;
 struct Key {
   Font *font = nullptr;
   std::string text;
+  float letter_spacing = 0.0f;
 
   bool operator==(const Key &other) const {
-    return font == other.font && text == other.text;
+    return font == other.font && text == other.text && letter_spacing == other.letter_spacing;
   }
 };
 
@@ -47,6 +48,7 @@ struct KeyHash {
     // FNV-ish mix of the text, then combine — cheap and stable.
     size_t textHash = std::hash<std::string>()(key.text);
     hash ^= textHash + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2);
+    hash ^= std::hash<float>()(key.letter_spacing) + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2);
     return hash;
   }
 };
@@ -78,12 +80,14 @@ void respectBudget() {
 
 }  // namespace
 
-const ShapedRun *xt_text_shape_cached(const std::string &utf8, Font *font) {
+const ShapedRun *xt_text_shape_cached(const std::string &utf8, Font *font,
+                                      float letter_spacing) {
   if (font == nullptr) return nullptr;
   if (utf8.empty()) return nullptr;
   Key key;
   key.font = font;
   key.text = utf8;
+  key.letter_spacing = letter_spacing;
   Generation &generation = g_generations[g_current];
   auto found = generation.runs.find(key);
   if (found != generation.runs.end()) {
@@ -94,6 +98,11 @@ const ShapedRun *xt_text_shape_cached(const std::string &utf8, Font *font) {
   auto inserted = generation.runs.emplace(std::move(key), ShapedRun());
   ShapedRun &run = inserted.first->second;
   run.width = xt_text_shape_run(utf8, font, run.glyphs);
+  if (letter_spacing != 0.0f && !run.glyphs.empty()) {
+    /* CSS adds the spacing after every typographic unit, including the last. */
+    for (ShapedGlyph &glyph : run.glyphs) glyph.x_advance += letter_spacing;
+    run.width += letter_spacing * (float)run.glyphs.size();
+  }
   generation.bytes += estimateBytes(inserted.first->first, run);
   respectBudget();
   return &run;

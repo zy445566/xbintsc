@@ -228,6 +228,7 @@ void addRectFiltered(DisplayList &out, float x, float y, float width, float heig
 
 void addBoxDropShadows(DisplayList &out, const LayoutBox &box, const XtStyle &style,
                        const FilterChain &chain, const PaintClip &clip) {
+  (void)style;  // box.border_radius is the resolved form
   if (chain.shadows.empty()) return;
   for (const FilterChain::Shadow &shadow : chain.shadows) {
     Color color = filterColor(chain, shadow.color);
@@ -237,7 +238,7 @@ void addBoxDropShadows(DisplayList &out, const LayoutBox &box, const XtStyle &st
       Color copy = color;
       if (shadow.blur > 0.0f) copy.a *= kBlurTapWeight;
       addRect(out, box.x + shadow.dx + tap.dx, box.y + shadow.dy + tap.dy, box.width, box.height,
-              style.border_radius, copy, clip, box.world);
+              box.border_radius, copy, clip, box.world);
     }
   }
 }

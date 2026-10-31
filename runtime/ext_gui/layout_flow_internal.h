@@ -40,9 +40,15 @@ struct InlineItem {
   float width = 0;
   float height = 0;
   float ascent = 0;
+  /** Atomic inline boxes: `vertical-align` shift (positive raises). */
+  float shift = 0.0f;
   bool is_space = false;
   bool atomic = false;      // inline-block
   bool force_break = false; // explicit newline (white-space: pre)
+  /** A character in a vertical writing mode: `width` is the column width and
+   * `height` the advance along the column. */
+  bool vertical = false;
+  bool upright = false;
 };
 
 /** One float taking part in the current block's formatting context. Floats are
@@ -191,6 +197,7 @@ inline FontSpec specOf(const XtStyle &style) {
   spec.pixel_size = style.font_size;
   spec.weight = style.font_weight;
   spec.italic = style.font_style == FontStyle::Italic;
+  spec.letter_spacing = style.letter_spacing.unit == Unit::Px ? style.letter_spacing.value : 0.0f;
   return spec;
 }
 
@@ -276,6 +283,9 @@ struct Layouter {
 
   void flattenInline(LayoutBox *box, float contentWidth, std::vector<InlineItem> &out) const;
 
+  /** Flatten a text box in a vertical writing mode into per-character items. */
+  void flattenVerticalText(LayoutBox *box, std::vector<InlineItem> &out) const;
+
   void computeInlineGeometry(LayoutBox *box) const;
 
   /** Lay out an inline formatting context; returns its consumed height. When
@@ -283,6 +293,14 @@ struct Layouter {
    * overlap it. */
   float layoutInlineRun(LayoutBox *container, const std::vector<LayoutBox *> &run,
                         float contentWidth, float y, const FloatContext *floats = nullptr) const;
+
+  /** Vertical writing mode: place already-flattened character items in columns
+   * (right-to-left for `vertical-rl`). Returns the consumed height. */
+  float layoutVerticalRun(LayoutBox *container, const std::vector<InlineItem> &items,
+                          float contentWidth, float y) const;
+
+  /** Lay out a text box whose style has a vertical writing mode. */
+  float layoutVerticalTextBox(LayoutBox *box, float x, float y, float width) const;
 
   float layoutFlex(LayoutBox *container, float contentWidth, float definiteHeight) const;
 
@@ -293,13 +311,13 @@ struct Layouter {
   /** Flex row main-axis layout, wrapping items into lines when `flex-wrap`
    * allows it. Returns the used cross size. */
   float layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox *> &items,
-                      float contentWidth, float definiteHeight, float mainGap,
-                      float crossGap) const;
+                      float contentWidth, float definiteHeight, float mainGap, float crossGap,
+                      FlexDirection direction) const;
 
   /** Flex column main-axis layout (wrapping needs a definite height). */
   float layoutFlexColumn(LayoutBox *container, const std::vector<LayoutBox *> &items,
-                         float contentWidth, float definiteHeight, float mainGap,
-                         float crossGap) const;
+                         float contentWidth, float definiteHeight, float mainGap, float crossGap,
+                         FlexDirection direction) const;
 
   static float sumOf(const std::vector<float> &values);
 

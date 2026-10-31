@@ -274,7 +274,9 @@ void addTextRun(DisplayList &out, float x, float baseline, float width, float he
   }
 
   /* `text-shadow`, bottom-most first: CSS paints later layers under earlier
-   * ones, so reverse the declaration list. */
+   * ones, so reverse the declaration list. A zero-blur layer stays a crisp text
+   * run at an offset; a blurred one is a real Gaussian of the glyph coverage,
+   * composited as one tinted texture. */
   for (size_t index = style.text_shadow.size(); index-- > 0;) {
     const TextShadow &shadow = style.text_shadow[index];
     float dx = resolveLength(shadow.dx, 0.0f, style.font_size, viewportWidth, viewportHeight);
@@ -282,11 +284,14 @@ void addTextRun(DisplayList &out, float x, float baseline, float width, float he
     float blur =
         resolveLength(shadow.blur, 0.0f, style.font_size, viewportWidth, viewportHeight);
     Color shadowColor = shadow.has_color ? filterColor(chain, shadow.color) : color;
-    for (const Tap &tap : blurTaps(blur)) {
-      Color copy = shadowColor;
-      if (blur > 0.0f) copy.a *= kBlurTapWeight;
-      emit(dx + tap.dx, dy + tap.dy, copy, true);
+    if (blur <= 0.0f) {
+      emit(dx, dy, shadowColor, true);
+      continue;
     }
+    std::shared_ptr<const PaintBitmap> mask = textShadowMask(text, font, blur);
+    if (mask == nullptr) continue;
+    addBitmapImage(out, mask, x + dx + mask->origin_x, baseline + dy + mask->origin_y,
+                   shadowColor, transform, clip);
   }
 
   /* `filter: blur()` spreads the glyphs themselves. */

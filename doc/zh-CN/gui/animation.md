@@ -30,26 +30,48 @@ transition 的属性时，会记录一个正在运行的 transition，并在每�
 结束；引擎用真实帧间隔推进时钟（`XtDocument::advance`），`win.advance(ms)`
 让测试可以确定性地推进。
 
-- 支持的属性：`background-color`、`color`、`border-color`、
-  `border-radius` 与 `transform`；`transition: all` 覆盖它们。影响布局的
-  属性（width、position 等）仍不做动画——那会每帧重新布局——但 `transform`
-  是绘制期效果，因此为它做动画的代价只是每个被动画的盒子每帧一个矩阵
-  （见[布局](./layout.md#变换m15)）。
+- 支持的属性：`background-color`、`color`、`border-color`、`opacity`、
+  `border-radius`、`transform`、`text-shadow`、`box-shadow`、所有盒模型
+  偏移/尺寸长度（`width`/`height`/`top`/`left`/`margin-*`/`padding-*`/…）、
+  gap/flex-basis 长度，以及 `filter`（形状一致的滤镜列表会插值模糊长度、数值与
+  drop-shadow 颜色）；`transition: all` 覆盖整个列表。单位一致的长度会插值
+  （单位变化按 CSS 的离散回退处理），`opacity`、颜色与 `transform` 正常插值。
 - `transition` 简写与 `transition-property` / `-duration` / `-delay` /
-  `-timing-function` 长写都会被解析；时间值接受 `s` 与 `ms`；缓动函数为
-  `linear`、`ease`、`ease-in`、`ease-out` 与 `ease-in-out`（`ease` 是
-  smoothstep 近似）。
+  `-timing-function` 长写都会被解析；时间值接受 `s` 与 `ms`；简写/长写内
+  都接受 `calc()`。
+- 缓动函数支持 `linear`、`ease`、`ease-in`、`ease-out`、`ease-in-out`、
+  `cubic-bezier(x1, y1, x2, y2)`、`steps(n, start|end)` 及其 `jump-*` 拼写；
+  三次贝塞尔用数值求解，关键字曲线使用 CSS 控制点。
 - 在动画中途重定向会从当前插值启动一个新 transition，因此反转悬停会从它
   当前所在位置平滑动画。
 - `computedStyle()` 报告显示（已插值）的值，因此 transition 在测试中可直接
   观察。
 
-`transform` 列表按**逐项**插值（`document.cpp`、`xt_transform_interpolate`），
+`transform` 列表按**逐项**插值（`animation_values.cpp`、`xt_transform_interpolate`），
 这正是让常见的一对 `translateY(-4px) rotate(-0.35deg)` 与 `none` 之间平滑
 滑行而不是跳变的原因：缺失的一侧会用同类型的单位（identity）操作补齐。两个
 列表形状或单位对不上时（`rotate(10deg)` 对 `rotate(10rad)`，或函数个数不同）
 完全不做插值——transition 直接吸附到目标值，即 CSS 的离散回退，而不是一段
 看起来错误的扫过。
+
+## CSS 动画（`@keyframes`）
+
+`@keyframes` 会被解析进 `StyleSheet::keyframes`（`from`/`to`/百分比选择器产生的
+偏移会排序）。支持 `animation` 简写及全部 `animation-*` 长写：名称、时长、
+延迟、时间函数、迭代次数（含 `infinite`）、方向
+（`normal`/`reverse`/`alternate`/`alternate-reverse`）、填充模式
+（`none`/`forwards`/`backwards`/`both`）与 `paused`/`running`。
+
+当计算样式首次声明某个元素/名称时，`XtDocument` 启动一个活动动画；简写变化时
+重新启动，无关的 restyle 不会打断它。每帧把本地时间解析为迭代进度，**逐个
+关键帧区间**应用时间函数，并插值所有可动画属性。中间关键帧没有提到的属性会
+在最近两个声明了它的关键帧之间继续插值（因此 0% 与 100% 声明的 transform
+即使 50% 只改 `opacity` 也会贯穿全程）。缺失的 0%/100% 步骤使用元素的底层
+样式；`forwards`/`backwards` 在活动时间之外保持边缘值，`computedStyle()`
+报告动画后的值。
+
+动画与 transition 共享 `animation_values.cpp`，因此属性集合、阴影列表与
+`transform` 的 identity 补齐行为一致。
 
 ## CSS transform（M15）
 
@@ -89,5 +111,6 @@ const tick = (t: number): void => {
 两种方式都由 `examples/gui/pelican-svg` 演示（逐帧摇摆 + 悬停时说明文字的
 transition），并由 `tests/e2e/gui-transform.test.ts` 固定住。
 
-动画仍需完成：`@keyframes` 动画与 `cubic-bezier(...)`。
+任意可动画长度都可以使用 `calc()`（例如
+`transition: width 300ms ease-out; width: calc(100% - 20px)`）。
 

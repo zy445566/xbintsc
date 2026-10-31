@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "animation_values.h"
 #include "css.h"
 #include "dom.h"
 #include "layout.h"
@@ -20,22 +21,24 @@
 
 namespace xtgui {
 
-/** A running CSS transition (paint-affecting properties, plus `transform`). */
+/** A running CSS transition. */
 struct ActiveTransition {
   const Node *node = nullptr;
   std::string property;
-  bool is_color = false;
-  bool is_transform = false;
-  float from_color[4] = {0, 0, 0, 0};
-  float to_color[4] = {0, 0, 0, 0};
-  float from_number = 0;
-  float to_number = 0;
-  std::vector<TransformOp> from_transform;
-  std::vector<TransformOp> to_transform;
+  AnimatableValue from;
+  AnimatableValue to;
   float start_ms = 0;     // when interpolation begins (after `delay`)
   float duration_ms = 0;
   float delay_ms = 0;
-  TimingFunction timing = TimingFunction::Ease;
+  TimingFunction timing;
+};
+
+/** A running `@keyframes` animation on one element. */
+struct ActiveAnimation {
+  const Node *node = nullptr;
+  std::string name;
+  AnimationSpec spec;
+  float start_ms = 0;
 };
 
 class XtDocument {
@@ -48,8 +51,8 @@ class XtDocument {
    * and layout when a transition is running. Returns true when anything
    * transitioned (the caller should repaint). */
   bool advance(double delta_ms);
-  /** True while at least one transition is running. */
-  bool animating() const { return !transitions_.empty(); }
+  /** True while at least one transition or animation is running. */
+  bool animating() const { return !transitions_.empty() || !animations_.empty(); }
   /** Set the hovered/focused element; restyles when it changed. Returns true
    * when the dynamic state (and therefore the styles) changed. */
   bool setHover(const Node *node);
@@ -117,7 +120,9 @@ class XtDocument {
  private:
   void collectStyleText(const Node *node, std::string *out) const;
   void startTransitions();
+  void startAnimations();
   void updateDisplay();
+  void applyAnimations(std::unordered_map<const Node *, XtStyle> *out);
 
   std::unique_ptr<Node> root_;
   /** Detached nodes (created or removed) stay alive here so handles remain valid. */
@@ -131,10 +136,13 @@ class XtDocument {
   MediaSizeMap mediaSizes_;                            // `<video>` intrinsic sizes
   CanvasInfoMap canvasInfo_;                           // `<canvas>` sizes + ids
   std::vector<ActiveTransition> transitions_;
+  std::vector<ActiveAnimation> animations_;
   /** Whether any computed style declares a `transition` (from the sheet or an
    * inline `style="…"`): when false the document skips the transition snapshot
    * and `display_` stays empty. */
   bool has_transitions_ = false;
+  /** Whether any computed style declares an `animation`. */
+  bool has_animations_ = false;
   double clock_ms_ = 0.0;
   LayoutTree layout_;
   const Node *hover_ = nullptr;

@@ -4,7 +4,12 @@
 
 #include "document.h"
 
+#include <cmath>
+#include <string>
+#include <vector>
+
 #include "perf.h"
+#include "style_internal.h"
 
 namespace xtgui {
 
@@ -33,6 +38,7 @@ void XtDocument::load(const std::string &html, float viewportWidth, float viewpo
   styles_.clear();
   display_.clear();
   transitions_.clear();
+  animations_.clear();
   mediaSizes_.clear();
   canvasInfo_.clear();
   clock_ms_ = 0.0;
@@ -51,203 +57,15 @@ void XtDocument::restyle(float viewportWidth, float viewportHeight) {
     state.hover = hover_;
     state.focus = focus_;
     bool hasTransitions = sheet_.has_transitions;
+    bool hasAnimations = sheet_.has_animations;
     xt_style_compute(root_.get(), sheet_, styles_, viewportWidth, viewportHeight, state, &pseudos_,
-                     &hasTransitions);
+                     &hasTransitions, &hasAnimations);
     has_transitions_ = hasTransitions;
+    has_animations_ = hasAnimations;
     startTransitions();
+    startAnimations();
     updateDisplay();
   }
-}
-
-namespace {
-
-float easeProgress(float t, TimingFunction timing) {
-  if (t <= 0.0f) return 0.0f;
-  if (t >= 1.0f) return 1.0f;
-  switch (timing) {
-    case TimingFunction::Linear:
-      return t;
-    case TimingFunction::EaseIn:
-      return t * t * t;
-    case TimingFunction::EaseOut: {
-      float u = 1.0f - t;
-      return 1.0f - u * u * u;
-    }
-    case TimingFunction::EaseInOut:
-      return t < 0.5f ? 4.0f * t * t * t : 1.0f - 4.0f * (1.0f - t) * (1.0f - t) * (1.0f - t);
-    case TimingFunction::Ease:
-    default:
-      return t * t * (3.0f - 2.0f * t);  // smoothstep approximation of `ease`
-  }
-}
-
-float mix(float a, float b, float t) { return a + (b - a) * t; }
-
-const float *colorOf(const XtStyle &style, const std::string &property) {
-  static const float transparent[4] = {0, 0, 0, 0};
-  if (property == "background-color") {
-    return style.has_background ? &style.background.r : transparent;
-  }
-  if (property == "border-color") {
-    return style.has_border_color ? &style.border_color.r : transparent;
-  }
-  return &style.color.r;
-}
-
-float numberOf(const XtStyle &style, const std::string &property) {
-  if (property == "border-radius") return style.border_radius;
-  return 0.0f;
-}
-
-bool isNumberProperty(const std::string &property) { return property == "border-radius"; }
-
-bool specMatches(const std::string &spec, const std::string &property) {
-  return spec == "all" || spec == property;
-}
-
-void applyColor(XtStyle *style, const std::string &property, const float *rgba) {
-  if (property == "background-color") {
-    style->background = Color{rgba[0], rgba[1], rgba[2], rgba[3], true};
-    style->has_background = rgba[3] > 0.0f;
-  } else if (property == "border-color") {
-    style->border_color = Color{rgba[0], rgba[1], rgba[2], rgba[3], true};
-    style->has_border_color = rgba[3] > 0.0f;
-  } else {
-    style->color = Color{rgba[0], rgba[1], rgba[2], rgba[3], true};
-  }
-}
-
-void applyNumber(XtStyle *style, const std::string &property, float value) {
-  if (property == "border-radius") style->border_radius = value;
-}
-
-}  // namespace
-
-void XtDocument::startTransitions() {
-  if (display_.empty()) return;  // first style computation: nothing to animate from
-  /* Without a `transition` declaration anywhere in the sheet (or in an inline
-   * style) no transition can start, so skip the O(nodes) scan `restyle` would
-   * otherwise do every time. */
-  if (!has_transitions_) return;
-  static const char *const kProperties[] = {"background-color", "color", "border-color",
-                                           "border-radius", "transform"};
-  for (auto &entry : styles_) {
-    const Node *node = entry.first;
-    const XtStyle &target = entry.second;
-    /* Generated boxes are rebuilt on every restyle; a transition keyed by one
-     * would address a node that no longer exists. */
-    if (node->is_pseudo) continue;
-    if (target.transitions.empty()) continue;
-    auto prev_it = display_.find(node);
-    if (prev_it == display_.end()) continue;
-    const XtStyle &current = prev_it->second;
-    for (const TransitionSpec &spec : target.transitions) {
-      if (spec.duration <= 0.0f) continue;
-      for (const char *property : kProperties) {
-        if (!specMatches(spec.property, property)) continue;
-        ActiveTransition running;
-        running.node = node;
-        running.property = property;
-        running.timing = spec.timing;
-        running.duration_ms = spec.duration * 1000.0f;
-        running.delay_ms = spec.delay * 1000.0f;
-        running.start_ms = (float)clock_ms_ + running.delay_ms;
-        if (std::string(property) == "transform") {
-          if (xt_transform_equal(current.transform, target.transform)) continue;
-          std::vector<TransformOp> probe;
-          /* Lists of a different shape (or with clashing units) cannot be
-           * mixed; such a change snaps instead of animating. */
-          if (!xt_transform_interpolate(current.transform, target.transform, 0.5f, &probe)) {
-            continue;
-          }
-          running.is_transform = true;
-          running.from_transform = current.transform;
-          running.to_transform = target.transform;
-        } else if (isNumberProperty(property)) {
-          float from = numberOf(current, property);
-          float to = numberOf(target, property);
-          if (from == to) continue;
-          running.is_color = false;
-          running.from_number = from;
-          running.to_number = to;
-        } else {
-          const float *from = colorOf(current, property);
-          const float *to = colorOf(target, property);
-          if (from[0] == to[0] && from[1] == to[1] && from[2] == to[2] && from[3] == to[3]) continue;
-          running.is_color = true;
-          for (int i = 0; i < 4; i++) {
-            running.from_color[i] = from[i];
-            running.to_color[i] = to[i];
-          }
-        }
-        /* Retarget an existing transition (mid-flight) instead of stacking. */
-        bool replaced = false;
-        for (ActiveTransition &existing : transitions_) {
-          if (existing.node == node && existing.property == property) {
-            existing = running;
-            replaced = true;
-            break;
-          }
-        }
-        if (!replaced) transitions_.push_back(running);
-      }
-    }
-  }
-}
-
-void XtDocument::updateDisplay() {
-  /* Without a `transition` declaration in the sheet (or an inline style) no
-   * transition can ever start, so the displayed style *is* the cascade result:
-   * skip the per-node deep copy of the whole style map (and keep `display_`
-   * empty, which `styleOf` already falls back from). */
-  if (!has_transitions_) {
-    if (!transitions_.empty()) transitions_.clear();
-    if (!display_.empty()) display_.clear();
-    layout_.compute(root_.get(), styles_, viewportWidth_, viewportHeight_, &mediaSizes_,
-                    &canvasInfo_);
-    return;
-  }
-  display_ = styles_;
-  for (size_t i = 0; i < transitions_.size();) {
-    ActiveTransition &transition = transitions_[i];
-    auto node_it = display_.find(transition.node);
-    if (node_it == display_.end()) {
-      transitions_.erase(transitions_.begin() + (long)i);
-      continue;
-    }
-    float elapsed = (float)clock_ms_ - transition.start_ms;
-    float progress = transition.duration_ms > 0.0f ? elapsed / transition.duration_ms : 1.0f;
-    if (progress > 1.0f) progress = 1.0f;
-    float eased = easeProgress(progress, transition.timing);
-    XtStyle &style = node_it->second;
-    if (transition.is_transform) {
-      std::vector<TransformOp> mixed;
-      if (xt_transform_interpolate(transition.from_transform, transition.to_transform, eased,
-                                   &mixed)) {
-        style.transform = mixed;
-      }
-    } else if (transition.is_color) {
-      float rgba[4];
-      for (int c = 0; c < 4; c++) rgba[c] = mix(transition.from_color[c], transition.to_color[c], eased);
-      applyColor(&style, transition.property, rgba);
-    } else {
-      applyNumber(&style, transition.property, mix(transition.from_number, transition.to_number, eased));
-    }
-    if (progress >= 1.0f) {
-      transitions_.erase(transitions_.begin() + (long)i);
-    } else {
-      i++;
-    }
-  }
-  layout_.compute(root_.get(), display_, viewportWidth_, viewportHeight_, &mediaSizes_,
-                  &canvasInfo_);
-}
-
-bool XtDocument::advance(double delta_ms) {
-  clock_ms_ += delta_ms;
-  if (transitions_.empty()) return false;
-  updateDisplay();
-  return true;
 }
 
 bool XtDocument::setHover(const Node *node) {

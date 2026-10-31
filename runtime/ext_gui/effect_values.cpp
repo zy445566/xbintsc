@@ -37,18 +37,72 @@ static bool parseTimeSeconds(const std::string &text, float *out) {
   return true;
 }
 
+static std::vector<std::string> splitCommas(const std::string &text);
+static std::vector<std::string> splitTokens(const std::string &text);
+
+/** Parse a CSS timing function. Besides the five keywords this accepts
+ * `cubic-bezier(x1, y1, x2, y2)` and `steps(n[, start|end|jump-*])`. */
 static bool parseTimingFunction(const std::string &text, TimingFunction *out) {
   std::string token = xt_css_lower(xt_css_trim(text));
   if (token == "linear") {
-    *out = TimingFunction::Linear;
+    *out = TimingFunction();
+    out->kind = TimingFunction::Kind::Linear;
   } else if (token == "ease") {
-    *out = TimingFunction::Ease;
+    *out = TimingFunction();
   } else if (token == "ease-in") {
-    *out = TimingFunction::EaseIn;
+    *out = TimingFunction();
+    out->kind = TimingFunction::Kind::EaseIn;
   } else if (token == "ease-out") {
-    *out = TimingFunction::EaseOut;
+    *out = TimingFunction();
+    out->kind = TimingFunction::Kind::EaseOut;
   } else if (token == "ease-in-out") {
-    *out = TimingFunction::EaseInOut;
+    *out = TimingFunction();
+    out->kind = TimingFunction::Kind::EaseInOut;
+  } else if (token == "step-start") {
+    *out = TimingFunction();
+    out->kind = TimingFunction::Kind::StepsStart;
+    out->steps = 1;
+  } else if (token == "step-end") {
+    *out = TimingFunction();
+    out->kind = TimingFunction::Kind::StepsEnd;
+    out->steps = 1;
+  } else if (token.compare(0, 13, "cubic-bezier(") == 0 && token.back() == ')') {
+    std::vector<std::string> args =
+        splitCommas(token.substr(13, token.size() - 14));
+    if (args.size() != 4) return false;
+    float values[4];
+    for (int i = 0; i < 4; i++) {
+      if (!xt_css_parse_number(args[i], &values[i])) return false;
+    }
+    TimingFunction fn;
+    fn.kind = TimingFunction::Kind::CubicBezier;
+    fn.x1 = values[0] < 0.0f ? 0.0f : (values[0] > 1.0f ? 1.0f : values[0]);
+    fn.y1 = values[1];
+    fn.x2 = values[2] < 0.0f ? 0.0f : (values[2] > 1.0f ? 1.0f : values[2]);
+    fn.y2 = values[3];
+    *out = fn;
+  } else if (token.compare(0, 6, "steps(") == 0 && token.back() == ')') {
+    std::string inner = token.substr(6, token.size() - 7);
+    for (char &c : inner) {
+      if (c == ',') c = ' ';
+    }
+    std::vector<std::string> args = xt_css_split_whitespace(inner);
+    if (args.empty()) return false;
+    float count = 0;
+    if (!xt_css_parse_number(args[0], &count) || count < 1.0f) return false;
+    bool stepStart = false;
+    if (args.size() > 1) {
+      std::string position = xt_css_lower(args[1]);
+      if (position == "start" || position == "jump-start" || position == "jump-both") {
+        stepStart = true;
+      } else if (position != "end" && position != "jump-end" && position != "jump-none") {
+        return false;
+      }
+    }
+    TimingFunction fn;
+    fn.kind = stepStart ? TimingFunction::Kind::StepsStart : TimingFunction::Kind::StepsEnd;
+    fn.steps = (int)(count + 0.5f);
+    *out = fn;
   } else {
     return false;
   }
@@ -56,28 +110,21 @@ static bool parseTimingFunction(const std::string &text, TimingFunction *out) {
 }
 
 static std::vector<std::string> splitCommas(const std::string &text) {
-  std::vector<std::string> parts;
-  size_t start = 0;
-  for (size_t i = 0; i <= text.size(); i++) {
-    if (i == text.size() || text[i] == ',') {
-      std::string part = xt_css_trim(text.substr(start, i - start));
-      if (!part.empty()) parts.push_back(part);
-      start = i + 1;
-    }
-  }
-  return parts;
+  /* Top-level commas only: a timing function or colour function may contain
+   * its own comma (`steps(4, end)`, `rgb(1, 2, 3)`). */
+  return xt_css_split_commas(text);
 }
 
 static void parseTransitionShorthand(const std::string &value, std::vector<TransitionSpec> *out) {
   out->clear();
   for (const std::string &group : splitCommas(value)) {
-    std::vector<std::string> tokens = xt_css_split_whitespace(group);
+    std::vector<std::string> tokens = splitTokens(group);
     if (tokens.empty()) continue;
     TransitionSpec spec;
     int time_seen = 0;
     for (const std::string &token : tokens) {
       float seconds = 0;
-      TimingFunction timing = TimingFunction::Ease;
+      TimingFunction timing;
       if (parseTimeSeconds(token, &seconds)) {
         if (time_seen == 0) {
           spec.duration = seconds;
@@ -99,7 +146,7 @@ static void parseTransitionShorthand(const std::string &value, std::vector<Trans
 /* -- filters, shadows and generated content -------------------------------- */
 
 /** Split on whitespace outside function parentheses (`rgb(1, 2, 3)` stays one). */
-static std::vector<std::string> splitShadowTokens(const std::string &text) {
+static std::vector<std::string> splitTokens(const std::string &text) {
   std::vector<std::string> parts;
   std::string current;
   int depth = 0;
@@ -152,7 +199,7 @@ static bool parseAngleDegrees(const std::string &raw, float *out) {
 
 static bool parseShadowLengths(const std::string &value, Length *dx, Length *dy, Length *blur,
                                Color *color, bool *hasColor) {
-  std::vector<std::string> tokens = splitShadowTokens(value);
+  std::vector<std::string> tokens = splitTokens(value);
   Length lengths[3];
   size_t count = 0;
   for (const std::string &token : tokens) {
@@ -255,11 +302,106 @@ static bool parseTextShadow(const std::string &value, std::vector<TextShadow> *o
   return true;
 }
 
+/** Parse a comma-separated `box-shadow` list. Offsets are `<dx> <dy>
+ * [<blur> [<spread>]]`, and the optional `inset` keyword plus a colour may
+ * appear anywhere in the entry, as in CSS. */
+static bool parseBoxShadow(const std::string &value, std::vector<BoxShadow> *out) {
+  std::string text = xt_css_trim(value);
+  std::string lower = xt_css_lower(text);
+  out->clear();
+  if (lower == "none" || text.empty()) return true;
+  for (const std::string &part : splitCommas(value)) {
+    BoxShadow shadow;
+    Length lengths[4];
+    size_t count = 0;
+    for (const std::string &token : splitTokens(part)) {
+      std::string tokenLower = xt_css_lower(token);
+      if (tokenLower == "inset") {
+        shadow.inset = true;
+        continue;
+      }
+      Length length = xt_css_parse_length(token);
+      if (length.unit != Unit::Invalid && length.unit != Unit::Auto &&
+          length.unit != Unit::None) {
+        if (count < 4) lengths[count++] = length;
+        continue;
+      }
+      Color color = xt_css_parse_color(token);
+      if (color.valid) {
+        shadow.color = color;
+        shadow.has_color = true;
+      }
+    }
+    if (count < 2) return false;
+    shadow.dx = lengths[0];
+    shadow.dy = lengths[1];
+    shadow.blur = count > 2 ? lengths[2] : Length{0.0f, Unit::Px};
+    shadow.spread = count > 3 ? lengths[3] : Length{0.0f, Unit::Px};
+    out->push_back(shadow);
+  }
+  return true;
+}
+
+static bool parseAnimationShorthand(const std::string &value, std::vector<AnimationSpec> *out) {
+  out->clear();
+  for (const std::string &group : splitCommas(value)) {
+    std::vector<std::string> tokens = splitTokens(group);
+    if (tokens.empty()) continue;
+    AnimationSpec spec;
+    int time_seen = 0;
+    for (const std::string &token : tokens) {
+      std::string lower = xt_css_lower(token);
+      float seconds = 0;
+      TimingFunction timing;
+      if (parseTimeSeconds(token, &seconds)) {
+        if (time_seen == 0) spec.duration = seconds;
+        else if (time_seen == 1) spec.delay = seconds;
+        time_seen++;
+      } else if (parseTimingFunction(token, &timing)) {
+        spec.timing = timing;
+      } else if (lower == "infinite") {
+        spec.iterations = -1.0f;
+      } else if (lower == "normal") {
+        spec.direction = AnimationDirection::Normal;
+      } else if (lower == "reverse") {
+        spec.direction = AnimationDirection::Reverse;
+      } else if (lower == "alternate") {
+        spec.direction = AnimationDirection::Alternate;
+      } else if (lower == "alternate-reverse") {
+        spec.direction = AnimationDirection::AlternateReverse;
+      } else if (lower == "none") {
+        spec.fill = AnimationFillMode::None;
+      } else if (lower == "forwards") {
+        spec.fill = AnimationFillMode::Forwards;
+      } else if (lower == "backwards") {
+        spec.fill = AnimationFillMode::Backwards;
+      } else if (lower == "both") {
+        spec.fill = AnimationFillMode::Both;
+      } else if (lower == "paused") {
+        spec.paused = true;
+      } else if (lower == "running") {
+        spec.paused = false;
+      } else {
+        float count = 0;
+        if (xt_css_parse_number(token, &count)) spec.iterations = count;
+        else spec.name = token;
+      }
+    }
+    out->push_back(spec);
+  }
+  return true;
+}
+
 bool xt_style_apply_effect(XtStyle *style, const std::string &property,
                            const std::string &value) {
   if (property == "filter") return parseFilterList(value, &style->filters);
   if (property == "backdrop-filter") return parseFilterList(value, &style->backdrop_filters);
   if (property == "text-shadow") return parseTextShadow(value, &style->text_shadow);
+  if (property == "box-shadow") return parseBoxShadow(value, &style->box_shadow);
+  if (property == "animation") {
+    parseAnimationShorthand(value, &style->animations);
+    return true;
+  }
   if (property == "content") {
     std::string text = xt_css_lower(xt_css_trim(value));
     if (text == "none" || text == "normal") {
@@ -301,8 +443,84 @@ bool xt_style_apply_transition(XtStyle *style, const std::string &property,
     std::vector<std::string> parts = splitCommas(value);
     style->transitions.resize(parts.size());
     for (size_t i = 0; i < parts.size(); i++) {
-      TimingFunction timing = TimingFunction::Ease;
+      TimingFunction timing;
       if (parseTimingFunction(parts[i], &timing)) style->transitions[i].timing = timing;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool xt_style_apply_animation(XtStyle *style, const std::string &property,
+                              const std::string &value) {
+  if (property == "animation-name") {
+    std::vector<std::string> parts = splitCommas(value);
+    style->animations.resize(parts.size());
+    for (size_t i = 0; i < parts.size(); i++) {
+      style->animations[i].name = parts[i];
+    }
+    return true;
+  }
+  if (property == "animation-duration" || property == "animation-delay") {
+    std::vector<std::string> parts = splitCommas(value);
+    style->animations.resize(parts.size());
+    for (size_t i = 0; i < parts.size(); i++) {
+      float seconds = 0;
+      if (!parseTimeSeconds(parts[i], &seconds)) continue;
+      if (property == "animation-duration") style->animations[i].duration = seconds;
+      else style->animations[i].delay = seconds;
+    }
+    return true;
+  }
+  if (property == "animation-timing-function") {
+    std::vector<std::string> parts = splitCommas(value);
+    style->animations.resize(parts.size());
+    for (size_t i = 0; i < parts.size(); i++) {
+      TimingFunction timing;
+      if (parseTimingFunction(parts[i], &timing)) style->animations[i].timing = timing;
+    }
+    return true;
+  }
+  if (property == "animation-iteration-count") {
+    std::vector<std::string> parts = splitCommas(value);
+    style->animations.resize(parts.size());
+    for (size_t i = 0; i < parts.size(); i++) {
+      std::string lower = xt_css_lower(parts[i]);
+      float count = 0;
+      if (lower == "infinite") style->animations[i].iterations = -1.0f;
+      else if (xt_css_parse_number(parts[i], &count)) style->animations[i].iterations = count;
+    }
+    return true;
+  }
+  if (property == "animation-direction") {
+    static const char *const names[] = {"normal", "reverse", "alternate", "alternate-reverse"};
+    std::vector<std::string> parts = splitCommas(value);
+    style->animations.resize(parts.size());
+    for (size_t i = 0; i < parts.size(); i++) {
+      std::string lower = xt_css_lower(parts[i]);
+      for (int d = 0; d < 4; d++) {
+        if (lower == names[d]) style->animations[i].direction = (AnimationDirection)d;
+      }
+    }
+    return true;
+  }
+  if (property == "animation-fill-mode") {
+    static const char *const names[] = {"none", "forwards", "backwards", "both"};
+    std::vector<std::string> parts = splitCommas(value);
+    style->animations.resize(parts.size());
+    for (size_t i = 0; i < parts.size(); i++) {
+      std::string lower = xt_css_lower(parts[i]);
+      for (int f = 0; f < 4; f++) {
+        if (lower == names[f]) style->animations[i].fill = (AnimationFillMode)f;
+      }
+    }
+    return true;
+  }
+  if (property == "animation-play-state") {
+    std::vector<std::string> parts = splitCommas(value);
+    style->animations.resize(parts.size());
+    for (size_t i = 0; i < parts.size(); i++) {
+      style->animations[i].paused = xt_css_lower(parts[i]) == "paused";
     }
     return true;
   }

@@ -191,6 +191,13 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
       /* Drop shadows sit behind the box's own background but above earlier
        * siblings. */
       paint_detail::addBoxDropShadows(out, *box, *style, chain, own);
+      /* A backdrop filter samples everything painted before this box, so it is
+       * emitted before any of the box's own shapes. */
+      paint_detail::addBackdropFilter(out, *box, *style, own, viewportWidth, viewportHeight);
+      /* CSS `box-shadow` outsets paint behind the background too; inset ones
+       * paint above it. */
+      paint_detail::addBoxShadows(out, *box, *style, chain, own, false, viewportWidth,
+                                  viewportHeight);
       paint_detail::paintBackgrounds(out, *box, *style, chain, own, viewportWidth,
                                      viewportHeight);
       const Matrix2D &matrix = box->world;
@@ -210,6 +217,8 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
         paint_detail::addRectFiltered(out, box->x + box->width - right, box->y + top, right,
                                       inner_height, 0.0f, bc, own, matrix, chain);
       }
+      paint_detail::addBoxShadows(out, *box, *style, chain, own, true, viewportWidth,
+                                  viewportHeight);
       if (box->is_canvas && box->canvas_id != 0 && box->content_width > 0.0f &&
           box->content_height > 0.0f) {
         PaintImage image;
@@ -361,6 +370,15 @@ std::string DisplayList::dump() const {
       text += prefix + "end-layer\n";
       continue;
     }
+    if (op.kind == PaintKind::Backdrop) {
+      const PaintBackdrop &backdrop = backdrops[op.index];
+      std::snprintf(buffer, sizeof(buffer),
+                    "backdrop x=%.1f y=%.1f w=%.1f h=%.1f r=%.1f blur=%.1f", backdrop.x,
+                    backdrop.y, backdrop.width, backdrop.height, backdrop.radius,
+                    backdrop.blur);
+      text += prefix + buffer + "\n";
+      continue;
+    }
     std::string suffix;
     if (op.kind == PaintKind::Rect) {
       suffix = transformSuffix(rects[op.index].transform);
@@ -395,6 +413,10 @@ std::string DisplayList::dump() const {
                         gradient.stops[stop].offset);
           text += buffer;
         }
+      } else if (image.bitmap != nullptr) {
+        std::snprintf(buffer, sizeof(buffer),
+                      "image x=%.1f y=%.1f w=%.1f h=%.1f bitmap=%s", image.x, image.y,
+                      image.width, image.height, image.bitmap->key.c_str());
       } else if (image.media_id != 0) {
         std::snprintf(buffer, sizeof(buffer), "image x=%.1f y=%.1f w=%.1f h=%.1f media=%llu",
                       image.x, image.y, image.width, image.height,

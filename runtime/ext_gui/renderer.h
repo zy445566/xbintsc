@@ -35,7 +35,14 @@ struct DisplayList;
 struct XtGuiDrawRun {
   /** `LayerBegin`/`LayerEnd` are zero-count markers around a
    * `mix-blend-mode` group; `layer` indexes `DisplayList::layers`. */
-  enum Pipeline { Shape = 0, Text = 1, Image = 2, LayerBegin = 3, LayerEnd = 4 };
+  enum Pipeline {
+    Shape = 0,
+    Text = 1,
+    Image = 2,
+    LayerBegin = 3,
+    LayerEnd = 4,
+    Backdrop = 5
+  };
   int pipeline = Shape;
   uint32_t first = 0;
   uint32_t count = 0;
@@ -45,6 +52,8 @@ struct XtGuiDrawRun {
   float clip_height = 0;
   SDL_GPUTexture *texture = nullptr;
   uint32_t layer = 0;
+  /** `Backdrop` runs: index into `DisplayList::backdrops`. */
+  uint32_t backdrop = 0;
 };
 
 /** Per-window GPU geometry (vertex buffer + draw range). */

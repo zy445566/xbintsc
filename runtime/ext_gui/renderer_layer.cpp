@@ -17,6 +17,8 @@
 
 #include "renderer_internal.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -135,6 +137,7 @@ SDL_GPUGraphicsPipeline *g_layer_pipeline = nullptr;
 SDL_GPUSampler *g_layer_sampler = nullptr;
 SDL_GPUTextureFormat g_layer_format = SDL_GPU_TEXTUREFORMAT_INVALID;
 bool g_layer_failed = false;
+
 
 struct BlendParams {
   int mode;
@@ -455,10 +458,31 @@ void renderSequence(SceneContext &context, size_t begin, size_t end, int depth, 
       continue;
     }
     if (run.pipeline == XtGuiDrawRun::LayerEnd) continue;
+    if (run.pipeline == XtGuiDrawRun::Backdrop) {
+      if (g_layer_pipeline == nullptr) continue;
+      SDL_EndGPURenderPass(pass);
+      SDL_GPUTexture *scene = sceneTexture(context.shapes, depth, context.parity[depth]);
+      SDL_GPUTexture *scratch =
+          sceneTexture(context.shapes, depth, context.parity[depth] ^ 1);
+      if (scene != nullptr && scratch != nullptr) {
+        /* Copy the scene first: a blur samples around every pixel, so it cannot
+         * read the target it is writing. */
+        compositePass(context, scratch, scene, scene, -1);
+        beginPass(context.cmd, scene, false, nullptr, &pass);
+        if (pass == nullptr) return;
+        drawBackdropPass(context.cmd, pass, scratch, *context.list, run, context.target_width,
+                         context.target_height, context.pixel_density);
+      } else {
+        beginPass(context.cmd, scene, false, nullptr, &pass);
+        if (pass == nullptr) return;
+      }
+      continue;
+    }
 
     size_t segment_end = i;
     while (segment_end < end && runs[segment_end].pipeline != XtGuiDrawRun::LayerBegin &&
-           runs[segment_end].pipeline != XtGuiDrawRun::LayerEnd) {
+           runs[segment_end].pipeline != XtGuiDrawRun::LayerEnd &&
+           runs[segment_end].pipeline != XtGuiDrawRun::Backdrop) {
       segment_end++;
     }
     drawRuns(pass, runs, i, segment_end, context.shapes, context.texts, context.images,
@@ -471,6 +495,7 @@ void renderSequence(SceneContext &context, size_t begin, size_t end, int depth, 
 }  // namespace
 
 bool layerRendererReady(SDL_GPUDevice *device) { return ensureLayerPipeline(device); }
+
 
 bool drawLayeredScene(SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *swapchain,
                       const float clear_color[4], XtGuiGeometry *shapes, XtGuiGeometry *texts,
@@ -551,6 +576,7 @@ void layerRendererDestroy(SDL_GPUDevice *device) {
   }
   g_layer_format = SDL_GPU_TEXTUREFORMAT_INVALID;
   g_layer_failed = false;
+  backdropRendererDestroy(device);
 }
 
 }  // namespace renderer_detail

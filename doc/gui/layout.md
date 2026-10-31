@@ -40,11 +40,12 @@ with absolute (viewport-relative) geometry:
   and columns grow from the items; a single-cell grid with `place-items: center` centres a card in the whole overlay. Item measurement is a two-pass
   layout (intrinsic size, then final placement), so text fragments are cleared
   between passes.
-- **CSS value functions and custom properties** — `clamp(min, value, max)`,
-  `min(...)` and `max(...)` keep their arguments unresolved in the computed style
-  and are evaluated at layout time against the element's font size and the
-  viewport (`vw`/`vh`); `env(safe-area-inset-*)` resolves to zero in a desktop
-  window. `var(--name[, fallback])` is substituted from inherited custom
+- **CSS value functions and custom properties** — `calc()` arithmetic (including
+  nested `calc()` and `calc()` inside the other functions), `clamp(min, value,
+  max)`, `min(...)` and `max(...)` keep their expression unresolved in the
+  computed style and are evaluated at layout time against the element's font
+  size and the viewport (`vw`/`vh`); `env(safe-area-inset-*)` resolves to zero in
+  a desktop window. `var(--name[, fallback])` is substituted from inherited custom
   properties during the cascade. `inset` is the four-value
   `top/right/bottom/left` shorthand, `box-sizing: border-box` subtracts padding
   and borders from an explicit width/height, `visibility: hidden` skips painting

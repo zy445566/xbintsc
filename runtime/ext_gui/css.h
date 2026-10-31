@@ -17,14 +17,35 @@
 
 namespace xtgui {
 
-enum class Unit { Auto, None, Px, Percent, Em, Rem, Vw, Vh, Number, Clamp, Min, Max, Invalid };
+enum class Unit {
+  Auto,
+  None,
+  Px,
+  Percent,
+  Em,
+  Rem,
+  Vw,
+  Vh,
+  Number,
+  Clamp,
+  Min,
+  Max,
+  /** A `calc()` sub-expression: `args[0] <op> args[1]`. Nested arithmetic keeps
+   * its operands unresolved, so only the units actually present are resolved
+   * against the element (a `calc(100% - 2em)` depends on both the containing
+   * block and the font size). */
+  Calc,
+  Invalid
+};
 
 struct Length {
   float value = 0.0f;
   Unit unit = Unit::Auto;
-  /* Arguments of `clamp(...)`, `min(...)` and `max(...)`; empty for a scalar
-   * length. Kept unresolved so vw/vh/em are resolved against the element that
-   * uses the length, not the viewport at parse time. */
+  /** `+`, `-`, `*` or `/` for `Unit::Calc`; zero otherwise. */
+  char op = 0;
+  /* Arguments of `clamp(...)`, `min(...)`, `max(...)` and `calc(...)`; empty for
+   * a scalar length. Kept unresolved so vw/vh/em are resolved against the
+   * element that uses the length, not the viewport at parse time. */
   std::vector<Length> args = {};
 };
 
@@ -79,8 +100,24 @@ struct Rule {
   std::string media;
 };
 
+/** One step of an `@keyframes` rule: a normalised offset (0..1) and the
+ * declarations that apply there. */
+struct Keyframe {
+  float offset = 0.0f;
+  std::vector<Declaration> declarations;
+};
+
+/** One `@keyframes <name>` block. Offsets are kept sorted so the animation
+ * engine can bracket a progress with two adjacent steps. */
+struct KeyframesRule {
+  std::string name;
+  std::vector<Keyframe> keyframes;
+};
+
 struct StyleSheet {
   std::vector<Rule> rules;
+  /** `@keyframes` blocks, in declaration order. */
+  std::vector<KeyframesRule> keyframes;
   /* Facts the cascade can act on once per sheet instead of once per element (a
    * `@media` block, a `::before` rule or a `transition` declaration used to be
    * discovered by scanning every rule for every node). */
@@ -88,7 +125,12 @@ struct StyleSheet {
   bool has_hover = false;
   bool has_focus = false;
   bool has_transitions = false;
+  bool has_animations = false;
 };
+
+/** Look up the last `@keyframes` rule with `name` (later blocks replace
+ * earlier ones), or null when the sheet has no such animation. */
+const KeyframesRule *xt_css_find_keyframes(const StyleSheet &sheet, const std::string &name);
 
 /** Dynamic element state consulted by `:hover` / `:focus` while matching. */
 struct MatchState {

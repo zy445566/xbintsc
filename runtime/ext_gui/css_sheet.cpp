@@ -8,6 +8,9 @@
 
 #include "css_internal.h"
 
+#include <algorithm>
+#include <cctype>
+
 namespace xtgui {
 
 namespace {
@@ -92,6 +95,69 @@ std::string stripImportant(std::string value, bool *important) {
   return value;
 }
 
+/** Strip matching quotes from an at-rule prelude name. */
+std::string unquote(std::string text) {
+  text = xt_css_trim(text);
+  if (text.size() >= 2 && (text.front() == '"' || text.front() == '\'') &&
+      text.back() == text.front()) {
+    text = text.substr(1, text.size() - 2);
+  }
+  return text;
+}
+
+bool parseKeyframeOffset(const std::string &text, float *offset) {
+  std::string token = xt_css_lower(xt_css_trim(text));
+  if (token == "from") {
+    *offset = 0.0f;
+    return true;
+  }
+  if (token == "to") {
+    *offset = 1.0f;
+    return true;
+  }
+  if (!token.empty() && token.back() == '%') {
+    float value = 0.0f;
+    if (!xt_css_parse_number(token.substr(0, token.size() - 1), &value)) return false;
+    *offset = value / 100.0f;
+    return true;
+  }
+  return false;
+}
+
+/** Parse the body of an `@keyframes` block into one rule. A selector list such
+ * as `0%, 50%` creates one step per offset with the same declarations. */
+void parseKeyframesBlock(const std::string &block, const std::string &prelude,
+                         StyleSheet *sheet) {
+  KeyframesRule rule;
+  rule.name = unquote(prelude);
+  if (rule.name.empty()) return;
+  size_t index = 0;
+  while (index < block.size()) {
+    while (index < block.size() && xt_is_css_space(block[index])) index++;
+    if (index >= block.size()) break;
+    size_t brace = block.find('{', index);
+    if (brace == std::string::npos) break;
+    size_t close = findBlockEnd(block, brace);
+    if (close == std::string::npos) break;
+    std::string selectors = block.substr(index, brace - index);
+    std::vector<Declaration> declarations =
+        xt_css_parse_declarations(block.substr(brace + 1, close - brace - 1));
+    for (const std::string &part : xt_css_split_commas(selectors)) {
+      float offset = 0.0f;
+      if (!parseKeyframeOffset(part, &offset)) continue;
+      Keyframe keyframe;
+      keyframe.offset = offset;
+      keyframe.declarations = declarations;
+      rule.keyframes.push_back(std::move(keyframe));
+    }
+    index = close + 1;
+  }
+  if (rule.keyframes.empty()) return;
+  std::stable_sort(rule.keyframes.begin(), rule.keyframes.end(),
+                   [](const Keyframe &a, const Keyframe &b) { return a.offset < b.offset; });
+  sheet->keyframes.push_back(std::move(rule));
+}
+
 /** Parse one rule list, carrying the enclosing `@media` prelude. */
 void parseRules(const std::string &text, const std::string &media, int *order,
                 StyleSheet *sheet) {
@@ -116,9 +182,12 @@ void parseRules(const std::string &text, const std::string &media, int *order,
           std::string query = xt_css_trim(text.substr(nameEnd, brace - nameEnd));
           std::string nested = combineMedia(media, query);
           parseRules(text.substr(brace + 1, close - brace - 1), nested, order, sheet);
+        } else if (name.size() >= 9 && name.compare(name.size() - 9, 9, "keyframes") == 0) {
+          parseKeyframesBlock(text.substr(brace + 1, close - brace - 1),
+                              text.substr(nameEnd, brace - nameEnd), sheet);
         }
-        /* Other block at-rules (`@supports`, `@keyframes`, `@font-face`, …) are
-         * not part of the engine's subset: ignore the whole block. */
+        /* Other block at-rules (`@supports`, `@font-face`, …) are not part of
+         * the engine's subset: ignore the whole block. */
         index = close + 1;
       } else {
         index = (semi == std::string::npos) ? text.size() : semi + 1;
@@ -157,6 +226,7 @@ void computeSheetFlags(StyleSheet *sheet) {
     }
     for (const Declaration &declaration : rule.declarations) {
       if (declaration.property.compare(0, 10, "transition") == 0) sheet->has_transitions = true;
+      if (declaration.property.compare(0, 9, "animation") == 0) sheet->has_animations = true;
     }
   }
 }
@@ -181,6 +251,14 @@ std::vector<Declaration> xt_css_parse_declarations(const std::string &text) {
     }
   }
   return declarations;
+}
+
+const KeyframesRule *xt_css_find_keyframes(const StyleSheet &sheet, const std::string &name) {
+  /* Later `@keyframes` blocks with the same name replace earlier ones. */
+  for (size_t i = sheet.keyframes.size(); i-- > 0;) {
+    if (sheet.keyframes[i].name == name) return &sheet.keyframes[i];
+  }
+  return nullptr;
 }
 
 StyleSheet xt_css_parse_stylesheet(const std::string &text) {

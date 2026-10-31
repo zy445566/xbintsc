@@ -32,16 +32,25 @@ bool isSpace(char c) { return xt_is_css_space(c); }
 
 std::string trim(const std::string &text) { return xt_css_trim(text); }
 
-/** Split `a, b` / `a b` / `a,b` into its arguments. */
+/** Split `a, b` / `a b` / `a,b` into its arguments, keeping a nested
+ * `calc(10px + 2px)` argument together. */
 std::vector<std::string> splitArgs(const std::string &text) {
   std::vector<std::string> parts;
-  size_t index = 0;
-  while (index < text.size()) {
-    while (index < text.size() && (isSpace(text[index]) || text[index] == ',')) index++;
-    size_t start = index;
-    while (index < text.size() && !isSpace(text[index]) && text[index] != ',') index++;
-    if (index > start) parts.push_back(text.substr(start, index - start));
+  std::string current;
+  int depth = 0;
+  for (char c : text) {
+    if (c == '(') depth++;
+    if (c == ')') depth--;
+    if ((isSpace(c) || c == ',') && depth == 0) {
+      if (!current.empty()) {
+        parts.push_back(current);
+        current.clear();
+      }
+    } else {
+      current.push_back(c);
+    }
   }
+  if (!current.empty()) parts.push_back(current);
   return parts;
 }
 
@@ -150,7 +159,13 @@ float resolveLength(const Length &length, float base, float em, float vw, float 
 }
 
 bool sameLength(const Length &left, const Length &right) {
-  return left.unit == right.unit && left.value == right.value;
+  if (left.unit != right.unit || left.value != right.value || left.op != right.op ||
+      left.args.size() != right.args.size())
+    return false;
+  for (size_t i = 0; i < left.args.size(); i++) {
+    if (!sameLength(left.args[i], right.args[i])) return false;
+  }
+  return true;
 }
 
 bool sameOp(const TransformOp &left, const TransformOp &right) {
@@ -181,6 +196,25 @@ bool sameOp(const TransformOp &left, const TransformOp &right) {
 
 bool mixLength(const Length &from, const Length &to, float t, Length *out) {
   if (from.unit != to.unit) return false;
+  if (from.unit == Unit::Calc) {
+    if (from.op != to.op || from.args.size() != to.args.size()) return false;
+    out->unit = Unit::Calc;
+    out->op = from.op;
+    out->args.resize(from.args.size());
+    for (size_t i = 0; i < from.args.size(); i++) {
+      if (!mixLength(from.args[i], to.args[i], t, &out->args[i])) return false;
+    }
+    return true;
+  }
+  if (from.unit == Unit::Clamp || from.unit == Unit::Min || from.unit == Unit::Max) {
+    if (from.args.size() != to.args.size()) return false;
+    out->unit = from.unit;
+    out->args.resize(from.args.size());
+    for (size_t i = 0; i < from.args.size(); i++) {
+      if (!mixLength(from.args[i], to.args[i], t, &out->args[i])) return false;
+    }
+    return true;
+  }
   out->unit = from.unit;
   out->value = from.value + (to.value - from.value) * t;
   return true;

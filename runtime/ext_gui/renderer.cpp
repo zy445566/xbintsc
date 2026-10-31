@@ -329,11 +329,17 @@ void xt_gui_build_runs(XtGuiGeometry *shapes, XtGuiGeometry *texts, XtGuiGeometr
   uint32_t cursor[3] = {0, 0, 0};
   for (const xtgui::PaintOp &op : list.ops) {
     if (op.kind == xtgui::PaintKind::LayerBegin ||
-        op.kind == xtgui::PaintKind::LayerEnd) {
+        op.kind == xtgui::PaintKind::LayerEnd ||
+        op.kind == xtgui::PaintKind::Backdrop) {
       XtGuiDrawRun marker;
-      marker.pipeline = op.kind == xtgui::PaintKind::LayerBegin ? XtGuiDrawRun::LayerBegin
-                                                                : XtGuiDrawRun::LayerEnd;
-      marker.layer = op.kind == xtgui::PaintKind::LayerBegin ? op.index : 0;
+      if (op.kind == xtgui::PaintKind::Backdrop) {
+        marker.pipeline = XtGuiDrawRun::Backdrop;
+        marker.backdrop = op.index;
+      } else {
+        marker.pipeline = op.kind == xtgui::PaintKind::LayerBegin ? XtGuiDrawRun::LayerBegin
+                                                                  : XtGuiDrawRun::LayerEnd;
+        marker.layer = op.kind == xtgui::PaintKind::LayerBegin ? op.index : 0;
+      }
       shapes->runs.push_back(marker);
       continue;
     }
@@ -410,8 +416,7 @@ void drawRuns(SDL_GPURenderPass *pass, const std::vector<XtGuiDrawRun> &runs, si
   };
   for (size_t i = begin; i < end && i < runs.size(); i++) {
     const XtGuiDrawRun &run = runs[i];
-    if (run.pipeline == XtGuiDrawRun::LayerBegin || run.pipeline == XtGuiDrawRun::LayerEnd)
-      continue;
+    if (run.pipeline >= XtGuiDrawRun::LayerBegin) continue;
     if (run.count == 0) continue;
     SDL_Rect scissor;
     scissor.x = 0;
@@ -488,7 +493,10 @@ void xt_gui_renderer_draw(SDL_GPUCommandBuffer *cmd, SDL_GPUTexture *swapchain,
    * compiled at run time on the SPIR-V/MSL backends. Everywhere else (or if
    * that compilation failed) the ordinary single pass still paints the
    * unblended content rather than dropping it. */
-  if (!list.layers.empty() && layerRendererReady(g_device)) {
+  const bool needs_layers = !list.layers.empty();
+  const bool needs_backdrop = !list.backdrops.empty();
+  if ((needs_layers || needs_backdrop) && layerRendererReady(g_device) &&
+      (!needs_backdrop || backdropRendererReady(g_device))) {
     if (drawLayeredScene(cmd, swapchain, clear_color, shapes, texts, images, list, viewport_width,
                          viewport_height, pixel_density))
       return;

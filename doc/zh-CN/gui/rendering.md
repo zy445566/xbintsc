@@ -92,9 +92,21 @@
 每次重算样式时重建的普通布局盒，因此其背景、边框、文本与 transform 都走同一条
 绘制路径。`content` 支持字符串、`attr()` 与 open/close quote。
 
-**`text-shadow`** 会作为阴影 `PaintText` run 排在真实 run 之前，因此文本管线
-无需新 shader 就能绘制。带模糊的阴影是围绕偏移量展开的九个半透明副本（与
-`filter: blur()` 相同的近似）。
+**`text-shadow`** 在不带模糊时作为阴影 `PaintText` run 排在真实 run 之前，文本
+管线无需新 shader 就能清晰绘制。带模糊的阴影是真正的高斯：`paint_shadow.cpp`
+光栅化字形覆盖度，用可分离核做卷积（`sigma = blur / 2`，截断在 ±3σ），再发出
+一个带色调的图像四边形。掩码按 文本/字体/模糊 缓存，因此动画颜色只改变色调。
+
+**`box-shadow`** 使用同一套高斯掩码：圆角矩形轮廓被光栅化（spread 扩张或收缩）、
+卷积，再合成到背景之后；`inset` 阴影反转掩码、裁剪到 padding box 并绘制在背景
+之上。零模糊的外阴影仍使用精确的圆角矩形。声明列表按最后一层最先绘制，与 CSS
+一致。
+
+**`backdrop-filter`** 与 `mix-blend-mode` 共用离屏机制：绘制器到达该盒子时，
+渲染器把此前场景复制到暂存纹理，用全屏 shader 应用高斯和一个合并的颜色矩阵
+（brightness/contrast/grayscale/sepia/invert/saturate/hue-rotate/opacity 相乘），
+再通过盒子的圆角边框盒掩码合成回来。因此 `backdrop-filter` 在 `paintList()` 中
+显示为 `backdrop …` op。
 
 **`clip-path`** 在 `paint_clip.cpp` 中解析为设备空间多边形（每个点都应用盒子的
 transform），用耳切法三角化，并存入 `DisplayList::clip_paths`。每个 op 的
@@ -107,8 +119,8 @@ shader 改动，但边缘是硬边（没有解析抗锯齿）。支持两层嵌�
 `invert`、`saturate`、`hue-rotate`、`opacity`）会折进每个绘制颜色，因此盒子与
 其后代都会看到滤镜。`blur()` 与 `drop-shadow()` 是显示列表层面的近似：模糊把每个
 图形展开成九个半透明副本，投影用盒子/文字轮廓。这样普通绘制保持单渲染通道，代价
-是组语义：被模糊/滤镜的组内重叠后代可能加深；`backdrop-filter` 无法采样元素背后
-的内容，因此会解析并参与层叠，但不绘制。
+是组语义：被模糊/滤镜的组内重叠后代可能加深。`backdrop-filter` 是例外，它有
+自己的离屏快照/滤镜通道（见上）。
 
 **`mix-blend-mode`** 是唯一真正需要离屏图层的例外。非 `normal` 的盒子会被
 `LayerBegin`/`LayerEnd` 标记包住（在 `paintList()` 中显示为 `layer blend=…` /
@@ -120,7 +132,8 @@ shader 合成到场景上。全部十六种 CSS 模式（`multiply`、`screen`�
 再由 SPIRV-Cross 交叉编译为 MSL（Metal）；每个嵌套层级的两张场景纹理跨帧复用，
 并通过 ping-pong 让背景在写入时仍可采样。既不吃 SPIR-V 也不吃 MSL 的后端
 （这里的 D3D12/DXIL 路径没有 shader 编译器）仍用普通 source-over 混合绘制该组。
-`backdrop-filter` 依旧不绘制。
+`backdrop-filter` 使用同一条运行时编译路径；shader 后端不可用时会跳过它，页面
+其余内容仍照常绘制。
 
 ## 文本技术栈（M4b）
 

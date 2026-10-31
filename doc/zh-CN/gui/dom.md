@@ -32,7 +32,7 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 函数会让整条声明失效（见[布局](./layout.md#变换m15)）。M19 增加了
 `background-image` 层列表（线性/径向）、`clip-path`
 （`inset`/`circle`/`ellipse`/`polygon`）、`filter`/`backdrop-filter` 函数列表、
-`text-shadow` 与 `content`。
+`text-shadow`、`box-shadow` 与 `content`。
 
 **层叠与计算样式**（`runtime/ext_gui/style.{h,cpp}`）：一份小的内置 UA
 样式表，作者规则按 `(!important, 特异性, 源码顺序)` 排序，然后是内联

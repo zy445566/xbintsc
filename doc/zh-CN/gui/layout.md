@@ -35,9 +35,10 @@
   `align/justify-self`（含 `place-items`/`place-self`）。隐式行/列由项目撑开；
   单单元格网格配合 `place-items: center` 可把卡片居中到整个覆盖层。项目测量是
   两遍布局（先固有尺寸、再最终放置），因此两遍之间会清空文本片段。
-- **CSS 值函数与自定义属性** —— `clamp(min, value, max)`、`min(...)` 与
-  `max(...)` 在计算样式中保留参数，布局时结合元素字号与视口（`vw`/`vh`）求值；
-  桌面窗口中 `env(safe-area-inset-*)` 解析为 0。`var(--name[, fallback])` 在
+- **CSS 值函数与自定义属性** —— `calc()` 算术（含嵌套 `calc()` 以及其它函数
+  内部的 `calc()`）、`clamp(min, value, max)`、`min(...)` 与 `max(...)` 在计算
+  样式中保留表达式，布局时结合元素字号与视口（`vw`/`vh`）求值；桌面窗口中
+  `env(safe-area-inset-*)` 解析为 0。`var(--name[, fallback])` 在
   层叠期间从继承的自定义属性替换。`inset` 是四值 `top/right/bottom/left`
   简写；`box-sizing: border-box` 会从显式宽高里扣除 padding 与边框；
   `visibility: hidden` 跳过绘制与命中测试；`pointer-events: none` 使盒子不接收输入

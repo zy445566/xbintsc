@@ -387,6 +387,7 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
   full.u1 = 1.0f;
   full.v1 = 1.0f;
   beginGradientUpload();
+  beginBitmapUpload();
   for (const xtgui::PaintOp &op : list.ops) {
     if (op.kind != xtgui::PaintKind::Image || op.index >= list.images.size()) continue;
     const xtgui::PaintImage &image = list.images[op.index];
@@ -398,7 +399,9 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     if (pixel_width < 1) pixel_width = 1;
     if (pixel_height < 1) pixel_height = 1;
     SDL_GPUTexture *texture = nullptr;
-    if (image.gradient != nullptr) {
+    if (image.bitmap != nullptr) {
+      texture = ensureBitmapTexture(device, *image.bitmap, batch);
+    } else if (image.gradient != nullptr) {
       texture = ensureGradientTexture(device, image, pixel_width, pixel_height, batch);
     } else if (image.canvas_id != 0) {
       texture = ensureCanvasTexture(device, image.canvas_id, batch);
@@ -416,12 +419,14 @@ void xt_gui_image_upload(SDL_GPUDevice *device, XtGuiGeometry *geometry,
     geometry->op_textures[op.index] = texture;
   }
   finishGradientUpload(device);
+  finishBitmapUpload(device);
   uploadVertices(device, geometry, verts.data(), (uint32_t)verts.size(), sizeof(TextVertex), batch);
 }
 
 void xt_gui_image_textures_destroy(SDL_GPUDevice *device) {
   using namespace xtgui::renderer_detail;
   releaseGradientTextures(device);
+  releaseBitmapTextures(device);
   for (auto &entry : g_image_textures) {
     if (entry.second != nullptr) SDL_ReleaseGPUTexture(device, entry.second);
   }

@@ -76,6 +76,28 @@ void paintBackgrounds(DisplayList &out, const LayoutBox &box, const XtStyle &sty
 void addBoxDropShadows(DisplayList &out, const LayoutBox &box, const XtStyle &style,
                        const FilterChain &chain, const PaintClip &clip);
 
+/** Append the `box-shadow` layers of a box. Outer shadows paint behind the
+ * background; inset shadows paint above it (call with `inset = true` for the
+ * latter). Declaration order is topmost first, so the list is reversed. */
+void addBoxShadows(DisplayList &out, const LayoutBox &box, const XtStyle &style,
+                   const FilterChain &chain, const PaintClip &clip, bool inset,
+                   float viewportWidth, float viewportHeight);
+
+/** Rasterise (or fetch from the bounded cache) the blurred glyph mask of a
+ * `text-shadow` layer. Returns null when the run has no visible glyphs. */
+std::shared_ptr<const PaintBitmap> textShadowMask(const std::string &text, const FontSpec &font,
+                                                  float blur);
+
+/** Append a bitmap-backed image op (a rasterised shadow) with `color` as its
+ * tint. The bitmap now owns its pixels; the renderer uploads it once. */
+void addBitmapImage(DisplayList &out, std::shared_ptr<const PaintBitmap> bitmap, float x, float y,
+                    const Color &color, const Matrix2D &transform, const PaintClip &clip);
+
+/** Resolve and append a `backdrop-filter` op for a box (before its
+ * background). Returns false when the filter list has no visible effect. */
+bool addBackdropFilter(DisplayList &out, const LayoutBox &box, const XtStyle &style,
+                       const PaintClip &clip, float viewportWidth, float viewportHeight);
+
 /** Resolve `clip-path` into a device-space triangulated polygon. */
 int addClipPathForBox(DisplayList &out, const LayoutBox &box, const XtStyle &style,
                       float viewportWidth, float viewportHeight);

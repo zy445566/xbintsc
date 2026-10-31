@@ -81,6 +81,22 @@ struct PaintText {
   bool shadow = false;
 };
 
+/** A CPU-rasterised RGBA bitmap carried by a display-list image op. Shadows are
+ * painted as one pre-blurred texture rather than a stack of offset copies: a
+ * separable Gaussian on the mask is the CSS blur, and the shader only has to
+ * composite one quad. `scale` is bitmap pixels per logical pixel. */
+struct PaintBitmap {
+  int width = 0;
+  int height = 0;
+  float scale = 1.0f;
+  /** Logical offset of the bitmap's top-left from the shape's origin (a text
+   * run's start/baseline, or a box's top-left). */
+  float origin_x = 0.0f;
+  float origin_y = 0.0f;
+  std::string key;
+  std::vector<unsigned char> pixels;
+};
+
 /** An image to draw, scaled into the given rectangle (viewport-relative).
  * A non-zero `media_id` names a live `<video>` frame owned by the media
  * subsystem; a non-zero `canvas_id` names a live `<canvas>` bitmap owned by the
@@ -101,6 +117,9 @@ struct PaintImage {
   /** Modulating colour for the image shader (white normally; a filter's
    * multiplicative effect may tint it). */
   Color tint{1.0f, 1.0f, 1.0f, 1.0f};
+  /** A CPU-rasterised shadow mask (white RGB, coverage in alpha) drawn with
+   * `tint` as its colour. */
+  std::shared_ptr<const PaintBitmap> bitmap;
   /** A `background-image` radial gradient: the renderer rasterises it into the
    * quad instead of loading `src`/`svg`. Its stops already carry the colour
    * functions of the filter chain; `tint` still carries brightness/opacity. */
@@ -136,13 +155,30 @@ struct PaintClip {
   int paths[2] = {-1, -1};
 };
 
-enum class PaintKind { Rect, Text, Image, LayerBegin, LayerEnd };
+enum class PaintKind { Rect, Text, Image, LayerBegin, LayerEnd, Backdrop };
 
 /** One `mix-blend-mode` compositing group. The ops between its `LayerBegin`
  * and `LayerEnd` markers are rendered to an offscreen texture and composited
  * over the backdrop as a group, so overlapping children blend once. */
 struct PaintLayer {
   MixBlendMode blend = MixBlendMode::Normal;
+};
+
+/** One `backdrop-filter` application: the renderer snapshots the scene painted
+ * so far, applies the Gaussian blur / colour matrix to it, and composites the
+ * result back only inside the element's rounded border box. */
+struct PaintBackdrop {
+  float x = 0;
+  float y = 0;
+  float width = 0;
+  float height = 0;
+  float radius = 0;
+  /** Standard deviation of the Gaussian in logical pixels (0 = no blur). */
+  float blur = 0;
+  /** Combined colour filter, row-major 3x3 plus a per-channel offset. */
+  float color[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+  float offset[3] = {0, 0, 0};
+  float alpha = 1;
 };
 
 /** One entry in painter order: which kind of shape, its index in the matching
@@ -164,6 +200,8 @@ struct DisplayList {
   std::vector<ClipPathGeometry> clip_paths;
   /** `mix-blend-mode` groups referenced by `LayerBegin` ops. */
   std::vector<PaintLayer> layers;
+  /** `backdrop-filter` regions referenced by `Backdrop` ops. */
+  std::vector<PaintBackdrop> backdrops;
 
   void clear() {
     rects.clear();
@@ -172,6 +210,7 @@ struct DisplayList {
     ops.clear();
     clip_paths.clear();
     layers.clear();
+    backdrops.clear();
   }
   bool empty() const { return rects.empty() && texts.empty() && images.empty(); }
   /** Human-readable dump, one shape per line, in painter order (diagnostics/tests). */

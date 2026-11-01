@@ -54,6 +54,7 @@ import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 import {
   cmakeToolchainArgs,
+  cxxCompileFlags,
   HB_LEAN_DEFINES,
   LEAN_SDL_OPTIONS,
   SECTION_CMAKE_FLAGS,
@@ -210,18 +211,18 @@ function findArchiver(clangPath: string): string {
  * sibling clang++, and the matching llvm-ar. No `gcc`/`g++` fallbacks, and
  * Windows never falls back to a non-LLVM archiver — mixing another C++ runtime
  * or object format would break the final link. */
-function driverClang(): string {
+function driverToolchain(): ReturnType<typeof resolveToolchain> {
   try {
-    return resolveToolchain().clang;
+    return resolveToolchain();
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
 }
 
-const clang = driverClang();
+const toolchain = driverToolchain();
+const clang = toolchain.clang;
 const clangxx = findClangxx(clang);
 const llvmAr = findArchiver(clang);
-
 
 /** The compiler a previous CMake configure recorded for `buildDir`. */
 function cachedCompiler(buildDir: string, variable: string): string | undefined {
@@ -534,7 +535,7 @@ const sources = readdirSync(engineDir)
   .sort();
 
 const objects: string[] = [];
-const cxxFlags = ["-std=c++17", "-O2", "-Wall", "-Wextra", ...SECTION_FLAGS, ...includeFlags];
+const cxxFlags = cxxCompileFlags(toolchain.sdkRoot, includeFlags);
 /* The engine is C++ and the MSVC C++ runtime must match the static C CRT that
  * clang links by default, so let every engine object record `libcpmt` as a
  * default library. The extension itself only contributes the DLL import library

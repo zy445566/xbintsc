@@ -1,5 +1,5 @@
 /**
- * Size options shared by the GUI archive build.
+ * Build options shared by the GUI and media archive builds.
  *
  * Kept apart from `build-gui.ts` so the orchestration stays under the
  * repository's per-file line budget and the "what do we compile out?" policy is
@@ -7,6 +7,7 @@
  */
 
 import { MACOS_MINIMUM_VERSION } from "../src/driver/platform-support.js";
+import { sysrootFlags } from "../src/driver/toolchain.js";
 
 /**
  * CMake generator and ABI settings used for every vendored library. Ninja is
@@ -61,6 +62,19 @@ export function cmakeToolchainArgs(toolchain: {
 /** One function/data item per section, so the linker can drop what a program
  * never references (`--gc-sections`, `-dead_strip`, link.exe `/OPT:REF`). */
 export const SECTION_FLAGS = ["-ffunction-sections", "-fdata-sections"] as const;
+
+/**
+ * Flags for the C++ translation units merged into the GUI and media archives.
+ *
+ * `sdkRoot` must be passed as `-isysroot`: an Apple clang invoked by absolute
+ * path never infers its sysroot, and macOS keeps every standard header —
+ * libc++'s `<string>` included — inside the SDK rather than in `/usr/include`
+ * or the toolchain. Without it the first translation unit fails with
+ * `'string' file not found`.
+ */
+export function cxxCompileFlags(sdkRoot: string | undefined, includeFlags: readonly string[]): string[] {
+  return ["-std=c++17", "-O2", "-Wall", "-Wextra", ...SECTION_FLAGS, ...sysrootFlags(sdkRoot), ...includeFlags];
+}
 
 /** The same flags as CMake cache entries. */
 export const SECTION_CMAKE_FLAGS = [

@@ -51,6 +51,7 @@ import { platformSlug } from "../src/driver/paths.js";
 import { applyMacosDeploymentTarget } from "../src/driver/platform-support.js";
 import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js";
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
+import { cxxCompileFlags } from "./gui-build-options.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeDir = join(root, "runtime");
@@ -166,9 +167,9 @@ function findArchiver(clangPath: string): string {
   return archiver;
 }
 
-function driverClang(): string {
+function driverToolchain(): ReturnType<typeof resolveToolchain> {
   try {
-    return resolveToolchain().clang;
+    return resolveToolchain();
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
   }
@@ -472,7 +473,8 @@ ensureFfmpegSource();
 /* One toolchain for the player and FFmpeg: the same clang the driver uses, its
  * sibling clang++, and the matching llvm-ar. Mixing another C++ runtime or
  * object format would break the final link. */
-const clang = driverClang();
+const toolchain = driverToolchain();
+const clang = toolchain.clang;
 const clangxx = findClangxx(clang);
 const archiver = findArchiver(clang);
 const windowsTools = isWindows
@@ -517,7 +519,10 @@ mkdirSync(objDir, { recursive: true });
  * references every entry point, so each member is extracted on demand. */
 const playerSources = ["media.cpp", "decode_audio.cpp"];
 const playerObjects: string[] = [];
-const cxxFlags = ["-std=c++17", "-O2", "-Wall", "-Wextra", "-I", runtimeDir, "-I", join(ffmpegInstall, "include")];
+const cxxFlags = cxxCompileFlags(toolchain.sdkRoot, [
+  "-I", runtimeDir,
+  "-I", join(ffmpegInstall, "include"),
+]);
 /* The engine and the player are C++ with the static CRT (`libcpmt`), matching
  * FFmpeg's clang-cl objects and the xbintsc runtime; see `scripts/build-gui.ts`. */
 if (isWindows) cxxFlags.push("-Xclang", "--dependent-lib=libcpmt");

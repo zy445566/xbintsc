@@ -404,8 +404,9 @@ ${measurements.join("\n")}
     expect(value("c")).toBe("750,290,40,20");
     // min(100%, 200px) and clamp(10px, 5vw, 40px) at an 800px viewport.
     expect(value("g")).toBe("0,0,200,40");
-    // The linear-gradient background is painted as a run of solid strips.
-    expect(Number(value("paint"))).toBeGreaterThan(10);
+    // The linear-gradient background is one rasterised gradient image, not a
+    // run of solid strips, so it contributes no rectangles to `paintCount`.
+    expect(Number(value("paint"))).toBe(0);
     expect(stdout).toContain("paint=");
   });
 });

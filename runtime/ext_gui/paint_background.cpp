@@ -2,19 +2,21 @@
  * xbintsc GUI engine — background layer painting.
  *
  * `background-color` is one rounded rectangle and a `background-image` layer is
- * a gradient or an image. A linear gradient is emitted as a run of solid bands
- * (18 strips, 64 while repeating). A radial gradient is emitted as a single
+ * a gradient or an image. Both gradient kinds are emitted as a single
  * `PaintGradient` that the renderer rasterises per pixel
- * (`renderer_gradient.cpp`): stacking translucent radial bands composites their
+ * (`renderer_gradient.cpp`). Stacking translucent bands instead composites their
  * alpha once per band, which turns a vignette whose stops fade to `transparent`
- * into an opaque disc.
+ * into an opaque disc, and a run of bands cannot draw a stop narrower than one
+ * band: a 1px divider line either falls between two samples or becomes a block.
  */
 
 #include "paint_internal.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -69,23 +71,31 @@ Color gradientColorAt(const std::vector<GradientStop> &stops, bool repeating, fl
 namespace {
 
 /** Resolve the declaration's percentage/length offsets against the gradient
- * line, then distribute the omitted (`Unit::Auto`) ones between their
- * neighbours. The last explicit stop is preserved: for a normal gradient it
- * holds that colour, and for a repeating one it defines the period. */
+ * line, then distribute the omitted ones between their neighbours. The last
+ * explicit stop is preserved: for a normal gradient it holds that colour, and
+ * for a repeating one it defines the period. */
 std::vector<GradientStop> resolveStops(const BackgroundLayer &layer, float line_length,
                                        const XtStyle &style, float viewportWidth,
                                        float viewportHeight) {
   std::vector<GradientStop> stops;
+  stops.reserve(layer.stops.size());
   for (const BackgroundGradientStop &stop : layer.stops) {
     GradientStop resolved;
     resolved.color = stop.color;
-    resolved.offset = -1.0f;
+    /* NaN means "this stop has no offset"; a resolved offset may legitimately be
+     * negative (`red -10%`, or a `calc()` that lands below the line's start), so
+     * it must not double as the "unset" marker — that turned a negative offset
+     * into an implicit one and re-spaced the whole ramp. */
+    resolved.offset = std::numeric_limits<float>::quiet_NaN();
     if (stop.offset.unit == Unit::Percent) {
       resolved.offset = stop.offset.value / 100.0f;
     } else if (stop.offset.unit != Unit::Auto && stop.offset.unit != Unit::Invalid &&
                stop.offset.unit != Unit::None) {
-      float pixels = resolveLength(stop.offset, 0.0f, style.font_size, viewportWidth,
-                                   viewportHeight);
+      /* A percentage inside `calc()` is relative to the gradient line, exactly
+       * like a bare percentage; resolving it against a zero base made
+       * `calc(10% - 1px)` come out as `-1px`. */
+      float pixels =
+          resolveLength(stop.offset, line_length, style.font_size, viewportWidth, viewportHeight);
       resolved.offset = line_length > 0.00001f ? pixels / line_length : 0.0f;
     }
     stops.push_back(resolved);
@@ -93,24 +103,27 @@ std::vector<GradientStop> resolveStops(const BackgroundLayer &layer, float line_
   if (stops.empty()) return stops;
 
   /* Explicit offsets are non-decreasing, as in CSS. */
-  float last = -1.0f;
+  bool have_previous = false;
+  float previous = 0.0f;
   for (GradientStop &stop : stops) {
-    if (stop.offset < 0.0f) continue;
-    if (stop.offset < last) stop.offset = last;
-    last = stop.offset;
+    if (std::isnan(stop.offset)) continue;
+    if (have_previous && stop.offset < previous) stop.offset = previous;
+    previous = stop.offset;
+    have_previous = true;
   }
 
   /* Fill implicit offsets by distributing them between their neighbours. */
   size_t i = 0;
   while (i < stops.size()) {
-    if (stops[i].offset >= 0.0f) {
+    if (!std::isnan(stops[i].offset)) {
       i++;
       continue;
     }
     size_t j = i;
-    while (j < stops.size() && stops[j].offset < 0.0f) j++;
+    while (j < stops.size() && std::isnan(stops[j].offset)) j++;
     float before = (i == 0) ? 0.0f : stops[i - 1].offset;
     float after = (j >= stops.size()) ? 1.0f : stops[j].offset;
+    if (after < before) after = before;
     size_t count = j - i;
     for (size_t k = 0; k < count; k++) {
       float offset = 0.0f;
@@ -164,35 +177,108 @@ PaintClip boxClip(const PaintClip &clip, const LayoutBox &box) {
   return out;
 }
 
+/** Stable identity of a rasterised gradient: the ramp plus its geometry. The
+ * renderer keys its texture cache by this string, so an unchanged declaration
+ * rasterises once. */
+std::string gradientKey(const PaintGradient &gradient) {
+  char buffer[192];
+  std::string key;
+  for (const GradientStop &stop : gradient.stops) {
+    std::snprintf(buffer, sizeof(buffer), "%.4f/%.5f,%.5f,%.5f,%.5f;", stop.offset, stop.color.r,
+                  stop.color.g, stop.color.b, stop.color.a);
+    key += buffer;
+  }
+  std::snprintf(buffer, sizeof(buffer), "%d;%.3f,%.3f,%.3f,%.3f;%.3f,%.3f,%.4f,%.4f,%.3f;%d;%.5f",
+                gradient.kind == PaintGradient::Kind::Linear ? 1 : 0, gradient.center_x,
+                gradient.center_y, gradient.radius_x, gradient.radius_y, gradient.start_x,
+                gradient.start_y, gradient.dir_x, gradient.dir_y, gradient.length,
+                gradient.repeating ? 1 : 0, gradient.period);
+  key += buffer;
+  return key;
+}
+
+/** The CSS gradient line of `layer` inside `box`: the box-local point where the
+ * ramp starts, the direction increasing offsets run in, and the line's length.
+ * CSS angles grow clockwise from "to top" and y grows downwards, hence the
+ * negated cosine. The line passes through the box centre and its length is the
+ * box's extent projected onto the direction, so `t` spans exactly 0..1 across
+ * the box and `%` offsets in `calc()` resolve against it. */
+void linearLine(const LayoutBox &box, float angle, float *start_x, float *start_y, float *dir_x,
+                float *dir_y, float *length) {
+  const float radians = angle * 3.14159265358979f / 180.0f;
+  const float dx = std::sin(radians);
+  const float dy = -std::cos(radians);
+  const float span = std::fabs(box.width * dx) + std::fabs(box.height * dy);
+  *dir_x = dx;
+  *dir_y = dy;
+  *length = span;
+  *start_x = box.width * 0.5f - dx * span * 0.5f;
+  *start_y = box.height * 0.5f - dy * span * 0.5f;
+}
+
+/** Fold the colour half of the filter chain into `stops` and emit the layer as
+ * one gradient image. `brightness()` and `opacity()` stay out of the stops: the
+ * image tint carries them exactly, and leaving them out keeps the ramp — and
+ * therefore the texture cache key — stable while a fade animates. */
+void emitGradient(const LayoutBox &box, const FilterChain &chain, const PaintClip &clip,
+                  const std::shared_ptr<PaintGradient> &gradient,
+                  const std::vector<GradientStop> &stops, DisplayList &out) {
+  FilterChain stopChain = chain;
+  stopChain.opacity = 1.0f;
+  for (size_t i = stopChain.ops.size(); i-- > 0;) {
+    FilterKind kind = stopChain.ops[i].kind;
+    if (kind == FilterKind::Brightness || kind == FilterKind::Opacity) {
+      stopChain.ops.erase(stopChain.ops.begin() + (std::ptrdiff_t)i);
+    }
+  }
+  gradient->stops.reserve(stops.size());
+  bool visible = false;
+  for (const GradientStop &stop : stops) {
+    GradientStop resolved = stop;
+    resolved.color = filterColor(stopChain, resolved.color);
+    visible = visible || resolved.color.a > 0.0f;
+    gradient->stops.push_back(resolved);
+  }
+  if (!visible) return;
+  gradient->key = gradientKey(*gradient);
+
+  /* One quad for the whole layer: the renderer resolves the ramp per pixel, so
+   * the layer composites exactly once instead of once per translucent band, and
+   * a stop narrower than a band keeps its exact position and width. */
+  PaintImage image;
+  image.x = box.x;
+  image.y = box.y;
+  image.width = box.width;
+  image.height = box.height;
+  image.transform = box.world;
+  image.gradient = gradient;
+  addImage(out, std::move(image), clip, chain);
+}
+
 void paintLinear(const LayoutBox &box, const XtStyle &style, const BackgroundLayer &layer,
                  const FilterChain &chain, const PaintClip &clip, float viewportWidth,
                  float viewportHeight, DisplayList &out) {
   if (layer.stops.size() < 2 || box.width <= 0.0f || box.height <= 0.0f) return;
-  /* Repeating patterns need more samples than one gradient ramp: a 10%
-   * stripe is only two bands at the old 18-strip resolution. */
-  const int strips = layer.repeating ? 64 : 18;
-  bool horizontal = (layer.angle > 80.0f && layer.angle < 100.0f) ||
-                    (layer.angle > 260.0f && layer.angle < 280.0f);
-  bool reverse = (layer.angle > 260.0f && layer.angle < 280.0f) || layer.angle < 10.0f ||
-                 layer.angle > 350.0f;
-  const float line_length = horizontal ? box.width : box.height;
-  std::vector<GradientStop> stops = resolveStops(layer, line_length, style, viewportWidth,
-                                                 viewportHeight);
+  float start_x = 0.0f;
+  float start_y = 0.0f;
+  float dir_x = 1.0f;
+  float dir_y = 0.0f;
+  float length = 0.0f;
+  linearLine(box, layer.angle, &start_x, &start_y, &dir_x, &dir_y, &length);
+  if (length <= 0.00001f) return;
+  std::vector<GradientStop> stops =
+      resolveStops(layer, length, style, viewportWidth, viewportHeight);
   if (stops.size() < 2) return;
-  const float period = stops.back().offset;
-  for (int i = 0; i < strips; i++) {
-    float t = ((float)i + 0.5f) / (float)strips;
-    Color color = gradientColorAt(stops, layer.repeating, period, reverse ? 1.0f - t : t);
-    color = filterColor(chain, color);
-    if (color.a <= 0.0f) continue;
-    if (horizontal) {
-      addRect(out, box.x + box.width * (float)i / (float)strips, box.y,
-              box.width / (float)strips + 0.4f, box.height, 0.0f, color, clip, box.world);
-    } else {
-      addRect(out, box.x, box.y + box.height * (float)i / (float)strips, box.width,
-              box.height / (float)strips + 0.4f, 0.0f, color, clip, box.world);
-    }
-  }
+  auto gradient = std::make_shared<PaintGradient>();
+  gradient->kind = PaintGradient::Kind::Linear;
+  gradient->start_x = start_x;
+  gradient->start_y = start_y;
+  gradient->dir_x = dir_x;
+  gradient->dir_y = dir_y;
+  gradient->length = length;
+  gradient->repeating = layer.repeating;
+  gradient->period = stops.back().offset;
+  emitGradient(box, chain, clip, gradient, stops, out);
 }
 
 /** Radii of a keyword-sized ellipse: it keeps the box's aspect ratio and is
@@ -283,24 +369,6 @@ void radialRadii(const LayoutBox &box, const BackgroundLayer &layer, const XtSty
   *cy = centerY;
 }
 
-/** Stable identity of a rasterised gradient: the ramp plus its geometry. The
- * renderer keys its texture cache by this string, so an unchanged declaration
- * rasterises once. */
-std::string gradientKey(const PaintGradient &gradient) {
-  char buffer[192];
-  std::string key;
-  for (const GradientStop &stop : gradient.stops) {
-    std::snprintf(buffer, sizeof(buffer), "%.4f/%.5f,%.5f,%.5f,%.5f;", stop.offset, stop.color.r,
-                  stop.color.g, stop.color.b, stop.color.a);
-    key += buffer;
-  }
-  std::snprintf(buffer, sizeof(buffer), "%.3f,%.3f,%.3f,%.3f;%d;%.5f", gradient.center_x,
-                gradient.center_y, gradient.radius_x, gradient.radius_y,
-                gradient.repeating ? 1 : 0, gradient.period);
-  key += buffer;
-  return key;
-}
-
 void paintRadial(const LayoutBox &box, const XtStyle &style, const BackgroundLayer &layer,
                  const FilterChain &chain, const PaintClip &clip, float viewportWidth,
                  float viewportHeight, DisplayList &out) {
@@ -314,46 +382,15 @@ void paintRadial(const LayoutBox &box, const XtStyle &style, const BackgroundLay
   std::vector<GradientStop> stops = resolveStops(layer, std::max(rx, ry), style, viewportWidth,
                                                  viewportHeight);
   if (stops.size() < 2) return;
-  /* The colour functions fold into the stops (a per-stop application is exact
-   * for the linear ones); `brightness()` and `opacity()` stay out, because the
-   * image tint carries them exactly and leaving them out keeps the ramp — and
-   * therefore the texture cache key — stable while a fade animates. */
-  FilterChain stopChain = chain;
-  stopChain.opacity = 1.0f;
-  for (size_t i = stopChain.ops.size(); i-- > 0;) {
-    FilterKind kind = stopChain.ops[i].kind;
-    if (kind == FilterKind::Brightness || kind == FilterKind::Opacity) {
-      stopChain.ops.erase(stopChain.ops.begin() + (ptrdiff_t)i);
-    }
-  }
   auto gradient = std::make_shared<PaintGradient>();
-  gradient->stops.reserve(stops.size());
-  bool visible = false;
-  for (size_t i = 0; i < stops.size(); i++) {
-    GradientStop resolved = stops[i];
-    resolved.color = filterColor(stopChain, resolved.color);
-    visible = visible || resolved.color.a > 0.0f;
-    gradient->stops.push_back(resolved);
-  }
-  if (!visible) return;
+  gradient->kind = PaintGradient::Kind::Radial;
   gradient->center_x = cx - box.x;
   gradient->center_y = cy - box.y;
   gradient->radius_x = rx;
   gradient->radius_y = ry;
   gradient->repeating = layer.repeating;
   gradient->period = stops.back().offset;
-  gradient->key = gradientKey(*gradient);
-
-  /* One quad for the whole layer: the renderer resolves the ramp per pixel, so
-   * the layer composites exactly once instead of once per translucent band. */
-  PaintImage image;
-  image.x = box.x;
-  image.y = box.y;
-  image.width = box.width;
-  image.height = box.height;
-  image.transform = box.world;
-  image.gradient = gradient;
-  addImage(out, std::move(image), clip, chain);
+  emitGradient(box, chain, clip, gradient, stops, out);
 }
 
 void paintImage(const LayoutBox &box, const BackgroundLayer &layer, const XtStyle &style,

@@ -354,9 +354,9 @@ engine were Rust.
     - Generated content: `::before`/`::after` selectors, inherited pseudo styles,
       `content` strings/escapes/`attr()`, and synthetic layout boxes that never
       leak into DOM traversal.
-    - Multi-layer `background-image` with linear gradients painted bottom-up as
-      solid bands (18 strips) and radial gradients rasterised per pixel into one
-      image texture (`renderer_gradient.cpp`).
+    - Multi-layer `background-image` with linear and radial gradients rasterised
+      per pixel into one image texture (`renderer_gradient.cpp`), so hard stops
+      and sub-pixel details (a 1px divider) are exact.
     - `text-shadow` and `box-shadow` (outer/inset, spread, multiple layers),
       blurred with a true separable Gaussian over the shape mask (M21).
     - `clip-path` polygons (`inset`/`circle`/`ellipse`/`polygon`) resolved to

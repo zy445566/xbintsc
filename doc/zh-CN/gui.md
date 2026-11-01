@@ -275,8 +275,8 @@
       特性）；`matchMedia()` 使用同一个求值器。
     - 生成内容：`::before`/`::after` 选择器、继承的伪样式、`content` 字符串/
       转义/`attr()`，以及不会泄漏到 DOM 遍历的合成布局盒。
-    - 多层 `background-image`：线性渐变自下而上按纯色带绘制（18 条），径向渐变
-      逐像素光栅化成一张图像纹理（`renderer_gradient.cpp`）。
+    - 多层 `background-image`：线性与径向渐变都逐像素光栅化成一张图像纹理
+      （`renderer_gradient.cpp`），硬色标与亚像素细节（1px 分割线）因此能精确绘制。
     - `text-shadow` 与 `box-shadow`（外/内阴影、spread、多层）用形状掩码上的
       真正可分离高斯模糊（M21）。
     - `clip-path` 多边形（`inset`/`circle`/`ellipse`/`polygon`）解析到设备空间，

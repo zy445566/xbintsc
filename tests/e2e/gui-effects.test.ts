@@ -145,15 +145,16 @@ describe.skipIf(!guiAvailable)("gui extension — effects", () => {
     const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
     expect(value("image")).toContain("radial-gradient()");
     expect(value("image")).toContain("linear-gradient()");
-    // The radial layer is one rasterised gradient carrying its stops; the linear
-    // layer is still painted as solid bands.
+    // Both layers are one rasterised gradient carrying its stops: a band walk
+    // would composite a translucent stop once per band and cannot place a stop
+    // narrower than a band.
     expect(list).toContain("gradient=radial");
+    expect(list).toContain("gradient=linear");
     expect(list).toContain("#ff0000ff");
     expect(list).toContain("#00ff00ff");
     expect(list).toMatch(/#0000[0-9a-f]{2}ff/);
-    // Eighteen linear strips plus the background colour: the gradient image is
-    // not a stack of rectangles.
-    expect(Number(value("count"))).toBe(19);
+    // Only the background colour is a rectangle: the gradient layers are images.
+    expect(Number(value("count"))).toBe(1);
   });
 
   it("rasterises a translucent radial vignette as one gradient image", () => {
@@ -233,10 +234,13 @@ describe.skipIf(!guiAvailable)("gui extension — effects", () => {
     const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
     // The computed value keeps the repeating function name ...
     expect(value("image")).toBe("repeating-linear-gradient()");
-    // ... and the whole 100px box is tiled: a 20% period gives five red and
-    // five blue bands, not one ramp that holds the final colour.
-    expect((list.match(/#ff0000ff/g) ?? []).length).toBeGreaterThan(4);
-    expect((list.match(/#0000ffff/g) ?? []).length).toBeGreaterThan(4);
+    // ... and the ramp is one per-pixel gradient image carrying both stops and
+    // the period the renderer tiles: a 20% period repeats five times over the
+    // 100px box, so the dump's stops stop at 0.2 rather than holding at 1.0.
+    expect(list).toContain("gradient=repeating-linear");
+    expect(list).toContain("#ff0000ff@0.0000");
+    expect(list).toContain("#0000ffff@0.1000");
+    expect(list).toContain("#0000ffff@0.2000");
   });
 
   it("resolves pixel offsets in repeating gradients", () => {
@@ -270,8 +274,93 @@ describe.skipIf(!guiAvailable)("gui extension — effects", () => {
     );
     const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
     expect(value("image")).toBe("repeating-linear-gradient()");
-    expect((list.match(/#123456ff/g) ?? []).length).toBeGreaterThan(4);
-    expect((list.match(/#abcdefff/g) ?? []).length).toBeGreaterThan(4);
+    // 10px of a 100px line is 0.1: pixel offsets resolve against the gradient
+    // line exactly like percentages, and become the tiling period.
+    expect(list).toContain("gradient=repeating-linear");
+    expect(list).toContain("#123456ff@0.1000");
+    expect(list).toContain("#abcdefff@0.2000");
+  });
+
+  it("resolves percentages inside calc() gradient stops against the gradient line", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "gradient-calc-offsets",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #c {
+          width: 100px; height: 20px;
+          background: linear-gradient(90deg,
+            #ff0000 0 calc(50% - 1px), #0000ff calc(50% - 1px) 100%);
+        }
+      </style></head><body><div id="c"></div></body></html>
+      \`;
+
+      const win = createWindow({ title: "gradient-calc-offsets", width: 400, height: 300 });
+      win.on("ready", () => {
+        console.log("image=" + win.computedStyle("#c", "background-image"));
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    expect(value("image")).toBe("linear-gradient()");
+    // 50% - 1px of a 100px line is 49px, i.e. 0.49 — not 1/3 and 2/3, which is
+    // what resolving the `%` against a zero base (=-1px, then re-distributed as
+    // an omitted offset) used to produce.
+    expect(list).toContain("#ff0000ff@0.4900");
+    expect(list).toContain("#0000ffff@0.4900");
+    expect(list).toContain("#0000ffff@1.0000");
+    expect(list).not.toContain("@0.3333");
+    expect(list).not.toContain("@0.6667");
+  });
+
+  it("keeps a repeating 1px divider a divider, not a solid band", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "gradient-hairline",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #h {
+          width: 372px; height: 17px;
+          background: repeating-linear-gradient(90deg,
+            transparent 0 calc(10% - 1px), rgba(4, 7, 11, 0.65) calc(10% - 1px) 10%);
+        }
+      </style></head><body><div id="h"></div></body></html>
+      \`;
+
+      const win = createWindow({ title: "gradient-hairline", width: 600, height: 300 });
+      win.on("ready", () => {
+        console.log("image=" + win.computedStyle("#h", "background-image"));
+        console.log("count=" + win.paintCount());
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    expect(value("image")).toBe("repeating-linear-gradient()");
+    // One gradient image, not a rectangle per band ...
+    expect(list).toContain("gradient=repeating-linear");
+    expect(Number(value("count"))).toBe(0);
+    // ... and the 1px stop keeps its position instead of landing at 1/3, 2/3.
+    expect(list).toContain("#00000000@0.0973");
+    expect(list).toContain("#04070ba6@0.0973");
+    expect(list).toContain("#04070ba6@0.1000");
   });
 
   it("tiles repeating radial gradients", () => {

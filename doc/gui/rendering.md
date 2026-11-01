@@ -90,11 +90,13 @@ in their column).
 comma-separated layer list is painted bottom-up (the first declaration layer is
 topmost), and both gradient kinds are supported:
 
-- a **linear** gradient is sampled at 18 points (64 when repeating) and emitted
-  as solid rectangles; `to <side>`, `deg`/`grad`/`rad`/`turn`, percentage or
-  length (`px`/`em`/…) offsets, the `color <start> <end>` shorthand and
-  multi-stop colours work (the band walk is axis-aligned, so an oblique angle
-  uses the nearest axis);
+- a **linear** gradient follows the CSS gradient line (through the box centre,
+  at the declared angle, with the box extent projected onto it as its length, so
+  `%` and `%`-inside-`calc()` offsets resolve against that length) and is
+  resolved per pixel like a radial one. The ramp only varies along the line, so
+  the texture is one row (or one column) of device pixels. `to <side>`,
+  `deg`/`grad`/`rad`/`turn`, percentage or length (`px`/`em`/…) offsets, the
+  `color <start> <end>` shorthand and multi-stop colours work;
 - a **radial** gradient is resolved per pixel in `renderer_gradient.cpp` into one
   RGBA texture that is drawn as a single image quad (`PaintGradient`). Nesting the
   bands instead would composite their alpha once per band — since every band
@@ -106,6 +108,14 @@ topmost), and both gradient kinds are supported:
   the side or corner, as CSS does. Stops interpolate in premultiplied alpha, and
   the last stop extends past the ending shape over the rest of the box.
 
+Both kinds share that per-pixel path: a walk of solid rectangles composites a
+translucent stop once per band and cannot place a stop narrower than a band, so a
+`transparent … calc(100% - 1px), rgba(…) calc(100% - 1px)` divider line either
+fell between two samples (and vanished) or widened into a full band. A stop
+position given as `calc()` keeps its percentage relative to the gradient line,
+and a stop whose resolved offset is negative stays where the declaration put it
+instead of being treated as "no offset declared".
+
 `repeating-linear-gradient()` and `repeating-radial-gradient()` tile the stop
 pattern from 0 to the last stop's offset across the whole box; the stop list is
 not forced to end at 100%, so `red 0%, blue 10%` repeats every 10%. A normal
@@ -113,8 +123,8 @@ gradient whose last stop is below 100% holds that colour for the rest of the box
 as in CSS.
 
 The background colour sits under every layer. Gradients are partially
-transparent if their stops are; a radial gradient is exact per pixel, while a
-linear one still samples 18 bands and can show banding on a large soft ramp.
+transparent if their stops are; both kinds are exact per pixel, so hard stops and
+1px details stay hard instead of banding.
 
 **Generated content** needs no new display-list kind: `::before`/`::after` are
 ordinary layout boxes owned by the per-restyle arena in `style.cpp`, so their

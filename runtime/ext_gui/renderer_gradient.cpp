@@ -40,10 +40,15 @@ std::unordered_map<std::string, GradientTexture> g_gradient_textures;
  * fresh texture every frame and never free the old ones. */
 constexpr size_t kMaxStaleGradients = 8;
 
-/** Largest texture edge a gradient is rasterised at. A radial ramp is smooth, so
- * a larger box is rasterised smaller and stretched: the sampled colours are
+/** Largest texture edge a gradient is rasterised at. A ramp is smooth, so a
+ * larger box is rasterised smaller and stretched: the sampled colours are
  * unchanged (the stretch is uniform), only the resolution of the ramp drops. */
 constexpr int kMaxGradientEdge = 1024;
+
+/** The same cap for a linear ramp, which is one texel thick across its line and
+ * therefore cheap at any length. A hairline stop (`calc(100% - 1px)`) wants the
+ * full device resolution of a wide window, so the 2D cap would soften it. */
+constexpr int kMaxLinearGradientEdge = 4096;
 
 unsigned char byteOf(float value) {
   if (!(value > 0.0f)) return 0;  // NaN and negatives
@@ -51,10 +56,12 @@ unsigned char byteOf(float value) {
   return (unsigned char)(value * 255.0f + 0.5f);
 }
 
-/** Rasterise `gradient` into `out`: the box maps 1:1 onto the texture. The ramp
- * covers the whole box — past the ending shape CSS keeps the last stop's colour
- * rather than fading out — so there is no shape edge to antialias; the texels
- * are sampled with linear filtering. */
+/** Rasterise `gradient` into `out`: the box maps 1:1 onto the texture (the
+ * caller may have shrunk one axis, see `rasterSize`). The ramp covers the whole
+ * box — past the last stop CSS holds that colour rather than fading out — so
+ * there is no shape edge to antialias; the texels are sampled with linear
+ * filtering. A linear ramp is constant across the gradient line, so a walk
+ * along it is one row (or one column) of texels rather than a full box. */
 void rasterizeGradient(const PaintGradient &gradient, float logical_width, float logical_height,
                        int pixel_width, int pixel_height, Image *out) {
   out->width = pixel_width;
@@ -62,16 +69,29 @@ void rasterizeGradient(const PaintGradient &gradient, float logical_width, float
   out->pixels.assign((size_t)pixel_width * (size_t)pixel_height * 4u, 0);
   const float pixel_x = logical_width / (float)pixel_width;  // logical px per texel
   const float pixel_y = logical_height / (float)pixel_height;
-  const float inv_rx = 1.0f / gradient.radius_x;
-  const float inv_ry = 1.0f / gradient.radius_y;
+  const bool linear = gradient.kind == PaintGradient::Kind::Linear;
+  const float inv_rx = linear || gradient.radius_x <= 0.0f ? 1.0f : 1.0f / gradient.radius_x;
+  const float inv_ry = linear || gradient.radius_y <= 0.0f ? 1.0f : 1.0f / gradient.radius_y;
+  const float inv_length =
+      linear && gradient.length > 0.00001f ? 1.0f / gradient.length : 0.0f;
   for (int y = 0; y < pixel_height; y++) {
     const float local_y = ((float)y + 0.5f) * pixel_y;
     unsigned char *row = out->pixels.data() + (size_t)y * (size_t)pixel_width * 4u;
     for (int x = 0; x < pixel_width; x++) {
       const float local_x = ((float)x + 0.5f) * pixel_x;
-      const float u = (local_x - gradient.center_x) * inv_rx;
-      const float v = (local_y - gradient.center_y) * inv_ry;
-      const float t = std::sqrt(u * u + v * v);
+      float t = 0.0f;
+      if (linear) {
+        /* A linear ramp is the position projected onto the gradient line. */
+        t = ((local_x - gradient.start_x) * gradient.dir_x +
+             (local_y - gradient.start_y) * gradient.dir_y) *
+            inv_length;
+      } else {
+        /* A radial ramp is the distance from the centre, normalised by the
+         * ending ellipse. */
+        const float u = (local_x - gradient.center_x) * inv_rx;
+        const float v = (local_y - gradient.center_y) * inv_ry;
+        t = std::sqrt(u * u + v * v);
+      }
       Color color =
           paint_detail::gradientColorAt(gradient.stops, gradient.repeating, gradient.period, t);
       if (color.a <= 0.0f) continue;
@@ -85,12 +105,12 @@ void rasterizeGradient(const PaintGradient &gradient, float logical_width, float
 }
 
 /** The device size a gradient of `pixel_width` x `pixel_height` is rasterised at,
- * preserving its aspect ratio under `kMaxGradientEdge`. */
-void rasterSize(int pixel_width, int pixel_height, int *width, int *height) {
+ * preserving its aspect ratio under `max_edge`. */
+void rasterSize(int pixel_width, int pixel_height, int max_edge, int *width, int *height) {
   *width = std::max(1, pixel_width);
   *height = std::max(1, pixel_height);
-  if (*width <= kMaxGradientEdge && *height <= kMaxGradientEdge) return;
-  float shrink = (float)kMaxGradientEdge / (float)std::max(*width, *height);
+  if (*width <= max_edge && *height <= max_edge) return;
+  float shrink = (float)max_edge / (float)std::max(*width, *height);
   *width = std::max(1, (int)((float)*width * shrink + 0.5f));
   *height = std::max(1, (int)((float)*height * shrink + 0.5f));
 }
@@ -119,12 +139,26 @@ SDL_GPUTexture *ensureGradientTexture(SDL_GPUDevice *device, const xtgui::PaintI
                                       int pixel_width, int pixel_height, XtGuiUploadBatch *batch) {
   if (image.gradient == nullptr || image.width <= 0.0f || image.height <= 0.0f) return nullptr;
   const xtgui::PaintGradient &gradient = *image.gradient;
-  if (gradient.radius_x <= 0.0f || gradient.radius_y <= 0.0f || gradient.stops.size() < 2) {
+  if (gradient.stops.size() < 2) return nullptr;
+  const bool linear = gradient.kind == xtgui::PaintGradient::Kind::Linear;
+  if (linear) {
+    if (gradient.length <= 0.00001f) return nullptr;
+  } else if (gradient.radius_x <= 0.0f || gradient.radius_y <= 0.0f) {
     return nullptr;
   }
+  int across = pixel_width;
+  int down = pixel_height;
+  if (linear) {
+    /* A linear ramp does not change along the box's other axis, so one texel of
+     * it is enough: only the axis the ramp runs along needs resolution. */
+    if (std::fabs(gradient.dir_y) < 0.0001f) down = 1;
+    else if (std::fabs(gradient.dir_x) < 0.0001f) across = 1;
+  }
+  const bool one_dimensional = linear && (across == 1 || down == 1);
   int width = 0;
   int height = 0;
-  rasterSize(pixel_width, pixel_height, &width, &height);
+  rasterSize(across, down, one_dimensional ? kMaxLinearGradientEdge : kMaxGradientEdge, &width,
+             &height);
   /* The key carries the ramp, its geometry and the logical box size: two boxes
    * of different sizes can resolve the same px radius but not the same picture. */
   char box[64];

@@ -32,22 +32,35 @@ struct GradientStop {
   Color color;
 };
 
-/** A radial `background-image` layer resolved by the paint pass: the renderer
+/** A `background-image` gradient layer resolved by the paint pass: the renderer
  * rasterises it into one RGBA texture and draws that as a single image quad.
  *
  * Nesting translucent bands instead composites every band's alpha once per band
  * — each band covers the whole interior — so a vignette whose stops fade to
  * `transparent` turns into an opaque disc that hides the scene behind it.
- * Resolving the ramp per pixel composites it exactly once. */
+ * Resolving the ramp per pixel composites it exactly once, and it is the only
+ * way to draw a stop narrower than a band: a walk of solid rectangles either
+ * swallows a 1px divider line (it falls between two samples) or widens it into
+ * a block the width of a band. */
 struct PaintGradient {
+  enum class Kind { Radial, Linear };
+  Kind kind = Kind::Radial;
   std::vector<GradientStop> stops;
+  /* radial: the ending shape, box-local logical pixels. */
   /** Centre in box-local logical pixels; the drawn quad spans the whole box. */
   float center_x = 0.0f;
   float center_y = 0.0f;
   float radius_x = 0.0f;
   float radius_y = 0.0f;
-  /** `repeating-radial-gradient()`: the stop pattern restarts every `period`
-   * (the last stop's offset) instead of clamping at the outer ellipse. */
+  /* linear: `t` grows along the gradient line from `start_*` in the direction
+   * `(dir_x, dir_y)` over `length`; both box-local logical pixels. */
+  float start_x = 0.0f;
+  float start_y = 0.0f;
+  float dir_x = 1.0f;
+  float dir_y = 0.0f;
+  float length = 0.0f;
+  /** `repeating-*`: the stop pattern restarts every `period` (the last stop's
+   * offset) instead of clamping at the last stop. */
   bool repeating = false;
   float period = 1.0f;
   /** Identity of the ramp (stops and geometry) for the renderer's texture cache. */
@@ -120,9 +133,10 @@ struct PaintImage {
   /** A CPU-rasterised shadow mask (white RGB, coverage in alpha) drawn with
    * `tint` as its colour. */
   std::shared_ptr<const PaintBitmap> bitmap;
-  /** A `background-image` radial gradient: the renderer rasterises it into the
-   * quad instead of loading `src`/`svg`. Its stops already carry the colour
-   * functions of the filter chain; `tint` still carries brightness/opacity. */
+  /** A `background-image` gradient (linear or radial): the renderer rasterises
+   * it into the quad instead of loading `src`/`svg`. Its stops already carry the
+   * colour functions of the filter chain; `tint` still carries
+   * brightness/opacity. */
   std::shared_ptr<const PaintGradient> gradient;
 };
 

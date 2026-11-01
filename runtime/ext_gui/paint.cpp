@@ -426,12 +426,22 @@ std::string DisplayList::dump() const {
       suffix = transformSuffix(image.transform);
       if (image.gradient != nullptr) {
         const PaintGradient &gradient = *image.gradient;
-        std::snprintf(buffer, sizeof(buffer),
-                      "image x=%.1f y=%.1f w=%.1f h=%.1f gradient=%s center=%.1f,%.1f "
-                      "radius=%.1f,%.1f stops=",
-                      image.x, image.y, image.width, image.height,
-                      gradient.repeating ? "repeating-radial" : "radial", gradient.center_x,
-                      gradient.center_y, gradient.radius_x, gradient.radius_y);
+        const bool linear = gradient.kind == PaintGradient::Kind::Linear;
+        const char *kind = linear ? (gradient.repeating ? "repeating-linear" : "linear")
+                                  : (gradient.repeating ? "repeating-radial" : "radial");
+        if (linear) {
+          std::snprintf(buffer, sizeof(buffer),
+                        "image x=%.1f y=%.1f w=%.1f h=%.1f gradient=%s start=%.1f,%.1f "
+                        "dir=%.4f,%.4f length=%.1f stops=",
+                        image.x, image.y, image.width, image.height, kind, gradient.start_x,
+                        gradient.start_y, gradient.dir_x, gradient.dir_y, gradient.length);
+        } else {
+          std::snprintf(buffer, sizeof(buffer),
+                        "image x=%.1f y=%.1f w=%.1f h=%.1f gradient=%s center=%.1f,%.1f "
+                        "radius=%.1f,%.1f stops=",
+                        image.x, image.y, image.width, image.height, kind, gradient.center_x,
+                        gradient.center_y, gradient.radius_x, gradient.radius_y);
+        }
         text += prefix + buffer;
         for (size_t stop = 0; stop < gradient.stops.size(); stop++) {
           std::snprintf(buffer, sizeof(buffer), "%s%s@%.4f", stop == 0 ? "" : ",",

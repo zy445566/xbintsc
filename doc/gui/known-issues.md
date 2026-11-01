@@ -90,11 +90,11 @@
   approximated from box silhouettes; at most two nested `clip-path` shapes are
   intersected (deeper nesting keeps the outer two); and images/canvases are not
   colour-filtered except for the brightness/opacity tint the image shader can
-  carry. Canvas textures are sampled nearest-neighbour. A background linear
-  gradient remains solid bands (18 strips, 64 while repeating), so a large soft
-  ramp may show slight banding; a radial gradient is rasterised per pixel into a
-  texture (capped at 1024 px per edge, then stretched, so a hard stop in a very
-  large box comes out slightly soft).
+  carry. Canvas textures are sampled nearest-neighbour. Background gradients
+  (linear and radial) are rasterised per pixel into a texture and then stretched
+  when the box is larger than the texture (1024 px per edge for a radial ramp,
+  4096 px along the line for a linear one, which is only one texel thick across
+  it), so a hard stop in a very large box can come out slightly soft.
 - **SVG is NanoSVG's subset.** SVG *files* (`<img src="logo.svg">`) and inline
   `<svg>` trees share the vendored NanoSVG parser/rasteriser
   (`runtime/ext_gui/svg.cpp`, `inline_svg.cpp`), which renders

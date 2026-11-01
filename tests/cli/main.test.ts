@@ -274,6 +274,7 @@ describe("cli", () => {
     expect(text).toContain("toolchain");
     expect(text).toContain("runtime");
     expect(text).toContain("status");
+    expect(text).toContain("support");
   });
 
   it("builds an IR artifact and then serves it from the cache", () => {

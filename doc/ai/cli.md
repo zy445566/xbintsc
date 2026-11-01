@@ -143,6 +143,12 @@ unreadable or malformed config fails the build with `invalid JSON` or
 | `xbintsc_PREFER_PREBUILT` | `0` forces the runtime to be compiled from source |
 | `xbintsc_BINARY` | Native compiler binary the `bin/` launcher should run |
 
+When linking a prebuilt `core`/`ext_node` archive fails with a toolchain
+mismatch (`LNK2038`, `LNK2019`, `Undefined symbols`, `undefined reference`),
+`build` automatically retries with those archives' C sources; the bundled
+`gui`/`media` archives cannot be rebuilt that way. See
+[npm-package](../npm-package.md#the-first-build-and-the-cache).
+
 ## Incremental compilation
 
 Each build is keyed on the entry source hash, the compiler version, the build

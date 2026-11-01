@@ -201,8 +201,24 @@ Hello from xbintsc
 （不一定是配置文件所在目录）；可以用 `xbintsc_CACHE_DIR` 改到别处。这种回退构建
 会明显比后续构建慢。
 
+预编译归档由发布机提供的最老工具链生成，面向
+[使用前置要求](./requirements.md#支持的平台)中的下限（macOS 11.0、Windows 10、
+glibc 2.39）。如果它比本机的工具链新——例如更新的 Xcode Command Line
+Tools/SDK 或 Visual Studio C++ 生成工具——链接器可能拒绝该归档，报未定义符号
+（`LNK2038`、`LNK2019`、`Undefined symbols`、`undefined reference`）或
+`was built for newer macOS version` 警告。此时驱动会**自动**用包内自带的源码重新
+编译 `core`/`ext_node` 并重试链接，所以归档版本不匹配只会多花时间，不会让构建失败：
+
+```text
+xbintsc: the prebuilt runtime archive does not match this toolchain (…); compiling the C runtime from source
+```
+
+这个回退不会被记住：升级工具链之后，后续构建仍会重新尝试预编译归档。随包的
+`gui.a`/`media.a` 是例外——它们内含 SDL3/FFmpeg，npm 包里没有这些源码，无法这样
+重编。如果冲突的是它们，请使用与本机工具链匹配的发布包，或在源码检出中构建。
+
 如果确实想忽略平台包归档、改从主包自带的源码编译 C 运行时（例如修改了
-`runtime/`，或预编译归档与当前环境不匹配），可以设置：
+`runtime/`），可以设置：
 
 ```bash
 xbintsc_PREFER_PREBUILT=0 npx xbintsc build src/main.ts --out build
@@ -408,6 +424,7 @@ npm 包通过可选平台包获得同一套预编译运行时，只有在跳过�
 | 第一次构建很慢 | 可选包 `@xbintsc/<os>-<arch>` 被跳过（或该宿主没有预编译包），正在编译并缓存运行时 C 源码。用 `npm ls @xbintsc/<os>-<arch>` 检查，并去掉 `--omit=optional` 重新安装；`--time` 可确认。 |
 | 写 `.xbintsc/` 权限错误 | 用 `xbintsc_CACHE_DIR` 指向可写目录，或在可写目录中运行。 |
 | `module 'fs' is provided by the 'node' extension` | 加 `--ext node`，或在配置里写 `"extensions": ["node"]`。 |
+| 链接报 `LNK2038`、`LNK2019`、`Undefined symbols` 或 `was built for newer macOS version` | 预编译归档由更新的 Xcode/Visual Studio 工具链构建。驱动会自动改用运行时的 C 源码重试链接；若仍然失败，冲突的是 `gui.a`/`media.a`，无法从 npm 包重编——请使用匹配的发布包或源码检出。 |
 | `GUI native library not found` / `media native library not found` | 携带 `gui.a`/`gui.lib` 或 `media.a`/`media.lib` 的可选平台包被跳过，或该宿主没有预编译的 GUI/media 归档（Windows arm64）。去掉 `--omit=optional` 重新安装，或使用 Linux/macOS/Windows x64 发布压缩包，或从源码检出构建。自动检测到的 `media` 特性缺归档只会 warning；`--feature media` 才会报错。 |
 | `require("xbintsc")` 失败 | 包只提供 ESM；使用 `import`（或动态 `import()`）。 |
 | Windows 链接时报缺少 MSVC 库 | 在 Native Tools 命令提示符中运行，安装 VS C++ 生成工具，并检查 `npx xbintsc doctor`。 |

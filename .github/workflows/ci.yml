@@ -30,11 +30,28 @@ concurrency:
 #   Linux arm64    -> ubuntu-24.04-arm
 #   macOS x64      -> macos-15-intel
 #   macOS arm64    -> macos-15
-#   Windows x64    -> windows-2025
+#   Windows x64    -> windows-2022 when the output ships (self-host, package),
+#                     so the artifacts come from VS 2022 / MSVC v143; the test
+#                     jobs keep windows-2025 (VS 2026) to validate the new end
+#                     of the supported range.
 #   Windows arm64  -> windows-11-arm
+#
+# The release artifacts target the oldest supported platform versions (macOS
+# 11.0, Windows 10, glibc 2.39) and are built with the oldest toolchain each
+# host still offers: clang 16 on Linux, the oldest installed Xcode on macOS, and
+# VS 2022 on Windows x64. `.github/actions/xcode-baseline` and
+# `.github/actions/vs-toolchain` keep the archives and the self-hosted compiler
+# on that baseline; the supported floors are in doc/requirements.md.
 #
 # Node.js is pinned to 22 everywhere: it is the documented minimum from
 # package.json (`engines.node`) and the only version CI exercises.
+
+env:
+  # Every clang invocation targets the oldest supported macOS (the Apple
+  # Silicon floor). Ignored on Linux/Windows; the archive build scripts apply
+  # the same default when they run outside CI.
+  MACOSX_DEPLOYMENT_TARGET: "11.0"
+  CMAKE_OSX_DEPLOYMENT_TARGET: "11.0"
 
 jobs:
   lint:
@@ -108,6 +125,14 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+
+      # The test matrix keeps the newest runner image; the macOS jobs still
+      # compile with the oldest installed Xcode so tests exercise the baseline
+      # toolchain as well (Windows coverage of the newest toolset stays on
+      # windows-2025, see the header comment).
+      - name: Select the oldest supported Xcode (macOS)
+        if: runner.os == 'macOS'
+        uses: ./.github/actions/xcode-baseline
 
       - name: Install a C compiler (Linux)
         if: runner.os == 'Linux'
@@ -187,12 +212,21 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Install a C compiler (Linux)
+      - name: Select the oldest supported Xcode (macOS)
+        if: runner.os == 'macOS'
+        uses: ./.github/actions/xcode-baseline
+
+      - name: Install the GUI build dependencies and clang 16 (Linux)
         if: runner.os == 'Linux'
         # The GUI archive needs the X11/Wayland headers to see a window backend,
         # so every Linux job that builds it installs the same set from one place
         # (scripts/install-gui-deps.sh) rather than repeating the list per job.
-        run: sudo sh scripts/install-gui-deps.sh
+        # clang 16 is the oldest compiler xbintsc supports, so the archives this
+        # job builds match the release baseline.
+        run: |
+          sudo sh scripts/install-gui-deps.sh
+          sudo apt-get update && sudo apt-get install -y clang-16 lld-16
+          echo "xbintsc_CLANG=clang-16" >> "$GITHUB_ENV"
 
       # The same Visual Studio Build Tools/Community installation a local build
       # uses: vcvarsall (MSVC, SDK, MSBuild) plus its bundled LLVM. `make: true`
@@ -408,7 +442,9 @@ jobs:
           - ubuntu-24.04-arm    # Linux arm64
           - macos-15-intel      # macOS x64
           - macos-15            # macOS arm64
-          - windows-2025        # Windows x64
+          # The self-hosted binary ships in the release: build it on the
+          # oldest Windows image still offered, which carries VS 2022 / v143.
+          - windows-2022        # Windows x64
           - windows-11-arm      # Windows arm64
     steps:
       - uses: actions/checkout@v7
@@ -418,9 +454,18 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: Install a C compiler (Linux)
+      - name: Select the oldest supported Xcode (macOS)
+        if: runner.os == 'macOS'
+        uses: ./.github/actions/xcode-baseline
+
+      # The shipped compiler is built with the oldest supported clang (16), so
+      # the release exercises the documented minimum rather than the runner's
+      # newest toolchain.
+      - name: Install clang 16 (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang-16 lld-16
+          echo "xbintsc_CLANG=clang-16" >> "$GITHUB_ENV"
 
       # Same Visual Studio toolchain as the local build and the archives.
       - name: Set up the Visual Studio toolchain (Windows)
@@ -471,6 +516,21 @@ jobs:
           esac
           ls -l dist
 
+      # The shipped compiler must run on the oldest supported macOS. A future
+      # runner image that ignores MACOSX_DEPLOYMENT_TARGET would otherwise
+      # silently raise the floor of the release.
+      - name: Verify the macOS deployment target
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          minos="$(otool -l dist/xbintsc | awk '/LC_BUILD_VERSION/{seen=1} seen && /minos/{print $2; exit}')"
+          echo "deployment target: ${minos}"
+          if [ "${minos}" != "11.0" ]; then
+            echo "::error::dist/xbintsc targets macOS ${minos}, expected 11.0 (MACOSX_DEPLOYMENT_TARGET)." >&2
+            exit 1
+          fi
+
       - name: Upload the self-hosted compiler
         uses: actions/upload-artifact@v7
         with:
@@ -496,7 +556,9 @@ jobs:
           - ubuntu-24.04-arm    # Linux arm64
           - macos-15-intel      # macOS x64
           - macos-15            # macOS arm64
-          - windows-2025        # Windows x64
+          # These archives are published: build them on the oldest Windows
+          # image still offered (VS 2022 / v143), not on windows-2025's VS 2026.
+          - windows-2022        # Windows x64
           - windows-11-arm      # Windows arm64
     steps:
       - uses: actions/checkout@v7
@@ -506,12 +568,21 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - name: Select the oldest supported Xcode (macOS)
+        if: runner.os == 'macOS'
+        uses: ./.github/actions/xcode-baseline
+
       # This job builds the GUI archive too, so it needs the same X11/Wayland
       # toolchain the compile-examples job installs. Omitting it is what made
       # SDL3 configure itself without a window backend and abort here.
-      - name: Install a C compiler (Linux)
+      # clang 16 is the oldest supported compiler: it builds the published
+      # runtime/gui/media archives and proves the documented minimum.
+      - name: Install the GUI build dependencies and clang 16 (Linux)
         if: runner.os == 'Linux'
-        run: sudo sh scripts/install-gui-deps.sh
+        run: |
+          sudo sh scripts/install-gui-deps.sh
+          sudo apt-get update && sudo apt-get install -y clang-16 lld-16
+          echo "xbintsc_CLANG=clang-16" >> "$GITHUB_ENV"
 
       # This job builds the GUI/media archives too, so it needs the same Visual
       # Studio toolchain as compile-examples (vcvarsall + its bundled LLVM) and
@@ -570,6 +641,22 @@ jobs:
       - name: Build the media archive
         if: runner.os != 'Windows' || runner.arch == 'X64'
         run: npm run media
+
+      # The archives ship to users, so prove they target the documented floor
+      # instead of trusting the environment variable to survive every build
+      # script (CMake, FFmpeg, direct clang calls).
+      - name: Verify the archive deployment target
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for archive in runtime/lib/*/*.a; do
+            [ -f "${archive}" ] || continue
+            if otool -l "${archive}" | awk '/minos/ {print $2}' | grep -qv '^11\.0$'; then
+              echo "::error::${archive} contains objects targeting a macOS other than 11.0." >&2
+              exit 1
+            fi
+          done
 
       - name: Assemble the release archive
         run: npm run package-release

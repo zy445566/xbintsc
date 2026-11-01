@@ -49,6 +49,7 @@ import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platformSlug } from "../src/driver/paths.js";
+import { applyMacosDeploymentTarget } from "../src/driver/platform-support.js";
 import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js";
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 import {
@@ -58,6 +59,7 @@ import {
   SECTION_CMAKE_FLAGS,
   SECTION_FLAGS,
 } from "./gui-build-options.js";
+import { ensureDeploymentTarget } from "./gui-build-cache.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeDir = join(root, "runtime");
@@ -98,6 +100,10 @@ const outDir = join(runtimeDir, "lib", platformSlug());
 const isWindows = process.platform === "win32";
 const objectSuffix = isWindows ? ".obj" : ".o";
 const output = join(outDir, isWindows ? "gui.lib" : "gui.a");
+
+/* The vendored CMake builds and the direct engine compiles must target the
+ * oldest supported macOS, not the build machine's version. */
+applyMacosDeploymentTarget();
 
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
 const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
@@ -348,6 +354,7 @@ if (!existsSync(join(sdlSrc, "CMakeLists.txt"))) {
 
 /* -- 2. static SDL3 ------------------------------------------------------- */
 
+ensureDeploymentTarget("SDL3", sdlBuild);
 const existingSdlArchive = sdlArchive();
 if (!existingSdlArchive) {
   /* Older trees configured SDL inside its source (`vendor/SDL/build`) and a
@@ -392,6 +399,7 @@ if (!existingSdlArchive) {
 ensureTarballSource("freetype", FREETYPE_URL, `freetype-${FREETYPE_VERSION}`);
 ensureTarballSource("harfbuzz", HARFBUZZ_URL, `harfbuzz-${HARFBUZZ_VERSION}`);
 
+ensureDeploymentTarget("FreeType", freetypeBuild);
 if (!existsSync(freetypeArchive() ?? "")) {
   const cmake = configureCmake("FreeType", freetypeSrc, freetypeBuild, [
     "-DCMAKE_BUILD_TYPE=Release",
@@ -410,6 +418,7 @@ if (!existsSync(freetypeArchive() ?? "")) {
   console.log(`xbintsc: reusing existing ${freetypeArchive()}`);
 }
 
+ensureDeploymentTarget("HarfBuzz", harfbuzzBuild);
 if (!existsSync(harfbuzzArchive() ?? "")) {
   const cmake = configureCmake("HarfBuzz", harfbuzzSrc, harfbuzzBuild, [
     "-DCMAKE_BUILD_TYPE=Release",
@@ -456,6 +465,7 @@ ensureTarballSource("glslang", GLSLANG_URL, `glslang-${GLSLANG_VERSION}`);
 ensureTarballSource(join("glslang", "External", "spirv-headers"), SPIRV_HEADERS_URL,
   `SPIRV-Headers-${SPIRV_HEADERS_VERSION}`);
 
+ensureDeploymentTarget("glslang", glslangBuild);
 if (!existsSync(glslangArchive() ?? "")) {
   const cmake = configureCmake("glslang", glslangSrc, glslangBuild, [
     "-DCMAKE_BUILD_TYPE=Release",
@@ -484,6 +494,7 @@ const metalBackend = process.platform === "darwin";
 if (metalBackend) {
   ensureTarballSource("spirv-cross", SPIRV_CROSS_URL, `SPIRV-Cross-${SPIRV_CROSS_VERSION}`);
 
+  ensureDeploymentTarget("SPIRV-Cross", spirvCrossBuild);
   if (!existsSync(spirvCrossArchive("spirv-cross-msl") ?? "")) {
     const cmake = configureCmake("SPIRV-Cross", spirvCrossSrc, spirvCrossBuild, [
       "-DCMAKE_BUILD_TYPE=Release",

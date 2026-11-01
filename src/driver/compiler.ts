@@ -395,16 +395,20 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     assembled.prebuiltArchives.some((archive) => stderr.includes(basename(archive)));
 
   /* One attempt, captured instead of thrown so the retry below is not itself
-   * caught by this decision block. */
-  let firstAttempt: { readonly stderr: string } | { readonly error: unknown };
+   * caught by this decision block. `failed` is explicit because a thrown
+   * `undefined` must not look like a successful link. */
+  let failed = false;
+  let firstError: unknown;
+  let firstStderr = "";
   try {
-    firstAttempt = { stderr: linkAssembled(assembled) };
+    firstStderr = linkAssembled(assembled);
   } catch (error) {
-    firstAttempt = { error };
+    failed = true;
+    firstError = error;
   }
 
-  if ("error" in firstAttempt) {
-    const error = firstAttempt.error;
+  if (failed) {
+    const error = firstError;
     /* The release runner's Xcode/SDK or Visual Studio toolset can be newer
      * than this machine's, and then the prebuilt archive cannot be linked
      * (`LNK2038`, `LNK2019`, `Undefined symbols`, ...). The C runtime sources
@@ -416,15 +420,15 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     retryFromSource(error.stderr);
   } else if (
     prebuiltInUse() &&
-    mentionsRebuildableArchive(firstAttempt.stderr) &&
-    looksLikePrebuiltLinkFailure(firstAttempt.stderr)
+    mentionsRebuildableArchive(firstStderr) &&
+    looksLikePrebuiltLinkFailure(firstStderr)
   ) {
     /* A successful link can still warn that the archive was built for a newer
      * macOS than the one being targeted: the binary would then claim the local
      * deployment target while calling newer SDK symbols at run time, so rebuild
      * it from source just like an outright failure. Only `core`/`ext_node` can
      * be replaced this way; a warning about `gui.a`/`media.a` is left alone. */
-    retryFromSource(firstAttempt.stderr);
+    retryFromSource(firstStderr);
   }
 
   const bundlePath =

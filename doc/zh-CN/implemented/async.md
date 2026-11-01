@@ -30,6 +30,7 @@
 - 微任务队列（`xt_microtasks`）；`xt_promise_ctor/resolve/reject/static`（含 `withResolvers`）、实例 `then` / `catch` / `finally`。
 - `xt_drain_microtasks` 在程序结束时清空队列，事件循环也会在回调之间清空它。
 - `xt_await` 对非 Promise / 已 settle 值排入一次微任务，对 pending promise 则挂起当前 async 协程直到 settle。
+- 未处理的 rejection 是致命错误，与 Node 默认的 `--unhandled-rejections=throw` 一致。一个 reject 后始终无人观察的 promise——没有 `.then` / `.catch`、没有被 `await`、也没有被另一个 promise 采纳——会在事件循环排空后向 stderr 打印 `Unhandled promise rejection`，并以状态码 1 退出。它主要保护入口函数：程序的 `main()` 通常是 `async`，从其中逃出的异常原本只是 reject 一个无人观察的 promise，进程会静默退出 0。即使在定时器里稍后才挂上处理函数，也算已观察。
 
 ## 定时器与事件循环
 

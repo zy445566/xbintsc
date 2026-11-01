@@ -30,6 +30,7 @@ Location: `runtime/xt_async.c`, `runtime/xt_coroutine.c`, `runtime/xt_promise.c`
 - Microtask queue (`xt_microtasks`); `xt_promise_ctor/resolve/reject/static` (including `withResolvers`), instance `then` / `catch` / `finally`.
 - `xt_drain_microtasks` empties the queue at program exit, and the event loop drains it between callbacks.
 - `xt_await` queues a microtask for a non-promise or settled value, and suspends the running async coroutine on a pending promise until it settles.
+- Unhandled rejections are fatal, like Node's default `--unhandled-rejections=throw`. A promise that rejects and is never observed — no `.then` / `.catch`, no `await`, not adopted by another promise — is reported as `Unhandled promise rejection` on stderr once the event loop drains, and the process exits with status 1. The case this protects is the entry point: a program's `main()` is usually `async`, so an exception escaping it would otherwise reject an unobserved promise and the process would print nothing and exit 0. Attaching a handler later, even from a timer, still counts as observed.
 
 ## Timers and the event loop
 

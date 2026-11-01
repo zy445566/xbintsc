@@ -11,6 +11,7 @@
 
 #include "rt_internal.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -33,6 +34,12 @@ struct xt_promise {
   xt_reaction **reactions;
   uint32_t reaction_count;
   uint32_t reaction_capacity;
+  /* Unhandled-rejection tracking. `observed` is set once something can see
+   * this promise's outcome: a `.then`/`.catch` registration, an `await`, or
+   * adoption by another promise. `report_index` is its slot in `xt_unhandled`
+   * (`XT_PROMISE_UNLISTED` while it is not queued). */
+  int observed;
+  uint32_t report_index;
 };
 
 /* -- microtask queue ------------------------------------------------------ */
@@ -64,6 +71,58 @@ static xt_value xt_promise_value(xt_promise *promise) {
   return XT_FROM_PTR(XT_TAG_OBJECT, promise);
 }
 
+/* -- unhandled rejections ------------------------------------------------- */
+/*
+ * A promise that rejects without anybody observing the outcome is a bug, and
+ * an invisible one here: a compiled program's entry point is usually `async`,
+ * so an escaping exception rejects *its* promise and nothing else looks at it.
+ * The process used to print nothing and exit 0, which hides the failure.
+ *
+ * A rejected promise joins this queue and leaves it the moment a handler (or
+ * an `await`) is registered — including one attached later, from a timer. What
+ * is still queued once the event loop drains is reported on stderr and the
+ * process exits non-zero, like Node's default `unhandled-rejections=throw`.
+ */
+#define XT_PROMISE_UNLISTED 0xFFFFFFFFu
+
+static xt_promise **xt_unhandled = NULL;
+static uint32_t xt_unhandled_count = 0;
+static uint32_t xt_unhandled_capacity = 0;
+
+static void xt_unhandled_remove(xt_promise *promise) {
+  uint32_t index = promise->report_index;
+  if (index == XT_PROMISE_UNLISTED) return;
+  uint32_t last = xt_unhandled_count - 1;
+  if (index != last) {
+    xt_promise *moved = xt_unhandled[last];
+    xt_unhandled[index] = moved;
+    moved->report_index = index;
+  }
+  xt_unhandled_count = last;
+  promise->report_index = XT_PROMISE_UNLISTED;
+}
+
+static void xt_unhandled_add(xt_promise *promise) {
+  if (promise->observed || promise->report_index != XT_PROMISE_UNLISTED) return;
+  if (xt_unhandled_count >= xt_unhandled_capacity) {
+    xt_unhandled_capacity = xt_unhandled_capacity == 0 ? 8 : xt_unhandled_capacity * 2;
+    xt_unhandled = (xt_promise **)realloc(xt_unhandled, sizeof(xt_promise *) * xt_unhandled_capacity);
+    if (!xt_unhandled) abort();
+  }
+  promise->report_index = xt_unhandled_count;
+  xt_unhandled[xt_unhandled_count++] = promise;
+}
+
+/* Something is listening now, so this promise can never be "unhandled". */
+static void xt_promise_observe(xt_promise *promise) {
+  if (!promise) return;
+  promise->observed = 1;
+  xt_unhandled_remove(promise);
+}
+
+/** Mark `value` (when it is a promise) as observed; see `xt_promise_observe`. */
+void xt_promise_observe_value(xt_value value) { xt_promise_observe(xt_as_promise(value)); }
+
 static void xt_promise_gc_register(void);
 
 static xt_promise *xt_promise_new(void) {
@@ -73,6 +132,8 @@ static xt_promise *xt_promise_new(void) {
   promise->reactions = NULL;
   promise->reaction_count = 0;
   promise->reaction_capacity = 0;
+  promise->observed = 0;
+  promise->report_index = XT_PROMISE_UNLISTED;
   xt_promise_gc_register();
   return promise;
 }
@@ -90,6 +151,9 @@ static void xt_promise_gc_scan_roots(void) {
     xt_gc_mark_header((xt_header *)reaction->result);
     if (reaction->async) xt_gc_mark_header((xt_header *)reaction->async);
   }
+  /* Pending rejections are reported by identity, and the reason must survive
+   * long enough to be printed. */
+  for (uint32_t i = 0; i < xt_unhandled_count; i++) xt_gc_mark_header((xt_header *)xt_unhandled[i]);
 }
 
 static void xt_promise_gc_register(void) {
@@ -115,6 +179,8 @@ void xt_promise_gc_trace(xt_header *header) {
 
 void xt_promise_gc_release(xt_header *header) {
   xt_promise *promise = (xt_promise *)header;
+  /* A listed rejection is a GC root, so this is only a safety net. */
+  xt_unhandled_remove(promise);
   /* Pending reactions are owned solely by the promise; queued ones live in
    * `xt_microtasks` and are freed as they run. */
   for (uint32_t i = 0; i < promise->reaction_count; i++) free(promise->reactions[i]);
@@ -129,6 +195,9 @@ static void xt_promise_resolve_into(xt_promise *result, xt_value value) {
     xt_promise_settle(result, XT_PROMISE_FULFILLED, value);
     return;
   }
+  /* `result` follows `other`, so `other`'s rejection is consumed here even if
+   * `result` ends up unhandled itself (Node reports only the outermost). */
+  xt_promise_observe(other);
   if (other->state == XT_PROMISE_PENDING) {
     xt_reaction *reaction = (xt_reaction *)malloc(sizeof(xt_reaction));
     if (!reaction) abort();
@@ -152,6 +221,7 @@ static void xt_promise_settle(xt_promise *promise, int state, xt_value value) {
   if (promise->state != XT_PROMISE_PENDING) return;
   promise->state = state;
   promise->value = value;
+  if (state == XT_PROMISE_REJECTED) xt_unhandled_add(promise);
   for (uint32_t i = 0; i < promise->reaction_count; i++) xt_microtask_push(promise->reactions[i]);
   promise->reaction_count = 0;
 }
@@ -206,6 +276,8 @@ void xt_promise_queue_async_wake(void *asyncPointer, xt_value settled, int rejec
   xt_promise *promise = xt_promise_new();
   promise->state = rejected ? XT_PROMISE_REJECTED : XT_PROMISE_FULFILLED;
   promise->value = settled;
+  /* An internal handoff to a coroutine, never a rejection anyone can see. */
+  promise->observed = 1;
   xt_reaction *reaction = (xt_reaction *)malloc(sizeof(xt_reaction));
   if (!reaction) abort();
   reaction->promise = promise;
@@ -239,6 +311,8 @@ xt_value xt_promise_value_of(xt_value value) {
 void xt_promise_add_async_waiter(xt_value promiseValue, void *async) {
   xt_promise *promise = xt_as_promise(promiseValue);
   if (!promise || promise->state != XT_PROMISE_PENDING) return;
+  /* The coroutine sees the rejection, so this promise is handled. */
+  xt_promise_observe(promise);
   xt_reaction *reaction = (xt_reaction *)malloc(sizeof(xt_reaction));
   if (!reaction) abort();
   reaction->promise = promise;
@@ -346,6 +420,9 @@ xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv) {
       for (uint32_t i = 0; i < array->length; i++) {
         xt_value item = array->items[i];
         xt_promise *inner = xt_is_promise(item) ? xt_as_promise(item) : NULL;
+        /* The combinator reads every element's outcome, including a rejection
+         * it forwards to its own result. */
+        xt_promise_observe(inner);
         int rejected = inner && inner->state == XT_PROMISE_REJECTED;
         if (strcmp(fn, "allSettled") == 0) {
           xt_value record = xt_object_new();
@@ -400,6 +477,10 @@ xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt
     return XT_UNDEFINED;
   }
   if (strcmp(method, "then") == 0) {
+    /* `.then` with no rejection handler still consumes this promise's
+     * rejection: the derivative carries it on and is reported if nobody
+     * handles *that* one, exactly like Node. */
+    xt_promise_observe(promise);
     xt_promise *result = xt_promise_new();
     xt_reaction *reaction = (xt_reaction *)malloc(sizeof(xt_reaction));
     if (!reaction) abort();
@@ -447,4 +528,26 @@ xt_value xt_queue_microtask(int32_t argc, xt_value *argv) {
   int handled = 0;
   xt_promise_method(promise, "then", 1, &callback, &handled);
   return XT_UNDEFINED;
+}
+
+/* -- reporting ------------------------------------------------------------ */
+
+int xt_promise_report_unhandled(void) {
+  int reported = 0;
+  for (uint32_t i = 0; i < xt_unhandled_count; i++) {
+    xt_promise *promise = xt_unhandled[i];
+    if (!promise || promise->observed) continue;
+    reported++;
+    /* `Error` (and its subclasses) carry a captured stack; everything else is
+     * stringified the way Node prints a rejection reason. */
+    xt_value text = xt_error_stack(promise->value);
+    if (text == XT_UNDEFINED) text = xt_to_string(promise->value);
+    xt_string *bytes = xt_as_string(text);
+    if (bytes) {
+      fprintf(stderr, "Unhandled promise rejection\n%s\n", xt_string_bytes(bytes));
+    } else {
+      fprintf(stderr, "Unhandled promise rejection\n");
+    }
+  }
+  return reported;
 }

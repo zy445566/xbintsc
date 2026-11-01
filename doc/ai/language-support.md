@@ -72,6 +72,7 @@ Canonical detail (always current, much longer):
 | Feature | Status | Notes |
 | --- | --- | --- |
 | `async` / `await`, `Promise`, `Promise.all` | ✅ | real suspension: an `async` body runs on a stackful coroutine, and awaiting a **pending** promise pauses it until the promise settles. Every `await` yields once, so a settled value or non-promise is queued as a microtask like Node |
+| Unhandled rejections | ✅ | fatal, like Node's default: printed as `Unhandled promise rejection` on stderr once the event loop drains, then exit status 1. A `.catch`, a `try` around an `await`, or a handler attached later from a timer all count as handled |
 | `setTimeout` and callbacks | ✅ | timers run on the core event loop; `await new Promise(r => setTimeout(r, ms))` works |
 | `queueMicrotask` / `setImmediate` / `performance.now` | ✅ | microtasks share the promise FIFO queue; `setImmediate` is a zero-delay timer with numeric ids; `performance.now` is monotonic fractional milliseconds |
 | Sockets / servers (`http`, `net`, `dgram`) | ✅ | callbacks run on the event loop and can settle a promise you await (`net` / `http` examples included in the tests) |

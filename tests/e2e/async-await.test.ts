@@ -111,8 +111,10 @@ async function main(): Promise<void> {
     console.log("finally");
   }
 }
-main();`;
-    expect(runProgram(source)).toBe("caught boom\nfinally");
+// The second rejection only passes through \`finally\`: it escapes \`main\`, so
+// the caller has to observe it (an unhandled rejection is fatal, like Node).
+main().catch((error: any) => console.log("escaped", error));`;
+    expect(runProgram(source)).toBe("caught boom\nfinally\nescaped boom");
   });
 
   it("rejects the returned promise when the body throws after resuming", () => {

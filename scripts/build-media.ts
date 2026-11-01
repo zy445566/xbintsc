@@ -48,6 +48,7 @@ import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { platformSlug } from "../src/driver/paths.js";
+import { applyMacosDeploymentTarget } from "../src/driver/platform-support.js";
 import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js";
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 
@@ -65,6 +66,10 @@ const ffmpegInstall = join(ffmpegBuild, "dist");
 const objDir = join(root, "build", "media-obj");
 const outDir = join(runtimeDir, "lib", platformSlug());
 const output = join(outDir, isWindows ? "media.lib" : "media.a");
+
+/* FFmpeg and the player object must target the oldest supported macOS. Clang's
+ * Darwin driver and FFmpeg's configure both read the environment variable. */
+applyMacosDeploymentTarget();
 
 const FFMPEG_VERSION = process.env.FFMPEG_VERSION || "7.1";
 const FFMPEG_URL = `https://ffmpeg.org/releases/ffmpeg-${FFMPEG_VERSION}.tar.xz`;
@@ -192,6 +197,30 @@ function ffmpegStaticLibraries(): string[] | undefined {
 /** True when `dist` holds both the libraries and the installed headers. */
 function ffmpegInstalled(): boolean {
   return ffmpegStaticLibraries() !== undefined && existsSync(join(ffmpegInstall, "include", "libavutil", "avutil.h"));
+}
+
+/** Marker recording the deployment target `dist` was built for (macOS). */
+function deploymentStamp(): string {
+  return join(ffmpegInstall, ".xbintsc-deployment-target");
+}
+
+/**
+ * Drop a cached FFmpeg build tree that was configured for another macOS
+ * deployment target. `dist` is reused when it already holds the libraries, and
+ * FFmpeg's Makefile does not notice a changed `MACOSX_DEPLOYMENT_TARGET`; a
+ * tree from an earlier checkout would keep 15.5 objects in `media.a`. A tree
+ * without the marker predates this check and is rebuilt once.
+ */
+function ensureDeploymentTarget(): void {
+  if (process.platform !== "darwin") return;
+  const wanted = process.env.MACOSX_DEPLOYMENT_TARGET ?? "";
+  const stamp = deploymentStamp();
+  const recorded = existsSync(stamp) ? readFileSync(stamp, "utf8").trim() : "";
+  if (recorded === wanted) return;
+  if (existsSync(ffmpegBuild)) {
+    console.log(`xbintsc: FFmpeg was built for macOS '${recorded}'; rebuilding for '${wanted}'`);
+    rmSync(ffmpegBuild, { recursive: true, force: true });
+  }
 }
 
 /** Arguments shared by the POSIX and Windows FFmpeg configure runs. */
@@ -456,6 +485,7 @@ const windowsTools = isWindows
 
 /* -- 2. minimal static FFmpeg --------------------------------------------- */
 
+ensureDeploymentTarget();
 if (!ffmpegInstalled()) {
   if (windowsTools) {
     buildFfmpegWindows(windowsTools.shell, windowsTools.clangCl, windowsTools.msvcBin);
@@ -469,6 +499,11 @@ if (!ffmpegInstalled()) {
   if (!ffmpegInstalled()) fail("FFmpeg build did not produce the expected static libraries");
 } else {
   console.log(`xbintsc: reusing existing ${ffmpegInstall}/lib`);
+}
+/* Record the target for the next run, whether this one built or reused. */
+if (process.platform === "darwin") {
+  mkdirSync(ffmpegInstall, { recursive: true });
+  writeFileSync(deploymentStamp(), process.env.MACOSX_DEPLOYMENT_TARGET ?? "");
 }
 
 /* -- 3. player object ------------------------------------------------------ */

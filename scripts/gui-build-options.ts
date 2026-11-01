@@ -6,6 +6,8 @@
  * reviewable in one place.
  */
 
+import { MACOS_MINIMUM_VERSION } from "../src/driver/platform-support.js";
+
 /**
  * CMake generator and ABI settings used for every vendored library. Ninja is
  * selected on Windows because the Visual Studio generator imports the
@@ -21,6 +23,10 @@
  * effect when policy CMP0091 is NEW, but some vendored projects declare
  * `cmake_minimum_required` below 3.15, which defaults the policy to OLD and
  * silently ignores it — hence `CMAKE_POLICY_DEFAULT_CMP0091`.
+ *
+ * On macOS every vendored library targets the oldest supported deployment
+ * target (`MACOSX_DEPLOYMENT_TARGET`, default 11.0), so a newer SDK on the
+ * build machine cannot raise the floor of the archive.
  *
  * The tool paths are absolute and come from the same clang the driver resolves
  * (on Windows, the LLVM bundled with Visual Studio when no newer one is on
@@ -38,7 +44,11 @@ export function cmakeToolchainArgs(toolchain: {
     `-DCMAKE_C_COMPILER=${toolchain.clang}`,
     `-DCMAKE_CXX_COMPILER=${toolchain.clangxx}`,
   ];
-  if (!toolchain.isWindows) return compilers;
+  const macos =
+    process.platform === "darwin"
+      ? [`-DCMAKE_OSX_DEPLOYMENT_TARGET=${process.env.CMAKE_OSX_DEPLOYMENT_TARGET ?? MACOS_MINIMUM_VERSION}`]
+      : [];
+  if (!toolchain.isWindows) return [...compilers, ...macos];
   return [
     "-G", "Ninja",
     "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",

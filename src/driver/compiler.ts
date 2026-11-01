@@ -18,18 +18,20 @@ import { DiagnosticBag, DiagnosticCode } from "../diagnostics/diagnostic.js";
 import { generate } from "../codegen/llvm.js";
 import { createDefaultRegistry } from "../extensions/registry.js";
 import { BuildCache } from "./cache.js";
-import { findRuntimeDir } from "./paths.js";
+import { findRuntimeDir, platformSlug } from "./paths.js";
 import { resolveToolchain } from "./toolchain-provider.js";
 import { readIcon, IconError, type IconInfo } from "./icon.js";
 import { bundlePathFor, packageMacApp } from "./mac-bundle.js";
 import type { AppConfig } from "./config.js";
 import { compileIr, link, mergeProfileData, realRunner, ToolchainError } from "./toolchain.js";
 import { parseEntry } from "./frontend.js";
-import { ensureRuntimeObjects } from "./runtime-objects.js";
+import { ensureRuntimeObjects, type RuntimeObjects } from "./runtime-objects.js";
 import { ensureAppArtifacts } from "./app-artifacts.js";
 import { buildCacheKey } from "./build-key.js";
 import { collectUsage } from "./usage.js";
 import { resolveLinkFeatures, type ResolvedLinkFeature } from "./link-features.js";
+import { isPrebuiltArchivePath, firstFailureLine, looksLikePrebuiltLinkFailure } from "./prebuilt.js";
+import { runtimeLibDirs as defaultRuntimeLibDirs } from "./runtime-lib.js";
 import type { BuildOptions, BuildResult, EmitKind, PhaseTiming } from "./options.js";
 
 export { COMPILER_VERSION } from "./version.js";
@@ -66,6 +68,36 @@ function executableName(entry: string, outDir: string, explicit: string | undefi
   const base = basename(entry, extname(entry));
   const suffix = process.platform === "win32" ? ".exe" : "";
   return resolve(outDir, base + suffix);
+}
+
+/**
+ * Explain a retry that still fails while prebuilt `gui`/`media` archives are in
+ * the link. Unlike `core`/`ext_node`, those bundle SDL3/FFmpeg/glslang and
+ * their sources are not part of the npm package, so the source fallback cannot
+ * replace them; only a release/toolchain match can.
+ */
+function prebuiltFallbackError(
+  error: unknown,
+  runtimeObjects: RuntimeObjects,
+  dirs: readonly string[] | undefined,
+): unknown {
+  if (!(error instanceof ToolchainError) || !looksLikePrebuiltLinkFailure(error.stderr)) return error;
+  const runtimeDirs = dirs ?? defaultRuntimeLibDirs();
+  const fixed = [...runtimeObjects.featureObjects, ...runtimeObjects.nativeObjects].filter((object) =>
+    isPrebuiltArchivePath(object, runtimeDirs),
+  );
+  if (fixed.length === 0) return error;
+  const archives = [...new Set(fixed.map((object) => basename(object)))].join(", ");
+  return new ToolchainError(
+    error.command,
+    error.status,
+    `${error.stderr}\n` +
+      `The remaining prebuilt archives (${archives}) come from the @xbintsc/${platformSlug()} ` +
+      "package. Unlike the C runtime, they bundle SDL3/FFmpeg, whose sources are not shipped " +
+      "in the npm package, so they cannot be rebuilt here.\n" +
+      "Build with the Xcode Command Line Tools / Visual Studio C++ toolset the release was built " +
+      "with, or use a release archive built for this machine.",
+  );
 }
 
 export function build(entryPath: string, options: BuildOptions = {}): BuildResult {
@@ -256,21 +288,31 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, irPath, cached: false, diagnostics: [], ir, timings };
   }
 
-  const runtimeStarted = Date.now();
-  const { runtimeObjects, extensionObjects, featureObjects, nativeObjects } = ensureRuntimeObjects({
-    runner,
-    clang,
-    runtimeDir,
-    cacheDir,
-    registry,
-    preferPrebuilt: resolvePreferPrebuilt(options.preferPrebuilt) && !lto && pgo === undefined,
-    env: toolchain.env,
-    lto,
-    pgo,
-    pgoDir,
-    features: linkFeatures,
-  });
-  timings.push({ phase: "runtime", ms: Date.now() - runtimeStarted });
+  /* The runtime is assembled before the app artifacts so a failed prebuilt
+   * link can be retried with the same artifact inputs. */
+  const runtimeLibDirs = options.runtimeLibDirs;
+  const preferPrebuilt = resolvePreferPrebuilt(options.preferPrebuilt) && !lto && pgo === undefined;
+  const assembleRuntime = (usePrebuilt: boolean): RuntimeObjects => {
+    const started = Date.now();
+    const assembled = ensureRuntimeObjects({
+      runner,
+      clang,
+      runtimeDir,
+      cacheDir,
+      registry,
+      preferPrebuilt: usePrebuilt,
+      env: toolchain.env,
+      lto,
+      pgo,
+      pgoDir,
+      features: linkFeatures,
+      ...(runtimeLibDirs !== undefined ? { runtimeLibDirs } : {}),
+    });
+    timings.push({ phase: "runtime", ms: Date.now() - started });
+    return assembled;
+  };
+
+  let assembled = assembleRuntime(preferPrebuilt);
 
   const artifacts = ensureAppArtifacts({
     runner,
@@ -287,42 +329,103 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, irPath, cached: false, diagnostics: diagnostics.diagnostics, ir };
   }
 
-  const linkStarted = Date.now();
-  link(runner, {
-    clang,
-    objectPaths: [
-      objectPath,
-      /* Feature archives come after their bridges (which reference the
-       * implementation) and before the extensions' own archives (`gui.a`
-       * provides symbols the bridges call back into). `Set` keeps that order
-       * and drops an archive two features or an extension share. */
-      ...new Set([
-        ...runtimeObjects,
-        ...extensionObjects,
-        ...featureObjects,
-        ...nativeObjects,
-        ...(artifacts.entryObject !== undefined ? [artifacts.entryObject] : []),
-        ...artifacts.iconObjects,
-      ]),
-    ],
-    outputPath,
-    linkerFlags: [
-      ...toolchain.linkerArgs,
-      ...(process.platform === "win32" ? ["-lws2_32"] : ["-lm", "-pthread"]),
-      ...registry.linkerFlags(),
-      ...linkFeatures.flatMap((feature) => feature.linkerFlags),
-      /* A GUI program is a Windows-subsystem executable: no console window is
-       * created when it is launched. Console output (stdout/stderr) is lost in
-       * that subsystem, so a program that wants to report things opts back in
-       * with `app.console: true`. */
-      ...artifacts.linkerFlags,
-    ],
-    optimize,
-    env: toolchain.env,
-    lto,
-    ...(pgo ? { pgo, pgoDir } : {}),
-  });
-  timings.push({ phase: "link", ms: Date.now() - linkStarted });
+  const linkAssembled = (runtimeObjects: RuntimeObjects): string => {
+    const started = Date.now();
+    const result = link(runner, {
+      clang,
+      objectPaths: [
+        objectPath,
+        /* Feature archives come after their bridges (which reference the
+         * implementation) and before the extensions' own archives (`gui.a`
+         * provides symbols the bridges call back into). `Set` keeps that order
+         * and drops an archive two features or an extension share. */
+        ...new Set([
+          ...runtimeObjects.runtimeObjects,
+          ...runtimeObjects.extensionObjects,
+          ...runtimeObjects.featureObjects,
+          ...runtimeObjects.nativeObjects,
+          ...(artifacts.entryObject !== undefined ? [artifacts.entryObject] : []),
+          ...artifacts.iconObjects,
+        ]),
+      ],
+      outputPath,
+      linkerFlags: [
+        ...toolchain.linkerArgs,
+        ...(process.platform === "win32" ? ["-lws2_32"] : ["-lm", "-pthread"]),
+        ...registry.linkerFlags(),
+        ...linkFeatures.flatMap((feature) => feature.linkerFlags),
+        /* A GUI program is a Windows-subsystem executable: no console window is
+         * created when it is launched. Console output (stdout/stderr) is lost in
+         * that subsystem, so a program that wants to report things opts back in
+         * with `app.console: true`. */
+        ...artifacts.linkerFlags,
+      ],
+      optimize,
+      env: toolchain.env,
+      lto,
+      ...(pgo ? { pgo, pgoDir } : {}),
+    });
+    timings.push({ phase: "link", ms: Date.now() - started });
+    return result.stderr;
+  };
+
+  /**
+   * Retry once with the C runtime compiled from the sources shipped in the
+   * package. The failed attempt is not cached: a later toolchain upgrade can
+   * use the archive again.
+   */
+  const retryFromSource = (stderr: string): void => {
+    const reason = firstFailureLine(stderr);
+    process.stderr.write(
+      "xbintsc: the prebuilt runtime archive does not match this toolchain" +
+        (reason ? ` (${reason})` : "") +
+        "; compiling the C runtime from source\n",
+    );
+    assembled = assembleRuntime(false);
+    try {
+      linkAssembled(assembled);
+    } catch (retryError) {
+      throw prebuiltFallbackError(retryError, assembled, runtimeLibDirs);
+    }
+  };
+  const prebuiltInUse = (): boolean =>
+    preferPrebuilt && assembled.prebuiltArchives.length > 0;
+  /** Whether the linker talked about an archive the source fallback can replace. */
+  const mentionsRebuildableArchive = (stderr: string): boolean =>
+    assembled.prebuiltArchives.some((archive) => stderr.includes(basename(archive)));
+
+  /* One attempt, captured instead of thrown so the retry below is not itself
+   * caught by this decision block. */
+  let firstAttempt: { readonly stderr: string } | { readonly error: unknown };
+  try {
+    firstAttempt = { stderr: linkAssembled(assembled) };
+  } catch (error) {
+    firstAttempt = { error };
+  }
+
+  if ("error" in firstAttempt) {
+    const error = firstAttempt.error;
+    /* The release runner's Xcode/SDK or Visual Studio toolset can be newer
+     * than this machine's, and then the prebuilt archive cannot be linked
+     * (`LNK2038`, `LNK2019`, `Undefined symbols`, ...). The C runtime sources
+     * ship with the package, so retry once with them instead of failing on a
+     * linker message the user cannot act on. */
+    if (!prebuiltInUse() || !(error instanceof ToolchainError) || !looksLikePrebuiltLinkFailure(error.stderr)) {
+      throw error;
+    }
+    retryFromSource(error.stderr);
+  } else if (
+    prebuiltInUse() &&
+    mentionsRebuildableArchive(firstAttempt.stderr) &&
+    looksLikePrebuiltLinkFailure(firstAttempt.stderr)
+  ) {
+    /* A successful link can still warn that the archive was built for a newer
+     * macOS than the one being targeted: the binary would then claim the local
+     * deployment target while calling newer SDK symbols at run time, so rebuild
+     * it from source just like an outright failure. Only `core`/`ext_node` can
+     * be replaced this way; a warning about `gui.a`/`media.a` is left alone. */
+    retryFromSource(firstAttempt.stderr);
+  }
 
   const bundlePath =
     bundle !== undefined

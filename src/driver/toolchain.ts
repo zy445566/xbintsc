@@ -361,7 +361,13 @@ function deadStripFlag(): string[] {
   return ["-Wl,--gc-sections"];
 }
 
-export function link(runner: Runner, options: LinkOptions): void {
+/**
+ * Link the program and return the command result. A successful link can still
+ * carry a warning (for example ld64's "object file was built for newer macOS
+ * version"); the driver inspects `stderr` to decide whether a prebuilt archive
+ * should be rebuilt from source.
+ */
+export function link(runner: Runner, options: LinkOptions): CommandResult {
   const profileFlags = optimizationFlags(options.lto, options.pgo, options.pgoDir);
   const args = [
     `-O${options.optimize}`,
@@ -378,6 +384,7 @@ export function link(runner: Runner, options: LinkOptions): void {
   ];
   const result = runner.run(options.clang, args, { env: options.env });
   if (result.status !== 0) throw new ToolchainError(`${options.clang} link`, result.status, result.stderr);
+  return result;
 }
 
 /**

@@ -51,6 +51,12 @@ export interface RuntimeObjects {
   readonly featureObjects: readonly string[];
   /** Pre-built C++/Rust objects and archives contributed by native extensions. */
   readonly nativeObjects: readonly string[];
+  /**
+   * The prebuilt `core`/`ext_<name>` archives this link used. Empty when the
+   * runtime was compiled from source. The driver retries a failed link without
+   * them, so it has to know whether the first attempt used any.
+   */
+  readonly prebuiltArchives: readonly string[];
 }
 
 export interface RuntimeObjectsOptions {
@@ -66,6 +72,9 @@ export interface RuntimeObjectsOptions {
   readonly pgoDir: string;
   /** Optional link features selected for this program. */
   readonly features?: readonly ResolvedLinkFeature[];
+  /** Override the folders searched for prebuilt archives (defaults to the
+   * runtime's `lib/<os>-<arch>` plus the installed platform package). */
+  readonly runtimeLibDirs?: readonly string[];
 }
 
 /**
@@ -113,19 +122,25 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
     return objectPath;
   };
 
-  const coreArchive = preferPrebuilt ? findRuntimeLibrary("core") : undefined;
+  const coreArchive = preferPrebuilt ? findRuntimeLibrary("core", options.runtimeLibDirs) : undefined;
   const runtimeObjects = coreArchive
     ? [coreArchive]
     : RUNTIME_SOURCES.map((source) => compileOne(join(runtimeDir, source), basename(source, ".c")));
+
+  /** Prebuilt archives this link uses; the driver retries without them. */
+  const prebuiltArchives: string[] = coreArchive ? [coreArchive] : [];
 
   const extensionObjects: string[] = [];
   const seen = new Set<string>();
   for (const extension of registry.all()) {
     const sources = extension.runtimeSources ? extension.runtimeSources() : [];
     if (sources.length === 0) continue;
-    const archive = preferPrebuilt ? findRuntimeLibrary(`ext_${extension.name}`) : undefined;
+    const archive = preferPrebuilt
+      ? findRuntimeLibrary(`ext_${extension.name}`, options.runtimeLibDirs)
+      : undefined;
     if (archive) {
       extensionObjects.push(archive);
+      prebuiltArchives.push(archive);
       continue;
     }
     for (const sourcePath of sources) {
@@ -156,5 +171,6 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
     extensionObjects,
     featureObjects: [...new Set(featureObjects)],
     nativeObjects: [...new Set(registry.nativeObjects())],
+    prebuiltArchives,
   };
 }

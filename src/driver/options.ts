@@ -28,6 +28,12 @@ export interface BuildOptions {
   readonly clang?: string;
   /** Prefer a prebuilt `runtime/lib/<os>-<arch>/*.a` archive when present (default true). */
   readonly preferPrebuilt?: boolean;
+  /**
+   * Folders searched for the prebuilt `core`/`ext_<name>` archives, replacing
+   * the default (`runtime/lib/<os>-<arch>` plus the installed platform
+   * package). Mostly useful for tests and embedding tools.
+   */
+  readonly runtimeLibDirs?: readonly string[];
   readonly write?: boolean;
   /** Application icon embedded into the binary (shorthand for `app.icon`). */
   readonly icon?: string;

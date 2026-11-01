@@ -20,6 +20,7 @@ import { formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js"
 import { SourceFile } from "../diagnostics/source.js";
 import { build, compileEntry, COMPILER_VERSION, type EmitKind, type PhaseTiming } from "../driver/compiler.js";
 import { findRuntimeDir, platformSlug } from "../driver/paths.js";
+import { supportFloor } from "../driver/platform-support.js";
 import { findRuntimeLibrary, runtimeLibDir } from "../driver/runtime-lib.js";
 import { resolveToolchain, type ResolvedToolchain } from "../driver/toolchain-provider.js";
 import { MINIMUM_CLANG_MAJOR, probeClang, realRunner, ToolchainError } from "../driver/toolchain.js";
@@ -276,6 +277,8 @@ function doctor(io: CliIo): number {
   } catch {
     io.stdout("runtime lib: unavailable\n");
   }
+
+  io.stdout(`support    : ${supportFloor()} (release artifacts target this floor)\n`);
 
   try {
     if (!toolchain) throw new Error("no toolchain");

@@ -454,6 +454,8 @@ See [Requirements](./doc/requirements.md) for the full, per-platform list.
 
 - Node.js 22+ — to run the compiler from npm or from source; released binaries
   are standalone
+- macOS 11.0+ / Windows 10+ / Linux glibc 2.39+ — the floors the released
+  binaries and prebuilt archives are built for
 - macOS: the Xcode Command Line Tools (`xcode-select --install`)
 - Windows: the Visual Studio C++ build tools (MSVC, MSBuild and the bundled
   LLVM; `scripts/setup-vs-toolchain.ps1` imports that exact toolchain)

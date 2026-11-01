@@ -7,8 +7,9 @@ xbintsc doctor
 ```
 
 It prints the platform, the toolchain it will use (and where it came from), the
-compiler version, the runtime directory, the runtime library directory and the
-icon resource compiler. Most "it doesn't work" reports are answered here.
+compiler version, the runtime directory, the runtime library directory, the
+supported platform floor and the icon resource compiler. Most "it doesn't work"
+reports are answered here.
 
 ## Before anything else: is clang new enough?
 
@@ -113,6 +114,24 @@ stderr — read the stderr, not just the first line. Frequent causes:
   `xbintsc_LINKER_ARGS=-fuse-ld=lld`;
 - `No C compiler found. Set xbintsc_CLANG to a clang binary.` — no clang on
   `PATH` at all.
+
+### `Undefined symbols` / `LNK2038` / `was built for newer macOS version`
+
+The prebuilt archive from `@xbintsc/<os>-<arch>` was produced by a newer Xcode
+Command Line Tools/SDK or Visual Studio C++ toolset than this machine's. The
+linker cannot mix it with local objects. The driver retries the link once with
+`core`/`ext_node` compiled from the sources shipped in the package and prints:
+
+```text
+xbintsc: the prebuilt runtime archive does not link with this toolchain (…); compiling the C runtime from source
+```
+
+The first retry is slow because it compiles the C runtime; later builds reuse
+the cached objects. If the failure persists, it is the `gui.a`/`media.a`
+archive: those bundle SDL3/FFmpeg and their sources are not in the npm package,
+so they cannot be rebuilt from it. Use a release/archive built for this
+toolchain, or a source checkout (`npm run gui`, `npm run media`). To skip the
+retry entirely set `xbintsc_PREFER_PREBUILT=0`.
 
 ### `GUI native library not found at …`
 

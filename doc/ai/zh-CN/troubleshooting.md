@@ -6,8 +6,8 @@
 xbintsc doctor
 ```
 
-它会打印平台、将要使用的工具链（以及来源）、编译器版本、运行时目录、运行时库目录
-与图标资源编译器。绝大多数"跑不起来"的答案都在这里。
+它会打印平台、将要使用的工具链（以及来源）、编译器版本、运行时目录、运行时库目录、
+支持的平台下限与图标资源编译器。绝大多数"跑不起来"的答案都在这里。
 
 ## 首先确认：clang 够新吗？
 
@@ -104,6 +104,21 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
   `xbintsc_LINKER_ARGS=-fuse-ld=lld`；
 - `No C compiler found. Set xbintsc_CLANG to a clang binary.` —— `PATH` 里完全没有
   clang。
+
+### `Undefined symbols` / `LNK2038` / `was built for newer macOS version`
+
+`@xbintsc/<os>-<arch>` 里的预编译归档由比本机更新的 Xcode Command Line
+Tools/SDK 或 Visual Studio C++ 生成工具构建，链接器无法把它与本机目标文件混用。
+驱动会自动改用包内自带的源码重新编译 `core`/`ext_node` 并重试一次链接，同时打印：
+
+```text
+xbintsc: the prebuilt runtime archive does not link with this toolchain (…); compiling the C runtime from source
+```
+
+首次重试会编译 C 运行时，所以较慢；之后的构建复用缓存的目标文件。如果仍然失败，
+冲突的就是 `gui.a`/`media.a`：它们内含 SDL3/FFmpeg，npm 包里没有这些源码，无法从
+包里重编。请改用与本机工具链匹配的发布包，或在源码检出中构建（`npm run gui`、
+`npm run media`）。设置 `xbintsc_PREFER_PREBUILT=0` 可以完全跳过这次重试。
 
 ### `GUI native library not found at …`
 

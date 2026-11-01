@@ -6,7 +6,7 @@ import { build, compileEntry, compileString, resolvePreferPrebuilt } from "../..
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
 import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
-import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
+import { ToolchainError, type CommandResult, type Runner } from "../../src/driver/toolchain.js";
 
 const directories: string[] = [];
 
@@ -245,5 +245,120 @@ describe("build", () => {
     expect(linkCall.args).toContain("-o");
     expect(linkCall.args).toContain(result.outputPath);
     if (process.platform !== "win32") expect(linkCall.args).toContain("-lm");
+  });
+
+  it("recompiles the runtime from source when a prebuilt archive cannot link", () => {
+    const directory = temporaryDirectory();
+    const entry = join(directory, "main.ts");
+    writeFileSync(entry, "console.log(1);");
+    const libDir = join(directory, "runtime-lib");
+    mkdirSync(libDir, { recursive: true });
+    writeFileSync(join(libDir, "core.a"), "archive built by a newer Xcode");
+
+    const calls: { command: string; args: string[] }[] = [];
+    let links = 0;
+    const runner: Runner = {
+      run(command, args): CommandResult {
+        calls.push({ command, args: [...args] });
+        if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
+        links += 1;
+        // The prebuilt archive was produced by a newer SDK: reject that link,
+        // then accept the retry built from the shipped C sources.
+        if (links === 1) {
+          return {
+            status: 1,
+            stdout: "",
+            stderr: "ld: warning: core.a(xt_alloc.o) was built for newer macOS version (15.0)\n" +
+              "ld: Undefined symbols:\n  _xt_newer_only",
+          };
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      },
+    };
+
+    const result = build(entry, {
+      emit: "exe",
+      outDir: join(directory, "out"),
+      cacheDir: join(directory, ".cache"),
+      runner,
+      clang: "clang",
+      preferPrebuilt: true,
+      runtimeLibDirs: [libDir],
+    });
+
+    expect(result.diagnostics).toHaveLength(0);
+    const linkCalls = calls.filter((call) => !call.args.includes("-c"));
+    expect(linkCalls).toHaveLength(2);
+    expect(linkCalls[0]!.args).toContain(join(libDir, "core.a"));
+    expect(linkCalls[1]!.args).not.toContain(join(libDir, "core.a"));
+    // The retry actually compiled the runtime instead of dropping it.
+    expect(calls.some((call) => call.args.some((arg) => arg.endsWith("xt_alloc.c")))).toBe(true);
+  });
+
+  it("rebuilds from source when a successful link warns about a newer SDK", () => {
+    const directory = temporaryDirectory();
+    const entry = join(directory, "main.ts");
+    writeFileSync(entry, "console.log(1);");
+    const libDir = join(directory, "runtime-lib");
+    mkdirSync(libDir, { recursive: true });
+    writeFileSync(join(libDir, "core.a"), "archive built by a newer Xcode");
+    let links = 0;
+    const runner: Runner = {
+      run(_command, args): CommandResult {
+        if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
+        links += 1;
+        return links === 1
+          ? {
+              status: 0,
+              stdout: "",
+              stderr:
+                "ld: warning: object file (core.a(xt_alloc.o)) was built for newer macOS version " +
+                "(15.0) than being linked (13.0)",
+            }
+          : { status: 0, stdout: "", stderr: "" };
+      },
+    };
+
+    build(entry, {
+      emit: "exe",
+      outDir: join(directory, "out"),
+      cacheDir: join(directory, ".cache"),
+      runner,
+      clang: "clang",
+      preferPrebuilt: true,
+      runtimeLibDirs: [libDir],
+    });
+
+    expect(links).toBe(2);
+  });
+
+  it("does not retry a link failure that is not a toolchain mismatch", () => {
+    const directory = temporaryDirectory();
+    const entry = join(directory, "main.ts");
+    writeFileSync(entry, "console.log(1);");
+    const libDir = join(directory, "runtime-lib");
+    mkdirSync(libDir, { recursive: true });
+    writeFileSync(join(libDir, "core.a"), "archive");
+    let links = 0;
+    const runner: Runner = {
+      run(_command, args): CommandResult {
+        if (args.includes("-c")) return { status: 0, stdout: "", stderr: "" };
+        links += 1;
+        return { status: 1, stdout: "", stderr: "clang: error: no such file or directory: 'nope.o'" };
+      },
+    };
+
+    expect(() =>
+      build(entry, {
+        emit: "exe",
+        outDir: join(directory, "out"),
+        cacheDir: join(directory, ".cache"),
+        runner,
+        clang: "clang",
+        preferPrebuilt: true,
+        runtimeLibDirs: [libDir],
+      }),
+    ).toThrow(ToolchainError);
+    expect(links).toBe(1);
   });
 });

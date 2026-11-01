@@ -26,6 +26,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RUNTIME_SOURCES } from "../src/driver/compiler.js";
 import { platformSlug } from "../src/driver/paths.js";
+import { applyMacosDeploymentTarget } from "../src/driver/platform-support.js";
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 import { RUNTIME_CFLAGS } from "../src/driver/toolchain.js";
 import { nodeExtension } from "../src/extensions/node/index.js";
@@ -36,6 +37,10 @@ const outDir = join(runtimeDir, "lib", platformSlug());
 const objDir = join(root, "build", "runtime-obj");
 const isWindows = process.platform === "win32";
 const archiveSuffix = isWindows ? ".lib" : ".a";
+
+/* Every archive targets the oldest supported macOS, not the build machine's
+ * version: a newer Xcode must not raise the deployment target of the objects. */
+applyMacosDeploymentTarget();
 
 // Use the same toolchain the driver will.
 const toolchain = resolveToolchain();

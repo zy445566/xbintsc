@@ -216,9 +216,29 @@ necessarily next to the config file); set `xbintsc_CACHE_DIR` to put it
 elsewhere. Expect that fallback build to take noticeably longer than the ones
 after it.
 
+The prebuilt archives are produced by the release runner's oldest available
+toolchain and target the floors in
+[requirements](./requirements.md#supported-platforms) (macOS 11.0, Windows 10,
+glibc 2.39). When that toolchain is newer than the one on this machine — a newer
+Xcode Command Line Tools/SDK or Visual Studio C++ toolset — the linker can
+reject the archive with unresolved symbols (`LNK2038`, `LNK2019`, `Undefined
+symbols`, `undefined reference`) or a `was built for newer macOS version`
+warning. The driver then retries the link **automatically** with
+`core`/`ext_node` compiled from the sources shipped in the package, so a
+mismatched archive costs time, not a failed build:
+
+```text
+xbintsc: the prebuilt runtime archive does not match this toolchain (…); compiling the C runtime from source
+```
+
+The retry is not remembered: after a toolchain upgrade a later build links the
+archive again. The bundled `gui.a`/`media.a` are the exception — they contain
+SDL3/FFmpeg, whose sources are not part of the npm package, so they cannot be
+rebuilt this way. If they are the incompatible archive, use a release built for
+this toolchain or a source checkout.
+
 To ignore the platform archive on purpose and compile the runtime from the
-sources shipped in the package — for example after patching `runtime/`, or when
-the prebuilt archive does not match the environment — set:
+sources shipped in the package — for example after patching `runtime/` — set:
 
 ```bash
 xbintsc_PREFER_PREBUILT=0 npx xbintsc build src/main.ts --out build
@@ -439,6 +459,7 @@ the same file under `node_modules/xbintsc/doc/ai/`.
 | The first build takes a long time | The optional `@xbintsc/<os>-<arch>` package was skipped (or this host has no prebuilt package), so the runtime C sources are compiled and cached. Check `npm ls @xbintsc/<os>-<arch>` and reinstall without `--omit=optional`; `--time` confirms. |
 | Permission errors writing `.xbintsc/` | Set `xbintsc_CACHE_DIR` to a writable directory, or run from a writable working directory. |
 | `module 'fs' is provided by the 'node' extension` | Add `--ext node`, or `"extensions": ["node"]` in the config. |
+| Link fails with `LNK2038`, `LNK2019`, `Undefined symbols` or `was built for newer macOS version` | The prebuilt archive was built by a newer Xcode/Visual Studio toolchain. The driver retries automatically with the runtime's C sources; if the error persists it is `gui.a`/`media.a`, which cannot be rebuilt from the npm package — use a matching release or a source checkout. |
 | `GUI native library not found` / `media native library not found` | The optional platform package that ships `gui.a`/`gui.lib` or `media.a`/`media.lib` was skipped, or this host has no prebuilt GUI/media archive (Windows arm64). Reinstall without `--omit=optional`, use a Linux/macOS/Windows x64 release archive, or build the archive from a source checkout. An auto-detected `media` feature with a missing archive only warns; `--feature media` makes it an error. |
 | `require("xbintsc")` fails | The package is ESM-only; use `import` (or dynamic `import()`). |
 | Windows link errors about missing MSVC libraries | Run from a Native Tools prompt, install the VS C++ build tools, and check `npx xbintsc doctor`. |

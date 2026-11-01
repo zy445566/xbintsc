@@ -1,0 +1,17 @@
+name: Oldest Xcode baseline
+
+# The prebuilt runtime archives and the self-hosted compiler must be built with
+# the oldest Xcode the runner image provides — but never Apple clang 15, which
+# cannot compile xbintsc's opaque-pointer IR (the compiler requires clang 16+).
+#
+# This action probes the installed `/Applications/Xcode*.app` bundles and
+# exports `DEVELOPER_DIR` and `xbintsc_CLANG` for the rest of the job, so every
+# clang invocation (IR, C runtime, CMake, FFmpeg) uses one toolchain.
+description: Select the oldest installed Xcode whose clang satisfies the LLVM 16 floor
+
+runs:
+  using: composite
+  steps:
+    - name: Select the oldest supported Xcode
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/select.mjs"

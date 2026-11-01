@@ -382,6 +382,7 @@ V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改�
 [使用前置要求](./doc/zh-CN/requirements.md)。
 
 - Node.js 22+ —— 从 npm 或源码运行编译器时需要；发布版二进制是独立的
+- macOS 11.0+ / Windows 10+ / Linux glibc 2.39+ —— 发布二进制和预编译归档面向的最低版本
 - macOS：Xcode Command Line Tools（`xcode-select --install`）
 - Windows：LLVM + Visual Studio C++ 生成工具（MSVC ABI）
 - Linux：发行版提供的 `clang` 与 `lld`

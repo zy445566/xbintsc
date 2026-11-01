@@ -123,6 +123,11 @@ JSON schema：[xbintsc.config.schema.json](../../xbintsc.config.schema.json)。�
 | `xbintsc_PREFER_PREBUILT` | `0` 强制从源码编译运行时 |
 | `xbintsc_BINARY` | `bin/` 启动器应运行的原生编译器二进制 |
 
+链接预编译的 `core`/`ext_node` 归档因工具链不匹配（`LNK2038`、`LNK2019`、
+`Undefined symbols`、`undefined reference`）失败时，`build` 会自动改用这些归档对应的
+C 源码重试；随包的 `gui`/`media` 归档无法这样重编。见
+[npm-package](../../zh-CN/npm-package.md#首次构建与缓存)。
+
 ## 增量编译
 
 每次构建的键由入口源码哈希、编译器版本、构建选项、平台和已启用扩展集合共同决定

@@ -277,6 +277,15 @@ describe("cli", () => {
     expect(text).toContain("support");
   });
 
+  /* The macOS SDK is what supplies every C standard header; when it cannot be
+   * resolved the first runtime include fails, so `doctor` must say which one
+   * the driver will hand to clang. */
+  it.runIf(process.platform === "darwin")("reports the macOS SDK", () => {
+    const { io, out } = capture();
+    run(["doctor"], io);
+    expect(out.join("")).toContain("sdk");
+  });
+
   it("builds an IR artifact and then serves it from the cache", () => {
     const entry = writeProgram();
     withWorkingDirectory((directory) => {

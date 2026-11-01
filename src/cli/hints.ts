@@ -36,10 +36,27 @@ const REQUIREMENT_HINT: DocumentationPointer = {
   path: DOC_REQUIREMENTS,
 };
 
-/** Hint for a clang failure: a missing or too-old clang has a specific answer. */
-export function toolchainPointer(message: string): DocumentationPointer {
+/**
+ * Hint for a clang failure: a missing or too-old clang has a specific answer.
+ *
+ * `platform` is a parameter so the macOS branch can be tested from any host.
+ */
+export function toolchainPointer(
+  message: string,
+  platform: NodeJS.Platform = process.platform,
+): DocumentationPointer {
   const usesTypedPointers = /defined with type '\[.*i8\]\*' but expected 'i8\*'/.test(message);
   if (usesTypedPointers || /No C compiler found/i.test(message)) return REQUIREMENT_HINT;
+  /* On macOS a C standard header lives in the SDK, so "'<header>' file not
+   * found" means the driver never got a sysroot — the header itself is fine.
+   * The driver exports SDKROOT from `xcrun`, which makes the selected Xcode
+   * the thing to check. */
+  if (platform === "darwin" && /fatal error: '.+' file not found/.test(message)) {
+    return {
+      text: "clang cannot see the macOS SDK headers; `xcrun --show-sdk-path` must resolve for the selected Xcode, or set SDKROOT yourself",
+      path: DOC_TROUBLESHOOTING,
+    };
+  }
   return {
     text: "read the clang output above, then the toolchain section of the troubleshooting guide",
     path: DOC_TROUBLESHOOTING,

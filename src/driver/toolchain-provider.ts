@@ -22,11 +22,16 @@
  * skipped (or rejected, when named explicitly) instead of producing objects
  * the linker cannot mix.
  *
+ * On macOS the resolved driver also gets `SDKROOT` (see `macos-sdk.ts`): an
+ * Apple clang invoked by absolute path does not infer the SDK by itself, and
+ * without one not even `<stdio.h>` is found.
+ *
  * Extra linker arguments (for example `-fuse-ld=lld`) can be supplied through
  * `xbintsc_LINKER_ARGS`.
  */
 
 import { locateClang, realRunner, type ClangVersion, type Runner } from "./toolchain.js";
+import { toolchainEnvironment } from "./macos-sdk.js";
 
 export type ToolchainSource = "env" | "system";
 
@@ -58,6 +63,6 @@ export function resolveToolchain(runner: Runner = realRunner): ResolvedToolchain
     source: location.source,
     ...(location.version ? { version: location.version } : {}),
     linkerArgs: linkerArgs([]),
-    env: {},
+    env: toolchainEnvironment(runner),
   };
 }

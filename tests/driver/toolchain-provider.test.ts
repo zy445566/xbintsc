@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveToolchain } from "../../src/driver/toolchain-provider.js";
 import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
@@ -82,6 +85,26 @@ describe("resolveToolchain", () => {
     expect(toolchain.source).toBe("system");
     expect(toolchain.env).toEqual({});
     expect(toolchain.linkerArgs).toEqual([]);
+  });
+
+  /* An Apple clang invoked by absolute path has no sysroot of its own, so the
+   * resolved toolchain must hand it the SDK through the environment. */
+  it.runIf(process.platform === "darwin")("exports the macOS SDK to the driver", () => {
+    delete process.env.xbintsc_CLANG;
+    delete process.env.xbintsc_TOOLCHAIN;
+    delete process.env.SDKROOT;
+    const sdk = mkdtempSync(join(tmpdir(), "xbintsc-sdk-"));
+    try {
+      const runner: Runner = {
+        run(command: string): CommandResult {
+          if (command === "xcrun") return { status: 0, stdout: `${sdk}\n`, stderr: "" };
+          return { status: 0, stdout: CLANG_19, stderr: "" };
+        },
+      };
+      expect(resolveToolchain(runner).env).toEqual({ SDKROOT: sdk });
+    } finally {
+      rmSync(sdk, { recursive: true, force: true });
+    }
   });
 
   it("rejects a system compiler older than the minimum", () => {

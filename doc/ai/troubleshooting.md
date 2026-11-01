@@ -8,8 +8,8 @@ xbintsc doctor
 
 It prints the platform, the toolchain it will use (and where it came from), the
 compiler version, the runtime directory, the runtime library directory, the
-supported platform floor and the icon resource compiler. Most "it doesn't work"
-reports are answered here.
+supported platform floor and the icon resource compiler — plus, on macOS, the
+SDK it will hand to clang. Most "it doesn't work" reports are answered here.
 
 ## Before anything else: is clang new enough?
 
@@ -110,6 +110,16 @@ stderr — read the stderr, not just the first line. Frequent causes:
   ```
   That imports `vcvarsall` and pins `xbintsc_CLANG` to the LLVM bundled with
   Visual Studio. Invoking `vcvarsall.bat x64` directly also works.
+- on macOS, clang reports a standard header as missing — `fatal error:
+  'stdio.h' file not found`, `'setjmp.h' file not found`, … There is no
+  `/usr/include` on macOS; those headers live in the SDK, and clang only
+  searches it when it has a sysroot (`/usr/bin/clang`'s shim, `-isysroot`, or
+  `SDKROOT`). xbintsc exports `SDKROOT` from `xcrun --show-sdk-path` unless it
+  is already set, so this error means `xcrun` cannot resolve an SDK for the
+  selected Xcode: check `xcode-select -p` and `DEVELOPER_DIR`, and that the
+  selected Xcode is a complete install. A header name in the message says
+  nothing about the header — the same error names whichever system header the
+  runtime includes first.
 - the linker is wrong on Linux — set `xbintsc_CLANG` and/or pass
   `xbintsc_LINKER_ARGS=-fuse-ld=lld`;
 - `No C compiler found. Set xbintsc_CLANG to a clang binary.` — no clang on

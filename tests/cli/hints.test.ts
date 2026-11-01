@@ -20,6 +20,7 @@ import {
   DOC_TROUBLESHOOTING,
   documentationFor,
   thrownFailure,
+  toolchainPointer,
   UNEXPECTED_FAILURE_HINT,
 } from "../../src/cli/hints.js";
 import { DiagnosticCode, type Diagnostic } from "../../src/diagnostics/diagnostic.js";
@@ -127,6 +128,16 @@ describe("documentation hints", () => {
       message: "Command failed (1): clang out.ll\nsome other clang complaint",
     };
     expect(documentationFor(diagnostic)?.path).toBe(DOC_TROUBLESHOOTING);
+  });
+
+  /* A macOS system header is never missing from the machine, only from the
+   * driver's search path, so the hint must name the SDK rather than the header. */
+  it("names the macOS SDK when a system header is not found", () => {
+    const message =
+      "Command failed (1): clang runtime/xt_alloc.c\nfatal error: 'setjmp.h' file not found";
+    expect(toolchainPointer(message, "darwin").text).toContain("macOS SDK");
+    expect(toolchainPointer(message, "darwin").path).toBe(DOC_TROUBLESHOOTING);
+    expect(toolchainPointer(message, "linux").text).not.toContain("macOS SDK");
   });
 
   it("has a pointer for every diagnostic code the CLI can print", () => {

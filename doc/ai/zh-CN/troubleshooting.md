@@ -7,7 +7,8 @@ xbintsc doctor
 ```
 
 它会打印平台、将要使用的工具链（以及来源）、编译器版本、运行时目录、运行时库目录、
-支持的平台下限与图标资源编译器。绝大多数"跑不起来"的答案都在这里。
+支持的平台下限与图标资源编译器；macOS 上还会打印交给 clang 的 SDK。绝大多数
+"跑不起来"的答案都在这里。
 
 ## 首先确认：clang 够新吗？
 
@@ -100,6 +101,14 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
   ```
   该脚本会导入 `vcvarsall`，并把 `xbintsc_CLANG` 指向 Visual Studio 自带的
   LLVM。直接执行 `vcvarsall.bat x64` 也仍然可行。
+- macOS 上 clang 报标准头找不到——`fatal error: 'stdio.h' file not found`、
+  `'setjmp.h' file not found` 等。macOS 没有 `/usr/include`；这些头文件在 SDK
+  里，而 clang 只有拿到 sysroot（`/usr/bin/clang` 的 shim、`-isysroot` 或
+  `SDKROOT`）才会去搜索它。xbintsc 会在 `SDKROOT` 未设置时用
+  `xcrun --show-sdk-path` 导出它，因此出现这个错误说明 `xcrun` 无法为选中的
+  Xcode 解析出 SDK：检查 `xcode-select -p` 和 `DEVELOPER_DIR`，并确认该 Xcode
+  是完整安装。消息里出现的头文件名没有意义——运行时先 include 哪个系统头，
+  报的就是哪个。
 - Linux 上链接器不对——设置 `xbintsc_CLANG`，并/或传
   `xbintsc_LINKER_ARGS=-fuse-ld=lld`；
 - `No C compiler found. Set xbintsc_CLANG to a clang binary.` —— `PATH` 里完全没有

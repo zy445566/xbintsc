@@ -138,6 +138,11 @@ xcode-select -p            # prints the active developer directory
 xcrun --show-sdk-path      # prints the SDK path
 ```
 
+xbintsc runs the command in the second line itself whenever `SDKROOT` is not
+already set, so a clang selected by absolute path (the CI baseline, or
+`xbintsc_CLANG`) still finds the SDK's C headers. Setting `SDKROOT` yourself
+takes precedence and pins a specific SDK.
+
 ## Linux — install clang and lld
 
 A normal glibc-based distribution plus `clang` and `lld` is enough:

@@ -24,6 +24,7 @@ import { supportFloor } from "../driver/platform-support.js";
 import { findRuntimeLibrary, runtimeLibDir } from "../driver/runtime-lib.js";
 import { resolveToolchain, type ResolvedToolchain } from "../driver/toolchain-provider.js";
 import { MINIMUM_CLANG_MAJOR, probeClang, realRunner, ToolchainError } from "../driver/toolchain.js";
+import { macosSdkRoot } from "../driver/macos-sdk.js";
 import {
   DOC_CLI,
   DOC_TROUBLESHOOTING,
@@ -279,6 +280,13 @@ function doctor(io: CliIo): number {
   }
 
   io.stdout(`support    : ${supportFloor()} (release artifacts target this floor)\n`);
+
+  if (process.platform === "darwin") {
+    /* macOS keeps the C headers in the SDK; without one, no header the runtime
+     * includes resolves. Report the sysroot the driver hands to clang. */
+    const sdk = toolchain?.env.SDKROOT ?? process.env.SDKROOT ?? macosSdkRoot(realRunner);
+    io.stdout(`sdk        : ${sdk ?? "unresolved (xcrun --show-sdk-path failed)"}\n`);
+  }
 
   try {
     if (!toolchain) throw new Error("no toolchain");

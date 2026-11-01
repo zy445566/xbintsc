@@ -22,16 +22,17 @@
  * skipped (or rejected, when named explicitly) instead of producing objects
  * the linker cannot mix.
  *
- * On macOS the resolved driver also gets `SDKROOT` (see `macos-sdk.ts`): an
- * Apple clang invoked by absolute path does not infer the SDK by itself, and
- * without one not even `<stdio.h>` is found.
+ * On macOS the resolved driver also carries the SDK as `sdkRoot`, which the
+ * compile and link steps pass as `-isysroot` (see `macos-sdk.ts`): an Apple
+ * clang invoked by absolute path does not infer the SDK by itself, and without
+ * one not even `<stdio.h>` — nor the linker's `libm` stub — is found.
  *
  * Extra linker arguments (for example `-fuse-ld=lld`) can be supplied through
  * `xbintsc_LINKER_ARGS`.
  */
 
 import { locateClang, realRunner, type ClangVersion, type Runner } from "./toolchain.js";
-import { toolchainEnvironment } from "./macos-sdk.js";
+import { macosSdkRoot } from "./macos-sdk.js";
 
 export type ToolchainSource = "env" | "system";
 
@@ -47,6 +48,9 @@ export interface ResolvedToolchain {
   /** Extra environment for the toolchain subprocesses, merged over the current
    * environment. */
   readonly env: Record<string, string>;
+  /** macOS SDK to pass as `-isysroot`; lost off macOS or when `SDKROOT` is
+   * already set. See `macos-sdk.ts`. */
+  readonly sdkRoot?: string;
 }
 
 function linkerArgs(fallback: readonly string[]): string[] {
@@ -58,11 +62,13 @@ function linkerArgs(fallback: readonly string[]): string[] {
 /** Resolve the toolchain that `build` should use. See the module docblock. */
 export function resolveToolchain(runner: Runner = realRunner): ResolvedToolchain {
   const location = locateClang(runner);
+  const sdkRoot = macosSdkRoot(runner);
   return {
     clang: location.command,
     source: location.source,
     ...(location.version ? { version: location.version } : {}),
     linkerArgs: linkerArgs([]),
-    env: toolchainEnvironment(runner),
+    env: {},
+    ...(sdkRoot === undefined ? {} : { sdkRoot }),
   };
 }

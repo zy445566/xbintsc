@@ -88,8 +88,8 @@ describe("resolveToolchain", () => {
   });
 
   /* An Apple clang invoked by absolute path has no sysroot of its own, so the
-   * resolved toolchain must hand it the SDK through the environment. */
-  it.runIf(process.platform === "darwin")("exports the macOS SDK to the driver", () => {
+   * resolved toolchain must carry the SDK for the compile and link steps. */
+  it.runIf(process.platform === "darwin")("resolves the macOS SDK for the driver", () => {
     delete process.env.xbintsc_CLANG;
     delete process.env.xbintsc_TOOLCHAIN;
     delete process.env.SDKROOT;
@@ -101,7 +101,7 @@ describe("resolveToolchain", () => {
           return { status: 0, stdout: CLANG_19, stderr: "" };
         },
       };
-      expect(resolveToolchain(runner).env).toEqual({ SDKROOT: sdk });
+      expect(resolveToolchain(runner).sdkRoot).toBe(sdk);
     } finally {
       rmSync(sdk, { recursive: true, force: true });
     }

@@ -2,21 +2,24 @@
  * macOS SDK discovery.
  *
  * macOS has no `/usr/include`: every C standard header (`stdio.h`,
- * `setjmp.h`, …) ships inside the SDK. clang only searches it when it has a
- * sysroot, which comes from the `/usr/bin/clang` shim, an explicit
- * `-isysroot`, or the `SDKROOT` environment variable.
+ * `setjmp.h`, …) ships inside the SDK, and the linker's `libm`/`libSystem`
+ * stubs live there too. clang only searches the SDK when it has a sysroot,
+ * which comes from the `/usr/bin/clang` shim, an explicit `-isysroot`, or the
+ * `SDKROOT` environment variable.
  *
  * xbintsc invokes clang by absolute path (CI pins it to the oldest installed
  * Xcode so released archives stay linkable by newer ones), which bypasses the
  * shim. Without a sysroot that driver sees neither the SDK nor `/usr/include`,
  * and the first runtime include fails with `'setjmp.h' file not found` — the
- * header is irrelevant, any system header would do.
+ * header is irrelevant, any system header would do. The same gap makes the
+ * link fail later with `ld: library 'm' not found`.
  *
- * Asking `xcrun` once and handing `SDKROOT` to the toolchain subprocesses
- * covers every C compile the driver performs — the runtime, its extensions and
- * the icon helpers — and the link that follows them. An explicit `SDKROOT` in
- * the environment always wins, so a developer can select an older SDK
- * deliberately.
+ * The SDK is therefore resolved once, with `xcrun`, and handed to clang as
+ * `-isysroot` on the command line rather than as `SDKROOT` in the environment:
+ * a self-hosted xbintsc binary runs the same driver, and its compiled
+ * `spawnSync` ignores `options.env`, so the variable would be lost exactly
+ * where the compiler rebuilds itself. An explicit `SDKROOT` in the environment
+ * always wins, so a developer can select an older SDK deliberately.
  */
 
 import { existsSync } from "node:fs";
@@ -27,7 +30,7 @@ import type { CommandResult, Runner } from "./toolchain.js";
  * the environment already names one, or no usable SDK can be resolved.
  *
  * A missing SDK is not an error here: the build still runs, and clang reports
- * the real problem (or the driver never needed the headers in the first place).
+ * the real problem (or the driver never needed the SDK in the first place).
  */
 export function macosSdkRoot(
   runner: Runner,
@@ -46,14 +49,4 @@ export function macosSdkRoot(
   if (result.status !== 0) return undefined;
   const sdk = result.stdout.trim();
   return sdk.length > 0 && existsSync(sdk) ? sdk : undefined;
-}
-
-/** Extra environment for clang subprocesses: `{ SDKROOT }` on macOS only. */
-export function toolchainEnvironment(
-  runner: Runner,
-  env: NodeJS.ProcessEnv = process.env,
-  platform: NodeJS.Platform = process.platform,
-): Record<string, string> {
-  const sdk = macosSdkRoot(runner, env, platform);
-  return sdk === undefined ? {} : { SDKROOT: sdk };
 }

@@ -16,7 +16,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { hashParts } from "./cache.js";
-import { compileC, type Runner } from "./toolchain.js";
+import { compileC, sysrootFlags, type Runner } from "./toolchain.js";
 
 export type IconFormat = "png" | "ico" | "icns";
 
@@ -144,6 +144,7 @@ export function ensureIconObject(
   cacheDir: string,
   icon: IconInfo,
   env?: Record<string, string>,
+  sdkRoot?: string,
 ): string {
   const key = hashParts(["icon", process.platform, Buffer.from(icon.bytes).toString("base64")]);
   const sourcePath = join(cacheDir, `icon-${key}.c`);
@@ -151,7 +152,7 @@ export function ensureIconObject(
   if (!existsSync(objectPath)) {
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(sourcePath, iconSource(icon));
-    compileC(runner, clang, sourcePath, objectPath, cacheDir, env);
+    compileC(runner, clang, sourcePath, objectPath, cacheDir, env, sysrootFlags(sdkRoot));
   }
   return objectPath;
 }

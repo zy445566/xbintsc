@@ -299,12 +299,25 @@ export function optimizationFlags(
   return flags;
 }
 
+/**
+ * `-isysroot` for a resolved macOS SDK, or nothing off macOS.
+ *
+ * The sysroot travels on the command line and not as `SDKROOT` in the
+ * environment because the self-hosted compiler's `spawnSync` ignores
+ * `options.env`; flags survive that. See `macos-sdk.ts`.
+ */
+export function sysrootFlags(sdkRoot: string | undefined): string[] {
+  return sdkRoot === undefined ? [] : ["-isysroot", sdkRoot];
+}
+
 export interface CompileIrOptions {
   readonly clang: string;
   readonly irPath: string;
   readonly objectPath: string;
   readonly optimize: string;
   readonly env?: Record<string, string>;
+  /** macOS SDK for `-isysroot`; see {@link sysrootFlags}. */
+  readonly sdkRoot?: string;
   /** Emit debug info (`-g`) and keep frame pointers for crash backtraces. */
   readonly debug?: boolean;
   /** Compile to LTO bitcode and let the linker optimize across units. */
@@ -332,6 +345,7 @@ export function compileIr(runner: Runner, options: CompileIrOptions): void {
       ...SECTION_FLAGS,
       ...debugFlags,
       ...profileFlags,
+      ...sysrootFlags(options.sdkRoot),
       "-c",
       options.irPath,
       "-o",
@@ -349,6 +363,9 @@ export interface LinkOptions {
   readonly linkerFlags: readonly string[];
   readonly optimize: string;
   readonly env?: Record<string, string>;
+  /** macOS SDK for `-isysroot`; the linker's stubs (`libm`, `libSystem`) come
+   * from it, so a link without one fails with `library 'm' not found`. */
+  readonly sdkRoot?: string;
   readonly lto?: boolean;
   readonly pgo?: PgoMode;
   readonly pgoDir?: string;
@@ -376,6 +393,7 @@ export function link(runner: Runner, options: LinkOptions): CommandResult {
      * understands both ELF/Mach-O and COFF; without it MSVC link.exe rejects
      * the bitcode object on Windows. */
     ...(options.lto ? ["-fuse-ld=lld"] : []),
+    ...sysrootFlags(options.sdkRoot),
     ...options.objectPaths,
     "-o",
     options.outputPath,

@@ -114,12 +114,13 @@ stderr — read the stderr, not just the first line. Frequent causes:
   'stdio.h' file not found`, `'setjmp.h' file not found`, … There is no
   `/usr/include` on macOS; those headers live in the SDK, and clang only
   searches it when it has a sysroot (`/usr/bin/clang`'s shim, `-isysroot`, or
-  `SDKROOT`). xbintsc exports `SDKROOT` from `xcrun --show-sdk-path` unless it
-  is already set, so this error means `xcrun` cannot resolve an SDK for the
-  selected Xcode: check `xcode-select -p` and `DEVELOPER_DIR`, and that the
-  selected Xcode is a complete install. A header name in the message says
-  nothing about the header — the same error names whichever system header the
-  runtime includes first.
+  `SDKROOT`). xbintsc resolves the SDK with `xcrun --show-sdk-path` and passes
+  it as `-isysroot` (unless `SDKROOT` is already set), so this error means
+  `xcrun` cannot resolve an SDK for the selected Xcode: check `xcode-select -p`
+  and `DEVELOPER_DIR`, and that the selected Xcode is a complete install. A
+  header name in the message says nothing about the header — the same error
+  names whichever system header the runtime includes first. The same missing
+  sysroot shows up at the link as `ld: library 'm' not found`.
 - the linker is wrong on Linux — set `xbintsc_CLANG` and/or pass
   `xbintsc_LINKER_ARGS=-fuse-ld=lld`;
 - `No C compiler found. Set xbintsc_CLANG to a clang binary.` — no clang on

@@ -125,9 +125,9 @@ xcode-select -p            # 打印当前开发者目录
 xcrun --show-sdk-path      # 打印 SDK 路径
 ```
 
-`SDKROOT` 未设置时，xbintsc 会自己执行第二条命令，因此即使 clang 是用绝对路径
-选中的（CI 的基线 Xcode，或 `xbintsc_CLANG`），也仍能找到 SDK 里的 C 头文件。
-自己设置 `SDKROOT` 优先，可用它固定某个 SDK。
+xbintsc 会自己执行第二条命令，并把结果以 `-isysroot` 传给 clang，因此即使 clang
+是用绝对路径选中的（CI 的基线 Xcode，或 `xbintsc_CLANG`），也仍能找到 SDK 里的
+C 头文件与链接桩。自己设置 `SDKROOT` 优先，可用它固定某个 SDK。
 
 ## Linux —— 安装 clang 与 lld
 

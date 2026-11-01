@@ -7,9 +7,10 @@
  *   const result = spawnSync("clang", ["--version"], { cwd, encoding: "utf8" });
  *   result.status / result.stdout / result.stderr
  *
- * `options.cwd` is honoured; stdout/stderr are always captured as UTF-8
- * strings. On Windows the process is run with `_spawnvp` and redirected
- * through temporary files (which also avoids pipe-buffer deadlocks).
+ * `options.cwd` and `options.env` are honoured (the latter with Node's replace
+ * semantics); stdout/stderr are always captured as UTF-8 strings. On Windows
+ * the child runs under `CreateProcess` with anonymous pipes drained by reader
+ * threads (which also avoids pipe-buffer deadlocks).
  */
 
 #include "rt.h"
@@ -58,6 +59,58 @@ static int option_stdio_inherit(xt_value options) {
   if (!XT_IS_OBJECT(options)) return 0;
   xt_value stdio = xt_object_get(options, xt_string_from_cstr("stdio"));
   return stdio && XT_IS_STRING(stdio) && strcmp(xt_string_data(stdio), "inherit") == 0;
+}
+
+/*
+ * `options.env` replaces the child's environment, exactly like Node: an absent
+ * option inherits the parent's environment, while a present one is the complete
+ * environment (spread `process.env` into it to extend rather than replace).
+ *
+ * The runtime used to ignore this option, which made every `spawnSync` inherit:
+ * a caller passing `SDKROOT` or `INCLUDE` silently got nothing, and a
+ * self-hosted compiler could not hand the macOS SDK to clang.
+ */
+
+/** The `env` object, or `XT_UNDEFINED` when the child should inherit. */
+static xt_value option_env(xt_value options) {
+  if (!XT_IS_OBJECT(options)) return XT_UNDEFINED;
+  xt_value env = xt_object_get(options, xt_string_from_cstr("env"));
+  return XT_IS_OBJECT(env) ? env : XT_UNDEFINED;
+}
+
+/** The number of `KEY=VALUE` entries the environment object provides. */
+static int32_t env_size(xt_value env) {
+  xt_value keys = xt_object_keys(env);
+  return XT_IS_ARRAY(keys) ? xt_array_size(keys) : 0;
+}
+
+static void free_env_entries(char **entries, int32_t count) {
+  if (entries == NULL) return;
+  for (int32_t i = 0; i < count; i++) free(entries[i]);
+  free(entries);
+}
+
+/** `KEY=VALUE` entries for the environment object, in object key order. */
+static char **env_entries(xt_value env, int32_t count) {
+  char **entries = (char **)calloc((size_t)(count > 0 ? count : 1), sizeof(char *));
+  if (entries == NULL) return NULL;
+  xt_value keys = xt_object_keys(env);
+  xt_value *items = XT_IS_ARRAY(keys) ? xt_array_items(keys) : NULL;
+  for (int32_t i = 0; i < count; i++) {
+    xt_value key = items[i];
+    xt_value raw = xt_object_get(env, key);
+    /* Node ignores `undefined` values instead of passing "undefined". */
+    if (XT_IS_UNDEFINED(raw)) continue;
+    const char *name = xt_string_data(xt_to_string(key));
+    const char *value = xt_string_data(xt_to_string(raw));
+    if (name == NULL || value == NULL) continue;
+    size_t length = strlen(name) + strlen(value) + 2;
+    char *entry = (char *)malloc(length);
+    if (entry == NULL) continue;
+    snprintf(entry, length, "%s=%s", name, value);
+    entries[i] = entry;
+  }
+  return entries;
 }
 
 static xt_value make_result(double status, const char *out, const char *err) {
@@ -181,18 +234,60 @@ static char *build_command_line(char **child_argv, int count) {
   return line;
 }
 
+/* `CreateProcessA` wants one ANSI block, entries sorted case-insensitively. */
+static int compare_env_entries(const void *left, const void *right) {
+  const char *a = *(const char *const *)left;
+  const char *b = *(const char *const *)right;
+  if (a == NULL) return b == NULL ? 0 : 1;
+  if (b == NULL) return -1;
+  return _stricmp(a, b);
+}
+
+/** The environment block for `CreateProcessA`, or NULL to inherit. */
+static char *build_env_block(xt_value env) {
+  if (!XT_IS_OBJECT(env)) return NULL;
+  int32_t count = env_size(env);
+  char **entries = env_entries(env, count);
+  if (entries == NULL) return NULL;
+  qsort(entries, (size_t)count, sizeof(char *), compare_env_entries);
+  size_t total = 1;
+  for (int32_t i = 0; i < count; i++) total += entries[i] != NULL ? strlen(entries[i]) + 1 : 0;
+  char *block = (char *)malloc(total + 1);
+  if (block == NULL) {
+    free_env_entries(entries, count);
+    return NULL;
+  }
+  char *cursor = block;
+  for (int32_t i = 0; i < count; i++) {
+    if (entries[i] == NULL) continue;
+    size_t length = strlen(entries[i]) + 1;
+    memcpy(cursor, entries[i], length);
+    cursor += length;
+  }
+  /* The block ends with an extra terminator; an empty environment is "\0\0". */
+  *cursor++ = 0;
+  *cursor = 0;
+  free_env_entries(entries, count);
+  return block;
+}
+
 xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   const char *command = argc > 0 ? xt_string_data(xt_to_string(argv[0])) : NULL;
   if (!command) command = "";
   xt_value args = argc > 1 ? argv[1] : XT_UNDEFINED;
   const char *cwd = argc > 2 ? option_cwd(argv[2]) : NULL;
+  char *env_block = build_env_block(option_env(argc > 2 ? argv[2] : XT_UNDEFINED));
 
   int count = 0;
   char **child_argv = (char **)build_argv(command, args, &count);
-  if (!child_argv) return make_result(-1, "", "out of memory");
+  if (!child_argv) {
+    free(env_block);
+    return make_result(-1, "", "out of memory");
+  }
   char *command_line = build_command_line(child_argv, count);
   if (!command_line) {
     free(child_argv);
+    free(env_block);
     return make_result(-1, "", "out of memory");
   }
 
@@ -204,9 +299,10 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
 
   if (option_stdio_inherit(argc > 2 ? argv[2] : XT_UNDEFINED)) {
     BOOL created = CreateProcessA(
-      NULL, command_line, NULL, NULL, TRUE, 0, NULL, cwd, &startup, &process);
+      NULL, command_line, NULL, NULL, TRUE, 0, env_block, cwd, &startup, &process);
     free(command_line);
     free(child_argv);
+    free(env_block);
     if (!created) return make_result(-1, "", "failed to start process");
     WaitForSingleObject(process.hProcess, INFINITE);
     DWORD exit_code = 0;
@@ -229,6 +325,7 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
     close_capture_pipe(&err_pipe);
     free(command_line);
     free(child_argv);
+    free(env_block);
     return make_result(-1, "", "could not create pipes");
   }
   startup.dwFlags = STARTF_USESTDHANDLES;
@@ -237,9 +334,10 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   startup.hStdError = err_write;
 
   BOOL created = CreateProcessA(
-    NULL, command_line, NULL, NULL, TRUE, 0, NULL, cwd, &startup, &process);
+    NULL, command_line, NULL, NULL, TRUE, 0, env_block, cwd, &startup, &process);
   free(command_line);
   free(child_argv);
+  free(env_block);
   CloseHandle(out_write);
   CloseHandle(err_write);
   if (!created) {
@@ -285,30 +383,68 @@ static void append_chunk(char **buffer, size_t *length, size_t *capacity, const 
   (*buffer)[*length] = 0;
 }
 
+/** A NULL-terminated `envp` for `exec`, or NULL when the child inherits. */
+static char **build_envp(xt_value env) {
+  if (!XT_IS_OBJECT(env)) return NULL;
+  int32_t count = env_size(env);
+  char **entries = env_entries(env, count);
+  if (entries == NULL) return NULL;
+  char **envp = (char **)calloc((size_t)count + 1, sizeof(char *));
+  if (envp == NULL) {
+    free_env_entries(entries, count);
+    return NULL;
+  }
+  int32_t kept = 0;
+  for (int32_t i = 0; i < count; i++) {
+    if (entries[i] != NULL) envp[kept++] = entries[i];
+  }
+  envp[kept] = NULL;
+  /* The strings now belong to `envp`; only the index array is released here. */
+  free(entries);
+  return envp;
+}
+
+/** Release an `envp` built by {@link build_envp}. */
+static void free_envp(char **envp) {
+  if (envp == NULL) return;
+  for (char **entry = envp; *entry != NULL; entry++) free(*entry);
+  free(envp);
+}
+
 xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   const char *command = argc > 0 ? xt_string_data(xt_to_string(argv[0])) : NULL;
   if (!command) command = "";
   xt_value args = argc > 1 ? argv[1] : XT_UNDEFINED;
   const char *cwd = argc > 2 ? option_cwd(argv[2]) : NULL;
+  char **envp = build_envp(option_env(argc > 2 ? argv[2] : XT_UNDEFINED));
 
   int count = 0;
   char **child_argv = (char **)build_argv(command, args, &count);
-  if (!child_argv) return make_result(-1, "", "out of memory");
+  if (!child_argv) {
+    free_envp(envp);
+    return make_result(-1, "", "out of memory");
+  }
 
   if (option_stdio_inherit(argc > 2 ? argv[2] : XT_UNDEFINED)) {
     pid_t inherit_pid = fork();
     if (inherit_pid < 0) {
       free(child_argv);
+      free_envp(envp);
       return make_result(-1, "", "failed to fork");
     }
     if (inherit_pid == 0) {
       if (cwd) chdir(cwd);
+      if (envp != NULL) {
+        extern char **environ;
+        environ = envp;
+      }
       execvp(command, child_argv);
       _exit(127);
     }
     int inherit_status = 0;
     waitpid(inherit_pid, &inherit_status, 0);
     free(child_argv);
+    free_envp(envp);
     return make_result(
       WIFEXITED(inherit_status) ? (double)WEXITSTATUS(inherit_status) : -1.0, "", "");
   }
@@ -317,6 +453,7 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   int err_pipe[2];
   if (pipe(out_pipe) != 0 || pipe(err_pipe) != 0) {
     free(child_argv);
+    free_envp(envp);
     return make_result(-1, "", "could not create pipes");
   }
 
@@ -329,6 +466,10 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
     close(err_pipe[0]);
     close(err_pipe[1]);
     if (cwd) chdir(cwd);
+    if (envp != NULL) {
+      extern char **environ;
+      environ = envp;
+    }
     execvp(command, child_argv);
     _exit(127);
   }
@@ -371,6 +512,7 @@ xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv) {
   free(buffers[0]);
   free(buffers[1]);
   free(child_argv);
+  free_envp(envp);
   return result;
 }
 

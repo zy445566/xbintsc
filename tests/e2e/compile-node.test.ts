@@ -150,6 +150,28 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     expect(stdout).toContain("status 0");
   });
 
+  it("passes options.env to the child instead of inheriting", () => {
+    // Node replaces the child environment with `options.env`; the driver relies
+    // on that to hand clang `SDKROOT`, and the option used to be dropped.
+    const source = `
+      import { spawnSync } from "node:child_process";
+      let isChild = false;
+      for (const arg of process.argv) {
+        if (arg === "xb-env-child") isChild = true;
+      }
+      if (isChild) {
+        console.log(process.env.XBINTSC_PROBE_ENV === "yes", process.env.PATH === undefined);
+      } else {
+        /* Windows wants SystemRoot in a custom environment; PATH stays absent
+         * either way, which is what proves the object *replaced* the parent's. */
+        const env = { XBINTSC_PROBE_ENV: "yes", SystemRoot: process.env.SystemRoot || "" };
+        const result = spawnSync(process.argv[0], ["xb-env-child"], { encoding: "utf8", env });
+        console.log(result.status, result.stdout.trim());
+      }
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("0 true true");
+  });
+
   it("hashes with SHA-1 and the streaming crypto API", () => {
     const source = `
       import { createHash } from "node:crypto";

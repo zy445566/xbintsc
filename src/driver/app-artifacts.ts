@@ -22,6 +22,8 @@ export interface AppArtifactRequest {
   readonly app: AppConfig;
   readonly icon: IconInfo | undefined;
   readonly env: Record<string, string>;
+  /** macOS SDK for `-isysroot`; see `sysrootFlags`. */
+  readonly sdkRoot?: string;
   readonly verbose: boolean | undefined;
 }
 
@@ -46,11 +48,11 @@ export interface AppArtifacts {
  * no equivalent.
  */
 export function ensureAppArtifacts(request: AppArtifactRequest): AppArtifacts {
-  const { runner, clang, cacheDir, registry, app, icon, env, verbose } = request;
+  const { runner, clang, cacheDir, registry, app, icon, env, sdkRoot, verbose } = request;
   const windowsSubsystem = process.platform === "win32" && registry.has("gui") && app.console !== true;
   const linkerFlags = windowsSubsystem ? ["-Wl,/SUBSYSTEM:WINDOWS"] : [];
   const entryObject = windowsSubsystem
-    ? ensureWindowsEntryObject(runner, clang, cacheDir, env)
+    ? ensureWindowsEntryObject(runner, clang, cacheDir, env, sdkRoot)
     : undefined;
 
   const iconObjects: string[] = [];
@@ -58,7 +60,7 @@ export function ensureAppArtifacts(request: AppArtifactRequest): AppArtifacts {
   // program gets an (empty) icon object even with no icon configured.
   if (icon !== undefined || registry.has("gui")) {
     try {
-      iconObjects.push(ensureIconObject(runner, clang, cacheDir, icon ?? EMPTY_ICON, env));
+      iconObjects.push(ensureIconObject(runner, clang, cacheDir, icon ?? EMPTY_ICON, env, sdkRoot));
       if (icon && process.platform === "win32") {
         const resourceCompiler = resolveResourceCompiler(runner, clang);
         if (resourceCompiler) {

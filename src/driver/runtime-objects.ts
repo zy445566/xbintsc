@@ -12,7 +12,7 @@ import type { ExtensionRegistry } from "../extensions/registry.js";
 import type { ResolvedLinkFeature } from "./link-features.js";
 import { hashParts } from "./cache.js";
 import { findRuntimeLibrary } from "./runtime-lib.js";
-import { compileC, optimizationFlags, RUNTIME_CFLAGS, type PgoMode, type Runner } from "./toolchain.js";
+import { compileC, optimizationFlags, RUNTIME_CFLAGS, sysrootFlags, type PgoMode, type Runner } from "./toolchain.js";
 import { COMPILER_VERSION } from "./version.js";
 
 /** Core runtime translation units (each compiled and cached independently). */
@@ -67,6 +67,8 @@ export interface RuntimeObjectsOptions {
   readonly registry: ExtensionRegistry;
   readonly preferPrebuilt: boolean;
   readonly env: Record<string, string>;
+  /** macOS SDK for `-isysroot`; part of the object cache key. */
+  readonly sdkRoot?: string;
   readonly lto: boolean;
   readonly pgo: PgoMode | undefined;
   readonly pgoDir: string;
@@ -88,6 +90,9 @@ export interface RuntimeObjectsOptions {
 export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObjects {
   const { runner, clang, runtimeDir, cacheDir, registry, preferPrebuilt, env, lto, pgo, pgoDir } = options;
   const optimization = optimizationFlags(lto, pgo, pgoDir);
+  /* The sysroot joins the extra flags (and therefore the cache key): objects
+     compiled against a different SDK are a different artifact. */
+  const compileFlags = [...optimization, ...sysrootFlags(options.sdkRoot)];
   /* Runtime objects depend on the shared headers (rt.h/rt_internal.h/...) and
      the `#include`d implementation fragments (`.inc`), so any change to them
      must invalidate every cached object. Hash them all. */
@@ -108,7 +113,7 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
       "runtime",
       COMPILER_VERSION,
       RUNTIME_CFLAGS.join(" "),
-      optimization.join(" "),
+      compileFlags.join(" "),
       tag,
       headerStamp,
       body,
@@ -117,7 +122,7 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
     ]);
     const objectPath = join(cacheDir, `${tag}-${key}.o`);
     if (!existsSync(objectPath)) {
-      compileC(runner, clang, sourcePath, objectPath, runtimeDir, env, optimization);
+      compileC(runner, clang, sourcePath, objectPath, runtimeDir, env, compileFlags);
     }
     return objectPath;
   };

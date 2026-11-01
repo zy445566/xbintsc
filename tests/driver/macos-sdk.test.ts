@@ -2,8 +2,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { macosSdkRoot, toolchainEnvironment } from "../../src/driver/macos-sdk.js";
+import { macosSdkRoot } from "../../src/driver/macos-sdk.js";
 import type { CommandResult, Runner } from "../../src/driver/toolchain.js";
+import { sysrootFlags } from "../../src/driver/toolchain.js";
 
 const directories: string[] = [];
 
@@ -35,8 +36,8 @@ describe("macosSdkRoot", () => {
         return { status: 0, stdout: "/sdk", stderr: "" };
       },
     };
-    expect(toolchainEnvironment(runner, {}, "linux")).toEqual({});
-    expect(toolchainEnvironment(runner, {}, "win32")).toEqual({});
+    expect(macosSdkRoot(runner, {}, "linux")).toBeUndefined();
+    expect(macosSdkRoot(runner, {}, "win32")).toBeUndefined();
     expect(commands).toEqual([]);
   });
 
@@ -54,14 +55,13 @@ describe("macosSdkRoot", () => {
         return { status: 0, stdout: `${sdk}\n`, stderr: "" };
       },
     };
-    expect(toolchainEnvironment(runner, {}, "darwin")).toEqual({ SDKROOT: sdk });
+    expect(macosSdkRoot(runner, {}, "darwin")).toBe(sdk);
     expect(calls).toEqual([{ command: "xcrun", args: ["--show-sdk-path"] }]);
   });
 
   it("ignores an xcrun that fails", () => {
     const runner = runnerReturning({ status: 72, stdout: "", stderr: "xcrun: error: unable to find SDK" });
     expect(macosSdkRoot(runner, {}, "darwin")).toBeUndefined();
-    expect(toolchainEnvironment(runner, {}, "darwin")).toEqual({});
   });
 
   it("ignores an empty or stale SDK path", () => {
@@ -76,6 +76,19 @@ describe("macosSdkRoot", () => {
         throw new Error("cannot spawn xcrun");
       },
     };
-    expect(toolchainEnvironment(runner, {}, "darwin")).toEqual({});
+    expect(macosSdkRoot(runner, {}, "darwin")).toBeUndefined();
+  });
+});
+
+describe("sysrootFlags", () => {
+  it("passes the SDK on the command line", () => {
+    expect(sysrootFlags("/Applications/Xcode.app/SDKs/MacOSX.sdk")).toEqual([
+      "-isysroot",
+      "/Applications/Xcode.app/SDKs/MacOSX.sdk",
+    ]);
+  });
+
+  it("adds nothing when no SDK was resolved", () => {
+    expect(sysrootFlags(undefined)).toEqual([]);
   });
 });

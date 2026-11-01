@@ -19,7 +19,7 @@ import { generate } from "../codegen/llvm.js";
 import { createDefaultRegistry } from "../extensions/registry.js";
 import { BuildCache } from "./cache.js";
 import { findRuntimeDir, platformSlug } from "./paths.js";
-import { resolveToolchain } from "./toolchain-provider.js";
+import { resolveToolchain, type ResolvedToolchain } from "./toolchain-provider.js";
 import { readIcon, IconError, type IconInfo } from "./icon.js";
 import { bundlePathFor, packageMacApp } from "./mac-bundle.js";
 import type { AppConfig } from "./config.js";
@@ -252,8 +252,8 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   // -- toolchain -----------------------------------------------------------
   const clangStarted = Date.now();
-  const toolchain = options.clang
-    ? { clang: options.clang, linkerArgs: [] as string[], env: {} as Record<string, string> }
+  const toolchain: Pick<ResolvedToolchain, "clang" | "linkerArgs" | "env" | "sdkRoot"> = options.clang
+    ? { clang: options.clang, linkerArgs: [], env: {} }
     : resolveToolchain(runner);
   const clang = toolchain.clang;
   if (pgo === "use") {
@@ -276,6 +276,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     objectPath,
     optimize,
     env: toolchain.env,
+    sdkRoot: toolchain.sdkRoot,
     debug: options.debug === true,
     lto,
     ...(pgo ? { pgo, pgoDir } : {}),
@@ -302,6 +303,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
       registry,
       preferPrebuilt: usePrebuilt,
       env: toolchain.env,
+      sdkRoot: toolchain.sdkRoot,
       lto,
       pgo,
       pgoDir,
@@ -322,6 +324,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     app,
     icon,
     env: toolchain.env,
+    sdkRoot: toolchain.sdkRoot,
     verbose: options.verbose,
   });
   if (artifacts.iconError !== undefined) {
@@ -362,6 +365,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
       ],
       optimize,
       env: toolchain.env,
+      sdkRoot: toolchain.sdkRoot,
       lto,
       ...(pgo ? { pgo, pgoDir } : {}),
     });

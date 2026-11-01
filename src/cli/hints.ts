@@ -49,8 +49,8 @@ export function toolchainPointer(
   if (usesTypedPointers || /No C compiler found/i.test(message)) return REQUIREMENT_HINT;
   /* On macOS a C standard header lives in the SDK, so "'<header>' file not
    * found" means the driver never got a sysroot — the header itself is fine.
-   * The driver exports SDKROOT from `xcrun`, which makes the selected Xcode
-   * the thing to check. */
+   * The driver resolves the SDK with `xcrun` and passes `-isysroot`, which
+   * makes the selected Xcode the thing to check. */
   if (platform === "darwin" && /fatal error: '.+' file not found/.test(message)) {
     return {
       text: "clang cannot see the macOS SDK headers; `xcrun --show-sdk-path` must resolve for the selected Xcode, or set SDKROOT yourself",

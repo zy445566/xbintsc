@@ -104,11 +104,12 @@ clang 自身失败。抛出的消息包含完整的 clang 命令与 stderr——
 - macOS 上 clang 报标准头找不到——`fatal error: 'stdio.h' file not found`、
   `'setjmp.h' file not found` 等。macOS 没有 `/usr/include`；这些头文件在 SDK
   里，而 clang 只有拿到 sysroot（`/usr/bin/clang` 的 shim、`-isysroot` 或
-  `SDKROOT`）才会去搜索它。xbintsc 会在 `SDKROOT` 未设置时用
-  `xcrun --show-sdk-path` 导出它，因此出现这个错误说明 `xcrun` 无法为选中的
-  Xcode 解析出 SDK：检查 `xcode-select -p` 和 `DEVELOPER_DIR`，并确认该 Xcode
-  是完整安装。消息里出现的头文件名没有意义——运行时先 include 哪个系统头，
-  报的就是哪个。
+  `SDKROOT`）才会去搜索它。xbintsc 会用 `xcrun --show-sdk-path` 解析 SDK 并以
+  `-isysroot` 传给 clang（`SDKROOT` 已设置时不覆盖），因此出现这个错误说明
+  `xcrun` 无法为选中的 Xcode 解析出 SDK：检查 `xcode-select -p` 和
+  `DEVELOPER_DIR`，并确认该 Xcode 是完整安装。消息里出现的头文件名没有意义
+  ——运行时先 include 哪个系统头，报的就是哪个。同一个缺失的 sysroot 也会在链接
+  阶段表现为 `ld: library 'm' not found`。
 - Linux 上链接器不对——设置 `xbintsc_CLANG`，并/或传
   `xbintsc_LINKER_ARGS=-fuse-ld=lld`；
 - `No C compiler found. Set xbintsc_CLANG to a clang binary.` —— `PATH` 里完全没有

@@ -126,6 +126,30 @@ describe("toolchain", () => {
     expect(calls[0]!.args).toEqual(["-O1", "a.o", "b.o", "-o", "prog", ...deadStrip, "-lm"]);
   });
 
+  /* The sysroot travels on the command line because a self-hosted compiler's
+   * `spawnSync` drops `options.env`, which is how `SDKROOT` would be lost. */
+  it("passes a resolved macOS SDK to the compile and the link", () => {
+    const { runner, calls } = recordingRunner();
+    compileIr(runner, {
+      clang: "clang",
+      irPath: "in.ll",
+      objectPath: "out.o",
+      optimize: "2",
+      sdkRoot: "/sdk",
+    });
+    link(runner, {
+      clang: "clang",
+      objectPaths: ["out.o"],
+      outputPath: "prog",
+      linkerFlags: ["-lm"],
+      optimize: "2",
+      sdkRoot: "/sdk",
+    });
+    expect(calls[0]!.args.slice(0, 4)).toEqual(["-O2", "-ffunction-sections", "-fdata-sections", "-isysroot"]);
+    expect(calls[1]!.args).toContain("-isysroot");
+    expect(calls[1]!.args[calls[1]!.args.indexOf("-isysroot") + 1]).toBe("/sdk");
+  });
+
   it("passes LTO and PGO flags to compilation and linking", () => {
     const { runner, calls } = recordingRunner();
     compileIr(runner, {

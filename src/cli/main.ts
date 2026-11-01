@@ -284,7 +284,7 @@ function doctor(io: CliIo): number {
   if (process.platform === "darwin") {
     /* macOS keeps the C headers in the SDK; without one, no header the runtime
      * includes resolves. Report the sysroot the driver hands to clang. */
-    const sdk = toolchain?.env.SDKROOT ?? process.env.SDKROOT ?? macosSdkRoot(realRunner);
+    const sdk = toolchain?.sdkRoot ?? process.env.SDKROOT ?? macosSdkRoot(realRunner);
     io.stdout(`sdk        : ${sdk ?? "unresolved (xcrun --show-sdk-path failed)"}\n`);
   }
 

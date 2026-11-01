@@ -182,7 +182,9 @@ run();
 这两个参数（`window`、`document`）只是普通的函数参数，因此脚本的局部变量
 无需任何全局对象机制。外部脚本同样可用：`<script src="./counter.ts">` 会在
 编译期读取，其 import 会被提升（重写为从 HTML 文件解析），其主体以同样方式
-包装——因此脚本模块可以 `import` 辅助函数，同时仍能看到 `document`。脚本是
+包装——因此脚本模块可以 `import` 辅助函数，同时仍能看到 `document`。内联主体
+走同一套拆分，因此 `import` 在两种写法中行为一致；开启 `node` 扩展后，
+`node:fs` 等其他 `node:` 内置模块同样可用。脚本是
 **编译期资产**：运行时创建的 HTML（`innerHTML`、网络获取）永不执行，`src`
 URL（`https://…`、`data:…`）会被忽略。一切都按文档顺序在解析后运行（实际上
 是 deferred）。完整设计参见 `gui-scripts.md`。

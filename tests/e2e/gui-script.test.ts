@@ -5,6 +5,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createGuiHarness, guiAvailable } from "./gui-helpers.js";
+import { nodeExtension } from "../../src/extensions/node/index.js";
 
 const harness = createGuiHarness();
 
@@ -90,5 +91,57 @@ button.addEventListener("click", () => {
     );
     /* 0 -> 1 -> 3 proves the hoisted import (double) is linked. */
     expect(value("srcAfter")).toBe("3");
+  });
+
+  it("runs an inline <script> with imports, node:fs included", () => {
+    /* An inline body is compiled like a `<script src>` file: its top-level
+     * imports are hoisted, a bare one links (`node:fs` needs the node
+     * extension) and a relative one is deferred until the script runs. */
+    const { value } = harness.compileAndRun(
+      "script-inline-imports",
+      `
+      import { createWindow, run } from "gui";
+      import page from "./page-inline.html";
+
+      const win = createWindow({ title: "inline-imports", width: 320, height: 240 });
+      win.on("ready", () => {
+        const button = win.document.getElementById("b");
+        button.click();
+        button.click();
+        console.log("inlineAfter=" + win.document.getElementById("container").textContent);
+        win.close();
+      });
+      win.loadHTML(page);
+      run();
+      `,
+      {
+        extensions: [nodeExtension],
+        console: true,
+        cwd: harness.workdir,
+        files: {
+          "page-inline.html": `<html><body>
+  <div id="container">0</div>
+  <button id="b">0</button>
+  <script lang="ts">
+    import { readFileSync } from "node:fs";
+    import { double } from "./helper";
+    const button = document.getElementById("b");
+    const label = document.getElementById("container");
+    let n = Number(readFileSync("seed.txt", "utf8"));
+    button.addEventListener("click", () => {
+      n = double(n) + 1;
+      button.textContent = String(n);
+      label.textContent = String(n);
+    });
+  </script>
+</body></html>`,
+          "seed.txt": "2",
+          "helper.ts": "export function double(n: number) { return n * 2; }",
+        },
+      },
+    );
+    /* 2 -> 5 -> 11: the file read supplied the seed and the deferred helper
+     * module was evaluated before the listener ran. */
+    expect(value("inlineAfter")).toBe("11");
   });
 });

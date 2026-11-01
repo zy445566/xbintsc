@@ -80,6 +80,71 @@ describe("gui .html asset loader", () => {
     expect(empty.moduleSource).not.toContain("__registerScript");
   });
 
+  it("hoists an inline script's bare import to module scope", () => {
+    /* An `import` left inside the script function body is not a module
+     * statement: codegen never registers the binding and reports TS5001 when
+     * the body calls it. Both script forms must link the same way. */
+    const body = [
+      'import { readFileSync } from "node:fs";',
+      'const out = document.getElementById("out");',
+      'out.textContent = readFileSync("data.txt", "utf8");',
+    ].join("\n");
+    const { moduleSource } = loadHtmlAsset("page.html", `<script lang="ts">${body}</script>`);
+    const importIndex = moduleSource.indexOf('import { readFileSync } from "node:fs"');
+    const wrappedIndex = moduleSource.indexOf("function __xt_script_");
+    expect(importIndex).toBeGreaterThanOrEqual(0);
+    expect(importIndex).toBeLessThan(wrappedIndex);
+    expect(moduleSource).toContain('readFileSync("data.txt", "utf8")');
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("defers an inline script's relative import and resolves it from the HTML dir", () => {
+    const directory = writeFiles({ "lib/util.ts": "export const size = 1;" });
+    const htmlPath = join(directory, "page.html");
+    const { moduleSource } = loadHtmlAsset(
+      htmlPath,
+      `<script>import { size } from "./lib/util";\nconsole.log(size);</script>`,
+    );
+    expect(moduleSource).toContain(
+      'import { __xt_deferred_module as __xt_deferred_0_0 } from "./lib/util"',
+    );
+    expect(moduleSource).toContain("const { size } = __xt_deferred_0_0();");
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("strips export modifiers from an inline script", () => {
+    const { moduleSource } = loadHtmlAsset(
+      "page.html",
+      `<script>export const a = 1;\nexport function f() { return a; }</script>`,
+    );
+    expect(moduleSource).toContain("const a = 1;");
+    expect(moduleSource).toContain("function f()");
+    expect(moduleSource).not.toContain("export const");
+    expect(parseDiagnostics(moduleSource)).toBe(0);
+  });
+
+  it("keys inline scripts by body and prelude, and rejects a shared eager binding", () => {
+    /* Identical statements, different deferred imports: one registry entry
+     * each, because the prelude is part of the wrapped function. */
+    const page = loadHtmlAsset(
+      "page.html",
+      `<script>import { size } from "./a";\nconsole.log(size);</script>` +
+        `<script>import { size } from "./b";\nconsole.log(size);</script>`,
+    );
+    const ids = [...page.moduleSource.matchAll(/__registerScript\("([^"]+)"/g)].map((m) => m[1]);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+
+    /* Two inline scripts cannot both claim the same module-scope binding. */
+    expect(() =>
+      loadHtmlAsset(
+        "page.html",
+        `<script>import { b } from "p1";\nconsole.log(b);</script>` +
+          `<script>import { b } from "p2";\nconsole.log(b);</script>`,
+      ),
+    ).toThrow(/already imported by another <script>/);
+  });
+
   it("compiles an external <script src> file into a registered function", () => {
     const directory = writeFiles({
       "app.ts": "const b = document.getElementById('b');\nb.textContent = 'ready';",

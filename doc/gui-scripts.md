@@ -141,9 +141,10 @@ __registerScript("a1b2…", __xt_script_a1b2);
 export default __html;
 ```
 
-- The id is a content hash of the body (sha256, first 32 hex chars); the body is
-  replaced by an empty marker element so the engine can find it in document
-  order.
+- id is a content hash of the wrapped body (sha256, first 32 hex chars; a
+  deferred import's prelude is included, so two scripts with identical
+  statements but different imports stay distinct); the body is replaced by an
+  empty marker element so the engine can find it in document order.
 - `window` and `document` are **function parameters**, so script globals resolve
   as ordinary locals — **no compiler changes**, no global object.
 - `__registerScript(id, fn)` is a new runtime builtin that stores the closure in
@@ -151,6 +152,13 @@ export default __html;
 - Deferred scripts (`<script defer>`, or all inline scripts, as decided in M9c)
   run after the full document is parsed and the first layout is computed, in
   document order. `DOMContentLoaded` then `load` are fired on `window`.
+- An inline body is split into imports and statements by the **same** routine as
+  a `<script src>` file (below): top-level `import`/`export … from` statements
+  are hoisted into the generated module, relative specifiers resolve from the
+  HTML file, and `export` modifiers are stripped. `import { readFileSync } from
+  "node:fs"` inside an inline `<script>` therefore links exactly like the same
+  import in an external script — one has to enable the `node` extension, but not
+  rewrite the page.
 
 ### 2b. External `<script src>`
 
@@ -162,21 +170,21 @@ are **deferred**, like a browser module script: the loader emits a synthetic
 at `loadHTML` time. The bundler wraps the whole local import graph in functions
 that return their exports (memoised by `__xt_defer`), so top-level module code
 runs after the document exists and two scripts importing the same module share
-one instance. Bare specifiers (`gui`, a package) stay eager.
+one instance. Bare specifiers (`gui`, a package, `node:fs`) stay eager. An
+inline `<script>` body goes through the identical split, so an import behaves
+the same in both forms; the only difference is where the body comes from.
 
 A missing `src` file is still a clear error (turned into a bundler diagnostic),
 and `src` URLs (`https://…`, `data:…`, `//host`) are left untouched — they are
 not compile-time assets and never run.
 
-`src` URLs (`https://…`, `data:…`, `//host`) are left untouched — they are not
-compile-time assets and never run.
-
-A wrapped body keeps its own file as the origin of every statement in it (the
-loader reports the body's span in the generated module as a *source range*), so
-a diagnostic points at `app.js:12` rather than at a column of `index.html`, and
-a **plain-JavaScript** script stays untyped exactly like a `.js` module imported
-directly: `state.update = …` on an object literal is not a `TS4003`. A page can
-therefore ship its existing scripts unchanged.
+A wrapped `<script src>` body keeps its own file as the origin of every
+statement in it (the loader reports the body's span in the generated module as a
+*source range*), so a diagnostic points at `app.js:12` rather than at a column
+of `index.html`, and a **plain-JavaScript** script stays untyped exactly like a
+`.js` module imported directly: `state.update = …` on an object literal is not a
+`TS4003`. A page can therefore ship its existing scripts unchanged. An inline
+body's origin is the HTML page itself.
 
 ```html
 <button id="b">0</button>
@@ -308,6 +316,10 @@ legacy `target` field over the handle.
     module wrapper at `loadHTML` time, so the import graph sees a parsed
     document and shares one instance per module. Missing files surface as
     diagnostics. All scripts run in document order. e2e coverage.
+  - **M9c′** ✅ — an inline `<script>` body is split by the same routine, so an
+    `import` (a `node:`/bare specifier included) links exactly as it does in a
+    `<script src>` file. It used to be wrapped verbatim, leaving an inline
+    `import` inside the script function where codegen reported TS5001.
   - **M9d** *(optional)* — detect inline HTML in template literals passed to
     `win.loadHTML(...)` and transform them too (fragile; deferred).
 - **M10 — polish** ✅ — `requestAnimationFrame`/`cancelAnimationFrame` on the
@@ -331,11 +343,12 @@ legacy `target` field over the handle.
   network fetches) do not run. Documented.
 - **Template-literal HTML** passed to `win.loadHTML(…)` is not transformed in
   M9b (only imported assets are). M9d addresses this if needed.
-- **Top-level `await`** inside a deferred `<script src>` module is not
+- **Top-level `await`** inside a deferred `<script src>` or inline script is not
   supported: the module body is wrapped in a synchronous init function.
-- **Assets.** `<script src>` is resolved relative to the HTML asset; URL `src`
-  values are ignored. The loader does not fetch network URLs; the runtime's
-  global `fetch` is a separate API.
+- **Assets.** `<script src>` is resolved relative to the HTML asset; an inline
+  body's imports resolve from the same place. URL `src` values are ignored. The
+  loader does not fetch network URLs; the runtime's global `fetch` is a separate
+  API.
 
 ## Testing
 
@@ -347,6 +360,9 @@ legacy `target` field over the handle.
   rewrites `*.foo` and records dependencies.
 - **M9b**: an e2e case with an inline `<script>` incrementing a counter on
   click, asserted through `console.log` from the handler.
+- **M9c′**: unit cases asserting an inline body's imports are hoisted (and its
+  relative ones deferred), plus an e2e case where an inline script reads a file
+  through `node:fs` and calls a deferred helper module.
 - **M10**: e2e cases for `requestAnimationFrame` (runs each frame, re-queues,
   receives a timestamp, honours `cancelAnimationFrame`) and for
   `offsetWidth`/`offsetHeight`/`contains`.

@@ -21,10 +21,14 @@
 
 ## 延迟求值
 
-- `gui` 的 `.html` 资产加载器用合成的 `__xt_deferred_module` 绑定标记相对的
-  `<script src>` import。bundler 会把该模块及其本地 import 图包装成返回各自
-  导出的函数，生成的脚本在 `loadHTML` 之后调用它们（`__xt_defer` 对每个模块
-  做记忆化）。这与浏览器的模块脚本一致：文档就绪后才求值 import 图。
+- `gui` 的 `.html` 资产加载器用合成的 `__xt_deferred_module` 绑定标记内联
+  `<script>` 主体与 `<script src>` 文件的相对 import。bundler 会把该模块及其
+  本地 import 图包装成返回各自导出的函数，生成的脚本在 `loadHTML` 之后调用它们
+  （`__xt_defer` 对每个模块做记忆化）。这与浏览器的模块脚本一致：文档就绪后才
+  求值 import 图。
+- 两种脚本写法使用同一套拆分逻辑：顶层 `import`/`export … from` 语句被提升进
+  生成模块，`export` 修饰符被去掉，因此裸说明符或 `node:` 说明符与普通模块
+  import 一样链接。
 - 同时被普通（非标记）import 引用的模块保持立即求值，并获得一个返回已初始化
   导出的薄包装。
 - 包装体是同步的：延迟脚本模块中的顶层 `await` 不受支持。

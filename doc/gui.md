@@ -245,6 +245,10 @@ engine were Rust.
      through a memoised module wrapper, so imported modules see the parsed
      document and share state. Missing files become diagnostics. Everything
      runs in document order.
+   - **M9c′** ✅ — an inline `<script>` body is split by the same routine, so its
+     imports are hoisted (a `node:`/bare specifier links like any module import)
+     instead of staying inside the wrapped function, where codegen reported
+     TS5001. Inline and `<script src>` now behave identically.
 10. **M10 — polish** ✅
     - `win.requestAnimationFrame(fn)` / `win.cancelAnimationFrame(id)`; callbacks
       run at the top of each frame with the frame timestamp and may mutate the
@@ -454,6 +458,9 @@ engine were Rust.
   memoised module wrapper (so module-level DOM work sees the parsed document),
   while missing files are diagnostics. Loader errors are caught by `loadGraph`
   and reported as build errors.
+- **M9c′** ✅ inline `<script>` bodies are split by the same routine as external
+  ones, so an inline `import` is hoisted and links identically (including
+  `node:fs` with the `node` extension); only the body's origin differs.
 - **M10** ✅ `requestAnimationFrame`/`cancelAnimationFrame` on window handles
   (callbacks run with the frame timestamp before layout each frame) plus
   `offsetWidth`/`offsetHeight`/`contains` on element handles; e2e coverage in

@@ -395,6 +395,8 @@ int xt_generator_await(xt_value value, xt_value *result) {
   /* A nested async function inside the generator runs on its own coroutine;
    * its awaits must not suspend the generator. */
   if (!xt_coroutine_is_current(gen->coroutine)) return 0;
+  /* The generator's body observes the outcome, so this rejection is handled. */
+  xt_promise_observe_value(value);
   int state = xt_promise_state_of(value);
   if (state == XT_PROMISE_PENDING) {
     gen->await_threw = 0;

@@ -334,6 +334,10 @@ xt_value xt_promise_static(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_await(xt_value value);
 /** Run queued promise reactions; called once the program body finishes. */
 void xt_drain_microtasks(void);
+/** Mark `value` (a promise) as observed, so its rejection is not reported. */
+void xt_promise_observe_value(xt_value value);
+/** Print rejected promises that no handler ever observed; returns how many. */
+int xt_promise_report_unhandled(void);
 
 /* -- host event loop ------------------------------------------------------ */
 /* A small select(2) reactor for host extensions (node's net/dgram/http). The

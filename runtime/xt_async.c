@@ -122,6 +122,10 @@ void xt_async_wake(void *asyncPointer, xt_value value, int rejected) {
  * queues a microtask before resuming, so an await always interleaves with
  * pending `.then` callbacks exactly like the specification. */
 xt_value xt_await(xt_value value) {
+  /* The awaiting code observes the outcome, so a rejection here is handled by
+   * definition — it is rethrown inside the coroutine, and the promise of the
+   * enclosing `async` function is what gets reported if nobody catches it. */
+  xt_promise_observe_value(value);
   /* An `await` inside an async generator suspends that generator's coroutine
    * while leaving the current `.next()` promise pending. */
   xt_value generatorResult;

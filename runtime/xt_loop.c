@@ -449,11 +449,15 @@ void xt_run_event_loop(void) {
      responsible for calling `xt_loop_poll` while it runs. */
   if (xt_loop_main != NULL) {
     xt_loop_main();
-    return;
+  } else {
+    while (xt_loop_has_work()) {
+      if (xt_loop_poll(-1) < 0) break;
+    }
   }
-  while (xt_loop_has_work()) {
-    if (xt_loop_poll(-1) < 0) break;
-  }
+  /* A rejection that no handler ever observed is fatal, like Node's default
+   * `--unhandled-rejections=throw`. Without this an `async main()` that throws
+   * exits 0 with no output at all, which hides the failure completely. */
+  if (xt_promise_report_unhandled() > 0) exit(1);
 }
 
 int xt_loop_has_work(void) {

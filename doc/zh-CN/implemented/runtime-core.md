@@ -27,5 +27,5 @@
 - 运算符辅助：`xt_in`（`in`）、`xt_delete`（`delete`）、`xt_rest_args`（剩余参数 / `arguments`）。
 - Box：`box_new/get/set`（用于闭包捕获变量）。
 - 函数与闭包：`arg`、`closure_new/call/env/arity`。
-- 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `_setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。codegen 还会维护一条影子调用栈（函数名、源文件、行号）：`Error.stack` 用它生成堆栈（见[标准库](./stdlib.md)），原生崩溃时致命信号处理器也会打印同一组帧。`--debug` 还会生成 `!DICompileUnit` / `!DISubprogram` / `!DILocation` 元数据，并用 `-g -fno-omit-frame-pointer` 编译，因此 gdb/lldb/WinDbg 可以把指令映射回源码行。
+- 异常：`xt_try_enter` / `xt_try_exception` / `xt_try_leave` 维护 `_setjmp` 帧栈；`xt_throw` 在存在帧时长跳到最近 `try`，否则打印 `Uncaught ...` 后退出。无人观察的 promise rejection 同样是致命的：事件循环排空后 `xt_promise_report_unhandled` 会打印 `Unhandled promise rejection` 与原因，并以状态码 1 退出（见[异步](./async.md)）。codegen 还会维护一条影子调用栈（函数名、源文件、行号）：`Error.stack` 用它生成堆栈（见[标准库](./stdlib.md)），原生崩溃时致命信号处理器也会打印同一组帧。`--debug` 还会生成 `!DICompileUnit` / `!DISubprogram` / `!DILocation` 元数据，并用 `-g -fno-omit-frame-pointer` 编译，因此 gdb/lldb/WinDbg 可以把指令映射回源码行。
 - 对象 / 函数：`xt_object` 带原型链，`xt_function` 带属性包（静态成员与 `prototype`）；`xt_new`（实例化）、`xt_instance_of`（原型链）、`xt_object_freeze/is_frozen/from_entries`；`xt_constructors.c` 保存一等公民构造器缓存、构造器原型与静态值分派。

@@ -51,6 +51,7 @@ import { platformSlug } from "../src/driver/paths.js";
 import { applyMacosDeploymentTarget } from "../src/driver/platform-support.js";
 import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js";
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
+import { downloadTarball } from "./fetch-tarball.js";
 import { cxxCompileFlags } from "./gui-build-options.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -175,19 +176,41 @@ function driverToolchain(): ReturnType<typeof resolveToolchain> {
   }
 }
 
-/** Download the FFmpeg release tarball and extract it under `vendor/ffmpeg`. */
+/** Fetch and extract the FFmpeg release tarball under `vendor/ffmpeg`.
+ *
+ * The tarball is kept (`vendor/ffmpeg-<version>.tar.xz`) so CI can cache it by
+ * `FFMPEG_VERSION`, and `downloadTarball` retries the transient TLS failures the
+ * release host throws; the release marker re-extracts a tree of another release. */
 function ensureFfmpegSource(): void {
-  if (existsSync(join(ffmpegSrc, "configure"))) return;
-  const tarball = join(vendorDir, "ffmpeg.tar.xz");
-  console.log(`xbintsc: fetching FFmpeg ${FFMPEG_VERSION} from ${FFMPEG_URL}`);
+  if (existsSync(join(ffmpegSrc, "configure")) && recordedRelease(ffmpegSrc) === FFMPEG_VERSION) return;
+  const tarball = join(vendorDir, `ffmpeg-${FFMPEG_VERSION}.tar.xz`);
   mkdirSync(vendorDir, { recursive: true });
-  run("curl", ["-sL", "--fail", "-o", tarball, FFMPEG_URL]);
+  if (existsSync(tarball)) {
+    console.log(`xbintsc: extracting cached ${tarball}`);
+  } else {
+    try {
+      downloadTarball(tarball, FFMPEG_URL, `FFmpeg ${FFMPEG_VERSION}`);
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
+  }
   run("tar", ["-xf", tarball, "-C", vendorDir]);
   const extracted = join(vendorDir, `ffmpeg-${FFMPEG_VERSION}`);
   if (!existsSync(extracted)) fail(`expected ffmpeg-${FFMPEG_VERSION} after extracting`);
   rmSync(ffmpegSrc, { recursive: true, force: true });
   renameSync(extracted, ffmpegSrc);
-  rmSync(tarball, { force: true });
+  writeFileSync(releaseStamp(ffmpegSrc), `${FFMPEG_VERSION}\n`);
+}
+
+/** Marker recording the FFmpeg release a source tree or installed prefix holds. */
+function releaseStamp(directory: string): string {
+  return join(directory, ".xbintsc-ffmpeg-version");
+}
+
+/** The release recorded in `directory`, or "" when it predates the marker. */
+function recordedRelease(directory: string): string {
+  const stamp = releaseStamp(directory);
+  return existsSync(stamp) ? readFileSync(stamp, "utf8").trim() : "";
 }
 
 function ffmpegStaticLibraries(): string[] | undefined {
@@ -222,6 +245,20 @@ function ensureDeploymentTarget(): void {
     console.log(`xbintsc: FFmpeg was built for macOS '${recorded}'; rebuilding for '${wanted}'`);
     rmSync(ffmpegBuild, { recursive: true, force: true });
   }
+}
+
+/**
+ * Drop a cached FFmpeg build tree from another release: neither the Makefile nor
+ * `dist` is keyed by `FFMPEG_VERSION`, so reusing it would link the previous
+ * release's libraries. A `dist` without the marker predates this check and is
+ * rebuilt once.
+ */
+function ensureBuildRelease(): void {
+  if (!ffmpegInstalled()) return;
+  const recorded = recordedRelease(ffmpegInstall);
+  if (recorded === FFMPEG_VERSION) return;
+  console.log(`xbintsc: FFmpeg was built as '${recorded || "unknown"}'; rebuilding for '${FFMPEG_VERSION}'`);
+  rmSync(ffmpegBuild, { recursive: true, force: true });
 }
 
 /** Arguments shared by the POSIX and Windows FFmpeg configure runs. */
@@ -488,6 +525,7 @@ const windowsTools = isWindows
 /* -- 2. minimal static FFmpeg --------------------------------------------- */
 
 ensureDeploymentTarget();
+ensureBuildRelease();
 if (!ffmpegInstalled()) {
   if (windowsTools) {
     buildFfmpegWindows(windowsTools.shell, windowsTools.clangCl, windowsTools.msvcBin);
@@ -502,11 +540,12 @@ if (!ffmpegInstalled()) {
 } else {
   console.log(`xbintsc: reusing existing ${ffmpegInstall}/lib`);
 }
-/* Record the target for the next run, whether this one built or reused. */
+/* Record the target and release for the next run, built or reused. */
 if (process.platform === "darwin") {
   mkdirSync(ffmpegInstall, { recursive: true });
   writeFileSync(deploymentStamp(), process.env.MACOSX_DEPLOYMENT_TARGET ?? "");
 }
+writeFileSync(releaseStamp(ffmpegInstall), `${FFMPEG_VERSION}\n`);
 
 /* -- 3. player object ------------------------------------------------------ */
 

@@ -217,7 +217,16 @@ engine were Rust.
    - `vendor/` (SDL3/FreeType/HarfBuzz/glslang for the GUI archive, FFmpeg for `media`)
      is cached per OS/arch, keyed by `scripts/build-gui.ts` /
      `scripts/build-media.ts`. Windows x64 gets its own source cache plus the
-     installed `vendor/ffmpeg-build-msvc/dist` prefix.
+     installed `vendor/ffmpeg-build-msvc/dist` prefix. On Linux/macOS the
+     installed `vendor/ffmpeg-build/dist` prefix has its own cache, keyed by
+     `FFMPEG_VERSION` and `scripts/build-media.ts` (which owns the configure
+     flags), so a hit skips FFmpeg's configure/make instead of rebuilding it on
+     every run: `scripts/build-media.ts` stamps the prefix with the release it
+     built and discards it when either the release or the macOS deployment
+     target changes. The FFmpeg
+     release tarball additionally has a cache keyed only by `FFMPEG_VERSION` and
+     shared by every job, so ffmpeg.org's intermittent TLS handshake cannot fail
+     a run that already downloaded it once.
    - Windows x64 builds both archives in CI and links a `gui` program that
      exercises the `media` link feature (plus an explicit `--feature media`
      build), using the same Visual Studio `vcvarsall` + bundled LLVM toolchain

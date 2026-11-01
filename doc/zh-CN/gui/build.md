@@ -39,8 +39,10 @@
   demuxer/parser/decoder 的最小静态构建，用它编译
   `runtime/ext_media/media.cpp`，并把所有内容合并到
   `runtime/lib/<os>-<arch>/media.a`（Windows 上 MSVC ABI 则为 `media.lib`）。
-  `gui.a` **不会**链接 FFmpeg：编译器为可能播放媒体的程序选中 `media` 链接特性后
-  才链接 `media.a`（见[链接特性](#链接特性)）。
+  下载会重试发布主机常见的瞬时 TLS 故障；解压后 tarball 保留为
+  `vendor/ffmpeg-<version>.tar.xz`，因此重建（或按 `FFMPEG_VERSION` 缓存它的
+  CI）会解压本地副本而不再下载。`gui.a` **不会**链接 FFmpeg：编译器为可能播放
+  媒体的程序选中 `media` 链接特性后才链接 `media.a`（见[链接特性](#链接特性)）。
 - `src/extensions/gui/index.ts` 通过 `nativeObjects()` 暴露引擎归档（经由
   `findRuntimeLibrary`，因此 `.a`/`.lib` 都可用），并通过 `linkerFlags()`
   暴露操作系统框架。它的 `linkFeatures()`（位于

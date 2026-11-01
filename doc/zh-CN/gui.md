@@ -157,7 +157,12 @@
    - `vendor/`（GUI 归档的 SDL3/FreeType/HarfBuzz/glslang，以及 `media` 的 FFmpeg，
      缓慢的部分）按 OS/arch 缓存，以 `scripts/build-gui.ts` /
      `scripts/build-media.ts` 为键。Windows x64 有独立的源码 + FFmpeg 安装前缀
-     缓存。
+     缓存；Linux/macOS 上安装前缀 `vendor/ffmpeg-build/dist` 另有以
+     `FFMPEG_VERSION` 和 `scripts/build-media.ts`（决定 configure 参数）为键的
+     缓存，命中后跳过 FFmpeg 的 configure/make，不必每次重编：脚本会在前缀里
+     记录构建它的发布版本，版本或 macOS 部署目标变化时丢弃重建。FFmpeg 发布
+     tarball 另有只以 `FFMPEG_VERSION` 为键、所有 job 共享的缓存：即使
+     ffmpeg.org 的 TLS 握手不稳定，也不会让已经下载过它的运行失败。
    - Windows x64 在 CI 中构建两个归档并链接一个会触发 `media` 链接特性的 `gui`
      程序（另有一条显式 `--feature media` 的构建）；托管 runner
      没有 GPU/Vulkan 驱动，因此 GUI/媒体示例的*运行*仍为试验性（失败只记录

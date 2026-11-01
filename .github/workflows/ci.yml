@@ -47,6 +47,10 @@ concurrency:
 # package.json (`engines.node`) and the only version CI exercises.
 
 env:
+  # The FFmpeg release the `media` archive is built against. It is read by
+  # `scripts/build-media.ts` and keys the tarball cache below, so bumping the
+  # pin downloads the new tarball exactly once.
+  FFMPEG_VERSION: "7.1"
   # Every clang invocation targets the oldest supported macOS (the Apple
   # Silicon floor). Ignored on Linux/Windows; the archive build scripts apply
   # the same default when they run outside CI.
@@ -239,6 +243,22 @@ jobs:
 
       - run: npm ci
 
+      # ffmpeg.org's TLS handshake intermittently fails from hosted runners
+      # (`curl: (35) SSL connect error`), and the source cache below is keyed on
+      # both build scripts, so an edit to either one would otherwise fetch the
+      # tarball again. The release tarball is identical on every platform and
+      # changes only with FFMPEG_VERSION, so it gets a cache of its own keyed on
+      # nothing else, shared by every job: `scripts/build-media.ts` keeps the
+      # tarball after extracting it, named after the release, and extracts it
+      # again whenever the extracted tree was not restored. Bump FFMPEG_VERSION
+      # for a new release (the key changes and the new tarball is fetched once).
+      - name: Cache the FFmpeg release tarball
+        if: runner.os != 'Windows' || runner.arch == 'X64'
+        uses: actions/cache@v5
+        with:
+          path: vendor/ffmpeg-*.tar.xz
+          key: ffmpeg-source-${{ env.FFMPEG_VERSION }}
+
       # Building SDL3/FreeType/HarfBuzz/glslang/SPIRV-Cross (and FFmpeg for the
       # media archive) from source is the slow part; cache the sources, keyed by
       # both build scripts (which pin the versions). actions/cache v5+ runs on
@@ -248,7 +268,8 @@ jobs:
       # compiler path and its `SDL_X11`/`SDL_WAYLAND` choices into a configure
       # that must make its own. `scripts/build-gui.ts` keeps them at
       # `vendor/sdl-build-lean`, `vendor/glslang-build-lean` and `vendor/spirv-cross-build-lean`,
-      # outside every cached path.
+      # outside every cached path. The installed FFmpeg prefix is the exception:
+      # it is relocatable and gets its own entry below.
       - name: Cache the GUI and media vendored libraries
         if: runner.os != 'Windows'
         uses: actions/cache@v5
@@ -280,6 +301,23 @@ jobs:
             vendor/ffmpeg
             vendor/ffmpeg-build-msvc/dist
           key: windows-vendor-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts', 'scripts/build-media.ts') }}
+
+      # A hit on the source cache above still leaves `npm run media` to run
+      # FFmpeg's configure/make, because the build tree is not cached. The
+      # *installed* prefix is different: it is only headers and static archives,
+      # no configure state, so it is relocatable and a hit skips the whole
+      # FFmpeg build. It gets its own entry rather than another path in the
+      # source cache: those entries already exist and cache keys are immutable,
+      # so an added path would never be saved while the build scripts stay
+      # stable. `scripts/build-media.ts` owns the configure flags, so its hash
+      # keys this entry; a prefix built for another macOS deployment target is
+      # discarded by the script's stamp check before it is used.
+      - name: Cache the installed FFmpeg prefix
+        if: runner.os != 'Windows'
+        uses: actions/cache@v5
+        with:
+          path: vendor/ffmpeg-build/dist
+          key: ffmpeg-dist-${{ runner.os }}-${{ runner.arch }}-${{ env.FFMPEG_VERSION }}-${{ hashFiles('scripts/build-media.ts') }}
 
       - name: Build the hello example
         run: npx tsx src/cli/main.ts build examples/hello.ts --out build/examples
@@ -595,6 +633,16 @@ jobs:
 
       - run: npm ci
 
+      # Same version-keyed FFmpeg tarball cache as `compile-examples`: this job
+      # builds the published `media` archive, so a flaky ffmpeg.org handshake
+      # must not decide whether a release can be assembled.
+      - name: Cache the FFmpeg release tarball
+        if: runner.os != 'Windows' || runner.arch == 'X64'
+        uses: actions/cache@v5
+        with:
+          path: vendor/ffmpeg-*.tar.xz
+          key: ffmpeg-source-${{ env.FFMPEG_VERSION }}
+
       - name: Cache the GUI and media vendored libraries
         if: runner.os != 'Windows'
         uses: actions/cache@v5
@@ -621,6 +669,15 @@ jobs:
             vendor/ffmpeg
             vendor/ffmpeg-build-msvc/dist
           key: windows-vendor-${{ runner.arch }}-${{ hashFiles('scripts/build-gui.ts', 'scripts/build-media.ts') }}
+
+      # Same installed-FFmpeg-prefix cache as `compile-examples` (see the long
+      # comment there): a hit skips configure/make for the published archive.
+      - name: Cache the installed FFmpeg prefix
+        if: runner.os != 'Windows'
+        uses: actions/cache@v5
+        with:
+          path: vendor/ffmpeg-build/dist
+          key: ffmpeg-dist-${{ runner.os }}-${{ runner.arch }}-${{ env.FFMPEG_VERSION }}-${{ hashFiles('scripts/build-media.ts') }}
 
       - name: Download the self-hosted compiler
         uses: actions/download-artifact@v8

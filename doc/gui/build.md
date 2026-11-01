@@ -45,9 +45,13 @@
   minimal static build with only the demuxers/parsers/decoders the media
   elements need, compiles `runtime/ext_media/media.cpp` against it and merges
   everything into `runtime/lib/<os>-<arch>/media.a` (`media.lib` with the MSVC
-  ABI on Windows). `gui.a` does **not** link FFmpeg: the compiler selects the
-  `media` link feature for a program that may play media and only then links
-  `media.a` (see [Link features](#link-features)).
+  ABI on Windows). The download retries the transient TLS failures the release
+  host is prone to, and the tarball is kept at
+  `vendor/ffmpeg-<version>.tar.xz` after extraction, so a rebuild (or CI, which
+  caches it by `FFMPEG_VERSION`) extracts the local copy instead of fetching it
+  again. `gui.a` does **not** link FFmpeg: the compiler selects the `media` link
+  feature for a program that may play media and only then links `media.a` (see
+  [Link features](#link-features)).
 - `src/extensions/gui/index.ts` exposes the engine archive through
   `nativeObjects()` (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the
   OS frameworks through `linkerFlags()`. Its `linkFeatures()` (in

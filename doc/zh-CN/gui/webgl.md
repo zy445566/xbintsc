@@ -133,6 +133,7 @@ transform feedback（入口为空操作：SDL_GPU 没有 transform feedback 阶�
 - `tests/e2e/gui-media.test.ts` 还会把 `<video>` 的最新解码帧上传为纹理并读回像素。
 - `examples/gui/webgl-cube` 是一个旋转、受光、带纹理的立方体；它在浏览器中原样运行，并由 `tests/e2e/gui-example-webgl.test.ts` 覆盖。
 - `examples/gui/webgl2-cubes` 用一次绘制调用画出 64 个实例化立方体，使用 `#version 300 es` 与 VAO；由 `tests/e2e/gui-example-webgl2.test.ts` 覆盖。
+- `examples/gui/pelican-3d` 是一个完整的光照场景（程序化天空、雾、实例化树木/云、带关节动画的鹈鹕和自行车），拆成九个 ES module，并用 `AudioContext` 合成音效；由 `tests/e2e/gui-example-pelican3d.test.ts` 覆盖。
 
 这些用例会在宿主选择的后端上运行：Linux（与 Windows）上是 Vulkan，macOS 上是 Metal，因此 SPIRV-Cross → MSL 路径与 SPIR-V 路径受同一组断言保护。
 

@@ -311,8 +311,12 @@ In a project, list the extension in `xbintsc.config.json`
 `node`. `XT_GUI_AUTOCLOSE_MS=<ms>` closes all windows after a delay, which is how
 the end-to-end tests run the examples headlessly.
 
-[`examples/gui/pelican-bike`](./examples/gui/pelican-bike) is a playable 2D game
+[`examples/gui/pelican-bike`](./examples/gui/pelican-bike) is a playable 2D game made with DOM elements
+[`examples/gui/pelican-canvas`](./examples/gui/pelican-canvas) is a playable 2D game made with canvas
 whose document also opens unchanged in a browser.
+[`examples/gui/pelican-3d`](./examples/gui/pelican-3d) goes one step further: a
+WebGL 2 low-poly pelican on a bicycle, built from nine ES modules with
+`AudioContext`-synthesized bells, wind and jump sounds.
 
 Platforms and full details: [doc/gui.md](./doc/gui.md) is the engine overview
 (architecture and roadmap); the per-function documents live under

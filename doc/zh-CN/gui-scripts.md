@@ -133,8 +133,9 @@ __registerScript("a1b2…", __xt_script_a1b2);
 export default __html;
 ```
 
-- id 是主体内容的哈希（sha256，前 32 个十六进制字符）；主体被替换为一个空的
-  标记元素，以便引擎能按文档顺序找到它。
+- id 是包装后主体内容的哈希（sha256，前 32 个十六进制字符；包含延迟 import 的
+  prelude，因此语句相同但 import 不同的两个脚本不会合并为同一条注册表记录）；
+  主体被替换为一个空的标记元素，以便引擎能按文档顺序找到它。
 - `window` 与 `document` 是**函数参数**，因此脚本的全局变量会作为普通局部
   变量解析 —— **无需编译器改动**，也没有全局对象。
 - `__registerScript(id, fn)` 是一个新的运行时内置函数，它把闭包存进全局的
@@ -142,6 +143,11 @@ export default __html;
 - 延迟脚本（`<script defer>`，或 M9c 中决定的所有内联脚本）在完整文档解析
   并计算首次布局之后按文档顺序运行。然后在 `window` 上依次触发
   `DOMContentLoaded` 再 `load`。
+- 内联主体与 `<script src>` 文件走**同一套**拆分逻辑（见下）：顶层
+  `import`/`export … from` 语句被提升进生成模块，相对说明符相对 HTML 文件
+  解析，`export` 修饰符被去掉。因此内联 `<script>` 里的
+  `import { readFileSync } from "node:fs"` 与外链脚本里的同一条 import 链接
+  方式完全一致 —— 需要开启 `node` 扩展，但不需要改写页面。
 
 ### 2b. 外部 `<script src>`
 
@@ -151,19 +157,19 @@ import 会像浏览器的模块脚本一样**延迟**：loader 生成一个合�
 `__xt_deferred_module` 标记，生成的脚本在 `loadHTML` 时调用模块包装函数。
 bundler 把整个本地 import 图包装成返回各自导出的函数（由 `__xt_defer`
 记忆化），因此模块顶层代码在文档就绪后才运行，且两个脚本导入同一模块时共享
-同一个实例。裸说明符（`gui`、npm 包）仍然立即加载。
+同一个实例。裸说明符（`gui`、npm 包、`node:fs`）仍然立即加载。内联
+`<script>` 主体走完全相同的拆分，因此两种写法里的 import 行为一致；唯一区别
+是主体的来源。
 
 缺失的 `src` 文件仍会抛出清晰的错误（被转换为 bundler 诊断）；
 `src` URL（`https://…`、`data:…`、`//host`）保持原样 —— 它们不是编译期资产，
 永不运行。
 
-`src` URL（`https://…`、`data:…`、`//host`）保持原样 —— 它们不是编译期资产，
-永不运行。
-
-被包装的脚本体以**它自己的文件**作为其中每条语句的来源（loader 会把该脚本体在生成模块中的
+被包装的 `<script src>` 主体以**它自己的文件**作为其中每条语句的来源（loader 会把该脚本体在生成模块中的
 区间作为 source range 上报），因此诊断会指向 `app.js:12`，而不是 `index.html` 的某一列；
 同时**纯 JavaScript** 脚本与直接 import 的 `.js` 模块一样不做类型检查：在对象字面量上写
-`state.update = …` 不会再报 `TS4003`。页面因此可以原样携带已有的脚本。
+`state.update = …` 不会再报 `TS4003`。页面因此可以原样携带已有的脚本。内联主体的
+来源就是 HTML 页面本身。
 
 ```html
 <button id="b">0</button>
@@ -288,6 +294,9 @@ Event 的 `target` 是句柄，其描述符（`toString`）与同一 `div#id.cla
     通过带记忆化的模块包装函数延迟到 `loadHTML` 求值，因此 import 图能看到
     已解析的文档，且同一模块只实例化一次。缺失文件作为诊断浮现。所有脚本按
     文档顺序运行。e2e 覆盖。
+  - **M9c′** ✅ —— 内联 `<script>` 主体走同一套拆分逻辑，因此 `import`（包括
+    `node:`/裸说明符）与外链脚本里的链接方式完全一致。此前内联主体被原样包装，
+    其 `import` 留在脚本函数体内，codegen 会报 TS5001。
   - **M9d** *(可选)* —— 检测传给 `win.loadHTML(...)` 的模板字面量中的内联
     HTML 并同样转换它们（脆弱；推迟）。
 - **M10 — 打磨** ✅ —— 窗口上的
@@ -312,10 +321,11 @@ Event 的 `target` 是句柄，其描述符（`toString`）与同一 `div#id.cla
   不会运行。已记录。
 - **模板字面量 HTML** 传给 `win.loadHTML(…)` 时在 M9b 中不会被转换（只有
   导入的资产会）。如有需要，M9d 会处理。
-- **外部 `<script src>` 文件之间的 import 绑定冲突。** 会被检测并报告
+- **外部 `<script src>` 与内联脚本之间的 import 绑定冲突。** 会被检测并报告
   （给 import 起别名）；之后可以做到带引用重写的按脚本重命名。
-- **资产。** `<script src>` 相对 HTML 资产解析；URL `src` 值被忽略。
-  加载器不会请求网络 URL；运行时全局 `fetch` 是另一套 API。
+- **资产。** `<script src>` 相对 HTML 资产解析；内联主体的 import 也从同一位置
+  解析。URL `src` 值被忽略。加载器不会请求网络 URL；运行时全局 `fetch` 是
+  另一套 API。
 
 ## 测试
 
@@ -326,6 +336,8 @@ Event 的 `target` 是句柄，其描述符（`toString`）与同一 `div#id.cla
 - **M9a**：一个假扩展加载器的单元测试，断言 bundler 重写 `*.foo` 并记录依赖。
 - **M9b**：一个带内联 `<script>`、点击时递增计数器的 e2e 用例，通过处理器的
   `console.log` 断言。
+- **M9c′**：单元用例断言内联主体的 import 被提升（相对 import 被延迟），外加
+  一个 e2e 用例：内联脚本通过 `node:fs` 读取文件并调用被延迟的辅助模块。
 - **M10**：`requestAnimationFrame`（每帧运行、重新排队、接收时间戳、遵守
   `cancelAnimationFrame`）与 `offsetWidth`/`offsetHeight`/`contains` 的 e2e
   用例。

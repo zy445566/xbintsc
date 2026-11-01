@@ -182,6 +182,9 @@
      相对 import 通过带记忆化的模块包装函数延迟到 `loadHTML` 求值，因此被导入
      模块能看到已解析的文档并共享状态。缺失文件会成为诊断。一切都按文档顺序
      运行。
+   - **M9c′** ✅ —— 内联 `<script>` 主体走同一套拆分逻辑，其 import 被提升
+     （`node:`/裸说明符像普通模块 import 一样链接），而不是留在被包装的函数
+     体内、由 codegen 报 TS5001。内联与外链现在行为一致。
 10. **M10 — 打磨** ✅
     - `win.requestAnimationFrame(fn)` / `win.cancelAnimationFrame(id)`；回调
       在每帧顶部以帧时间戳运行，并可修改 DOM
@@ -366,6 +369,8 @@
 - **M9c** ✅ 外部 `<script src>` 文件被读取，其主体被包装/注册；相对 import
   通过带记忆化的模块包装函数延迟到 `loadHTML`（模块级 DOM 工作因此能看到已解析
   文档）；缺失文件会成为诊断。加载器错误被 `loadGraph` 捕获并报告为构建错误。
+- **M9c′** ✅ 内联 `<script>` 主体与外链主体走同一套拆分逻辑，因此内联 `import`
+  被提升并同样链接（开启 `node` 扩展后包括 `node:fs`）；只有主体来源不同。
 - **M10** ✅ 窗口句柄上的 `requestAnimationFrame`/`cancelAnimationFrame`
   （回调在每帧布局之前以帧时间戳运行），以及元素句柄上的
   `offsetWidth`/`offsetHeight`/`contains`；e2e 覆盖在

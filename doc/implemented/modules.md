@@ -21,12 +21,15 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
 
 ## Deferred evaluation
 
-- The `gui` `.html` asset loader marks relative `<script src>` imports with a
-  synthetic `__xt_deferred_module` binding. The bundler then wraps that module
-  and its local import graph in functions that return their exports, and the
-  generated script calls them after `loadHTML` (`__xt_defer` memoises each
-  module). This matches a browser module script, where the graph is evaluated
-  once the document exists.
+- The `gui` `.html` asset loader marks relative imports of an inline `<script>`
+  body or a `<script src>` file with a synthetic `__xt_deferred_module` binding.
+  The bundler then wraps that module and its local import graph in functions that
+  return their exports, and the generated script calls them after `loadHTML`
+  (`__xt_defer` memoises each module). This matches a browser module script,
+  where the graph is evaluated once the document exists.
+- Both script forms are split the same way: top-level `import`/`export … from`
+  statements are hoisted into the generated module and `export` modifiers are
+  stripped, so a bare or `node:` specifier links like any ordinary module import.
 - Modules also reachable through a normal (non-marker) import stay eager and get
   a thin wrapper over their already-initialised exports.
 - The wrapper body is synchronous: top-level `await` inside a deferred script

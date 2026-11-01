@@ -12,13 +12,16 @@
  * This is how xbintsc supports `<script>` without a JavaScript engine: the body
  * is ordinary TypeScript compiled by the existing front end, ahead of time.
  *
- * Inline `<script lang="ts">body</script>` bodies are wrapped directly. External
- * `<script src="./app.ts">` files are read, their top-level `import`/`export
- * … from` statements are hoisted to the generated module (with relative
- * specifiers rewritten so they resolve from the HTML file), and the remaining
- * statements are wrapped in the script function. All scripts run in document
- * order after parsing (there is no "eager" execution point), i.e. every script
- * is effectively `defer`red.
+ * Both forms are compiled the same way: an inline
+ * `<script lang="ts">body</script>` body and an external `<script src="./app.ts">`
+ * file are parsed as a module, their top-level `import`/`export … from`
+ * statements are hoisted to the generated module (with relative specifiers
+ * rewritten so they resolve from the HTML file), and the remaining statements
+ * are wrapped in the script function. An inline body therefore resolves imports
+ * relative to the page that contains it, exactly like `<script type="module">`
+ * in a browser — including a `node:`/bare specifier, which links like any other
+ * module import. All scripts run in document order after parsing (there is no
+ * "eager" execution point), i.e. every script is effectively `defer`red.
  */
 
 import { existsSync, readFileSync } from "node:fs";
@@ -161,12 +164,18 @@ function deferredPrelude(alias: string, declaration: ImportDeclaration): string[
   return lines;
 }
 
-/** Split an external script module into hoisted imports and a body. */
-function compileModuleSource(htmlPath: string, scriptPath: string, scriptIndex: number): CompiledModule {
+/** Split a script module into hoisted imports and a body. */
+function compileModuleSource(
+  htmlPath: string,
+  scriptPath: string,
+  scriptSource: string,
+  scriptIndex: number,
+): CompiledModule {
   /* Mask the normalized text: the parser indexes the `SourceFile` text, where
    * `\r\n` already became `\n`, so blanking statement spans in the raw file
-   * would remove the wrong characters on a CRLF checkout. */
-  const source = new SourceFile(scriptPath, readFileSync(scriptPath, "utf8")).text;
+   * would remove the wrong characters on a CRLF checkout. An inline body is
+   * already normalized (the page was), so this is the identity for it. */
+  const source = new SourceFile(scriptPath, scriptSource).text;
   const bag = new DiagnosticBag();
   const parsed = new Parser(new SourceFile(scriptPath, source), bag).parseSourceFile();
   const chars = source.split("");
@@ -272,6 +281,35 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
   const importedText = new Set<string>();
   const bound = new Set<string>();
 
+  /* Every script's hoisted imports live at module scope, so they are collected
+   * here and placed in front of the script functions. `element` and `hint` only
+   * shape the error for an eager binding claimed by two scripts. */
+  const hoistImports = (compiled: CompiledModule, element: string, hint: string): void => {
+    for (const text of compiled.imports) {
+      if (!importedText.has(text)) {
+        importedText.add(text);
+        imports.push(text);
+      }
+    }
+    lazyImports.push(...compiled.lazyImports);
+    for (const name of compiled.localNames) {
+      if (bound.has(name)) {
+        throw new Error(
+          `gui: ${element} imports '${name}', already imported by another <script>; ${hint}`,
+        );
+      }
+      bound.add(name);
+    }
+  };
+  const register = (compiled: CompiledModule, file?: string): string => {
+    /* Hash the wrapped body, prelude included: the engine keys the registry by
+     * id, so two scripts with the same statements but different deferred
+     * imports must not collapse into one entry. */
+    const id = hashString([...compiled.prelude, compiled.body].join("\n"));
+    scripts.push({ id, body: compiled.body, prelude: compiled.prelude, ...(file ? { file } : {}) });
+    return id;
+  };
+
   /* The engine's cascade only reads `<style>` elements, so a linked stylesheet
    * would be dropped at runtime. Inline it (and its `@import`s) now. */
   const styles = inlineStylesheets(path, page);
@@ -284,32 +322,24 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
       if (!existsSync(scriptPath)) {
         throw new Error(`gui: <script src="${src}"> not found (looked for ${scriptPath})`);
       }
-      const compiled = compileModuleSource(path, scriptPath, scripts.length);
-      for (const text of compiled.imports) {
-        if (!importedText.has(text)) {
-          importedText.add(text);
-          imports.push(text);
-        }
-      }
-      lazyImports.push(...compiled.lazyImports);
-      for (const name of compiled.localNames) {
-        if (bound.has(name)) {
-          throw new Error(
-            `gui: <script src="${src}"> imports '${name}', already imported by another <script src>; alias it in ${scriptPath}`,
-          );
-        }
-        bound.add(name);
-      }
-      const id = hashString([...compiled.prelude, compiled.body].join("\n"));
-      scripts.push({ id, body: compiled.body, prelude: compiled.prelude, file: scriptPath });
+      const compiled = compileModuleSource(path, scriptPath, readFileSync(scriptPath, "utf8"), scripts.length);
+      hoistImports(compiled, `<script src="${src}">`, `alias it in ${scriptPath}`);
+      const id = register(compiled, scriptPath);
       return `<script data-xt-id="${id}"></script>`;
     }
 
     /* A `src` URL, or a data block: leave the element untouched. */
     if (src !== undefined) return match;
     if (inlineBody.trim() === "") return match;
-    const id = hashString(inlineBody);
-    scripts.push({ id, body: inlineBody, prelude: [] });
+    /* An inline body is compiled exactly like a `<script src>` file, so an
+     * `import` links the same way in both: a bare or `node:` specifier is
+     * hoisted to the generated module, a relative one is deferred, and both
+     * resolve from the HTML file as a browser module script would. Wrapping the
+     * body verbatim used to leave an inline `import` inside the script function,
+     * where codegen cannot link its binding (TS5001). */
+    const compiled = compileModuleSource(path, path, inlineBody, scripts.length);
+    hoistImports(compiled, "inline <script>", "alias it");
+    const id = register(compiled);
     return `<script data-xt-id="${id}"></script>`;
   });
 

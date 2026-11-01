@@ -201,7 +201,9 @@ The two parameters (`window`, `document`) are ordinary function arguments, so
 script locals need no global-object machinery. External scripts work too:
 `<script src="./counter.ts">` is read at compile time, its imports are hoisted
 (rewritten to resolve from the HTML file) and its body is wrapped the same way —
-so a script module can `import` helpers and still see `document`. Scripts are
+so a script module can `import` helpers and still see `document`. An inline body
+goes through the same split, so `import` works identically there, `node:fs` and
+other `node:` built-ins included once the `node` extension is enabled. Scripts are
 **compile-time assets**: HTML created at runtime (`innerHTML`, fetched over the
 network) never executes, and `src` URLs (`https://…`, `data:…`) are ignored.
 Everything runs in document order after parsing (effectively deferred). See

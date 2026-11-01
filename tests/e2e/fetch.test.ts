@@ -23,7 +23,7 @@ const describeWithClang = hasClang() ? describe : describe.skip;
 
 const SERVER_SOURCE = `
 const { createServer } = require("node:http");
-const { writeFileSync } = require("node:fs");
+const { renameSync, writeFileSync } = require("node:fs");
 
 const server = createServer((req, res) => {
   const url = req.url.split("?")[0];
@@ -68,14 +68,43 @@ const server = createServer((req, res) => {
 });
 
 server.listen(0, "127.0.0.1", () => {
-  writeFileSync(process.argv[2], String(server.address().port));
+  /* Publish the port atomically: this test polls for the file, and a reader
+   * that observes a half-written one would build a malformed base URL. */
+  const temporary = process.argv[2] + ".tmp";
+  writeFileSync(temporary, String(server.address().port));
+  renameSync(temporary, process.argv[2]);
 });
 `;
+
+/**
+ * Wait until the server has published its port, then read it once.
+ *
+ * The file's *content* is the readiness signal, not its existence: `create`
+ * and `write` are two syscalls, so an existence check can succeed while the
+ * port is still empty. Reading it then yields a base URL like
+ * `http://127.0.0.1:` whose every request rejects, and the compiled program
+ * exits 0 with no output because the rejected `main()` is never reported.
+ */
+async function waitForPort(file: string): Promise<number> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    if (existsSync(file)) {
+      const text = readFileSync(file, "utf8").trim();
+      if (/^\d+$/.test(text)) {
+        const port = Number(text);
+        if (port > 0 && port < 65536) return port;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`the test server did not publish a port in ${file}`);
+}
 
 describeWithClang("fetch builtin", () => {
   let workdir: string;
   let cacheDir: string;
   let server: ChildProcess | undefined;
+  let port = 0;
 
   beforeAll(async () => {
     workdir = mkdtempSync(join(tmpdir(), "xbintsc-fetch-"));
@@ -84,9 +113,7 @@ describeWithClang("fetch builtin", () => {
     const portFile = join(workdir, "port.txt");
     writeFileSync(serverFile, SERVER_SOURCE);
     server = spawn(process.execPath, [serverFile, portFile], { stdio: ["ignore", "ignore", "inherit"] });
-    while (!existsSync(portFile)) {
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
+    port = await waitForPort(portFile);
   });
 
   afterAll(() => {
@@ -101,11 +128,11 @@ describeWithClang("fetch builtin", () => {
     const result = build(entry, { emit: "exe", outDir: join(workdir, "out"), cacheDir, force: true });
     expect(result.diagnostics.filter((d) => d.category === "error")).toEqual([]);
     const executed = spawnSync(result.outputPath, [], { encoding: "utf8", timeout: 120000 });
+    if (executed.error) throw executed.error;
     return { stdout: executed.stdout ?? "", stderr: executed.stderr ?? "", status: executed.status };
   }
 
   function baseUrl(): string {
-    const port = readFileSync(join(workdir, "port.txt"), "utf8").trim();
     return `http://127.0.0.1:${port}`;
   }
 

@@ -337,6 +337,10 @@ SPIRV-Cross, nor any `webgl_*` member (see [Link features](./build.md#link-featu
 - `examples/gui/webgl2-cubes` draws 64 instanced cubes with one draw call,
   `#version 300 es` and a VAO; covered by
   `tests/e2e/gui-example-webgl2.test.ts`.
+- `examples/gui/pelican-3d` is a complete lit scene (procedural sky, fog,
+  instanced trees/clouds, a rigged pelican and bicycle) split across nine ES
+  modules with `AudioContext` sound; covered by
+  `tests/e2e/gui-example-pelican3d.test.ts`.
 
 These suites run against whichever backend the host selects: Vulkan on Linux
 (and Windows), Metal on macOS, so the SPIRV-Cross -> MSL path is covered by the

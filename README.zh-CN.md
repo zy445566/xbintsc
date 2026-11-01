@@ -253,8 +253,13 @@ xbintsc run examples/gui/media.ts --ext gui
 `--ext gui`，与 `node` 完全一样。设置 `XT_GUI_AUTOCLOSE_MS=<ms>` 可在指定毫秒后
 自动关闭所有窗口，端到端测试正是用它无头运行示例。
 
-仓库里的示例是 [`examples/gui/pelican-bike`](./examples/gui/pelican-bike)
-——一个可玩的 2D 游戏，它的同一份文档在浏览器里也能直接打开。
+仓库里的示例是
+ [`examples/gui/pelican-bike`](./examples/gui/pelican-bike)
+ [`examples/gui/pelican-canvas`](./examples/gui/pelican-canvas)
+——一个可玩的 2D 游戏(分别使用dom和canvas绘制)，它的同一份文档在浏览器里也能直接打开。
+[`examples/gui/pelican-3d`](./examples/gui/pelican-3d) 更进一步：一个用九个 ES
+module 搭起来的 WebGL 2 低多边形鹈鹕骑车场景，并用 `AudioContext` 合成车铃、
+风声和跳跃音效。
 
 平台与完整说明：[doc/zh-CN/gui.md](./doc/zh-CN/gui.md) 是引擎总览（架构与
 路线图）；按功能拆分的文档位于 [doc/zh-CN/gui/](./doc/zh-CN/gui) —— API、

@@ -1,0 +1,239 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>鹈鹕骑单车 3D · Pelican Ride</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 1100px;
+      height: 700px;
+      overflow: hidden;
+      background-color: #0d141f;
+      color: #f8f2e6;
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      font-size: 14px;
+    }
+
+    #scene {
+      display: block;
+      width: 1100px;
+      height: 700px;
+      background-color: #f0b57f;
+    }
+
+    .hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1100px;
+      height: 700px;
+      pointer-events: none;
+    }
+
+    .brand {
+      position: absolute;
+      top: 28px;
+      left: 32px;
+      width: 360px;
+      padding: 16px 20px 15px 20px;
+      background-color: #10202b;
+      border-color: rgba(255, 226, 178, 0.28);
+      border-width: 1px;
+      border-radius: 14px;
+    }
+
+    .kicker {
+      color: #8fe0d3;
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 2.2px;
+    }
+
+    .title {
+      margin-top: 6px;
+      color: #fff6e5;
+      font-size: 36px;
+      font-weight: bold;
+      letter-spacing: 1.2px;
+      line-height: 42px;
+    }
+
+    .title span {
+      color: #ffd166;
+    }
+
+    .subtitle {
+      margin-top: 5px;
+      color: #e9c9a5;
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+
+    .stats {
+      position: absolute;
+      top: 28px;
+      right: 24px;
+      width: 443px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .stat {
+      width: 141px;
+      padding: 11px 15px 10px 15px;
+      background-color: #10202b;
+      border-color: rgba(255, 226, 178, 0.28);
+      border-width: 1px;
+      border-radius: 12px;
+    }
+
+    .label {
+      color: #91a6b1;
+      font-size: 9px;
+      font-weight: bold;
+      letter-spacing: 1.8px;
+    }
+
+    .value {
+      margin-top: 4px;
+      color: #fff4db;
+      font-size: 25px;
+      font-weight: bold;
+      line-height: 28px;
+    }
+
+    .value .unit {
+      margin-left: 4px;
+      color: #ffd166;
+      font-size: 10px;
+      letter-spacing: 1px;
+    }
+
+    .mode {
+      margin-top: 5px;
+      color: #8fe0d3;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 1.4px;
+    }
+
+    .help {
+      position: absolute;
+      left: 32px;
+      bottom: 28px;
+      width: 600px;
+      padding: 13px 17px;
+      background-color: #10202b;
+      border-color: rgba(255, 226, 178, 0.22);
+      border-width: 1px;
+      border-radius: 12px;
+      color: #e8d8c2;
+      font-size: 12px;
+      line-height: 21px;
+      letter-spacing: 0;
+    }
+
+    .chip {
+      position: absolute;
+      right: 24px;
+      bottom: 28px;
+      width: 150px;
+      height: 40px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #10202b;
+      border-color: rgba(143, 224, 211, 0.46);
+      border-width: 1px;
+      border-radius: 10px;
+      color: #8fe0d3;
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 0;
+      text-align: center;
+      cursor: pointer;
+      pointer-events: auto;
+    }
+
+    .status {
+      position: absolute;
+      right: 24px;
+      bottom: 82px;
+      width: 300px;
+      color: rgba(248, 242, 230, 0.58);
+      font-size: 9px;
+      letter-spacing: 0.9px;
+      text-align: right;
+    }
+
+    .error {
+      position: absolute;
+      left: 100px;
+      top: 250px;
+      width: 900px;
+      padding: 24px;
+      display: none;
+      background-color: rgba(18, 24, 30, 0.92);
+      border-color: #e85b4a;
+      border-width: 2px;
+      border-radius: 12px;
+      color: #ffd8cf;
+      font-size: 14px;
+      line-height: 24px;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="scene" width="1100" height="700"></canvas>
+
+  <div class="hud">
+    <div class="brand">
+      <div class="kicker">WEBGL 2 · ES MODULES · WEBAUDIO</div>
+      <div class="title">PELICAN RIDE <span>3D</span></div>
+      <div class="subtitle">黄昏公路上的鹈鹕骑手</div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="label">SPEED</div>
+        <div class="value"><span id="speed">021</span><span class="unit">KM/H</span></div>
+      </div>
+      <div class="stat">
+        <div class="label">DISTANCE</div>
+        <div class="value"><span id="distance">0 m</span></div>
+        <div id="mode" class="mode">CRUISE</div>
+      </div>
+      <div class="stat">
+        <div class="label">FPS</div>
+        <div class="value"><span id="fps">060</span></div>
+        <div class="mode">FRAME RATE</div>
+      </div>
+    </div>
+
+    <div class="help">
+      <div>空格 跳跃 · B 车铃 · W 加速 · S 刹车</div>
+      <div>鼠标拖拽或滚轮 视角 · M 静音 · R 重置 · P 暂停</div>
+    </div>
+
+    <div id="status" class="status">WEBGL 2</div>
+    <div id="sound" class="chip"><span id="sound-label">SOUND ON</span></div>
+    <div id="error" class="error"></div>
+  </div>
+
+  <!-- A real ES module: a browser evaluates the graph natively, while xbintsc's
+       gui `.html` loader AOT-compiles the same graph and defers it until the
+       document has been parsed. -->
+  <script type="module" src="./js/main.js"></script>
+</body>
+
+</html>

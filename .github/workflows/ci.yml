@@ -144,6 +144,13 @@ jobs:
         # report below needs alongside clang.
         run: sudo apt-get update && sudo apt-get install -y clang llvm
 
+      # An update scan, install or pending reboot is invisible to the job and
+      # can stall it for minutes or take the runner offline mid-step; turn
+      # Windows Update off before the build starts (see the script).
+      - name: Disable Windows Update (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/disable-windows-update
+
       # Windows uses the same Visual Studio installation a local build uses:
       # vcvarsall supplies MSVC, the Windows SDK and MSBuild, and the LLVM
       # bundled with Visual Studio is the compiler (`xbintsc_CLANG`). No
@@ -231,6 +238,13 @@ jobs:
           sudo sh scripts/install-gui-deps.sh
           sudo apt-get update && sudo apt-get install -y clang-16 lld-16
           echo "xbintsc_CLANG=clang-16" >> "$GITHUB_ENV"
+
+      # An update scan, install or pending reboot is invisible to the job and
+      # can stall it for minutes or take the runner offline mid-step; turn
+      # Windows Update off before the build starts (see the script).
+      - name: Disable Windows Update (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/disable-windows-update
 
       # The same Visual Studio Build Tools/Community installation a local build
       # uses: vcvarsall (MSVC, SDK, MSBuild) plus its bundled LLVM. `make: true`
@@ -505,6 +519,13 @@ jobs:
           sudo apt-get update && sudo apt-get install -y clang-16 lld-16
           echo "xbintsc_CLANG=clang-16" >> "$GITHUB_ENV"
 
+      # An update scan, install or pending reboot is invisible to the job and
+      # can stall it for minutes or take the runner offline mid-step; turn
+      # Windows Update off before the build starts (see the script).
+      - name: Disable Windows Update (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/disable-windows-update
+
       # Same Visual Studio toolchain as the local build and the archives.
       - name: Set up the Visual Studio toolchain (Windows)
         if: runner.os == 'Windows'
@@ -621,6 +642,13 @@ jobs:
           sudo sh scripts/install-gui-deps.sh
           sudo apt-get update && sudo apt-get install -y clang-16 lld-16
           echo "xbintsc_CLANG=clang-16" >> "$GITHUB_ENV"
+
+      # An update scan, install or pending reboot is invisible to the job and
+      # can stall it for minutes or take the runner offline mid-step; turn
+      # Windows Update off before the build starts (see the script).
+      - name: Disable Windows Update (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/disable-windows-update
 
       # This job builds the GUI/media archives too, so it needs the same Visual
       # Studio toolchain as compile-examples (vcvarsall + its bundled LLVM) and

@@ -170,9 +170,11 @@ winget install -e --id Microsoft.VisualStudio.2022.BuildTools `
   --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
 ```
 
-The LLVM bundled with Visual Studio 2022
-(`VC\Tools\Llvm\x64\bin\clang.exe`, version 19.1.5 in current installs) is what
-`scripts/setup-vs-toolchain.ps1` selects. A standalone LLVM also works for
+The LLVM bundled with Visual Studio (`VC\Tools\Llvm\x64\bin\clang.exe`) is what
+`scripts/setup-vs-toolchain.ps1` selects. `xbintsc` probes both install layouts —
+the year-named one (`2019`, `2022`) and the version-numbered one used by Visual
+Studio 2026 and later (`18\Community`, `18\Insiders`, …) — so a newer installation
+is found without setting `xbintsc_CLANG`. A standalone LLVM also works for
 `xbintsc` itself (`winget install -e --id LLVM.LLVM`), but the GUI/media archive
 builds and the CI setup use the Visual Studio one so one toolchain produces the
 runtime, the archives and the final binary. Either way the compiler must target

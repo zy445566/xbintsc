@@ -154,8 +154,11 @@ winget install -e --id Microsoft.VisualStudio.2022.BuildTools `
   --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Llvm.Clang --includeRecommended"
 ```
 
-Visual Studio 2022 自带的 LLVM（`VC\Tools\Llvm\x64\bin\clang.exe`，当前版本
-19.1.5）就是 `scripts/setup-vs-toolchain.ps1` 选择的工具链。独立安装的 LLVM
+Visual Studio 自带的 LLVM（`VC\Tools\Llvm\x64\bin\clang.exe`，当前 2022 安装中
+为 19.1.5）就是 `scripts/setup-vs-toolchain.ps1` 选择的工具链。`xbintsc` 会探测
+两种安装布局——按年份命名的旧布局（`2019`、`2022`）以及 Visual Studio 2026 及
+之后按主版本号命名的布局（`18\Community`、`18\Insiders` 等）——因此更新版本的
+安装无需设置 `xbintsc_CLANG` 也能被发现。独立安装的 LLVM
 （`winget install -e --id LLVM.LLVM`）对 `xbintsc` 本身也可用，但 GUI/媒体
 归档构建与 CI 都使用 Visual Studio 这一套，从而让运行时、预编译归档与最终
 二进制出自同一条工具链。无论哪种，编译器必须以 MSVC ABI 为目标

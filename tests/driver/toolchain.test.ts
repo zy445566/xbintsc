@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -12,6 +12,7 @@ import {
   parseClangVersion,
   probeClang,
   ToolchainError,
+  visualStudioLlvmDirs,
   type CommandResult,
   type Runner,
 } from "../../src/driver/toolchain.js";
@@ -55,6 +56,28 @@ describe("toolchain", () => {
 
   it("requires clang 16 or newer", () => {
     expect(MINIMUM_CLANG_MAJOR).toBe(16);
+  });
+
+  it("finds LLVM in year-named and version-numbered Visual Studio installs, newest first", () => {
+    const root = mkdtempSync(join(tmpdir(), "xbintsc-vs-"));
+    const llvm = (version: string, edition: string): string =>
+      join(root, version, edition, "VC", "Tools", "Llvm");
+    try {
+      mkdirSync(llvm("2019", "Enterprise"), { recursive: true });
+      mkdirSync(llvm("2022", "BuildTools"), { recursive: true });
+      mkdirSync(llvm("2022", "Community"), { recursive: true });
+      /* Visual Studio 2026 (version 18) names its directory after the version. */
+      mkdirSync(llvm("18", "Insiders"), { recursive: true });
+      mkdirSync(join(root, "Installer"), { recursive: true });
+      expect(visualStudioLlvmDirs(root)).toEqual([
+        llvm("18", "Insiders"),
+        llvm("2022", "Community"),
+        llvm("2022", "BuildTools"),
+        llvm("2019", "Enterprise"),
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("reports the version and first line of a probe", () => {

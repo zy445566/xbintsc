@@ -145,6 +145,75 @@ export function probeClang(
 }
 
 /**
+ * Release years that name their install directory after the year, mapped to the
+ * major version each release actually ships (VS 2022 is version 17).
+ */
+const VISUAL_STUDIO_YEAR_MAJOR: Readonly<Record<string, number>> = {
+  "2015": 14,
+  "2017": 15,
+  "2019": 16,
+  "2022": 17,
+};
+
+/**
+ * Sort key for a directory under `%ProgramFiles%\Microsoft Visual Studio`.
+ * Releases up to 2022 use year names ("2022"); Visual Studio 2026 (version 18)
+ * and later use the plain major version ("18").
+ */
+function visualStudioMajor(directoryName: string): number {
+  const known = VISUAL_STUDIO_YEAR_MAJOR[directoryName];
+  if (known !== undefined) return known;
+  return /^\d+$/.test(directoryName) ? Number(directoryName) : -1;
+}
+
+/** Immediate subdirectory names, or `[]` when the directory cannot be read. */
+function subdirectories(directory: string): string[] {
+  try {
+    return readdirSync(directory, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Preference order when one release has several installs; channel names not
+ * listed here (for example `Insiders`) follow alphabetically.
+ */
+const VISUAL_STUDIO_EDITIONS: readonly string[] = ["Community", "Professional", "Enterprise", "BuildTools"];
+
+function editionRank(edition: string): number {
+  const index = VISUAL_STUDIO_EDITIONS.indexOf(edition);
+  return index === -1 ? VISUAL_STUDIO_EDITIONS.length : index;
+}
+
+/**
+ * The `VC\Tools\Llvm` directory of every Visual Studio installation under one
+ * `Microsoft Visual Studio` root, newest release first.
+ *
+ * Both layouts are discovered by enumerating directories — `<year>\<edition>`
+ * for 2019/2022 (for example `2022\BuildTools`) and `<major>\<channel>` for
+ * Visual Studio 2026 and later (for example `18\Insiders`) — so a future
+ * release needs no code change and a non-default channel still works.
+ */
+export function visualStudioLlvmDirs(visualStudioRoot: string): string[] {
+  const versions = subdirectories(visualStudioRoot)
+    .filter((name) => visualStudioMajor(name) >= 0)
+    .sort((a, b) => visualStudioMajor(b) - visualStudioMajor(a));
+  const dirs: string[] = [];
+  for (const version of versions) {
+    const editions = subdirectories(join(visualStudioRoot, version)).sort(
+      (a, b) => editionRank(a) - editionRank(b) || a.localeCompare(b),
+    );
+    for (const edition of editions) {
+      dirs.push(join(visualStudioRoot, version, edition, "VC", "Tools", "Llvm"));
+    }
+  }
+  return dirs;
+}
+
+/**
  * Visual Studio ships its own LLVM build (`VC\Tools\Llvm\x64\bin\clang.exe`).
  * It is a perfectly good driver but is not on `PATH` in a plain shell, so probe
  * the well-known install locations too. Only candidates that exist are
@@ -152,17 +221,19 @@ export function probeClang(
  */
 function visualStudioClangCandidates(): string[] {
   if (process.platform !== "win32") return [];
-  const roots = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"], process.env.ProgramW6432]
-    .filter((root): root is string => Boolean(root));
+  const roots = [
+    ...new Set(
+      [process.env.ProgramFiles, process.env["ProgramFiles(x86)"], process.env.ProgramW6432].filter(
+        (root): root is string => Boolean(root),
+      ),
+    ),
+  ];
   const arch = process.arch === "arm64" ? "ARM64" : "x64";
   const candidates: string[] = [];
   for (const root of roots) {
-    for (const year of ["2022", "2019"]) {
-      for (const edition of ["Community", "Professional", "Enterprise", "BuildTools"]) {
-        const llvm = join(root, "Microsoft Visual Studio", year, edition, "VC", "Tools", "Llvm");
-        candidates.push(join(llvm, arch, "bin", "clang.exe"));
-        candidates.push(join(llvm, "bin", "clang.exe"));
-      }
+    for (const llvm of visualStudioLlvmDirs(join(root, "Microsoft Visual Studio"))) {
+      candidates.push(join(llvm, arch, "bin", "clang.exe"));
+      candidates.push(join(llvm, "bin", "clang.exe"));
     }
     candidates.push(join(root, "LLVM", "bin", "clang.exe"));
   }

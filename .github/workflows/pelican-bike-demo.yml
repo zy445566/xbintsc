@@ -75,13 +75,6 @@ jobs:
             libdbus-1-dev libudev-dev libdrm-dev libgbm-dev libgl1-mesa-dev \
             libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers xvfb
 
-      # An update scan, install or pending reboot is invisible to the job and
-      # can stall it for minutes or take the runner offline mid-step; turn
-      # Windows Update off before the build starts (see the script).
-      - name: Disable Windows Update (Windows)
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/disable-windows-update
-
       # The same Visual Studio toolchain (MSVC + its bundled LLVM) a local
       # build resolves; the GUI archive links with the MSVC ABI.
       - name: Set up the Visual Studio toolchain (Windows)

@@ -101,6 +101,10 @@ if (process.platform !== "win32") chmodSync(stagedBinary, 0o755);
 console.log(`xbintsc: packaged binary ${basename(binary)} (${statSync(binary).size} bytes)`);
 
 // 2. The C runtime (sources fallback + prebuilt archives) next to the binary.
+// The copy is bracketed with its own messages so a stalled packaging step can be
+// attributed: this tree carries the freshly built gui/media archives, and a copy
+// blocked on one of them looks exactly like a hang in the `tar` call below.
+console.log("xbintsc: copying runtime/ into the staging tree");
 cpSync(findRuntimeDir(), join(stage, "runtime"), { recursive: true });
 console.log("xbintsc: packaged runtime/");
 
@@ -116,6 +120,10 @@ const extension = releaseArchiveExtension(hasZstd);
 const archive = join(releaseRoot, `${archiveBase}${extension}`);
 rmSync(archive, { force: true });
 const tarArgs = ["-c", hasZstd ? "--zstd" : "-z", "-f", archive, "-C", stageRoot, base];
+// Log the exact command before running it: `tar` prints nothing on success, so
+// this line is what tells a stuck step apart from a stuck filesystem copy above,
+// and it records which compression filter this runner chose (`--zstd` vs `-z`).
+console.log(`xbintsc: running tar ${tarArgs.join(" ")}`);
 const tar = spawnSync("tar", tarArgs, { stdio: "inherit" });
 if (tar.error) fail(`failed to run tar: ${tar.error.message}`);
 if (tar.status !== 0) fail(`tar exited with ${tar.status}`);

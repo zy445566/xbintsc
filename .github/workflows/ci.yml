@@ -633,6 +633,25 @@ jobs:
 
       - run: npm ci
 
+      # `npm run package-release` shells out to `tar` (and probes `zstd`), and
+      # `tar` prints nothing while it runs: a step that stalls there produces no
+      # further log output at all. Record which archiver and which compression
+      # this image actually provides — the bundled bsdtar differs between
+      # Windows runners (Server 2022 ships 3.5.x, 2025/11 ship 3.8.x), and that
+      # is what decides whether `--zstd` is handled in-process or by an external
+      # filter program. Printed before the archives are built, so the details
+      # survive even if a later step is the one that hangs.
+      - name: Report the archiver (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          tar --version
+          "tar: $((Get-Command tar).Source)"
+          $zstd = Get-Command zstd -ErrorAction SilentlyContinue
+          if ($zstd) { "zstd: $($zstd.Source)" } else { "zstd: not on PATH" }
+          $drive = (Get-Item $env:GITHUB_WORKSPACE).PSDrive
+          "free space on $($drive.Name): $([math]::Round($drive.Free / 1GB, 1)) GB"
+
       # Same version-keyed FFmpeg tarball cache as `compile-examples`: this job
       # builds the published `media` archive, so a flaky ffmpeg.org handshake
       # must not decide whether a release can be assembled.

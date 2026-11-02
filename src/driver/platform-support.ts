@@ -16,8 +16,17 @@
 /** Deployment target for every macOS artifact (also the Apple Silicon floor). */
 export const MACOS_MINIMUM_VERSION = "11.0";
 
-/** Oldest Windows version the prebuilt objects and the compiler target. */
-export const WINDOWS_MINIMUM_VERSION = "10";
+/**
+ * Oldest Windows version the prebuilt objects and the compiler target.
+ *
+ * Windows 10 was the floor while the release jobs ran on `windows-2022`
+ * (VS 2022 / MSVC v143). Those images cannot assemble a release: their bundled
+ * `tar` has no built-in zstd, so `tar --zstd` hands compression to an external
+ * program the step waits on forever. The release jobs therefore run on
+ * `windows-2025`, whose toolset targets Windows 11, and the supported floor
+ * moved with them.
+ */
+export const WINDOWS_MINIMUM_VERSION = "11";
 
 /**
  * glibc the release archives are built and tested against: the GitHub

@@ -135,7 +135,7 @@ an archive from the
 [Releases page](https://github.com/zy445566/xbintsc/releases/latest) (here
 `xbintsc-<version>-win32-x64.tar.zst`; use `-arm64` on Windows on ARM) and run the
 commands below in an **x64 Native Tools Command Prompt for VS 2022** (Windows on
-ARM: **ARM64 Native Tools**) — Windows 10+ ships `tar`:
+ARM: **ARM64 Native Tools**) — Windows 11+ ships `tar`:
 
 ```powershell
 # 1. Verify the checksum (optional but recommended)
@@ -454,7 +454,7 @@ See [Requirements](./doc/requirements.md) for the full, per-platform list.
 
 - Node.js 22+ — to run the compiler from npm or from source; released binaries
   are standalone
-- macOS 11.0+ / Windows 10+ / Linux glibc 2.39+ — the floors the released
+- macOS 11.0+ / Windows 11+ / Linux glibc 2.39+ — the floors the released
   binaries and prebuilt archives are built for
 - macOS: the Xcode Command Line Tools (`xcode-select --install`)
 - Windows: the Visual Studio C++ build tools (MSVC, MSBuild and the bundled

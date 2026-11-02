@@ -30,18 +30,18 @@ concurrency:
 #   Linux arm64    -> ubuntu-24.04-arm
 #   macOS x64      -> macos-15-intel
 #   macOS arm64    -> macos-15
-#   Windows x64    -> windows-2022 when the output ships (self-host, package),
-#                     so the artifacts come from VS 2022 / MSVC v143; the test
-#                     jobs keep windows-2025 (VS 2026) to validate the new end
-#                     of the supported range.
+#   Windows x64    -> windows-2025
 #   Windows arm64  -> windows-11-arm
 #
 # The release artifacts target the oldest supported platform versions (macOS
-# 11.0, Windows 10, glibc 2.39) and are built with the oldest toolchain each
-# host still offers: clang 16 on Linux, the oldest installed Xcode on macOS, and
-# VS 2022 on Windows x64. `.github/actions/xcode-baseline` and
-# `.github/actions/vs-toolchain` keep the archives and the self-hosted compiler
-# on that baseline; the supported floors are in doc/requirements.md.
+# 11.0, Windows 11, glibc 2.39) and are built with the oldest toolchain that can
+# still produce a release for that host: clang 16 on Linux, the oldest installed
+# Xcode on macOS. Windows x64 uses the `windows-2025` image's Visual Studio: the
+# older `windows-2022` image cannot assemble a release, because its bundled `tar`
+# has no built-in zstd and `tar --zstd` then stalls on an external filter
+# program. `.github/actions/xcode-baseline` and `.github/actions/vs-toolchain`
+# keep the archives and the self-hosted compiler on that baseline; the supported
+# floors are in doc/requirements.md.
 #
 # Node.js is pinned to 22 everywhere: it is the documented minimum from
 # package.json (`engines.node`) and the only version CI exercises.
@@ -130,10 +130,9 @@ jobs:
           node-version: "22"
           cache: npm
 
-      # The test matrix keeps the newest runner image; the macOS jobs still
-      # compile with the oldest installed Xcode so tests exercise the baseline
-      # toolchain as well (Windows coverage of the newest toolset stays on
-      # windows-2025, see the header comment).
+      # The test matrix runs the same Windows image that ships (windows-2025);
+      # the macOS jobs still compile with the oldest installed Xcode so tests
+      # exercise the baseline toolchain as well.
       - name: Select the oldest supported Xcode (macOS)
         if: runner.os == 'macOS'
         uses: ./.github/actions/xcode-baseline
@@ -480,9 +479,9 @@ jobs:
           - ubuntu-24.04-arm    # Linux arm64
           - macos-15-intel      # macOS x64
           - macos-15            # macOS arm64
-          # The self-hosted binary ships in the release: build it on the
-          # oldest Windows image still offered, which carries VS 2022 / v143.
-          - windows-2022        # Windows x64
+          # The self-hosted binary ships in the release: build it on the same
+          # Windows image (and toolchain) as the published archives.
+          - windows-2025        # Windows x64
           - windows-11-arm      # Windows arm64
     steps:
       - uses: actions/checkout@v7
@@ -594,9 +593,9 @@ jobs:
           - ubuntu-24.04-arm    # Linux arm64
           - macos-15-intel      # macOS x64
           - macos-15            # macOS arm64
-          # These archives are published: build them on the oldest Windows
-          # image still offered (VS 2022 / v143), not on windows-2025's VS 2026.
-          - windows-2022        # Windows x64
+          # These archives are published: build them on the same Windows image
+          # (and toolchain) as the self-hosted compiler.
+          - windows-2025        # Windows x64
           - windows-11-arm      # Windows arm64
     steps:
       - uses: actions/checkout@v7

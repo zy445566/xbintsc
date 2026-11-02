@@ -117,7 +117,7 @@ tar -xf xbintsc-<version>-darwin-arm64.tar.zst
 [Releases 页面](https://github.com/zy445566/xbintsc/releases/latest) 下载对应归档
 （此处为 `xbintsc-<version>-win32-x64.tar.zst`；Windows on ARM 请用 `-arm64`），
 然后在 **x64 Native Tools Command Prompt for VS 2022**（Windows on ARM 用
-**ARM64 Native Tools**）中执行以下命令 —— Windows 10+ 自带 `tar`：
+**ARM64 Native Tools**）中执行以下命令 —— Windows 11+ 自带 `tar`：
 
 ```powershell
 # 1. 校验哈希（可选，但推荐）
@@ -382,7 +382,7 @@ V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改�
 [使用前置要求](./doc/zh-CN/requirements.md)。
 
 - Node.js 22+ —— 从 npm 或源码运行编译器时需要；发布版二进制是独立的
-- macOS 11.0+ / Windows 10+ / Linux glibc 2.39+ —— 发布二进制和预编译归档面向的最低版本
+- macOS 11.0+ / Windows 11+ / Linux glibc 2.39+ —— 发布二进制和预编译归档面向的最低版本
 - macOS：Xcode Command Line Tools（`xcode-select --install`）
 - Windows：LLVM + Visual Studio C++ 生成工具（MSVC ABI）
 - Linux：发行版提供的 `clang` 与 `lld`

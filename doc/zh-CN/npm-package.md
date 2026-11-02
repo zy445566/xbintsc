@@ -201,8 +201,8 @@ Hello from xbintsc
 （不一定是配置文件所在目录）；可以用 `xbintsc_CACHE_DIR` 改到别处。这种回退构建
 会明显比后续构建慢。
 
-预编译归档由发布机提供的最老工具链生成，面向
-[使用前置要求](./requirements.md#支持的平台)中的下限（macOS 11.0、Windows 10、
+预编译归档由发布机的工具链生成，面向
+[使用前置要求](./requirements.md#支持的平台)中的下限（macOS 11.0、Windows 11、
 glibc 2.39）。如果它比本机的工具链新——例如更新的 Xcode Command Line
 Tools/SDK 或 Visual Studio C++ 生成工具——链接器可能拒绝该归档，报未定义符号
 （`LNK2038`、`LNK2019`、`Undefined symbols`、`undefined reference`）或

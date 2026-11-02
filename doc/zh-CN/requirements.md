@@ -17,19 +17,19 @@ xbintsc 不再自带编译器，因此每个平台都需要安装一个兼容 cl
 ## 支持的平台
 
 发布二进制和预编译运行库归档面向 xbintsc 支持的最低平台版本。CI 使用**各宿主仍
-能提供的最老工具链**构建它们，因此你机器上更新的 Xcode 或 Visual Studio 可以链接
+能产出发布包的最老工具链**构建它们，因此你机器上更新的 Xcode 或 Visual Studio 可以链接
 这些产物；反过来（旧工具链链接新产物）才会出现 `LNK2038`、`Undefined symbols` 或
 `was built for newer macOS version`。
 
 | 平台 | 生成的二进制可运行于 | 构建基线（CI） |
 | --- | --- | --- |
 | macOS x64 / arm64 | **macOS 11.0**（Big Sur）及以上 | 镜像中最老的 clang 16+ Xcode，`MACOSX_DEPLOYMENT_TARGET=11.0` |
-| Windows x64 | **Windows 10** 及以上 | `windows-2022` 上的 Visual Studio 2022（MSVC v143） |
+| Windows x64 | **Windows 11** 及以上 | `windows-2025` 镜像自带的工具链（当前为 VS 2026） |
 | Windows arm64 | **Windows 11** | `windows-11-arm` 镜像自带的工具链（当前为 VS 2026；没有更老的 arm64 镜像） |
 | Linux x64 / arm64 | **glibc 2.39**（Ubuntu 24.04）及以上 | `ubuntu-24.04` 上的 clang 16 + lld 16 |
 
-编译器工具链下限为：macOS 上的 Xcode 16（Apple clang 16）、Windows 上的
-Visual Studio 2022 / MSVC v143、Linux 上的 clang 16。因此构建机的要求比生成二进制的
+编译器工具链下限为：macOS 上的 Xcode 16（Apple clang 16）、Windows 上 `windows-2025`
+镜像自带的 Visual Studio（当前为 VS 2026）、Linux 上的 clang 16。因此构建机的要求比生成二进制的
 运行要求更高：Xcode 16 本身需要 macOS 14.5+，macOS 11–14 的构建机需要另外安装
 LLVM 16+（例如 Homebrew 的 `llvm`）。`xbintsc doctor` 会打印当前宿主的支持下限。如果归档是用比本机更新的工具链构建的，`build` 会自动改用随包 C 源码
 重试（见 [npm 包指南](./npm-package.md#首次构建与缓存)）；随包的 `gui.a`/`media.a`

@@ -216,9 +216,9 @@ necessarily next to the config file); set `xbintsc_CACHE_DIR` to put it
 elsewhere. Expect that fallback build to take noticeably longer than the ones
 after it.
 
-The prebuilt archives are produced by the release runner's oldest available
-toolchain and target the floors in
-[requirements](./requirements.md#supported-platforms) (macOS 11.0, Windows 10,
+The prebuilt archives are produced by the release runner's toolchain and target
+the floors in
+[requirements](./requirements.md#supported-platforms) (macOS 11.0, Windows 11,
 glibc 2.39). When that toolchain is newer than the one on this machine — a newer
 Xcode Command Line Tools/SDK or Visual Studio C++ toolset — the linker can
 reject the archive with unresolved symbols (`LNK2038`, `LNK2019`, `Undefined

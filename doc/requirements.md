@@ -18,24 +18,24 @@ then runs the compiler itself; see [Using xbintsc from npm](./npm-package.md).
 ## Supported platforms
 
 Release binaries and the prebuilt runtime archives target the oldest platform
-versions xbintsc supports. CI builds them with the **oldest toolchain each host
-still provides**, so a newer Xcode or Visual Studio on your machine can link
-them — the reverse direction is what fails with `LNK2038`, `Undefined symbols`
-or `was built for newer macOS version`.
+versions xbintsc supports. CI builds them with the **oldest toolchain that can
+still assemble a release for each host**, so a newer Xcode or Visual Studio on
+your machine can link them — the reverse direction is what fails with `LNK2038`,
+`Undefined symbols` or `was built for newer macOS version`.
 
 | Platform | Produced binaries run on | Build baseline (CI) |
 | --- | --- | --- |
 | macOS x64 / arm64 | **macOS 11.0** (Big Sur) and newer | the oldest installed Xcode with clang 16+, `MACOSX_DEPLOYMENT_TARGET=11.0` |
-| Windows x64 | **Windows 10** and newer | Visual Studio 2022 (MSVC v143) on `windows-2022` |
+| Windows x64 | **Windows 11** and newer | the `windows-2025` image's toolset (VS 2026) |
 | Windows arm64 | **Windows 11** | the `windows-11-arm` image's toolset (currently VS 2026; no older arm64 image exists) |
 | Linux x64 / arm64 | **glibc 2.39** (Ubuntu 24.04) and newer | clang 16 + lld 16 on `ubuntu-24.04` |
 
-The compiler toolchain floors are Xcode 16 (Apple clang 16) on macOS, Visual
-Studio 2022 / MSVC v143 on Windows and clang 16 on Linux. Building therefore
-needs a newer host than the produced binary does: Xcode 16 itself requires
-macOS 14.5+, so a macOS 11–14 build machine needs a standalone LLVM 16+
-(for example Homebrew's `llvm`). `xbintsc doctor` prints the floor for the host
-it runs on. If the archives were built with a
+The compiler toolchain floors are Xcode 16 (Apple clang 16) on macOS, the
+`windows-2025` image's Visual Studio (currently VS 2026) on Windows and clang 16
+on Linux. Building therefore needs a newer host than the produced binary does:
+Xcode 16 itself requires macOS 14.5+, so a macOS 11–14 build machine needs a
+standalone LLVM 16+ (for example Homebrew's `llvm`). `xbintsc doctor` prints the
+floor for the host it runs on. If the archives were built with a
 newer toolchain than yours, `build` retries with the C runtime's shipped
 sources (see [the npm package guide](./npm-package.md#the-first-build-and-the-cache));
 the bundled `gui.a`/`media.a` cannot be rebuilt that way, because SDL3/FFmpeg

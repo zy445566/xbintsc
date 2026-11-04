@@ -33,6 +33,8 @@ enum class AlignContent { Stretch, FlexStart, FlexEnd, Center, SpaceBetween, Spa
 enum class FloatSide { None, Left, Right };
 enum class Clear { None, Left, Right, Both };
 enum class TextAlign { Start, Center, End, Justify };
+/** `text-overflow` on an overflowing line; the engine signals it with U+2026. */
+enum class TextOverflow { Clip, Ellipsis };
 enum class WhiteSpace { Normal, NoWrap, Pre, PreWrap, PreLine };
 enum class Overflow { Visible, Hidden, Scroll, Auto };
 enum class BorderStyle { None, Solid, Dashed, Dotted };
@@ -304,6 +306,9 @@ struct XtStyle {
   Length line_height;                  // Auto = normal; Number = multiplier
 
   TextAlign text_align = TextAlign::Start;  // inherited
+  /** `text-overflow`; not inherited. Only meaningful when the box clips
+   * (`overflow` other than `visible`). */
+  TextOverflow text_overflow = TextOverflow::Clip;
   WhiteSpace white_space = WhiteSpace::Normal;  // inherited
   TextTransform text_transform = TextTransform::None;  // inherited
   /** Resolved to pixels in the cascade (em is the element's own font size). */

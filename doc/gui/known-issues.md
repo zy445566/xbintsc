@@ -76,9 +76,11 @@
   backgrounds, `text-shadow` (true Gaussian), `box-shadow` (outer/inset, spread,
   multiple layers), `clip-path` (`inset`/`circle`/`ellipse`/`polygon`),
   `filter` colour functions, `@keyframes` animations, the full `transition`
-  timing-function set, `letter-spacing`, `text-transform`, inline-level
+  timing-function set, `letter-spacing`, `text-transform`,
+  `white-space: nowrap`, `text-overflow: ellipsis`, inline-level
   `flex`/`grid`, `grid-area`, `aspect-ratio`, auto margins, percentage
-  `border-radius`, `outline`, `background-size` tiling for `url()` layers and
+  `border-radius` (including rounded `overflow` clipping of children and
+  replaced content), `outline`, `background-size` tiling for `url()` layers and
   document CSS on SVG children (`fill`/`stroke`/…) are implemented. Known
   limits: `background-clip`, `background-position` and `background-repeat`
   remain unimplemented (`background-size` covers the tiled default);
@@ -91,8 +93,9 @@
   groups fall back to normal source-over painting and the backdrop filter is
   skipped. `filter: blur()` is still a nine-tap per-shape spread rather than a
   true group blur, so overlapping descendants can darken; `drop-shadow` is
-  approximated from box silhouettes; at most two nested `clip-path` shapes are
-  intersected (deeper nesting keeps the outer two); and images/canvases are not
+  approximated from box silhouettes; at most four nested clip shapes (CSS
+  `clip-path` and rounded `overflow` boxes together) are intersected (deeper
+  nesting keeps the outer four); and images/canvases are not
   colour-filtered except for the brightness/opacity tint the image shader can
   carry. Canvas textures are sampled nearest-neighbour. Background gradients
   (linear and radial) are rasterised per pixel into a texture and then stretched

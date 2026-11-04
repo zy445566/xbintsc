@@ -390,6 +390,16 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
   if (block->style->display == Display::Grid)
     return layoutGrid(block, contentWidth, definiteHeight);
 
+  /* A percentage height on a child resolves against this block's *content*
+   * height. `definiteHeight` is that height when it is known (an explicit
+   * `height`, a clamp()/aspect-ratio result, or a flex/grid stretch); a box
+   * whose height came from `clamp()` must hand that value down, because the
+   * `availableHeight` it received is only the containing block's height from
+   * further up (or -1 when that chain is indefinite). Without this, a
+   * `height: 100%` portrait inside a sized frame was treated as `auto` and
+   * collapsed to its zero-height absolutely positioned artwork. */
+  float childHeight = definiteHeight >= 0 ? definiteHeight : availableHeight;
+
   float y = block->content_y;
   float startY = y;
   /* The bottom margin of the last in-flow block, waiting to collapse with the
@@ -458,7 +468,7 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
                          : block->content_x + contentWidth - outerWidth;
       setContainingBlock(child.get(), containingBlockAncestor(block));
       float height =
-          layoutBlock(child.get(), floatX, y, contentWidth, availableHeight, contentW);
+          layoutBlock(child.get(), floatX, y, contentWidth, childHeight, contentW);
       ActiveFloat entry;
       entry.left = childStyle->float_side == FloatSide::Left;
       entry.x = child->x;
@@ -489,7 +499,7 @@ float Layouter::layoutChildren(LayoutBox *block, float contentWidth, float avail
       }
       y = desired;
       setContainingBlock(child.get(), containingBlockAncestor(block));
-      y += layoutBlock(child.get(), block->content_x, y, contentWidth, availableHeight);
+      y += layoutBlock(child.get(), block->content_x, y, contentWidth, childHeight);
       pending = child->margin_bottom;
       hasBlock = true;
     } else {

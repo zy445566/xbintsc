@@ -303,4 +303,122 @@ describe.skipIf(!guiAvailable)("gui extension — paint", () => {
     // validation does) contains the bare word without an engine warning.
     expect(stderr).not.toContain("xt_gui: mix-blend-mode");
   });
+
+  it("clips rounded overflow boxes and rounded replaced content", () => {
+    const src = harness.imageSrc(harness.logoPath);
+    const { value, stdout } = harness.compileAndRun(
+      "rounded-clip",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #outer, #middle, #art {
+          width: 62px; height: 62px; border-radius: 50%; overflow: hidden;
+        }
+        #art img { width: 60px; height: 60px; }
+        #own { display: block; width: 40px; height: 40px; border-radius: 50%; }
+      </style></head><body>
+        <div id="outer"><div id="middle"><div id="art"><img id="pic" src="${src}"></div></div></div>
+        <img id="own" src="${src}">
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "rounded-clip", width: 400, height: 300 });
+      win.on("ready", () => {
+        const rect = (selector) => {
+          const r = win.getBoundingClientRect(selector);
+          return r.x + "," + r.y + "," + r.width + "," + r.height;
+        };
+        console.log("pic=" + rect("#pic"));
+        console.log("own=" + rect("#own"));
+        console.log("radius=" + win.computedStyle("#art", "border-radius"));
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    const lines = list.split("\n");
+    const picLine = lines.find((line) => line.includes("w=60.0 h=60.0"));
+    const ownLine = lines.find((line) => line.includes("w=40.0 h=40.0"));
+    expect(picLine).toBeDefined();
+    expect(ownLine).toBeDefined();
+    // The child image is inside three rounded `overflow: hidden` ancestors, so
+    // its op carries three triangulated clip polygons. Before the rounded clip
+    // existed the rectangle scissor let the square artwork fill the corners of
+    // the circle.
+    expect(picLine!).toMatch(/clip-path=\d+,\d+,\d+ /);
+    // A `border-radius` on a replaced element clips its own pixels too, with
+    // no `overflow` needed.
+    expect(ownLine!).toMatch(/clip-path=\d+ /);
+    // The scissor rectangle is still the (intersected) padding box.
+    expect(picLine!).toContain("clip=0.0,0.0,62.0,62.0");
+    expect(value("pic")).toBe("0,0,60,60");
+    expect(value("own")).toBe("0,62,40,40");
+    expect(value("radius")).toBe("50%");
+  });
+
+  it("truncates an overflowing nowrap line with `text-overflow: ellipsis`", () => {
+    const text = "W".repeat(40);
+    const { value, stdout } = harness.compileAndRun(
+      "text-overflow",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #clip, #ellipsis, #fits {
+          width: 60px; overflow: hidden; white-space: nowrap;
+          font-size: 12px; color: #112233;
+        }
+        #ellipsis, #fits { text-overflow: ellipsis; }
+      </style></head><body>
+        <div id="clip">${text}</div>
+        <div id="ellipsis">${text}</div>
+        <div id="fits">OK</div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "text-overflow", width: 400, height: 200 });
+      win.on("ready", () => {
+        console.log("clip-height=" + win.getBoundingClientRect("#clip").height);
+        console.log("ellipsis-height=" + win.getBoundingClientRect("#ellipsis").height);
+        console.log("overflow=" + win.computedStyle("#ellipsis", "text-overflow"));
+        console.log("list-start");
+        console.log(win.paintList());
+        console.log("list-end");
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    const list = stdout.slice(stdout.indexOf("list-start"), stdout.indexOf("list-end"));
+    const runs = list.split("\n").filter((line) => line.includes("text x="));
+    // `nowrap` keeps both boxes one line tall; without it the 40 W's would wrap
+    // inside the 60px box and the height would be several lines.
+    const lineHeight = Number(value("clip-height"));
+    expect(lineHeight).toBeGreaterThan(0);
+    expect(Number(value("ellipsis-height"))).toBeCloseTo(lineHeight, 3);
+    expect(value("overflow")).toBe("ellipsis");
+    // The default (`clip`) still paints the complete string; the ellipsis box
+    // replaces the part that does not fit with one U+2026 and drops the rest.
+    expect(runs.some((line) => line.includes('"' + text + '"'))).toBe(true);
+    // A short line that fits is left alone: no ellipsis is appended.
+    expect(runs.some((line) => line.includes('"OK"'))).toBe(true);
+    const ellipsized = runs.find((line) => line.includes("\u2026"));
+    expect(ellipsized).toBeDefined();
+    expect(runs.filter((line) => line.includes("\u2026"))).toHaveLength(1);
+    expect(ellipsized!).toMatch(/"W+\u2026"/);
+    expect(ellipsized!).not.toContain(text);
+  });
 });

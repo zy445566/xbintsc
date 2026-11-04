@@ -156,17 +156,20 @@ struct ClipPathGeometry {
 
 /** The clip rectangle in effect for a painted shape (device-space logical
  * pixels — a transformed subtree contributes the bounding box of its clip).
- * `width <= 0` means "no clip". `paths` index `DisplayList::clip_paths`; at most
- * two nested `clip-path` shapes are kept (CSS would intersect every ancestor;
- * deeper nesting is rare and the outermost two are the ones a UI uses). */
+ * `width <= 0` means "no clip". `paths` index `DisplayList::clip_paths`: the
+ * `clip-path` shapes and the rounded padding boxes of `overflow` ancestors
+ * intersected down the tree. Four nested shapes are kept (CSS would intersect
+ * every ancestor; deeper nesting is rare and the outermost four are the ones a
+ * shape has to satisfy). */
 struct PaintClip {
+  static constexpr int kMaxPaths = 4;
   bool active = false;
   float x = 0;
   float y = 0;
   float width = 0;
   float height = 0;
   int path_count = 0;
-  int paths[2] = {-1, -1};
+  int paths[kMaxPaths] = {-1, -1, -1, -1};
 };
 
 enum class PaintKind { Rect, Text, Image, LayerBegin, LayerEnd, Backdrop };

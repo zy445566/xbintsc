@@ -11,8 +11,10 @@ emits a backend-agnostic `DisplayList`: a painter-order `ops` list of
 **text runs** (each carrying its text, colour and resolved `FontSpec`) and
 **images**, backed by parallel payload arrays. Each op also carries the active
 clip rectangle (the padding box of the nearest `overflow: hidden` ancestor) and
-up to two indices into the display list's triangulated `clip-path` polygons, so
-`overflow`/`clip-path` clipping and `z-index` ordering survive into the renderer.
+up to four indices into the display list's triangulated clip polygons — CSS
+`clip-path` shapes plus the rounded padding boxes of `overflow` ancestors with a
+`border-radius` — so `overflow`/`clip-path` clipping and `z-index` ordering
+survive into the renderer, and a circular avatar frame really is a circle.
 `DisplayList::dump()` feeds `paintList()`/`paintCount()`.
 
 `opacity` multiplies the alpha of every colour painted by the box and its
@@ -28,7 +30,9 @@ Hiding and revealing a layer with `opacity: 0` on the hidden state is what
 per window (shapes, glyph quads and images) and merges consecutive ops that
 share a pipeline, clip and texture into **draw runs**. Each run is drawn with
 its own GPU scissor rectangle (scaled to device pixels), so painter order and
-`overflow` clipping are applied per op through the SDL_GPU graphics pipelines:
+`overflow` clipping are applied per op through the SDL_GPU graphics pipelines;
+the scissor is only the bounding rectangle, while rounded `overflow` clips and
+`clip-path` shapes are cut into the vertex geometry described below:
 
 - The shared pipelines are created lazily from the device's supported shader
   format. Each of SDL_GPU's three backends consumes a different binary and none
@@ -154,12 +158,15 @@ therefore shows as a `backdrop …` op in `paintList()`.
 
 **`clip-path`** is resolved in `paint_clip.cpp` to a device-space polygon (the
 box transform is applied to every point), triangulated with ear clipping, and
-stored on `DisplayList::clip_paths`. Ops carry up to two path indices on their
-`PaintClip`; `renderer_clip.cpp` intersects each convex shape/glyph/image quad
-with those triangles at upload time. The result is exact even for concave
-`polygon()` shapes, needs no stencil or shader change, and the edges are hard
-(no analytic antialiasing). Intersecting two nested paths is supported; deeper
-nesting keeps the outermost two.
+stored on `DisplayList::clip_paths`. A rounded `overflow` clip uses the same
+representation: each corner is a short chord approximation, so the polygon is
+convex and the scissor rectangle is only its bounding box. Ops carry up to four
+path indices on their `PaintClip`; `renderer_clip.cpp` intersects each convex
+shape/glyph/image quad with those triangles at upload time (the quad is clipped
+by one path, and each resulting piece by the next). The result is exact even
+for concave `polygon()` shapes, needs no stencil or shader change, and the edges
+are hard (no analytic antialiasing). Nesting deeper than four shapes keeps the
+outermost four.
 
 **`filter`** colour functions (`brightness`, `contrast`, `grayscale`, `sepia`,
 `invert`, `saturate`, `hue-rotate`, `opacity`) are folded into each painted

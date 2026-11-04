@@ -274,6 +274,9 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   }
   if (property == "text-align") return alignTextNames[(int)style.text_align];
   if (property == "text-transform") return textTransformNames[(int)style.text_transform];
+  if (property == "text-overflow") {
+    return style.text_overflow == TextOverflow::Ellipsis ? "ellipsis" : "clip";
+  }
   if (property == "letter-spacing") return formatLength(style.letter_spacing);
   if (property == "writing-mode") return writingModeNames[(int)style.writing_mode];
   if (property == "vertical-align") return formatLength(style.vertical_align);

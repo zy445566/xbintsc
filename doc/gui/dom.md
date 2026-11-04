@@ -29,7 +29,9 @@ combinators (descendant, child, adjacent and general sibling), the pseudo-classe
 subset), numbers, keywords and shorthands (`margin`/`padding`/`border`/`flex`/
 `font`/`outline`). `display: inline-flex`/`inline-grid` make a flex/grid
 container inline-level; `grid-area`, `aspect-ratio`, `letter-spacing`,
-`text-transform`, `writing-mode` (`vertical-rl`/`vertical-lr` text),
+`text-transform`, `text-overflow` (`clip`/`ellipsis`), `white-space`
+(`normal`/`nowrap`/`pre`/`pre-wrap`/`pre-line`), `writing-mode`
+(`vertical-rl`/`vertical-lr` text),
 `vertical-align` (length form), percentage `border-radius`, `background-size`
 (size + default repeat for `url()` layers) and `currentColor` are parsed too.
 `font-variant-numeric`, `text-wrap`, `text-rendering`, `touch-action`,

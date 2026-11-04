@@ -10,10 +10,11 @@
 `DisplayList`：一个按画家顺序排列的 `ops` 列表，包含**矩形**（背景与四条实心
 边框，带 `border-radius`）、**文本 run**（每个携带其文本、颜色与已解析的
 `FontSpec`）与**图像**，背后由并列的负载数组支撑。每个 op 还携带当前生效的裁剪
-矩形（最近的 `overflow: hidden` 祖先的 padding box）以及最多两个指向显示列表
-三角化 `clip-path` 多边形的下标，因此 `overflow`/`clip-path` 裁剪与 `z-index`
-顺序都能保留到渲染器。`DisplayList::dump()` 为 `paintList()`/`paintCount()`
-提供数据。
+矩形（最近的 `overflow: hidden` 祖先的 padding box）以及最多四个指向显示列表
+裁剪多边形的下标——CSS `clip-path` 形状，加上带 `border-radius` 的 `overflow`
+祖先的圆角 padding box——因此 `overflow`/`clip-path` 裁剪与 `z-index`
+顺序都能保留到渲染器，圆形头像框也真的是圆的。`DisplayList::dump()` 为
+`paintList()`/`paintCount()` 提供数据。
 
 `opacity` 会乘到该盒子及其后代绘制的每个颜色 alpha 上（沿绘制链逐层相乘），
 因此小数 opacity 以及 CSS 解析器接受的 `opacity` 过渡都能看到效果。这是按图形
@@ -24,7 +25,8 @@
 `runtime/ext_gui/renderer.{h,cpp}` 把该列表转换为每个窗口的批处理顶点缓冲
 （图形、字形四边形与图像），并把管线、裁剪与纹理都相同的连续 op 合并为
 **绘制 run**。每个 run 用各自的 GPU scissor 矩形（按设备像素缩放）绘制，因此
-画家顺序与 `overflow` 裁剪按 op 生效，并通过 SDL_GPU 图形管线完成：
+画家顺序与 `overflow` 裁剪按 op 生效，并通过 SDL_GPU 图形管线完成；scissor 只是
+包围矩形，圆角 `overflow` 裁剪与 `clip-path` 形状会切进下面描述的顶点几何：
 
 - 共享管线会依据设备支持的着色器格式延迟创建。SDL_GPU 的三个后端各自只接受一种
   二进制格式，且都不会在运行时编译 GLSL/HLSL，因此引擎三种都随包提供，由
@@ -122,11 +124,12 @@ rgba(…) calc(100% - 1px)` 这样的 1px 分割线要么落在两次采样之�
 显示为 `backdrop …` op。
 
 **`clip-path`** 在 `paint_clip.cpp` 中解析为设备空间多边形（每个点都应用盒子的
-transform），用耳切法三角化，并存入 `DisplayList::clip_paths`。每个 op 的
-`PaintClip` 最多携带两个路径下标；`renderer_clip.cpp` 在上传时把每个凸的图形/
-字形/图像四边形与这些三角形求交。即使 `polygon()` 是凹多边形也正确，无需模板或
-shader 改动，但边缘是硬边（没有解析抗锯齿）。支持两层嵌套路径求交；更深时保留
-最外两层。
+transform），用耳切法三角化，并存入 `DisplayList::clip_paths`。圆角 `overflow`
+裁剪使用同一表示：每个角用短弦近似，因此多边形是凸的，scissor 矩形只是它的
+包围盒。每个 op 的 `PaintClip` 最多携带四个路径下标；`renderer_clip.cpp` 在上传
+时把每个凸的图形/字形/图像四边形与这些三角形求交（先按一条路径裁剪，再把得到的
+每块交给下一条）。即使 `polygon()` 是凹多边形也正确，无需模板或 shader 改动，
+但边缘是硬边（没有解析抗锯齿）。嵌套超过四层时保留最外四层。
 
 **`filter`** 的颜色函数（`brightness`、`contrast`、`grayscale`、`sepia`、
 `invert`、`saturate`、`hue-rotate`、`opacity`）会折进每个绘制颜色，因此盒子与

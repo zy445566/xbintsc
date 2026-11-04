@@ -409,4 +409,56 @@ ${measurements.join("\n")}
     expect(Number(value("paint"))).toBe(0);
     expect(stdout).toContain("paint=");
   });
+
+  it("resolves percentage heights against a definite containing block", () => {
+    const { value } = harness.compileAndRun(
+      "percent-height",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #hud { display: grid; width: 400px; }
+        #card { display: flex; }
+        #frame { width: 78px; height: clamp(60px, 10vw, 78px); }
+        #avatar { position: relative; width: 100%; height: 100%; }
+        #art { position: absolute; inset: 0; }
+        #box { height: 200px; }
+        #inner { height: 100%; }
+      </style></head><body>
+        <div id="hud"><div id="card"><div id="frame"><div id="avatar"><div id="art"></div></div></div></div></div>
+        <div id="box"><div id="inner"></div></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "percent-height", width: 800, height: 600 });
+      win.on("ready", () => {
+        const rect = (selector) => {
+          const r = win.getBoundingClientRect(selector);
+          return r.x + "," + r.y + "," + r.width + "," + r.height;
+        };
+        for (const id of ["frame", "avatar", "art", "box", "inner"]) {
+          console.log(id + "=" + rect("#" + id));
+        }
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    // `clamp(60px, 10vw, 78px)` at an 800px viewport is 78px. The frame is a
+    // grid item in a flex row, so both ancestors hand down an indefinite
+    // height; the frame's own used height must still be the basis for its
+    // `height: 100%` children (it used to resolve to `auto` and collapse to 0).
+    expect(value("frame")).toBe("0,0,78,78");
+    expect(value("avatar")).toBe("0,0,78,78");
+    // The absolutely positioned artwork fills the now-sized avatar.
+    expect(value("art")).toBe("0,0,78,78");
+    // A definite block height is the basis too: 100% of 200, not of the
+    // viewport height that the auto-height body passed down before.
+    expect(value("box")).toBe("0,78,800,200");
+    expect(value("inner")).toBe("0,78,800,200");
+  });
 });

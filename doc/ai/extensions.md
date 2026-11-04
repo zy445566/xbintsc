@@ -89,10 +89,13 @@ reflowing anything — animate it per frame from `requestAnimationFrame` or with
 `transition: transform` (see `examples/gui/pelican-svg`). The CSS subset also
 covers `@media`, `::before`/`::after` generated content, multi-layer linear/radial
 backgrounds, `calc()`, `text-shadow`/`box-shadow` with a true Gaussian blur,
-`clip-path`, `filter` colour effects, `backdrop-filter` compositing,
-`@keyframes` and `transition`/`animation` timing functions, `letter-spacing`,
-`text-transform`, inline-level `flex`/`grid`, `grid-area`, `aspect-ratio`, auto
-margins, percentage `border-radius`, `outline`, tiled `background-size` for
+`clip-path`, rounded `border-radius` clipping (including `overflow: hidden`
+frames and replaced content), `filter` colour effects, `backdrop-filter`
+compositing, `@keyframes` and `transition`/`animation` timing functions,
+`letter-spacing`, `text-transform`, `white-space: nowrap`,
+`text-overflow: ellipsis`, inline-level `flex`/`grid`, `grid-area`,
+`aspect-ratio`, auto margins, percentage heights inside a definite frame,
+percentage `border-radius`, `outline`, tiled `background-size` for
 `url()` layers, document CSS on SVG children and text-only vertical writing
 mode. `filter: blur()` is still a documented approximation. If the archive is
 missing for your platform, the build fails with an actionable message; design

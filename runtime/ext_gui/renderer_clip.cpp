@@ -10,6 +10,7 @@
 #include "renderer_internal.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 namespace xtgui {
@@ -86,26 +87,27 @@ uint32_t appendClipped(std::vector<V> &out, const std::vector<V> &quad, const Pa
     appendFan(quad, &out);
     return 6;
   }
-  const ClipPathGeometry *first = pathAt(list, clip.paths[0]);
-  if (first == nullptr || first->triangles.empty()) return 0;
-  uint32_t before = (uint32_t)out.size();
-  if (clip.path_count == 1) {
-    for (const ClipTriangle &triangle : first->triangles) {
-      std::vector<V> clipped = clipToTriangle(quad, triangle, mix);
-      if (clipped.size() >= 3) appendFan(clipped, &out);
-    }
-  } else {
-    const ClipPathGeometry *second = pathAt(list, clip.paths[1]);
-    if (second == nullptr || second->triangles.empty()) return 0;
-    for (const ClipTriangle &outer : first->triangles) {
-      std::vector<V> firstClip = clipToTriangle(quad, outer, mix);
-      if (firstClip.size() < 3) continue;
-      for (const ClipTriangle &inner : second->triangles) {
-        std::vector<V> secondClip = clipToTriangle(firstClip, inner, mix);
-        if (secondClip.size() >= 3) appendFan(secondClip, &out);
+  /* Start with the convex quad and clip it by every path in turn. Each path is
+   * a triangulated (possibly concave) polygon, so intersecting a convex piece
+   * with its triangles partitions it correctly; the result may be several
+   * convex pieces, which the next path clips independently. */
+  std::vector<std::vector<V>> pieces;
+  pieces.push_back(quad);
+  for (int p = 0; p < clip.path_count; p++) {
+    const ClipPathGeometry *path = pathAt(list, clip.paths[p]);
+    if (path == nullptr || path->triangles.empty()) return 0;
+    std::vector<std::vector<V>> next;
+    for (const std::vector<V> &piece : pieces) {
+      for (const ClipTriangle &triangle : path->triangles) {
+        std::vector<V> clipped = clipToTriangle(piece, triangle, mix);
+        if (clipped.size() >= 3) next.push_back(std::move(clipped));
       }
     }
+    pieces = std::move(next);
+    if (pieces.empty()) return 0;
   }
+  uint32_t before = (uint32_t)out.size();
+  for (const std::vector<V> &piece : pieces) appendFan(piece, &out);
   return (uint32_t)out.size() - before;
 }
 

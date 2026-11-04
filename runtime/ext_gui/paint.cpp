@@ -65,15 +65,22 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
 
 /** The clip a box imposes on its content: its padding box, intersected with the
  * clip already in effect. Only `overflow: hidden/scroll/auto` clips. A
- * transformed box clips to the bounding box of its transformed padding box. */
-PaintClip clipForChildren(const LayoutBox *box, const PaintClip &parent) {
+ * `border-radius` makes that clip a rounded rectangle, exactly as a browser
+ * rounds `overflow` (the GPU scissor stays the bounding box; the rounded shape
+ * joins the `clip-path` polygons the renderer intersects). A transformed box
+ * clips to the bounding box of its transformed padding box. */
+PaintClip clipForChildren(const LayoutBox *box, const PaintClip &parent, DisplayList &out) {
   if (box->style == nullptr || box->style->overflow == Overflow::Visible) return parent;
-  float x = box->x + box->border_left;
-  float y = box->y + box->border_top;
-  float width = box->width - box->border_left - box->border_right;
-  float height = box->height - box->border_top - box->border_bottom;
-  if (width < 0) width = 0;
-  if (height < 0) height = 0;
+  float padding_x = box->x + box->border_left;
+  float padding_y = box->y + box->border_top;
+  float padding_width = box->width - box->border_left - box->border_right;
+  float padding_height = box->height - box->border_top - box->border_bottom;
+  if (padding_width < 0) padding_width = 0;
+  if (padding_height < 0) padding_height = 0;
+  float x = padding_x;
+  float y = padding_y;
+  float width = padding_width;
+  float height = padding_height;
   if (box->has_transform) {
     LayoutRect bounds = xt_layout_transform_rect(box->world, x, y, width, height);
     x = bounds.x;
@@ -88,16 +95,28 @@ PaintClip clipForChildren(const LayoutBox *box, const PaintClip &parent) {
     result.y = y;
     result.width = width;
     result.height = height;
-    return result;
+  } else {
+    float x0 = std::max(x, parent.x);
+    float y0 = std::max(y, parent.y);
+    float x1 = std::min(x + width, parent.x + parent.width);
+    float y1 = std::min(y + height, parent.y + parent.height);
+    result.x = x0;
+    result.y = y0;
+    result.width = std::max(0.0f, x1 - x0);
+    result.height = std::max(0.0f, y1 - y0);
   }
-  float x0 = std::max(x, parent.x);
-  float y0 = std::max(y, parent.y);
-  float x1 = std::min(x + width, parent.x + parent.width);
-  float y1 = std::min(y + height, parent.y + parent.height);
-  result.x = x0;
-  result.y = y0;
-  result.width = std::max(0.0f, x1 - x0);
-  result.height = std::max(0.0f, y1 - y0);
+  /* The radius belongs to the border box, so the padding box's inner radius is
+   * reduced by the widest border (CSS 8.1). The polygon is built from the
+   * *untransformed* padding box and mapped point by point, so a rotated box
+   * keeps a round circle instead of a rounded AABB. */
+  if (box->border_radius > 0.0f && padding_width > 0.0f && padding_height > 0.0f) {
+    float inset = std::max(std::max(box->border_left, box->border_right),
+                           std::max(box->border_top, box->border_bottom));
+    float radius = box->border_radius - inset;
+    int index = paint_detail::addRoundedClipPath(out, box->world, padding_x, padding_y,
+                                                 padding_width, padding_height, radius);
+    result = paint_detail::addClipPath(result, index);
+  }
   return result;
 }
 
@@ -209,6 +228,21 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
     }
   }
 
+  /* `border-radius` also clips the box's own background images/gradients and
+   * replaced content; a solid background is already painted as a rounded
+   * rectangle and needs no polygon. An `<img>`/`<svg>` with only a radius
+   * (no `overflow: hidden`) gets its corners clipped this way too. */
+  PaintClip contentClip = own;
+  if (style != nullptr && !box->is_text && box->border_radius > 0.0f && box->width > 0.0f &&
+      box->height > 0.0f) {
+    bool replaces = box->is_image || box->is_canvas || box->is_media || box->is_inline_svg;
+    if (!style->background_layers.empty() || replaces) {
+      int index = paint_detail::addRoundedClipPath(out, box->world, box->x, box->y, box->width,
+                                                   box->height, box->border_radius);
+      contentClip = paint_detail::addClipPath(contentClip, index);
+    }
+  }
+
   if (style != nullptr && box->display != Display::None) {
     if (box->is_text) {
       addTextRuns(box, *style, out, own, chain, viewportWidth, viewportHeight);
@@ -223,7 +257,7 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
        * paint above it. */
       paint_detail::addBoxShadows(out, *box, *style, chain, own, false, viewportWidth,
                                   viewportHeight);
-      paint_detail::paintBackgrounds(out, *box, *style, chain, own, viewportWidth,
+      paint_detail::paintBackgrounds(out, *box, *style, chain, contentClip, viewportWidth,
                                      viewportHeight);
       const Matrix2D &matrix = box->world;
       if (style->border_style != BorderStyle::None && style->has_border_color) {
@@ -254,7 +288,7 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
         image.height = box->content_height;
         image.canvas_id = box->canvas_id;
         image.transform = matrix;
-        paint_detail::addImage(out, image, own, chain);
+        paint_detail::addImage(out, image, contentClip, chain);
       } else if (box->is_media && box->media_id != 0 && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
         PaintImage image;
@@ -264,7 +298,7 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
         image.height = box->content_height;
         image.media_id = box->media_id;
         image.transform = matrix;
-        paint_detail::addImage(out, image, own, chain);
+        paint_detail::addImage(out, image, contentClip, chain);
       } else if (box->is_inline_svg && !box->svg_markup.empty() && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
         PaintImage image;
@@ -274,7 +308,7 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
         image.height = box->content_height;
         image.svg = box->svg_markup;
         image.transform = matrix;
-        paint_detail::addImage(out, image, own, chain);
+        paint_detail::addImage(out, image, contentClip, chain);
       } else if (box->is_image && !box->image_src.empty() && box->content_width > 0.0f &&
                  box->content_height > 0.0f) {
         PaintImage image;
@@ -284,7 +318,7 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
         image.height = box->content_height;
         image.src = box->image_src;
         image.transform = matrix;
-        paint_detail::addImage(out, image, own, chain);
+        paint_detail::addImage(out, image, contentClip, chain);
       }
     }
   }
@@ -293,7 +327,8 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
    * already been emitted, so descendants must not repeat it. */
   paint_detail::FilterChain childChain = chain;
   childChain.shadows.clear();
-  paintChildren(box, out, clipForChildren(box, own), childChain, viewportWidth, viewportHeight);
+  paintChildren(box, out, clipForChildren(box, own, out), childChain, viewportWidth,
+                viewportHeight);
 }
 
 /** Paint one box, wrapping it in a `mix-blend-mode` group when it declares one.

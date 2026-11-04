@@ -18,6 +18,8 @@ void xt_style_apply_inherit(XtStyle *style, const XtStyle *parent, const std::st
   if (parent == nullptr) return;
   if (property == "color") {
     style->color = parent->color;
+  } else if (property == "text-overflow") {
+    style->text_overflow = parent->text_overflow;
   } else if (property == "clip-path") {
     style->clip_path = parent->clip_path;
   } else if (property == "font") {

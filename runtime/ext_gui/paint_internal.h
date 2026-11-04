@@ -107,7 +107,13 @@ bool addBackdropFilter(DisplayList &out, const LayoutBox &box, const XtStyle &st
 int addClipPathForBox(DisplayList &out, const LayoutBox &box, const XtStyle &style,
                       float viewportWidth, float viewportHeight);
 
-/** Push `index` onto a clip chain (at most two survive). */
+/** Resolve the rounded padding box an `overflow` clip uses into a device-space
+ * triangulated polygon, approximating each corner with short chords. The
+ * corners stay round after a transform because every point is mapped. */
+int addRoundedClipPath(DisplayList &out, const Matrix2D &world, float x, float y, float width,
+                       float height, float radius);
+
+/** Push `index` onto a clip chain (at most `PaintClip::kMaxPaths` survive). */
 PaintClip addClipPath(PaintClip clip, int index);
 
 }  // namespace paint_detail

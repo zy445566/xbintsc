@@ -59,8 +59,10 @@
   `text-shadow`（真正的高斯）、`box-shadow`（外阴影/内阴影、spread、多层）、
   `clip-path`（`inset`/`circle`/`ellipse`/`polygon`）、`filter` 颜色函数、
   `@keyframes` 动画、完整的 `transition` 时间函数、`letter-spacing`、
-  `text-transform`、行内级 `flex`/`grid`、`grid-area`、`aspect-ratio`、自动
-  外边距、百分比 `border-radius`、`outline`、`url()` 图层的 `background-size`
+  `text-transform`、`white-space: nowrap`、`text-overflow: ellipsis`、行内级
+  `flex`/`grid`、`grid-area`、`aspect-ratio`、自动
+  外边距、百分比 `border-radius`（含对子元素与替换内容的圆角 `overflow` 裁剪）、
+  `outline`、`url()` 图层的 `background-size`
   平铺，以及 SVG 子元素上的文档 CSS（`fill`/`stroke`/…）均已实现。仍有限制：
   `background-clip`、`background-position`、`background-repeat` 未实现
   （`background-size` 只覆盖默认平铺场景）；`font-variant-numeric`、
@@ -71,7 +73,8 @@
   近似而非真正的组合成；D3D12/DXIL 后端没有混合与 `backdrop-filter` 合成器，
   那里会退回普通 source-over 绘制并跳过背景滤镜。`filter: blur()` 仍是按图形做
   九次偏移的近似，而不是真正的组模糊，重叠的子元素会加深；`drop-shadow` 用盒子
-  轮廓近似；最多只交叉两层嵌套 `clip-path`（更深时保留外侧两层）；
+  轮廓近似；最多只交叉四层裁剪形状（CSS `clip-path` 与圆角 `overflow` 盒一起
+  计算；更深时保留外侧四层）；
   图像/画布除图像着色器能携带的亮度与透明度染色外不做颜色滤镜。Canvas 纹理使用
   最近邻采样。背景渐变（线性与径向）都逐像素光栅化成纹理，盒子大于纹理时再拉伸
   （径向每边最大 1024 px；线性沿渐变线最大 4096 px，且沿渐变线之外只有一像素厚），

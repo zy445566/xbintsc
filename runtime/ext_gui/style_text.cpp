@@ -167,6 +167,17 @@ bool xt_style_apply_text_property(XtStyle *style, const std::string &property,
     parseTextTransform(value, &style->text_transform);
     return true;
   }
+  if (property == "text-overflow") {
+    /* `clip | ellipsis` (the two-value `start end` form collapses to one
+     * behaviour here). A custom string is accepted as `clip`, which is still
+     * closer than dropping the declaration. */
+    bool ellipsis = false;
+    for (const std::string &token : splitTokens(lowerTrim(value))) {
+      if (token == "ellipsis") ellipsis = true;
+    }
+    style->text_overflow = ellipsis ? TextOverflow::Ellipsis : TextOverflow::Clip;
+    return true;
+  }
   if (property == "writing-mode") {
     parseWritingMode(value, &style->writing_mode);
     return true;

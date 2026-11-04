@@ -8,6 +8,8 @@
 
 #include "layout_flow_internal.h"
 
+#include <utility>
+
 namespace xtgui {
 namespace layout_flow_detail {
 
@@ -24,12 +26,23 @@ void Layouter::flattenInline(LayoutBox *box, float contentWidth,
     const std::string &text = box->text;
     size_t i = 0;
     while (i < text.size()) {
-      if (text[i] == '\n') {
-        InlineItem br;
-        br.box = box;
-        br.style = &style;
-        br.force_break = true;
-        out.push_back(std::move(br));
+      if (text[i] == '\n' || text[i] == '\r') {
+        /* `nowrap` collapses a source newline to a space; the other modes keep
+         * the engine's existing forced break (notably `pre`, which must). */
+        bool preserveNewline = style.white_space != WhiteSpace::NoWrap;
+        InlineItem item;
+        item.box = box;
+        item.style = &style;
+        if (preserveNewline) {
+          item.force_break = true;
+        } else {
+          item.text = " ";
+          item.is_space = true;
+          item.width = textWidth(" ", style);
+          item.height = height;
+          item.ascent = ascent;
+        }
+        out.push_back(std::move(item));
         i++;
         continue;
       }
@@ -143,11 +156,33 @@ float Layouter::layoutInlineRun(LayoutBox *container, const std::vector<LayoutBo
     for (LayoutBox *box : run) computeInlineGeometry(box);
     return height;
   }
+  /* `nowrap`/`pre` keep the run on one line (a preserved newline still breaks
+   * it); without that, `text-overflow: ellipsis` would never see an overflowing
+   * line on ordinary prose. */
+  const bool wrap = containerStyle.white_space == WhiteSpace::Normal ||
+                    containerStyle.white_space == WhiteSpace::PreWrap ||
+                    containerStyle.white_space == WhiteSpace::PreLine;
+  const bool ellipsis = containerStyle.text_overflow == TextOverflow::Ellipsis &&
+                        containerStyle.overflow != Overflow::Visible;
   float cursorY = y;
   std::vector<InlineItem *> line;
   float lineWidth = 0;
   float lineAscent = 0;
   float lineDescent = 0;
+
+  /* Byte length of the longest UTF-8 prefix of `text` that fits in `budget`
+   * when measured with `style`, without splitting a multi-byte code point. */
+  auto fittingPrefix = [&](const std::string &text, const XtStyle &style, float budget) {
+    size_t best = 0;
+    for (size_t i = 0; i < text.size();) {
+      size_t next = i + 1;
+      while (next < text.size() && ((unsigned char)text[next] & 0xC0) == 0x80) next++;
+      if (textWidth(text.substr(0, next), style) > budget + 0.001f) break;
+      best = next;
+      i = next;
+    }
+    return best;
+  };
 
   /* Horizontal band left free by the floats overlapping [top, top + height). */
   auto band = [&](float top, float height, float *x0, float *x1) {
@@ -171,6 +206,44 @@ float Layouter::layoutInlineRun(LayoutBox *container, const std::vector<LayoutBo
     float x1 = 0;
     band(cursorY, height, &x0, &x1);
     float available = x1 - x0;
+    if (ellipsis && lineWidth > available + 0.001f) {
+      /* Replace the part of the line that does not fit with one ellipsis. The
+       * ellipsis gets the style of the run it terminates, so a smaller/larger
+       * inline span keeps its own metrics. */
+      const std::string dots = "\xE2\x80\xA6";  // U+2026 HORIZONTAL ELLIPSIS
+      float dotsWidth = textWidth(dots, containerStyle);
+      float budget = available - dotsWidth;
+      if (budget < 0.0f) budget = 0.0f;
+      std::vector<InlineItem *> kept;
+      float used = 0.0f;
+      for (InlineItem *item : line) {
+        if (used + item->width <= budget + 0.001f) {
+          kept.push_back(item);
+          used += item->width;
+          continue;
+        }
+        if (item->atomic) {
+          /* An atomic inline box cannot carry the ellipsis itself; append it to
+           * the last text run when one still fits, otherwise drop the box. */
+          if (!kept.empty() && !kept.back()->atomic && !kept.back()->is_space) {
+            kept.back()->text += dots;
+            kept.back()->width += dotsWidth;
+          }
+          break;
+        }
+        size_t prefix = fittingPrefix(item->text, *item->style, budget - used);
+        std::string text = item->text.substr(0, prefix);
+        while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.pop_back();
+        item->text = text + dots;
+        item->width = textWidth(text, *item->style) + dotsWidth;
+        kept.push_back(item);
+        break;
+      }
+      line = std::move(kept);
+      lineWidth = 0.0f;
+      for (InlineItem *item : line) lineWidth += item->width;
+      if (line.empty()) return;
+    }
     float x = x0;
     if (containerStyle.text_align == TextAlign::Center) {
       x += (available - lineWidth) / 2.0f;
@@ -213,7 +286,7 @@ float Layouter::layoutInlineRun(LayoutBox *container, const std::vector<LayoutBo
     float x1 = 0;
     band(cursorY, pendingHeight, &x0, &x1);
     float available = x1 - x0;
-    if (lineWidth + item.width > available && !line.empty()) finalize();
+    if (wrap && lineWidth + item.width > available && !line.empty()) finalize();
     if (item.is_space && line.empty()) continue;
     line.push_back(&item);
     lineWidth += item.width;

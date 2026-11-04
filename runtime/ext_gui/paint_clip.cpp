@@ -215,6 +215,49 @@ void triangulate(std::vector<Point> points, std::vector<ClipTriangle> *triangles
   }
 }
 
+/** Transform a box-local polygon into device space, triangulate it and store it
+ * on the display list. A polygon with fewer than three points is kept as an
+ * empty clip: a valid `clip-path` that hides everything must not degrade into
+ * "no clip". `convex` lets a caller that knows the shape (a rounded rectangle)
+ * skip ear clipping and emit a fan. */
+int storeClipPolygon(DisplayList &out, const std::vector<Point> &points, const Matrix2D &world,
+                     bool convex) {
+  ClipPathGeometry geometry;
+  geometry.points.reserve(points.size() * 2);
+  for (const Point &point : points) {
+    float x = point.x;
+    float y = point.y;
+    world.apply(point.x, point.y, &x, &y);
+    geometry.points.push_back(x);
+    geometry.points.push_back(y);
+  }
+  if (points.size() >= 3) {
+    if (convex) {
+      /* A convex outline is triangulated by a fan from its first vertex; the
+       * rounded-overflow shape (the common case) has ~68 points and this keeps
+       * its cost linear. */
+      for (size_t i = 1; i + 1 < points.size(); i++) {
+        ClipTriangle triangle;
+        triangle.x[0] = geometry.points[0];
+        triangle.y[0] = geometry.points[1];
+        triangle.x[1] = geometry.points[i * 2];
+        triangle.y[1] = geometry.points[i * 2 + 1];
+        triangle.x[2] = geometry.points[(i + 1) * 2];
+        triangle.y[2] = geometry.points[(i + 1) * 2 + 1];
+        geometry.triangles.push_back(triangle);
+      }
+    } else {
+      std::vector<Point> device;
+      device.reserve(points.size());
+      for (size_t i = 0; i + 1 < geometry.points.size(); i += 2)
+        device.push_back({geometry.points[i], geometry.points[i + 1]});
+      triangulate(device, &geometry.triangles);
+    }
+  }
+  out.clip_paths.push_back(std::move(geometry));
+  return (int)(out.clip_paths.size() - 1);
+}
+
 }  // namespace
 
 int addClipPathForBox(DisplayList &out, const LayoutBox &box, const XtStyle &style,
@@ -238,29 +281,41 @@ int addClipPathForBox(DisplayList &out, const LayoutBox &box, const XtStyle &sty
   /* An empty but valid shape (`inset(50%)`, `circle(0)`) clips everything away;
    * it must not fall back to "no clip". The paint walk keeps the empty geometry
    * and the renderer emits no geometry for ops that reference it. */
-  ClipPathGeometry geometry;
-  geometry.points.reserve(points.size() * 2);
-  for (Point &point : points) {
-    float x = point.x;
-    float y = point.y;
-    box.world.apply(point.x, point.y, &x, &y);
-    geometry.points.push_back(x);
-    geometry.points.push_back(y);
-  }
-  if (points.size() >= 3) {
-    std::vector<Point> device;
-    device.reserve(points.size());
-    for (size_t i = 0; i + 1 < geometry.points.size(); i += 2)
-      device.push_back({geometry.points[i], geometry.points[i + 1]});
-    triangulate(device, &geometry.triangles);
-  }
-  out.clip_paths.push_back(std::move(geometry));
-  return (int)(out.clip_paths.size() - 1);
+  return storeClipPolygon(out, points, box.world, false);
+}
+
+int addRoundedClipPath(DisplayList &out, const Matrix2D &world, float x, float y, float width,
+                       float height, float radius) {
+  if (width <= 0.0f || height <= 0.0f || radius <= 0.0f) return -1;
+  /* CSS never lets a corner arc exceed half of the shorter side. */
+  float limit = std::min(width, height) * 0.5f;
+  if (radius > limit) radius = limit;
+  if (radius <= 0.0f) return -1;
+  /* Sixteen chords per quarter circle keep a large (176px) preview avatar
+   * visually round — the chord error at that radius is under half a pixel —
+   * and stay cheap to clip quads against. The `inset(... round ...)` outline
+   * keeps its coarser six-segment construction. */
+  constexpr int kSegments = 16;
+  std::vector<Point> points;
+  points.reserve((size_t)(kSegments + 1) * 4);
+  auto arc = [&](float centerX, float centerY, float start) {
+    for (int i = 0; i <= kSegments; i++) {
+      float angle = start + (float)i / (float)kSegments * (kPi * 0.5f);
+      appendPoint(&points,
+                  {centerX + std::cos(angle) * radius, centerY + std::sin(angle) * radius});
+    }
+  };
+  /* Clockwise from the top-left corner, matching `insetOutline`. */
+  arc(x + radius, y + radius, kPi);
+  arc(x + width - radius, y + radius, kPi * 1.5f);
+  arc(x + width - radius, y + height - radius, 0.0f);
+  arc(x + radius, y + height - radius, kPi * 0.5f);
+  return storeClipPolygon(out, points, world, true);
 }
 
 PaintClip addClipPath(PaintClip clip, int index) {
   if (index < 0) return clip;
-  if (clip.path_count < 2) clip.paths[clip.path_count++] = index;
+  if (clip.path_count < PaintClip::kMaxPaths) clip.paths[clip.path_count++] = index;
   return clip;
 }
 

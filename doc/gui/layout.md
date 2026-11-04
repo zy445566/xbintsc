@@ -10,11 +10,14 @@ with absolute (viewport-relative) geometry:
 
 - **Block flow** — block-level children stack vertically; `display: none`
   generates no box; `width: auto` fills the containing block, `height: auto`
-  wraps the content. The box model (margin/padding/border) is resolved,
-  including percentages against the containing block width. Adjoining vertical
-  margins between siblings collapse to `max(positive) + min(negative)`; a
-  parent's bottom margin does not collapse with its last child's (see the
-  limitations below).
+  wraps the content. A percentage `height` resolves against the containing
+  block's **definite** content height (a frame sized by `height`/`clamp()` hands
+  its used height down to its children); when no definite height is known along
+  that chain, it is treated as `auto`. The box
+  model (margin/padding/border) is resolved, including percentages against the
+  containing block width. Adjoining vertical margins between siblings collapse
+  to `max(positive) + min(negative)`; a parent's bottom margin does not collapse
+  with its last child's (see the limitations below).
 - **Inline flow** — consecutive inline-level children form an anonymous inline
   formatting context with greedy, word-based line breaking, `text-align` and
   `line-height`. Inline elements get the union of their descendants' geometry;
@@ -23,6 +26,10 @@ with absolute (viewport-relative) geometry:
   that overlap it, so later lines wrap around them.
   Each text fragment remembers the run it covers, so paint can shape it. Text is
   measured with the stb_truetype stack (see [Text stack](./rendering.md#text-stack-m4b)).
+  `white-space: nowrap` stops a run from wrapping at spaces (a source newline
+  collapses to a space); `text-overflow: ellipsis` on a box whose `overflow` is
+  not `visible` replaces the part of an overflowing line that does not fit with
+  a single U+2026 ellipsis and drops the rest.
 - **Flexbox** — `row`/`column` (and the `-reverse` variants) with `gap`,
   `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and `align-items`
   (including `stretch` when the cross size is definite). On both axes the main
@@ -99,7 +106,13 @@ with absolute (viewport-relative) geometry:
   enclose them.
 - **`overflow` clipping** — a box with `overflow: hidden` (or `scroll`/`auto`)
   clips its subtree to its padding box, intersected with any ancestor clip; the
-  renderer applies the result with a GPU scissor rectangle. There is no
+  renderer applies the result with a GPU scissor rectangle. A `border-radius`
+  rounds that clip: the padding box becomes a triangulated polygon that joins
+  the `clip-path` intersection, so a circular avatar frame trims the square
+  artwork inside it instead of only cutting the corners off its bounding box.
+  The same radius clips the box's own background images/gradients and replaced
+  content (`<img>`, `<canvas>`, `<video>`, inline `<svg>`), so a bare
+  `border-radius: 50%` rounds an image even without `overflow`. There is no
   scrolling yet, so `scroll`/`auto` clip like `hidden`.
 
 Not yet implemented: parent/child and empty-block margin collapsing, anonymous

@@ -10,7 +10,10 @@
 几何信息的 `LayoutBox` 树：
 
 - **块级流** —— 块级子元素垂直堆叠；`display: none`
-  不生成盒；`width: auto` 填满包含块，`height: auto` 包裹内容。盒模型
+  不生成盒；`width: auto` 填满包含块，`height: auto` 包裹内容。百分比
+  `height` 相对包含块**确定**的内容高度解析（由 `height`/`clamp()` 定尺的
+  框架会把已用高度传给子元素）；当整条链上都没有确定高度时，百分比按 `auto`
+  处理。盒模型
   （margin/padding/border）会被解析，包括相对包含块宽度的百分比。相邻兄弟的
   垂直外边距会折叠为 `max(正值) + min(负值)`；父元素的下外边距不会与其最后一个
   子元素折叠（见下方限制）。
@@ -19,7 +22,10 @@
   的并集；`display: inline-block` 以 shrink-to-fit 宽度原子化布局。每一行会收缩到
   与之重叠的浮动（`float: left|right`）所留出的空白带，因此后续行会绕开它们。
   每个文本片段会记住它覆盖的 run，以便绘制时对它整形。文本使用 stb_truetype
-  技术栈测量（见[文本技术栈](./rendering.md)）。
+  技术栈测量（见[文本技术栈](./rendering.md)）。`white-space: nowrap`
+  让一段文本不在空格处换行（源码换行会折叠为空格）；在 `overflow` 不是
+  `visible` 的盒子上，`text-overflow: ellipsis` 会把溢出线放不下的部分替换为
+  单个 U+2026 省略号并丢弃其余内容。
 - **Flexbox** —— `row`/`column`（以及 `-reverse` 变体），支持 `gap`、
   `flex-basis`/`flex-grow`/`flex-shrink`、`justify-content` 与 `align-items`
   （当交叉轴尺寸确定时包括 `stretch`）。两个方向的主轴尺寸都先取
@@ -78,8 +84,12 @@
   会把后续块推到相关浮动的下方，而只包含浮动的块会增高以包裹它们。
 - **`overflow` 裁剪** —— `overflow: hidden`（或 `scroll`/`auto`）的盒子会将其
   子树裁剪到自身的 padding box，并与任一祖先裁剪区域取交集；渲染器用 GPU
-  scissor 矩形实现该结果。目前还没有滚动，因此 `scroll`/`auto` 与 `hidden`
-  一样只做裁剪。
+  scissor 矩形实现该结果。`border-radius` 会让该裁剪变成圆角：padding box
+  成为三角化多边形，加入 `clip-path` 的交集，因此圆形头像框会真正裁掉其中
+  的方形图像，而不只是裁掉其包围盒的四角。同一半径也会裁剪盒子自身的
+  background 图像/渐变与替换内容（`<img>`、`<canvas>`、`<video>`、内联
+  `<svg>`），所以单独的 `border-radius: 50%` 即使没有 `overflow` 也能把图片
+  变圆。目前还没有滚动，因此 `scroll`/`auto` 与 `hidden` 一样只做裁剪。
 
 尚未实现：父/子与空块的外边距折叠、由非空白文本产生的匿名 flex 项、完整的
 `z-index` 层叠上下文，以及 `float` 对块级子元素的影响（只有行内内容会绕排，

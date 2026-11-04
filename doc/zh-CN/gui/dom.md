@@ -27,7 +27,9 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 颜色（十六进制、`rgb()`/`rgba()`、一个命名子集）、数字、关键字与简写
 （`margin`/`padding`/`border`/`flex`/`font`/`outline`）。
 `display: inline-flex`/`inline-grid` 生成行内级 flex/grid 容器；`grid-area`、
-`aspect-ratio`、`letter-spacing`、`text-transform`、`writing-mode`
+`aspect-ratio`、`letter-spacing`、`text-transform`、`text-overflow`
+（`clip`/`ellipsis`）、`white-space`
+（`normal`/`nowrap`/`pre`/`pre-wrap`/`pre-line`）、`writing-mode`
 （`vertical-rl`/`vertical-lr` 文本）、`vertical-align`（长度形式）、百分比
 `border-radius`、`background-size`（`url()` 图层按尺寸与默认 repeat 平铺）与
 `currentColor` 都已支持。`font-variant-numeric`、`text-wrap`、`text-rendering`、

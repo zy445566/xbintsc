@@ -48,7 +48,11 @@
   `tests/e2e/gui-example-browser.test.ts` 中。
 - **`display: none -> flex` 的重排。** 通过类名切换让隐藏元素显示在 flex 容器上时，也曾观察
   到同样的崩溃；`examples/gui/pelican-bike` 改用 `opacity` 显示游戏结束遮罩。
-- **CSS 覆盖范围是有意为之的子集。** 已实现 Grid、`calc()`（含嵌套算术及
+- **CSS 覆盖范围是有意为之的子集。** 不支持的属性名、at-rule、选择器、函数、
+  单位、特性（attribute）以及
+  [DOM](./dom.md#不支持的特性会给出提示) 中列出的元素，会在 stderr 上报告一次，
+  而不是被静默丢弃，因此从 Web 移植的页面能看出回退掉了什么。已实现
+  Grid、`calc()`（含嵌套算术及
   `min()`/`max()`/`clamp()` 内的 `calc()`）、`clamp()`/`min()`/`max()`/`env()`、
   `var()` 自定义属性、`inset` 简写、`box-sizing`、`visibility`/`pointer-events`、
   `@media` 查询、生成内容（`::before`/`::after`）、线性/径向多层背景、

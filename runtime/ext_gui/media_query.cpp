@@ -9,6 +9,8 @@
  */
 #include "css_internal.h"
 
+#include "warnings.h"
+
 #include <cmath>
 #include <string>
 #include <vector>
@@ -113,7 +115,10 @@ bool evaluateRange(const std::string &inner, float vw, float vh, bool *matched) 
     float actual = 0.0f;
     if (feature == "width") actual = vw;
     else if (feature == "height") actual = vh;
-    else return false;
+    else {
+      xt_warn_unsupported_media_feature(feature);
+      return false;
+    }
     float value = 0.0f;
     if (!mediaLength(valueText, vw, vh, &value)) return false;
     if (flipped) {
@@ -159,6 +164,7 @@ bool evaluateFeature(const std::string &inner, float vw, float vh) {
   if (name == "prefers-contrast") return value == "no-preference";
   if (name == "scripting") return value == "enabled";
   if (name == "display-mode") return value == "browser";
+  xt_warn_unsupported_media_feature(name);
   return false;
 }
 

@@ -17,6 +17,7 @@
 
 #include "css_internal.h"
 #include "style_internal.h"
+#include "warnings.h"
 
 namespace xtgui {
 
@@ -169,6 +170,7 @@ bool applyFunction(const std::string &name, const std::vector<std::string> &args
     }
     return true;
   }
+  xt_warn_unsupported_function("transform", name);
   return false;  // perspective/… are not supported yet
 }
 

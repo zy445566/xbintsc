@@ -8,6 +8,8 @@
 
 #include "css_internal.h"
 
+#include "warnings.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -287,6 +289,8 @@ void parseFontFaceBlock(const std::string &block, StyleSheet *sheet) {
         rule.has_italic = true;
         rule.italic = true;
       }
+    } else {
+      xt_warn_unsupported_descriptor(declaration.property);
     }
   }
   if (rule.family.empty() || rule.sources.empty()) return;
@@ -308,6 +312,9 @@ void parseRules(const std::string &text, const std::string &media, int *order,
              (std::isalnum((unsigned char)text[nameEnd]) || text[nameEnd] == '-'))
         nameEnd++;
       std::string name = xt_css_lower(text.substr(nameStart, nameEnd - nameStart));
+      const bool supported = name == "media" || name == "font-face" ||
+                             (name.size() >= 9 && name.compare(name.size() - 9, 9, "keyframes") == 0);
+      if (!supported) xt_warn_unsupported_at_rule(name);
       size_t brace = text.find('{', nameEnd);
       size_t semi = text.find(';', nameEnd);
       if (brace != std::string::npos && (semi == std::string::npos || brace < semi)) {

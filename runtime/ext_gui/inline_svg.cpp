@@ -4,6 +4,8 @@
 
 #include "inline_svg.h"
 
+#include "warnings.h"
+
 #include <cctype>
 #include <cstdio>
 #include <string>
@@ -239,6 +241,7 @@ void serializeStyleText(const Node *node, const std::unordered_map<const Node *,
 void serializeNode(const Node *node, const std::unordered_map<const Node *, XtStyle> *styles,
                    std::string *out) {
   if (node == nullptr || !node->isElement()) return;
+  xt_warn_unsupported_svg_element(node->tag);
   const XtStyle *computed = nullptr;
   if (styles != nullptr) {
     auto found = styles->find(node);

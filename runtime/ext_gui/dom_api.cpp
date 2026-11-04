@@ -21,6 +21,8 @@
 
 #include "dom_api_internal.h"
 
+#include "warnings.h"
+
 #include <cctype>
 #include <string>
 #include <vector>
@@ -132,6 +134,7 @@ void remove_attribute_raw(xtgui::Node *node, const std::string &name) {
 
 void set_attribute(XtGuiWindow *win, xtgui::Node *node, const std::string &name,
                    const std::string &value) {
+  if (node != nullptr) xtgui::xt_warn_unsupported_attribute(node->tag, name);
   set_attribute_raw(node, name, value);
   mark_dirty(win);
 }

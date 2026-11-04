@@ -81,6 +81,8 @@ export interface GuiRunOptions {
   /** Working directory for the compiled program (defaults to the test process
    * CWD). Relative image/font paths resolve against it. */
   cwd?: string;
+  /** Extra environment variables for the run (merged over the test's own). */
+  env?: Record<string, string>;
 }
 
 /** Enough for programs whose whole body runs in the first frame's `ready` handler. */
@@ -152,6 +154,7 @@ export function createGuiHarness(): GuiHarness {
       env: {
         ...process.env,
         XT_GUI_AUTOCLOSE_MS: String(options.autocloseMs ?? DEFAULT_AUTOCLOSE_MS),
+        ...options.env,
       },
     });
     expect(executed.status, executed.stderr).toBe(0);

@@ -4,6 +4,8 @@
 
 #include "document.h"
 
+#include "warnings.h"
+
 #include <cmath>
 #include <string>
 #include <utility>
@@ -184,6 +186,7 @@ std::string XtDocument::toDebugString() const {
 /* -- DOM mutation --------------------------------------------------------- */
 
 Node *XtDocument::createElement(const std::string &tag) {
+  xt_warn_unsupported_element(tag);
   auto node = std::make_unique<Node>(NodeType::Element);
   node->tag = tag;
   Node *raw = node.get();

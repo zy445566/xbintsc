@@ -4,9 +4,26 @@
 
 #include "css_internal.h"
 
+#include "warnings.h"
+
+#include <string>
+#include <unordered_set>
+
 namespace xtgui {
 
 namespace {
+
+/** Pseudo-classes `css_match.cpp` can evaluate. `:not(...)` and
+ * `:nth-child(...)` are stored with their argument text, so the base name is
+ * what this set holds. */
+const std::unordered_set<std::string> &supportedPseudoClasses() {
+  static const std::unordered_set<std::string> names = {
+      "active", "checked", "disabled", "empty",      "first-child", "focus",
+      "focus-visible", "hover", "last-child", "not",  "nth-child",   "only-child",
+      "root",
+  };
+  return names;
+}
 
 class SelectorParser {
  public:
@@ -43,6 +60,9 @@ class SelectorParser {
         ComplexSelector selector;
         if (parseComplex(part, &selector) && !selector.compounds.empty()) {
           selectors.push_back(std::move(selector));
+        } else {
+          const std::string trimmed = xt_css_trim(part);
+          if (!trimmed.empty()) xt_warn_unsupported_selector(trimmed);
         }
         start = i + 1;
       }
@@ -93,10 +113,12 @@ class SelectorParser {
         /* `::before`/`::after` are generated-content elements, not states. The
          * single-colon spellings (`:before`) are the legacy equivalent. */
         if (pseudoElement || name == "before" || name == "after") {
+          if (name != "before" && name != "after") xt_warn_unsupported_pseudo_element(name);
           compound->pseudo_element = name;
           any = true;
           continue;
         }
+        const std::string base = name;
         if (!pseudoElement && *index < text.size() && text[*index] == '(') {
           int depth = 0;
           size_t start = *index;
@@ -113,6 +135,7 @@ class SelectorParser {
           }
           name += text.substr(start, *index - start);
         }
+        if (supportedPseudoClasses().count(base) == 0) xt_warn_unsupported_pseudo_class(base);
         compound->pseudoClasses.push_back(name);
         any = true;
       } else if (xt_css_is_ident_start(c)) {

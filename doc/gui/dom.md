@@ -68,6 +68,72 @@ per-restyle arena. Layout inserts its box before/after the real children;
 traversal, queries, `innerHTML` and `elementIndex()` never see it, and hit
 testing targets the origin element.
 
+### Unsupported features are reported
+
+The subset above is a limit, not a silent one. The rest of the document still
+renders — an unsupported element becomes an ordinary box (or stays hidden, for a
+tag such as `<template>`), an unsupported declaration is dropped — but the first
+use of each name is reported on stderr:
+
+```text
+xt_gui: warning: unsupported element <table>; the engine has no browser behaviour for it
+xt_gui: warning: unsupported CSS property 'gap'; it is ignored
+xt_gui: warning: unsupported at-rule '@supports'; its rule is ignored
+xt_gui: warning: unsupported pseudo-class ':has'; it never matches
+xt_gui: warning: unsupported CSS unit 'vmin'; the value is ignored
+```
+
+Reporting is per name for the whole process, so one property used by many rules
+or a cell repeated on every row appears once. The parser/cascade path reports:
+
+- **HTML elements** with browser behaviour the engine lacks: `applet`, `area`,
+  `basefont`, `bgsound`, `blink`, `caption`, `col`, `colgroup`, `datalist`,
+  `details`, `dialog`, `embed`, `frame`, `frameset`, `iframe`, `input`,
+  `isindex`, `keygen`, `map`, `marquee`, `math`, `meter`, `noembed`, `noframes`,
+  `object`, `optgroup`, `option`, `output`, `param`, `plaintext`, `progress`,
+  `select`, `summary`, `table`, `tbody`, `td`, `template`, `textarea`, `tfoot`,
+  `th`, `thead`, `tr`, `track` and `xmp`. Every other tag — including `button`,
+  `label`, custom elements and a typo such as `<dvi>` — is rendered as a plain
+  box, which is the intended fallback rather than a dropped feature, so it is
+  not reported.
+- **HTML attributes** that request unsupported behaviour: `href` (links do not
+  navigate), `srcset`, `sizes`, `poster`, `controls`, `contenteditable`,
+  `draggable`, `autofocus`, `tabindex`, `hidden`, and the SVG
+  `filter`/`mask`/`clip-path`/`marker-*` attributes.
+- **CSS properties** outside the subset, and **length units** the parser does
+  not implement (`ch`, `ex`, `vmin`, `dvh`, …). A recognised property with an
+  unparsable value is not reported as unsupported; only the property name is
+  checked.
+- **CSS at-rules** other than `@media`, `@font-face` and `@keyframes` (including
+  its vendor-prefixed spelling): `@supports`, `@layer`, `@container`,
+  `@import`, …
+- **`@font-face` descriptors** other than `font-family`, `src`, `font-weight`
+  and `font-style` (`font-display`, `unicode-range`, …).
+- **Selectors**: unsupported pseudo-classes (`:has`, `:is`, `:where`,
+  `:nth-of-type`, …), unsupported pseudo-elements (`::selection`, `::marker`, …),
+  and a selector the parser has to drop.
+- **Media queries**: an unknown feature (`min-resolution`, `aspect-ratio`, …)
+  evaluates to false and is reported.
+- **CSS functions** in a supported property when the engine does not implement
+  them: `hsl()`/`oklch()`/… colours, `perspective()`/`rotateX()` transforms,
+  `url()` filters, `path()` clip shapes, `conic-gradient()` backgrounds and
+  `counter()` generated content. An unsupported function invalidates the
+  declaration that uses it.
+- **SVG elements** NanoSVG does not render: `<text>`, `<use>`, `<filter>` and the
+  `fe*` primitives, `<mask>`, `<clipPath>`, `<pattern>`, `<marker>`, `<image>`,
+  `<foreignObject>` and animation elements. They are reported when an inline
+  `<svg>` is serialized for painting (an `<img src="…svg">` file goes through
+  NanoSVG directly and is outside this check).
+
+`XT_GUI_NO_WARNINGS=1` silences the reports. On Windows a GUI program is a
+Windows-subsystem executable, so stderr is visible only with `app.console: true`
+(see [API](./api.md)). The warnings do not affect the exit status.
+
+This is a parser/cascade audit, not a complete API audit: an unsupported *value*
+of a supported property (`display: contents`, for example), a DOM method that is
+a deliberate no-op and a WebGL entry point the backend does not implement remain
+silent (the Canvas and WebGL pages document their subsets).
+
 ## Interactive DOM (M8)
 
 `win.document` returns the document handle; element handles have stable identity

@@ -14,6 +14,7 @@
 
 #include "style_internal.h"
 #include "style_values_internal.h"
+#include "warnings.h"
 
 namespace xtgui {
 
@@ -384,8 +385,22 @@ bool parseRadialGradient(const std::string &body, BackgroundLayer *layer) {
   return true;
 }
 
+/** Image functions a browser accepts but this engine does not paint. */
+bool isUnsupportedImageFunction(const std::string &name) {
+  static const char *const names[] = {
+      "-webkit-conic-gradient", "-webkit-cross-fade", "-webkit-image-set",
+      "conic-gradient",         "cross-fade",         "element",
+      "image",                  "image-set",          "paint",
+      "repeating-conic-gradient",
+  };
+  for (const char *candidate : names) {
+    if (name == candidate) return true;
+  }
+  return false;
+}
+
 /** Parse one layer, appending it when it is a supported gradient or image. */
-bool parseLayer(const std::string &part, BackgroundLayer *layer) {
+bool parseLayer(const std::string &part, BackgroundLayer *layer, const char *property) {
   std::string body;
   /* The repeating prefix is checked first: a plain substring search for
    * `linear-gradient(` would also match inside `repeating-linear-gradient(`. */
@@ -410,19 +425,24 @@ bool parseLayer(const std::string &part, BackgroundLayer *layer) {
     layer->image_src = source;
     return true;
   }
+  const size_t open = part.find('(');
+  if (open != std::string::npos) {
+    const std::string name = xt_css_lower(xt_css_trim(part.substr(0, open)));
+    if (isUnsupportedImageFunction(name)) xt_warn_unsupported_function(property, name);
+  }
   return false;
 }
 
 /** Parse the layer list. `allowColor` is true for the `background` shorthand. */
 bool parseLayers(const std::string &value, std::vector<BackgroundLayer> *layers, Color *color,
-                 bool *hasColor, bool allowColor) {
+                 bool *hasColor, bool allowColor, const char *property) {
   layers->clear();
   std::string text = xt_css_trim(value);
   std::string lower = xt_css_lower(text);
   if (lower == "none") return true;
   for (const std::string &part : splitCommas(text)) {
     BackgroundLayer layer;
-    if (parseLayer(part, &layer)) {
+    if (parseLayer(part, &layer, property)) {
       layers->push_back(layer);
       /* `background: linear-gradient(...) #fff` mixes the final colour with the
        * image layer; the gradient itself is one token, so a colour scan cannot
@@ -460,7 +480,7 @@ void xt_style_apply_background_image(XtStyle *style, const std::string &value) {
   Color color;
   bool hasColor = false;
   std::vector<BackgroundLayer> layers;
-  parseLayers(value, &layers, &color, &hasColor, false);
+  parseLayers(value, &layers, &color, &hasColor, false, "background-image");
   style->background_layers = std::move(layers);
 }
 
@@ -472,7 +492,7 @@ void xt_style_apply_background(XtStyle *style, const std::string &value) {
   Color color;
   bool hasColor = false;
   std::vector<BackgroundLayer> layers;
-  parseLayers(value, &layers, &color, &hasColor, true);
+  parseLayers(value, &layers, &color, &hasColor, true, "background");
   style->background_layers = std::move(layers);
   style->background_sizes.clear();
   if (hasColor) {

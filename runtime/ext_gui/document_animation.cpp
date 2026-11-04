@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "style_internal.h"
+#include "warnings.h"
 
 namespace xtgui {
 
@@ -171,7 +172,9 @@ void applyKeyframeDeclarations(XtStyle *style, const std::vector<Declaration> &d
         declaration.property[1] == '-')
       continue;
     if (declaration.property.compare(0, 9, "animation") == 0) continue;
-    xt_style_apply_declaration(style, declaration.property, declaration.value, context);
+    if (!xt_style_apply_declaration(style, declaration.property, declaration.value, context)) {
+      xt_warn_unsupported_property(declaration.property);
+    }
   }
 }
 

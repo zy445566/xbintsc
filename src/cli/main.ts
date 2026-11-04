@@ -338,6 +338,7 @@ function mergeAppConfig(flags: Map<string, string | boolean>, config: ProjectCon
     ...(bundleId !== undefined ? { bundleId } : {}),
     ...(bundle !== undefined ? { bundle } : {}),
     ...(icon !== undefined ? { icon } : {}),
+    ...(base.console !== undefined ? { console: base.console } : {}),
   };
 }
 

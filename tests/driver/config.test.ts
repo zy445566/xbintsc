@@ -38,7 +38,13 @@ describe("parseProjectConfig", () => {
         extensions: ["gui", "node"],
         extNative: ["native/xbintsc.manifest.json"],
         force: true,
-        app: { name: "Demo", icon: "assets/app.png", bundle: true, bundleId: "com.example.demo" },
+        app: {
+          name: "Demo",
+          icon: "assets/app.png",
+          bundle: true,
+          bundleId: "com.example.demo",
+          console: true,
+        },
       }),
     );
     expect(config).toEqual({
@@ -52,7 +58,13 @@ describe("parseProjectConfig", () => {
       extensions: ["gui", "node"],
       extNative: ["native/xbintsc.manifest.json"],
       force: true,
-      app: { name: "Demo", icon: "assets/app.png", bundle: true, bundleId: "com.example.demo" },
+      app: {
+        name: "Demo",
+        icon: "assets/app.png",
+        bundle: true,
+        bundleId: "com.example.demo",
+        console: true,
+      },
     });
   });
 
@@ -75,6 +87,9 @@ describe("parseProjectConfig", () => {
     expect(() => parseProjectConfig(JSON.stringify({ extensions: [1] }))).toThrow(/array of strings/);
     expect(() => parseProjectConfig(JSON.stringify({ app: [] }))).toThrow(/must be a JSON object/);
     expect(() => parseProjectConfig(JSON.stringify({ app: { name: 1 } }))).toThrow(/must be a string/);
+    expect(() => parseProjectConfig(JSON.stringify({ app: { console: "yes" } }))).toThrow(
+      /must be a boolean/,
+    );
   });
 
   it("rejects an unknown optimization level", () => {

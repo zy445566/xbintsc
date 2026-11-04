@@ -123,6 +123,7 @@ export function parseProjectConfig(text: string, where: string = CONFIG_FILE_NAM
       icon: readString(appRoot, "icon", `${where}: 'app'`),
       bundle: readBoolean(appRoot, "bundle", `${where}: 'app'`),
       bundleId: readString(appRoot, "bundleId", `${where}: 'app'`),
+      console: readBoolean(appRoot, "console", `${where}: 'app'`),
     };
     for (const key of Object.keys(app) as (keyof AppConfig)[]) {
       if (app[key] === undefined) delete app[key];

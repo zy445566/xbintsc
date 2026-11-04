@@ -61,6 +61,64 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 之前/之后；遍历、查询、`innerHTML` 与 `elementIndex()` 永远看不到它，命中测试
 则指向原始元素。
 
+### 不支持的特性会给出提示
+
+上面的子集是一条边界，但不是一条静默的边界。文档其余部分仍然会渲染——不支持的
+元素会变成普通盒子（`<template>` 这类标签则保持隐藏），不支持的声明会被丢弃——
+但每个名字的第一次使用会输出到 stderr：
+
+```text
+xt_gui: warning: unsupported element <table>; the engine has no browser behaviour for it
+xt_gui: warning: unsupported CSS property 'gap'; it is ignored
+xt_gui: warning: unsupported at-rule '@supports'; its rule is ignored
+xt_gui: warning: unsupported pseudo-class ':has'; it never matches
+xt_gui: warning: unsupported CSS unit 'vmin'; the value is ignored
+```
+
+报告按名字在整个进程内去重：一个被多条规则使用的属性，或每行重复出现的表格
+单元格，只会出现一次。解析/层叠路径会报告：
+
+- **HTML 元素**：引擎缺少其浏览器行为的标签——`applet`、`area`、`basefont`、
+  `bgsound`、`blink`、`caption`、`col`、`colgroup`、`datalist`、`details`、
+  `dialog`、`embed`、`frame`、`frameset`、`iframe`、`input`、`isindex`、
+  `keygen`、`map`、`marquee`、`math`、`meter`、`noembed`、`noframes`、
+  `object`、`optgroup`、`option`、`output`、`param`、`plaintext`、`progress`、
+  `select`、`summary`、`table`、`tbody`、`td`、`template`、`textarea`、`tfoot`、
+  `th`、`thead`、`tr`、`track` 与 `xmp`。其余标签——包括 `button`、`label`、
+  自定义元素以及 `<dvi>` 这类拼写错误——都会渲染成普通盒子，这是预期的回退而
+  不是被丢弃的特性，因此不会报告。
+- **HTML 特性（attribute）**：请求了不支持行为的 `href`（链接不会导航）、
+  `srcset`、`sizes`、`poster`、`controls`、`contenteditable`、`draggable`、
+  `autofocus`、`tabindex`、`hidden`，以及 SVG 的
+  `filter`/`mask`/`clip-path`/`marker-*` 特性。
+- **CSS 属性**：子集之外的属性名；以及解析器未实现的长度单位（`ch`、`ex`、
+  `vmin`、`dvh` 等）。已支持属性上的非法值不会按“不支持”报告——只检查属性的
+  *名字*。
+- **CSS at-rule**：`@media`、`@font-face`、`@keyframes`（含厂商前缀拼写）之外的
+  at-rule，例如 `@supports`、`@layer`、`@container`、`@import`。
+- **`@font-face` 描述符**：`font-family`、`src`、`font-weight`、`font-style`
+  之外的描述符（`font-display`、`unicode-range` 等）。
+- **选择器**：不支持的伪类（`:has`、`:is`、`:where`、`:nth-of-type` 等）、
+  不支持的伪元素（`::selection`、`::marker` 等），以及解析器不得不丢弃的
+  选择器。
+- **媒体查询**：未知特性（`min-resolution`、`aspect-ratio` 等）会按不匹配处理并
+  报告。
+- **CSS 函数**：已支持属性里出现引擎未实现的函数——`hsl()`/`oklch()` 等颜色、
+  `perspective()`/`rotateX()` 等变换、`url()` 滤镜、`path()` 裁剪形状、
+  `conic-gradient()` 背景、`counter()` 生成内容。不支持的函数会使整条声明失效。
+- **SVG 元素**：NanoSVG 不渲染的 `<text>`、`<use>`、`<filter>` 及其 `fe*`
+  原语、`<mask>`、`<clipPath>`、`<pattern>`、`<marker>`、`<image>`、
+  `<foreignObject>` 与动画元素。内联 `<svg>` 在序列化用于绘制时报告；
+  `<img src="…svg">` 文件直接交给 NanoSVG，不经过这项检查。
+
+`XT_GUI_NO_WARNINGS=1` 可以关闭这些报告。在 Windows 上，GUI 程序是
+Windows 子系统可执行文件，只有设置 `app.console: true` 时才能看到 stderr
+（见 [API](./api.md)）。这些警告不影响退出状态。
+
+这是解析/层叠路径的审计，不是完整 API 审计：已支持属性上的不支持*值*
+（例如 `display: contents`）、有意空实现的 DOM 方法和后端未实现的 WebGL 入口
+仍然保持静默（Canvas 与 WebGL 页面记录了各自的子集）。
+
 ## 交互式 DOM（M8）
 
 `win.document` 返回文档句柄；元素句柄具有稳定标识，并提供可读写的属性、

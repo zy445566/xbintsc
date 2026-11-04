@@ -14,6 +14,7 @@
 #include "css_internal.h"
 #include "style_internal.h"
 #include "style_values_internal.h"
+#include "warnings.h"
 
 namespace xtgui {
 
@@ -223,7 +224,8 @@ static bool parseShadowLengths(const std::string &value, Length *dx, Length *dy,
   return true;
 }
 
-static bool parseFilterList(const std::string &value, std::vector<FilterOp> *out) {
+static bool parseFilterList(const std::string &value, const char *property,
+                            std::vector<FilterOp> *out) {
   std::string text = xt_css_trim(value);
   std::string lower = xt_css_lower(text);
   if (lower == "none" || text.empty()) {
@@ -260,6 +262,7 @@ static bool parseFilterList(const std::string &value, std::vector<FilterOp> *out
     i = close + 1;
 
     FilterOp op;
+    bool knownName = true;
     bool known = true;
     if (name == "blur") {
       op.kind = FilterKind::Blur;
@@ -281,8 +284,12 @@ static bool parseFilterList(const std::string &value, std::vector<FilterOp> *out
       else if (name == "invert") op.kind = FilterKind::Invert;
       else if (name == "saturate") op.kind = FilterKind::Saturate;
       else if (name == "opacity") op.kind = FilterKind::Opacity;
-      else known = false;
-      if (known && !parseFilterAmount(args, &op.amount)) known = false;
+      else knownName = false;
+      if (knownName && !parseFilterAmount(args, &op.amount)) known = false;
+    }
+    if (!knownName) {
+      xt_warn_unsupported_function(property, name);
+      continue;
     }
     if (known) out->push_back(op);
   }
@@ -396,10 +403,24 @@ static bool parseAnimationShorthand(const std::string &value, std::vector<Animat
 
 bool xt_style_apply_effect(XtStyle *style, const std::string &property,
                            const std::string &value) {
-  if (property == "filter") return parseFilterList(value, &style->filters);
-  if (property == "backdrop-filter") return parseFilterList(value, &style->backdrop_filters);
-  if (property == "text-shadow") return parseTextShadow(value, &style->text_shadow);
-  if (property == "box-shadow") return parseBoxShadow(value, &style->box_shadow);
+  /* A recognised property is "handled" even when the value fails to parse: the
+   * caller reports only unknown property names, never invalid values. */
+  if (property == "filter") {
+    parseFilterList(value, "filter", &style->filters);
+    return true;
+  }
+  if (property == "backdrop-filter") {
+    parseFilterList(value, "backdrop-filter", &style->backdrop_filters);
+    return true;
+  }
+  if (property == "text-shadow") {
+    parseTextShadow(value, &style->text_shadow);
+    return true;
+  }
+  if (property == "box-shadow") {
+    parseBoxShadow(value, &style->box_shadow);
+    return true;
+  }
   if (property == "animation") {
     parseAnimationShorthand(value, &style->animations);
     return true;

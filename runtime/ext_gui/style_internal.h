@@ -36,8 +36,13 @@ void xt_style_apply_user_agent(const Node *node, XtStyle *style);
 float xt_style_border_radius_px(const Length &radius, float width, float height, float em,
                                 float root, float vw, float vh);
 
-/** Apply a parsed declaration to a computed style. */
-void xt_style_apply_declaration(XtStyle *style, const std::string &property,
+/** Apply a parsed declaration to a computed style.
+ *
+ * Returns false only when the *property name* is not part of the engine's
+ * subset; a recognised property with an unparsable value returns true (the
+ * declaration is simply a no-op), so callers can warn about unknown properties
+ * without mistaking bad values for unsupported ones. */
+bool xt_style_apply_declaration(XtStyle *style, const std::string &property,
                                 const std::string &rawValue, const ApplyContext &context);
 
 }  // namespace xtgui

@@ -9,6 +9,8 @@
 
 #include "dom_internal.h"
 
+#include "warnings.h"
+
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -326,8 +328,10 @@ std::unique_ptr<Node> xt_html_parse(const std::string &html) {
       while (stack.size() > 1 && closesOpenElement(stack.back()->tag, token.name)) {
         stack.pop_back();
       }
+      xt_warn_unsupported_element(token.name);
       Node *element = stack.back()->addElement(token.name);
       element->attrs = std::move(token.attrs);
+      for (const Attr &attr : element->attrs) xt_warn_unsupported_attribute(token.name, attr.name);
       bool isVoid = voidElements().count(token.name) != 0;
       if (!isVoid && !token.selfClosing) stack.push_back(element);
       continue;

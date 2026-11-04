@@ -10,6 +10,7 @@
 
 #include "css_internal.h"
 #include "perf.h"
+#include "warnings.h"
 
 #include <algorithm>
 #include <cctype>
@@ -241,7 +242,9 @@ void applyCandidates(XtStyle *style, std::vector<Candidate> *candidates,
     if (xt_css_lower(value).find("current") != std::string::npos) {
       value = xt_style_replace_current_color(value, style->color);
     }
-    xt_style_apply_declaration(style, property, value, nodeContext);
+    if (!xt_style_apply_declaration(style, property, value, nodeContext)) {
+      xt_warn_unsupported_property(property);
+    }
   }
 }
 
@@ -359,6 +362,7 @@ std::string resolveContent(const Node *origin, const std::string &raw, bool *gen
     }
     if (i < value.size() && value[i] == '(') {
       /* Unsupported function (`counter`, `counters`, `url`, …): skip it. */
+      xt_warn_unsupported_function("content", token);
       int depth = 0;
       for (; i < value.size(); i++) {
         if (value[i] == '(') depth++;

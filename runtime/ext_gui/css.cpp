@@ -6,10 +6,13 @@
 
 #include "css_internal.h"
 
+#include "warnings.h"
+
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace xtgui {
 
@@ -131,7 +134,10 @@ static Length makeScalarLength(double number, const std::string &rawUnit) {
   else if (unit == "cm") { length.value = (float)number * (96.0f / 2.54f); length.unit = Unit::Px; }
   else if (unit == "mm") { length.value = (float)number * (96.0f / 25.4f); length.unit = Unit::Px; }
   else if (unit == "q") { length.value = (float)number * (96.0f / 101.6f); length.unit = Unit::Px; }
-  else length.unit = Unit::Invalid;
+  else {
+    length.unit = Unit::Invalid;
+    if (!unit.empty()) xt_warn_unsupported_unit(unit);
+  }
   return length;
 }
 
@@ -404,7 +410,10 @@ bool parseFunctionColor(const std::string &text, Color *color) {
   for (size_t i = 0; i < parts.size() && i < 4; i++) {
     const std::string &part = parts[i];
     if (i < 3) {
-      if (name == "hsl" || name == "hsla") return false;  // hsl not supported yet
+      if (name == "hsl" || name == "hsla") {
+        xt_warn_unsupported_function("color", name);
+        return false;
+      }
       if (!part.empty() && part.back() == '%') {
         values[i] = strtof(part.c_str(), nullptr) / 100.0f;
       } else {
@@ -447,6 +456,14 @@ const std::unordered_map<std::string, unsigned int> &namedColors() {
 
 }  // namespace
 
+/** CSS Color 4 functions the engine does not implement (beyond hsl). */
+static bool isUnsupportedColorFunction(const std::string &name) {
+  static const std::unordered_set<std::string> names = {
+      "color", "color-mix", "hwb", "lab", "lch", "light-dark", "oklab", "oklch",
+  };
+  return names.count(name) != 0;
+}
+
 Color xt_css_parse_color(const std::string &value) {
   Color color;
   std::string text = xt_css_lower(xt_css_trim(value));
@@ -459,6 +476,14 @@ Color xt_css_parse_color(const std::string &value) {
       text.rfind("hsla", 0) == 0) {
     parseFunctionColor(text, &color);
     return color;
+  }
+  const size_t open = text.find('(');
+  if (open != std::string::npos) {
+    const std::string name = xt_css_trim(text.substr(0, open));
+    if (isUnsupportedColorFunction(name)) {
+      xt_warn_unsupported_function("color", name);
+      return color;
+    }
   }
   auto it = namedColors().find(text);
   if (it != namedColors().end()) {

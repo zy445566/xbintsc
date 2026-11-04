@@ -64,7 +64,11 @@
   *class change* on a flex container has also been observed to crash the same
   way; `examples/gui/pelican-bike` reveals its game-over overlay with `opacity`
   instead.
-- **CSS coverage is a deliberate subset.** Grid, `calc()` (including
+- **CSS coverage is a deliberate subset.** Unsupported property names, at-rules,
+  selectors, functions, units, attributes and elements (see
+  [DOM](./dom.md#unsupported-features-are-reported)) are reported once on stderr
+  rather than silently dropped, so a ported page shows what fell back. Grid,
+  `calc()` (including
   nested arithmetic and `calc()` inside `min()`/`max()`/`clamp()`),
   `clamp()`/`min()`/`max()`/`env()`, `var()` custom properties, the `inset`
   shorthand, `box-sizing`, `visibility` and `pointer-events`, `@media` queries,

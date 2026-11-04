@@ -81,7 +81,6 @@ static bool parseEdgeLengths(const std::string &value, Edges *edges) {
   return true;
 }
 
-
 /** `inset: <top> <right> <bottom> <left>` (1-4 values, like margin). */
 static bool parseInsetLengths(const std::string &value, Length *top, Length *right, Length *bottom,
                               Length *left) {
@@ -123,7 +122,6 @@ static bool assignLength(Length *target, const std::string &value) {
   return true;
 }
 
-
 /** A unitless declaration value, accepting `calc()` arithmetic (which resolves
  * against the element's font and the viewport). */
 static bool parseNumeric(const std::string &value, const ApplyContext &context, float *out) {
@@ -156,7 +154,7 @@ static bool assignColor(Color *target, bool *has, const std::string &value) {
 
 /* -- declaration application ---------------------------------------------- */
 
-void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
+bool xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
                                 const std::string &rawValue, const ApplyContext &context) {
   std::string value = xt_css_trim(rawValue);
   /* Vendor aliases of properties the engine does implement. */
@@ -170,24 +168,24 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
     if (text == "inline-flex") {
       style->display = Display::Flex;
       style->inline_level = true;
-      return;
+      return true;
     }
     if (text == "inline-grid") {
       style->display = Display::Grid;
       style->inline_level = true;
-      return;
+      return true;
     }
     static const char *const names[] = {"none", "block", "inline", "inline-block", "flex", "grid",
                                         "list-item"};
     int index = 0;
     if (parseEnum(text, names, 7, &index)) style->display = (Display)index;
-    return;
+    return true;
   }
   if (property == "visibility") {
     std::string text = xt_css_lower(xt_css_trim(value));
     if (text == "hidden" || text == "collapse") style->visible = false;
     else if (text == "visible") style->visible = true;
-    return;
+    return true;
   }
   if (property == "pointer-events") {
     std::string text = xt_css_lower(xt_css_trim(value));
@@ -195,33 +193,33 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
     else if (text == "auto" || text == "all" || text == "visiblepainted" ||
              text == "visiblefill" || text == "visiblestroke")
       style->pointer_events = true;
-    return;
+    return true;
   }
   if (property == "box-sizing") {
     std::string text = xt_css_lower(xt_css_trim(value));
     if (text == "border-box") style->box_sizing = BoxSizing::BorderBox;
     else if (text == "content-box") style->box_sizing = BoxSizing::ContentBox;
-    return;
+    return true;
   }
   if (property == "position") {
     static const char *const names[] = {"static", "relative", "absolute", "fixed"};
     int index = 0;
     if (parseEnum(value, names, 4, &index)) style->position = (Position)index;
-    return;
+    return true;
   }
-  if (property == "width") { assignLength(&style->width, value); return; }
-  if (property == "height") { assignLength(&style->height, value); return; }
-  if (property == "min-width") { assignLength(&style->min_width, value); return; }
-  if (property == "min-height") { assignLength(&style->min_height, value); return; }
-  if (property == "max-width") { assignLength(&style->max_width, value); return; }
-  if (property == "max-height") { assignLength(&style->max_height, value); return; }
-  if (property == "top") { assignLength(&style->top, value); return; }
-  if (property == "right") { assignLength(&style->right, value); return; }
-  if (property == "bottom") { assignLength(&style->bottom, value); return; }
-  if (property == "left") { assignLength(&style->left, value); return; }
+  if (property == "width") { assignLength(&style->width, value); return true; }
+  if (property == "height") { assignLength(&style->height, value); return true; }
+  if (property == "min-width") { assignLength(&style->min_width, value); return true; }
+  if (property == "min-height") { assignLength(&style->min_height, value); return true; }
+  if (property == "max-width") { assignLength(&style->max_width, value); return true; }
+  if (property == "max-height") { assignLength(&style->max_height, value); return true; }
+  if (property == "top") { assignLength(&style->top, value); return true; }
+  if (property == "right") { assignLength(&style->right, value); return true; }
+  if (property == "bottom") { assignLength(&style->bottom, value); return true; }
+  if (property == "left") { assignLength(&style->left, value); return true; }
   if (property == "inset") {
     parseInsetLengths(value, &style->top, &style->right, &style->bottom, &style->left);
-    return;
+    return true;
   }
 
   if (property == "margin") {
@@ -231,39 +229,39 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
       style->margin_bottom_auto = style->margin.bottom.unit == Unit::Auto;
       style->margin_left_auto = style->margin.left.unit == Unit::Auto;
     }
-    return;
+    return true;
   }
-  if (property == "padding") { parseEdgeLengths(value, &style->padding); return; }
+  if (property == "padding") { parseEdgeLengths(value, &style->padding); return true; }
   if (property == "margin-top") {
     setEdge(&style->margin, "top", xt_css_parse_length(value));
     style->margin_top_auto = style->margin.top.unit == Unit::Auto;
-    return;
+    return true;
   }
   if (property == "margin-right") {
     setEdge(&style->margin, "right", xt_css_parse_length(value));
     style->margin_right_auto = style->margin.right.unit == Unit::Auto;
-    return;
+    return true;
   }
   if (property == "margin-bottom") {
     setEdge(&style->margin, "bottom", xt_css_parse_length(value));
     style->margin_bottom_auto = style->margin.bottom.unit == Unit::Auto;
-    return;
+    return true;
   }
   if (property == "margin-left") {
     setEdge(&style->margin, "left", xt_css_parse_length(value));
     style->margin_left_auto = style->margin.left.unit == Unit::Auto;
-    return;
+    return true;
   }
-  if (property == "padding-top") { setEdge(&style->padding, "top", xt_css_parse_length(value)); return; }
-  if (property == "padding-right") { setEdge(&style->padding, "right", xt_css_parse_length(value)); return; }
-  if (property == "padding-bottom") { setEdge(&style->padding, "bottom", xt_css_parse_length(value)); return; }
-  if (property == "padding-left") { setEdge(&style->padding, "left", xt_css_parse_length(value)); return; }
+  if (property == "padding-top") { setEdge(&style->padding, "top", xt_css_parse_length(value)); return true; }
+  if (property == "padding-right") { setEdge(&style->padding, "right", xt_css_parse_length(value)); return true; }
+  if (property == "padding-bottom") { setEdge(&style->padding, "bottom", xt_css_parse_length(value)); return true; }
+  if (property == "padding-left") { setEdge(&style->padding, "left", xt_css_parse_length(value)); return true; }
 
-  if (property == "border-width") { parseEdgeLengths(value, &style->border_width); return; }
-  if (property == "border-top-width") { setEdge(&style->border_width, "top", xt_css_parse_length(value)); return; }
-  if (property == "border-right-width") { setEdge(&style->border_width, "right", xt_css_parse_length(value)); return; }
-  if (property == "border-bottom-width") { setEdge(&style->border_width, "bottom", xt_css_parse_length(value)); return; }
-  if (property == "border-left-width") { setEdge(&style->border_width, "left", xt_css_parse_length(value)); return; }
+  if (property == "border-width") { parseEdgeLengths(value, &style->border_width); return true; }
+  if (property == "border-top-width") { setEdge(&style->border_width, "top", xt_css_parse_length(value)); return true; }
+  if (property == "border-right-width") { setEdge(&style->border_width, "right", xt_css_parse_length(value)); return true; }
+  if (property == "border-bottom-width") { setEdge(&style->border_width, "bottom", xt_css_parse_length(value)); return true; }
+  if (property == "border-left-width") { setEdge(&style->border_width, "left", xt_css_parse_length(value)); return true; }
   if (property == "border-radius") {
     /* `%` stays symbolic: layout resolves it against the box's smaller side. */
     Length length = xt_css_parse_length(value);
@@ -271,19 +269,19 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
         length.unit != Unit::None) {
       style->border_radius = length;
     }
-    return;
+    return true;
   }
   if (property == "border-style" || property == "border-top-style" || property == "border-right-style" ||
       property == "border-bottom-style" || property == "border-left-style") {
     static const char *const names[] = {"none", "solid", "dashed", "dotted"};
     int index = 0;
     if (parseEnum(value, names, 4, &index)) style->border_style = (BorderStyle)index;
-    return;
+    return true;
   }
   if (property == "border-color" || property == "border-top-color" || property == "border-right-color" ||
       property == "border-bottom-color" || property == "border-left-color") {
     assignColor(&style->border_color, &style->has_border_color, value);
-    return;
+    return true;
   }
   if (property == "border" || property == "border-top" || property == "border-right" ||
       property == "border-bottom" || property == "border-left") {
@@ -307,39 +305,39 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
         style->has_border_color = true;
       }
     }
-    return;
+    return true;
   }
 
   if (property == "color") {
     Color color = xt_css_parse_color(value);
     if (color.valid) style->color = color;
-    return;
+    return true;
   }
-  if (property == "background-color") { assignColor(&style->background, &style->has_background, value); return; }
-  if (property == "background-size") { xt_style_apply_background_size(style, value); return; }
+  if (property == "background-color") { assignColor(&style->background, &style->has_background, value); return true; }
+  if (property == "background-size") { xt_style_apply_background_size(style, value); return true; }
   if (property == "background-image") {
     xt_style_apply_background_image(style, value);
-    return;
+    return true;
   }
   if (property == "background") {
     xt_style_apply_background(style, value);
-    return;
+    return true;
   }
   if (property == "clip-path") {
     xt_style_apply_clip_path(style, property, value);
-    return;
+    return true;
   }
-  if (xt_style_apply_effect(style, property, value)) return;
+  if (xt_style_apply_effect(style, property, value)) return true;
 
   if (property == "font-size") {
     Length length = xt_css_parse_length(value);
-    if (length.unit == Unit::Invalid) return;
+    if (length.unit == Unit::Invalid) return true;
     /* `em`/`%` resolve against the *parent* font size, never the element's own
      * (possibly UA-set) size. */
     style->font_size = xt_style_resolve_absolute(length, context.parentFontSize, context.parentFontSize,
                                                  context.rootFontSize, context.viewportWidth, context.viewportHeight);
     if (style->font_size <= 0.0f) style->font_size = 16.0f;
-    return;
+    return true;
   }
   if (property == "font-weight") {
     std::string text = xt_css_lower(value);
@@ -351,21 +349,21 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
       float number = 0;
       if (xt_css_parse_number(text, &number)) style->font_weight = (int)number;
     }
-    return;
+    return true;
   }
   if (property == "font-family") {
     style->font_family = value;
-    return;
+    return true;
   }
   if (property == "font-style") {
     style->font_style = (xt_css_lower(value) == "italic") ? FontStyle::Italic : FontStyle::Normal;
-    return;
+    return true;
   }
   if (property == "line-height") {
     std::string text = xt_css_lower(value);
     if (text == "normal") {
       style->line_height = {};
-      return;
+      return true;
     }
     /* A unitless `line-height` is a multiplier, not a length in pixels. The
      * generic length parser maps a bare number to `px`, which collapsed
@@ -383,15 +381,15 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
       float number = 0;
       if (xt_css_parse_number(text, &number)) {
         style->line_height = {number, Unit::Number};
-        return;
+        return true;
       }
     }
     Length length = xt_css_parse_length(text);
-    if (length.unit == Unit::Invalid) return;
+    if (length.unit == Unit::Invalid) return true;
     /* Relative units are resolved in `finalizeStyle`, once the element's own
      * font size is settled. */
     style->line_height = length;
-    return;
+    return true;
   }
   if (property == "text-align") {
     std::string text = xt_css_lower(value);
@@ -399,31 +397,31 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
     else if (text == "right" || text == "end") style->text_align = TextAlign::End;
     else if (text == "center") style->text_align = TextAlign::Center;
     else if (text == "justify") style->text_align = TextAlign::Justify;
-    return;
+    return true;
   }
   if (property == "white-space") {
     static const char *const names[] = {"normal", "nowrap", "pre", "pre-wrap", "pre-line"};
     int index = 0;
     if (parseEnum(value, names, 5, &index)) style->white_space = (WhiteSpace)index;
-    return;
+    return true;
   }
-  if (xt_style_apply_text_property(style, property, value, context)) return;
-  if (xt_style_apply_ui_property(style, property, value)) return;
-  if (xt_style_apply_svg_property(style, property, value)) return;
+  if (xt_style_apply_text_property(style, property, value, context)) return true;
+  if (xt_style_apply_ui_property(style, property, value)) return true;
+  if (xt_style_apply_svg_property(style, property, value)) return true;
 
-  if (xt_style_apply_grid_property(style, property, value)) return;
+  if (xt_style_apply_grid_property(style, property, value)) return true;
 
   if (property == "flex-direction") {
     static const char *const names[] = {"row", "row-reverse", "column", "column-reverse"};
     int index = 0;
     if (parseEnum(value, names, 4, &index)) style->flex_direction = (FlexDirection)index;
-    return;
+    return true;
   }
   if (property == "flex-wrap") {
     static const char *const names[] = {"nowrap", "wrap", "wrap-reverse"};
     int index = 0;
     if (parseEnum(value, names, 3, &index)) style->flex_wrap = (FlexWrap)index;
-    return;
+    return true;
   }
   if (property == "flex-flow") {
     /* `flex-flow: <direction> || <wrap>` in either order. */
@@ -434,59 +432,59 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
       if (parseEnum(token, dirs, 4, &index)) style->flex_direction = (FlexDirection)index;
       else if (parseEnum(token, wraps, 3, &index)) style->flex_wrap = (FlexWrap)index;
     }
-    return;
+    return true;
   }
   if (property == "justify-content") {
     static const char *const names[] = {"flex-start", "flex-end", "center", "space-between",
                                         "space-around", "space-evenly"};
     int index = 0;
     if (parseEnum(value, names, 6, &index)) style->justify_content = (JustifyContent)index;
-    return;
+    return true;
   }
   if (property == "align-content") {
     static const char *const names[] = {"stretch", "flex-start", "flex-end", "center",
                                         "space-between", "space-around"};
     int index = 0;
     if (parseEnum(value, names, 6, &index)) style->align_content = (AlignContent)index;
-    return;
+    return true;
   }
   if (property == "gap") {
     assignLength(&style->gap, value);
     style->row_gap = style->column_gap = style->gap;
-    return;
+    return true;
   }
-  if (property == "row-gap") { assignLength(&style->row_gap, value); return; }
-  if (property == "column-gap") { assignLength(&style->column_gap, value); return; }
+  if (property == "row-gap") { assignLength(&style->row_gap, value); return true; }
+  if (property == "column-gap") { assignLength(&style->column_gap, value); return true; }
   if (property == "flex-grow") {
     float number = 0;
     if (parseNumeric(value, context, &number)) style->flex_grow = number;
-    return;
+    return true;
   }
   if (property == "flex-shrink") {
     float number = 0;
     if (parseNumeric(value, context, &number)) style->flex_shrink = number;
-    return;
+    return true;
   }
-  if (property == "flex-basis") { assignLength(&style->flex_basis, value); return; }
+  if (property == "flex-basis") { assignLength(&style->flex_basis, value); return true; }
   if (property == "flex") {
     std::string text = xt_css_lower(value);
     if (text == "none") {
       style->flex_grow = 0;
       style->flex_shrink = 0;
       style->flex_basis = {0.0f, Unit::Auto};
-      return;
+      return true;
     }
     if (text == "auto") {
       style->flex_grow = 1;
       style->flex_shrink = 1;
       style->flex_basis = {0.0f, Unit::Auto};
-      return;
+      return true;
     }
     if (text == "initial") {
       style->flex_grow = 0;
       style->flex_shrink = 1;
       style->flex_basis = {0.0f, Unit::Auto};
-      return;
+      return true;
     }
     std::vector<std::string> parts = splitEdgeTokens(text);
     style->flex_grow = 0;
@@ -504,13 +502,13 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
       if (index >= parts.size()) style->flex_basis = {0.0f, Unit::Px};
     }
     if (index < parts.size()) assignLength(&style->flex_basis, parts[index]);
-    return;
+    return true;
   }
 
   if (property == "transform") {
     std::vector<TransformOp> ops;
     if (xt_transform_parse(value, &ops)) style->transform = ops;
-    return;
+    return true;
   }
   if (property == "transform-origin") {
     /* One or two values plus an optional z offset (ignored: the engine is 2D).
@@ -528,12 +526,12 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
         if (keyword == "left" || keyword == "top") length = {0.0f, Unit::Percent};
         else if (keyword == "center") length = {50.0f, Unit::Percent};
         else if (keyword == "right" || keyword == "bottom") length = {100.0f, Unit::Percent};
-        else return;
+        else return true;
         vertical[used] = keyword == "top" || keyword == "bottom";
       }
       values[used++] = length;
     }
-    if (used == 0) return;
+    if (used == 0) return true;
     Length x = values[0];
     Length y = used > 1 ? values[1] : Length{50.0f, Unit::Percent};
     if (used > 1) {
@@ -548,13 +546,13 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
     }
     style->transform_origin_x = x;
     style->transform_origin_y = y;
-    return;
+    return true;
   }
   if (property == "opacity") {
     float number = 0;
     if (parseNumeric(value, context, &number))
       style->opacity = number < 0 ? 0 : (number > 1 ? 1 : number);
-    return;
+    return true;
   }
   if (property == "mix-blend-mode") {
     static const char *const names[] = {
@@ -564,13 +562,13 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
         "luminosity"};
     int index = 0;
     if (parseEnum(value, names, 16, &index)) style->mix_blend_mode = (MixBlendMode)index;
-    return;
+    return true;
   }
   if (property == "overflow" || property == "overflow-x" || property == "overflow-y") {
     static const char *const names[] = {"visible", "hidden", "scroll", "auto"};
     int index = 0;
     if (parseEnum(value, names, 4, &index)) style->overflow = (Overflow)index;
-    return;
+    return true;
   }
   if (property == "z-index") {
     float number = 0;
@@ -578,23 +576,24 @@ void xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
       style->z_index = (int)number;
       style->has_z_index = true;
     }
-    return;
+    return true;
   }
   if (property == "float") {
     static const char *const names[] = {"none", "left", "right"};
     int index = 0;
     if (parseEnum(value, names, 3, &index)) style->float_side = (FloatSide)index;
-    return;
+    return true;
   }
   if (property == "clear") {
     static const char *const names[] = {"none", "left", "right", "both"};
     int index = 0;
     if (parseEnum(value, names, 4, &index)) style->clear = (Clear)index;
-    return;
+    return true;
   }
-  if (xt_style_apply_transition(style, property, value)) return;
-  if (xt_style_apply_animation(style, property, value)) return;
+  if (xt_style_apply_transition(style, property, value)) return true;
+  if (xt_style_apply_animation(style, property, value)) return true;
 
+  return false;
 }
 
 }  // namespace xtgui

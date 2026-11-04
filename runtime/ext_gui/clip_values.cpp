@@ -13,6 +13,7 @@
 #include "css_internal.h"
 #include "style_internal.h"
 #include "style_values_internal.h"
+#include "warnings.h"
 
 namespace xtgui {
 
@@ -219,6 +220,10 @@ bool xt_style_apply_clip_path(XtStyle *style, const std::string &property,
     return true;
   }
   if (text.size() < 8 || text.back() != ')') {
+    const size_t open = lower.find('(');
+    if (open != std::string::npos) {
+      xt_warn_unsupported_function("clip-path", xt_css_trim(lower.substr(0, open)));
+    }
     style->clip_path = spec;
     return true;
   }
@@ -239,6 +244,12 @@ bool xt_style_apply_clip_path(XtStyle *style, const std::string &property,
     return true;
   }
   /* `url(#…)`, `path()` and other shapes are not part of the subset. */
+  {
+    const size_t open = lower.find('(');
+    if (open != std::string::npos) {
+      xt_warn_unsupported_function("clip-path", xt_css_trim(lower.substr(0, open)));
+    }
+  }
   style->clip_path = spec;
   return true;
 }

@@ -12,6 +12,39 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());
 
+  it("synthesizes html/head/body for fragments and keeps innerHTML fragments unwrapped", () => {
+    const { value } = harness.compileAndRun(
+      "document-structure",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "structure", width: 320, height: 200 });
+      win.on("ready", () => {
+        const doc: any = win.document;
+        // A fragment has no <html>/<head>/<body> in the source.
+        win.loadHTML("<style>body { margin: 7px; }</style><div id='frag'>hi</div>");
+        console.log("frag=" + (doc.body != null) + ":" + (doc.documentElement.tagName) + ":" +
+                    (doc.head != null));
+        console.log("head=" + doc.head.childNodes.length + ":" + doc.body.childNodes.length);
+        console.log("margin=" + win.computedStyle("body", "margin-top"));
+        const box: any = doc.getElementById("frag");
+        box.innerHTML = "<span id='inner'>x</span><b>y</b>";
+        console.log("inner=" + box.innerHTML + ":" + box.children.length);
+        // The fragment parser must not wrap innerHTML in a second <html>.
+        console.log("body-tags=" + (doc.body.innerHTML.indexOf("<html") < 0));
+        win.close();
+      });
+      win.loadHTML("<div>x</div>");
+      run();
+      `,
+    );
+    expect(value("frag")).toBe("true:HTML:true");
+    expect(value("head")).toBe("1:1");
+    expect(value("margin")).toBe("7px");
+    expect(value("inner")).toBe('<span id="inner">x</span><b>y</b>:2');
+    expect(value("body-tags")).toBe("true");
+  });
+
   it("exposes DOM element handles, mutation and element events", () => {
     const { value, stdout } = harness.compileAndRun(
       "dom",

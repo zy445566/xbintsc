@@ -308,7 +308,119 @@ bool closesOpenElement(const std::string &open, const std::string &next) {
 
 }  // namespace
 
-std::unique_ptr<Node> xt_html_parse(const std::string &html) {
+namespace {
+
+/** Elements the HTML tree builder puts in `<head>` when the source omits it. */
+bool isHeadElement(const Node *node) {
+  if (node == nullptr || !node->isElement()) return false;
+  return node->tag == "title" || node->tag == "meta" || node->tag == "link" ||
+         node->tag == "base" || node->tag == "style";
+}
+
+/** A parsed fragment (`<div>…</div>`, no `<html>`) still needs `document.body`
+ * and the HTML structure the UA stylesheet assumes (`body { margin: 8px }`,
+ * `:root`, `html`/`body` block boxes). Browsers synthesise the missing elements
+ * during tree construction; the engine does the same after parsing, moving
+ * head-like top-level nodes into `<head>` and everything else into `<body>`. */
+void synthesizeDocumentStructure(Node *document) {
+  Node *html = nullptr;
+  for (const std::unique_ptr<Node> &child : document->children) {
+    if (child->isElement() && child->tag == "html") {
+      html = child.get();
+      break;
+    }
+  }
+  if (html == nullptr) {
+    auto html_node = std::make_unique<Node>(NodeType::Element);
+    html_node->tag = "html";
+    auto head_node = std::make_unique<Node>(NodeType::Element);
+    head_node->tag = "head";
+    auto body_node = std::make_unique<Node>(NodeType::Element);
+    body_node->tag = "body";
+    std::vector<std::unique_ptr<Node>> top_level;
+    top_level.swap(document->children);
+    for (std::unique_ptr<Node> &child : top_level) {
+      if (child->isElement() && isHeadElement(child.get())) {
+        head_node->append(std::move(child));
+      } else if (child->isText() && xt_dom_trim(child->text).empty()) {
+        /* Inter-element whitespace outside <body> is dropped, like the HTML
+         * parser's "before head/body" insertion modes. */
+      } else {
+        body_node->append(std::move(child));
+      }
+    }
+    html_node->append(std::move(head_node));
+    html_node->append(std::move(body_node));
+    document->append(std::move(html_node));
+    return;
+  }
+
+  Node *head = nullptr;
+  Node *body = nullptr;
+  for (const std::unique_ptr<Node> &child : html->children) {
+    if (child->isElement() && child->tag == "head") head = child.get();
+    if (child->isElement() && child->tag == "body") body = child.get();
+  }
+  if (head == nullptr) {
+    auto head_node = std::make_unique<Node>(NodeType::Element);
+    head_node->tag = "head";
+    Node *reference = html->children.empty() ? nullptr : html->children.front().get();
+    html->insertChild(std::move(head_node), reference);
+    head = html->firstElementChild();
+    /* `insertChild` may append when the reference is not a child. */
+    for (const std::unique_ptr<Node> &child : html->children) {
+      if (child->isElement() && child->tag == "head") head = child.get();
+    }
+  }
+  /* Move stray head elements (a `<style>` after `</head>`, a fragment's style)
+   * into the head so the cascade sees them in the usual place. */
+  {
+    std::vector<std::unique_ptr<Node>> moved;
+    for (auto it = html->children.begin(); it != html->children.end();) {
+      if (it->get() != head && it->get() != body && isHeadElement(it->get())) {
+        moved.push_back(std::move(*it));
+        it = html->children.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    for (std::unique_ptr<Node> &child : moved) head->append(std::move(child));
+  }
+  if (body == nullptr) {
+    auto body_node = std::make_unique<Node>(NodeType::Element);
+    body_node->tag = "body";
+    std::vector<std::unique_ptr<Node>> moved;
+    for (auto it = html->children.begin(); it != html->children.end();) {
+      if (it->get() == head || it->get() == body) {
+        ++it;
+        continue;
+      }
+      moved.push_back(std::move(*it));
+      it = html->children.erase(it);
+    }
+    html->append(std::move(body_node));
+    body = html->children.back().get();
+    for (std::unique_ptr<Node> &child : moved) body->append(std::move(child));
+  }
+  /* Stray body content directly under <html> (a `<div>` after `</body>`, a
+   * fragment mixed with an authored body) belongs in the body. */
+  {
+    std::vector<std::unique_ptr<Node>> moved;
+    for (auto it = html->children.begin(); it != html->children.end();) {
+      if (it->get() == head || it->get() == body) {
+        ++it;
+        continue;
+      }
+      moved.push_back(std::move(*it));
+      it = html->children.erase(it);
+    }
+    for (std::unique_ptr<Node> &child : moved) body->append(std::move(child));
+  }
+}
+
+}  // namespace
+
+std::unique_ptr<Node> xt_html_parse(const std::string &html, bool synthesize_structure) {
   Tokenizer tokenizer(html);
   std::vector<Token> tokens = tokenizer.run();
 
@@ -346,6 +458,7 @@ std::unique_ptr<Node> xt_html_parse(const std::string &html) {
     }
   }
 
+  if (synthesize_structure) synthesizeDocumentStructure(document.get());
   return document;
 }
 

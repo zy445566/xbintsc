@@ -187,7 +187,7 @@ METHOD(node_inner_html_set) {
    * handles without releasing the nodes would leak one subtree per assignment —
    * a per-frame `innerHTML` write in a game loop then grows without bound. */
   for (xtgui::Node *child : existing) discard_subtree(win, child);
-  std::unique_ptr<xtgui::Node> fragment = xtgui::xt_html_parse(html);
+  std::unique_ptr<xtgui::Node> fragment = xtgui::xt_html_parse(html, false);
   for (std::unique_ptr<xtgui::Node> &child : fragment->children) node->append(std::move(child));
   mark_dirty(win);
   return XT_UNDEFINED;

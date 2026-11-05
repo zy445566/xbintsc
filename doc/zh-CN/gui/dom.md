@@ -10,7 +10,10 @@
 **HTML 解析器**（`runtime/ext_gui/dom.{h,cpp}`）：标签/属性/文本，注释与
 doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素，原始文本元素
 （`<style>`/`<script>`），以及常见的隐式闭合规则（`li`、`dt`/`dd`、`option`、
-`p`、标题、表格单元格/行）。
+`p`、标题、表格单元格/行）。解析片段时会补上隐式的 `<html>`/`<head>`/`<body>`
+（顶层 `<style>`/`<title>` 等进入 `<head>`，其余进入 `<body>`），因此即使源文件
+只有一个 `<div>`，`document.body`、`document.head` 与 `body { … }` 也能工作。
+`innerHTML`/`insertAdjacentHTML` 按片段解析，**不会**再合成一层文档包装。
 
 **CSS 解析器**（`runtime/ext_gui/css.{h,cpp}`）：会剥离注释；`@media` 块递归解析
 （嵌套查询用 `and` 合并，逗号列表会分配到内层查询），其他 at-rule 跳过。规则支持

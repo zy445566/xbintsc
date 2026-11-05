@@ -33,6 +33,7 @@ import { utilModule } from "./util/index.js";
 import { querystringModule } from "./querystring/index.js";
 import { assertModule } from "./assert/index.js";
 import { testModule } from "./test/index.js";
+import { readlineModule } from "./readline/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -57,6 +58,7 @@ const modules: readonly NodeModule[] = [
   querystringModule,
   assertModule,
   testModule,
+  readlineModule,
 ];
 
 export const nodeExtension: Extension = {

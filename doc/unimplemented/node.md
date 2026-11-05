@@ -2,7 +2,7 @@
 
 > Part of [Unimplemented syntax and features](../unimplemented.md) · [简体中文](../zh-CN/unimplemented/node.md)
 
-The Node extension implements 21 modules plus the event-loop integration; the
+The Node extension implements 22 modules plus the event-loop integration; the
 implemented surface is documented page by page under
 [Node extension: implemented](../implemented/node.md). This section records what
 is missing or differs from Node.
@@ -11,7 +11,7 @@ is missing or differs from Node.
 
 - [`fs`](./node/fs.md) — callback-style async operations, real file watching, option callbacks
 - [`fs/promises`](./node/fs-promises.md) — `FileHandle` append/read offsets, immediate `Dir` callbacks, inert `watch`, no cancellation
-- [Fully unimplemented modules](./node/modules.md) — `https`, `readline`, `tls`, `cluster`, `vm`, ...
+- [Fully unimplemented modules](./node/modules.md) — `https`, `tls`, `cluster`, `vm`, ...
 - [Global objects and namespaces](./node/globals.md) — `global`, `__dirname`, `require` outside `node_modules`
 - [Async and the event-loop model](./node/async.md) — blocked file watching, blocking `net.connect`, no keep-alive, fixed-size offload pool
 - [The Bun extension](./node/bun.md) — design example only

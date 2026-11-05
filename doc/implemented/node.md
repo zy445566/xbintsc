@@ -33,6 +33,7 @@ work on another. Missing or different behaviour is recorded under
 | `events` | [events](./node/events.md) | `EventEmitter` (global and named export) |
 | `util` | [util](./node/util.md) | formatting, inspection and predicates |
 | `querystring` | [querystring](./node/querystring.md) | parse / stringify / escape |
+| `readline` | [readline](./node/readline.md) | line/question reader over stdin, cursor helpers |
 | `assert` | [assert](./node/assert.md) | assertion functions |
 | `test` | [test](./node/test.md) | minimal TAP runner |
 | `crypto` | [crypto](./node/crypto.md) | `createHash` (SHA-1 / SHA-256) |

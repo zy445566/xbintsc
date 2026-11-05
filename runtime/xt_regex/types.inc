@@ -23,8 +23,15 @@ enum {
   XT_RE_Q_NONE = 0,
   XT_RE_Q_STAR,
   XT_RE_Q_PLUS,
-  XT_RE_Q_QUEST
+  XT_RE_Q_QUEST,
+  XT_RE_Q_RANGE
 };
+
+/** Upper bound for a counted quantifier (`a{0,20000}`): the matcher recurses
+ * once per repetition, so an unbounded authored bound could overflow the C
+ * stack. A brace group whose count exceeds this is treated as literal text,
+ * exactly like any other malformed `{...}`. */
+#define XT_RE_MAX_REPEAT 4096
 
 typedef struct xt_re_alt xt_re_alt;
 
@@ -40,6 +47,9 @@ typedef struct {
   xt_re_node *node;
   int quant;
   int lazy;
+  /** Repetition bounds for the quantifier (`max == -1` means unbounded). */
+  int min;
+  int max;
 } xt_re_piece;
 
 typedef struct {

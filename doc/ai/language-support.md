@@ -108,7 +108,8 @@ construct can hide a bug but never reject working code.
 
 Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`/`WeakRef`,
 `Symbol`, `Error` family, `BigInt`, `Array`/`String`/`Number`/`Object` methods,
-typed arrays, `String.prototype.match`/`split`/`replace` with capture groups,
+typed arrays, `String.prototype.match`/`split`/`replace` with capture groups and
+the `*`/`+`/`?`/`{n,m}` regex quantifiers,
 immutable array helpers (`toReversed`, `toSorted`, `toSpliced`, `with`), global
 URI functions, first-class built-in constructors (`const A = Array; new A(...)`,
 `A.isArray`, `x instanceof A`) and `Object.prototype`

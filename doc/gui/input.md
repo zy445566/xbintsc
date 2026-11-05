@@ -22,7 +22,8 @@ follows the artwork, not the box flow left behind.
   (`"KeyW"`, `"ArrowUp"`, `"Space"`) and `key` the produced value (`"w"`, `"W"`,
   `" "`) — not SDL's scancode/key names.
 - `:hover` matches the hovered element **and its ancestors** (so hovering a child
-  lights up its parents); `:focus` matches the focused element. When either
+  lights up its parents); `:focus` matches the focused element and
+  `:focus-within` its ancestors too. When either
   changes, `XtDocument::setHover`/`setFocus` recompute styles and layout and mark
   the window's geometry dirty, so the change is painted on the next frame.
 - `win.hitTest(x, y)` and `win.sendEvent(type, options)` expose hit testing and

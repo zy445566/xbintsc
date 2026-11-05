@@ -297,4 +297,48 @@ describe.skipIf(!guiAvailable)("gui extension — style", () => {
     // No border: a used width of 0, style `none`, currentColor.
     expect(value("f4")).toBe("rgb(0, 0, 0):0px:none");
   });
+
+  it("matches :focus-within on the focused element and its ancestors", () => {
+    const { value } = harness.compileAndRun(
+      "focus-within",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #card { background-color: #111111; width: 120px; height: 48px; }
+        #card:focus-within { background-color: #00ff00; }
+        #deep:focus-within { background-color: #0000ff; }
+      </style></head><body>
+        <div id="card">
+          <input id="inner" value="x">
+          <div id="deep"><input id="deep-input"></div>
+        </div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "focus-within", width: 300, height: 200 });
+      win.on("ready", () => {
+        const doc: any = win.document;
+        win.loadHTML(HTML);
+        console.log("before=" + win.computedStyle("#card", "background-color"));
+        doc.getElementById("inner").focus();
+        console.log("inner=" + win.computedStyle("#card", "background-color"));
+        doc.getElementById("deep-input").focus();
+        console.log("deep=" + win.computedStyle("#card", "background-color") + ":" +
+                    win.computedStyle("#deep", "background-color"));
+        doc.getElementById("deep-input").blur();
+        console.log("blur=" + win.computedStyle("#card", "background-color"));
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("before")).toBe("rgb(17, 17, 17)");
+    expect(value("inner")).toBe("rgb(0, 255, 0)");
+    expect(value("deep")).toBe("rgb(0, 255, 0):rgb(0, 0, 255)");
+    expect(value("blur")).toBe("rgb(17, 17, 17)");
+  });
 });

@@ -27,7 +27,8 @@ commas, brackets or parentheses without splitting the list. Selectors: type,
 combinators (descendant, child, adjacent and general sibling), the pseudo-classes
 `:first-child`, `:last-child`, `:only-child`, `:empty`, `:root`, `:not(...)`,
 `:nth-child(an+b)`, `:disabled`, `:checked`, plus the stateful `:hover`,
-`:focus`, `:focus-visible` (currently an alias of `:focus`) and `:active` (see
+`:focus`, `:focus-visible` (currently an alias of `:focus`), `:focus-within`
+(the focused element and its ancestors) and `:active` (see
 [Input](./input.md)), and the pseudo-elements `::before`/`::after`
 (legacy `:before`/`:after` too). Values: lengths (`px`, `%`, `em`, `rem`, `vw`,
 `vh`, `pt`, `pc`, `in`, `cm`, `mm`, `q`), colors (hex, `rgb()`/`rgba()`, a named

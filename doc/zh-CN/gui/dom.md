@@ -23,7 +23,8 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 （`=`、`~=`、`|=`、`^=`、`$=`、`*=`）、四种组合器（后代、子、相邻兄弟与
 通用兄弟）、伪类 `:first-child`、`:last-child`、`:only-child`、`:empty`、
 `:root`、`:not(...)`、`:nth-child(an+b)`、`:disabled`、`:checked`、有状态的
-`:hover`、`:focus`、`:focus-visible`（目前等同 `:focus`）与 `:active`
+`:hover`、`:focus`、`:focus-visible`（目前等同 `:focus`）、`:focus-within`
+（聚焦元素及其祖先）与 `:active`
 （见[输入](./input.md)），以及伪元素
 `::before`/`::after`（也接受旧式 `:before`/`:after`）。值：长度
 （`px`、`%`、`em`、`rem`、`vw`、`vh`、`pt`、`pc`、`in`、`cm`、`mm`、`q`）、

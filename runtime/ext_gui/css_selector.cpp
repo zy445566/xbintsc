@@ -19,8 +19,8 @@ namespace {
 const std::unordered_set<std::string> &supportedPseudoClasses() {
   static const std::unordered_set<std::string> names = {
       "active", "checked", "disabled", "empty",      "first-child", "focus",
-      "focus-visible", "hover", "last-child", "not",  "nth-child",   "only-child",
-      "root",
+      "focus-visible", "focus-within", "hover", "last-child", "not",
+      "nth-child", "only-child", "root",
   };
   return names;
 }

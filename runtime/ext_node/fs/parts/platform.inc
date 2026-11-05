@@ -150,3 +150,68 @@ static inline int xt_fs_mkdir_parents(const char *path, int mode) {
   free(copy);
   return status;
 }
+
+/* -- atomic rename -------------------------------------------------------- */
+/* POSIX `rename` replaces an existing destination atomically. The Windows CRT
+ * `rename` fails with EEXIST instead, so `renameSync` could not overwrite a
+ * file (the usual write-to-temp-then-rename pattern broke on Windows).
+ * `MoveFileExW` with `MOVEFILE_REPLACE_EXISTING` has the POSIX semantics and
+ * takes UTF-8 paths through a wide-string conversion. */
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+
+static inline wchar_t *xt_fs_utf8_to_wide(const char *text) {
+  int length = MultiByteToWideChar(CP_UTF8, 0, text, -1, NULL, 0);
+  if (length <= 0) return NULL;
+  wchar_t *wide = (wchar_t *)malloc((size_t)length * sizeof(wchar_t));
+  if (!wide) return NULL;
+  if (MultiByteToWideChar(CP_UTF8, 0, text, -1, wide, length) <= 0) {
+    free(wide);
+    return NULL;
+  }
+  return wide;
+}
+
+static inline int xt_fs_rename_atomic(const char *from, const char *to) {
+  wchar_t *wide_from = xt_fs_utf8_to_wide(from);
+  wchar_t *wide_to = xt_fs_utf8_to_wide(to);
+  if (!wide_from || !wide_to) {
+    free(wide_from);
+    free(wide_to);
+    errno = EINVAL;
+    return -1;
+  }
+  BOOL ok = MoveFileExW(wide_from, wide_to, MOVEFILE_REPLACE_EXISTING);
+  DWORD error = ok ? ERROR_SUCCESS : GetLastError();
+  free(wide_from);
+  free(wide_to);
+  if (ok) return 0;
+  switch (error) {
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_PATH_NOT_FOUND:
+      errno = ENOENT;
+      break;
+    case ERROR_ACCESS_DENIED:
+    case ERROR_SHARING_VIOLATION:
+      errno = EACCES;
+      break;
+    case ERROR_ALREADY_EXISTS:
+      errno = EEXIST;
+      break;
+    case ERROR_NOT_SAME_DEVICE:
+      errno = EXDEV;
+      break;
+    default:
+      errno = EIO;
+      break;
+  }
+  return -1;
+}
+#else
+static inline int xt_fs_rename_atomic(const char *from, const char *to) {
+  return rename(from, to);
+}
+#endif

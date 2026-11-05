@@ -333,7 +333,7 @@ void xt_fs_job_run(xt_async_job *base) {
       if (!job->path || xt_fs_rmdir_one(job->path) != 0) xt_fs_job_fail(job, errno, "rmdir", job->path);
       break;
     case XT_FS_JOB_RENAME:
-      if (!job->path || !job->path2 || rename(job->path, job->path2) != 0) {
+      if (!job->path || !job->path2 || xt_fs_rename_atomic(job->path, job->path2) != 0) {
         xt_fs_job_fail(job, errno, "rename", job->path);
       }
       break;

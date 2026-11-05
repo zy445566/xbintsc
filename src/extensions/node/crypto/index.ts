@@ -13,6 +13,14 @@ const builtins: Record<string, BuiltinFunction> = {
 
 const exports: ModuleExports = {
   createHash: { symbol: "xt_crypto_create_hash" },
+  randomBytes: { symbol: "xt_crypto_random_bytes" },
+  randomUUID: { symbol: "xt_crypto_random_uuid" },
+  randomInt: { symbol: "xt_crypto_random_int" },
+  randomFillSync: { symbol: "xt_crypto_random_fill_sync" },
+  randomFill: { symbol: "xt_crypto_random_fill" },
+  pbkdf2Sync: { symbol: "xt_crypto_pbkdf2_sync" },
+  pbkdf2: { symbol: "xt_crypto_pbkdf2" },
+  webcrypto: { symbol: "xt_crypto_webcrypto", valueSymbol: "xt_crypto_webcrypto" },
 };
 
 export const cryptoModule: NodeModule = {

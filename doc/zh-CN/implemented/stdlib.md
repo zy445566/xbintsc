@@ -91,3 +91,9 @@
 - `btoa` / `atob` base64 编解码（核心全局函数，并非 Node 扩展专属）。
 - `structuredClone`：数组、对象、`Map`、`Set`、`Date`、`RegExp` 与类型化数组，保留循环引用与共享引用；函数、symbol、Promise、生成器会被拒绝。
 - 定时器、`queueMicrotask` 与 `performance.now` 见[异步、Promise 与生成器](./async.md)；`fetch` 见 [fetch](./fetch.md)。
+
+## 全局 crypto
+
+- `crypto.getRandomValues(typedArray)` 从操作系统 CSPRNG 填充整数类型化数组（最多 65 536 字节）并返回；`crypto.randomUUID()` 返回 v4 UUID 字符串。`crypto` 也是一等对象，方法可脱离对象使用（`const uuid = crypto.randomUUID`）。
+- `Math.random` 使用由操作系统 CSPRNG 播种的 xoshiro256** 流（53 位随机性），不再使用 C `rand()`。
+- Node 的 `crypto.randomBytes` / `randomInt` / `randomFillSync` / `pbkdf2Sync` 见 [node/crypto](../implemented/node/crypto.md)。

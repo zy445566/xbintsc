@@ -238,7 +238,7 @@ xt_value xt_node_rename(int32_t argc, xt_value *argv) {
   const char *from = xt_string_data(xt_to_string(argv[0]));
   const char *to = xt_string_data(xt_to_string(argv[1]));
   if (!from || !to) return xt_undefined();
-  if (rename(from, to) != 0) xt_fs_error("rename", from);
+  if (xt_fs_rename_atomic(from, to) != 0) xt_fs_error("rename", from);
   return xt_undefined();
 }
 

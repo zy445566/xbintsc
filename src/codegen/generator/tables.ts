@@ -243,6 +243,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   BigInt: "xt_bigint_static",
   Symbol: "xt_symbol_static",
   Date: "xt_date_static",
+  crypto: "xt_crypto_static",
   Promise: "xt_promise_static",
   ArrayBuffer: "xt_array_buffer_static",
   path: "xt_path_static",
@@ -286,6 +287,7 @@ export const SYMBOL_WELL_KNOWN = new Set<string>([
 /** Namespaces that also exist as a first-class object value (`Math.cos`). */
 export const NAMESPACE_VALUES: Record<string, string> = {
   Math: "xt_math_object",
+  crypto: "xt_crypto_object",
 };
 
 /** Namespace identifiers whose property access maps to a runtime getter. */
@@ -294,6 +296,7 @@ export const NAMESPACE_PROPERTIES: Record<string, string> = {
   "import.meta": "xt_import_meta",
   Symbol: "xt_symbol_get",
   performance: "xt_performance_get",
+  crypto: "xt_crypto_get",
 };
 
 /** Global constructors called as `new X(...)` (all have signature `(i32, i64*)`). */

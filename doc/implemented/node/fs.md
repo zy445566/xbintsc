@@ -18,7 +18,7 @@ Location: `src/extensions/node/fs/*.ts`, `runtime/ext_node/fs/*.c`
 | `rmSync(path[, options])` | `xt_node_rm` | delete a file/directory; `{ recursive: true }` deletes recursively |
 | `rmdirSync(path[, options])` | `xt_node_rmdir` | delete an empty directory |
 | `unlinkSync(path)` | `xt_node_unlink` | delete a file |
-| `renameSync(oldPath, newPath)` | `xt_node_rename` | rename / move |
+| `renameSync(oldPath, newPath)` | `xt_node_rename` | rename / move; atomically replaces an existing target (`MoveFileExW` + `MOVEFILE_REPLACE_EXISTING` on Windows) |
 | `copyFileSync(src, dest[, flags])` | `xt_node_copy_file` | copy a file; honours `COPYFILE_EXCL` |
 | `cpSync(src, dest[, options])` | `xt_node_cp` | recursive copy; `recursive`, `force`, `errorOnExist`, `dereference`, `preserveTimestamps` |
 | `realpathSync(path)` | `xt_node_realpath` | resolve to an absolute path |

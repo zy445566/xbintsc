@@ -354,7 +354,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
       outputPath,
       linkerFlags: [
         ...toolchain.linkerArgs,
-        ...(process.platform === "win32" ? ["-lws2_32"] : ["-lm", "-pthread"]),
+        ...(process.platform === "win32" ? ["-lws2_32", "-lbcrypt"] : ["-lm", "-pthread"]),
         ...registry.linkerFlags(),
         ...linkFeatures.flatMap((feature) => feature.linkerFlags),
         /* A GUI program is a Windows-subsystem executable: no console window is

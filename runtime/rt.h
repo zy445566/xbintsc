@@ -291,8 +291,14 @@ xt_value xt_array_buffer_alloc(uint32_t byte_length);
 /** Typed-array view internals for extensions: whether `value` is a view, the
  * `ArrayBuffer` it views, and the byte offset of the view inside it. */
 int xt_is_typed_array(xt_value value);
+/** Element kind (0..8: U8, I8, U8C, U16, I16, U32, I32, F32, F64), or -1. */
+int xt_typed_array_kind_of(xt_value value);
+/** Read one element (coerced to a number) from a typed-array view. */
+xt_value xt_typed_array_read(xt_value array, uint32_t index);
 xt_value xt_typed_array_backing_buffer(xt_value value);
 uint32_t xt_typed_array_view_offset(xt_value value);
+/** Number of elements in a typed-array view. */
+uint32_t xt_typed_array_length(xt_value value);
 /** Error-family construction and prototype lookup by constructor name. */
 xt_value xt_error_ctor_by_name(xt_value name, int32_t argc, xt_value *argv);
 xt_value xt_error_prototype(xt_value name);
@@ -313,6 +319,27 @@ xt_value xt_url_file_url_to_path(int32_t argc, xt_value *argv);
 
 /* -- node:crypto ---------------------------------------------------------- */
 xt_value xt_crypto_create_hash(int32_t argc, xt_value *argv);
+
+/* -- entropy (xt_random.c) ------------------------------------------------ */
+/** Fill `out` with `length` bytes from the OS CSPRNG. Returns 0 on success. */
+int xt_secure_random(uint8_t *out, size_t length);
+/** A 64-bit value from the process-wide xoshiro256** generator (seeded from the
+ * OS CSPRNG). Never returns a constant stream. */
+uint64_t xt_random_u64(void);
+/** Uniform double in `[0, 1)` with 53 random bits. */
+double xt_random_double(void);
+/** Uniform integer in `[0, bound)` (rejection sampling; `bound` 0 returns 0). */
+uint64_t xt_random_below(uint64_t bound);
+
+/* -- Web Crypto surface (xt_crypto.c) ------------------------------------ */
+/** `crypto.<method>(...)` (namespace call lowering). */
+xt_value xt_crypto_static(xt_value name, int32_t argc, xt_value *argv);
+/** `crypto.<property>` read as a value (closures for the methods). */
+xt_value xt_crypto_get(xt_value name);
+/** The first-class `crypto` object (`const c = crypto`). */
+xt_value xt_crypto_object(int32_t argc, xt_value *argv);
+/** The `webcrypto` object re-exported by `node:crypto`. */
+xt_value xt_crypto_webcrypto(int32_t argc, xt_value *argv);
 
 /* -- node:child_process --------------------------------------------------- */
 xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv);

@@ -77,6 +77,18 @@ user.disabled = true;
   caret and `compositionstart` / `compositionupdate` / `compositionend` fire;
   the commit is inserted into the value on `compositionend`.
 - **Clipboard** is the system clipboard through SDL: Ctrl+C/X/V.
+- **Events** fire automatically: `beforeinput` (cancelable) before a text edit,
+  `input` after every value change (typing, deletion, checkbox/radio toggle,
+  range drag, select), and `change` when the value is committed (a text field
+  losing focus after a change, Enter in a single-line field, a checkbox/radio
+  click, a range release or a select change). `input`/`change` payloads carry
+  `value`; `change` also carries `checked`.
+- **Forms**: a submit button (or Enter in a single-line field) fires a
+  cancelable `submit` on the enclosing `<form>` with the `submitter` when one
+  was clicked; there is no navigation, so preventing the event or not has the
+  same visible result. A reset button or `form.reset()` fires `reset` and
+  restores every control's default value/checked state. `form.submit()` and
+  `form.requestSubmit(submitter?)` dispatch the same event.
 
 `win.sendEvent` also accepts `{ type: "textInput", text }` (as if SDL delivered
 that text), `{ type: "compositionstart" | "compositionupdate" | "compositionend",

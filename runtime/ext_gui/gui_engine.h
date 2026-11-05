@@ -341,6 +341,10 @@ void xt_gui_form_pointer(XtGuiWindow *win, const char *type, xtgui::Node *node, 
 void xt_gui_form_activate(XtGuiWindow *win, xtgui::Node *node);
 /** Move focus to the next (`forward`) / previous tabbable element. */
 void xt_gui_focus_step(XtGuiWindow *win, bool forward);
+/** Fire `submit` on a `<form>` (no navigation); `submitter` may be null. */
+void xt_gui_form_submit_request(XtGuiWindow *win, xtgui::Node *form, xtgui::Node *submitter);
+/** Reset every control in a `<form>` to its default value/checked state. */
+void xt_gui_form_reset(XtGuiWindow *win, xtgui::Node *form);
 /** Set a control's caret from a viewport x coordinate (click positioning). */
 void xt_gui_form_focus_at(XtGuiWindow *win, xtgui::Node *node, float x);
 /** Translate one physical key (SDL scancode/keycode + modifiers) to the browser

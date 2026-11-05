@@ -138,6 +138,7 @@ METHOD(node_checked_set) {
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || !xtgui::xt_form_is_checkable(node)) return XT_UNDEFINED;
   xtgui::xt_form_set_checked(node, argc >= 1 ? value_truthy(xt_arg(argc, argv, 0)) : false);
+  mark_dirty(win);
   form_dirty(win);
   return XT_UNDEFINED;
 }
@@ -434,6 +435,7 @@ METHOD(node_selected_index_set) {
   if (index < 0 || (size_t)index >= options.size()) index = options.empty() ? -1 : 0;
   state->selected_index = index;
   if (index >= 0) state->value = xtgui::xt_form_option_value(options[(size_t)index]);
+  mark_dirty(win);
   form_dirty(win);
   return XT_UNDEFINED;
 }
@@ -525,6 +527,38 @@ METHOD(node_tab_index_set) {
   char text[16];
   std::snprintf(text, sizeof(text), "%d", value);
   set_attribute(win, node, "tabindex", text);
+  return XT_UNDEFINED;
+}
+
+METHOD(node_form_submit) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement() || node->tag != "form") return XT_UNDEFINED;
+  xt_gui_form_submit_request(win, node, nullptr);
+  return XT_UNDEFINED;
+}
+
+METHOD(node_form_request_submit) {
+  (void)env;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement() || node->tag != "form") return XT_UNDEFINED;
+  xtgui::Node *submitter = argc >= 1 ? resolve_node(xt_arg(argc, argv, 0), nullptr) : nullptr;
+  xt_gui_form_submit_request(win, node, submitter);
+  return XT_UNDEFINED;
+}
+
+METHOD(node_form_reset) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement() || node->tag != "form") return XT_UNDEFINED;
+  xt_gui_form_reset(win, node);
   return XT_UNDEFINED;
 }
 

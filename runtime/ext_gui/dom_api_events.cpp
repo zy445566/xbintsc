@@ -30,7 +30,7 @@ static xt_value make_dom_event(XtGuiWindow *win, const char *type, const xtgui::
         "deltaX",  "deltaY",  "key",     "code",    "repeat",  "ctrl",
         "shift",   "alt",     "meta",    "ctrlKey", "shiftKey", "altKey",
         "metaKey", "data",    "inputType", "isComposing", "value", "charCode",
-        "keyCode", "relatedTarget", "detail",
+        "keyCode", "relatedTarget", "detail", "submitter",
     };
     for (const char *field : fields) {
       xt_value value = xt_object_get_cstr(legacy, field);

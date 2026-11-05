@@ -45,7 +45,9 @@ and hit testing follow it), and `scrollX` / `scrollY` / `pageXOffset` /
 `document.hasFocus()`; `blur()` clears it. Events emitted:
 `ready` (after the first presented frame), `load`, `close`, `resize`, `scroll`,
 `focus`, `blur` and the input events `mousemove`, `mousedown`, `mouseup`,
-`click`, `wheel`, `keydown`, `keyup`.
+`click`, `wheel`, `keydown`, `keyup`, `keypress`, `textInput`,
+`compositionstart` / `compositionupdate` / `compositionend`, `beforeinput`,
+`input`, `change`, `submit` and `reset`.
 
 `createWindow(options)` honours more than the title and size:
 `{ title, width, height, highDensity, resizable, borderless, alwaysOnTop,

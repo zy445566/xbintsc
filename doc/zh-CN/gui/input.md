@@ -67,6 +67,16 @@ user.disabled = true;
   `compositionstart` / `compositionupdate` / `compositionend`；提交内容在
   `compositionend` 时插入值中。
 - **剪贴板**通过 SDL 使用系统剪贴板：Ctrl+C/X/V。
+- **事件**自动派发：文本编辑前触发可取消的 `beforeinput`，每次值变化后触发
+  `input`（输入、删除、checkbox/radio 切换、range 拖动、select 切换），值提交时
+  触发 `change`（有改动的文本框失焦、单行输入框回车、checkbox/radio 点击、
+  range 释放或 select 切换）。`input`/`change` 负载携带 `value`；`change` 还
+  携带 `checked`。
+- **表单**：提交按钮（或单行输入框回车）在所属 `<form>` 上触发可取消的
+  `submit`，被点击时携带 `submitter`；引擎不会导航，因此是否阻止事件在视觉上
+  没有区别。重置按钮或 `form.reset()` 触发 `reset`，并把每个控件恢复到默认
+  值/勾选状态。`form.submit()` 与 `form.requestSubmit(submitter?)` 派发同一个
+  事件。
 
 `win.sendEvent` 也接受 `{ type: "textInput", text }`（等同于 SDL 投递该文本）、
 `{ type: "compositionstart" | "compositionupdate" | "compositionend", data }` 与

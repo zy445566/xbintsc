@@ -14,6 +14,12 @@ export function hasModifier(node: Node, kind: ModifierKind): boolean {
 
 export function declarationName(node: Node): Identifier | undefined {
   switch (node.kind) {
+    /* Destructured bindings are declared with their identifier node (see
+     * `Binder.declareBinding`), so renaming must accept a bare Identifier too;
+     * otherwise the declaration keeps its old name while references are
+     * rewritten and the merged program fails to resolve it. */
+    case SyntaxKind.Identifier:
+      return node as Identifier;
     case SyntaxKind.FunctionDeclaration:
     case SyntaxKind.ClassDeclaration:
     case SyntaxKind.EnumDeclaration:

@@ -64,4 +64,36 @@ describeE2E("end-to-end module bundling", (harness) => {
       runProgram(source, { files: { "side_effect.ts": 'console.log("side");' } }),
     ).toBe("side\nmain");
   });
+
+  it("keeps shorthand keys when bundling renames an imported binding", () => {
+    writeFileSync(
+      join(harness.workdir, "shorthand_dep.ts"),
+      `export function getUser() { return { username: "alice", password: "secret" }; }`,
+    );
+    const source = `
+      import { getUser } from "./shorthand_dep.js";
+      const user = getUser();
+      const { username } = user;
+      console.log(JSON.stringify({ username }));
+      console.log(JSON.stringify({ username: username }));
+      console.log(JSON.stringify({ username, password: "x" }));
+    `;
+    expect(runProgram(source)).toBe(
+      '{"username":"alice"}\n{"username":"alice"}\n{"username":"alice","password":"x"}',
+    );
+  });
+
+  it("renames destructured top-level bindings without breaking the read", () => {
+    writeFileSync(
+      join(harness.workdir, "destructure_dep.ts"),
+      `export function getUser() { return { username: "alice" }; }`,
+    );
+    const source = `
+      import { getUser } from "./destructure_dep.js";
+      const { username, role = "admin" } = getUser();
+      console.log(username + ":" + role);
+      console.log(JSON.stringify({ username }));
+    `;
+    expect(runProgram(source)).toBe('alice:admin\n{"username":"alice"}');
+  });
 });

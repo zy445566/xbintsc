@@ -227,6 +227,12 @@ export const declarationFunctionMethods: DeclarationFunctionMethods = {
         name = this.parseBindingName();
       } else {
         name = first;
+        /* `{ a }` reads the key `a`; record it in a separate node so a later
+         * rename of the binding does not change which property is read. */
+        propertyName =
+          first.kind === SyntaxKind.Identifier
+            ? { kind: SyntaxKind.Identifier, text: first.text, escaped: first.escaped, start: first.start, end: first.end }
+            : first;
       }
     } else {
       // Array element, or a nested pattern used as an object value.

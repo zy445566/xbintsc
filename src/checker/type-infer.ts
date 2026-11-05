@@ -156,7 +156,7 @@ function objectLiteralType(context: InferenceContext, literal: ObjectLiteralExpr
         if (!(property.accessor === "set" && properties.has(name))) properties.set(name, { type, optional: false });
       } else if (element.kind === SyntaxKind.ShorthandPropertyAssignment) {
         const shorthand = element as ShorthandPropertyAssignment;
-        properties.set(shorthand.name.text, { type: inferTypeOfExpression(context, shorthand.name), optional: false });
+        properties.set(shorthand.propertyName, { type: inferTypeOfExpression(context, shorthand.name), optional: false });
       } else {
         return ANY; // spread: the shape is not static
       }

@@ -292,7 +292,7 @@ function isModuleExports(expression: Expression, bind: BindResult): boolean {
 
 function literalPropertyName(property: ObjectLiteralElementLike): string | undefined {
   if (property.kind === SyntaxKind.ShorthandPropertyAssignment) {
-    return (property as unknown as { name: Identifier }).name.text;
+    return (property as unknown as { propertyName: string }).propertyName;
   }
   if (property.kind === SyntaxKind.PropertyAssignment) {
     const name = (property as unknown as { name: Node }).name;

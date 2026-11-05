@@ -108,6 +108,25 @@ double xt_monotonic_ms(void) {
 #endif
 }
 
+/* Wall-clock milliseconds since the Unix epoch, for `Date.now()` and
+ * `new Date()`. `time(NULL)` only has second resolution, which silently broke
+ * elapsed-time math; this keeps the milliseconds the language exposes. */
+double xt_wallclock_ms(void) {
+#if defined(_WIN32)
+  FILETIME file_time;
+  GetSystemTimeAsFileTime(&file_time);
+  ULARGE_INTEGER ticks;
+  ticks.LowPart = file_time.dwLowDateTime;
+  ticks.HighPart = file_time.dwHighDateTime;
+  /* 100-ns ticks between 1601-01-01 and 1970-01-01. */
+  return (double)(int64_t)((ticks.QuadPart - 116444736000000000ULL) / 10000);
+#else
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  return (double)((int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+#endif
+}
+
 static void xt_loop_sleep_ms(int ms) {  if (ms <= 0) return;
 #if defined(_WIN32)
   Sleep((DWORD)ms);

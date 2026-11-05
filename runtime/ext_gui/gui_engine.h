@@ -70,6 +70,14 @@ void xt_browser_schedule_frame(void);
 /** Whether `run()` currently owns the frame loop (the pump then stays idle). */
 int xt_gui_run_active(void);
 
+/* Page-level error reporting (error_report.cpp). `xt_gui_invoke` runs one
+ * host-invoked callback under a `try` boundary so a throw reaches the window's
+ * `error`/`unhandledrejection` surfaces instead of terminating the process. */
+void xt_gui_install_error_handlers(void);
+void xt_gui_report_uncaught(xt_value error);
+int xt_gui_unhandled_rejection(xt_value reason, xt_value promise);
+int xt_gui_invoke(xt_value fn, xt_value thisValue, int32_t argc, xt_value *argv);
+
 /* Web Audio objects (`audio.cpp`).
  * `AudioContext.prototype` — also the `instanceof AudioContext` target. */
 xt_value xt_gui_audio_proto(void);
@@ -243,6 +251,11 @@ struct XtGuiWindow {
 
 /** Resolve a window handle (`this`) to its record, or NULL for a foreign value. */
 XtGuiWindow *xt_gui_window_from_this(xt_value thisValue);
+
+/** The most recently created live window, or NULL when none is open. Error
+ * reporting uses it because a throw can escape a callback with no window
+ * argument. */
+XtGuiWindow *xt_gui_primary_window(void);
 
 
 /** The `document` handle for `win` (created on first use). */

@@ -222,6 +222,22 @@ static void xt_loop_gc_register(void) {
   xt_gc_register_root_provider(xt_loop_gc_scan_roots);
 }
 
+/* Run one timer callback under a host boundary. Without it an exception from a
+ * `setTimeout` callback terminates the process, which in a GUI program looks
+ * like the window vanishing; `xt_uncaught_exception` hands it to the host when
+ * one is installed and keeps the Node-like fatal default otherwise. */
+static void xt_timer_invoke(xt_value callback, int32_t argc, xt_value *args) {
+  void *frame = xt_try_enter();
+  if (xt_try_setjmp(frame) == 0) {
+    xt_closure_call(callback, argc, args);
+    xt_try_leave(frame);
+    return;
+  }
+  xt_value error = xt_try_exception(frame);
+  xt_try_leave(frame);
+  xt_uncaught_exception(error);
+}
+
 /* Invoke every timer whose deadline has passed. Timers scheduled by a callback
  * (or by a microtask) are left for the next reactor iteration, so a recursive
  * `setTimeout(fn, 0)` cannot spin forever inside a single call. */
@@ -240,7 +256,7 @@ static void xt_timer_run_due(void) {
     } else {
       timer->active = 0;
     }
-    if (XT_IS_FUNCTION(callback)) xt_closure_call(callback, argc, args);
+    if (XT_IS_FUNCTION(callback)) xt_timer_invoke(callback, argc, args);
   }
 }
 

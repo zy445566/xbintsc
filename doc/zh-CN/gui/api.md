@@ -47,6 +47,15 @@ API 编写的文档可以原样运行。
 `compositionstart` / `compositionupdate` / `compositionend`、`beforeinput`、
 `input`、`change`、`submit` 与 `reset`。
 
+由引擎调用的代码（元素/窗口监听器、定时器、动画帧、媒体事件）抛出的异常会被
+当作页面错误，而不是终止进程：引擎在回调边界捕获它，并对齐浏览器接口。
+`window.onerror` 收到 `(message, source, line, column, error)`，
+`addEventListener("error", …)` 收到类 `ErrorEvent` 对象（`.message`、`.error`、
+`.filename`、`.lineno`、`.colno`），无人观察的拒绝会变成
+`unhandledrejection` 事件（也可通过 `window.onunhandledrejection` 设置，事件带
+`.reason` / `.promise`）。默认日志写到 stderr；`onerror` 返回 `true` 或调用
+`event.preventDefault()` 可抑制该日志。错误处理器自身抛错也只会被报告，不会关闭窗口。
+
 `createWindow(options)` 除标题与尺寸外还支持：`{ title, width, height,
 highDensity, resizable, borderless, alwaysOnTop, hidden, fullscreen, x, y,
 opacity, maximized, minimized }`，它们会映射到对应的 SDL 窗口标志/调用，而不是

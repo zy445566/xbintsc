@@ -122,6 +122,7 @@ static void ensure_init(void) {
   /* Registered only once a window can exist: a failed init has nothing to
    * mark, and a caller that cannot retry never needs a second provider. */
   xt_gc_register_root_provider(xt_gui_gc_scan_roots);
+  xt_gui_install_error_handlers();
   g_sdl_initialized = 1;
 }
 
@@ -147,6 +148,13 @@ const char *xt_gui_driver(void) {
 
 XtGuiWindow *xt_gui_window_from_this(xt_value thisValue) {
   return window_by_object(thisValue);
+}
+
+XtGuiWindow *xt_gui_primary_window(void) {
+  for (int i = g_window_count - 1; i >= 0; i--) {
+    if (g_windows[i].open) return &g_windows[i];
+  }
+  return NULL;
 }
 
 void xt_gui_quit_window(XtGuiWindow *win) {
@@ -253,6 +261,11 @@ static XtGuiWindow *create_window_record(const char *title, int width, int heigh
   xt_object_set(object, xt_string_from_cstr("__xt_gui_index"), xt_number((double)index));
   xt_object_set(object, xt_string_from_cstr("__xt_gui_html"), xt_string_from_cstr(""));
   xt_object_set(object, xt_string_from_cstr("__xt_gui_events"), xt_object_new());
+  /* Present-but-null handler properties, like a browser window: a feature
+   * probe gets "object" instead of "undefined", and assigning a function is a
+   * plain property write. */
+  xt_object_set(object, xt_string_from_cstr("onerror"), XT_NULL);
+  xt_object_set(object, xt_string_from_cstr("onunhandledrejection"), XT_NULL);
   /* The engine owns a graph of values on the window's behalf — element
    * handles (`node_handles`), their event listeners and the queued animation
    * frame closures. Most of them are referenced from TypeScript too, but not
@@ -413,6 +426,9 @@ extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
      * frames. `xt_loop_poll(0)` is non-blocking. */
     xt_loop_poll(0);
     xt_drain_microtasks();
+    /* Rejections nobody observed become window `unhandledrejection` events;
+     * the installed handler suppresses the process-killing default. */
+    xt_promise_report_unhandled();
 
     if (deadline != 0 && SDL_GetTicks() >= deadline) break;
     if (!had_event) SDL_Delay(1);

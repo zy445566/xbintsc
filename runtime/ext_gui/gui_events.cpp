@@ -401,7 +401,7 @@ void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms) {
   for (const XtGuiAnimationFrame &frame : frames) {
     if (!win->open) break;
     xt_value arg = xt_number(timestamp_ms);
-    xt_call_with_this(frame.fn, win->object, 1, &arg);
+    xt_gui_invoke(frame.fn, win->object, 1, &arg);
   }
   frames.clear();
 }

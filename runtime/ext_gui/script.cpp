@@ -99,6 +99,6 @@ void xt_gui_run_scripts(XtGuiWindow *win) {
     auto it = script_registry().find(id);
     if (it == script_registry().end()) continue;
     xt_value args[2] = {window_handle, document_handle};
-    xt_call_with_this(it->second, XT_UNDEFINED, 2, args);
+    xt_gui_invoke(it->second, XT_UNDEFINED, 2, args);
   }
 }

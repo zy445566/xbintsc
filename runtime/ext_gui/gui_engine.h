@@ -314,6 +314,10 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y);
 /** Synthesise a key event (`keydown`/`keyup`). */
 void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code);
+/** Synthesise a key event with explicit modifier/repeat flags. */
+void xt_gui_dispatch_key_with_modifiers(XtGuiWindow *win, const char *type, const char *key,
+                                        const char *code, bool repeat, bool ctrl, bool shift,
+                                        bool alt, bool meta);
 
 /* -- form controls (`form_input.cpp`) ------------------------------------ */
 
@@ -335,6 +339,8 @@ void xt_gui_form_key_down(XtGuiWindow *win, xt_value payload);
 void xt_gui_form_pointer(XtGuiWindow *win, const char *type, xtgui::Node *node, float x, float y);
 /** Run a control's activation behaviour (checkbox/radio toggle, select cycle). */
 void xt_gui_form_activate(XtGuiWindow *win, xtgui::Node *node);
+/** Move focus to the next (`forward`) / previous tabbable element. */
+void xt_gui_focus_step(XtGuiWindow *win, bool forward);
 /** Set a control's caret from a viewport x coordinate (click positioning). */
 void xt_gui_form_focus_at(XtGuiWindow *win, xtgui::Node *node, float x);
 /** Translate one physical key (SDL scancode/keycode + modifiers) to the browser

@@ -11,6 +11,7 @@
 
 #include "form_state.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -502,6 +503,29 @@ METHOD(node_step_get) {
 METHOD(node_step_set) {
   (void)env;
   return attrum_set(self, argc, argv, "step", false);
+}
+
+METHOD(node_tab_index_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xtgui::Node *node = resolve_node(self, nullptr);
+  if (node == nullptr || !node->isElement()) return xt_number(-1);
+  const std::string *value = node->attr("tabindex");
+  if (value != nullptr) return xt_number(std::strtod(value->c_str(), nullptr));
+  return xtgui::xt_form_is_focusable(node) ? xt_number(0) : xt_number(-1);
+}
+
+METHOD(node_tab_index_set) {
+  (void)env;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
+  int value = argc >= 1 ? (int)xt_to_number(xt_arg(argc, argv, 0)) : -1;
+  char text[16];
+  std::snprintf(text, sizeof(text), "%d", value);
+  set_attribute(win, node, "tabindex", text);
+  return XT_UNDEFINED;
 }
 
 #undef METHOD

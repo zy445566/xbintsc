@@ -54,8 +54,12 @@ user.disabled = true;
   `setSelectionRange(start, end, direction)` 与 `select()` 使用 UTF-16 码元
   偏移（DOM 约定），底层存储为 UTF-8。
 - **`checked`**、`type`、`name`、`disabled`、`readOnly`、`required`、
-  `placeholder`、`min`、`max`、`step`、`maxLength`、`form`、`options` 与
-  `selectedIndex` 均为活动 DOM 属性。
+  `placeholder`、`min`、`max`、`step`、`maxLength`、`tabIndex`、`form`、
+  `options` 与 `selectedIndex` 均为活动 DOM 属性。
+- **`document.activeElement`** 是聚焦元素；没有焦点时为 `<body>`。`tabindex`
+  决定 Tab 顺序（`tabindex="1"` 排在隐式 `0` 之前；`-1` 可点击聚焦但被 Tab
+  跳过）；即使没有文本框聚焦，Tab 与 Shift+Tab 也能移动焦点。禁用或隐藏的控件
+  不能聚焦、会被 Tab 跳过，并以灰色绘制。
 - **文本输入**来自 `SDL_EVENT_TEXT_INPUT`，它携带键盘布局或 IME 实际产生的
   文本。`keydown` 处理编辑命令（Backspace/Delete/方向键/Home/End/Ctrl+A/C/X/V，
   Shift 扩展选区），编辑后派发 `keypress` 与 `input`。

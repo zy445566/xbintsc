@@ -99,7 +99,7 @@ or a cell repeated on every row appears once. The parser/cascade path reports:
   intended fallback rather than a dropped feature, so it is not reported.
 - **HTML attributes** that request unsupported behaviour: `href` (links do not
   navigate), `srcset`, `sizes`, `poster`, `controls`, `contenteditable`,
-  `draggable`, `autofocus`, `tabindex`, `hidden`, and the SVG
+  `draggable`, `autofocus`, `hidden`, and the SVG
   `filter`/`mask`/`clip-path`/`marker-*` attributes.
 - **CSS properties** outside the subset, and **length units** the parser does
   not implement (`ch`, `ex`, `vmin`, `dvh`, …). A recognised property with an

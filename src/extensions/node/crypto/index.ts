@@ -25,7 +25,10 @@ const exports: ModuleExports = {
 
 export const cryptoModule: NodeModule = {
   name: "crypto",
-  runtimeSources: () => [resolveFrom(import.meta.url, "../../../../runtime/ext_node/crypto/crypto.c")],
+  runtimeSources: () => [
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/crypto/crypto.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/crypto/crypto_random.c"),
+  ],
   builtins: () => builtins,
   exports: () => exports,
 };

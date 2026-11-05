@@ -54,7 +54,10 @@ user.disabled = true;
   track and thumb and updates from a drag; color paints a swatch; submit/reset/
   button paint their label. `hidden` has no box.
 - **`<textarea>`** is multi-line (`\n` breaks a line), **`<select>`** paints the
-  selected `<option>`'s label and cycles the selection on click.
+  selected `<option>`'s label and cycles the selection on click (there is no
+  popup menu). `date`/`time`/`month`/`week` inputs are editable text fields with
+  the browser's value shape, and `color`/`file` expose their value/state without
+  opening a native picker or file dialog.
 - **`value`** is the live value, separate from the `value` attribute (the
   default). `<textarea>` reads its default from its text content and `<select>`
   from the selected/first `<option>`. Assigning `value` moves the caret to the

@@ -9,6 +9,8 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createGuiHarness, guiAvailable } from "./gui-helpers.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
 
@@ -39,6 +41,9 @@ describe.skipIf(!guiAvailable)("gui extension — deferred <script src> imports"
   afterAll(() => harness.cleanup());
 
   it("evaluates the import graph after loadHTML and shares module state", () => {
+    /* A portable empty file (`/dev/null` does not exist on Windows). */
+    const emptyPath = join(harness.workdir, "empty.txt");
+    writeFileSync(emptyPath, "");
     const { value, stdout } = harness.compileAndRun(
       "script-import-order",
       `
@@ -101,7 +106,7 @@ export function bump(): number { n += seed; return n; }
           "app10.ts": 'import * as math from "./mathmod"; console.log("app10=" + math.add(2, 3) + math.tag);',
           "mathmod.ts": 'export function add(a: number, b: number): number { return a + b; } export const tag = "m";',
           "app11.ts": 'import { readEmpty } from "./guilib"; console.log("app11=" + (readEmpty() === ""));',
-          "guilib.ts": 'import { readFileSync } from "fs"; export function readEmpty(): string { return readFileSync("/dev/null", "utf8"); }',
+          "guilib.ts": `import { readFileSync } from "fs"; export function readEmpty(): string { return readFileSync(${JSON.stringify(emptyPath)}, "utf8"); }`,
           "value.ts": 'export const value = "v";',
           "app4.ts": 'import { value } from "./wide"; console.log("app4=" + value);',
           "wide.ts": 'export * from "./value";',

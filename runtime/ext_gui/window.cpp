@@ -20,6 +20,11 @@
 
 static xt_value g_window_proto = XT_UNDEFINED;
 
+/* Defined in `window_diagnostics.cpp`. */
+xt_value xt_gui_window_set_background(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+xt_value xt_gui_window_paint_list(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+xt_value xt_gui_window_paint_count(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+
 /** String value of a runtime value, as `std::string` ("" for null/undefined). */
 static std::string window_string(xt_value value) {
   const char *data = xt_string_data(xt_to_string(value));
@@ -192,56 +197,8 @@ static xt_value win_layout_tree(xt_value self, xt_value env, int32_t argc, xt_va
   return xt_string_from_cstr(text.c_str());
 }
 
-static xt_value win_set_background(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)env;
-  XtGuiWindow *win = xt_gui_window_from_this(self);
-  if (win != NULL && argc >= 1) {
-    xt_value text = xt_to_string(xt_arg(argc, argv, 0));
-    const char *data = xt_string_data(text);
-    if (data != nullptr) {
-      xtgui::Color color = xtgui::xt_css_parse_color(data);
-      if (color.valid) {
-        win->background[0] = color.r;
-        win->background[1] = color.g;
-        win->background[2] = color.b;
-        win->background[3] = color.a;
-        win->present_dirty = 1;
-      }
-    }
-    xt_object_set(self, xt_string_from_cstr("__xt_gui_background"), text);
-  }
-  return XT_UNDEFINED;
-}
-
-/** Diagnostic/test hook: the display list built from the current layout. */
-static xt_value win_paint_list(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  XtGuiWindow *win = xt_gui_window_from_this(self);
-  if (win == nullptr || win->document == nullptr) return xt_string_from_cstr("");
-  xt_gui_flush_dom(win);
-  xtgui::DisplayList list;
-  xtgui::xt_paint_build(win->document->layout().root(), list);
-  std::string text = list.dump();
-  return xt_string_from_cstr(text.c_str());
-}
-
-/** Diagnostic/test hook: number of shapes in the display list. */
-static xt_value win_paint_count(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  XtGuiWindow *win = xt_gui_window_from_this(self);
-  if (win == nullptr || win->document == nullptr) return xt_number(0);
-  xt_gui_flush_dom(win);
-  xtgui::DisplayList list;
-  xtgui::xt_paint_build(win->document->layout().root(), list);
-  return xt_number((double)list.rects.size());
-}
-
-/** Diagnostic/test hook: the serialized SVG document of the first `<svg>`
- * element matching `selector`, plus the intrinsic size and shape count the
+/** Diagnostic/test hook: the serialized inline `<svg>` document of the first
+ * element matching `selector`, plus the intrinsic size and shape count a
  * NanoSVG parse yields. Returns `undefined` when there is no such element. */
 static xt_value win_inline_svg(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
@@ -591,9 +548,9 @@ xt_value xt_gui_window_proto(void) {
   define_method(proto, "queryCount", (void *)win_query_count);
   define_method(proto, "getBoundingClientRect", (void *)win_get_bounding_rect);
   define_method(proto, "layoutTree", (void *)win_layout_tree);
-  define_method(proto, "setBackground", (void *)win_set_background);
-  define_method(proto, "paintList", (void *)win_paint_list);
-  define_method(proto, "paintCount", (void *)win_paint_count);
+  define_method(proto, "setBackground", (void *)xt_gui_window_set_background);
+  define_method(proto, "paintList", (void *)xt_gui_window_paint_list);
+  define_method(proto, "paintCount", (void *)xt_gui_window_paint_count);
   define_method(proto, "inlineSvg", (void *)win_inline_svg);
   define_method(proto, "advance", (void *)win_advance);
   define_method(proto, "measureText", (void *)win_measure_text);

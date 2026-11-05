@@ -73,12 +73,11 @@ const std::unordered_set<std::string> &unsupportedElements() {
   static const std::unordered_set<std::string> names = {
       "applet",   "area",     "basefont", "bgsound",  "blink",    "caption",
       "col",      "colgroup", "datalist", "details",  "dialog",   "embed",
-      "frame",    "frameset", "iframe",   "input",    "isindex",  "keygen",
-      "map",      "marquee",  "math",     "meter",    "noembed",  "noframes",
-      "object",   "optgroup", "option",   "output",   "param",    "plaintext",
-      "progress", "select",   "summary",  "table",    "tbody",    "td",
-      "template", "textarea", "tfoot",    "th",       "thead",    "tr",
-      "track",    "xmp",
+      "frame",    "frameset", "iframe",   "isindex",  "keygen",   "map",
+      "marquee",  "math",     "meter",    "noembed",  "noframes", "object",
+      "output",   "param",    "plaintext", "progress", "summary", "table",
+      "tbody",    "td",       "template", "tfoot",    "th",       "thead",
+      "tr",       "track",    "xmp",
   };
   return names;
 }

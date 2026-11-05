@@ -8,6 +8,8 @@
 
 #include "layout_flow_internal.h"
 
+#include "form_state.h"
+
 namespace xtgui {
 namespace layout_flow_detail {
 
@@ -44,6 +46,13 @@ float Layouter::verticalEdges(const LayoutBox *box) const {
 float Layouter::preferredContentWidth(const LayoutBox *box, float available) const {
   const XtStyle &style = *box->style;
   if (!isAuto(style.width)) return px(style.width, available, style.font_size, 0.0f);
+  if (box->is_control) {
+    float width = 0.0f;
+    float height = 0.0f;
+    xt_form_intrinsic_size(box->node, style, &width, &height);
+    (void)height;
+    if (width > 0.0f) return width;
+  }
   if ((box->is_image || box->is_canvas || box->is_inline_svg) && box->intrinsic_width > 0)
     return box->intrinsic_width;
   if (box->is_text) {
@@ -322,7 +331,20 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
   }
 
   float contentHeight;
-  if (forcedContentHeight >= 0) {
+  if (box->is_control) {
+    /* Controls are leaves with an intrinsic content height (a line, a textarea's
+     * rows, 13px for a checkbox, …); their children are not boxes. */
+    float intrinsic_width = 0.0f;
+    float intrinsic_height = 0.0f;
+    xt_form_intrinsic_size(box->node, style, &intrinsic_width, &intrinsic_height);
+    (void)intrinsic_width;
+    contentHeight = forcedContentHeight >= 0
+                        ? forcedContentHeight
+                        : (definiteHeight >= 0 ? definiteHeight : intrinsic_height);
+    contentHeight = clampSize(contentHeight, style.min_height, style.max_height,
+                              availableHeight < 0 ? contentHeight : availableHeight, em);
+    if (contentHeight < 0) contentHeight = 0;
+  } else if (forcedContentHeight >= 0) {
     layoutChildren(box, contentWidth, availableHeight, forcedContentHeight);
     contentHeight = forcedContentHeight;
   } else {

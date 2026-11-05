@@ -89,6 +89,10 @@ struct LayoutBox {
   bool is_canvas = false;
   uint64_t canvas_id = 0;
 
+  /* `<input>` / `<textarea>` / `<select>`: a leaf box whose content is painted
+   * from the node's `FormState` (value, caret, decorations). */
+  bool is_control = false;
+
   /* Inline `<svg>`: a replaced element whose pixels are the serialized subtree
    * (`svg_markup`), rasterised like an SVG file at the drawn device size. The
    * normal box walk does not descend into its children — they are vector art,

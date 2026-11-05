@@ -269,7 +269,7 @@ METHOD(node_focus) {
   if (XT_IS_OBJECT(options)) {
     prevent_scroll = value_truthy(xt_object_get_cstr(options, "preventScroll"));
   }
-  if (win->document->setFocus(node)) win->geometry.dirty = 1;
+  if (win->document->focus() != node) xt_gui_set_focus(win, node);
   const xtgui::LayoutBox *box = win->document->boxOf(node);
   if (!prevent_scroll && box != nullptr) {
     float viewport_width = 0;
@@ -293,7 +293,7 @@ METHOD(node_blur) {
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || win == nullptr || win->document == nullptr) return XT_UNDEFINED;
-  if (win->document->focus() == node && win->document->setFocus(nullptr)) win->geometry.dirty = 1;
+  if (win->document->focus() == node) xt_gui_set_focus(win, nullptr);
   return XT_UNDEFINED;
 }
 
@@ -304,7 +304,7 @@ METHOD(node_click) {
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || win == nullptr) return XT_UNDEFINED;
-  xt_gui_dispatch_to_node(win, node, "click");
+  if (!xt_gui_dispatch_to_node(win, node, "click")) xt_gui_form_activate(win, node);
   return XT_UNDEFINED;
 }
 

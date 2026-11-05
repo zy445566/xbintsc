@@ -11,7 +11,7 @@
 出来**的位置被命中——`:hover` 跟着画面走，而不是跟着流式布局留下的盒子走。
 
 - SDL 指针/滚轮/键盘事件会被路由到所属窗口，进行命中测试，并投递给用 `on`
-  注册的处理器。`mousedown` 还会移动焦点。
+  注册的处理器。`mousedown` 还会移动焦点，并在文本框中放置光标。
 - 键盘事件同时走 DOM 路径：目标为聚焦元素（没有焦点时为 `<body>`），事件沿祖先
   冒泡到 `document`，最后到达 `window` 监听器。因此按浏览器写的
   `document.addEventListener("keydown", …)` 可以直接工作。负载使用浏览器
@@ -24,5 +24,49 @@
   输入，使整条路径可无头测试（e2e 套件在没有真实鼠标的情况下驱动点击、滚轮
   与按键）。
 
-完整输入仍需完成：文本选择、拖拽、IME 与剪贴板。
+## 表单控件（M23）
 
+`<input>`、`<textarea>` 与 `<select>` 是引擎原生的叶子盒：值、选区与勾选状态
+保存在 `Node::form`（`FormState`）中，由引擎绘制，不涉及浏览器/DOM 层。
+
+```ts
+const user = document.getElementById("user"); // <input id="user" value="abc">
+user.focus();
+user.value;                 // "abc"
+user.selectionStart;        // 3
+user.setSelectionRange(1, 3);
+user.placeholder = "name";
+user.disabled = true;
+```
+
+- **`<input>` 类型**：`text`、`search`、`tel`、`url`、`email`、`password`、
+  `number`、`date`、`month`、`week`、`time`、`datetime-local`、`range`、`color`、
+  `checkbox`、`radio`、`file`、`submit`、`reset`、`button`、`image` 与 `hidden`。
+  文本类可编辑；checkbox/radio 绘制方框并在点击时切换（radio 会取消同 `name`
+  组的其它项）；range 绘制轨道与滑块并支持拖动；color 绘制色块；
+  submit/reset/button 绘制标签；`hidden` 不产生盒。
+- **`<textarea>`** 支持多行（`\n` 换行），**`<select>`** 绘制当前 `<option>`
+  的标签，点击切换选项。
+- **`value`** 是活动值，与 `value` 属性（默认值）分离。`<textarea>` 的默认值
+  来自其文本内容，`<select>` 来自被选中/第一个 `<option>`。给 `value` 赋值会
+  把光标移到末尾，与浏览器一致。
+- **`selectionStart` / `selectionEnd` / `selectionDirection`**、
+  `setSelectionRange(start, end, direction)` 与 `select()` 使用 UTF-16 码元
+  偏移（DOM 约定），底层存储为 UTF-8。
+- **`checked`**、`type`、`name`、`disabled`、`readOnly`、`required`、
+  `placeholder`、`min`、`max`、`step`、`maxLength`、`form`、`options` 与
+  `selectedIndex` 均为活动 DOM 属性。
+- **文本输入**来自 `SDL_EVENT_TEXT_INPUT`，它携带键盘布局或 IME 实际产生的
+  文本。`keydown` 处理编辑命令（Backspace/Delete/方向键/Home/End/Ctrl+A/C/X/V，
+  Shift 扩展选区），编辑后派发 `keypress` 与 `input`。
+- **IME** 使用 `SDL_EVENT_TEXT_EDITING`：预编辑文本显示在光标处，并触发
+  `compositionstart` / `compositionupdate` / `compositionend`；提交内容在
+  `compositionend` 时插入值中。
+- **剪贴板**通过 SDL 使用系统剪贴板：Ctrl+C/X/V。
+
+`win.sendEvent` 也接受 `{ type: "textInput", text }`（等同于 SDL 投递该文本）、
+`{ type: "compositionstart" | "compositionupdate" | "compositionend", data }` 与
+可打印的 `keydown`。真实的物理 `keydown` 不会插入其 US 布局的 `key`：对应的
+文本输入事件才会插入，因此 IME 或非 US 布局不会重复字符。
+
+完整输入仍需完成：跨多行的拖动选择与撤销/重做。

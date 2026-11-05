@@ -90,14 +90,13 @@ or a cell repeated on every row appears once. The parser/cascade path reports:
 
 - **HTML elements** with browser behaviour the engine lacks: `applet`, `area`,
   `basefont`, `bgsound`, `blink`, `caption`, `col`, `colgroup`, `datalist`,
-  `details`, `dialog`, `embed`, `frame`, `frameset`, `iframe`, `input`,
-  `isindex`, `keygen`, `map`, `marquee`, `math`, `meter`, `noembed`, `noframes`,
-  `object`, `optgroup`, `option`, `output`, `param`, `plaintext`, `progress`,
-  `select`, `summary`, `table`, `tbody`, `td`, `template`, `textarea`, `tfoot`,
-  `th`, `thead`, `tr`, `track` and `xmp`. Every other tag — including `button`,
-  `label`, custom elements and a typo such as `<dvi>` — is rendered as a plain
-  box, which is the intended fallback rather than a dropped feature, so it is
-  not reported.
+  `details`, `dialog`, `embed`, `frame`, `frameset`, `iframe`, `isindex`,
+  `keygen`, `map`, `marquee`, `math`, `meter`, `noembed`, `noframes`, `object`,
+  `output`, `param`, `plaintext`, `progress`, `summary`, `table`, `tbody`,
+  `td`, `template`, `tfoot`, `th`, `thead`, `tr`, `track` and `xmp`. Every other
+  tag — including `button`, `input`, `label`, `select`, `textarea`, custom
+  elements and a typo such as `<dvi>` — is rendered as a box, which is the
+  intended fallback rather than a dropped feature, so it is not reported.
 - **HTML attributes** that request unsupported behaviour: `href` (links do not
   navigate), `srcset`, `sizes`, `poster`, `controls`, `contenteditable`,
   `draggable`, `autofocus`, `tabindex`, `hidden`, and the SVG

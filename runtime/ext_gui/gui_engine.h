@@ -255,11 +255,14 @@ xt_value xt_gui_node_handle(XtGuiWindow *win, const xtgui::Node *node);
 void xt_gui_node_handle_forget(XtGuiWindow *win, const xtgui::Node *node);
 /** Drop every cached handle/listener and bump the document generation. */
 void xt_gui_handles_reset(XtGuiWindow *win);
-/** Deliver `type` to element listeners along the propagation path. */
-void xt_gui_emit_dom_event(XtGuiWindow *win, const char *type, const xtgui::Node *target,
+/** Deliver `type` to element listeners along the propagation path. Returns
+ * true when a listener called `preventDefault()` (the caller then skips the
+ * default action). */
+bool xt_gui_emit_dom_event(XtGuiWindow *win, const char *type, const xtgui::Node *target,
                            xt_value legacy_payload);
-/** Synthesise a DOM event whose target is `target` (used by element.click()). */
-void xt_gui_dispatch_to_node(XtGuiWindow *win, const xtgui::Node *target, const char *type);
+/** Synthesise a DOM event whose target is `target` (used by element.click()).
+ * Returns true when a listener called `preventDefault()`. */
+bool xt_gui_dispatch_to_node(XtGuiWindow *win, const xtgui::Node *target, const char *type);
 /** Apply any pending DOM mutation (restyle/relayout) before a synchronous read. */
 void xt_gui_flush_dom(XtGuiWindow *win);
 /** Run every registered `<script data-xt-id>` body found in the document, in
@@ -311,6 +314,29 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y);
 /** Synthesise a key event (`keydown`/`keyup`). */
 void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code);
+
+/* -- form controls (`form_input.cpp`) ------------------------------------ */
+
+/** Focus `node` (or clear focus when null). Updates the control's focused flag,
+ * starts/stops SDL text input and repaints. Returns true when the focus moved. */
+bool xt_gui_set_focus(XtGuiWindow *win, xtgui::Node *node);
+/** Commit `text` as typed input to the focused editable control, dispatching
+ * `keypress` then `input`. */
+void xt_gui_text_input(XtGuiWindow *win, const char *text);
+/** IME composing text update (`SDL_EVENT_TEXT_EDITING`): shows `text` at the
+ * caret until the commit. */
+void xt_gui_text_editing(XtGuiWindow *win, const char *text, int start, int length);
+/** Synthesise a composition event (`compositionstart`/`update`/`end`). */
+void xt_gui_composition_event(XtGuiWindow *win, const char *type, const char *data);
+/** Default keydown action for the focused editable control (text editing,
+ * clipboard, caret movement). Called after the DOM listeners did not cancel. */
+void xt_gui_form_key_down(XtGuiWindow *win, xt_value payload);
+/** Pointer default action (focus/caret placement, checkbox toggle, range drag). */
+void xt_gui_form_pointer(XtGuiWindow *win, const char *type, xtgui::Node *node, float x, float y);
+/** Run a control's activation behaviour (checkbox/radio toggle, select cycle). */
+void xt_gui_form_activate(XtGuiWindow *win, xtgui::Node *node);
+/** Set a control's caret from a viewport x coordinate (click positioning). */
+void xt_gui_form_focus_at(XtGuiWindow *win, xtgui::Node *node, float x);
 /** Translate one physical key (SDL scancode/keycode + modifiers) to the browser
  * `key`/`code` names and dispatch it to the DOM and window listeners. */
 void xt_gui_dispatch_physical_key(XtGuiWindow *win, const char *type, int scancode, int keycode,

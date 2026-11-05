@@ -4,6 +4,7 @@
 
 #include "style_internal.h"
 
+#include <cctype>
 #include <unordered_map>
 
 namespace xtgui {
@@ -38,6 +39,47 @@ void xt_style_apply_user_agent(const Node *node, XtStyle *style) {
   if (tag == "br") style->display = Display::Block;
   if (tag == "button" || tag == "input" || tag == "select" || tag == "textarea") {
     style->display = Display::InlineBlock;
+    /* The browser's form-control look: a 1px border, a white field background
+     * and the inherited font. The value/caret are painted by `paint_form.cpp`. */
+    style->border_style = BorderStyle::Solid;
+    style->border_width.set({1.0f, Unit::Px});
+    style->border_color = {0.46f, 0.46f, 0.46f, 1.0f};
+    style->has_border_color = true;
+    style->background = {1.0f, 1.0f, 1.0f, 1.0f};
+    style->has_background = true;
+    style->color = {0.1f, 0.1f, 0.1f, 1.0f};
+    style->padding.set({1.0f, Unit::Px});
+    style->padding.left = style->padding.right = {2.0f, Unit::Px};
+  }
+  if (tag == "input") {
+    const std::string *type = node->attr("type");
+    std::string kind;
+    if (type != nullptr) {
+      kind = *type;
+      for (char &c : kind) c = (char)std::tolower((unsigned char)c);
+    }
+    if (kind == "hidden") style->display = Display::None;
+    if (kind == "checkbox" || kind == "radio" || kind == "range") {
+      style->border_style = BorderStyle::None;
+      style->padding.set({0.0f, Unit::Px});
+      style->background = Color{0.0f, 0.0f, 0.0f, 0.0f};
+      style->has_background = false;
+    }
+  }
+  if (tag == "textarea") {
+    style->white_space = WhiteSpace::PreWrap;
+  }
+  if (tag == "button") {
+    style->background = {0.93f, 0.93f, 0.93f, 1.0f};
+    style->has_background = true;
+    style->padding.set({1.0f, Unit::Px});
+    style->padding.left = style->padding.right = {6.0f, Unit::Px};
+  }
+  if ((tag == "input" || tag == "textarea" || tag == "select" || tag == "button") &&
+      node->attr("disabled") != nullptr) {
+    style->color = {0.55f, 0.55f, 0.55f, 1.0f};
+    style->background = {0.95f, 0.95f, 0.95f, 1.0f};
+    style->has_background = true;
   }
   if (tag == "img") style->display = Display::InlineBlock;
   /* An inline `<svg>` is a replaced inline-block too: its intrinsic size comes

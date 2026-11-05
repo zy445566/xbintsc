@@ -12,7 +12,8 @@ scaled or translated element is hit exactly where it is drawn — and `:hover`
 follows the artwork, not the box flow left behind.
 
 - SDL pointer/wheel/key events are routed to the owning window, hit tested, and
-delivered to the handlers registered with `on`. `mousedown` also moves focus.
+  delivered to the handlers registered with `on`. `mousedown` also moves focus
+  and places the caret in a text field.
 - Keyboard events also follow the DOM path: the target is the focused element (or
   `<body>` when nothing is focused), the event bubbles through its ancestors to
   `document`, and finally reaches `window` listeners. This is what lets a page
@@ -28,5 +29,54 @@ delivered to the handlers registered with `on`. `mousedown` also moves focus.
   synthetic input so the whole path is testable headlessly (the e2e suite drives
   clicks, wheels and keys without a real mouse).
 
-Still to do for full input: text selection, drag, IME and clipboard.
+## Form controls (M23)
 
+`<input>`, `<textarea>` and `<select>` are native leaf boxes: their value,
+selection and checked state live in `Node::form` (`FormState`) and are painted
+by the engine, so no browser/DOM layer is involved.
+
+```ts
+const user = document.getElementById("user"); // <input id="user" value="abc">
+user.focus();
+user.value;                 // "abc"
+user.selectionStart;        // 3
+user.setSelectionRange(1, 3);
+user.placeholder = "name";
+user.disabled = true;
+```
+
+- **`<input>` types**: `text`, `search`, `tel`, `url`, `email`, `password`,
+  `number`, `date`, `month`, `week`, `time`, `datetime-local`, `range`, `color`,
+  `checkbox`, `radio`, `file`, `submit`, `reset`, `button`, `image` and
+  `hidden`. Text-like types are editable; checkbox/radio paint their box and
+  toggle on click (radios uncheck the rest of their `name` group); range paints a
+  track and thumb and updates from a drag; color paints a swatch; submit/reset/
+  button paint their label. `hidden` has no box.
+- **`<textarea>`** is multi-line (`\n` breaks a line), **`<select>`** paints the
+  selected `<option>`'s label and cycles the selection on click.
+- **`value`** is the live value, separate from the `value` attribute (the
+  default). `<textarea>` reads its default from its text content and `<select>`
+  from the selected/first `<option>`. Assigning `value` moves the caret to the
+  end, as browsers do.
+- **`selectionStart` / `selectionEnd` / `selectionDirection`**,
+  `setSelectionRange(start, end, direction)` and `select()` use UTF-16 code-unit
+  offsets (the DOM convention), backed by UTF-8 storage.
+- **`checked`**, `type`, `name`, `disabled`, `readOnly`, `required`,
+  `placeholder`, `min`, `max`, `step`, `maxLength`, `form`, `options` and
+  `selectedIndex` are live DOM properties.
+- **Text input** comes from `SDL_EVENT_TEXT_INPUT`, which carries the text the
+  keyboard layout or IME actually produced. `keydown` handles the editing
+  commands (Backspace/Delete/arrows/Home/End/Ctrl+A/C/X/V, with Shift extending
+  the selection) and `keypress` + `input` are dispatched after an edit.
+- **IME** uses `SDL_EVENT_TEXT_EDITING`: the pre-edit text is displayed at the
+  caret and `compositionstart` / `compositionupdate` / `compositionend` fire;
+  the commit is inserted into the value on `compositionend`.
+- **Clipboard** is the system clipboard through SDL: Ctrl+C/X/V.
+
+`win.sendEvent` also accepts `{ type: "textInput", text }` (as if SDL delivered
+that text), `{ type: "compositionstart" | "compositionupdate" | "compositionend",
+data }` and printable `keydown` events. A real physical `keydown` never inserts
+its US-layout `key`: the matching text-input event does, so an IME or a non-US
+layout cannot double a character.
+
+Still to do for full input: drag-selection across several lines and undo/redo.

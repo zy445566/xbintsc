@@ -171,6 +171,8 @@ win.on("keydown", (e) => console.log(e.key, e.code, e.ctrlKey, e.shiftKey));
 | `key`、`code` | keyboard | 浏览器 `KeyboardEvent` 写法：产生的值与物理键 |
 | `repeat`、`ctrl`、`shift`、`alt`、`meta` | keyboard | 修饰键（旧版 DOM 写法） |
 | `ctrlKey`、`shiftKey`、`altKey`、`metaKey` | keyboard | 修饰键（现行 DOM 写法） |
+| `data` | composition | 预编辑文本（`compositionstart`/`update`/`end`） |
+| `text` | `textInput` | IME/键盘布局实际产生的文本 |
 | `target` | pointer、wheel | 该点下最深的元素，表示为类 CSS 描述符（`div#main.card`），可能缺省 |
 
 ## 诊断
@@ -189,7 +191,9 @@ win.inlineSvg(selector)                // 序列化的内联 <svg>：{ markup, w
 win.measureText(text, fontSize?, family?)  // 整形后的推进宽度（像素）
 win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
 win.hitTest(x, y)                      // 最深的元素描述符，或 ""
-win.sendEvent(type, options?)          // 合成输入（测试用）
+win.sendEvent(type, options?)          // 合成输入（测试用）；也支持
+                                       // "textInput" + { text } 与
+                                       // "composition*" 事件 + { data }
 win.advance(ms)                        // 推进 CSS transition 时钟（测试用）
 win.stats()                            // 引擎/运行时计数器（内存排查用）
 ```

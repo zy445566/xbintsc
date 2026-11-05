@@ -429,6 +429,24 @@ static xt_value win_send_event(xt_value self, xt_value env, int32_t argc, xt_val
     y = xt_gui_number_or(xt_object_get_cstr(options, "y"), 0);
   }
   std::string name(type);
+  if (name == "textInput") {
+    std::string text;
+    if (XT_IS_OBJECT(options)) {
+      xt_value value = xt_object_get_cstr(options, "text");
+      if (XT_IS_STRING(value)) text = std::string(xt_string_data(value));
+    }
+    xt_gui_text_input(win, text.c_str());
+    return XT_TRUE;
+  }
+  if (name == "compositionstart" || name == "compositionupdate" || name == "compositionend") {
+    std::string data;
+    if (XT_IS_OBJECT(options)) {
+      xt_value value = xt_object_get_cstr(options, "data");
+      if (XT_IS_STRING(value)) data = std::string(xt_string_data(value));
+    }
+    xt_gui_composition_event(win, name.c_str(), data.c_str());
+    return XT_TRUE;
+  }
   if (name == "wheel") {
     double delta_x = 0;
     double delta_y = 0;

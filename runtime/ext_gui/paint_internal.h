@@ -103,6 +103,12 @@ void addBitmapImage(DisplayList &out, std::shared_ptr<const PaintBitmap> bitmap,
 bool addBackdropFilter(DisplayList &out, const LayoutBox &box, const XtStyle &style,
                        const PaintClip &clip, float viewportWidth, float viewportHeight);
 
+/** Paint the value/selection/caret and type-specific decoration of a form
+ * control (`<input>`, `<textarea>`, `<select>`). */
+void xt_paint_form_control(const LayoutBox &box, const XtStyle &style, DisplayList &out,
+                           const PaintClip &clip, const FilterChain &chain,
+                           float viewportWidth, float viewportHeight);
+
 /** Resolve `clip-path` into a device-space triangulated polygon. */
 int addClipPathForBox(DisplayList &out, const LayoutBox &box, const XtStyle &style,
                       float viewportWidth, float viewportHeight);

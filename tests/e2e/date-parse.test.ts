@@ -66,4 +66,22 @@ describeE2E("Date parsing", (harness) => {
       }
     `);
   });
+
+  it("gives Date.now millisecond resolution", () => {
+    /* `time(NULL)` used to truncate the clock to whole seconds, so 50 samples
+     * spread over ~250 ms all reported the same value. */
+    const stdout = harness.runProgram(`
+      const samples: number[] = [];
+      for (let i = 0; i < 50; i++) {
+        const until = performance.now() + 5;
+        while (performance.now() < until) {}
+        samples.push(Date.now());
+      }
+      const distinct = new Set(samples).size;
+      console.log(distinct > 10);
+      console.log(Date.now() % 1 === 0);
+      console.log(Math.abs(new Date().getTime() - Date.now()) < 1000);
+    `);
+    expect(stdout).toBe("true\ntrue\ntrue");
+  });
 });

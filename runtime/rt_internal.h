@@ -414,6 +414,9 @@ xt_value xt_iter_open(xt_value value);
 /* Monotonic clock in fractional milliseconds (xt_loop.c), for `performance.now`. */
 double xt_monotonic_ms(void);
 
+/* Wall-clock milliseconds since the Unix epoch (xt_loop.c), for `Date`. */
+double xt_wallclock_ms(void);
+
 /* Stackful generators (xt_generator.c). */
 int xt_is_generator(xt_value value);
 xt_value xt_generator_new(xt_value function, xt_value thisValue, int32_t argc, xt_value *argv);

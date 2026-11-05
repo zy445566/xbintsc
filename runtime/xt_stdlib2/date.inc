@@ -101,7 +101,7 @@ static double xt_date_parse_text(const char *text) {
 
 xt_value xt_date_ctor(int32_t argc, xt_value *argv) {
   xt_date *date = (xt_date *)xt_alloc(sizeof(xt_date), XT_OBJECT_KIND_DATE);
-  if (argc == 0) date->time = (double)time(NULL) * 1000.0;
+  if (argc == 0) date->time = xt_wallclock_ms();
   else if (argc == 1) {
     if (XT_IS_STRING(argv[0])) {
       date->time = xt_date_parse_text(xt_string_data(argv[0]));
@@ -126,7 +126,7 @@ xt_value xt_date_ctor(int32_t argc, xt_value *argv) {
 xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv) {
   const char *fn = xt_string_data(name);
   if (!fn) return XT_UNDEFINED;
-  if (strcmp(fn, "now") == 0) return xt_number((double)time(NULL) * 1000.0);
+  if (strcmp(fn, "now") == 0) return xt_number(xt_wallclock_ms());
   if (strcmp(fn, "parse") == 0) {
     xt_value input = xt_arg_at(argc, argv, 0);
     if (!XT_IS_STRING(input)) return xt_number(NAN);

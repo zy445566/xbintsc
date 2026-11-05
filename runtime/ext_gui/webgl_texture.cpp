@@ -12,14 +12,6 @@
 namespace xtgui {
 namespace {
 
-bool depth_texture_format(SDL_GPUTextureFormat format) {
-  return format == SDL_GPU_TEXTUREFORMAT_D16_UNORM ||
-         format == SDL_GPU_TEXTUREFORMAT_D24_UNORM ||
-         format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT ||
-         format == SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT ||
-         format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
-}
-
 int texel_bytes(SDL_GPUTextureFormat format) {
   if (format == SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT) return 8;
   if (format == SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT) return 16;

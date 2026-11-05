@@ -28,7 +28,8 @@
   打开 Metal GPU 着色器校验后渲染正常——在这类机器上以
   `MTL_SHADER_VALIDATION=1` 运行即可让
   `tests/e2e/gui-webgl2-shadow-sampler.test.ts` 通过。这指向驱动的着色器编译器
-  而非引擎，因此以环境变量作为绕过办法；其他 Apple GPU 未必存在该问题。
+  而非引擎，因此以环境变量作为绕过办法（e2e 测试在 macOS 上会自动设置它）；
+  其他 Apple GPU 未必存在该问题。
 
 
 - **自动关闭时的偶发崩溃。** 设置 `XT_GUI_AUTOCLOSE_MS` 结束运行时，约五次中有两次会以原生

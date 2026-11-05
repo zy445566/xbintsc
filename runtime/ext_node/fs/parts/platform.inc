@@ -118,6 +118,8 @@ static inline size_t xt_fs_path_root(const char *path) {
     while (xt_fs_is_sep(path[i])) i++;
     return i;
   }
+#else
+  (void)path;
 #endif
   return 0;
 }

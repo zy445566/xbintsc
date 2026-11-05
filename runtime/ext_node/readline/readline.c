@@ -180,8 +180,10 @@ static void xt_readline_job_run(xt_async_job *base) {
   xt_readline_job *job = (xt_readline_job *)base;
   for (;;) {
     char byte = 0;
-    int read = xt_readline_read(0, &byte, 1);
-    if (read <= 0) {
+    /* Not `read`: the local would shadow the POSIX function of the same name
+     * inside its own initializer on non-Windows hosts. */
+    int got = (int)xt_readline_read(0, &byte, 1);
+    if (got <= 0) {
       /* A bare EOF reports the last line (without a newline) and then closes;
        * a read error is treated the same way so the program cannot hang. */
       job->eof = 1;

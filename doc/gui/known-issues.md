@@ -31,7 +31,8 @@
   shader validation is enabled — running with `MTL_SHADER_VALIDATION=1` makes
   `tests/e2e/gui-webgl2-shadow-sampler.test.ts` pass on such a machine. That
   points at the driver's shader compiler rather than the engine, so the
-  workaround is the environment variable; other Apple GPUs may not show it.
+  workaround is the environment variable (the e2e test sets it for macOS runs);
+  other Apple GPUs may not show it.
 
 
 

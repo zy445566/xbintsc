@@ -144,7 +144,7 @@ export const literalMethods: LiteralMethods = {
             initializer = this.parseAssignmentExpression();
             end = initializer.end;
           }
-          const shorthand: ShorthandPropertyAssignment = { kind: SyntaxKind.ShorthandPropertyAssignment, name, initializer, start, end };
+          const shorthand: ShorthandPropertyAssignment = { kind: SyntaxKind.ShorthandPropertyAssignment, name, propertyName: name.text, initializer, start, end };
           properties.push(shorthand);
         } else {
           this.error(DiagnosticCode.UnexpectedToken, "Invalid object literal member");

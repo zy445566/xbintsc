@@ -217,7 +217,9 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
         continue;
       }
       const shorthand = property as ShorthandPropertyAssignment;
-      const key = this.stringValue(shorthand.name.text);
+      /* A destructuring target reads the source key, not the (possibly
+       * bundler-renamed) binding name. */
+      const key = this.stringValue(shorthand.propertyName);
       excludedKeys.push(key);
       let elementValue = this.reg();
       this.emit(`  ${elementValue} = call i64 @xt_get(i64 ${value}, i64 ${key})`);

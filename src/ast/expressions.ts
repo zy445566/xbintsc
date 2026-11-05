@@ -122,6 +122,12 @@ export interface PropertyAssignment extends Node {
 export interface ShorthandPropertyAssignment extends Node {
   readonly kind: SyntaxKind.ShorthandPropertyAssignment;
   readonly name: Identifier;
+  /**
+   * The literal property key as written (`"a"` in `{ a }`). Kept separate from
+   * `name.text`, which the bundler rewrites when it renames the binding: the
+   * key is part of the object shape, not a reference to the binding.
+   */
+  readonly propertyName: string;
   /** Present for `{ a = default }` when used as a destructuring target. */
   readonly initializer?: Expression;
 }

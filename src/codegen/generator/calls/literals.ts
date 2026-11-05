@@ -68,7 +68,10 @@ export const literalCallMethods: LiteralCallMethods = {
           continue;
         }
         const identifier = property.name;
-        const key = this.stringValue(identifier.text);
+        /* The key is the spelling in the source; `identifier.text` may have
+         * been rewritten to a bundler-mangled name when the variable itself is
+         * renamed. */
+        const key = this.stringValue(property.propertyName);
         const value = this.emitIdentifier(identifier);
         this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
       } else if (property.kind === SyntaxKind.SpreadElement) {

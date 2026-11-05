@@ -98,6 +98,9 @@ bool matchPseudo(const Node *node, const std::string &pseudo, const MatchState &
   /* The engine has no keyboard modality tracking, so focus-visible is the same
    * as focus (a mouse click also shows the focus ring). */
   if (pseudo == "focus-visible") return node == state.focus;
+  /* `:focus-within` matches the focused element and every ancestor, which is
+   * what lets a form card highlight while one of its fields has focus. */
+  if (pseudo == "focus-within") return isHoverTarget(node, state.focus);
   if (pseudo == "active") return isHoverTarget(node, state.active);
   if (pseudo == "empty") {
     for (const std::unique_ptr<Node> &child : node->children) {

@@ -18,8 +18,9 @@
   `KeyboardEvent` 的写法：`code` 是物理键（`"KeyW"`、`"ArrowUp"`、`"Space"`），
   `key` 是产生的值（`"w"`、`"W"`、`" "`），而不是 SDL 的扫描码/键名。
 - `:hover` 匹配悬停元素**及其祖先**（因此悬停子元素会点亮其父元素）；
-  `:focus` 匹配聚焦元素。当任一改变时，`XtDocument::setHover`/`setFocus`
-  重新计算样式与布局，并把窗口几何标记为脏，因此改动会在下一帧绘制。
+  `:focus` 匹配聚焦元素，`:focus-within` 同时匹配其祖先。当任一改变时，
+  `XtDocument::setHover`/`setFocus` 重新计算样式与布局，并把窗口几何标记为
+  脏，因此改动会在下一帧绘制。
 - `win.hitTest(x, y)` 与 `win.sendEvent(type, options)` 暴露命中测试与合成
   输入，使整条路径可无头测试（e2e 套件在没有真实鼠标的情况下驱动点击、滚轮
   与按键）。

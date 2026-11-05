@@ -37,7 +37,7 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 
 ## JSON
 
-- `JSON.parse` with a `reviver`.
+- `JSON.parse` with a `reviver`; malformed input (bad numbers/strings, trailing text, missing separators) throws a catchable `SyntaxError` instead of returning `undefined`.
 - `JSON.stringify` with a function or array `replacer`, `toJSON`, and `space` (number or string, clamped to 10). `undefined` / function / symbol values follow the standard omission rules.
 - Object keys are emitted in insertion order, with integer keys ordered numerically; circular references throw.
 

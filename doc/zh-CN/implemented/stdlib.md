@@ -35,7 +35,7 @@
 
 ## JSON
 
-- `JSON.parse` 支持 `reviver`。
+- `JSON.parse` 支持 `reviver`；畸形输入（错误数字/字符串、尾随内容、缺少分隔符）会抛出可捕获的 `SyntaxError`，而不是返回 `undefined`。
 - `JSON.stringify` 支持函数或数组 `replacer`、`toJSON`，以及 `space`（数字或字符串，最多 10 个单位）。`undefined` / 函数 / symbol 值遵循标准省略规则。
 - 对象键按插入序输出，整数键按数值排序；循环引用抛错。
 

@@ -153,9 +153,19 @@ describe.skipIf(!guiAvailable)("gui extension — CSS features", () => {
     expect(value("o-style")).toBe("dashed");
     expect(value("w-wrap")).toBe("break-word");
     expect(value("n-wrap")).toBe("normal");
-    // break-word splits the 65px word into lines; normal lets it overflow one.
-    expect(value("w")).toBe("60x64");
-    expect(value("n")).toBe("60x16");
+    // break-word splits the long word over several lines inside the 60px box;
+    // normal lets it overflow on one line. The exact heights come from the
+    // resolved system font's advances, so measure the split against the
+    // single-line box instead of a fixed pixel count.
+    const widthOf = (label: string): number => Number(value(label).split("x")[0]);
+    const heightOf = (label: string): number => Number(value(label).split("x")[1]);
+    expect(widthOf("w")).toBe(60);
+    expect(widthOf("n")).toBe(60);
+    const lineHeight = heightOf("n");
+    expect(lineHeight).toBeGreaterThan(0);
+    const lines = Math.round(heightOf("w") / lineHeight);
+    expect(lines).toBeGreaterThan(1);
+    expect(heightOf("w")).toBeCloseTo(lines * lineHeight, 2);
     const rules = stdout.split("\n").filter((line) => line.startsWith("rect ") && line.includes("h=1.1"));
     expect(rules.length).toBe(3);
   });

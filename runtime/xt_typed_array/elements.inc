@@ -254,15 +254,6 @@ static int32_t xt_ta_relative(int32_t index, int32_t length) {
   return index;
 }
 
-static xt_value xt_ta_append(xt_value array, int kind, xt_value value) {
-  uint32_t length = xt_ta_length(array);
-  xt_object_set(array, xt_string_from_cstr("length"), xt_number((double)(length + 1)));
-  xt_object_set(array, xt_string_from_cstr("byteLength"),
-                xt_number((double)(length + 1) * xt_ta_bytes[kind]));
-  xt_ta_store(array, kind, length, xt_to_number(value));
-  return array;
-}
-
 uint32_t xt_typed_array_length(xt_value value) {
   return xt_typed_array_kind_of(value) >= 0 ? xt_ta_length(value) : 0;
 }

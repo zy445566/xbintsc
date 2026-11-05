@@ -126,7 +126,13 @@ describe.skipIf(!guiAvailable)("gui extension — shadow samplers and gl_FragDep
       });
       win.loadHTML(page);
       `,
-      { files: { "page.html": PAGE } },
+      {
+        files: { "page.html": PAGE },
+        /* Intel Macs miscompile the generated `sample_compare` (the draw writes
+         * nothing, so both probes read black); Metal shader validation makes the
+         * driver compile it correctly. See doc/gui/known-issues.md. */
+        env: process.platform === "darwin" ? { MTL_SHADER_VALIDATION: "1" } : undefined,
+      },
     );
 
     expect(value("fs")).toBe("true");

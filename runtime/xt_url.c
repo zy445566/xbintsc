@@ -99,12 +99,6 @@ static void xt_url_append_pair(xt_value entries, xt_value key, xt_value value) {
   xt_array_push(entries, pair);
 }
 
-static xt_value xt_url_string_at(xt_value text, size_t start, size_t length) {
-  xt_string *string = xt_as_string(text);
-  const char *bytes = xt_string_bytes(string);
-  return xt_string_new(bytes + start, length);
-}
-
 /* Split a query string on `&`, then each item on the first `=`; decode both
  * halves and append them. A leading `?` is ignored. */
 static void xt_url_parse_into(xt_value params, xt_value input) {

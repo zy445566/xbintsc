@@ -25,12 +25,6 @@ xt_value xt_gui_window_set_background(xt_value self, xt_value env, int32_t argc,
 xt_value xt_gui_window_paint_list(xt_value self, xt_value env, int32_t argc, xt_value *argv);
 xt_value xt_gui_window_paint_count(xt_value self, xt_value env, int32_t argc, xt_value *argv);
 
-/** String value of a runtime value, as `std::string` ("" for null/undefined). */
-static std::string window_string(xt_value value) {
-  const char *data = xt_string_data(xt_to_string(value));
-  return data != nullptr ? data : "";
-}
-
 /* -- methods -------------------------------------------------------------- */
 
 static xt_value win_set_title(xt_value self, xt_value env, int32_t argc, xt_value *argv) {

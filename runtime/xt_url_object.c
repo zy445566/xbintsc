@@ -339,11 +339,11 @@ xt_value xt_url_ctor(int32_t argc, xt_value *argv) {
   /* A reference without a scheme is a filesystem path. With no explicit base
    * it resolves against the working directory, so `new URL("./a.txt")` is a
    * `file://` URL rather than an unparseable relative one. */
-  char adjusted[XT_URL_MAX];
   if (base[0] == 0 && xt_url_scheme_length(inputText) == 0) {
     xt_url_cwd_base(base, sizeof(base));
   }
 #if defined(_WIN32)
+  char adjusted[XT_URL_MAX];
   if (xt_url_scheme_length(inputText) == 0 && isalpha((unsigned char)inputText[0]) &&
       inputText[1] == ':' && (inputText[2] == '\\' || inputText[2] == '/')) {
     /* `C:\dir\file` -> `/C:/dir/file`, the path part of a file URL. */

@@ -47,7 +47,9 @@ user.disabled = true;
   组的其它项）；range 绘制轨道与滑块并支持拖动；color 绘制色块；
   submit/reset/button 绘制标签；`hidden` 不产生盒。
 - **`<textarea>`** 支持多行（`\n` 换行），**`<select>`** 绘制当前 `<option>`
-  的标签，点击切换选项。
+  的标签，点击切换选项（没有弹出菜单）。`date`/`time`/`month`/`week` 输入框
+  是按浏览器值格式编辑的文本框；`color`/`file` 暴露值/状态，但不会打开原生
+  取色器或文件对话框。
 - **`value`** 是活动值，与 `value` 属性（默认值）分离。`<textarea>` 的默认值
   来自其文本内容，`<select>` 来自被选中/第一个 `<option>`。给 `value` 赋值会
   把光标移到末尾，与浏览器一致。

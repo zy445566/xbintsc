@@ -215,7 +215,7 @@ describe.skipIf(!guiAvailable)("gui extension — CSS coverage", () => {
     expect(value("color")).toBe("rgb(0, 255, 0)");
     expect(value("width")).toBe("2px");
     expect(value("offset")).toBe("3px");
-    expect(stdout).toContain("rect x=7.0 y=7.0 w=66.0 h=2.0");
+    expect(stdout).toContain("rect x=7.0 y=7.0 w=78.0 h=2.0");
     expect(value("active")).toContain("translateY(5px)");
     expect(value("released")).toBe("none");
   });

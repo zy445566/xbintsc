@@ -58,7 +58,7 @@ const HTML = ${JSON.stringify(PAGE)};
 const win = createWindow({ title: "unsupported", width: 320, height: 240 });
 win.on("ready", () => {
   /* A run-time created element is reported too, not just markup from the page. */
-  win.document.createElement("select");
+  win.document.createElement("meter");
   win.document.querySelector(".one").style.setProperty("unsupported-two", "3px");
   win.computedStyle(".one", "color");
   console.log("done=1");
@@ -82,10 +82,11 @@ describe.skipIf(!guiAvailable)("gui extension — unsupported features", () => {
     expect(value("done")).toBe("1");
 
     expect(stderr).toContain("unsupported element <table>");
-    expect(stderr).toContain("unsupported element <input>");
+    /* `input`/`select`/`textarea` are implemented form controls now. */
+    expect(stderr).not.toContain("unsupported element <input>");
     expect(stderr).toContain("unsupported element <iframe>");
     /* Created through `document.createElement`, after the page was parsed. */
-    expect(stderr).toContain("unsupported element <select>");
+    expect(stderr).toContain("unsupported element <meter>");
     /* Declared by two rules, but reported as one property name. */
     expect(stderr).toContain("unsupported CSS property 'unsupported-one'");
     /* Set through the CSSOM after the page was parsed. */

@@ -7,7 +7,7 @@
  * throws a catchable `SyntaxError`.
  */
 
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { describeE2E } from "./harness.js";
 
 describeE2E("JSON.parse errors", (harness) => {

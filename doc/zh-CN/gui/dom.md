@@ -183,7 +183,9 @@ console.log(box.contains(inner));                 // 后代判断
 计算颜色，`border-*-width` 对 `none` 边框报告实际使用的 `0px`，
 `border-*-style` 报告计算后的样式关键字。传入 `"::before"` 或 `"::after"`
 可读取生成内容盒；其他伪元素返回空值。每次读取都会先结算待处理的重新样式，
-因此早先创建的句柄在后续变更后仍然有效。
+因此早先创建的句柄在后续变更后仍然有效。引擎未建模的标准属性（例如
+`word-break`、`object-fit`、`list-style-type`）会返回其 CSS 初始值而不是 `""`，
+因此「读取当前样式」的常规写法对这些属性同样可用。
 
 `getBoundingClientRect()` 在 `x` / `y` / `width` / `height` 之外还带有旧式的
 `top` / `right` / `bottom` / `left` 成员；`document.title = …` 写入文档的

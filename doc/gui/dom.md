@@ -204,7 +204,10 @@ element's computed colour, `border-*-width` reports the used `0px` for a
 `none` border, and `border-*-style` reports the computed style keyword.
 Pass `"::before"`/`"::after"` to read generated content; any
 other pseudo-element answers empty values. Every read flushes a pending restyle,
-so a handle created early stays live after later mutations.
+so a handle created early stays live after later mutations. Unset properties that
+the engine does not model (for example `word-break`, `object-fit` or
+`list-style-type`) answer with their CSS initial value rather than `""`, so the
+usual "read the current style" pattern works for them too.
 
 `getBoundingClientRect()` carries the legacy `top` / `right` / `bottom` / `left`
 members next to `x` / `y` / `width` / `height`, and `document.title = …` writes

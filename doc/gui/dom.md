@@ -192,7 +192,11 @@ removes it, and `Object.keys(dataset)` / `for...in` list only the data keys.
 author rules, inheritance and the inline declarations — rather than echoing the
 inline block, so a stylesheet rule is visible. It exposes `getPropertyValue`,
 `getPropertyPriority` and named properties (`cs.width`, `cs.backgroundColor`,
-`cs["--accent"]`). Pass `"::before"`/`"::after"` to read generated content; any
+`cs["--accent"]`). Border properties are serialized per side too:
+`border-top-color` / `border-right-color` / … resolve `currentColor` to the
+element's computed colour, `border-*-width` reports the used `0px` for a
+`none` border, and `border-*-style` reports the computed style keyword.
+Pass `"::before"`/`"::after"` to read generated content; any
 other pseudo-element answers empty values. Every read flushes a pending restyle,
 so a handle created early stays live after later mutations.
 

@@ -238,6 +238,15 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   static const char *const cursorNames[] = {"auto", "default", "pointer", "text", "move",
                                             "wait", "help", "not-allowed", "crosshair"};
   static const char *const borderStyleNames[] = {"none", "solid", "dashed", "dotted"};
+  auto borderColor = [&style]() {
+    return style.has_border_color ? formatColor(style.border_color) : formatColor(style.color);
+  };
+  auto borderWidth = [&style](const Length &length) {
+    /* A `none`/`hidden` border has a used width of zero, and `getComputedStyle`
+     * reports that resolved width. */
+    if (style.border_style == BorderStyle::None) return std::string("0px");
+    return formatLength(length);
+  };
 
   if (property == "display") {
     if (style.inline_level) return style.display == Display::Grid ? "inline-grid" : "inline-flex";
@@ -317,6 +326,27 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "flex-grow") return formatNumber(style.flex_grow);
   if (property == "flex-shrink") return formatNumber(style.flex_shrink);
   if (property == "flex-basis") return formatLength(style.flex_basis);
+  if (property == "border-top-width") return borderWidth(style.border_width.top);
+  if (property == "border-right-width") return borderWidth(style.border_width.right);
+  if (property == "border-bottom-width") return borderWidth(style.border_width.bottom);
+  if (property == "border-left-width") return borderWidth(style.border_width.left);
+  if (property == "border-width") {
+    return borderWidth(style.border_width.top) + " " + borderWidth(style.border_width.right) + " " +
+           borderWidth(style.border_width.bottom) + " " + borderWidth(style.border_width.left);
+  }
+  if (property == "border-top-style" || property == "border-right-style" ||
+      property == "border-bottom-style" || property == "border-left-style" ||
+      property == "border-style") {
+    return borderStyleNames[(int)style.border_style];
+  }
+  if (property == "border-top-color") return borderColor();
+  if (property == "border-right-color") return borderColor();
+  if (property == "border-bottom-color") return borderColor();
+  if (property == "border-left-color") return borderColor();
+  if (property == "border-color") {
+    std::string color = borderColor();
+    return color + " " + color + " " + color + " " + color;
+  }
   if (property == "border-radius") return formatLength(style.border_radius);
   if (property == "opacity") return formatNumber(style.opacity);
   if (property == "mix-blend-mode") {

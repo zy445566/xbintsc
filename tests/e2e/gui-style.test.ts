@@ -249,4 +249,52 @@ describe.skipIf(!guiAvailable)("gui extension — style", () => {
     expect(value("end-bg")).toBe("rgb(255, 255, 255)"); // finished
     expect(value("end-radius")).toBe("10px");
   });
+
+  it("serializes border side colors, widths and styles in computed style", () => {
+    const { value } = harness.compileAndRun(
+      "border-computed",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #f1 { border: 2px solid #00f; width: 60px; height: 20px; }
+        #f2 { border-top-color: #f00; border-top-width: 3px; border-top-style: dashed; }
+        #f3 { border-width: 1px 2px 3px 4px; border-style: dotted; color: #0f0; }
+        #f4 { }
+      </style></head><body>
+        <div id="f1"></div><div id="f2"></div><div id="f3"></div><div id="f4"></div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "border", width: 320, height: 200 });
+      win.on("ready", () => {
+        win.loadHTML(HTML);
+        console.log("f1=" + win.computedStyle("#f1", "border-top-color") + ":" +
+                    win.computedStyle("#f1", "border-top-width") + ":" +
+                    win.computedStyle("#f1", "border-top-style"));
+        console.log("f2=" + win.computedStyle("#f2", "border-top-color") + ":" +
+                    win.computedStyle("#f2", "border-top-width") + ":" +
+                    win.computedStyle("#f2", "border-top-style"));
+        console.log("f3=" + win.computedStyle("#f3", "border-left-width") + ":" +
+                    win.computedStyle("#f3", "border-bottom-width") + ":" +
+                    win.computedStyle("#f3", "border-top-color"));
+        console.log("f4=" + win.computedStyle("#f4", "border-top-color") + ":" +
+                    win.computedStyle("#f4", "border-top-width") + ":" +
+                    win.computedStyle("#f4", "border-top-style"));
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("f1")).toBe("rgb(0, 0, 255):2px:solid");
+    expect(value("f2")).toBe("rgb(255, 0, 0):3px:dashed");
+    // A single color declaration resolves to currentColor and applies to every
+    // side; per-side widths stay distinct.
+    expect(value("f3")).toBe("4px:3px:rgb(0, 255, 0)");
+    // No border: a used width of 0, style `none`, currentColor.
+    expect(value("f4")).toBe("rgb(0, 0, 0):0px:none");
+  });
 });

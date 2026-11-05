@@ -2,14 +2,14 @@
 
 > 属于[未实现语法与功能](../unimplemented.md) · [English](../../unimplemented/node.md)
 
-Node 扩展实现了 21 个模块以及事件循环集成；已实现表面按模块记录在
+Node 扩展实现了 22 个模块以及事件循环集成；已实现表面按模块记录在
 [Node 扩展：已实现](../implemented/node.md)。本节记录缺失或与 Node 不同之处。
 
 ## 目录
 
 - [`fs`](./node/fs.md) —— 回调式异步操作、真正的文件监听、选项回调
 - [`fs/promises`](./node/fs-promises.md) —— `FileHandle` 追加/读取偏移、`Dir` 回调立即完成、`watch` 不触发、无取消
-- [完全未实现的模块](./node/modules.md) —— `https`、`readline`、`tls`、`cluster`、`vm` 等
+- [完全未实现的模块](./node/modules.md) —— `https`、`tls`、`cluster`、`vm` 等
 - [全局对象与命名空间](./node/globals.md) —— `global`、`__dirname`、`node_modules` 之外的 `require`
 - [异步与事件循环模型](./node/async.md) —— 文件监听缺失、阻塞式 `net.connect`、无 keep-alive、固定大小线程池
 - [Bun 扩展](./node/bun.md) —— 仅为设计示例

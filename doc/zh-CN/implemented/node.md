@@ -31,6 +31,7 @@ TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编
 | `events` | [events](./node/events.md) | `EventEmitter`（全局与具名导出） |
 | `util` | [util](./node/util.md) | 格式化、inspect 与类型谓词 |
 | `querystring` | [querystring](./node/querystring.md) | parse / stringify / escape |
+| `readline` | [readline](./node/readline.md) | 基于 stdin 的逐行/question 读取与光标辅助函数 |
 | `assert` | [assert](./node/assert.md) | 断言函数 |
 | `test` | [test](./node/test.md) | 最小 TAP 运行器 |
 | `crypto` | [crypto](./node/crypto.md) | `createHash`（SHA-1 / SHA-256） |

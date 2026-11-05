@@ -30,6 +30,8 @@ export interface RunOptions {
   files?: Record<string, string>;
   /** Extra environment variables for the compiled binary (e.g. XT_GC_THRESHOLD). */
   env?: Record<string, string>;
+  /** Text fed to the child's standard input (for `readline` and stdin tests). */
+  input?: string;
   /**
    * Return stdout/stderr exactly as captured. By default CRLF is normalised to
    * LF: the runtime opens stdout in binary mode on Windows, so a CRLF a test
@@ -52,6 +54,8 @@ export interface NodeRunOptions {
   timeout?: number;
   /** Extra modules written next to the entry file, keyed by relative path. */
   files?: Record<string, string>;
+  /** Text fed to the child's standard input. */
+  input?: string;
   /** See {@link RunOptions.raw}. */
   raw?: boolean;
 }
@@ -130,6 +134,7 @@ export function describeE2E(
       const executed = spawnSync(result.outputPath, [], {
         encoding: "utf8",
         ...(runOptions.env ? { env: { ...process.env, ...runOptions.env } } : {}),
+        ...(runOptions.input !== undefined ? { input: runOptions.input } : {}),
         ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
       });
       return {
@@ -145,6 +150,7 @@ export function describeE2E(
       writeFileSync(entry, source);
       const executed = spawnSync(process.execPath, ["--import", "tsx", entry], {
         encoding: "utf8",
+        ...(runOptions.input !== undefined ? { input: runOptions.input } : {}),
         ...(runOptions.timeout ? { timeout: runOptions.timeout } : {}),
       });
       expect(executed.status).toBe(0);

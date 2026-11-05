@@ -184,12 +184,8 @@ export const operatorExpressionMethods: OperatorExpressionMethods = {
         this.emit(`  ${result} = call i64 @xt_bit_not(i64 ${operand})`);
         return result;
       }
-      case PrefixUnaryOperator.TypeOf: {
-        const operand = this.emitExpression(node.operand);
-        const result = this.reg();
-        this.emit(`  ${result} = call i64 @xt_typeof(i64 ${operand})`);
-        return result;
-      }
+      case PrefixUnaryOperator.TypeOf:
+        return this.emitTypeOf(node.operand);
       case PrefixUnaryOperator.Void:
         if (node.operand) this.emitExpression(node.operand);
         return i64(XT_UNDEFINED);

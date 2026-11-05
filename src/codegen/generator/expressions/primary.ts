@@ -34,6 +34,9 @@ import {
   CTOR_FUNCTIONS,
   ERROR_CONSTRUCTORS,
   FIRST_CLASS_CONSTRUCTORS,
+  GLOBAL_FUNCTIONS,
+  NAMESPACE_PROPERTIES,
+  NAMESPACE_STATICS,
   NAMESPACE_VALUES,
 } from "../tables.js";
 import type { GlobalValue } from "../../../extensions/registry.js";
@@ -42,6 +45,15 @@ import type { Generator } from "../generator.js";
 export interface PrimaryExpressionMethods {
   emitExpression(this: Generator, node: Expression): string;
   emitIdentifier(this: Generator, identifier: Identifier): string;
+  /**
+   * `typeof` lowering. Host globals the compiler knows about but that have no
+   * first-class value (the console object, `JSON`, `performance`, extension
+   * builtins such as `requestAnimationFrame`) used to lower their operand as
+   * an undefined constant, so `typeof` reported "undefined" for a global the
+   * program could call. Answer these from the known global kinds instead.
+   */
+  emitTypeOf(this: Generator, operand: Expression): string;
+  globalTypeOf(this: Generator, name: string): string | undefined;
   emitGlobalValue(this: Generator, value: GlobalValue): string;
   emitFunctionValue(this: Generator, symbol: SymbolInfo): string;
   emitTemplate(this: Generator, node: TemplateLiteral): string;
@@ -111,12 +123,8 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return this.emitExpression((node as { expression: Expression }).expression);
       case SyntaxKind.DeleteExpression:
         return this.emitDelete(node as DeleteExpression);
-      case SyntaxKind.TypeOfExpression: {
-        const operand = this.emitExpression((node as { expression: Expression }).expression);
-        const result = this.reg();
-        this.emit(`  ${result} = call i64 @xt_typeof(i64 ${operand})`);
-        return result;
-      }
+      case SyntaxKind.TypeOfExpression:
+        return this.emitTypeOf((node as { expression: Expression }).expression);
       case SyntaxKind.VoidExpression:
         this.emitExpression((node as { expression: Expression }).expression);
         return i64(XT_UNDEFINED);
@@ -164,6 +172,50 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         this.unsupported(node, "expression");
         return i64(XT_UNDEFINED);
     }
+  },
+
+  emitTypeOf(operand: Expression): string {
+    if (operand.kind === SyntaxKind.Identifier) {
+      const identifier = operand as Identifier;
+      /* A real binding (including an import) shadows the global, so lower it
+       * normally. Only an unresolved name can be a host global. */
+      if (!this.binding.symbolOfIdentifier.get(identifier)) {
+        const kind = this.globalTypeOf(identifier.text);
+        if (kind !== undefined) return this.stringValue(kind);
+      }
+    }
+    const value = this.emitExpression(operand);
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_typeof(i64 ${value})`);
+    return result;
+  },
+
+  /** Known kind of an unresolved global name, or undefined when the runtime
+   * getter should answer (`window`, `document`, `localStorage`, …). */
+  globalTypeOf(this: Generator, name: string): string | undefined {
+    /* A host extension function has no object value yet, but it is callable. */
+    if (this.builtins[name]) return "function";
+    /* Extension values are real host objects (or deliberately undefined for an
+     * unsupported type), so let `xt_typeof` inspect the getter's result. */
+    if (this.globalValues[name]) return undefined;
+    if (
+      ERROR_CONSTRUCTORS[name] ||
+      FIRST_CLASS_CONSTRUCTORS.has(name) ||
+      CTOR_FUNCTIONS[name] ||
+      BUILTIN_FUNCTION_VALUES[name] ||
+      GLOBAL_FUNCTIONS[name]
+    ) {
+      return "function";
+    }
+    if (
+      name === "console" ||
+      NAMESPACE_STATICS[name] ||
+      NAMESPACE_VALUES[name] ||
+      NAMESPACE_PROPERTIES[name]
+    ) {
+      return "object";
+    }
+    return undefined;
   },
 
   emitIdentifier(identifier: Identifier): string {

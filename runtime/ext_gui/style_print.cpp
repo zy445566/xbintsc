@@ -234,6 +234,8 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   static const char *const clearNames[] = {"none", "left", "right", "both"};
   static const char *const alignTextNames[] = {"start", "center", "end", "justify"};
   static const char *const textTransformNames[] = {"none", "uppercase", "lowercase", "capitalize"};
+  static const char *const decorationStyleNames[] = {"solid", "double", "dotted", "dashed", "wavy"};
+  static const char *const overflowWrapNames[] = {"normal", "break-word", "anywhere"};
   static const char *const writingModeNames[] = {"horizontal-tb", "vertical-rl", "vertical-lr"};
   static const char *const cursorNames[] = {"auto", "default", "pointer", "text", "move",
                                             "wait", "help", "not-allowed", "crosshair"};
@@ -251,6 +253,9 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "display") {
     if (style.inline_level) return style.display == Display::Grid ? "inline-grid" : "inline-flex";
     return displayNames[(int)style.display];
+  }
+  if (property == "box-sizing") {
+    return style.box_sizing == BoxSizing::BorderBox ? "border-box" : "content-box";
   }
   if (property == "position") return positionNames[(int)style.position];
   if (property == "color") return formatColor(style.color);
@@ -283,6 +288,29 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   }
   if (property == "text-align") return alignTextNames[(int)style.text_align];
   if (property == "text-transform") return textTransformNames[(int)style.text_transform];
+  if (property == "text-decoration" || property == "text-decoration-line") {
+    if (style.text_decoration_line == 0) return "none";
+    std::string out;
+    if (style.text_decoration_line & (uint8_t)TextDecorationLine::Underline) out = "underline";
+    if (style.text_decoration_line & (uint8_t)TextDecorationLine::Overline) {
+      if (!out.empty()) out += " ";
+      out += "overline";
+    }
+    if (style.text_decoration_line & (uint8_t)TextDecorationLine::LineThrough) {
+      if (!out.empty()) out += " ";
+      out += "line-through";
+    }
+    return out;
+  }
+  if (property == "text-decoration-style") {
+    return decorationStyleNames[(int)style.text_decoration_style];
+  }
+  if (property == "text-decoration-color") {
+    return formatColor(style.has_text_decoration_color ? style.text_decoration_color : style.color);
+  }
+  if (property == "overflow-wrap" || property == "word-wrap") {
+    return overflowWrapNames[(int)style.overflow_wrap];
+  }
   if (property == "text-overflow") {
     return style.text_overflow == TextOverflow::Ellipsis ? "ellipsis" : "clip";
   }

@@ -59,6 +59,107 @@ describe.skipIf(!guiAvailable)("gui extension — CSS features", () => {
     expect(value("b")).toBe("110.0,10.0");
   });
 
+  it("resolves a percentage width against the content box under box-sizing", () => {
+    const { value } = harness.compileAndRun(
+      "box-sizing",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        .card { width: 300px; padding: 24px; box-sizing: border-box; }
+        input { width: 100%; padding: 4px; border: 2px solid #000; box-sizing: border-box; }
+        .plain { width: 100px; padding: 10px; box-sizing: content-box; }
+      </style></head><body>
+        <div class="card"><input id="field"></div>
+        <div class="plain" id="plain"></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "box-sizing", width: 400, height: 300 });
+      win.on("ready", () => {
+        const card = win.getBoundingClientRect(".card");
+        const field = win.getBoundingClientRect("#field");
+        const plain = win.getBoundingClientRect("#plain");
+        console.log("card=" + card.width);
+        console.log("field=" + field.width);
+        console.log("plain=" + plain.width);
+        console.log("card-box=" + win.computedStyle(".card", "box-sizing"));
+        console.log("field-box=" + win.computedStyle("#field", "box-sizing"));
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+      { console: true, autocloseMs: 2000 },
+    );
+    // The card's 300px border box leaves 252px of content for the field.
+    expect(value("card")).toBe("300");
+    expect(value("field")).toBe("252");
+    // content-box keeps the declared width as the content width.
+    expect(value("plain")).toBe("120");
+    expect(value("card-box")).toBe("border-box");
+    expect(value("field-box")).toBe("border-box");
+  });
+
+  it("parses text decoration and overflow-wrap, and breaks long words", () => {
+    const { value, stdout } = harness.compileAndRun(
+      "text-decoration",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; font-size: 16px; }
+        #u { text-decoration: underline; }
+        #t { text-decoration: line-through #ff0000; }
+        #o { text-decoration: overline dashed blue; }
+        #w { width: 60px; overflow-wrap: break-word; }
+        #n { width: 60px; word-wrap: normal; }
+      </style></head><body>
+        <p id="u">under</p>
+        <p id="t">through</p>
+        <p id="o">over</p>
+        <div id="w">supercalifragilisticexpialidocious</div>
+        <div id="n">supercalifragilisticexpialidocious</div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "text", width: 400, height: 300 });
+      win.on("ready", () => {
+        for (const id of ["u", "t", "o", "w", "n"]) {
+          const rect = win.getBoundingClientRect("#" + id);
+          console.log(id + "=" + rect.width + "x" + rect.height);
+        }
+        console.log("u-decoration=" + win.computedStyle("#u", "text-decoration"));
+        console.log("t-decoration=" + win.computedStyle("#t", "text-decoration"));
+        console.log("t-color=" + win.computedStyle("#t", "text-decoration-color"));
+        console.log("o-style=" + win.computedStyle("#o", "text-decoration-style"));
+        console.log("w-wrap=" + win.computedStyle("#w", "overflow-wrap"));
+        console.log("n-wrap=" + win.computedStyle("#n", "word-wrap"));
+        console.log("paint=" + win.paintList().trim());
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+      { console: true, autocloseMs: 2000 },
+    );
+
+    expect(value("u-decoration")).toBe("underline");
+    expect(value("t-decoration")).toBe("line-through");
+    expect(value("t-color")).toBe("rgb(255, 0, 0)");
+    expect(value("o-style")).toBe("dashed");
+    expect(value("w-wrap")).toBe("break-word");
+    expect(value("n-wrap")).toBe("normal");
+    // break-word splits the 65px word into lines; normal lets it overflow one.
+    expect(value("w")).toBe("60x64");
+    expect(value("n")).toBe("60x16");
+    const rules = stdout.split("\n").filter((line) => line.startsWith("rect ") && line.includes("h=1.1"));
+    expect(rules.length).toBe(3);
+  });
+
   it("paints box-shadow and blurred text-shadow as Gaussian masks", () => {
     const { value, stdout } = harness.compileAndRun(
       "shadows",

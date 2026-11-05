@@ -25,7 +25,10 @@
   技术栈测量（见[文本技术栈](./rendering.md)）。`white-space: nowrap`
   让一段文本不在空格处换行（源码换行会折叠为空格）；在 `overflow` 不是
   `visible` 的盒子上，`text-overflow: ellipsis` 会把溢出线放不下的部分替换为
-  单个 U+2026 省略号并丢弃其余内容。
+  单个 U+2026 省略号并丢弃其余内容。`overflow-wrap: break-word` / `anywhere`
+  （以及 `word-wrap` 别名）会在放不下时按当前行剩余空间的最长前缀拆分单词。
+  `text-decoration` 会解析 line/style/color 分量，并把 underline、overline 与
+  line-through 绘制为实线（dashed/dotted/wavy 会出现在计算样式中，但按实线绘制）。
 - **Flexbox** —— `row`/`column`（以及 `-reverse` 变体），支持 `gap`、
   `flex-basis`/`flex-grow`/`flex-shrink`、`justify-content` 与 `align-items`
   （当交叉轴尺寸确定时包括 `stretch`）。两个方向的主轴尺寸都先取

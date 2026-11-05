@@ -29,7 +29,11 @@ with absolute (viewport-relative) geometry:
   `white-space: nowrap` stops a run from wrapping at spaces (a source newline
   collapses to a space); `text-overflow: ellipsis` on a box whose `overflow` is
   not `visible` replaces the part of an overflowing line that does not fit with
-  a single U+2026 ellipsis and drops the rest.
+  a single U+2026 ellipsis and drops the rest. `overflow-wrap: break-word` /
+  `anywhere` (and the `word-wrap` alias) splits a word that does not fit at the
+  largest prefix the remaining line can hold. `text-decoration` parses its
+  line/style/colour components and paints underline, overline and line-through
+  as solid rules (dashed/dotted/wavy are reported computed but painted solid).
 - **Flexbox** — `row`/`column` (and the `-reverse` variants) with `gap`,
   `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and `align-items`
   (including `stretch` when the cross size is definite). On both axes the main

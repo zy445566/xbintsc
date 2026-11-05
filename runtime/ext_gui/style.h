@@ -10,6 +10,7 @@
 #ifndef XT_GUI_STYLE_H
 #define XT_GUI_STYLE_H
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -37,6 +38,11 @@ enum class TextAlign { Start, Center, End, Justify };
 enum class TextOverflow { Clip, Ellipsis };
 enum class WhiteSpace { Normal, NoWrap, Pre, PreWrap, PreLine };
 enum class Overflow { Visible, Hidden, Scroll, Auto };
+/** `text-decoration-line` is a bit set; `None` is zero. */
+enum class TextDecorationLine : uint8_t { None = 0, Underline = 1, Overline = 2, LineThrough = 4 };
+enum class TextDecorationStyle { Solid, Double, Dotted, Dashed, Wavy };
+/** `overflow-wrap` (and its legacy `word-wrap` spelling). */
+enum class OverflowWrap { Normal, BreakWord, Anywhere };
 enum class BorderStyle { None, Solid, Dashed, Dotted };
 enum class FontStyle { Normal, Italic };
 
@@ -311,6 +317,13 @@ struct XtStyle {
   TextOverflow text_overflow = TextOverflow::Clip;
   WhiteSpace white_space = WhiteSpace::Normal;  // inherited
   TextTransform text_transform = TextTransform::None;  // inherited
+  /** `text-decoration` shorthand (line/style/color); not inherited, but it
+   * propagates visually to in-flow descendants. */
+  uint8_t text_decoration_line = 0;
+  TextDecorationStyle text_decoration_style = TextDecorationStyle::Solid;
+  Color text_decoration_color{0.0f, 0.0f, 0.0f, 1.0f};
+  bool has_text_decoration_color = false;
+  OverflowWrap overflow_wrap = OverflowWrap::Normal;  // inherited
   /** Resolved to pixels in the cascade (em is the element's own font size). */
   Length letter_spacing{0.0f, Unit::Px};  // inherited
   bool font_variant_numeric = false;  // inherited; accepted, no OpenType features

@@ -183,6 +183,8 @@ bubbles from the focused element or `<body>`, before the window listeners run.
 | `key`, `code` | keyboard | browser `KeyboardEvent` spellings: produced value and physical key |
 | `repeat`, `ctrl`, `shift`, `alt`, `meta` | keyboard | modifiers (the legacy DOM spellings) |
 | `ctrlKey`, `shiftKey`, `altKey`, `metaKey` | keyboard | modifiers (the current DOM spellings) |
+| `data` | composition | pre-edit text (`compositionstart`/`update`/`end`) |
+| `text` | `textInput` | the text an IME/keyboard layout produced |
 | `target` | pointer, wheel | deepest element under the point as a CSS-like descriptor (`div#main.card`), or absent |
 
 ## Diagnostics
@@ -202,7 +204,9 @@ win.inlineSvg(selector)                // serialized inline <svg>: { markup, wid
 win.measureText(text, fontSize?, family?)  // shaped advance width in pixels
 win.fontMetrics(fontSize?, family?)    // { ascent, descent, lineHeight, ready }
 win.hitTest(x, y)                      // deepest element descriptor, or ""
-win.sendEvent(type, options?)          // synthesise input (testing)
+win.sendEvent(type, options?)          // synthesise input (testing); also
+                                       // "textInput" + { text } and the
+                                       // "composition*" events + { data }
 win.advance(ms)                        // step the CSS transition clock (testing)
 win.stats()                            // engine/runtime counters (memory debugging)
 ```

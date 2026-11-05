@@ -82,13 +82,12 @@ xt_gui: warning: unsupported CSS unit 'vmin'; the value is ignored
 
 - **HTML 元素**：引擎缺少其浏览器行为的标签——`applet`、`area`、`basefont`、
   `bgsound`、`blink`、`caption`、`col`、`colgroup`、`datalist`、`details`、
-  `dialog`、`embed`、`frame`、`frameset`、`iframe`、`input`、`isindex`、
-  `keygen`、`map`、`marquee`、`math`、`meter`、`noembed`、`noframes`、
-  `object`、`optgroup`、`option`、`output`、`param`、`plaintext`、`progress`、
-  `select`、`summary`、`table`、`tbody`、`td`、`template`、`textarea`、`tfoot`、
-  `th`、`thead`、`tr`、`track` 与 `xmp`。其余标签——包括 `button`、`label`、
-  自定义元素以及 `<dvi>` 这类拼写错误——都会渲染成普通盒子，这是预期的回退而
-  不是被丢弃的特性，因此不会报告。
+  `dialog`、`embed`、`frame`、`frameset`、`iframe`、`isindex`、`keygen`、`map`、
+  `marquee`、`math`、`meter`、`noembed`、`noframes`、`object`、`output`、`param`、
+  `plaintext`、`progress`、`summary`、`table`、`tbody`、`td`、`template`、`tfoot`、
+  `th`、`thead`、`tr`、`track` 与 `xmp`。其余标签——包括 `button`、`input`、
+  `label`、`select`、`textarea`、自定义元素以及 `<dvi>` 这类拼写错误——都会渲染
+  成盒子，这是预期的回退而不是被丢弃的特性，因此不会报告。
 - **HTML 特性（attribute）**：请求了不支持行为的 `href`（链接不会导航）、
   `srcset`、`sizes`、`poster`、`controls`、`contenteditable`、`draggable`、
   `autofocus`、`tabindex`、`hidden`，以及 SVG 的

@@ -191,6 +191,44 @@ METHOD(node_is_connected_get);
 METHOD(node_class_list_get);
 METHOD(node_style_get);
 
+/* form controls (`<input>`, `<textarea>`, `<select>`) */
+METHOD(node_value_get);
+METHOD(node_value_set);
+METHOD(node_default_value_get);
+METHOD(node_checked_get);
+METHOD(node_checked_set);
+METHOD(node_type_get);
+METHOD(node_type_set);
+METHOD(node_name_get);
+METHOD(node_name_set);
+METHOD(node_disabled_get);
+METHOD(node_disabled_set);
+METHOD(node_read_only_get);
+METHOD(node_read_only_set);
+METHOD(node_required_get);
+METHOD(node_required_set);
+METHOD(node_placeholder_get);
+METHOD(node_placeholder_set);
+METHOD(node_selection_start_get);
+METHOD(node_selection_start_set);
+METHOD(node_selection_end_get);
+METHOD(node_selection_end_set);
+METHOD(node_selection_direction_get);
+METHOD(node_set_selection_range);
+METHOD(node_select);
+METHOD(node_form_get);
+METHOD(node_options_get);
+METHOD(node_selected_index_get);
+METHOD(node_selected_index_set);
+METHOD(node_max_length_get);
+METHOD(node_max_length_set);
+METHOD(node_min_get);
+METHOD(node_min_set);
+METHOD(node_max_get);
+METHOD(node_max_set);
+METHOD(node_step_get);
+METHOD(node_step_set);
+
 /* node methods */
 METHOD(node_get_attribute);
 METHOD(node_set_attribute);

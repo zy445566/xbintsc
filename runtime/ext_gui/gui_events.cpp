@@ -7,6 +7,7 @@
 #include "gui_keymap.h"
 #include "listener_options.h"
 
+#include "form_state.h"
 #include "paint.h"
 #include "perf.h"
 
@@ -187,27 +188,45 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
                              int clicks) {
   if (win == NULL || !win->open) return;
   const xtgui::Node *node = xt_gui_hit_node(win, x, y);
+  xtgui::Node *target = const_cast<xtgui::Node *>(node);
   xt_gui_update_hover(win, node);
+  bool prevented = false;
   if (win->document != nullptr) {
     if (strcmp(type, "mousedown") == 0) {
-      if (win->document->setFocus(node)) {
-        win->geometry.dirty = 1;
-        win->present_dirty = 1;
+      if (target != nullptr && xtgui::xt_form_is_focusable(target)) {
+        xt_gui_form_pointer(win, "mousedown", target, x, y);
+      } else if (target != nullptr && xtgui::xt_form_is_control(target)) {
+        /* A disabled/hidden control is not focusable and does not take focus. */
+        xt_gui_set_focus(win, nullptr);
+      } else {
+        xt_gui_set_focus(win, target);
       }
       if (win->document->setActive(node)) {
         win->geometry.dirty = 1;
         win->present_dirty = 1;
       }
     } else if (strcmp(type, "mouseup") == 0) {
+      const xtgui::Node *active = win->document->active();
+      if (active != nullptr && active->form && active->form->dragging) {
+        xt_gui_form_pointer(win, "mouseup", const_cast<xtgui::Node *>(active), x, y);
+      }
       if (win->document->setActive(nullptr)) {
         win->geometry.dirty = 1;
         win->present_dirty = 1;
       }
+    } else if (strcmp(type, "mousemove") == 0) {
+      const xtgui::Node *active = win->document->active();
+      if (active != nullptr && active->form && active->form->dragging) {
+        xt_gui_form_pointer(win, "mousemove", const_cast<xtgui::Node *>(active), x, y);
+      }
     }
   }
   xt_value payload = xt_gui_pointer_payload(type, win, x, y, button, clicks, node);
-  if (node != nullptr) xt_gui_emit_dom_event(win, type, node, payload);
+  if (node != nullptr) prevented = xt_gui_emit_dom_event(win, type, node, payload);
   xt_gui_emit_payload(win, type, payload);
+  if (!prevented && node != nullptr && strcmp(type, "click") == 0) {
+    xt_gui_form_pointer(win, "click", target, x, y);
+  }
 }
 
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y) {
@@ -262,12 +281,16 @@ static const xtgui::Node *xt_gui_key_target(XtGuiWindow *win) {
 }
 
 /** Deliver one fully built keyboard payload to the DOM (bubbling from the
- * focused element / body to `document`) and then to `window` listeners. */
+ * focused element / body to `document`) and then to `window` listeners. When
+ * the DOM did not cancel a `keydown`, run the focused control's editing
+ * default action. */
 static void xt_gui_dispatch_key_payload(XtGuiWindow *win, const char *type, xt_value payload) {
   if (win == NULL || !win->open) return;
   const xtgui::Node *node = xt_gui_key_target(win);
-  if (node != nullptr) xt_gui_emit_dom_event(win, type, node, payload);
+  bool prevented = false;
+  if (node != nullptr) prevented = xt_gui_emit_dom_event(win, type, node, payload);
   xt_gui_emit_payload(win, type, payload);
+  if (!prevented && strcmp(type, "keydown") == 0) xt_gui_form_key_down(win, payload);
 }
 
 void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code) {
@@ -284,6 +307,10 @@ void xt_gui_dispatch_physical_key(XtGuiWindow *win, const char *type, int scanco
                    caps_lock, &key, &code);
   xt_value payload = xt_gui_key_payload(type, key.c_str(), code.c_str(), repeat, ctrl, shift, alt,
                                         meta);
+  /* Mark the payload so the editing default action knows the produced text will
+   * arrive separately as `SDL_EVENT_TEXT_INPUT` (inserting the US `key` here too
+   * would double every character on an IME or non-US layout). */
+  xt_object_set(payload, xt_string_from_cstr("__xt_gui_physical"), XT_TRUE);
   xt_gui_dispatch_key_payload(win, type, payload);
 }
 
@@ -324,6 +351,19 @@ void handle_event(const SDL_Event *event) {
       win->present_dirty = 1;
       win->expose_pending = 1;
     }
+    return;
+  }
+
+  if (event->type == SDL_EVENT_TEXT_INPUT) {
+    XtGuiWindow *win = xt_gui_find_by_window_id(event->text.windowID);
+    if (win == NULL || !win->open) return;
+    xt_gui_text_input(win, event->text.text);
+    return;
+  }
+  if (event->type == SDL_EVENT_TEXT_EDITING) {
+    XtGuiWindow *win = xt_gui_find_by_window_id(event->edit.windowID);
+    if (win == NULL || !win->open) return;
+    xt_gui_text_editing(win, event->edit.text, event->edit.start, event->edit.length);
     return;
   }
 

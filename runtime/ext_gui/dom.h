@@ -26,6 +26,37 @@ struct Attr {
   std::string value;
 };
 
+/** Editable/checkable state of a form control (`<input>`, `<textarea>`,
+ * `<select>`). The browser keeps this in the element's internal value, separate
+ * from the `value`/`checked` *attributes*; the engine does the same so
+ * `<input value="a">` (the default) and `el.value = "b"` (the live value) do not
+ * overwrite each other. */
+struct FormState {
+  std::string value;
+  bool initialized = false;
+  /** `checkbox`/`radio` state (the `checked` attribute is only the default). */
+  bool checked = false;
+  bool checked_initialized = false;
+  /** Selection in UTF-16 code units, like the DOM's `selectionStart`/`End`. */
+  int selection_start = 0;
+  int selection_end = 0;
+  /** 0 = none, 1 = forward, -1 = backward (`selectionDirection`). */
+  int selection_direction = 0;
+  bool focused = false;
+  /** IME composition: `composition` is displayed at the selection until the
+   * `compositionend` commit inserts it into `value`. */
+  bool composing = false;
+  std::string composition;
+  int composition_start = 0;
+  int composition_end = 0;
+  /** `<select>`: index of the selected `<option>`, or -1 when it has none. */
+  int selected_index = -1;
+  /** Range drag in progress (paint and pointer dispatch share it). */
+  bool dragging = false;
+  /** `<textarea>` first visible line (reserved; the engine paints from line 0). */
+  int scroll_top = 0;
+};
+
 /** A DOM node. Element/text/document are one type to keep the tree simple. */
 struct Node {
   NodeType type = NodeType::Element;
@@ -38,6 +69,8 @@ struct Node {
   std::vector<Attr> attrs;
   Node *parent = nullptr;
   std::vector<std::unique_ptr<Node>> children;
+  /** Form-control state, allocated only for `<input>`/`<textarea>`/`<select>`. */
+  std::unique_ptr<FormState> form;
 
   /* -- generated content (`::before` / `::after`) -------------------------
    * A pseudo-element is a synthetic node owned by the document's per-restyle

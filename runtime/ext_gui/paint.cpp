@@ -279,7 +279,10 @@ void paintBoxInner(const LayoutBox *box, DisplayList &out, const PaintClip &clip
       paint_detail::addBoxShadows(out, *box, *style, chain, own, true, viewportWidth,
                                   viewportHeight);
       paint_detail::addOutline(out, *box, *style, chain, own, viewportWidth, viewportHeight);
-      if (box->is_canvas && box->canvas_id != 0 && box->content_width > 0.0f &&
+      if (box->is_control) {
+        paint_detail::xt_paint_form_control(*box, *style, out, contentClip, chain, viewportWidth,
+                                            viewportHeight);
+      } else if (box->is_canvas && box->canvas_id != 0 && box->content_width > 0.0f &&
           box->content_height > 0.0f) {
         PaintImage image;
         image.x = box->content_x;

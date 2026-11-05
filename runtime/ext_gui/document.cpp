@@ -4,6 +4,7 @@
 
 #include "document.h"
 
+#include "form_state.h"
 #include "warnings.h"
 
 #include <cmath>
@@ -73,10 +74,21 @@ void XtDocument::load(const std::string &html, float viewportWidth, float viewpo
   restyle(viewportWidth, viewportHeight);
 }
 
+namespace {
+void initialiseFormControls(Node *node) {
+  if (node == nullptr) return;
+  if (node->isElement() && xt_form_is_control(node)) xt_form_init(node);
+  for (const std::unique_ptr<Node> &child : node->children) {
+    initialiseFormControls(child.get());
+  }
+}
+}  // namespace
+
 void XtDocument::restyle(float viewportWidth, float viewportHeight) {
   viewportWidth_ = viewportWidth;
   viewportHeight_ = viewportHeight;
   g_perf_frame.restyles += 1;
+  if (root_ != nullptr) initialiseFormControls(root_.get());
   if (root_ != nullptr) {
     MatchState state;
     state.hover = hover_;

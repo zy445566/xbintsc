@@ -50,6 +50,27 @@ xt_value node_proto() {
   define_getter(proto, "dataset", (void *)node_dataset_get);
   define_getter(proto, "offsetWidth", (void *)node_offset_width_get);
   define_getter(proto, "offsetHeight", (void *)node_offset_height_get);
+  /* Form-control properties (`<input>`/`<textarea>`/`<select>`; undefined on
+   * other elements, as in the DOM). */
+  define_getter(proto, "value", (void *)node_value_get);
+  define_getter(proto, "defaultValue", (void *)node_default_value_get);
+  define_getter(proto, "checked", (void *)node_checked_get);
+  define_getter(proto, "type", (void *)node_type_get);
+  define_getter(proto, "name", (void *)node_name_get);
+  define_getter(proto, "disabled", (void *)node_disabled_get);
+  define_getter(proto, "readOnly", (void *)node_read_only_get);
+  define_getter(proto, "required", (void *)node_required_get);
+  define_getter(proto, "placeholder", (void *)node_placeholder_get);
+  define_getter(proto, "selectionStart", (void *)node_selection_start_get);
+  define_getter(proto, "selectionEnd", (void *)node_selection_end_get);
+  define_getter(proto, "selectionDirection", (void *)node_selection_direction_get);
+  define_getter(proto, "form", (void *)node_form_get);
+  define_getter(proto, "options", (void *)node_options_get);
+  define_getter(proto, "selectedIndex", (void *)node_selected_index_get);
+  define_getter(proto, "maxLength", (void *)node_max_length_get);
+  define_getter(proto, "min", (void *)node_min_get);
+  define_getter(proto, "max", (void *)node_max_get);
+  define_getter(proto, "step", (void *)node_step_get);
   /* Media element properties (`<video>`/`<audio>`; harmless on any element). */
   define_getter(proto, "paused", (void *)node_paused_get);
   define_getter(proto, "ended", (void *)node_ended_get);
@@ -81,6 +102,21 @@ xt_value node_proto() {
   define_setter(proto, "src", (void *)node_media_src_set);
   define_setter(proto, "width", (void *)node_width_set);
   define_setter(proto, "height", (void *)node_height_set);
+  define_setter(proto, "value", (void *)node_value_set);
+  define_setter(proto, "checked", (void *)node_checked_set);
+  define_setter(proto, "type", (void *)node_type_set);
+  define_setter(proto, "name", (void *)node_name_set);
+  define_setter(proto, "disabled", (void *)node_disabled_set);
+  define_setter(proto, "readOnly", (void *)node_read_only_set);
+  define_setter(proto, "required", (void *)node_required_set);
+  define_setter(proto, "placeholder", (void *)node_placeholder_set);
+  define_setter(proto, "selectionStart", (void *)node_selection_start_set);
+  define_setter(proto, "selectionEnd", (void *)node_selection_end_set);
+  define_setter(proto, "selectedIndex", (void *)node_selected_index_set);
+  define_setter(proto, "maxLength", (void *)node_max_length_set);
+  define_setter(proto, "min", (void *)node_min_set);
+  define_setter(proto, "max", (void *)node_max_set);
+  define_setter(proto, "step", (void *)node_step_set);
   /* Methods. */
   define_method(proto, "getAttribute", (void *)node_get_attribute);
   define_method(proto, "setAttribute", (void *)node_set_attribute);
@@ -104,6 +140,8 @@ xt_value node_proto() {
   define_method(proto, "focus", (void *)node_focus);
   define_method(proto, "blur", (void *)node_blur);
   define_method(proto, "click", (void *)node_click);
+  define_method(proto, "setSelectionRange", (void *)node_set_selection_range);
+  define_method(proto, "select", (void *)node_select);
   define_method(proto, "addEventListener", (void *)node_add_event_listener);
   define_method(proto, "removeEventListener", (void *)node_remove_event_listener);
   define_method(proto, "dispatchEvent", (void *)node_dispatch_event);

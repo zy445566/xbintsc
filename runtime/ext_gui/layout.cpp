@@ -23,6 +23,7 @@
 #include "image.h"
 #include "inline_svg.h"
 #include "perf.h"
+#include "form_state.h"
 #include "style_internal.h"
 
 namespace xtgui {
@@ -128,7 +129,12 @@ std::unique_ptr<LayoutBox> buildBoxTree(const Node *node,
     }
     if (box->intrinsic_width <= 0.0f) box->intrinsic_width = 300.0f;
     if (box->intrinsic_height <= 0.0f) box->intrinsic_height = 150.0f;
+  } else if (node->isElement() && xt_form_is_control(node)) {
+    /* A form control is a leaf: its `<option>`/text children are the model, not
+     * laid-out boxes (the value is painted from `Node::form`). */
+    box->is_control = true;
   }
+  if (box->is_control) return box;
   if (box->is_inline_svg) return box;
 
   /* `::before` / `::after` boxes are emitted around the DOM children. Only a

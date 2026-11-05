@@ -173,6 +173,28 @@ void addTextRuns(const LayoutBox *box, const XtStyle &style, DisplayList &out,
       paint_detail::addTextRun(out, fragment.x, fragment.y + ascent, fragment.width,
                                fragment.height, fragment.text, spec, base, box->world, clip, style,
                                chain, viewportWidth, viewportHeight);
+      if (style.text_decoration_line != 0) {
+        /* The decoration uses the element's text colour unless the shorthand
+         * named one. Dashed/dotted/wavy are currently painted solid; the style
+         * is still retained for `getComputedStyle`. */
+        Color rule = paint_detail::filterColor(
+            chain, style.has_text_decoration_color ? style.text_decoration_color : style.color);
+        float thickness = std::max(1.0f, style.font_size / 14.0f);
+        float baseline = fragment.y + ascent;
+        if (style.text_decoration_line & (uint8_t)TextDecorationLine::Underline) {
+          paint_detail::addRect(out, fragment.x, baseline + thickness, fragment.width, thickness,
+                                0.0f, rule, clip, box->world);
+        }
+        if (style.text_decoration_line & (uint8_t)TextDecorationLine::Overline) {
+          paint_detail::addRect(out, fragment.x, fragment.y, fragment.width, thickness, 0.0f, rule,
+                                clip, box->world);
+        }
+        if (style.text_decoration_line & (uint8_t)TextDecorationLine::LineThrough) {
+          paint_detail::addRect(out, fragment.x,
+                                fragment.y + fragment.height * 0.55f - thickness / 2.0f,
+                                fragment.width, thickness, 0.0f, rule, clip, box->world);
+        }
+      }
       continue;
     }
     if (fragment.upright) {

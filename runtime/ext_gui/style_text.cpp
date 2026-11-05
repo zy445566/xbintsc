@@ -123,6 +123,38 @@ bool isFontWeightKeyword(const std::string &token) {
   return token == "bold" || token == "bolder" || token == "lighter" || token == "normal";
 }
 
+/** One token of `text-decoration-line` (`none` clears the set). */
+bool applyDecorationLineToken(const std::string &token, uint8_t *out) {
+  if (token == "none") {
+    *out = 0;
+    return true;
+  }
+  if (token == "underline") *out |= (uint8_t)TextDecorationLine::Underline;
+  else if (token == "overline") *out |= (uint8_t)TextDecorationLine::Overline;
+  else if (token == "line-through") *out |= (uint8_t)TextDecorationLine::LineThrough;
+  else if (token == "blink") return true;  // accepted, no animation
+  else return false;
+  return true;
+}
+
+bool parseDecorationStyle(const std::string &token, TextDecorationStyle *out) {
+  if (token == "solid") *out = TextDecorationStyle::Solid;
+  else if (token == "double") *out = TextDecorationStyle::Double;
+  else if (token == "dotted") *out = TextDecorationStyle::Dotted;
+  else if (token == "dashed") *out = TextDecorationStyle::Dashed;
+  else if (token == "wavy") *out = TextDecorationStyle::Wavy;
+  else return false;
+  return true;
+}
+
+bool parseOverflowWrap(const std::string &text, OverflowWrap *out) {
+  if (text == "normal") *out = OverflowWrap::Normal;
+  else if (text == "break-word") *out = OverflowWrap::BreakWord;
+  else if (text == "anywhere") *out = OverflowWrap::Anywhere;
+  else return false;
+  return true;
+}
+
 }  // namespace
 
 std::string xt_apply_text_transform(const std::string &text, TextTransform transform) {
@@ -165,6 +197,53 @@ bool xt_style_apply_text_property(XtStyle *style, const std::string &property,
   }
   if (property == "text-transform") {
     parseTextTransform(value, &style->text_transform);
+    return true;
+  }
+  if (property == "text-decoration" || property == "text-decoration-line") {
+    std::vector<std::string> tokens = splitTokens(lowerTrim(value));
+    uint8_t line = 0;
+    bool sawLine = false;
+    for (const std::string &token : tokens) {
+      if (applyDecorationLineToken(token, &line)) {
+        sawLine = true;
+        continue;
+      }
+      if (property == "text-decoration" && parseDecorationStyle(token, &style->text_decoration_style)) {
+        continue;
+      }
+      if (property == "text-decoration") {
+        Color color = xt_css_parse_color(token);
+        if (color.valid) {
+          style->text_decoration_color = color;
+          style->has_text_decoration_color = true;
+        }
+      }
+    }
+    /* `text-decoration: <style> <color>` without a line keeps the current
+     * line; the shorthand's `none` already cleared it. */
+    if (sawLine || property == "text-decoration-line") style->text_decoration_line = line;
+    return true;
+  }
+  if (property == "text-decoration-style") {
+    parseDecorationStyle(lowerTrim(value), &style->text_decoration_style);
+    return true;
+  }
+  if (property == "text-decoration-color") {
+    Color color = xt_css_parse_color(value);
+    if (color.valid) {
+      style->text_decoration_color = color;
+      style->has_text_decoration_color = true;
+    }
+    return true;
+  }
+  if (property == "text-decoration-thickness" || property == "text-underline-offset" ||
+      property == "text-decoration-skip-ink") {
+    /* Accepted: the painter uses a fixed one-pixel rule and does not skip
+     * descenders yet. */
+    return true;
+  }
+  if (property == "overflow-wrap" || property == "word-wrap") {
+    parseOverflowWrap(lowerTrim(value), &style->overflow_wrap);
     return true;
   }
   if (property == "text-overflow") {

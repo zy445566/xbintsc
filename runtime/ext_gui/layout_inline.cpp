@@ -67,7 +67,10 @@ void Layouter::flattenInline(LayoutBox *box, float contentWidth,
     float available = contentWidth;
     float intrinsic = preferredContentWidth(box, available);
     setContainingBlock(box, containingBlockAncestor(box));
-    layoutBlock(box, 0, 0, available, -1, intrinsic);
+    /* An explicit width must go through the normal used-width path so
+     * `box-sizing: border-box` can subtract padding and borders. Only an `auto`
+     * width needs the shrink-to-fit content width forced here. */
+    layoutBlock(box, 0, 0, available, -1, isAuto(style.width) ? intrinsic : -1.0f);
     InlineItem item;
     item.box = box;
     item.style = &style;
@@ -274,24 +277,53 @@ float Layouter::layoutInlineRun(LayoutBox *container, const std::vector<LayoutBo
     lineDescent = 0;
   };
 
-  for (InlineItem &item : items) {
+  for (size_t index = 0; index < items.size(); index++) {
+    InlineItem &item = items[index];
     if (item.force_break) {
       finalize();
       continue;
     }
     if (item.is_space && line.empty()) continue;  // no leading space on a line
-    /* Break against the band the line would occupy, then place it. */
-    float pendingHeight = std::max(lineAscent + lineDescent, item.height);
-    float x0 = 0;
-    float x1 = 0;
-    band(cursorY, pendingHeight, &x0, &x1);
-    float available = x1 - x0;
-    if (wrap && lineWidth + item.width > available && !line.empty()) finalize();
-    if (item.is_space && line.empty()) continue;
-    line.push_back(&item);
-    lineWidth += item.width;
-    lineAscent = std::max(lineAscent, item.ascent);
-    lineDescent = std::max(lineDescent, item.height - item.ascent);
+    /* A `break-word`/`anywhere` word that does not fit is split at the
+     * largest prefix the remaining line can hold; the remainder is processed
+     * again on the next line. Without this a long token overflowed the box. */
+    for (;;) {
+      /* Break against the band the line would occupy, then place it. */
+      float pendingHeight = std::max(lineAscent + lineDescent, item.height);
+      float x0 = 0;
+      float x1 = 0;
+      band(cursorY, pendingHeight, &x0, &x1);
+      float available = x1 - x0;
+      bool overflows = lineWidth + item.width > available + 0.001f;
+      if (wrap && overflows) {
+        bool breakWord = item.style != nullptr &&
+                         item.style->overflow_wrap != OverflowWrap::Normal;
+        if (breakWord && !item.atomic && !item.is_space && item.text.size() > 1) {
+          float room = available - lineWidth;
+          size_t prefix = fittingPrefix(item.text, *item.style, room);
+          if (prefix > 0 && prefix < item.text.size()) {
+            InlineItem head = item;
+            head.text = item.text.substr(0, prefix);
+            head.width = textWidth(head.text, *item.style);
+            line.push_back(&head);
+            lineWidth += head.width;
+            lineAscent = std::max(lineAscent, head.ascent);
+            lineDescent = std::max(lineDescent, head.height - head.ascent);
+            finalize();
+            item.text = item.text.substr(prefix);
+            item.width = textWidth(item.text, *item.style);
+            continue;
+          }
+        }
+        if (!line.empty()) finalize();
+      }
+      if (item.is_space && line.empty()) break;
+      line.push_back(&item);
+      lineWidth += item.width;
+      lineAscent = std::max(lineAscent, item.ascent);
+      lineDescent = std::max(lineDescent, item.height - item.ascent);
+      break;
+    }
   }
   finalize();
 

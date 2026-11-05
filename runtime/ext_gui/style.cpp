@@ -187,6 +187,7 @@ void inheritFrom(XtStyle *style, const XtStyle *parent) {
   style->white_space = parent->white_space;
   style->text_shadow = parent->text_shadow;
   style->text_transform = parent->text_transform;
+  style->overflow_wrap = parent->overflow_wrap;
   style->letter_spacing = parent->letter_spacing;
   style->font_variant_numeric = parent->font_variant_numeric;
   style->writing_mode = parent->writing_mode;

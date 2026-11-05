@@ -1,13 +1,8 @@
-#if defined(_WIN32)
-#define XT_REG_MULTILINE REG_MULTILINE
-#else
-#define XT_REG_MULTILINE REG_NEWLINE
-#endif
-
-/* RegExp support built on POSIX ERE. JavaScript patterns are translated to
- * their POSIX equivalents, capturing groups are tracked so the JS capture
- * indices stay correct even after `(?:` groups are lowered, and the resulting
- * `regmatch_t` offsets are converted back to offsets into the input string. */
+/* RegExp support built on the runtime's self-contained ERE matcher. JavaScript
+ * patterns are translated to their ERE equivalents, capturing groups are
+ * tracked so the JS capture indices stay correct even after `(?:` groups are
+ * lowered, and the resulting `regmatch_t` offsets are converted back to offsets
+ * into the input string. */
 
 static int xt_regex_hex_digit(char c) {
   if (c >= '0' && c <= '9') return c - '0';
@@ -135,7 +130,7 @@ static int xt_regexp_run(xt_value regexpValue, xt_value input, int32_t start,
     const char *flagBytes = xt_string_bytes(f);
     for (uint32_t i = 0; i < f->length; i++) {
       if (flagBytes[i] == 'i') flags |= REG_ICASE;
-      if (flagBytes[i] == 'm') flags |= XT_REG_MULTILINE;
+      if (flagBytes[i] == 'm') flags |= REG_MULTILINE;
     }
   }
   char *translated = xt_regexp_translate_js(xt_string_bytes(pattern), jsGroups, groupCount);

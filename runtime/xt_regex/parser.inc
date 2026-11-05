@@ -194,7 +194,8 @@ static xt_re_node *xt_re_parse_atom(xt_re_parser *p) {
 /** Parse `{n}`, `{n,}` or `{n,m}` starting at `p->i`. On success advances past
  * the closing brace and reports the bounds. A malformed group (or one whose
  * bound is unreasonable) is left untouched so its `{` is matched as a literal,
- * which is what JavaScript does for `a{`, `a{x}` and `a{2,1}`. */
+ * which is what JavaScript does for `a{` and `a{x}`; an inverted range such as
+ * `a{2,1}` is treated as literal too rather than rejected. */
 static int xt_re_parse_brace(xt_re_parser *p, int *min, int *max) {
   size_t i = p->i;
   long low = 0;

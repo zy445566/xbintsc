@@ -1,11 +1,15 @@
 /*
  * xbintsc runtime — minimal POSIX ERE-compatible regular expressions.
  *
- * Windows does not ship <regex.h>, so on `_WIN32` targets we fall back to this
- * small self-contained matcher. It implements the subset the runtime uses:
+ * The runtime uses this self-contained matcher on every host instead of the C
+ * library's <regex.h>. Host implementations disagree on JavaScript-visible
+ * details (lazy quantifiers, counted-quantifier limits, malformed `{...}`
+ * groups), so one engine keeps a program's output identical everywhere. It
+ * implements the subset the runtime uses:
  *
  *   literals, '.', '^', '$', '[abc]', '[^abc]', '[a-z]', '*', '+', '?',
  *   alternation '|', groups '(...)', and escapes ('\d', '\w', '\s', ...).
+ *   Counted quantifiers `{n}`, `{n,}` and `{n,m}` accept a lazy `?` suffix.
  *
  * Capturing groups are reported through `regmatch_t` the same way POSIX does:
  * `pmatch[0]` is the whole match and `pmatch[k]` the k-th group in pattern

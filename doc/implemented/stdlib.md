@@ -48,8 +48,8 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 
 ## RegExp
 
-- `RegExp` uses POSIX ERE (`regcomp` / `regexec`) for `test` / `exec`, with capture groups exposed through `exec` / `match` / `replace` / `split` / `search`.
-- Quantifiers include `*`, `+`, `?` and the counted forms `{n}`, `{n,}` and `{n,m}` (with a lazy `?` suffix); a malformed or inverted brace group stays literal, as in JavaScript.
+- `RegExp` uses the runtime's self-contained POSIX-ERE-compatible matcher (`regcomp` / `regexec` style) on every host, so results do not depend on the platform's libc. Capture groups are exposed through `exec` / `match` / `replace` / `split` / `search`.
+- Quantifiers include `*`, `+`, `?` and the counted forms `{n}`, `{n,}` and `{n,m}` (with a lazy `?` suffix). Malformed brace groups such as `{x}` and `{,2}` stay literal, as in JavaScript; an inverted range such as `{2,1}` is also treated as literal instead of being rejected.
 - Matching is byte-oriented and `/g` / `/y` `lastIndex` is not honoured — see [Runtime deviations](../unimplemented/deviations.md).
 
 ## Symbol

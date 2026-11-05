@@ -46,8 +46,8 @@
 
 ## RegExp
 
-- `RegExp` 使用 POSIX ERE（`regcomp` / `regexec`）实现 `test` / `exec`；捕获组可经 `exec` / `match` / `replace` / `split` / `search` 使用。
-- 量词支持 `*`、`+`、`?` 以及计数形式 `{n}`、`{n,}`、`{n,m}`（可带惰性 `?` 后缀）；畸形或倒置的花括号组保持字面量，与 JavaScript 一致。
+- `RegExp` 在所有宿主上都使用运行时自带的 POSIX ERE 兼容匹配器（`regcomp` / `regexec` 风格），因此结果不依赖平台 libc。捕获组可经 `exec` / `match` / `replace` / `split` / `search` 使用。
+- 量词支持 `*`、`+`、`?` 以及计数形式 `{n}`、`{n,}`、`{n,m}`（可带惰性 `?` 后缀）。`{x}`、`{,2}` 这类畸形花括号组保持字面量，与 JavaScript 一致；`{2,1}` 这类倒置范围同样按字面量处理，而不是报错。
 - 匹配按字节进行，且 `/g` / `/y` 的 `lastIndex` 不被读取 —— 见[运行时偏差](../unimplemented/deviations.md)。
 
 ## Symbol

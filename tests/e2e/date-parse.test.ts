@@ -6,10 +6,39 @@
  * optional `THH:MM[:SS[.mmm]]`, and a `Z` / `±HH:MM` / `±HHMM` offset.
  */
 
-import { it } from "vitest";
+import { expect, it } from "vitest";
 import { describeE2E } from "./harness.js";
 
 describeE2E("Date parsing", (harness) => {
+  it("formats local and locale date/time strings", () => {
+    const stdout = harness.runProgram(`
+      // Local components: the expected text does not depend on the host zone.
+      const d = new Date(2023, 10, 14, 22, 13, 20);
+      console.log(d.toLocaleDateString());
+      console.log(d.toLocaleTimeString());
+      console.log(d.toLocaleString());
+      console.log(d.toDateString());
+      console.log(d.toTimeString());
+      console.log(new Date(0).toUTCString());
+      console.log(d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }));
+      console.log(d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }));
+      console.log(new Date("nope").toLocaleDateString());
+    `);
+    expect(stdout).toBe(
+      [
+        "11/14/2023",
+        "10:13:20 PM",
+        "11/14/2023, 10:13:20 PM",
+        "Tue Nov 14 2023",
+        "22:13:20",
+        "Thu, 01 Jan 1970 00:00:00 GMT",
+        "November 14, 2023",
+        "22:13",
+        "Invalid Date",
+      ].join("\n"),
+    );
+  });
+
   it("parses ISO 8601 strings like Node", () => {
     harness.expectSameOutputAsNode(`
       console.log(Date.parse("2020-01-01T00:00:00.000Z"));

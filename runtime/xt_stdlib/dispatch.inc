@@ -158,6 +158,8 @@ static const xt_method_spec XT_DATE_METHODS[] = {
   {"getUTCFullYear", 0}, {"getUTCMonth", 0}, {"getUTCDate", 0}, {"getUTCDay", 0},
   {"getUTCHours", 0}, {"getUTCMinutes", 0}, {"getUTCSeconds", 0}, {"getUTCMilliseconds", 0},
   {"toISOString", 0}, {"toJSON", 1}, {"toString", 0}, {"valueOf", 0},
+  {"toLocaleDateString", 0}, {"toLocaleTimeString", 0}, {"toLocaleString", 0},
+  {"toDateString", 0}, {"toTimeString", 0}, {"toUTCString", 0},
 };
 
 static const xt_method_spec XT_MAP_METHODS[] = {

@@ -99,6 +99,43 @@ describe.skipIf(!guiAvailable)("gui extension — browser globals", () => {
     expect(value("frames")).toBe("3");
   });
 
+  it("reports the real typeof for host globals", () => {
+    /* These names are callable before the fix but had no first-class value, so
+     * `typeof` lowered the operand as an undefined constant. */
+    const { value } = harness.compileAndRun(
+      "global-typeof",
+      `
+      import { createWindow } from "gui";
+
+      console.log("performance=" + typeof performance);
+      console.log("console=" + typeof console);
+      console.log("json=" + typeof JSON);
+      console.log("raf=" + typeof requestAnimationFrame);
+      console.log("cancel=" + typeof cancelAnimationFrame);
+      console.log("process=" + typeof process);
+      console.log("storage=" + typeof localStorage);
+      console.log("math=" + typeof Math);
+      console.log("date=" + typeof Date);
+      console.log("fetch=" + typeof fetch);
+      const win = createWindow({ title: "typeof", width: 160, height: 120 });
+      win.on("ready", () => win.close());
+      win.loadHTML("<div>x</div>");
+      `,
+      { console: true, autocloseMs: 2000 },
+    );
+
+    expect(value("performance")).toBe("object");
+    expect(value("console")).toBe("object");
+    expect(value("json")).toBe("object");
+    expect(value("raf")).toBe("function");
+    expect(value("cancel")).toBe("function");
+    expect(value("process")).toBe("object");
+    expect(value("storage")).toBe("object");
+    expect(value("math")).toBe("object");
+    expect(value("date")).toBe("function");
+    expect(value("fetch")).toBe("function");
+  });
+
   it("treats an html page's plain-JavaScript <script src> as JavaScript", () => {
     /* The `.html` loader wraps a `<script src>` body in a generated module.
      * That body comes from the script file, not from the page, so a `.js`

@@ -167,6 +167,7 @@ xt_value document_proto() {
   if (XT_IS_OBJECT(g_document_proto)) return g_document_proto;
   xt_value proto = xt_object_new_with_proto(node_proto());
   define_getter(proto, "body", (void *)doc_body_get);
+  define_getter(proto, "head", (void *)doc_head_get);
   define_getter(proto, "documentElement", (void *)doc_document_element_get);
   define_getter(proto, "activeElement", (void *)doc_active_element_get);
   define_method(proto, "querySelector", (void *)doc_query_selector);

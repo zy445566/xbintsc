@@ -162,6 +162,7 @@ METHOD(doc_title_set);
 METHOD(doc_default_view_get);
 METHOD(doc_create_text_node);
 METHOD(doc_body_get);
+METHOD(doc_head_get);
 METHOD(doc_document_element_get);
 METHOD(doc_active_element_get);
 

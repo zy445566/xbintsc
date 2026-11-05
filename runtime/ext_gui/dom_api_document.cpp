@@ -226,6 +226,15 @@ METHOD(doc_body_get) {
   return xt_gui_node_handle(win, find_by_tag(win->document->root(), "body"));
 }
 
+METHOD(doc_head_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = resolve_window(self);
+  if (win == nullptr || win->document == nullptr) return XT_UNDEFINED;
+  return xt_gui_node_handle(win, find_by_tag(win->document->root(), "head"));
+}
+
 METHOD(doc_document_element_get) {
   (void)env;
   (void)argc;

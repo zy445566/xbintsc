@@ -136,7 +136,7 @@ METHOD(node_insert_adjacent_html) {
   }
   std::string position = to_string_value(xt_arg(argc, argv, 0));
   std::string html = to_string_value(xt_arg(argc, argv, 1));
-  std::unique_ptr<xtgui::Node> parsed = xtgui::xt_html_parse(html);
+  std::unique_ptr<xtgui::Node> parsed = xtgui::xt_html_parse(html, false);
   if (!parsed) return XT_UNDEFINED;
   if (position == "beforebegin" || position == "afterend") {
     xtgui::Node *parent = node->parent;

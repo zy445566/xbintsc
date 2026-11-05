@@ -119,8 +119,11 @@ struct Node {
   int elementSiblingCount() const;
 };
 
-/** Parse an HTML document/fragment. Returns a Document node (never NULL). */
-std::unique_ptr<Node> xt_html_parse(const std::string &html);
+/** Parse an HTML document/fragment. Returns a Document node (never NULL).
+ * `synthesize_structure` wraps a fragment in the implicit `<html>`/`<head>`/
+ * `<body>`; `innerHTML`/`insertAdjacentHTML` pass false because their result is
+ * inserted under an existing element. */
+std::unique_ptr<Node> xt_html_parse(const std::string &html, bool synthesize_structure = true);
 
 /** Serialize a subtree; used by diagnostics and tests. */
 std::string xt_dom_to_string(const Node *node);

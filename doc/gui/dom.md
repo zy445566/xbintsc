@@ -9,7 +9,12 @@
 **HTML parser** (`runtime/ext_gui/dom.{h,cpp}`): tags/attributes/text,
 comments and doctype skipped, entity decoding (named + numeric/hex), void
 elements, raw-text elements (`<style>`/`<script>`), and the common implicit
-close rules (`li`, `dt`/`dd`, `option`, `p`, headings, table cells/rows).
+close rules (`li`, `dt`/`dd`, `option`, `p`, headings, table cells/rows). A
+parsed fragment is wrapped in the implicit `<html>`/`<head>`/`<body>` (head-like
+top-level elements such as `<style>`/`<title>` go to `<head>`, everything else
+to `<body>`), so `document.body`, `document.head` and `body { … }` work even
+when the source is only a `<div>`. `innerHTML`/`insertAdjacentHTML` parse their
+input as a fragment and do **not** synthesize another document wrapper.
 
 **CSS parser** (`runtime/ext_gui/css.{h,cpp}`): comments are stripped; `@media`
 blocks are parsed recursively (nested queries combine with `and`, and a comma

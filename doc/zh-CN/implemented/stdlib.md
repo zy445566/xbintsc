@@ -46,6 +46,7 @@
 ## RegExp
 
 - `RegExp` 使用 POSIX ERE（`regcomp` / `regexec`）实现 `test` / `exec`；捕获组可经 `exec` / `match` / `replace` / `split` / `search` 使用。
+- 量词支持 `*`、`+`、`?` 以及计数形式 `{n}`、`{n,}`、`{n,m}`（可带惰性 `?` 后缀）；畸形或倒置的花括号组保持字面量，与 JavaScript 一致。
 - 匹配按字节进行，且 `/g` / `/y` 的 `lastIndex` 不被读取 —— 见[运行时偏差](../unimplemented/deviations.md)。
 
 ## Symbol

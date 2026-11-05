@@ -127,6 +127,31 @@ describeE2E("end-to-end built-in library", (harness) => {
     );
   });
 
+  it("supports counted RegExp quantifiers ({n}, {n,}, {n,m})", () => {
+    const source = `
+      const login = /^[A-Za-z0-9_]{3,20}$/;
+      console.log(login.test("abc_1"), login.test("ab"), login.test("a".repeat(21)));
+      console.log(/^a{2}$/.test("aa"), /^a{2}$/.test("a"), /a{2}/.test("xaay"));
+      console.log(/^a{2,}$/.test("aaaa"), /^a{2,}$/.test("a"), /^a{2,4}$/.test("aaaa"));
+      console.log(/^a{2,3}?$/.test("aa"), /^\\d{3}-\\d{4}$/.test("123-4567"));
+      console.log(/^(ab){2}$/.test("abab"), /^a{0}$/.test(""), /^a{0,2}$/.test("aa"));
+      console.log("aa".replace(/a{2}/, "X"));
+      // A malformed or inverted brace group stays literal, as in JavaScript.
+      console.log(/^a{2,1}$/.test("a{2,1}"), /^a\\{$/.test("a{"), /^\\{2\\}$/.test("{2}"));
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        "true false false",
+        "true false true",
+        "true false true",
+        "true true",
+        "true true true",
+        "X",
+        "true true true",
+      ].join("\n"),
+    );
+  });
+
   it("supports the immutable array methods and Object statics", () => {
     const source = `
       const a = [3, 1, 2];

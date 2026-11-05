@@ -33,7 +33,8 @@ static xt_re_node *xt_re_new_class(const unsigned char *bits) {
   return n;
 }
 
-static void xt_re_push_piece(xt_re_concat *c, xt_re_node *node, int quant, int lazy) {
+static void xt_re_push_piece(xt_re_concat *c, xt_re_node *node, int quant, int lazy, int min,
+                             int max) {
   if (c->count == c->capacity) {
     int next = c->capacity ? c->capacity * 2 : 4;
     xt_re_piece *grown = (xt_re_piece *)realloc(c->pieces, (size_t)next * sizeof(xt_re_piece));
@@ -44,6 +45,8 @@ static void xt_re_push_piece(xt_re_concat *c, xt_re_node *node, int quant, int l
   c->pieces[c->count].node = node;
   c->pieces[c->count].quant = quant;
   c->pieces[c->count].lazy = lazy;
+  c->pieces[c->count].min = min;
+  c->pieces[c->count].max = max;
   c->count++;
 }
 
@@ -188,30 +191,89 @@ static xt_re_node *xt_re_parse_atom(xt_re_parser *p) {
   return xt_re_new_char((unsigned char)c);
 }
 
+/** Parse `{n}`, `{n,}` or `{n,m}` starting at `p->i`. On success advances past
+ * the closing brace and reports the bounds. A malformed group (or one whose
+ * bound is unreasonable) is left untouched so its `{` is matched as a literal,
+ * which is what JavaScript does for `a{`, `a{x}` and `a{2,1}`. */
+static int xt_re_parse_brace(xt_re_parser *p, int *min, int *max) {
+  size_t i = p->i;
+  long low = 0;
+  long high = 0;
+  int have_low = 0;
+  int have_high = 0;
+  if (p->s[i] != '{') return 0;
+  i++;
+  while (p->s[i] >= '0' && p->s[i] <= '9') {
+    low = low * 10 + (p->s[i] - '0');
+    if (low > XT_RE_MAX_REPEAT) return 0;
+    have_low = 1;
+    i++;
+  }
+  if (!have_low) return 0;
+  if (p->s[i] == '}') {
+    i++;
+    *min = (int)low;
+    *max = (int)low;
+    p->i = i;
+    return 1;
+  }
+  if (p->s[i] != ',') return 0;
+  i++;
+  while (p->s[i] >= '0' && p->s[i] <= '9') {
+    high = high * 10 + (p->s[i] - '0');
+    if (high > XT_RE_MAX_REPEAT) return 0;
+    have_high = 1;
+    i++;
+  }
+  if (p->s[i] != '}') return 0;
+  i++;
+  if (have_high && high < low) return 0;
+  *min = (int)low;
+  *max = have_high ? (int)high : -1;
+  p->i = i;
+  return 1;
+}
+
 static void xt_re_parse_concat(xt_re_parser *p, xt_re_concat *out) {
   while (p->s[p->i] && p->s[p->i] != '|' && p->s[p->i] != ')') {
     xt_re_node *node = xt_re_parse_atom(p);
     int quant = XT_RE_Q_NONE;
     int lazy = 0;
+    int min = 0;
+    int max = 0;
     if (p->error || !node) {
       p->error = 1;
       return;
     }
     if (p->s[p->i] == '*') {
       quant = XT_RE_Q_STAR;
+      min = 0;
+      max = -1;
       p->i++;
     } else if (p->s[p->i] == '+') {
       quant = XT_RE_Q_PLUS;
+      min = 1;
+      max = -1;
       p->i++;
     } else if (p->s[p->i] == '?') {
       quant = XT_RE_Q_QUEST;
+      min = 0;
+      max = 1;
       p->i++;
+    } else if (p->s[p->i] == '{') {
+      int range_min = 0;
+      int range_max = 0;
+      if (xt_re_parse_brace(p, &range_min, &range_max)) {
+        quant = XT_RE_Q_RANGE;
+        min = range_min;
+        max = range_max;
+      }
     }
     if (quant != XT_RE_Q_NONE && p->s[p->i] == '?') {
       lazy = 1;
       p->i++;
     }
-    xt_re_push_piece(out, node, quant, lazy);
+    xt_re_push_piece(out, node, quant, lazy, min, max);
   }
 }
 

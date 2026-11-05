@@ -160,35 +160,16 @@ static int xt_re_repeat_try(xt_re_repeat *rep, size_t pos, int count, const xt_r
 static int xt_re_match_piece(xt_re_piece *piece, const xt_re_input *in, size_t pos,
                              xt_re_cont cont, void *ctx, const xt_re_cap *caps) {
   xt_re_repeat rep;
+  if (piece->quant == XT_RE_Q_NONE)
+    return xt_re_match_atom(piece->node, in, pos, cont, ctx, caps);
+  rep.atom = piece->node;
+  rep.in = in;
+  rep.min = piece->min;
+  rep.max = piece->max;
   rep.lazy = piece->lazy;
-  switch (piece->quant) {
-    case XT_RE_Q_STAR:
-      rep.atom = piece->node;
-      rep.in = in;
-      rep.min = 0;
-      rep.max = -1;
-      rep.cont = cont;
-      rep.ctx = ctx;
-      return xt_re_repeat_try(&rep, pos, 0, caps);
-    case XT_RE_Q_PLUS:
-      rep.atom = piece->node;
-      rep.in = in;
-      rep.min = 1;
-      rep.max = -1;
-      rep.cont = cont;
-      rep.ctx = ctx;
-      return xt_re_repeat_try(&rep, pos, 0, caps);
-    case XT_RE_Q_QUEST:
-      rep.atom = piece->node;
-      rep.in = in;
-      rep.min = 0;
-      rep.max = 1;
-      rep.cont = cont;
-      rep.ctx = ctx;
-      return xt_re_repeat_try(&rep, pos, 0, caps);
-    default:
-      return xt_re_match_atom(piece->node, in, pos, cont, ctx, caps);
-  }
+  rep.cont = cont;
+  rep.ctx = ctx;
+  return xt_re_repeat_try(&rep, pos, 0, caps);
 }
 
 typedef struct {

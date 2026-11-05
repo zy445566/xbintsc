@@ -189,7 +189,9 @@ console.log(box.contains(inner));                 // 后代判断
 
 `getBoundingClientRect()` 在 `x` / `y` / `width` / `height` 之外还带有旧式的
 `top` / `right` / `bottom` / `left` 成员；`document.title = …` 写入文档的
-`<title>`（页面没有该元素时会创建它以及 `<head>`）。
+`<title>`（页面没有该元素时会创建它以及 `<head>`）。没有布局盒的节点
+（`display: none`、游离元素或过期句柄）返回全 0 矩形而不是 `undefined`，
+与 DOM 一致。`label.htmlFor` 反映 `for` 属性（可读、可写、可清空）。
 
 变更操作会把文档标记为脏；引擎会延迟地（在下一次读取或下一帧之前）重新计算
 样式并重新布局。`inner = …`/`innerHTML = …` **不会**执行脚本。元素事件支持

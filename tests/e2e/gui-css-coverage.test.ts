@@ -16,6 +16,51 @@ describe.skipIf(!guiAvailable)("gui extension — CSS coverage", () => {
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());
 
+  it("answers CSS initial values for unset properties", () => {
+    const { value } = harness.compileAndRun(
+      "initial-values",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "defaults", width: 400, height: 200 });
+      win.on("ready", () => {
+        const props = [
+          "display", "position", "box-sizing", "opacity", "z-index", "transform",
+          "box-shadow", "text-shadow", "filter", "text-decoration",
+          "text-decoration-style", "overflow-wrap", "word-break", "word-spacing",
+          "object-fit", "user-select", "list-style-type", "background-repeat",
+        ];
+        for (const prop of props) {
+          console.log(prop + "=" + win.computedStyle("#x", prop));
+        }
+        win.close();
+      });
+      win.loadHTML("<div id='x'>hi</div>");
+      run();
+      `,
+      { console: true, autocloseMs: 2000 },
+    );
+
+    expect(value("display")).toBe("block");
+    expect(value("position")).toBe("static");
+    expect(value("box-sizing")).toBe("content-box");
+    expect(value("opacity")).toBe("1");
+    expect(value("z-index")).toBe("auto");
+    expect(value("transform")).toBe("none");
+    expect(value("box-shadow")).toBe("none");
+    expect(value("text-shadow")).toBe("none");
+    expect(value("filter")).toBe("none");
+    expect(value("text-decoration")).toBe("none");
+    expect(value("text-decoration-style")).toBe("solid");
+    expect(value("overflow-wrap")).toBe("normal");
+    expect(value("word-break")).toBe("normal");
+    expect(value("word-spacing")).toBe("0px");
+    expect(value("object-fit")).toBe("fill");
+    expect(value("user-select")).toBe("auto");
+    expect(value("list-style-type")).toBe("disc");
+    expect(value("background-repeat")).toBe("repeat");
+  });
+
   it("applies letter-spacing and text-transform to layout and paint", () => {
     const { value, stdout } = harness.compileAndRun(
       "typography",

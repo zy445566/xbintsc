@@ -283,6 +283,16 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "font-size") return formatNumber(style.font_size) + "px";
   if (property == "font-weight") return formatNumber((float)style.font_weight);
   if (property == "font-family") return style.font_family;
+  if (property == "font-style") return style.font_style == FontStyle::Italic ? "italic" : "normal";
+  if (property == "font-variant") return style.font_variant_numeric ? "tabular-nums" : "normal";
+  if (property == "font-stretch") return "100%";
+  if (property == "font-kerning") return "auto";
+  if (property == "overflow" || property == "overflow-x" || property == "overflow-y") {
+    static const char *const overflowNames[] = {"visible", "hidden", "scroll", "auto"};
+    return overflowNames[(int)style.overflow];
+  }
+  if (property == "transition") return style.transitions.empty() ? "none" : "";
+  if (property == "animation") return style.animations.empty() ? "none" : "";
   if (property == "line-height") {
     return style.line_height.unit == Unit::Auto ? "normal" : formatLength(style.line_height);
   }
@@ -410,6 +420,67 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "transform") return xt_transform_to_string(style.transform);
   if (property == "transform-origin") {
     return formatLength(style.transform_origin_x) + " " + formatLength(style.transform_origin_y);
+  }
+
+  /* Standard properties the engine does not model still answer with their
+   * CSS initial value. Returning "" made the usual "read the current style"
+   * pattern (`getComputedStyle(el).wordBreak`, `.objectFit`, …) see a value no
+   * browser produces. Modelled properties are handled above; this table is
+   * only the computed default. */
+  struct InitialValue {
+    const char *name;
+    const char *value;
+  };
+  static const InitialValue kInitialValues[] = {
+      {"box-sizing", "content-box"},
+      {"text-decoration", "none"},
+      {"text-decoration-line", "none"},
+      {"text-decoration-style", "solid"},
+      {"text-decoration-color", "rgb(0, 0, 0)"},
+      {"overflow-wrap", "normal"},
+      {"word-wrap", "normal"},
+      {"text-indent", "0px"},
+      {"word-spacing", "0px"},
+      {"word-break", "normal"},
+      {"hyphens", "manual"},
+      {"tab-size", "8"},
+      {"direction", "ltr"},
+      {"unicode-bidi", "normal"},
+      {"text-rendering", "auto"},
+      {"text-justify", "auto"},
+      {"background-repeat", "repeat"},
+      {"background-position", "0% 0%"},
+      {"background-attachment", "scroll"},
+      {"background-clip", "border-box"},
+      {"background-origin", "padding-box"},
+      {"border-collapse", "separate"},
+      {"border-spacing", "0px"},
+      {"table-layout", "auto"},
+      {"caption-side", "top"},
+      {"empty-cells", "show"},
+      {"list-style-type", "disc"},
+      {"list-style-position", "outside"},
+      {"list-style-image", "none"},
+      {"object-fit", "fill"},
+      {"object-position", "50% 50%"},
+      {"resize", "none"},
+      {"user-select", "auto"},
+      {"touch-action", "auto"},
+      {"scroll-behavior", "auto"},
+      {"overscroll-behavior", "auto"},
+      {"will-change", "auto"},
+      {"contain", "none"},
+      {"isolation", "auto"},
+      {"appearance", "none"},
+      {"columns", "auto"},
+      {"column-count", "auto"},
+      {"column-rule", "none"},
+      {"caret-color", "auto"},
+      {"accent-color", "auto"},
+      {"color-scheme", "normal"},
+  };
+  for (const InitialValue &entry : kInitialValues) {
+    if (property == entry.name) return entry.value;
   }
   return "";
 }

@@ -75,6 +75,7 @@ xt_value browser_tick(xt_value self, xt_value env, int32_t argc, xt_value *argv)
   if (record == NULL || !record->open) return XT_UNDEFINED;
   xt_gui_pump_events();
   xt_gui_render_window(record);
+  xt_promise_report_unhandled();
   if (record->open && !record->animation_frames.empty()) arm_tick();
   return XT_UNDEFINED;
 }

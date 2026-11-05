@@ -117,7 +117,7 @@ static bool call_node_listeners(XtGuiWindow *win, xtgui::Node *node, const char 
     xt_object_set(event, xt_string_from_cstr("__xt_gui_passive"),
                   listener.passive ? XT_TRUE : XT_FALSE);
     xt_value args[1] = {event};
-    xt_call_with_this(listener.fn, self, 1, args);
+    xt_gui_invoke(listener.fn, self, 1, args);
     xt_object_set(event, xt_string_from_cstr("__xt_gui_passive"), previousPassive);
     if (value_truthy(xt_object_get_cstr(event, "__stopImmediate"))) return true;
     if (value_truthy(xt_object_get_cstr(event, "__stop"))) return true;

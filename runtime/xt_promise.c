@@ -532,11 +532,30 @@ xt_value xt_queue_microtask(int32_t argc, xt_value *argv) {
 
 /* -- reporting ------------------------------------------------------------ */
 
+static xt_unhandled_rejection_handler g_unhandled_rejection_handler = NULL;
+
+void xt_set_unhandled_rejection_handler(xt_unhandled_rejection_handler handler) {
+  g_unhandled_rejection_handler = handler;
+}
+
 int xt_promise_report_unhandled(void) {
+  if (xt_unhandled_count == 0) return 0;
+  /* The host handler runs JavaScript, which may observe promises and mutate
+   * the queue (removing entries and swapping in the tail). Iterate a snapshot
+   * and clear the queue afterwards, so every rejection is reported once. */
+  uint32_t count = xt_unhandled_count;
+  xt_promise **snapshot = (xt_promise **)malloc(sizeof(xt_promise *) * count);
+  if (!snapshot) abort();
+  memcpy(snapshot, xt_unhandled, sizeof(xt_promise *) * count);
   int reported = 0;
-  for (uint32_t i = 0; i < xt_unhandled_count; i++) {
-    xt_promise *promise = xt_unhandled[i];
+  for (uint32_t i = 0; i < count; i++) {
+    xt_promise *promise = snapshot[i];
     if (!promise || promise->observed) continue;
+    int consumed = 0;
+    if (g_unhandled_rejection_handler != NULL) {
+      consumed = g_unhandled_rejection_handler(promise->value, xt_promise_value(promise));
+    }
+    if (consumed) continue;
     reported++;
     /* `Error` (and its subclasses) carry a captured stack; everything else is
      * stringified the way Node prints a rejection reason. */
@@ -549,5 +568,10 @@ int xt_promise_report_unhandled(void) {
       fprintf(stderr, "Unhandled promise rejection\n");
     }
   }
+  free(snapshot);
+  for (uint32_t i = 0; i < xt_unhandled_count; i++) {
+    if (xt_unhandled[i]) xt_unhandled[i]->report_index = XT_PROMISE_UNLISTED;
+  }
+  xt_unhandled_count = 0;
   return reported;
 }

@@ -114,7 +114,8 @@ xt_value blob_callback(xt_value self, xt_value env, int32_t argc, xt_value *argv
   xt_value fn = xt_closure_env(env, 0);
   xt_value blob = xt_closure_env(env, 1);
   xt_value args[1] = {blob};
-  return xt_call_with_this(fn, XT_UNDEFINED, 1, args);
+  xt_gui_invoke(fn, XT_UNDEFINED, 1, args);
+  return XT_UNDEFINED;
 }
 
 }  // namespace

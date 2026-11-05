@@ -46,6 +46,6 @@ void xt_gui_emit_payload(XtGuiWindow *win, const char *event, xt_value payload) 
       continue;
     }
     if (listener.once) remove_window_listener(win, listener);
-    if (XT_IS_FUNCTION(listener.fn)) xt_call_with_this(listener.fn, win->object, count, args);
+    if (XT_IS_FUNCTION(listener.fn)) xt_gui_invoke(listener.fn, win->object, count, args);
   }
 }

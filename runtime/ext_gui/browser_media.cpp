@@ -54,7 +54,7 @@ void remove_listener(xt_value self, xt_value fn) {
 void call_change_listener(xt_value fn, xt_value list, xt_value event) {
   if (!XT_IS_FUNCTION(fn)) return;
   xt_value args[1] = {event};
-  xt_call_with_this(fn, list, 1, args);
+  xt_gui_invoke(fn, list, 1, args);
 }
 
 #define METHOD(name) xt_value name(xt_value self, xt_value env, int32_t argc, xt_value *argv)

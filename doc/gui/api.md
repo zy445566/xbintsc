@@ -49,6 +49,18 @@ and hit testing follow it), and `scrollX` / `scrollY` / `pageXOffset` /
 `compositionstart` / `compositionupdate` / `compositionend`, `beforeinput`,
 `input`, `change`, `submit` and `reset`.
 
+Exceptions thrown by code the engine invokes (an element or window listener, a
+timer, an animation frame, a media event) are page errors, not process
+termination: the engine catches them at its callback boundary and mirrors the
+browser surfaces. `window.onerror` receives
+`(message, source, line, column, error)`, `addEventListener("error", …)`
+receives an `ErrorEvent`-like object (`.message`, `.error`, `.filename`,
+`.lineno`, `.colno`) and a rejection nobody observes becomes an
+`unhandledrejection` event (also available as
+`window.onunhandledrejection` with `.reason` / `.promise`). The default log line
+goes to stderr; return `true` from `onerror` or call `event.preventDefault()` to
+suppress it. Handlers that throw are reported and do not close the window.
+
 `createWindow(options)` honours more than the title and size:
 `{ title, width, height, highDensity, resizable, borderless, alwaysOnTop,
 hidden, fullscreen, x, y, opacity, maximized, minimized }` map to the matching

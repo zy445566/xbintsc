@@ -293,21 +293,44 @@ void *xt_try_mark(void) { return (void *)g_try_top; }
 
 void xt_try_restore(void *mark) { g_try_top = (xt_try_frame *)mark; }
 
-void xt_throw(xt_value v) {
-  if (g_try_top) {
-    g_try_top->exception = v;
-    longjmp(g_try_top->buf, 1);
-  }
+/* A host (the GUI engine) can install a handler so an exception thrown by a
+ * callback it invoked is reported as a page error instead of killing the
+ * process. The handler only runs from a host-owned boundary that can resume
+ * after the `longjmp`; `xt_throw` itself still terminates when nothing catches. */
+static xt_uncaught_exception_handler g_uncaught_exception_handler = NULL;
+
+void xt_set_uncaught_exception_handler(xt_uncaught_exception_handler handler) {
+  g_uncaught_exception_handler = handler;
+}
+
+static void xt_print_uncaught(xt_value v) {
   xt_value stack = xt_error_stack(v);
   if (stack != XT_UNDEFINED) {
     xt_string *text = xt_as_string(stack);
     if (text) {
       fprintf(stderr, "Uncaught %s\n", xt_string_bytes(text));
-      exit(1);
+      return;
     }
   }
   xt_value message = xt_to_string(v);
   xt_string *s = xt_as_string(message);
   fprintf(stderr, "Uncaught %s\n", xt_string_bytes(s));
+}
+
+void xt_uncaught_exception(xt_value v) {
+  if (g_uncaught_exception_handler != NULL) {
+    g_uncaught_exception_handler(v);
+    return;
+  }
+  xt_print_uncaught(v);
+  exit(1);
+}
+
+void xt_throw(xt_value v) {
+  if (g_try_top) {
+    g_try_top->exception = v;
+    longjmp(g_try_top->buf, 1);
+  }
+  xt_print_uncaught(v);
   exit(1);
 }

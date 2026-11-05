@@ -363,6 +363,13 @@ xt_value xt_await(xt_value value);
 void xt_drain_microtasks(void);
 /** Mark `value` (a promise) as observed, so its rejection is not reported. */
 void xt_promise_observe_value(xt_value value);
+/**
+ * Host hook for an unhandled rejection. Return non-zero when the host reported
+ * it and the default fatal exit should be suppressed (the GUI engine turns it
+ * into a window `unhandledrejection` event).
+ */
+typedef int (*xt_unhandled_rejection_handler)(xt_value reason, xt_value promise);
+void xt_set_unhandled_rejection_handler(xt_unhandled_rejection_handler handler);
 /** Print rejected promises that no handler ever observed; returns how many. */
 int xt_promise_report_unhandled(void);
 
@@ -481,6 +488,14 @@ xt_value xt_is_nullish(xt_value value);
 
 /* -- exceptions / output -------------------------------------------------- */
 void xt_throw(xt_value v);
+/**
+ * Report an exception that a host-owned callback boundary caught. With a host
+ * handler installed (the GUI engine) the handler decides how to surface it;
+ * otherwise this prints like `xt_throw` and exits.
+ */
+typedef void (*xt_uncaught_exception_handler)(xt_value error);
+void xt_set_uncaught_exception_handler(xt_uncaught_exception_handler handler);
+void xt_uncaught_exception(xt_value error);
 /** Allocate and push a `try` frame; the returned pointer is the `setjmp` buffer. */
 void *xt_try_enter(void);
 xt_value xt_try_exception(void *frame);

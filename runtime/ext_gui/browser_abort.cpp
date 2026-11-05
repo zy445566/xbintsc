@@ -58,14 +58,14 @@ void call_abort_listener(xt_value fn, xt_value signal) {
   xt_object_set(event, xt_string_from_cstr("defaultPrevented"), XT_FALSE);
   if (XT_IS_FUNCTION(fn)) {
     xt_value args[1] = {event};
-    xt_call_with_this(fn, signal, 1, args);
+    xt_gui_invoke(fn, signal, 1, args);
     return;
   }
   if (XT_IS_OBJECT(fn)) {
     xt_value handler = xt_object_get_cstr(fn, "handleEvent");
     if (XT_IS_FUNCTION(handler)) {
       xt_value args[1] = {event};
-      xt_call_with_this(handler, fn, 1, args);
+      xt_gui_invoke(handler, fn, 1, args);
     }
   }
 }

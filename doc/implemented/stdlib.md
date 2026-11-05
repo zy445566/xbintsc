@@ -95,3 +95,9 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 - `btoa` / `atob` base64 encoding and decoding (core globals; not Node-extension-only).
 - `structuredClone`: arrays, objects, `Map`, `Set`, `Date`, `RegExp` and typed arrays, preserving cycles and shared references; functions, symbols, promises and generators are rejected.
 - Timers, `queueMicrotask` and `performance.now` are described in [Async, promises and generators](./async.md); `fetch` in [fetch](./fetch.md).
+
+## Global crypto
+
+- `crypto.getRandomValues(typedArray)` fills an integer typed array (up to 65 536 bytes) from the OS CSPRNG and returns it; `crypto.randomUUID()` returns a v4 UUID string. `crypto` is also a first-class object and the methods can be detached (`const uuid = crypto.randomUUID`).
+- `Math.random` draws from a xoshiro256** stream seeded from the OS CSPRNG (53 random bits), not from the C `rand()`.
+- Node's `crypto.randomBytes` / `randomInt` / `randomFillSync` / `pbkdf2Sync` surface is documented in [node/crypto](../implemented/node/crypto.md).

@@ -18,7 +18,7 @@
 | `rmSync(path[, options])` | `xt_node_rm` | 删除文件/目录，`{ recursive: true }` 递归删除 |
 | `unlinkSync(path)` | `xt_node_unlink` | 删除文件 |
 | `rmdirSync(path)` | `xt_node_rmdir` | 删除空目录 |
-| `renameSync(oldPath, newPath)` | `xt_node_rename` | 重命名 / 移动 |
+| `renameSync(oldPath, newPath)` | `xt_node_rename` | 重命名 / 移动；原子替换已存在的目标（Windows 使用 `MoveFileExW` + `MOVEFILE_REPLACE_EXISTING`） |
 | `copyFileSync(src, dest[, flags])` | `xt_node_copy_file` | 复制文件；支持 `COPYFILE_EXCL` |
 | `cpSync(src, dest[, options])` | `xt_node_cp` | 递归复制；`recursive` / `force` / `errorOnExist` / `dereference` / `preserveTimestamps` |
 | `realpathSync(path)` | `xt_node_realpath` | 解析为绝对路径 |

@@ -48,7 +48,7 @@ xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
     if (isnan(a)) return xt_number(NAN);
     return xt_number(a > 0 ? 1.0 : a < 0 ? -1.0 : a);
   }
-  if (strcmp(fn, "random") == 0) return xt_number((double)rand() / ((double)RAND_MAX + 1.0));
+  if (strcmp(fn, "random") == 0) return xt_number(xt_random_double());
   if (strcmp(fn, "min") == 0) {
     double result = INFINITY;
     for (int32_t i = 0; i < argc; i++) {

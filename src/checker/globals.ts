@@ -14,6 +14,7 @@ import {
   GLOBAL_FUNCTIONS,
   NAMESPACE_PROPERTIES,
   NAMESPACE_STATICS,
+  NAMESPACE_VALUES,
   TYPED_ARRAYS,
 } from "../codegen/generator/tables.js";
 
@@ -25,6 +26,7 @@ const KNOWN_GLOBALS: ReadonlySet<string> = new Set<string>([
   ...Object.keys(TYPED_ARRAYS),
   ...Object.keys(NAMESPACE_STATICS),
   ...Object.keys(NAMESPACE_PROPERTIES),
+  ...Object.keys(NAMESPACE_VALUES),
   ...FIRST_CLASS_CONSTRUCTORS,
   // Handled directly in `emitIdentifier` rather than through a table.
   "console",

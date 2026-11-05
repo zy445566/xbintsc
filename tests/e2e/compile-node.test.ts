@@ -34,6 +34,11 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       console.log(existsSync(base + "/a/b/file.txt"), existsSync(base + "/missing"));
       copyFileSync(base + "/a/b/file.txt", base + "/a/copy.txt");
       renameSync(base + "/a/copy.txt", base + "/a/moved.txt");
+      // POSIX rename replaces an existing target atomically; the Windows CRT
+      // rename used to fail here with EEXIST.
+      writeFileSync(base + "/a/target.txt", "old");
+      renameSync(base + "/a/moved.txt", base + "/a/target.txt");
+      console.log(readFileSync(base + "/a/target.txt"));
       console.log(readdirSync(base + "/a").sort().join(","));
       const entries = readdirSync(base + "/a", { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
       console.log(entries.map((entry) => entry.name + ":" + entry.isDirectory()).join(","));
@@ -43,7 +48,7 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       console.log(existsSync(base + "/a"));
     `;
     expect(runProgram(source, { extensions: true })).toBe(
-      "hello world\n68656c6c6f20776f726c64\ntrue false\nb,moved.txt\nb:true,moved.txt:false\n11 true false\nfalse",
+      "hello world\n68656c6c6f20776f726c64\ntrue false\nhello world\nb,target.txt\nb:true,target.txt:false\n11 true false\nfalse",
     );
   });
 
@@ -185,6 +190,42 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     expect(runProgram(source, { extensions: true })).toBe(
       "a9993e364706816aba3e25717850c26c9cd0d89d\nba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
     );
+  });
+
+  it("generates random bytes, UUIDs and PBKDF2 keys", () => {
+    const source = `
+      import { randomBytes, randomUUID, randomInt, randomFillSync, pbkdf2Sync, webcrypto } from "node:crypto";
+      const a = randomBytes(16);
+      const b = randomBytes(16);
+      console.log(a.length, a.toString("hex").length, a.toString("hex") !== b.toString("hex"));
+      const uuid = randomUUID();
+      console.log(uuid.length, uuid.charAt(14), uuid.split("-").length);
+      let inRange = true;
+      for (let i = 0; i < 100; i++) {
+        const n = randomInt(10, 20);
+        if (n < 10 || n >= 20) inRange = false;
+      }
+      console.log(inRange, randomInt(5) < 5);
+      const fill = Buffer.alloc(8);
+      console.log(randomFillSync(fill) === fill);
+      console.log(pbkdf2Sync("password", "salt", 1, 32, "sha256").toString("hex"));
+      console.log(pbkdf2Sync("password", "salt", 2, 32, "sha256").toString("hex"));
+      const e = new Uint8Array(4);
+      webcrypto.getRandomValues(e);
+      console.log(e.length);
+    `;
+    const output = runProgram(source, { extensions: true }).split("\n");
+    expect(output[0]).toBe("16 32 true");
+    expect(output[1]).toMatch(/^36 4 5$/);
+    expect(output[2]).toBe("true true");
+    expect(output[3]).toBe("true");
+    expect(output[4]).toBe(
+      "120fb6cffcf8b32c43e7225256c4f837a86548c92ccc35480805987cb70be17b",
+    );
+    expect(output[5]).toBe(
+      "ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43",
+    );
+    expect(output[6]).toBe("4");
   });
 
   it("runs node:test assertions through node:assert", () => {

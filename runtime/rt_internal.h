@@ -411,10 +411,9 @@ xt_value xt_iter_has(xt_value value, xt_value index);
  * protocols, or a wrapper around `value[Symbol.iterator]()` otherwise. */
 xt_value xt_iter_open(xt_value value);
 
-/* Monotonic clock in fractional milliseconds (xt_loop.c), for `performance.now`. */
+/* xbintsc clock helpers (xt_loop.c): monotonic milliseconds for
+ * `performance.now`, wall-clock milliseconds for `Date`. */
 double xt_monotonic_ms(void);
-
-/* Wall-clock milliseconds since the Unix epoch (xt_loop.c), for `Date`. */
 double xt_wallclock_ms(void);
 
 /* Stackful generators (xt_generator.c). */
@@ -596,7 +595,6 @@ uint32_t xt_array_buffer_byte_length(xt_value value);
 uint8_t xt_array_buffer_get_byte(xt_value buffer, uint32_t index);
 void xt_array_buffer_set_byte(xt_value buffer, uint32_t index, uint8_t value);
 xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv);
-
 #include "xt_async_io.h"
 
 #endif /* XT_RT_INTERNAL_H */

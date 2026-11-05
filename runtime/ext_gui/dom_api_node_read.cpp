@@ -102,6 +102,33 @@ METHOD(node_id_set) {
   return XT_UNDEFINED;
 }
 
+/** `label.htmlFor` reflects the `for` attribute (`""` when absent). */
+METHOD(node_html_for_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xtgui::Node *node = resolve_node(self, nullptr);
+  if (node == nullptr || !node->isElement()) return xt_string_from_cstr("");
+  const std::string *value = node->attr("for");
+  return xt_string_from_cstr(value != nullptr ? value->c_str() : "");
+}
+
+METHOD(node_html_for_set) {
+  (void)env;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
+  std::string value = argc >= 1 ? to_string_value(xt_arg(argc, argv, 0)) : "";
+  /* HTML reflects an empty `htmlFor` as a missing attribute. */
+  if (value.empty()) {
+    remove_attribute_raw(node, "for");
+    mark_dirty(win);
+  } else {
+    set_attribute(win, node, "for", value);
+  }
+  return XT_UNDEFINED;
+}
+
 METHOD(node_class_name_get) {
   (void)env;
   (void)argc;

@@ -214,25 +214,31 @@ METHOD(node_get_bounding_rect) {
   (void)env;
   (void)argc;
   (void)argv;
+  /* Like the DOM, an element with no layout box (`display: none`, a detached
+   * node, or a stale handle) still returns a rectangle, all zeroes. Returning
+   * `undefined` made every hidden-state measurement in UI code fail. */
+  auto rectangle = [](float x, float y, float width, float height) {
+    xt_value object = xt_object_new();
+    xt_object_set(object, xt_string_from_cstr("x"), xt_number(x));
+    xt_object_set(object, xt_string_from_cstr("y"), xt_number(y));
+    xt_object_set(object, xt_string_from_cstr("width"), xt_number(width));
+    xt_object_set(object, xt_string_from_cstr("height"), xt_number(height));
+    xt_object_set(object, xt_string_from_cstr("top"), xt_number(y));
+    xt_object_set(object, xt_string_from_cstr("right"), xt_number(x + width));
+    xt_object_set(object, xt_string_from_cstr("bottom"), xt_number(y + height));
+    xt_object_set(object, xt_string_from_cstr("left"), xt_number(x));
+    return object;
+  };
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
-  if (node == nullptr || win == nullptr || win->document == nullptr) return XT_UNDEFINED;
+  if (node == nullptr || win == nullptr || win->document == nullptr) return rectangle(0, 0, 0, 0);
   const xtgui::LayoutBox *box = win->document->boxOf(node);
-  if (box == nullptr) return XT_UNDEFINED;
+  if (box == nullptr) return rectangle(0, 0, 0, 0);
   /* Like the DOM: the rectangle of the *transformed* border box. The legacy
    * `top`/`right`/`bottom`/`left` members are the same rectangle in the other
    * spelling; libraries read both. */
   xtgui::LayoutRect rect = xtgui::xt_layout_transformed_bounds(box);
-  xt_value object = xt_object_new();
-  xt_object_set(object, xt_string_from_cstr("x"), xt_number(rect.x));
-  xt_object_set(object, xt_string_from_cstr("y"), xt_number(rect.y));
-  xt_object_set(object, xt_string_from_cstr("width"), xt_number(rect.width));
-  xt_object_set(object, xt_string_from_cstr("height"), xt_number(rect.height));
-  xt_object_set(object, xt_string_from_cstr("top"), xt_number(rect.y));
-  xt_object_set(object, xt_string_from_cstr("right"), xt_number(rect.x + rect.width));
-  xt_object_set(object, xt_string_from_cstr("bottom"), xt_number(rect.y + rect.height));
-  xt_object_set(object, xt_string_from_cstr("left"), xt_number(rect.x));
-  return object;
+  return rectangle(rect.x, rect.y, rect.width, rect.height);
 }
 
 METHOD(node_offset_width_get) {

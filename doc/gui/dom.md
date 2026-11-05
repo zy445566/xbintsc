@@ -212,7 +212,9 @@ usual "read the current style" pattern works for them too.
 `getBoundingClientRect()` carries the legacy `top` / `right` / `bottom` / `left`
 members next to `x` / `y` / `width` / `height`, and `document.title = …` writes
 the document's `<title>` (creating the element, and a `<head>`, when the page
-has none).
+has none). A node with no layout box (`display: none`, a detached element or a
+stale handle) returns an all-zero rectangle instead of `undefined`, matching the
+DOM. `label.htmlFor` reflects the `for` attribute (read, assign, and clear).
 
 Mutations mark the document dirty; the engine restyles + relayouts lazily (before
 the next read or frame). `inner = …`/`innerHTML = …` do **not** run scripts.

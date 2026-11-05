@@ -12,6 +12,46 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());
 
+  it("returns a zero rectangle for hidden nodes and reflects htmlFor", () => {
+    const { value } = harness.compileAndRun(
+      "dom-rect-reflect",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><body>
+        <div id="box" style="display: none">hidden</div>
+        <label id="lab" for="field">Field</label>
+      </body></html>\`;
+
+      const win = createWindow({ title: "rect", width: 400, height: 200 });
+      win.on("ready", () => {
+        const doc: any = win.document;
+        const hidden: any = doc.getElementById("box").getBoundingClientRect();
+        console.log("hidden=" + hidden.width + "," + hidden.height + "," + hidden.top);
+        const detached: any = doc.createElement("div").getBoundingClientRect();
+        console.log("detached=" + detached.width + "," + detached.height);
+        const label: any = doc.getElementById("lab");
+        console.log("for=" + label.htmlFor + ":" + label.getAttribute("for"));
+        label.htmlFor = "other";
+        console.log("set=" + label.htmlFor + ":" + label.getAttribute("for"));
+        label.htmlFor = "";
+        console.log("cleared=" + label.htmlFor + ":" + label.hasAttribute("for"));
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+      { console: true, autocloseMs: 2000 },
+    );
+
+    expect(value("hidden")).toBe("0,0,0");
+    expect(value("detached")).toBe("0,0");
+    expect(value("for")).toBe("field:field");
+    expect(value("set")).toBe("other:other");
+    expect(value("cleared")).toBe(":false");
+  });
+
   it("synthesizes html/head/body for fragments and keeps innerHTML fragments unwrapped", () => {
     const { value } = harness.compileAndRun(
       "document-structure",

@@ -176,6 +176,8 @@ METHOD(node_id_get);
 METHOD(node_id_set);
 METHOD(node_class_name_get);
 METHOD(node_class_name_set);
+METHOD(node_html_for_get);
+METHOD(node_html_for_set);
 METHOD(node_text_content_get);
 METHOD(node_text_content_set);
 METHOD(node_inner_html_get);

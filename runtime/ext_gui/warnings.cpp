@@ -117,7 +117,6 @@ const std::unordered_set<std::string> &unsupportedAttributes() {
       "autofocus",    "clip-path", "contenteditable", "controls", "draggable",
       "filter",       "hidden",    "href",            "marker-end", "marker-mid",
       "marker-start", "mask",      "poster",          "sizes",    "srcset",
-      "tabindex",
   };
   return names;
 }

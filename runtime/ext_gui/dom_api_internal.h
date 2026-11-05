@@ -163,6 +163,7 @@ METHOD(doc_default_view_get);
 METHOD(doc_create_text_node);
 METHOD(doc_body_get);
 METHOD(doc_document_element_get);
+METHOD(doc_active_element_get);
 
 /* node getters */
 METHOD(node_tag_name_get);
@@ -228,6 +229,8 @@ METHOD(node_max_get);
 METHOD(node_max_set);
 METHOD(node_step_get);
 METHOD(node_step_set);
+METHOD(node_tab_index_get);
+METHOD(node_tab_index_set);
 
 /* node methods */
 METHOD(node_get_attribute);

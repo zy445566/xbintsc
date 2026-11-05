@@ -71,6 +71,7 @@ xt_value node_proto() {
   define_getter(proto, "min", (void *)node_min_get);
   define_getter(proto, "max", (void *)node_max_get);
   define_getter(proto, "step", (void *)node_step_get);
+  define_getter(proto, "tabIndex", (void *)node_tab_index_get);
   /* Media element properties (`<video>`/`<audio>`; harmless on any element). */
   define_getter(proto, "paused", (void *)node_paused_get);
   define_getter(proto, "ended", (void *)node_ended_get);
@@ -117,6 +118,7 @@ xt_value node_proto() {
   define_setter(proto, "min", (void *)node_min_set);
   define_setter(proto, "max", (void *)node_max_set);
   define_setter(proto, "step", (void *)node_step_set);
+  define_setter(proto, "tabIndex", (void *)node_tab_index_set);
   /* Methods. */
   define_method(proto, "getAttribute", (void *)node_get_attribute);
   define_method(proto, "setAttribute", (void *)node_set_attribute);
@@ -163,6 +165,7 @@ xt_value document_proto() {
   xt_value proto = xt_object_new_with_proto(node_proto());
   define_getter(proto, "body", (void *)doc_body_get);
   define_getter(proto, "documentElement", (void *)doc_document_element_get);
+  define_getter(proto, "activeElement", (void *)doc_active_element_get);
   define_method(proto, "querySelector", (void *)doc_query_selector);
   define_method(proto, "querySelectorAll", (void *)doc_query_selector_all);
   define_method(proto, "getElementById", (void *)doc_get_element_by_id);

@@ -189,6 +189,76 @@ describe.skipIf(!guiAvailable)("gui extension — form controls", () => {
     expect(stdout).toContain("after=中ab");
   });
 
+  it("tracks document.activeElement, Tab order, disabled and placeholder", () => {
+    const { value } = harness.compileAndRun(
+      "form-focus",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><body style="margin:0">
+        <input id="one" tabindex="1" value="a">
+        <input id="two" tabindex="2" value="b">
+        <input id="zero" value="c">
+        <button id="btn">go</button>
+        <input id="off" disabled value="d">
+        <div id="box" tabindex="-1">box</div>
+        <textarea id="note" placeholder="type..."></textarea>
+        <label id="lab" for="agree">agree</label>
+        <input id="agree" type="checkbox">
+      </body></html>\`;
+
+      const win = createWindow({ title: "form-focus", width: 400, height: 320 });
+      win.on("ready", () => {
+        const doc: any = win.document;
+        win.loadHTML(HTML);
+        console.log("initial=" + doc.activeElement.tagName + ":" + doc.activeElement.id);
+        const order: string[] = [];
+        for (let i = 0; i < 5; i++) {
+          win.sendEvent("keydown", { key: "Tab" });
+          order.push(doc.activeElement.id);
+        }
+        console.log("order=" + order.join(","));
+        win.sendEvent("keydown", { key: "Tab", shift: true });
+        console.log("back=" + doc.activeElement.id);
+        const off: any = doc.getElementById("off");
+        off.focus();
+        console.log("disabled=" + (doc.activeElement.id !== "off") + ":" + off.disabled);
+        const box: any = doc.getElementById("box");
+        box.focus();
+        console.log("box=" + doc.activeElement.id + ":" + box.tabIndex);
+        const one: any = doc.getElementById("one");
+        console.log("tabindex=" + one.tabIndex + ":" + box.tabIndex);
+        one.tabIndex = 5;
+        console.log("tabindex-set=" + one.tabIndex);
+        const note: any = doc.getElementById("note");
+        console.log("placeholder=" + note.placeholder);
+        note.placeholder = "write";
+        console.log("placeholder2=" + note.placeholder);
+        // A <label for=...> focuses and activates its control.
+        const lab: any = doc.getElementById("lab");
+        lab.click();
+        const agree: any = doc.getElementById("agree");
+        console.log("label=" + (doc.activeElement.id === "agree") + ":" + agree.checked);
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("initial")).toBe("BODY:");
+    expect(value("order")).toBe("one,two,zero,btn,note");
+    expect(value("back")).toBe("btn");
+    expect(value("disabled")).toBe("true:true");
+    expect(value("box")).toBe("box:-1");
+    expect(value("tabindex")).toBe("1:-1");
+    expect(value("tabindex-set")).toBe("5");
+    expect(value("placeholder")).toBe("type...");
+    expect(value("placeholder2")).toBe("write");
+    expect(value("label")).toBe("true:true");
+  });
+
   it("masks a password field's painted value", () => {
     const { value } = harness.compileAndRun(
       "form-password",

@@ -14,11 +14,13 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <vector>
 
 #include "form_state.h"
 #include "layout.h"
@@ -286,6 +288,45 @@ void set_range_value(XtGuiWindow *win, Node *node, float x) {
 
 void activate_control(XtGuiWindow *win, Node *node) {
   if (node == nullptr || xtgui::xt_form_is_disabled(node)) return;
+  if (node->isElement() && node->tag == "label") {
+    Node *target = nullptr;
+    const std::string *for_attr = node->attr("for");
+    if (for_attr != nullptr) {
+      const Node *root = node;
+      while (root->parent != nullptr) root = root->parent;
+      struct FindById {
+        const std::string &id;
+        const Node *operator()(const Node *current) const {
+          if (current->isElement()) {
+            const std::string *value = current->attr("id");
+            if (value != nullptr && *value == id) return current;
+          }
+          for (const std::unique_ptr<Node> &child : current->children) {
+            if (const Node *found = (*this)(child.get())) return found;
+          }
+          return nullptr;
+        }
+      } find = {*for_attr};
+      target = const_cast<Node *>(find(root));
+    }
+    if (target == nullptr) {
+      struct FindControl {
+        const Node *operator()(const Node *current) const {
+          if (xtgui::xt_form_is_focusable(current)) return current;
+          for (const std::unique_ptr<Node> &child : current->children) {
+            if (const Node *found = (*this)(child.get())) return found;
+          }
+          return nullptr;
+        }
+      } find_control;
+      target = const_cast<Node *>(find_control(node));
+    }
+    if (target != nullptr && target != node) {
+      xt_gui_set_focus(win, target);
+      activate_control(win, target);
+    }
+    return;
+  }
   if (xtgui::xt_form_is_checkable(node)) {
     if (xtgui::xt_form_type(node) == "radio") {
       xtgui::xt_form_set_checked(node, true);
@@ -388,6 +429,83 @@ void xt_gui_form_pointer(XtGuiWindow *win, const char *type, xtgui::Node *node, 
 }
 
 void xt_gui_form_activate(XtGuiWindow *win, xtgui::Node *node) { activate_control(win, node); }
+
+namespace {
+
+struct TabStop {
+  Node *node;
+  int index;
+  int order;
+};
+
+int tab_index_of(const Node *node) {
+  const std::string *value = node->attr("tabindex");
+  if (value != nullptr) return (int)std::strtol(value->c_str(), nullptr, 10);
+  return 0;
+}
+
+void collect_tab_stops(const Node *node, std::vector<TabStop> *out, int *order) {
+  if (node->isElement() && xtgui::xt_form_is_focusable(node)) {
+    int index = tab_index_of(node);
+    if (index >= 0) out->push_back({const_cast<Node *>(node), index, (*order)++});
+  }
+  for (const std::unique_ptr<Node> &child : node->children) {
+    collect_tab_stops(child.get(), out, order);
+  }
+}
+
+void ensure_visible(XtGuiWindow *win, Node *node) {
+  if (win == nullptr || win->document == nullptr) return;
+  xt_gui_flush_dom(win);
+  const xtgui::LayoutBox *box = win->document->boxOf(node);
+  if (box == nullptr) return;
+  float viewport_width = 0;
+  float viewport_height = 0;
+  xt_gui_window_viewport(win, &viewport_width, &viewport_height);
+  float x = win->scroll_x;
+  float y = win->scroll_y;
+  if (box->x < x) x = box->x;
+  else if (box->x + box->width > x + viewport_width) x = box->x + box->width - viewport_width;
+  if (box->y < y) y = box->y;
+  else if (box->y + box->height > y + viewport_height) y = box->y + box->height - viewport_height;
+  xt_gui_scroll_to(win, x, y);
+}
+
+}  // namespace
+
+void xt_gui_focus_step(XtGuiWindow *win, bool forward) {
+  if (win == nullptr || win->document == nullptr) return;
+  std::vector<TabStop> stops;
+  int order = 0;
+  collect_tab_stops(win->document->root(), &stops, &order);
+  if (stops.empty()) {
+    xt_gui_set_focus(win, nullptr);
+    return;
+  }
+  std::stable_sort(stops.begin(), stops.end(), [](const TabStop &a, const TabStop &b) {
+    if (a.index == 0 && b.index == 0) return a.order < b.order;
+    if (a.index == 0) return false;
+    if (b.index == 0) return true;
+    if (a.index != b.index) return a.index < b.index;
+    return a.order < b.order;
+  });
+  int current = -1;
+  Node *focused = const_cast<Node *>(win->document->focus());
+  for (size_t i = 0; i < stops.size(); i++) {
+    if (stops[i].node == focused) {
+      current = (int)i;
+      break;
+    }
+  }
+  int next;
+  if (current < 0) {
+    next = forward ? 0 : (int)stops.size() - 1;
+  } else {
+    next = (int)((size_t)current + (forward ? 1u : (size_t)stops.size() - 1u)) % (int)stops.size();
+  }
+  xt_gui_set_focus(win, stops[(size_t)next].node);
+  ensure_visible(win, stops[(size_t)next].node);
+}
 
 void xt_gui_text_input(XtGuiWindow *win, const char *text) {
   Node *node = nullptr;

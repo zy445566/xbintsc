@@ -235,6 +235,25 @@ METHOD(doc_document_element_get) {
   return xt_gui_node_handle(win, find_by_tag(win->document->root(), "html"));
 }
 
+/** `document.activeElement`: the focused element, or `<body>` when nothing is
+ * focused (a browser never answers "none" for a parsed document). A focus
+ * pointer left on a detached node falls back to the body too. */
+METHOD(doc_active_element_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  XtGuiWindow *win = resolve_window(self);
+  if (win == nullptr || win->document == nullptr) return XT_NULL;
+  const xtgui::Node *root = win->document->root();
+  const xtgui::Node *focus = win->document->focus();
+  if (focus != nullptr && root != nullptr && root->contains(focus)) {
+    return xt_gui_node_handle(win, focus);
+  }
+  if (const xtgui::Node *body = find_by_tag(root, "body")) return xt_gui_node_handle(win, body);
+  if (const xtgui::Node *html = find_by_tag(root, "html")) return xt_gui_node_handle(win, html);
+  return XT_NULL;
+}
+
 #undef METHOD
 
 }  // namespace domapi

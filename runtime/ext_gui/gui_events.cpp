@@ -290,11 +290,28 @@ static void xt_gui_dispatch_key_payload(XtGuiWindow *win, const char *type, xt_v
   bool prevented = false;
   if (node != nullptr) prevented = xt_gui_emit_dom_event(win, type, node, payload);
   xt_gui_emit_payload(win, type, payload);
-  if (!prevented && strcmp(type, "keydown") == 0) xt_gui_form_key_down(win, payload);
+  if (!prevented && strcmp(type, "keydown") == 0) {
+    xt_gui_form_key_down(win, payload);
+    /* Tab is the one editing command that works from any element, not only a
+     * focused text field: move focus along the tabbable order. */
+    xt_value key = xt_object_get_cstr(payload, "key");
+    if (XT_IS_STRING(key) && strcmp(xt_string_data(key), "Tab") == 0) {
+      bool shift = xt_truthy(xt_object_get_cstr(payload, "shiftKey")) ||
+                   xt_truthy(xt_object_get_cstr(payload, "shift"));
+      xt_gui_focus_step(win, !shift);
+    }
+  }
 }
 
 void xt_gui_dispatch_key(XtGuiWindow *win, const char *type, const char *key, const char *code) {
   xt_value payload = xt_gui_key_payload(type, key, code, false, false, false, false, false);
+  xt_gui_dispatch_key_payload(win, type, payload);
+}
+
+void xt_gui_dispatch_key_with_modifiers(XtGuiWindow *win, const char *type, const char *key,
+                                        const char *code, bool repeat, bool ctrl, bool shift,
+                                        bool alt, bool meta) {
+  xt_value payload = xt_gui_key_payload(type, key, code, repeat, ctrl, shift, alt, meta);
   xt_gui_dispatch_key_payload(win, type, payload);
 }
 

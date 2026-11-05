@@ -4,6 +4,7 @@
  */
 
 #include "dom_api_internal.h"
+#include "form_state.h"
 #include "listener_options.h"
 
 #include <algorithm>
@@ -262,6 +263,12 @@ METHOD(node_focus) {
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || win == nullptr || win->document == nullptr) return XT_UNDEFINED;
+  /* A disabled (or hidden) form control cannot take focus, matching the DOM. */
+  if (xtgui::xt_form_is_control(node) &&
+      (xtgui::xt_form_is_disabled(node) ||
+       (xtgui::xt_form_is_input(node) && xtgui::xt_form_type(node) == "hidden"))) {
+    return XT_UNDEFINED;
+  }
   /* `{ preventScroll: true }` keeps the current page offset; otherwise the
    * focused box is scrolled into view, like the browser default. */
   bool prevent_scroll = false;

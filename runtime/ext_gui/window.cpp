@@ -458,10 +458,10 @@ static xt_value win_send_event(xt_value self, xt_value env, int32_t argc, xt_val
     return XT_TRUE;
   }
   if (name == "keydown" || name == "keyup") {
+    auto flag = [options](const char *key) { return xt_truthy(xt_object_get_cstr(options, key)); };
     if (XT_IS_OBJECT(options) && XT_IS_NUMBER(xt_object_get_cstr(options, "scancode"))) {
       int scancode = (int)xt_gui_number_or(xt_object_get_cstr(options, "scancode"), 0);
       int keycode = (int)xt_gui_number_or(xt_object_get_cstr(options, "keycode"), 0);
-      auto flag = [options](const char *key) { return xt_truthy(xt_object_get_cstr(options, key)); };
       xt_gui_dispatch_physical_key(win, type, scancode, keycode, flag("repeat"), flag("ctrl"),
                                    flag("shift"), flag("alt"), flag("meta"), flag("caps"));
       return XT_TRUE;
@@ -474,7 +474,8 @@ static xt_value win_send_event(xt_value self, xt_value env, int32_t argc, xt_val
       if (XT_IS_STRING(key_value)) key = xt_string_data(key_value);
       if (XT_IS_STRING(code_value)) code = xt_string_data(code_value);
     }
-    xt_gui_dispatch_key(win, type, key, code);
+    xt_gui_dispatch_key_with_modifiers(win, type, key, code, flag("repeat"), flag("ctrl"),
+                                       flag("shift"), flag("alt"), flag("meta"));
     return XT_TRUE;
   }
   int button = -1;

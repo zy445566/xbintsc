@@ -90,7 +90,7 @@ xt_gui: warning: unsupported CSS unit 'vmin'; the value is ignored
   成盒子，这是预期的回退而不是被丢弃的特性，因此不会报告。
 - **HTML 特性（attribute）**：请求了不支持行为的 `href`（链接不会导航）、
   `srcset`、`sizes`、`poster`、`controls`、`contenteditable`、`draggable`、
-  `autofocus`、`tabindex`、`hidden`，以及 SVG 的
+  `autofocus`、`hidden`，以及 SVG 的
   `filter`/`mask`/`clip-path`/`marker-*` 特性。
 - **CSS 属性**：子集之外的属性名；以及解析器未实现的长度单位（`ch`、`ex`、
   `vmin`、`dvh` 等）。已支持属性上的非法值不会按“不支持”报告——只检查属性的

@@ -62,8 +62,13 @@ user.disabled = true;
   `setSelectionRange(start, end, direction)` and `select()` use UTF-16 code-unit
   offsets (the DOM convention), backed by UTF-8 storage.
 - **`checked`**, `type`, `name`, `disabled`, `readOnly`, `required`,
-  `placeholder`, `min`, `max`, `step`, `maxLength`, `form`, `options` and
-  `selectedIndex` are live DOM properties.
+  `placeholder`, `min`, `max`, `step`, `maxLength`, `tabIndex`, `form`,
+  `options` and `selectedIndex` are live DOM properties.
+- **`document.activeElement`** is the focused element, or `<body>` when nothing
+  is focused. `tabindex` establishes the Tab order (`tabindex="1"` before the
+  implicit `0` stops; `-1` is click-focusable but skipped by Tab); Tab and
+  Shift+Tab move focus even when no text field is focused. A disabled or hidden
+  control cannot be focused, is skipped by Tab and paints dimmed.
 - **Text input** comes from `SDL_EVENT_TEXT_INPUT`, which carries the text the
   keyboard layout or IME actually produced. `keydown` handles the editing
   commands (Backspace/Delete/arrows/Home/End/Ctrl+A/C/X/V, with Shift extending

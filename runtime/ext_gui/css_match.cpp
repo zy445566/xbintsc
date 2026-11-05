@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <memory>
 
+#include "form_state.h"
+
 namespace xtgui {
 
 namespace {
@@ -105,7 +107,22 @@ bool matchPseudo(const Node *node, const std::string &pseudo, const MatchState &
     return true;
   }
   if (pseudo == "disabled") return node->attr("disabled") != nullptr;
-  if (pseudo == "checked") return node->attr("checked") != nullptr;
+  if (pseudo == "checked") {
+    /* The live state, not the default `checked` attribute: a checkbox toggled
+     * by a click must match `:checked` immediately. */
+    if (node->isTag("input") && (xt_form_type(node) == "checkbox" ||
+                                 xt_form_type(node) == "radio")) {
+      return xt_form_checked(node);
+    }
+    if (node->isTag("option")) {
+      const Node *select = node->parent;
+      while (select != nullptr && !(select->isElement() && select->isTag("select"))) {
+        select = select->parent;
+      }
+      if (select != nullptr) return xt_form_selected_option(select) == node;
+    }
+    return node->attr("checked") != nullptr;
+  }
   if (pseudo.rfind("nth-child(", 0) == 0) {
     return matchesNth(node->elementIndex() + 1, pseudo.substr(10, pseudo.size() - 11));
   }

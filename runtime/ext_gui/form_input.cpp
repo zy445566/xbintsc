@@ -77,6 +77,25 @@ void emit_composition(XtGuiWindow *win, Node *node, const char *type, const std:
   xt_gui_emit_dom_event(win, type, node, payload);
 }
 
+void emit_change(XtGuiWindow *win, Node *node) {
+  xt_value payload = make_payload("change");
+  xt_object_set(payload, xt_string_from_cstr("value"),
+                xt_string_from_cstr(xtgui::xt_form_value(node).c_str()));
+  xt_object_set(payload, xt_string_from_cstr("checked"),
+                xtgui::xt_form_checked(node) ? XT_TRUE : XT_FALSE);
+  xt_gui_emit_dom_event(win, "change", node, payload);
+}
+
+/** Dispatch `beforeinput`; true when a listener cancelled the edit. */
+bool before_input(XtGuiWindow *win, Node *node, const std::string &data, const char *input_type) {
+  xt_value payload = make_payload("beforeinput");
+  xt_object_set(payload, xt_string_from_cstr("data"), xt_string_from_cstr(data.c_str()));
+  xt_object_set(payload, xt_string_from_cstr("inputType"), xt_string_from_cstr(input_type));
+  xt_object_set(payload, xt_string_from_cstr("value"),
+                xt_string_from_cstr(xtgui::xt_form_value(node).c_str()));
+  return xt_gui_emit_dom_event(win, "beforeinput", node, payload);
+}
+
 /** Emit `keypress`; true when a listener cancelled the insertion. */
 bool emit_keypress(XtGuiWindow *win, Node *node, const std::string &text) {
   if (text.empty()) return false;
@@ -153,7 +172,7 @@ void commit_composition(XtGuiWindow *win, Node *node, const std::string &text) {
   int end = state->selection_end;
   state->composing = false;
   state->composition.clear();
-  if (!text.empty()) {
+  if (!text.empty() && !before_input(win, node, text, "insertCompositionText")) {
     replace_range(node, start, end, text);
     form_dirty(win);
     emit_input(win, node, text, "insertCompositionText");
@@ -222,7 +241,7 @@ void paste_clipboard(XtGuiWindow *win, Node *node) {
   char *text = SDL_GetClipboardText();
   if (text == nullptr) return;
   FormState *state = xtgui::xt_form_state(node);
-  if (state != nullptr) {
+  if (state != nullptr && !before_input(win, node, text, "insertFromPaste")) {
     replace_range(node, state->selection_start, state->selection_end, text);
     form_dirty(win);
     emit_input(win, node, text, "insertFromPaste");
@@ -284,6 +303,65 @@ void set_range_value(XtGuiWindow *win, Node *node, float x) {
   }
   xtgui::xt_form_set_value(node, buffer);
   form_dirty(win);
+  emit_input(win, node, "", "insertReplacementText");
+}
+
+Node *form_ancestor(Node *node) {
+  for (Node *parent = node != nullptr ? node->parent : nullptr; parent != nullptr;
+       parent = parent->parent) {
+    if (parent->isElement() && parent->tag == "form") return parent;
+  }
+  return nullptr;
+}
+
+void form_restyle(XtGuiWindow *win) {
+  if (win == nullptr) return;
+  win->struct_dirty = 1;
+  if (win->document != nullptr) win->document->invalidate();
+  win->geometry.dirty = 1;
+  win->present_dirty = 1;
+}
+
+void reset_controls(XtGuiWindow *win, Node *form) {
+  if (form == nullptr) return;
+  if (xtgui::xt_form_is_control(form)) {
+    if (form->form) {
+      form->form->initialized = false;
+      form->form->composing = false;
+      form->form->composition.clear();
+    }
+    xtgui::xt_form_init(form);
+    if (form->form) {
+      form->form->selection_start = (int)xtgui::xt_form_utf16_length(form->form->value);
+      form->form->selection_end = form->form->selection_start;
+    }
+    return;
+  }
+  for (const std::unique_ptr<Node> &child : form->children) reset_controls(win, child.get());
+  if (form->tag == "form") form_restyle(win);
+}
+
+/** Fire `reset` on `form`; true when nothing cancelled it. */
+bool reset_form(XtGuiWindow *win, Node *form) {
+  if (form == nullptr || !form->isElement() || form->tag != "form") return false;
+  xt_value payload = make_payload("reset");
+  if (xt_gui_emit_dom_event(win, "reset", form, payload)) return false;
+  reset_controls(win, form);
+  form_restyle(win);
+  return true;
+}
+
+/** Fire `submit` on `form`; true when nothing cancelled it. There is no
+ * navigation in the engine, so the default action is intentionally a no-op. */
+bool submit_form(XtGuiWindow *win, Node *form, Node *submitter) {
+  if (form == nullptr || !form->isElement() || form->tag != "form") return false;
+  xt_value payload = make_payload("submit");
+  if (submitter != nullptr) {
+    xt_object_set(payload, xt_string_from_cstr("submitter"),
+                  xt_gui_node_handle(win, submitter));
+  }
+  xt_gui_emit_dom_event(win, "submit", form, payload);
+  return true;
 }
 
 void activate_control(XtGuiWindow *win, Node *node) {
@@ -327,13 +405,35 @@ void activate_control(XtGuiWindow *win, Node *node) {
     }
     return;
   }
+  if (xtgui::xt_form_is_button_like(node)) {
+    std::string type = xtgui::xt_form_type(node);
+    if (type == "reset") {
+      reset_form(win, form_ancestor(node));
+    } else if (type == "submit" || type == "image") {
+      submit_form(win, form_ancestor(node), node);
+    }
+    return;
+  }
+  if (node->isElement() && node->tag == "button") {
+    const std::string *attr = node->attr("type");
+    std::string type = attr != nullptr ? *attr : "submit";
+    for (char &c : type) c = (char)std::tolower((unsigned char)c);
+    if (type == "reset") {
+      reset_form(win, form_ancestor(node));
+    } else if (type != "button") {
+      submit_form(win, form_ancestor(node), node);
+    }
+    return;
+  }
   if (xtgui::xt_form_is_checkable(node)) {
     if (xtgui::xt_form_type(node) == "radio") {
       xtgui::xt_form_set_checked(node, true);
     } else {
       xtgui::xt_form_set_checked(node, !xtgui::xt_form_checked(node));
     }
-    form_dirty(win);
+    form_restyle(win);
+    emit_input(win, node, "", "insertReplacementText");
+    emit_change(win, node);
     return;
   }
   if (xtgui::xt_form_is_select(node)) {
@@ -352,7 +452,9 @@ void activate_control(XtGuiWindow *win, Node *node) {
       state->selected_index = (state->selected_index + 1) % count;
       const Node *option = xtgui::xt_form_selected_option(node);
       state->value = option != nullptr ? xtgui::xt_form_option_value(option) : "";
-      form_dirty(win);
+      form_restyle(win);
+      emit_input(win, node, "", "insertReplacementText");
+      emit_change(win, node);
     }
   }
 }
@@ -365,12 +467,27 @@ bool xt_gui_set_focus(XtGuiWindow *win, xtgui::Node *node) {
   if (old == node) return false;
   if (old != nullptr) {
     FormState *old_state = xtgui::xt_form_state(old);
-    if (old_state != nullptr) old_state->focused = false;
+    if (old_state != nullptr) {
+      /* `change` for a text field fires when focus leaves and the value differs
+       * from the value it had when focus arrived (the browser's rule). */
+      if (form_editable(old) && old_state->focus_value_valid &&
+          old_state->value != old_state->focus_value) {
+        emit_change(win, old);
+      }
+      old_state->focus_value_valid = false;
+      old_state->focused = false;
+    }
   }
   bool changed = win->document->setFocus(node);
   if (node != nullptr) {
     FormState *new_state = xtgui::xt_form_state(node);
-    if (new_state != nullptr) new_state->focused = true;
+    if (new_state != nullptr) {
+      new_state->focused = true;
+      if (form_editable(node)) {
+        new_state->focus_value = new_state->value;
+        new_state->focus_value_valid = true;
+      }
+    }
   }
   if (win->window != nullptr) {
     if (form_editable(node)) {
@@ -422,7 +539,14 @@ void xt_gui_form_pointer(XtGuiWindow *win, const char *type, xtgui::Node *node, 
   }
   if (event == "mouseup") {
     FormState *state = xtgui::xt_form_state(node);
-    if (state != nullptr) state->dragging = false;
+    if (state != nullptr) {
+      bool was_dragging = state->dragging;
+      state->dragging = false;
+      if (was_dragging && xtgui::xt_form_is_input(node) &&
+          xtgui::xt_form_type(node) == "range") {
+        emit_change(win, node);
+      }
+    }
     return;
   }
   if (event == "click") activate_control(win, node);
@@ -507,6 +631,12 @@ void xt_gui_focus_step(XtGuiWindow *win, bool forward) {
   ensure_visible(win, stops[(size_t)next].node);
 }
 
+void xt_gui_form_submit_request(XtGuiWindow *win, xtgui::Node *form, xtgui::Node *submitter) {
+  submit_form(win, form, submitter);
+}
+
+void xt_gui_form_reset(XtGuiWindow *win, xtgui::Node *form) { reset_form(win, form); }
+
 void xt_gui_text_input(XtGuiWindow *win, const char *text) {
   Node *node = nullptr;
   FormState *state = focused_state(win, &node);
@@ -523,6 +653,7 @@ void xt_gui_text_input(XtGuiWindow *win, const char *text) {
     if (!xtgui::xt_form_is_textarea(node)) return;
     produced = "\n";
   }
+  if (before_input(win, node, produced, "insertText")) return;
   int start = state->selection_start;
   int end = state->selection_end;
   replace_range(node, start, end, produced);
@@ -610,6 +741,7 @@ void xt_gui_form_key_down(XtGuiWindow *win, xt_value payload) {
       return;
     }
     if (lower == "x") {
+      if (before_input(win, node, "", "deleteByCut")) return;
       copy_selection(node, true);
       form_dirty(win);
       emit_input(win, node, "", "deleteByCut");
@@ -625,6 +757,7 @@ void xt_gui_form_key_down(XtGuiWindow *win, xt_value payload) {
   int caret = state->selection_start;
   int end = state->selection_end;
   if (key == "Backspace") {
+    if (before_input(win, node, "", "deleteContentBackward")) return;
     if (delete_by(node, -1)) {
       form_dirty(win);
       emit_input(win, node, "", "deleteContentBackward");
@@ -632,6 +765,7 @@ void xt_gui_form_key_down(XtGuiWindow *win, xt_value payload) {
     return;
   }
   if (key == "Delete") {
+    if (before_input(win, node, "", "deleteContentForward")) return;
     if (delete_by(node, 1)) {
       form_dirty(win);
       emit_input(win, node, "", "deleteContentForward");
@@ -663,9 +797,18 @@ void xt_gui_form_key_down(XtGuiWindow *win, xt_value payload) {
   if (key == "Enter") {
     if (xtgui::xt_form_is_textarea(node)) {
       if (emit_keypress(win, node, "\n")) return;
+      if (before_input(win, node, "\n", "insertLineBreak")) return;
       replace_range(node, caret, end, "\n");
       form_dirty(win);
       emit_input(win, node, "\n", "insertLineBreak");
+    } else {
+      /* Enter in a single-line field commits the value and submits its form. */
+      if (state->focus_value_valid && state->value != state->focus_value) {
+        emit_change(win, node);
+        state->focus_value = state->value;
+      }
+      Node *form = form_ancestor(node);
+      if (form != nullptr) submit_form(win, form, nullptr);
     }
     return;
   }
@@ -679,6 +822,7 @@ void xt_gui_form_key_down(XtGuiWindow *win, xt_value payload) {
   }
   if (produced.empty()) return;
   if (emit_keypress(win, node, produced)) return;
+  if (before_input(win, node, produced, "insertText")) return;
   replace_range(node, caret, end, produced);
   form_dirty(win);
   emit_input(win, node, produced, "insertText");

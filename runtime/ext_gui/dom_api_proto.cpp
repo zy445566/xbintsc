@@ -144,6 +144,9 @@ xt_value node_proto() {
   define_method(proto, "click", (void *)node_click);
   define_method(proto, "setSelectionRange", (void *)node_set_selection_range);
   define_method(proto, "select", (void *)node_select);
+  define_method(proto, "submit", (void *)node_form_submit);
+  define_method(proto, "requestSubmit", (void *)node_form_request_submit);
+  define_method(proto, "reset", (void *)node_form_reset);
   define_method(proto, "addEventListener", (void *)node_add_event_listener);
   define_method(proto, "removeEventListener", (void *)node_remove_event_listener);
   define_method(proto, "dispatchEvent", (void *)node_dispatch_event);

@@ -259,6 +259,109 @@ describe.skipIf(!guiAvailable)("gui extension — form controls", () => {
     expect(value("label")).toBe("true:true");
   });
 
+  it("dispatches beforeinput/input/change and submits/resets forms", () => {
+    const { value } = harness.compileAndRun(
+      "form-events",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        input:checked { background-color: #00ff00; }
+      </style></head><body>
+        <form id="f">
+          <input id="user" value="abc">
+          <input id="cb" type="checkbox">
+          <select id="sel"><option value="a">A</option><option value="b">B</option></select>
+          <input id="rg" type="range" min="0" max="10" value="5">
+          <button id="sub" type="submit">Send</button>
+          <button id="rst" type="reset">Reset</button>
+        </form>
+      </body></html>\`;
+
+      const win = createWindow({ title: "form-events", width: 400, height: 320 });
+      win.on("ready", () => {
+        const doc: any = win.document;
+        win.loadHTML(HTML);
+        const user: any = doc.getElementById("user");
+        const cb: any = doc.getElementById("cb");
+        const sel: any = doc.getElementById("sel");
+        const rg: any = doc.getElementById("rg");
+        const form: any = doc.getElementById("f");
+        const log: string[] = [];
+        user.addEventListener("input", (e: any) => log.push("u.input:" + e.inputType));
+        user.addEventListener("beforeinput", (e: any) => {
+          if ((e.data || "") === "!") e.preventDefault();
+        });
+        user.addEventListener("change", () => log.push("u.change:" + user.value));
+        cb.addEventListener("input", () => log.push("cb.input"));
+        cb.addEventListener("change", () => log.push("cb.change:" + cb.checked));
+        sel.addEventListener("input", () => log.push("sel.input"));
+        sel.addEventListener("change", () => log.push("sel.change:" + sel.value));
+        rg.addEventListener("input", () => log.push("rg.input"));
+        rg.addEventListener("change", () => log.push("rg.change"));
+        form.addEventListener("submit", (e: any) => {
+          log.push("submit:" + (e.submitter ? e.submitter.id : "-"));
+          if (user.value === "block") e.preventDefault();
+        });
+        form.addEventListener("reset", () => log.push("reset"));
+
+        user.focus();
+        win.sendEvent("keydown", { key: "d" });
+        win.sendEvent("keydown", { key: "!" });
+        cb.click();
+        sel.click();
+        user.focus();
+        win.sendEvent("keydown", { key: "Tab" });
+        console.log("log1=" + log.join("|"));
+        console.log("checked-style=" + win.computedStyle("#cb", "background-color"));
+
+        user.focus();
+        win.sendEvent("keydown", { key: "Enter" });
+        console.log("log2=" + log.join("|"));
+        doc.getElementById("sub").click();
+        user.value = "block";
+        doc.getElementById("sub").click();
+        console.log("prevented=" + log.filter((line: string) => line === "submit:sub").length);
+
+        user.value = "changed";
+        cb.checked = true;
+        doc.getElementById("rst").click();
+        console.log("reset=" + user.value + ":" + cb.checked + ":" + sel.value);
+        form.reset();
+        console.log("reset2=" + user.value + ":" + cb.checked);
+
+        // A range drag emits input while moving and change when the button is
+        // released.
+        const rect = rg.getBoundingClientRect();
+        const y = rect.y + rect.height / 2;
+        win.sendEvent("mousedown", { x: rect.x + 5, y: y });
+        win.sendEvent("mousemove", { x: rect.x + rect.width - 5, y: y });
+        win.sendEvent("mouseup", { x: rect.x + rect.width - 5, y: y });
+        console.log("range=" + rg.value + ":" +
+                    log.filter((line: string) => line === "rg.input").length + ":" +
+                    log.filter((line: string) => line === "rg.change").length);
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("log1")).toBe(
+      "u.input:insertText|cb.input|cb.change:true|sel.input|sel.change:b|u.change:abcd",
+    );
+    expect(value("checked-style")).toBe("rgb(0, 255, 0)");
+    // Enter in the input commits the value and submits the form implicitly
+    // (no submitter).
+    expect(value("log2")).toContain("|submit:-");
+    expect(value("prevented")).toBe("2");
+    expect(value("reset")).toBe("abc:false:a");
+    expect(value("reset2")).toBe("abc:false");
+    expect(value("range")).toMatch(/^10:2:1$/);
+  });
+
   it("masks a password field's painted value", () => {
     const { value } = harness.compileAndRun(
       "form-password",

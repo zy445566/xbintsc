@@ -43,6 +43,9 @@ struct FormState {
   /** 0 = none, 1 = forward, -1 = backward (`selectionDirection`). */
   int selection_direction = 0;
   bool focused = false;
+  /** Text value when focus arrived, so `change` fires only if it changed. */
+  std::string focus_value;
+  bool focus_value_valid = false;
   /** IME composition: `composition` is displayed at the selection until the
    * `compositionend` commit inserts it into `value`. */
   bool composing = false;

@@ -43,7 +43,9 @@ API 编写的文档可以原样运行。
 提升操作系统窗口并置位 `document.hasFocus()`，`blur()` 清除它。事件：
 `ready`（首帧呈现后）、`load`、`close`、`resize`、`scroll`、`focus`、`blur`，
 以及输入事件 `mousemove`、`mousedown`、`mouseup`、`click`、`wheel`、
-`keydown`、`keyup`。
+`keydown`、`keyup`、`keypress`、`textInput`、
+`compositionstart` / `compositionupdate` / `compositionend`、`beforeinput`、
+`input`、`change`、`submit` 与 `reset`。
 
 `createWindow(options)` 除标题与尺寸外还支持：`{ title, width, height,
 highDensity, resizable, borderless, alwaysOnTop, hidden, fullscreen, x, y,

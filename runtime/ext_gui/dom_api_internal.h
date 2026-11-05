@@ -231,6 +231,9 @@ METHOD(node_step_get);
 METHOD(node_step_set);
 METHOD(node_tab_index_get);
 METHOD(node_tab_index_set);
+METHOD(node_form_submit);
+METHOD(node_form_request_submit);
+METHOD(node_form_reset);
 
 /* node methods */
 METHOD(node_get_attribute);

@@ -47,8 +47,28 @@ static xt_value win_set_size(xt_value self, xt_value env, int32_t argc, xt_value
   (void)env;
   XtGuiWindow *win = xt_gui_window_from_this(self);
   if (win != NULL && win->window != NULL && argc >= 2) {
-    SDL_SetWindowSize(win->window, (int)xt_to_number(xt_arg(argc, argv, 0)),
-                      (int)xt_to_number(xt_arg(argc, argv, 1)));
+    int width = (int)xt_to_number(xt_arg(argc, argv, 0));
+    int height = (int)xt_to_number(xt_arg(argc, argv, 1));
+    SDL_SetWindowSize(win->window, width, height);
+    /* Settle the request with the window system (bounded by the backend's own
+     * timeout). `innerWidth` already reads the live size, so a host that does
+     * not pump SDL events — a page driven only by timers — otherwise never
+     * observes the matching `resize` event. */
+    SDL_SyncWindow(win->window);
+    int actualWidth = width;
+    int actualHeight = height;
+    SDL_GetWindowSize(win->window, &actualWidth, &actualHeight);
+    if (actualWidth != win->width || actualHeight != win->height) {
+      win->width = actualWidth;
+      win->height = actualHeight;
+      if (win->document != NULL) {
+        win->document->restyle((float)win->width, (float)win->height);
+      }
+      win->geometry.dirty = 1;
+      win->present_dirty = 1;
+      xt_gui_emit(win, "resize");
+      xt_gui_media_lists_notify(win);
+    }
   }
   return XT_UNDEFINED;
 }

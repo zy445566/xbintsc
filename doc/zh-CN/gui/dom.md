@@ -174,7 +174,10 @@ console.log(box.contains(inner));                 // 后代判断
 `getComputedStyle(el, pseudoElt)` 从**层叠结果**读取——UA 样式表、作者规则、
 继承和内联声明——而不是回显内联块，因此写在样式表里的规则同样可见。它支持
 `getPropertyValue`、`getPropertyPriority` 与命名属性（`cs.width`、
-`cs.backgroundColor`、`cs["--accent"]`）。传入 `"::before"` 或 `"::after"`
+`cs.backgroundColor`、`cs["--accent"]`）。边框属性也按边序列化：
+`border-top-color` / `border-right-color` / … 会把 `currentColor` 解析为元素
+计算颜色，`border-*-width` 对 `none` 边框报告实际使用的 `0px`，
+`border-*-style` 报告计算后的样式关键字。传入 `"::before"` 或 `"::after"`
 可读取生成内容盒；其他伪元素返回空值。每次读取都会先结算待处理的重新样式，
 因此早先创建的句柄在后续变更后仍然有效。
 

@@ -61,6 +61,9 @@ receives an `ErrorEvent`-like object (`.message`, `.error`, `.filename`,
 goes to stderr; return `true` from `onerror` or call `event.preventDefault()` to
 suppress it. Handlers that throw are reported and do not close the window.
 
+Programmatic `setSize` settles the request and fires `resize` synchronously
+(once) when the size actually changes, so a page that never pumps SDL events
+still sees the event; a later backend event for the same size is ignored.
 `createWindow(options)` honours more than the title and size:
 `{ title, width, height, highDensity, resizable, borderless, alwaysOnTop,
 hidden, fullscreen, x, y, opacity, maximized, minimized }` map to the matching

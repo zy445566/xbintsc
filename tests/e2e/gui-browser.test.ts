@@ -230,6 +230,42 @@ describe.skipIf(!guiAvailable)("gui extension — browser globals", () => {
     expect(value("frames")).toBe("5");
   });
 
+  it("emits resize from setSize without waiting for the event pump", () => {
+    const { value } = harness.compileAndRun(
+      "window-resize",
+      `
+      import { createWindow, run } from "gui";
+
+      const win: any = createWindow({ title: "resize", width: 320, height: 200 });
+      win.on("ready", () => {
+        let count = 0;
+        win.on("resize", () => {
+          count += 1;
+          console.log("resize=" + count + ":" + win.innerWidth + "x" + win.innerHeight);
+        });
+        win.setSize(700, 500);
+        console.log("sync=" + count + ":" + win.innerWidth);
+        // The same size is not a change and must not emit again.
+        win.setSize(700, 500);
+        console.log("same=" + count);
+        setTimeout(() => {
+          console.log("final=" + count);
+          win.close();
+        }, 150);
+      });
+      win.loadHTML("<div>x</div>");
+      run();
+      `,
+      { console: true, autocloseMs: 2000 },
+    );
+
+    expect(value("resize")).toBe("1:700x500");
+    expect(value("sync")).toBe("1:700");
+    expect(value("same")).toBe("1");
+    // The backend's queued resize event must not deliver it a second time.
+    expect(value("final")).toBe("1");
+  });
+
   it("scrolls the page, focuses the window, answers dialogs and reports media changes", () => {
     const { value, stderr } = harness.compileAndRun(
       "navigation",

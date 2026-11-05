@@ -56,6 +56,8 @@ API 编写的文档可以原样运行。
 `.reason` / `.promise`）。默认日志写到 stderr；`onerror` 返回 `true` 或调用
 `event.preventDefault()` 可抑制该日志。错误处理器自身抛错也只会被报告，不会关闭窗口。
 
+`setSize` 会先结算请求，并在尺寸确实变化时同步触发一次 `resize`，因此不主动泵
+SDL 事件的页面也能收到；后端随后针对同一尺寸的事件会被忽略。
 `createWindow(options)` 除标题与尺寸外还支持：`{ title, width, height,
 highDensity, resizable, borderless, alwaysOnTop, hidden, fullscreen, x, y,
 opacity, maximized, minimized }`，它们会映射到对应的 SDL 窗口标志/调用，而不是

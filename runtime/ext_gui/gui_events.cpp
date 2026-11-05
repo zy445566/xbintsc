@@ -304,6 +304,9 @@ void handle_event(const SDL_Event *event) {
   if (event->type == SDL_EVENT_WINDOW_RESIZED) {
     XtGuiWindow *win = xt_gui_find_by_window_id(event->window.windowID);
     if (win == NULL || !win->open) return;
+    /* `setSize` already applied and emitted the change synchronously; the
+     * queued backend event must not deliver the same resize twice. */
+    if (win->width == event->window.data1 && win->height == event->window.data2) return;
     win->width = event->window.data1;
     win->height = event->window.data2;
     if (win->document != NULL) win->document->restyle((float)win->width, (float)win->height);

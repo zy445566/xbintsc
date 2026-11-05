@@ -44,6 +44,7 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 ## Date
 
 - `Date` backed by `gmtime_r`; ISO 8601 parsing through `Date.parse` / `new Date(string)`.
+- `toLocaleDateString` / `toLocaleTimeString` / `toLocaleString` format the local time (`M/D/YYYY`, `h:mm:ss AM`); a small options subset (`weekday`/`year`/`month`/`day`/`hour`/`minute`/`second`/`hour12`) is honoured. `toDateString` / `toTimeString` / `toUTCString` are available too, and an invalid date formats as `Invalid Date`.
 
 ## RegExp
 

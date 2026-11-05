@@ -42,6 +42,7 @@
 ## Date
 
 - `Date` 基于 `gmtime_r`；`Date.parse` / `new Date(string)` 支持 ISO 8601 解析。
+- `toLocaleDateString` / `toLocaleTimeString` / `toLocaleString` 按本地时间格式化（`M/D/YYYY`、`h:mm:ss AM`）；支持少量 options（`weekday`/`year`/`month`/`day`/`hour`/`minute`/`second`/`hour12`）。另有 `toDateString` / `toTimeString` / `toUTCString`；无效日期格式化为 `Invalid Date`。
 
 ## RegExp
 

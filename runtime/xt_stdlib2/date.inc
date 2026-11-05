@@ -149,9 +149,172 @@ xt_value xt_date_static(xt_value name, int32_t argc, xt_value *argv) {
   return XT_UNDEFINED;
 }
 
+static const char *const xt_date_month_long[12] = {
+    "January", "February", "March",     "April",   "May",      "June",
+    "July",    "August",   "September", "October", "November", "December",
+};
+static const char *const xt_date_month_short[12] = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+};
+static const char *const xt_date_weekday_long[7] = {
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+};
+static const char *const xt_date_weekday_short[7] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+
+static void xt_date_append(char *out, size_t capacity, size_t *length, const char *text) {
+  if (text == NULL) return;
+  size_t count = strlen(text);
+  if (*length + count + 1 > capacity) count = capacity > *length + 1 ? capacity - *length - 1 : 0;
+  memcpy(out + *length, text, count);
+  *length += count;
+  out[*length] = '\0';
+}
+
+static void xt_date_append_int(char *out, size_t capacity, size_t *length, int value, int width) {
+  char buffer[24];
+  if (width == 2) {
+    snprintf(buffer, sizeof(buffer), "%02d", value);
+  } else {
+    snprintf(buffer, sizeof(buffer), "%d", value);
+  }
+  xt_date_append(out, capacity, length, buffer);
+}
+
+/** Read a string option (`{ month: "long" }`); null when absent. */
+static const char *xt_date_option(xt_value options, const char *name) {
+  if (!XT_IS_OBJECT(options)) return NULL;
+  xt_value value = xt_object_get_cstr(options, name);
+  if (XT_IS_UNDEFINED(value) || XT_IS_NULL(value)) return NULL;
+  return xt_string_data(xt_to_string(value));
+}
+
+static int xt_date_option_width(const char *value) {
+  return value != NULL && strcmp(value, "2-digit") == 0 ? 2 : 1;
+}
+
+static int xt_date_has_option(xt_value options, const char *const *names, int count) {
+  for (int i = 0; i < count; i++) {
+    if (xt_date_option(options, names[i]) != NULL) return 1;
+  }
+  return 0;
+}
+
+/** `toLocaleDateString` with a small, deterministic en-US-style subset of the
+ * options object. No locale database is linked, so unknown locales still use
+ * the same month/day order. */
+static xt_value xt_date_locale_date(const struct tm *tm, xt_value options) {
+  static const char *const names[] = {"weekday", "year", "month", "day"};
+  int custom = xt_date_has_option(options, names, 4);
+  char buffer[128];
+  size_t length = 0;
+  buffer[0] = '\0';
+  if (!custom) {
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_mon + 1, 1);
+    xt_date_append(buffer, sizeof(buffer), &length, "/");
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_mday, 1);
+    xt_date_append(buffer, sizeof(buffer), &length, "/");
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_year + 1900, 4);
+    return xt_string_from_cstr(buffer);
+  }
+  const char *weekday = xt_date_option(options, "weekday");
+  if (weekday != NULL) {
+    if (strcmp(weekday, "long") == 0) xt_date_append(buffer, sizeof(buffer), &length,
+                                                    xt_date_weekday_long[tm->tm_wday]);
+    else xt_date_append(buffer, sizeof(buffer), &length, xt_date_weekday_short[tm->tm_wday]);
+    xt_date_append(buffer, sizeof(buffer), &length, ", ");
+  }
+  const char *month = xt_date_option(options, "month");
+  const char *day = xt_date_option(options, "day");
+  const char *year = xt_date_option(options, "year");
+  if (month != NULL && (strcmp(month, "long") == 0 || strcmp(month, "short") == 0 ||
+                        strcmp(month, "narrow") == 0)) {
+    if (strcmp(month, "long") == 0) {
+      xt_date_append(buffer, sizeof(buffer), &length, xt_date_month_long[tm->tm_mon]);
+    } else {
+      xt_date_append(buffer, sizeof(buffer), &length, xt_date_month_short[tm->tm_mon]);
+    }
+    if (day != NULL) {
+      xt_date_append(buffer, sizeof(buffer), &length, " ");
+      xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_mday,
+                         xt_date_option_width(day));
+    }
+    if (year != NULL) {
+      xt_date_append(buffer, sizeof(buffer), &length, ", ");
+      xt_date_append_int(buffer, sizeof(buffer), &length,
+                         xt_date_option_width(year) == 2 ? (tm->tm_year + 1900) % 100
+                                                          : tm->tm_year + 1900,
+                         xt_date_option_width(year));
+    }
+    return xt_string_from_cstr(buffer);
+  }
+  if (month != NULL) {
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_mon + 1,
+                       xt_date_option_width(month));
+  }
+  if (day != NULL) {
+    if (month != NULL) xt_date_append(buffer, sizeof(buffer), &length, "/");
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_mday, xt_date_option_width(day));
+  }
+  if (year != NULL) {
+    if (month != NULL || day != NULL) xt_date_append(buffer, sizeof(buffer), &length, "/");
+    xt_date_append_int(buffer, sizeof(buffer), &length,
+                       xt_date_option_width(year) == 2 ? (tm->tm_year + 1900) % 100
+                                                        : tm->tm_year + 1900,
+                       xt_date_option_width(year));
+  }
+  return xt_string_from_cstr(buffer);
+}
+
+static xt_value xt_date_locale_time(const struct tm *tm, xt_value options) {
+  static const char *const names[] = {"hour", "minute", "second"};
+  int custom = xt_date_has_option(options, names, 3);
+  const char *hour12_option = xt_date_option(options, "hour12");
+  int hour12 = 1;
+  if (hour12_option != NULL) hour12 = strcmp(hour12_option, "false") != 0;
+  int hour = tm->tm_hour;
+  const char *suffix = hour >= 12 ? "PM" : "AM";
+  if (hour12) hour = hour % 12 == 0 ? 12 : hour % 12;
+  char buffer[64];
+  size_t length = 0;
+  buffer[0] = '\0';
+  const char *hour_option = xt_date_option(options, "hour");
+  const char *minute_option = xt_date_option(options, "minute");
+  const char *second_option = xt_date_option(options, "second");
+  if (!custom) {
+    xt_date_append_int(buffer, sizeof(buffer), &length, hour, 1);
+    xt_date_append(buffer, sizeof(buffer), &length, ":");
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_min, 2);
+    xt_date_append(buffer, sizeof(buffer), &length, ":");
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_sec, 2);
+    if (hour12) {
+      xt_date_append(buffer, sizeof(buffer), &length, " ");
+      xt_date_append(buffer, sizeof(buffer), &length, suffix);
+    }
+    return xt_string_from_cstr(buffer);
+  }
+  if (hour_option != NULL) {
+    xt_date_append_int(buffer, sizeof(buffer), &length, hour, xt_date_option_width(hour_option));
+  } else if (minute_option != NULL || second_option != NULL) {
+    xt_date_append_int(buffer, sizeof(buffer), &length, hour, 1);
+  }
+  if (minute_option != NULL) {
+    xt_date_append(buffer, sizeof(buffer), &length, ":");
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_min,
+                       xt_date_option_width(minute_option));
+  }
+  if (second_option != NULL) {
+    xt_date_append(buffer, sizeof(buffer), &length, ":");
+    xt_date_append_int(buffer, sizeof(buffer), &length, tm->tm_sec,
+                       xt_date_option_width(second_option));
+  }
+  if (hour12) {
+    xt_date_append(buffer, sizeof(buffer), &length, " ");
+    xt_date_append(buffer, sizeof(buffer), &length, suffix);
+  }
+  return xt_string_from_cstr(buffer);
+}
+
 static xt_value xt_date_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled) {
-  (void)argc;
-  (void)argv;
   *handled = 1;
   xt_date *date = (xt_date *)XT_GET_PTR(target);
   if (strcmp(method, "getTime") == 0 || strcmp(method, "valueOf") == 0) return xt_number(date->time);
@@ -167,8 +330,45 @@ static xt_value xt_date_method(xt_value target, const char *method, int32_t argc
   }
   /* Bare getters and `toString` report local time; `getUTC*` and
    * `toISOString` report UTC. */
-  if (isUtc || strcmp(method, "toISOString") == 0) xt_gmtime_r(&seconds, &tm);
-  else xt_localtime_r(&seconds, &tm);
+  if (isUtc || strcmp(method, "toISOString") == 0 || strcmp(method, "toUTCString") == 0) {
+    xt_gmtime_r(&seconds, &tm);
+  } else {
+    xt_localtime_r(&seconds, &tm);
+  }
+  /* Locale/time-string methods answer "Invalid Date" for NaN time values, as
+   * browsers do; `toISOString` is the one that throws. */
+  if (strcmp(method, "toLocaleDateString") == 0 || strcmp(method, "toLocaleTimeString") == 0 ||
+      strcmp(method, "toLocaleString") == 0 || strcmp(method, "toDateString") == 0 ||
+      strcmp(method, "toTimeString") == 0 || strcmp(method, "toUTCString") == 0) {
+    if (isnan(date->time)) return xt_string_from_cstr("Invalid Date");
+    xt_value options = XT_UNDEFINED;
+    if (argc >= 2 && XT_IS_OBJECT(argv[1])) options = argv[1];
+    else if (argc >= 1 && XT_IS_OBJECT(argv[0])) options = argv[0];
+    if (strcmp(method, "toDateString") == 0) {
+      char buffer[48];
+      snprintf(buffer, sizeof(buffer), "%s %s %02d %04d", xt_date_weekday_short[tm.tm_wday],
+               xt_date_month_short[tm.tm_mon], tm.tm_mday, tm.tm_year + 1900);
+      return xt_string_from_cstr(buffer);
+    }
+    if (strcmp(method, "toTimeString") == 0) {
+      char buffer[32];
+      snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", tm.tm_hour, tm.tm_min, tm.tm_sec);
+      return xt_string_from_cstr(buffer);
+    }
+    if (strcmp(method, "toUTCString") == 0) {
+      char buffer[64];
+      snprintf(buffer, sizeof(buffer), "%s, %02d %s %04d %02d:%02d:%02d GMT",
+               xt_date_weekday_short[tm.tm_wday], tm.tm_mday, xt_date_month_short[tm.tm_mon],
+               tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec);
+      return xt_string_from_cstr(buffer);
+    }
+    xt_value date_part = xt_date_locale_date(&tm, options);
+    if (strcmp(method, "toLocaleDateString") == 0) return date_part;
+    xt_value time_part = xt_date_locale_time(&tm, options);
+    if (strcmp(method, "toLocaleTimeString") == 0) return time_part;
+    xt_value comma = xt_string_from_cstr(", ");
+    return xt_add(xt_add(date_part, comma), time_part);
+  }
   if (strcmp(name, "getFullYear") == 0) return xt_number(tm.tm_year + 1900);
   if (strcmp(name, "getMonth") == 0) return xt_number(tm.tm_mon);
   if (strcmp(name, "getDate") == 0) return xt_number(tm.tm_mday);

@@ -22,11 +22,22 @@
       font-size: 14px;
     }
 
-    #scene {
+    .scene {
       display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 1100px;
       height: 700px;
       background-color: #f0b57f;
+    }
+
+    #scene-webgl2 {
+      display: block;
+    }
+
+    #scene-webgpu {
+      display: none;
     }
 
     .hud {
@@ -143,10 +154,6 @@
 
     .chip {
       position: absolute;
-      right: 24px;
-      bottom: 28px;
-      width: 150px;
-      height: 40px;
       padding: 0;
       display: flex;
       align-items: center;
@@ -164,11 +171,34 @@
       pointer-events: auto;
     }
 
+    .backend {
+      right: 24px;
+      bottom: 28px;
+      width: 190px;
+      height: 46px;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .backend .caption {
+      color: #91a6b1;
+      font-size: 8px;
+      font-weight: bold;
+      letter-spacing: 1.6px;
+    }
+
+    .sound {
+      right: 224px;
+      bottom: 28px;
+      width: 150px;
+      height: 46px;
+    }
+
     .status {
       position: absolute;
       right: 24px;
-      bottom: 82px;
-      width: 300px;
+      bottom: 84px;
+      width: 350px;
       color: rgba(248, 242, 230, 0.58);
       font-size: 9px;
       letter-spacing: 0.9px;
@@ -194,11 +224,14 @@
 </head>
 
 <body>
-  <canvas id="scene" width="1100" height="700"></canvas>
+  <!-- One canvas per backend: a canvas can only ever have one context kind, so
+       switching renderers switches which canvas is displayed. -->
+  <canvas id="scene-webgl2" class="scene" width="1100" height="700"></canvas>
+  <canvas id="scene-webgpu" class="scene" width="1100" height="700"></canvas>
 
   <div class="hud">
     <div class="brand">
-      <div class="kicker">WEBGL 2 · ES MODULES · WEBAUDIO</div>
+      <div class="kicker">WEBGL 2 / WEBGPU · ES MODULES · WEBAUDIO</div>
       <div class="title">PELICAN RIDE <span>3D</span></div>
       <div class="subtitle">黄昏公路上的鹈鹕骑手</div>
     </div>
@@ -223,10 +256,15 @@
     <div class="help">
       <div>空格 跳跃 · B 车铃 · W 加速 · S 刹车</div>
       <div>鼠标拖拽或滚轮 视角 · M 静音 · R 重置 · P 暂停</div>
+      <div>G 或右下角按钮 切换 WebGL 2 / WebGPU 渲染</div>
     </div>
 
-    <div id="status" class="status">WEBGL 2</div>
-    <div id="sound" class="chip"><span id="sound-label">SOUND ON</span></div>
+    <div id="status" class="status">STARTING</div>
+    <div id="sound" class="chip sound"><span id="sound-label">SOUND ON</span></div>
+    <div id="backend" class="chip backend">
+      <span class="caption">RENDERER</span>
+      <span id="backend-label">WEBGL 2</span>
+    </div>
     <div id="error" class="error"></div>
   </div>
 

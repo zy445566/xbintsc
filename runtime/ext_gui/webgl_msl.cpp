@@ -80,12 +80,13 @@ bool cross_compile_msl_stage(const std::vector<uint32_t> &spirv, int stage,
   }
 }
 
-}  // namespace xtgui
-
 bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
                        std::string *source, std::string *entry, std::string *log) {
   return cross_compile_msl_stage(spirv, fragment ? 1 : 0, source, entry, log);
 }
+
+}  // namespace xtgui
+
 #else /* !__APPLE__ */
 
 namespace xtgui {

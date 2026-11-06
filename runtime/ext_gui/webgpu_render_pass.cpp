@@ -63,14 +63,13 @@ xt_value pass_set_vertex_buffer(Object &object, int argc, xt_value *argv) {
   std::shared_ptr<Object> buffer = get_object(object_id(xt_arg(argc, argv, 1)), Kind::Buffer);
   if (buffer == nullptr || pass.pass == nullptr || slot < 0 || slot >= 16) return XT_UNDEFINED;
   Buffer *native = static_cast<Buffer *>(buffer.get());
+  /* Record the slot; `prepare_draw` binds the whole range in one SDL call.
+   * Binding each slot separately hits SDL_GPU's Vulkan `firstSlot` handling:
+   * a second `SDL_BindGPUVertexBuffers(pass, 1, …)` is stored at index 0 and
+   * clobbers the geometry buffer, which turns an instanced draw into garbage
+   * (the instance buffer is then read as the position attribute). */
   pass.vertex_buffers[slot] = native->id;
   pass.vertex_offsets[slot] = arg_u64(argc, argv, 2);
-  if (native->has_gpu) {
-    SDL_GPUBufferBinding binding = {};
-    binding.buffer = native->gpu;
-    binding.offset = (Uint32)pass.vertex_offsets[slot];
-    SDL_BindGPUVertexBuffers(pass.pass, (Uint32)slot, &binding, 1);
-  }
   return XT_UNDEFINED;
 }
 
@@ -93,9 +92,31 @@ xt_value pass_set_index_buffer(Object &object, int argc, xt_value *argv) {
   return XT_UNDEFINED;
 }
 
+/** Bind the recorded vertex-buffer prefix in one call, from slot 0. */
+bool bind_vertex_buffers(RenderPassEncoder &pass) {
+  SDL_GPUBufferBinding bindings[16] = {};
+  Uint32 count = 0;
+  for (int slot = 0; slot < 16; slot++) {
+    if (pass.vertex_buffers[slot] == 0) break;
+    std::shared_ptr<Object> object = get_object(pass.vertex_buffers[slot], Kind::Buffer);
+    if (object == nullptr) return false;
+    Buffer *buffer = static_cast<Buffer *>(object.get());
+    if (!buffer->has_gpu) return false;
+    bindings[count].buffer = buffer->gpu;
+    bindings[count].offset = (Uint32)pass.vertex_offsets[slot];
+    count++;
+  }
+  /* A pipeline may have no vertex buffers at all (positions generated from
+   * @builtin(vertex_index)); that is valid, so an empty prefix is not a
+   * failure. */
+  if (count > 0) SDL_BindGPUVertexBuffers(pass.pass, 0, bindings, count);
+  return true;
+}
+
 bool prepare_draw(RenderPassEncoder &pass) {
   RenderPipeline *pipeline = pipeline_of(pass);
   if (pipeline == nullptr || pass.pass == nullptr) return false;
+  if (!bind_vertex_buffers(pass)) return false;
   SDL_GPUCommandBuffer *command = command_of(pass);
   return bind_render_resources(pass, *pipeline, command);
 }

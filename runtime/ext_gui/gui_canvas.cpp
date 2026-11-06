@@ -91,6 +91,7 @@ void xt_gui_canvas_sync(XtGuiWindow *win) {
   std::vector<const xtgui::Node *> nodes;
   collectCanvases(win->document->root(), &nodes);
   const XtWebglApi *webgl = xt_webgl_api();
+  const XtWebgpuApi *webgpu = xt_webgpu_api();
   for (const xtgui::Node *node : nodes) {
     if (webgl != nullptr) {
       if (void *context = webgl->find(win, node)) {
@@ -98,6 +99,20 @@ void xt_gui_canvas_sync(XtGuiWindow *win) {
         float height = 0.0f;
         uint64_t id = 0;
         webgl->info(context, &width, &height, &id);
+        win->document->setCanvasInfo(node, width, height, id);
+        continue;
+      }
+    }
+    /* A WebGPU context publishes its colour texture through the same canvas
+     * table: the paint pipeline samples that texture directly, so it needs a
+     * non-zero canvas id exactly like a WebGL or 2D canvas. */
+    if (webgpu != nullptr) {
+      uint32_t context = 0;
+      if (webgpu->canvas_find(win, node, &context)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgpu->info(context, &width, &height, &id);
         win->document->setCanvasInfo(node, width, height, id);
         continue;
       }

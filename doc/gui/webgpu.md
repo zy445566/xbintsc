@@ -28,6 +28,10 @@ takes its fallback path.
 - `context.getCurrentTexture()` returns a `GPUTexture` whose SDL_GPU texture is
   also the canvas's colour texture. The page's image pipeline samples it
   directly (no CPU readback), exactly like the WebGL path.
+- Vertex buffers are recorded per slot and bound together at draw time
+  (`SDL_BindGPUVertexBuffers` starts at slot 0). This SDL_GPU build's Vulkan
+  backend mishandles separate `firstSlot` bindings, so binding slot 1 on its own
+  would overwrite slot 0 and break `stepMode: "instance"`.
 - `context.configure()` creates the backbuffer at the canvas's `width` /
   `height`; the `canvas.width` / `canvas.height` setters recreate it.
 - Queue submissions are immediate SDL_GPU command buffer submissions. A

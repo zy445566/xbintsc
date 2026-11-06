@@ -20,6 +20,12 @@ const PAGE = `
   <canvas id="c" width="64" height="64"></canvas>
 </body></html>`;
 
+const INSTANCED_PAGE = `
+<html><head><title>webgpu instanced</title></head>
+<body style="margin:0">
+  <canvas id="c" width="64" height="64"></canvas>
+</body></html>`;
+
 describe.skipIf(!guiAvailable)("gui extension — WebGPU", () => {
   beforeAll(() => harness.setup());
   afterAll(() => harness.cleanup());
@@ -176,6 +182,10 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         pass.end();
         device.queue.submit([encoder.finish()]);
         await device.queue.onSubmittedWorkDone();
+        /* The canvas texture must appear in the compositor's display list, not
+         * just in the GPU readback: the engine publishes a WebGPU canvas's
+         * colour-texture id during its canvas sync. */
+        label("composite", String((win as any).paintList()).indexOf("canvas=") >= 0);
 
         const readback: any = device.createBuffer({
           size: 256,
@@ -261,11 +271,148 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
     expect(value("compiled")).toBe("0");
     expect(value("pipeline")).toBe("true");
     expect(value("bind-group")).toBe("true");
+    expect(value("composite")).toBe("true");
     expect(value("triangle")).toMatch(/^0,0,[1-9][0-9]*,255$/);
     expect(value("validation")).toBe("true");
     expect(value("compile-error")).toBe("true");
     expect(value("compute-pipeline")).toBe("true");
     expect(value("compute")).toBe("7,11,15,19");
+    expect(stderr).not.toContain("SDL_GPU");
+  });
+
+  it("binds a second, per-instance vertex buffer without clobbering slot 0", () => {
+    const { value, stderr } = harness.compileAndRun(
+      "webgpu-instanced",
+      `
+      import { createWindow } from "gui";
+      import page from "./instanced.html";
+
+      const win = createWindow({ title: "instanced", width: 256, height: 256 });
+      const label = (name: string, value: any): void => console.log(name + "=" + value);
+
+      const SHADER = \`
+struct VOut {
+  @builtin(position) pos: vec4f,
+  @location(0) color: vec3f,
+};
+
+@vertex
+fn vs(@location(0) position: vec2f, @location(1) instance: vec4f) -> VOut {
+  var out: VOut;
+  out.pos = vec4f(position.x * 0.35 + instance.x, position.y * 0.35 + instance.y, 0.0, 1.0);
+  out.color = vec3f(1.0 - instance.z, instance.z, 0.0);
+  return out;
+}
+
+@fragment
+fn fs(in: VOut) -> @location(0) vec4f {
+  return vec4f(in.color, 1.0);
+}
+\`;
+
+      const run = async (): Promise<void> => {
+        const canvas: any = document.getElementById("c");
+        const context: any = canvas.getContext("webgpu");
+        const gpu: any = (navigator as any).gpu;
+        if (context == null || gpu == null) { win.close(); return; }
+        const adapter = await gpu.requestAdapter();
+        const device: any = await adapter.requestDevice();
+        const format = gpu.getPreferredCanvasFormat();
+        context.configure({
+          device,
+          format,
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+        });
+
+        const module: any = device.createShaderModule({ code: SHADER });
+        const pipeline: any = device.createRenderPipeline({
+          vertex: {
+            module,
+            entryPoint: "vs",
+            buffers: [
+              {
+                arrayStride: 8,
+                stepMode: "vertex",
+                attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }],
+              },
+              {
+                arrayStride: 16,
+                stepMode: "instance",
+                attributes: [{ shaderLocation: 1, offset: 0, format: "float32x4" }],
+              },
+            ],
+          },
+          fragment: { module, entryPoint: "fs", targets: [{ format }] },
+          primitive: { topology: "triangle-list" },
+        });
+
+        const vertices = device.createBuffer({
+          size: 24,
+          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        });
+        device.queue.writeBuffer(vertices, 0, new Float32Array([-1, -1, 1, -1, 0, 1]));
+        const instances = device.createBuffer({
+          size: 32,
+          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        });
+        /* x/y offset and a red/green switch per instance. */
+        device.queue.writeBuffer(
+          instances,
+          0,
+          new Float32Array([-0.5, 0, 0, 0, 0.5, 0, 1, 0]),
+        );
+
+        const encoder: any = device.createCommandEncoder();
+        const pass: any = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: context.getCurrentTexture().createView(),
+            clearValue: { r: 0, g: 0, b: 1, a: 1 },
+            loadOp: "clear",
+            storeOp: "store",
+          }],
+        });
+        pass.setPipeline(pipeline);
+        pass.setVertexBuffer(0, vertices);
+        pass.setVertexBuffer(1, instances);
+        pass.draw(3, 2, 0, 0);
+        pass.end();
+        device.queue.submit([encoder.finish()]);
+        await device.queue.onSubmittedWorkDone();
+
+        const readback: any = device.createBuffer({
+          size: 256 * 64,
+          usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+        });
+        const copy: any = device.createCommandEncoder();
+        copy.copyTextureToBuffer(
+          { texture: context.getCurrentTexture(), origin: { x: 0, y: 0 } },
+          { buffer: readback, bytesPerRow: 256 },
+          { width: 64, height: 64 },
+        );
+        device.queue.submit([copy.finish()]);
+        await readback.mapAsync(GPUMapMode.READ);
+        const pixels = new Uint8Array(readback.getMappedRange());
+        const at = (x: number, y: number): string => {
+          const i = y * 256 + x * 4;
+          return pixels[i] + "," + pixels[i + 1] + "," + pixels[i + 2] + "," + pixels[i + 3];
+        };
+        label("left", at(16, 32));
+        label("right", at(48, 32));
+        readback.unmap();
+        win.close();
+      };
+
+      win.on("ready", () => { run(); });
+      win.loadHTML(page);
+      `,
+      { files: { "instanced.html": INSTANCED_PAGE }, autocloseMs: 12000, console: true },
+    );
+
+    /* bgra8unorm readback: red = 0,0,255 and green = 0,255,0. A clobbered
+     * slot 0 makes the instance buffer the position source, so neither probe
+     * sees its triangle. */
+    expect(value("left")).toBe("0,0,255,255");
+    expect(value("right")).toBe("0,255,0,255");
     expect(stderr).not.toContain("SDL_GPU");
   });
 });

@@ -25,6 +25,10 @@ const module = device.createShaderModule({ code: WGSL });
 
 - `context.getCurrentTexture()` 返回的 `GPUTexture` 同时就是画布的颜色纹理，
   页面图像管线直接采样它（不经 CPU 回读），与 WebGL 路径一致。
+- 多路顶点缓冲按槽位记录，在 draw 时从 slot 0 起一次性绑定
+  （`SDL_BindGPUVertexBuffers`）。这版 SDL_GPU 的 Vulkan 后端对分开的
+  `firstSlot` 绑定处理有误，单独绑定 slot 1 会覆盖 slot 0，使
+  `stepMode: "instance"` 失效。
 - `context.configure()` 按画布的 `width`/`height` 创建后备缓冲；
   `canvas.width`/`canvas.height` 的赋值会重建它。
 - 队列提交即提交 SDL_GPU 命令缓冲。已结束的 render pass 在下一帧对合成器可见。

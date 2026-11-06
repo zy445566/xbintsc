@@ -34,6 +34,10 @@ namespace xtgui {
 bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
                        std::string *source, std::string *entry, std::string *log);
 
+/** Stage-explicit form: 0 = vertex, 1 = fragment, 2 = compute. */
+bool cross_compile_msl_stage(const std::vector<uint32_t> &spirv, int stage,
+                             std::string *source, std::string *entry, std::string *log);
+
 }  // namespace xtgui
 
 #endif /* XT_GUI_WEBGL_MSL_H */

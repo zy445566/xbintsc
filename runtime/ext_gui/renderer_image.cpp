@@ -16,6 +16,7 @@
 #include "perf.h"
 #include "svg.h"
 #include "webgl_api.h"
+#include "webgpu_api.h"
 
 #include "renderer_shaders.h"
 
@@ -158,6 +159,11 @@ static SDL_GPUTexture *ensureMediaTexture(SDL_GPUDevice *device, uint64_t media_
  * directly and nothing is copied through the CPU. */
 static SDL_GPUTexture *ensureCanvasTexture(SDL_GPUDevice *device, uint64_t canvas_id,
                                           XtGuiUploadBatch *batch) {
+  if (const XtWebgpuApi *webgpu = xt_webgpu_api()) {
+    if (void *texture = webgpu->color_texture(canvas_id)) {
+      return static_cast<SDL_GPUTexture *>(texture);
+    }
+  }
   if (const XtWebglApi *webgl = xt_webgl_api()) {
     if (void *texture = webgl->color_texture(canvas_id)) {
       return static_cast<SDL_GPUTexture *>(texture);

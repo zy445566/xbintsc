@@ -140,6 +140,14 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
 bool compile_glsl(const std::string &source, bool fragment, std::vector<uint32_t> *spirv,
                   std::string *log);
 
+/**
+ * The same compiler for an explicit stage: 0 = vertex, 1 = fragment,
+ * 2 = compute. WebGL always passes vertex/fragment; WebGPU compute pipelines
+ * need the third.
+ */
+bool compile_glsl_stage(const std::string &source, int stage, std::vector<uint32_t> *spirv,
+                        std::string *log);
+
 /** One std140 block member, reflected from SPIR-V. */
 struct GlslBlockMember {
   std::string name;

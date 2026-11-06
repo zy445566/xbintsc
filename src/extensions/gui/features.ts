@@ -40,9 +40,21 @@ export function hasMediaUsage(usage: ProgramUsage): boolean {
   return usage.strings.some((value) => MEDIA_TAG.test(value) || MEDIA_TAG_NAME.test(value));
 }
 
+/** True when the program may use `navigator.gpu` / WGSL shaders. */
+export function hasWebgpuUsage(usage: ProgramUsage): boolean {
+  if (usage.dynamicMarkup) return true;
+  for (const name of usage.identifiers) {
+    if (name.startsWith("GPU")) return true;
+  }
+  return usage.strings.some((value) =>
+    /webgpu|navigator\.gpu|requestAdapter|createShaderModule|@vertex|@fragment|@compute|wgsl/i.test(value),
+  );
+}
+
 /** True when the program may compile GLSL at run time (WebGL or blending). */
 export function hasGpuUsage(usage: ProgramUsage): boolean {
   if (usage.dynamicMarkup) return true;
+  if (hasWebgpuUsage(usage)) return true;
   if (usage.identifiers.has("mixBlendMode") || usage.identifiers.has("backdropFilter")) return true;
   if (usage.getContext.some((kind) => kind === undefined || /webgl/i.test(kind))) return true;
   return usage.strings.some((value) => GPU_TOKEN.test(value));
@@ -150,6 +162,18 @@ export const guiLinkFeatures: readonly LinkFeature[] = [
      */
     runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "text_bridge.c")],
     used: hasShapingUsage,
+  },
+  {
+    name: "webgpu",
+    description: "WebGPU (navigator.gpu, WGSL) rendering over SDL_GPU (requires gpu)",
+    requires: ["gpu"],
+    /**
+     * `webgpu_bridge.c` installs `XtWebgpuApi` and references the WebGPU
+     * runtime, pulling the object model, WGSL front end and canvas bindings
+     * out of `gui.a`. A page without WebGPU links none of them.
+     */
+    runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "webgpu_bridge.c")],
+    used: hasWebgpuUsage,
   },
   {
     name: "webgl",

@@ -18,9 +18,11 @@ const xtgui::GpuShaderApi kGpuShaderApi = {
     xtgui::scan_glsl,
     xtgui::rewrite_glsl,
     xtgui::compile_glsl,
+    xtgui::compile_glsl_stage,
     xtgui::reflect_uniform_block,
     xtgui::reflect_attributes,
     xtgui::cross_compile_msl,
+    xtgui::cross_compile_msl_stage,
 };
 
 }  // namespace

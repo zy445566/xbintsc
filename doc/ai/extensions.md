@@ -119,7 +119,13 @@ a bundled glslang — consumed by Vulkan, or cross-compiled to MSL by bundled
 SPIRV-Cross on Metal — and drawn through SDL_GPU; the page composites the colour
 texture without a CPU readback, and WebGL 2 adds VAOs, instancing, integer
 attributes, sampler objects, `texStorage2D` and buffer copies (see
-[../gui/webgl.md](../gui/webgl.md)). WebXR and streaming are **not**
+[../gui/webgl.md](../gui/webgl.md)). **WebGPU is implemented** too:
+`navigator.gpu` and `getContext("webgpu")` expose the `GPU…` object model
+(buffers, textures, samplers, bind groups, render/compute pipelines, passes,
+copies and buffer mapping) behind the optional `webgpu` link feature (which
+requires `gpu`), with WGSL translated to GLSL and compiled by the same bundled
+glslang. Queries, atomics and DOM-image uploads report validation errors; see
+[../gui/webgpu.md](../gui/webgpu.md). WebXR and streaming are **not**
 implemented: `typeof` answers `"undefined"` so a page takes its own fallback
 branch. `fetch`
 is **not** a GUI extension feature: the core runtime provides it (`http://`,

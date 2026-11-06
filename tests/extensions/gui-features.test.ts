@@ -22,6 +22,7 @@ import {
   hasMediaUsage,
   hasShapingUsage,
   hasWebglUsage,
+  hasWebgpuUsage,
 } from "../../src/extensions/gui/features.js";
 import type { ProgramUsage } from "../../src/extensions/link-feature.js";
 
@@ -46,6 +47,7 @@ const media = guiLinkFeatures.find((feature) => feature.name === "media")!;
 const gpu = guiLinkFeatures.find((feature) => feature.name === "gpu")!;
 const images = guiLinkFeatures.find((feature) => feature.name === "images")!;
 const shaping = guiLinkFeatures.find((feature) => feature.name === "shaping")!;
+const webgpu = guiLinkFeatures.find((feature) => feature.name === "webgpu")!;
 const webgl = guiLinkFeatures.find((feature) => feature.name === "webgl")!;
 
 describe("gui link features", () => {
@@ -56,12 +58,14 @@ describe("gui link features", () => {
       "gpu",
       "images",
       "shaping",
+      "webgpu",
       "webgl",
     ]);
     expect(media.description).toMatch(/FFmpeg/);
     expect(gpu.description).toMatch(/glslang|GLSL/);
     expect(images.description).toMatch(/stb_image|NanoSVG/);
     expect(shaping.description).toMatch(/HarfBuzz|FreeType/);
+    expect(webgpu.requires).toEqual(["gpu"]);
     expect(webgl.requires).toEqual(["gpu"]);
   });
 
@@ -85,6 +89,11 @@ describe("gui link features", () => {
   it("links the shaping bridge without an archive", () => {
     expect(shaping.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_gui", "text_bridge.c")]);
     expect(shaping.nativeObjects?.()).toBeUndefined();
+  });
+
+  it("links the webgpu bridge without an archive", () => {
+    expect(webgpu.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_gui", "webgpu_bridge.c")]);
+    expect(webgpu.nativeObjects?.()).toBeUndefined();
   });
 
   it("links the webgl bridge without an archive", () => {
@@ -214,5 +223,16 @@ describe("shaping usage detection", () => {
 
   it("turns on for dynamic markup", () => {
     expect(hasShapingUsage(usage({ dynamicMarkup: true }))).toBe(true);
+  });
+});
+
+describe("webgpu usage detection", () => {
+  it("recognises WebGPU calls and WGSL sources", () => {
+    expect(hasWebgpuUsage(usage({ strings: ["webgpu"] }))).toBe(true);
+    expect(hasWebgpuUsage(usage({ strings: ["navigator.gpu"] }))).toBe(true);
+    expect(hasWebgpuUsage(usage({ strings: ["requestAdapter"] }))).toBe(true);
+    expect(hasWebgpuUsage(usage({ strings: ["@vertex fn main() {}"] }))).toBe(true);
+    expect(hasWebgpuUsage(usage({ identifiers: new Set(["GPUDevice"]) }))).toBe(true);
+    expect(hasWebgpuUsage(usage({ strings: ["<canvas>"] }))).toBe(false);
   });
 });

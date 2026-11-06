@@ -9,6 +9,7 @@
  */
 
 #include "dom_api_internal.h"
+#include "webgpu_api.h"
 
 #include <string>
 #include <vector>
@@ -86,11 +87,31 @@ METHOD(node_get_context) {
   if (value_truthy(xt_object_get_cstr(self, "__xt_gui_offscreen"))) return XT_NULL;
   XtGuiWindow *win = nullptr;
   xtgui::Node *node = resolve_node(self, &win);
+  if (mode == "webgpu") {
+    const XtWebgpuApi *webgpu = xt_webgpu_api();
+    if (webgpu == nullptr) return XT_NULL;
+    if (node == nullptr) return XT_NULL;
+    if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
+    if (xt_gui_canvas_find(win, node) != nullptr) return XT_NULL;
+    if (const XtWebglApi *webgl = xt_webgl_api()) {
+      if (webgl->find(win, node) != nullptr) return XT_NULL;
+    }
+    xt_value cached = xt_object_get_cstr(self, "__xt_gui_webgpu");
+    if (XT_IS_OBJECT(cached)) return cached;
+    uint32_t context_id = 0;
+    if (!webgpu->canvas_get(win, node, &context_id)) return XT_NULL;
+    xt_value context = webgpu->handle(self, context_id);
+    xt_object_set(self, xt_string_from_cstr("__xt_gui_webgpu"), context);
+    return context;
+  }
   if (mode == "webgl" || mode == "experimental-webgl" || mode == "webgl2") {
     const bool webgl2 = mode == "webgl2";
     const XtWebglApi *webgl = xt_webgl_api();
     if (webgl == nullptr) return XT_NULL;
     if (node == nullptr) return XT_NULL;
+    if (const XtWebgpuApi *webgpu = xt_webgpu_api()) {
+      if (XT_IS_OBJECT(xt_object_get_cstr(self, "__xt_gui_webgpu"))) return XT_NULL;
+    }
     if (!node->isElement() || !node->isTag("canvas")) return XT_NULL;
     if (xt_gui_canvas_find(win, node) != nullptr) return XT_NULL;  // already a 2D canvas
     xt_value cached = xt_object_get_cstr(self, "__xt_gui_gl");

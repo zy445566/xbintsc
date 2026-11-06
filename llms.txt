@@ -77,6 +77,7 @@
   - [doc/gui/runtime.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/runtime.md): event loop integration, the native bridge and memory
   - [doc/gui/canvas.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/canvas.md): `<canvas>` and the 2D context
   - [doc/gui/webgl.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/webgl.md): WebGL 1.0 on the GPU — GLSL ES to SPIR-V, textures, framebuffers and readback
+  - [doc/gui/webgpu.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/webgpu.md): WebGPU — navigator.gpu, the GPU object model and WGSL shaders over SDL_GPU
   - [doc/gui/build.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/build.md): building `gui.a` and running the examples
   - [doc/gui/known-issues.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui/known-issues.md): known issues and open questions
 - [doc/gui-scripts.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/gui-scripts.md): the GUI scripting surface

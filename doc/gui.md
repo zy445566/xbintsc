@@ -1,6 +1,6 @@
 # xbintsc GUI extension (self-hosted HTML/CSS renderer)
 
-Status: **M22** — features (M1–M15) are complete: HTML parsing, CSS selector
+Status: **M23** — features (M1–M15) are complete: HTML parsing, CSS selector
 matching, the cascade, computed styles and layout (block, inline, Flexbox and
 CSS positioning) are
 in place, and the engine *paints*: it builds a display list of rectangles, images
@@ -415,6 +415,17 @@ engine were Rust.
       `skewX()`/`skewY()`, `background-size` tiling for `url()` layers and
       document CSS on SVG children (`fill`/`stroke`/…) are now honoured.
     - E2E: `tests/e2e/gui-css-coverage.test.ts`.
+23. **M23 — WebGPU** ✅
+    - `navigator.gpu`, `getContext("webgpu")` and the `GPU…` object model are
+      implemented behind the optional **`webgpu` link feature** (requires
+      `gpu`), with a WGSL → Vulkan GLSL front end compiled by the bundled
+      glslang and cross-compiled to MSL on Metal by SPIRV-Cross.
+    - The canvas backbuffer is shared with the page compositor (no readback);
+      buffers, textures, samplers, bind groups, render/compute pipelines,
+      command encoders, render/compute passes, draws, dispatches, copies and
+      buffer mapping are implemented; queries/atomics/DOM image uploads report
+      validation errors (see [WebGPU](./gui/webgpu.md)).
+    - E2E: `tests/e2e/gui-webgpu.test.ts`; demo: `examples/gui/webgpu-triangle`.
 
 ## Progress log
 

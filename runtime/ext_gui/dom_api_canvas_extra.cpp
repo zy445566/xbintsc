@@ -8,6 +8,7 @@
  */
 
 #include "dom_api_internal.h"
+#include "webgpu_api.h"
 
 #include <cmath>
 #include <string>
@@ -290,6 +291,17 @@ METHOD(node_width_get) {
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || !node->isElement()) return xt_number(0);
   if (node->isTag("canvas")) {
+    if (const XtWebgpuApi *webgpu = xt_webgpu_api()) {
+      xt_value context = xt_object_get_cstr(self, "__xt_gui_webgpu");
+      if (XT_IS_OBJECT(context)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgpu->info((uint32_t)xt_to_number(xt_object_get_cstr(context, "__xt_webgpu_id")),
+                     &width, &height, &id);
+        return xt_number(width);
+      }
+    }
     if (const XtWebglApi *webgl = xt_webgl_api()) {
       if (void *context = webgl->find(win, node)) {
         float width = 0.0f;
@@ -316,6 +328,25 @@ METHOD(node_width_set) {
   if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
   double value = canvas_number_arg(argc, argv, 0, 0.0);
   if (node->isTag("canvas")) {
+    if (const XtWebgpuApi *webgpu = xt_webgpu_api()) {
+      xt_value context = xt_object_get_cstr(self, "__xt_gui_webgpu");
+      if (XT_IS_OBJECT(context)) {
+        uint32_t context_id =
+            (uint32_t)xt_to_number(xt_object_get_cstr(context, "__xt_webgpu_id"));
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t canvas_id = 0;
+        webgpu->info(context_id, &width, &height, &canvas_id);
+        webgpu->resize(context_id, (int)value, (int)height);
+        mark_dirty(win);
+        if (win->document != nullptr) {
+          webgpu->info(context_id, &width, &height, &canvas_id);
+          win->document->setCanvasInfo(node, width, height, canvas_id);
+        }
+        set_attribute(win, node, "width", std::to_string((long long)value));
+        return XT_UNDEFINED;
+      }
+    }
     if (const XtWebglApi *webgl = xt_webgl_api()) {
       if (void *context = webgl->find(win, node)) {
         float width = 0.0f;
@@ -367,6 +398,17 @@ METHOD(node_height_get) {
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || !node->isElement()) return xt_number(0);
   if (node->isTag("canvas")) {
+    if (const XtWebgpuApi *webgpu = xt_webgpu_api()) {
+      xt_value context = xt_object_get_cstr(self, "__xt_gui_webgpu");
+      if (XT_IS_OBJECT(context)) {
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t id = 0;
+        webgpu->info((uint32_t)xt_to_number(xt_object_get_cstr(context, "__xt_webgpu_id")),
+                     &width, &height, &id);
+        return xt_number(height);
+      }
+    }
     if (const XtWebglApi *webgl = xt_webgl_api()) {
       if (void *context = webgl->find(win, node)) {
         float width = 0.0f;
@@ -392,6 +434,25 @@ METHOD(node_height_set) {
   if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
   double value = canvas_number_arg(argc, argv, 0, 0.0);
   if (node->isTag("canvas")) {
+    if (const XtWebgpuApi *webgpu = xt_webgpu_api()) {
+      xt_value context = xt_object_get_cstr(self, "__xt_gui_webgpu");
+      if (XT_IS_OBJECT(context)) {
+        uint32_t context_id =
+            (uint32_t)xt_to_number(xt_object_get_cstr(context, "__xt_webgpu_id"));
+        float width = 0.0f;
+        float height = 0.0f;
+        uint64_t canvas_id = 0;
+        webgpu->info(context_id, &width, &height, &canvas_id);
+        webgpu->resize(context_id, (int)width, (int)value);
+        mark_dirty(win);
+        if (win->document != nullptr) {
+          webgpu->info(context_id, &width, &height, &canvas_id);
+          win->document->setCanvasInfo(node, width, height, canvas_id);
+        }
+        set_attribute(win, node, "height", std::to_string((long long)value));
+        return XT_UNDEFINED;
+      }
+    }
     if (const XtWebglApi *webgl = xt_webgl_api()) {
       if (void *context = webgl->find(win, node)) {
         float width = 0.0f;

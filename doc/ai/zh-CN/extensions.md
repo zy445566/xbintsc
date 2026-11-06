@@ -108,7 +108,12 @@ AudioParam 自动化，`decodeAudioData` 引擎内解码 WAV，压缩格式则�
 （Vulkan 直接消费，Metal 上由内置 SPIRV-Cross 转成 MSL），
 并通过 SDL_GPU 绘制；页面直接合成颜色纹理而无须 CPU 读回，WebGL 2 还增加
 VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷贝（见
-[../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。WebXR 与流式接口**尚未实现**：
+[../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。**WebGPU 也已实现**：
+`navigator.gpu` 与 `getContext("webgpu")` 暴露整套 `GPU…` 对象模型（缓冲、纹理、
+采样器、bind group、render/compute pipeline、pass、拷贝与缓冲映射），位于可选的
+`webgpu` 链接特性中（依赖 `gpu`）；WGSL 先翻译为 GLSL，再由同一个内置 glslang 编译。
+查询、原子与 DOM 图像上传会记录校验错误；见
+[../../zh-CN/gui/webgpu.md](../../zh-CN/gui/webgpu.md)。WebXR 与流式接口**尚未实现**：
 `typeof` 会回答
 `"undefined"`，让页面走自己的降级分支。`fetch` 不是 GUI 扩展的功能——它由核心
 运行时提供（`http://`，以及本地 `file://` 与相对路径；不支持 HTTPS 与流式），

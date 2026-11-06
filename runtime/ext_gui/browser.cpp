@@ -19,6 +19,7 @@
 
 #include "gui_engine.h"
 #include "dom_api_internal.h"
+#include "webgpu_api.h"
 
 #include <cstdio>
 #include <string>
@@ -214,6 +215,11 @@ xt_value navigator_build(void) {
   set_number(nav, "maxTouchPoints", 0);
   set_prop(nav, "onLine", XT_TRUE);
   set_prop(nav, "webdriver", XT_FALSE);
+  if (const XtWebgpuApi *webgpu = xt_webgpu_api()) {
+    set_prop(nav, "gpu", webgpu->navigator_gpu());
+  } else {
+    set_prop(nav, "gpu", XT_UNDEFINED);
+  }
   set_method(nav, "vibrate", (void *)noop);
   xt_value languages = xt_array_new(0, NULL);
   xt_array_push(languages, string_of("en-US"));
@@ -532,6 +538,10 @@ xt_value xt_browser_type(int32_t argc, xt_value *argv) {
       name == "ReadableStream" || name == "Request" || name == "Headers" ||
       name == "DOMParser") {
     return XT_UNDEFINED;
+  }
+  if (const XtWebgpuApi *webgpu = xt_webgpu_api()) {
+    xt_value type = webgpu->host_type(name.c_str());
+    if (!XT_IS_UNDEFINED(type)) return type;
   }
   return type_value(name);
 }

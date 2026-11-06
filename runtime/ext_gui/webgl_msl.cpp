@@ -25,8 +25,8 @@
 
 namespace xtgui {
 
-bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
-                       std::string *source, std::string *entry, std::string *log) {
+bool cross_compile_msl_stage(const std::vector<uint32_t> &spirv, int stage,
+                             std::string *source, std::string *entry, std::string *log) {
   if (source == nullptr || entry == nullptr || log == nullptr) return false;
   source->clear();
   entry->clear();
@@ -55,11 +55,12 @@ bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
      * one shows what SPIRV-Cross handed the Metal backend, which is where a
      * backend-only sampling difference (depth/comparison samplers) shows up. */
     if (getenv("XT_WEBGL_DUMP_MSL") != nullptr) {
-      fprintf(stderr, "--- MSL %s ---\n%s\n---\n", fragment ? "fragment" : "vertex",
-              source->c_str());
+      fprintf(stderr, "--- MSL stage %d ---\n%s\n---\n", stage, source->c_str());
     }
-    *entry = compiler.get_cleansed_entry_point_name(
-        "main", fragment ? spv::ExecutionModelFragment : spv::ExecutionModelVertex);
+    spv::ExecutionModel model = spv::ExecutionModelVertex;
+    if (stage == 1) model = spv::ExecutionModelFragment;
+    else if (stage == 2) model = spv::ExecutionModelGLCompute;
+    *entry = compiler.get_cleansed_entry_point_name("main", model);
     if (entry->empty()) {
       *log = "MSL entry point vanished during translation";
       source->clear();
@@ -81,6 +82,10 @@ bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
 
 }  // namespace xtgui
 
+bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
+                       std::string *source, std::string *entry, std::string *log) {
+  return cross_compile_msl_stage(spirv, fragment ? 1 : 0, source, entry, log);
+}
 #else /* !__APPLE__ */
 
 namespace xtgui {
@@ -92,14 +97,19 @@ namespace xtgui {
  * this; it exists so the callers keep one unconditional branch and a device that
  * ever did advertise MSL fails with an actionable log instead of a wrong shader.
  */
-bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
-                       std::string *source, std::string *entry, std::string *log) {
+bool cross_compile_msl_stage(const std::vector<uint32_t> &spirv, int stage,
+                             std::string *source, std::string *entry, std::string *log) {
   (void)spirv;
-  (void)fragment;
+  (void)stage;
   source->clear();
   entry->clear();
   *log = "this build has no MSL backend (SPIRV-Cross is macOS-only)";
   return false;
+}
+
+bool cross_compile_msl(const std::vector<uint32_t> &spirv, bool fragment,
+                       std::string *source, std::string *entry, std::string *log) {
+  return cross_compile_msl_stage(spirv, fragment ? 1 : 0, source, entry, log);
 }
 
 }  // namespace xtgui

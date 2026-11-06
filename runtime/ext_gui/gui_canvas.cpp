@@ -14,6 +14,7 @@
 #include "canvas.h"
 #include "document.h"
 #include "gui_engine.h"
+#include "webgpu_api.h"
 #include "gui_internal.h"
 #include "perf.h"
 
@@ -145,6 +146,8 @@ void xt_gui_canvas_shutdown(XtGuiWindow *win) {
   if (win == nullptr) return;
   const XtWebglApi *webgl = xt_webgl_api();
   if (webgl != nullptr) webgl->shutdown(win);
+  const XtWebgpuApi *webgpu = xt_webgpu_api();
+  if (webgpu != nullptr) webgpu->shutdown(win);
   for (auto &entry : win->canvases) releaseCanvasTexture(entry.second.get());
   win->canvases.clear();
   for (auto &entry : win->offscreen_canvases) releaseCanvasTexture(entry.second.get());

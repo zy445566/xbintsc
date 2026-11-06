@@ -31,12 +31,18 @@ struct GpuShaderApi {
                               const GlslLinkLayout &layout, const GlslShaderInfo &info);
   bool (*compile_glsl)(const std::string &source, bool fragment,
                        std::vector<uint32_t> *spirv, std::string *log);
+  /** Stage-explicit compile (0 vertex, 1 fragment, 2 compute) for WebGPU. */
+  bool (*compile_glsl_stage)(const std::string &source, int stage,
+                             std::vector<uint32_t> *spirv, std::string *log);
   bool (*reflect_uniform_block)(const std::vector<uint32_t> &spirv,
                                 std::vector<GlslBlockMember> *out);
   bool (*reflect_attributes)(const std::vector<uint32_t> &spirv,
                              std::unordered_map<std::string, int> *out);
   bool (*cross_compile_msl)(const std::vector<uint32_t> &spirv, bool fragment,
                             std::string *source, std::string *entry, std::string *log);
+  /** Stage-explicit MSL cross-compile for WebGPU compute. */
+  bool (*cross_compile_msl_stage)(const std::vector<uint32_t> &spirv, int stage,
+                                  std::string *source, std::string *entry, std::string *log);
 };
 
 /** Install the table. Called by the `gpu` feature bridge before `main`. */

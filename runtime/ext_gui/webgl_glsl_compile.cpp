@@ -340,18 +340,19 @@ void reflect_struct_members(const Module &module, uint32_t struct_id, int base,
 
 }  // namespace
 
-bool compile_glsl(const std::string &source, bool fragment, std::vector<uint32_t> *spirv,
-                  std::string *log) {
+bool compile_glsl_stage(const std::string &source, int stage_index, std::vector<uint32_t> *spirv,
+                        std::string *log) {
   static const bool initialized = glslang::InitializeProcess();
   if (!initialized) {
     *log = "glslang initialization failed";
     return false;
   }
-  const EShLanguage stage = fragment ? EShLangFragment : EShLangVertex;
+  EShLanguage stage = EShLangVertex;
+  if (stage_index == 1) stage = EShLangFragment;
+  else if (stage_index == 2) stage = EShLangCompute;
   glslang::TShader shader(stage);
   if (getenv("XT_WEBGL_DUMP_GLSL") != nullptr) {
-    fprintf(stderr, "--- GLSL %s ---\n%s\n---\n", fragment ? "fragment" : "vertex",
-            source.c_str());
+    fprintf(stderr, "--- GLSL stage %d ---\n%s\n---\n", stage_index, source.c_str());
   }
   const char *text = source.c_str();
   shader.setStrings(&text, 1);
@@ -374,6 +375,11 @@ bool compile_glsl(const std::string &source, bool fragment, std::vector<uint32_t
   spirv->clear();
   glslang::GlslangToSpv(*program.getIntermediate(stage), *spirv);
   return !spirv->empty();
+}
+
+bool compile_glsl(const std::string &source, bool fragment, std::vector<uint32_t> *spirv,
+                  std::string *log) {
+  return compile_glsl_stage(source, fragment ? 1 : 0, spirv, log);
 }
 
 bool reflect_uniform_block(const std::vector<uint32_t> &spirv, std::vector<GlslBlockMember> *out) {

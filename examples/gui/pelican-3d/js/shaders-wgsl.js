@@ -81,7 +81,7 @@ fn lit_fragment(in: LitOut) -> @location(0) vec4f {
   color = mix(vec3f(luma), color, 1.24);
   color = (color - 0.5) * 1.06 + 0.5;
 
-  return vec4f(clamp(color, 0.0, 1.0), u.alpha);
+  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), u.alpha);
 }
 
 @vertex
@@ -127,7 +127,7 @@ fn instanced_fragment(in: LitOut) -> @location(0) vec4f {
   color = mix(vec3f(luma), color, 1.24);
   color = (color - 0.5) * 1.06 + 0.5;
 
-  return vec4f(clamp(color, 0.0, 1.0), 1.0);
+  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
 }
 
 struct ShadowOut {
@@ -195,6 +195,6 @@ fn sky_fragment(in: SkyOut) -> @location(0) vec4f {
   let luma = dot(sky, vec3f(0.2126, 0.7152, 0.0722));
   sky = mix(vec3f(luma), sky, 1.22);
 
-  return vec4f(clamp(sky, 0.0, 1.0), 1.0);
+  return vec4f(clamp(sky, vec3f(0.0), vec3f(1.0)), 1.0);
 }
 `;

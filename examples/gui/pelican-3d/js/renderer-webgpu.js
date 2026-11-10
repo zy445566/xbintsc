@@ -304,11 +304,24 @@ export class WebGPURenderer {
     });
     this.queue.writeBuffer(vertexBuffer, 0, data);
 
+    /* WebGPU requires every buffer size and `writeBuffer` payload to be a
+     * multiple of 4 bytes. A Uint16 index array with an odd number of indices
+     * (for example the 9-segment pine-tree cones in world.js) is `n * 2`
+     * bytes, so pad it to the next 4-byte boundary; the extra bytes are never
+     * read because `drawIndexed` uses the real `indexCount`. */
+    const indexByteLength = geometry.indices.byteLength;
+    const indexAligned = (indexByteLength + 3) & ~3;
     const indexBuffer = device.createBuffer({
-      size: geometry.indices.byteLength,
+      size: indexAligned,
       usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
     });
-    this.queue.writeBuffer(indexBuffer, 0, geometry.indices);
+    if (indexAligned === indexByteLength) {
+      this.queue.writeBuffer(indexBuffer, 0, geometry.indices);
+    } else {
+      const padded = new Uint8Array(indexAligned);
+      padded.set(new Uint8Array(geometry.indices.buffer, geometry.indices.byteOffset, indexByteLength));
+      this.queue.writeBuffer(indexBuffer, 0, padded);
+    }
 
     let instanceBuffer = null;
     let count = 1;

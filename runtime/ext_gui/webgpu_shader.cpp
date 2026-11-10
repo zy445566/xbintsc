@@ -83,13 +83,17 @@ bool build_stage_code(Device &device, ShaderModule &module, const std::string &e
   }
 
   if (!create_shader) return true;
-  if (resources->format != SDL_GPU_SHADERFORMAT_SPIRV) {
-    *error = "graphics pipelines need SPIR-V on this backend";
-    return false;
-  }
   SDL_GPUShaderCreateInfo info = {};
-  info.code = reinterpret_cast<const Uint8 *>(resources->spirv.data());
-  info.code_size = resources->spirv.size() * sizeof(uint32_t);
+  /* The device consumes MSL text on Metal and SPIR-V words on Vulkan; point
+   * `code` at whichever the backend asked for, exactly like the WebGL path.
+   * `entry` already holds the cross-compiled name on Metal. */
+  if (resources->format == SDL_GPU_SHADERFORMAT_MSL) {
+    info.code = reinterpret_cast<const Uint8 *>(resources->msl.data());
+    info.code_size = resources->msl.size();
+  } else {
+    info.code = reinterpret_cast<const Uint8 *>(resources->spirv.data());
+    info.code_size = resources->spirv.size() * sizeof(uint32_t);
+  }
   info.entrypoint = resources->entry.c_str();
   info.format = resources->format;
   info.stage = stage == 1 ? SDL_GPU_SHADERSTAGE_FRAGMENT : SDL_GPU_SHADERSTAGE_VERTEX;

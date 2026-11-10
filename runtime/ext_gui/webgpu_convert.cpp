@@ -131,7 +131,11 @@ bool Convert::texture_format(const std::string &name, SDL_GPUTextureFormat *out)
       {"rgba16uint", SDL_GPU_TEXTUREFORMAT_R16G16B16A16_UINT},
       {"rgba16sint", SDL_GPU_TEXTUREFORMAT_R16G16B16A16_INT},
       {"depth16unorm", SDL_GPU_TEXTUREFORMAT_D16_UNORM},
-      {"depth24plus", SDL_GPU_TEXTUREFORMAT_D24_UNORM},
+      /* WebGPU's `depth24plus` is a promise format: the implementation picks a
+       * depth of at least 24 bits. Metal has no 24-bit-only depth format (its
+       * `D24_UNORM` is `MTLPixelFormatInvalid`), so use 32-bit float, which is
+       * ≥24 bits and supported by every backend (matching Dawn on Metal). */
+      {"depth24plus", SDL_GPU_TEXTUREFORMAT_D32_FLOAT},
       {"depth24plus-stencil8", SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT},
       {"depth32float", SDL_GPU_TEXTUREFORMAT_D32_FLOAT},
       {"depth32float-stencil8", SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT},

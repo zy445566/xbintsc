@@ -39,6 +39,7 @@ small file instead of a single monolithic document.
 - [Typed arrays and binary data](./implemented/typed-arrays.md) — typed arrays, ArrayBuffer, DataView
 - [Async, promises and generators](./implemented/async.md) — async/await, async generators, promises, timers
 - [fetch](./implemented/fetch.md) — reactor-driven HTTP/1.1 client and Headers
+- [WebAssembly](./implemented/wasm.md) — the `WebAssembly` namespace surface (bytecode execution is not implemented)
 
 ### Modules and tooling
 

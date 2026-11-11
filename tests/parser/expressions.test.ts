@@ -51,6 +51,13 @@ describe("arrow functions", () => {
     expect(expr.returnType.kind).toBe(SyntaxKind.TypePredicate);
   });
 
+  it("parses dynamic import expressions", () => {
+    const expr = initializer('const p = import("./x.ts");');
+    expect(expr.kind).toBe(SyntaxKind.ImportExpression);
+    expect(expr.specifier.kind).toBe(SyntaxKind.StringLiteral);
+    expect(expr.specifier.value).toBe("./x.ts");
+  });
+
   it("scans template defaults without counting literal parens", () => {
     /* The `}` of `${x}` must continue the template, not end it: the literal
      * text contains `)` and `}` that findMatchingParen would otherwise count. */

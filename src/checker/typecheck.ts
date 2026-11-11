@@ -346,6 +346,9 @@ export class TypeChecker {
         for (const argument of call.arguments) this.checkExpression(argument, flow, context);
         return this.resolver.inferExpression(call, (symbol) => this.lookup(symbol.id, flow));
       }
+      case SyntaxKind.ImportExpression:
+        this.checkExpression((expression as unknown as { specifier: Expression }).specifier, flow, context);
+        return ANY;
       case SyntaxKind.BinaryExpression:
         return this.checkBinary(expression as BinaryExpression, flow, context);
       case SyntaxKind.ConditionalExpression: {

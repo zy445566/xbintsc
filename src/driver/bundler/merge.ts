@@ -31,6 +31,7 @@ import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import type { AssetLoader } from "../../extensions/registry.js";
 import { loadGraph } from "./graph.js";
 import { lowerCommonJSRequires, prepareCommonJS } from "./commonjs.js";
+import { prepareDynamicImports } from "./dynamic-import.js";
 import { classifyDependency } from "./resolve.js";
 import {
   computeDeferredModules,
@@ -65,6 +66,9 @@ export function bundleModules(
     const resolution = classifyDependency(dirname(record.path), specifier, externalSpecifiers);
     return resolution.kind === "file" ? byPath.get(resolution.path) : undefined;
   };
+
+  // Rewrite dynamic imports and record modules reached only through them.
+  const dynamicTargets = prepareDynamicImports(records, dependencyOf);
 
   // Phase 1: record every top-level binding and pick a unique final name.
   for (const record of records) {
@@ -445,10 +449,10 @@ export function bundleModules(
     }
   }
 
-  /* A marker target that stayed eager still needs a wrapper: its exports are
-   * already initialised, so the wrapper only builds the namespace object. */
+  /* A marker or dynamic-import target that stayed eager still needs a wrapper:
+   * its exports are already initialised. */
   for (const record of records) {
-    if (deferredModules.has(record.path) || !markerTargets.has(record.path)) continue;
+    if (deferredModules.has(record.path) || (!markerTargets.has(record.path) && !dynamicTargets.has(record.path))) continue;
     for (const statement of eagerModuleFunctions(record)) push(record, statement);
   }
 

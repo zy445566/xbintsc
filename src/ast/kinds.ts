@@ -64,6 +64,7 @@ export const enum SyntaxKind {
   BindingElement = 48,
   ComputedPropertyName = 49,
   SequenceExpression = 50,
+  ImportExpression = 51,
 
   // Statements
   ExpressionStatement = 60,

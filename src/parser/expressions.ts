@@ -426,6 +426,15 @@ export const expressionMethods: ExpressionMethods = {
           const metaName = this.parseIdentifierName();
           return { kind: SyntaxKind.Identifier, text: "import.meta", start: importToken.start, end: metaName.end };
         }
+        if (this.atAhead(1, TokenKind.OpenParen)) {
+          // Dynamic `import(specifier)`: the specifier is an expression; a
+          // string literal is what the bundler can resolve statically.
+          const importToken = this.nextToken();
+          this.nextToken();
+          const specifier = this.parseAssignmentExpression();
+          const close = this.parseExpected(TokenKind.CloseParen);
+          return { kind: SyntaxKind.ImportExpression, specifier, start: importToken.start, end: close.end };
+        }
         break;
       default:
         break;

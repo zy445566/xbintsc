@@ -16,6 +16,7 @@ import { Parser } from "../parser/parser.js";
 import { generate } from "../codegen/llvm.js";
 import { SyntaxKind, type SourceFileNode } from "../ast/nodes.js";
 import { bundleModules } from "./modules.js";
+import { collectDynamicImportSites } from "./bundler/dynamic-import.js";
 import { createDefaultRegistry, type ExtensionRegistry } from "../extensions/registry.js";
 import type { CompileStringResult } from "./options.js";
 
@@ -63,12 +64,13 @@ export function parseEntry(
   const file = new SourceFile(absoluteEntry, sourceText);
   const parser = new Parser(file, diagnostics);
   let sourceFile = parser.parseSourceFile();
-  const isModule = sourceFile.statements.some(
-    (statement) =>
-      statement.kind === SyntaxKind.ImportDeclaration ||
-      statement.kind === SyntaxKind.ExportDeclaration ||
-      statement.kind === SyntaxKind.ExportAssignment,
-  );
+  const isModule =
+    sourceFile.statements.some(
+      (statement) =>
+        statement.kind === SyntaxKind.ImportDeclaration ||
+        statement.kind === SyntaxKind.ExportDeclaration ||
+        statement.kind === SyntaxKind.ExportAssignment,
+    ) || collectDynamicImportSites(sourceFile).length > 0;
   let cacheText = sourceText;
   if (isModule) {
     const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry), registry.assetLoaders());

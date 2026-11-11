@@ -117,6 +117,25 @@ describe("bundleModules", () => {
     expect(result?.moduleCount).toBe(3);
   });
 
+  it("resolves a dynamic import into a Promise of the module namespace", () => {
+    const directory = writeFiles({
+      "util.ts": "export const answer = 42;",
+      "main.ts": 'import("./util.ts").then((m) => console.log(m.answer));',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+    let hasImportExpression = false;
+    const names = new Set<string>();
+    walk(result!.sourceFile, (node) => {
+      if (node.kind === SyntaxKind.ImportExpression) hasImportExpression = true;
+      if (node.kind === SyntaxKind.Identifier) names.add((node as unknown as { text: string }).text);
+    });
+    expect(hasImportExpression).toBe(false);
+    expect(names.has("resolve")).toBe(true);
+    expect([...names].some((name) => name.startsWith("__xt_deferred_"))).toBe(true);
+  });
+
   it("keeps external (extension) imports in place", () => {
     const directory = writeFiles({
       "main.ts": 'import fs from "node:fs";\nfs.readFileSync("f.txt");',

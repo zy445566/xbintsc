@@ -218,6 +218,12 @@ export interface SequenceExpression extends Node {
   readonly expressions: Expression[];
 }
 
+/** Dynamic `import(specifier)`: resolves to a Promise of the module namespace. */
+export interface ImportExpression extends Node {
+  readonly kind: SyntaxKind.ImportExpression;
+  readonly specifier: Expression;
+}
+
 export interface PrefixUnaryExpression extends Node {
   readonly kind: SyntaxKind.PrefixUnaryExpression;
   readonly operator: PrefixUnaryOperator;

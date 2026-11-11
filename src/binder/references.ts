@@ -248,6 +248,9 @@ export const referenceMethods: ReferenceMethods = {
         for (const argument of call.arguments) this.bindNode(argument, scope);
         return;
       }
+      case SyntaxKind.ImportExpression:
+        this.bindNode((node as unknown as { specifier: Expression }).specifier, scope);
+        return;
       default:
         break;
     }

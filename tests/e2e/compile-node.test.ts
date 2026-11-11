@@ -112,6 +112,20 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     expect(runProgram(source, { extensions: true })).toBe("a/b\na/c y.txt");
   });
 
+  it("uses imported bindings as first-class values", () => {
+    const source = `
+      import { basename } from "path";
+      import assert from "node:assert";
+      const f = basename;
+      const a = assert;
+      console.log(f("/x/y.txt"));
+      console.log(typeof a.strictEqual);
+      a.strictEqual(1, 1);
+      console.log("ok");
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("y.txt\nfunction\nok");
+  });
+
   it("supports default and namespace imports of node: modules", () => {
     const dataPath = join(harness.workdir, `default-import-${Math.random().toString(36).slice(2)}.txt`);
     writeFileSync(dataPath, "via default import");

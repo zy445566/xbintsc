@@ -112,6 +112,8 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_string_from_cstr(i8*)",
   "declare i64 @xt_arg(i32, i64*, i32)",
   "declare i64 @xt_closure_new(i8*, i32, i64*)",
+  "declare i64 @xt_fnptr_trampoline(i64, i64, i32, i64*)",
+  "declare i64 @xt_method_trampoline(i64, i64, i32, i64*)",
   "declare i64 @xt_function_set_metadata(i64, i64, i32)",
   "declare i64 @xt_function_set_generator(i64)",
   "declare i64 @xt_function_set_async(i64)",

@@ -26,6 +26,16 @@ describeE2E("node_modules packages", (harness) => {
     expect(runProgram(source, { files })).toBe("5");
   });
 
+  it("does not report arity for unannotated JavaScript parameters", () => {
+    const source = 'import { f } from "jsx";\nconsole.log(f());';
+    const files = {
+      "node_modules/jsx/package.json": '{ "name": "jsx", "type": "module", "main": "index.js" }',
+      "node_modules/jsx/index.js":
+        'export function f(x) { return x === undefined ? "ok" : String(x); }',
+    };
+    expect(runProgram(source, { files })).toBe("ok");
+  });
+
   it("matches Node for a package with a default and named exports", () => {
     const source = `
       import make, { add, two } from "mathx";

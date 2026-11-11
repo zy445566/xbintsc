@@ -45,6 +45,7 @@ import { stringDecoderModule } from "./string-decoder/index.js";
 import { diagnosticsChannelModule } from "./diagnostics-channel/index.js";
 import { dnsModule } from "./dns/index.js";
 import { readlinePromisesModule } from "./readline-promises/index.js";
+import { compressionFeature } from "./zlib/compression.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -105,4 +106,5 @@ export const nodeExtension: Extension = {
     }
     return exposed;
   },
+  linkFeatures: () => [compressionFeature],
 };

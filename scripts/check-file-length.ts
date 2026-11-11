@@ -41,6 +41,16 @@ const VENDORED_FILES = new Set([
   join("runtime", "ext_gui", "stb_truetype.h"),
   join("runtime", "ext_gui", "nanosvg.h"),
   join("runtime", "ext_gui", "nanosvgrast.h"),
+  // miniz, the single-file DEFLATE library used by the `compression` link
+  // feature (`node:zlib`), ships verbatim.
+  join("runtime", "ext_node", "zlib", "miniz", "miniz.c"),
+  join("runtime", "ext_node", "zlib", "miniz", "miniz.h"),
+  join("runtime", "ext_node", "zlib", "miniz", "miniz_tdef.c"),
+  join("runtime", "ext_node", "zlib", "miniz", "miniz_tdef.h"),
+  join("runtime", "ext_node", "zlib", "miniz", "miniz_tinfl.c"),
+  join("runtime", "ext_node", "zlib", "miniz", "miniz_tinfl.h"),
+  join("runtime", "ext_node", "zlib", "miniz", "miniz_common.h"),
+  join("runtime", "ext_node", "zlib", "miniz", "miniz_export.h"),
 ]);
 
 /** Machine-generated files: they are reproduced from their sources by a script,

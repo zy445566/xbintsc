@@ -202,6 +202,23 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     expect(runProgram(source, { extensions: true })).toBe("0 true true");
   });
 
+  it("captures child output through the async spawn API", () => {
+    const source = `
+      import { spawn } from "node:child_process";
+      let isChild = false;
+      for (const arg of process.argv) if (arg === "xb-spawn-child") isChild = true;
+      if (isChild) {
+        console.log("child-output");
+      } else {
+        const child = spawn(process.argv[0], ["xb-spawn-child"]);
+        let out = "";
+        child.stdout.on("data", (d: string) => { out += d; });
+        child.on("close", (code: number) => console.log(code, JSON.stringify(out.trim())));
+      }
+    `;
+    expect(runProgram(source, { extensions: true })).toBe('0 "child-output"');
+  });
+
   it("hashes with SHA-1 and the streaming crypto API", () => {
     const source = `
       import { createHash } from "node:crypto";

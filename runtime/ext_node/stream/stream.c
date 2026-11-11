@@ -27,6 +27,9 @@ static xt_value xt_stream_new(xt_stream_kind kind) {
   return stream;
 }
 
+/* A fresh Readable stream for a host producer (e.g. child_process spawn). */
+xt_value xt_stream_new_readable(void) { return xt_stream_new(XT_STREAM_READABLE); }
+
 static int xt_stream_kind_of(xt_value stream) {
   return (int)xt_to_number(xt_object_get_cstr(stream, "__kind"));
 }
@@ -47,7 +50,7 @@ static int xt_stream_has_data_listener(xt_value stream) {
 
 /* -- readable surface ----------------------------------------------------- */
 
-static xt_value xt_stream_deliver(xt_value stream, xt_value chunk) {
+xt_value xt_stream_deliver(xt_value stream, xt_value chunk) {
   if (xt_stream_has_data_listener(stream)) {
     xt_node_emit1(stream, "data", chunk);
   } else {

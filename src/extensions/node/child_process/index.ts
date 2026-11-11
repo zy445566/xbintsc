@@ -17,11 +17,15 @@ const builtins: Record<string, BuiltinFunction> = {
 
 const exports: ModuleExports = {
   spawnSync: { symbol: "xt_child_process_spawn_sync" },
+  spawn: { symbol: "xt_child_process_spawn" },
 };
 
 export const childProcessModule: NodeModule = {
   name: "child_process",
-  runtimeSources: () => [resolveFrom(import.meta.url, "../../../../runtime/ext_node/child_process/child_process.c")],
+  runtimeSources: () => [
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/child_process/child_process.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/child_process/spawn.c"),
+  ],
   builtins: () => builtins,
   exports: () => exports,
 };

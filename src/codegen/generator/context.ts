@@ -229,7 +229,8 @@ export class GeneratorContext {
   private bindModuleAlias(symbol: SymbolInfo, module: ExtensionModule): void {
     if (module.namespace) {
       this.importNamespaces.set(symbol.id, module.namespace);
-    } else if (module.exports) {
+    }
+    if (module.exports) {
       this.importModuleExports.set(symbol.id, module.exports);
     }
   }

@@ -16,6 +16,7 @@ const exports: ModuleExports = {
   isMainThread: { valueSymbol: "xt_worker_is_main_thread" },
   workerData: { valueSymbol: "xt_worker_data" },
   parentPort: { valueSymbol: "xt_worker_parent_port" },
+  markAsUncloneable: { symbol: "xt_worker_mark_as_uncloneable" },
 };
 
 export const workerThreadsModule: NodeModule = {

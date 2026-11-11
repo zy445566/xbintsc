@@ -263,6 +263,13 @@ xt_value xt_events_static(xt_value name, int32_t argc, xt_value *argv) {
   return xt_undefined();
 }
 
+/* `events.defaultMaxListeners` read as a value: the default is 10. */
+xt_value xt_events_default_max_listeners(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return xt_number(10);
+}
+
 /* -- prototype ------------------------------------------------------------ */
 
 static xt_value xt_events_proto(void) {

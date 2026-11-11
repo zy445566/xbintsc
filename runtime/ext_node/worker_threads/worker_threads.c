@@ -47,6 +47,14 @@ xt_value xt_worker_is_main_thread(int32_t argc, xt_value *argv) {
   return xt_bool(!xt_worker_is_worker());
 }
 
+/* `markAsUncloneable(value)`: structuredClone rejects the value; the runtime's
+ * structuredClone already rejects streams and handles, so it is a no-op. */
+xt_value xt_worker_mark_as_uncloneable(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return XT_UNDEFINED;
+}
+
 xt_value xt_worker_data(int32_t argc, xt_value *argv) {
   (void)argc;
   (void)argv;

@@ -381,6 +381,11 @@ xt_value xt_path_static(xt_value name, int32_t argc, xt_value *argv) {
     const char *to = argc > 1 ? xt_string_data(xt_to_string(argv[1])) : "";
     return xt_path_relative(from ? from : "", to ? to : "");
   }
+  if (strcmp(method, "toNamespacedPath") == 0) {
+    /* Namespaced paths only matter on Windows, where the C path module keeps
+     * POSIX semantics, so the path is already valid as-is. */
+    return argc > 0 ? xt_to_string(argv[0]) : xt_string_from_cstr("");
+  }
   return xt_undefined();
 }
 

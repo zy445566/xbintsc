@@ -22,6 +22,7 @@ const methods = [
   "basename",
   "extname",
   "relative",
+  "toNamespacedPath",
 ] as const;
 
 const exports: ModuleExports = {

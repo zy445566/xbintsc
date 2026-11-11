@@ -15,6 +15,7 @@ const methods = ["listenerCount", "getEventListeners", "getMaxListeners", "setMa
 
 const exports: ModuleExports = {
   EventEmitter: { symbol: "xt_event_emitter_ctor", isConstructor: true },
+  defaultMaxListeners: { valueSymbol: "xt_events_default_max_listeners" },
   ...Object.fromEntries(methods.map((method) => [method, { namespace: "events", method }])),
 };
 

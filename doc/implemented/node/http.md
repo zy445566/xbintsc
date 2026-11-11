@@ -16,6 +16,7 @@ closes.
 | `http.request(options[, cb])` | create a `ClientRequest` (`write` / `end` / `setHeader`) |
 | `http.get(url[, cb])` | issue a GET |
 | `http.STATUS_CODES` | numeric code (string key) -> reason phrase |
+| `http.IncomingMessage` | constructor identity (see below) |
 
 `IncomingMessage` (`req` / response): `method`, `url`, `httpVersion`, `headers`, `statusCode`, `data` / `end` events, `setEncoding`.
 

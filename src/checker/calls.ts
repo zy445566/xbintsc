@@ -121,6 +121,9 @@ export function checkCallArity(
     if (call.arguments.some((argument) => argument.kind === SyntaxKind.SpreadElement)) return;
     const fn = resolveCallee(binding, assigned, call.expression);
     if (!fn || fn.isModule || usesArguments(fn)) return;
+    // A plain-JavaScript function's unannotated parameters are implicitly
+    // optional, so its declared signature is not the call contract.
+    if (isUntypedNode(sourceFile, fn.node)) return;
     const arity = arityOf(fn);
     if (!arity) return;
     const argc = call.arguments.length;

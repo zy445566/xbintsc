@@ -135,6 +135,18 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
+  it("compresses with deflateRawSync via the miniz link feature", () => {
+    const source = `
+      import { deflateRawSync } from "node:zlib";
+      const input = Buffer.from("a".repeat(200));
+      const out = deflateRawSync(input);
+      console.log(Buffer.isBuffer(out), out.length < input.length);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim()).toBe("true true");
+  });
+
   it("provides dns.lookup and readline/promises.createInterface", () => {
     const source = `
       import { lookup } from "node:dns";

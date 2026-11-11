@@ -69,8 +69,7 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     expect(runProgram(source, { extensions: true })).toBe("hello hello\naGVsbG8=");
   });
 
-  it("provides the path module", () => {
-    const source = `
+  it("provides the path module", () => {    const source = `
       console.log(path.join("a", "b", "..", "c"));
       console.log(path.resolve("/tmp", "a", "..", "b"));
       console.log(path.dirname("/x/y/z.txt"), path.basename("/x/y/z.txt"), path.extname("/x/y/z.txt"));
@@ -124,6 +123,18 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
       console.log("ok");
     `;
     expect(runProgram(source, { extensions: true })).toBe("y.txt\nfunction\nok");
+  });
+
+  it("exposes path constants and url/util constructors", () => {
+    const source = `
+      import { sep, delimiter } from "node:path";
+      import { URL } from "node:url";
+      import { TextDecoder } from "node:util";
+      console.log(sep, delimiter);
+      console.log(new URL("https://example.com/a").hostname);
+      console.log(new TextDecoder().decode(new Uint8Array([104, 105])));
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("/ :\nexample.com\nhi");
   });
 
   it("supports default and namespace imports of node: modules", () => {

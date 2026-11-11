@@ -383,3 +383,17 @@ xt_value xt_path_static(xt_value name, int32_t argc, xt_value *argv) {
   }
   return xt_undefined();
 }
+
+/* `path.sep` / `path.delimiter` read as values: the C path module always uses
+ * POSIX separators, which Windows accepts everywhere (see the header note). */
+xt_value xt_path_sep_value(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return xt_string_from_cstr("/");
+}
+
+xt_value xt_path_delimiter_value(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return xt_string_from_cstr(":");
+}

@@ -16,6 +16,7 @@ const builtins: Record<string, BuiltinFunction> = {
 const exports: ModuleExports = {
   pathToFileURL: { symbol: "xt_url_path_to_file_url" },
   fileURLToPath: { symbol: "xt_url_file_url_to_path" },
+  URL: { symbol: "xt_url_ctor", isConstructor: true },
 };
 
 export const urlModule: NodeModule = {

@@ -33,6 +33,14 @@ const symbols: Record<string, string> = {
   isRegExp: "xt_util_is_regexp",
   isPromise: "xt_util_is_promise",
   isError: "xt_util_is_error",
+  isMap: "xt_util_is_map",
+  isSet: "xt_util_is_set",
+  isWeakMap: "xt_util_is_weak_map",
+  isWeakSet: "xt_util_is_weak_set",
+  isArrayBuffer: "xt_util_is_array_buffer",
+  isTypedArray: "xt_util_is_typed_array",
+  isUint8Array: "xt_util_is_uint8_array",
+  isProxy: "xt_util_is_proxy",
   debuglog: "xt_util_debuglog",
 };
 
@@ -40,6 +48,7 @@ const exports: ModuleExports = {
   ...Object.fromEntries(Object.entries(symbols).map(([name, symbol]) => [name, { symbol }])),
   TextDecoder: { symbol: "xt_text_decoder_ctor", isConstructor: true },
   TextEncoder: { symbol: "xt_text_encoder_ctor", isConstructor: true },
+  types: { valueSymbol: "xt_util_types_value" },
 };
 
 export const utilModule: NodeModule = {

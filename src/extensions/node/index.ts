@@ -34,6 +34,15 @@ import { querystringModule } from "./querystring/index.js";
 import { assertModule } from "./assert/index.js";
 import { testModule } from "./test/index.js";
 import { readlineModule } from "./readline/index.js";
+import { timersModule } from "./timers/index.js";
+import { consoleModule } from "./console/index.js";
+import { perfHooksModule } from "./perf_hooks/index.js";
+import { ttyModule } from "./tty/index.js";
+import { moduleModule } from "./module/index.js";
+import { timersPromisesModule } from "./timers-promises/index.js";
+import { utilTypesModule } from "./util-types/index.js";
+import { stringDecoderModule } from "./string-decoder/index.js";
+import { diagnosticsChannelModule } from "./diagnostics-channel/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -59,6 +68,15 @@ const modules: readonly NodeModule[] = [
   assertModule,
   testModule,
   readlineModule,
+  timersModule,
+  consoleModule,
+  perfHooksModule,
+  ttyModule,
+  moduleModule,
+  timersPromisesModule,
+  utilTypesModule,
+  stringDecoderModule,
+  diagnosticsChannelModule,
 ];
 
 export const nodeExtension: Extension = {

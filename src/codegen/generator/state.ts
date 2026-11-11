@@ -196,6 +196,7 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_util_static(i64, i32, i64*)",
   "declare i64 @xt_querystring_static(i64, i32, i64*)",
   "declare i64 @xt_assert_static(i64, i32, i64*)",
+  "declare i64 @xt_diagnostics_channel_static(i64, i32, i64*)",
   "declare i64 @xt_process_call(i64, i32, i64*)",
   "declare i64 @xt_process_get(i64)",
   "declare i64 @xt_map_ctor(i32, i64*)",

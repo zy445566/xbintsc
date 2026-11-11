@@ -27,6 +27,12 @@ export const childProcessModule: NodeModule = {
   runtimeSources: () => [
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/child_process/child_process.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/child_process/spawn.c"),
+    resolveFrom(
+      import.meta.url,
+      process.platform === "win32"
+        ? "../../../../runtime/ext_node/child_process/spawn_win.c"
+        : "../../../../runtime/ext_node/child_process/spawn_posix.c",
+    ),
   ],
   builtins: () => builtins,
   exports: () => exports,

@@ -27,7 +27,7 @@ TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编
 | `net` | [net](./node/net.md) | TCP 服务端与客户端 |
 | `dgram` | [dgram](./node/dgram.md) | UDP 套接字 |
 | `http` | [http](./node/http.md) | 服务端与客户端，`Connection: close` |
-| `child_process` | [child_process](./node/child-process.md) | 仅 `spawnSync` |
+| `child_process` | [child_process](./node/child-process.md) | `spawnSync` / `spawn` / `execFile` / `execSync` |
 | `events` | [events](./node/events.md) | `EventEmitter`（全局与具名导出） |
 | `util` | [util](./node/util.md) | 格式化、inspect 与类型谓词 |
 | `querystring` | [querystring](./node/querystring.md) | parse / stringify / escape |

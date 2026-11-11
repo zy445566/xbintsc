@@ -10,5 +10,6 @@
 | `tls` / `cluster` / `vm` | 其余未列出的核心模块 |
 
 > `crypto`（仅 `createHash`，现支持流式 API）、`url`（仅 `pathToFileURL` / `fileURLToPath`）、
-> `child_process`（仅 `spawnSync`）、`zlib`（仅 `createGzip`）与
-> `worker_threads`（仅 `Worker` / `isMainThread` / `workerData` / `parentPort`）目前为部分实现。
+> `child_process`（仅 `spawnSync` / `spawn` / `execFile` / `execSync`）、
+> `zlib`（仅 `createGzip`）与 `worker_threads`（仅 `Worker` / `isMainThread` /
+> `workerData` / `parentPort`）目前为部分实现。

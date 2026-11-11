@@ -29,7 +29,7 @@ work on another. Missing or different behaviour is recorded under
 | `net` | [net](./node/net.md) | TCP server and client |
 | `dgram` | [dgram](./node/dgram.md) | UDP sockets |
 | `http` | [http](./node/http.md) | server and client, `Connection: close` |
-| `child_process` | [child_process](./node/child-process.md) | `spawnSync` only |
+| `child_process` | [child_process](./node/child-process.md) | `spawnSync` / `spawn` / `execFile` / `execSync` |
 | `events` | [events](./node/events.md) | `EventEmitter` (global and named export) |
 | `util` | [util](./node/util.md) | formatting, inspection and predicates |
 | `querystring` | [querystring](./node/querystring.md) | parse / stringify / escape |

@@ -15,6 +15,7 @@ The following Node built-in modules have no corresponding extension / builtin
 | `tls` / `cluster` / `vm` | other core modules not listed |
 
 > `crypto` (only `createHash`, now with the streaming API), `url` (only
-> `pathToFileURL` / `fileURLToPath`), `child_process` (only `spawnSync`),
-> `zlib` (only `createGzip`) and `worker_threads` (only `Worker` /
-> `isMainThread` / `workerData` / `parentPort`) are partially implemented.
+> `pathToFileURL` / `fileURLToPath`), `child_process` (only `spawnSync` /
+> `spawn` / `execFile` / `execSync`), `zlib` (only `createGzip`) and
+> `worker_threads` (only `Worker` / `isMainThread` / `workerData` /
+> `parentPort`) are partially implemented.

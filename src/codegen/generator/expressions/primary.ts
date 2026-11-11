@@ -15,6 +15,7 @@ import {
   type Expression,
   type FunctionExpression,
   type Identifier,
+  type ImportExpression,
   type NewExpression,
   type ObjectLiteralExpression,
   type PostfixUnaryExpression,
@@ -139,6 +140,12 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         return this.emitNew(node as NewExpression);
       case SyntaxKind.AwaitExpression:
         return this.emitAwait(node as AwaitExpression);
+      case SyntaxKind.ImportExpression: {
+        const specifier = (node as ImportExpression).specifier;
+        if (specifier.kind !== SyntaxKind.StringLiteral) return this.emitDynamicImportReject(specifier);
+        this.unsupported(node, "expression");
+        return i64(XT_UNDEFINED);
+      }
       case SyntaxKind.YieldExpression:
         return this.emitYield(node as YieldExpression);
       case SyntaxKind.ClassExpression: {

@@ -11,6 +11,7 @@
 import { i64, XT_UNDEFINED } from "../../values.js";
 import { NAMESPACE_STATICS } from "../tables.js";
 import type { ModuleExport, ModuleExports } from "../../../extensions/registry.js";
+import type { Expression } from "../../../ast/nodes.js";
 import type { Generator } from "../generator.js";
 
 export interface ModuleValueExpressionMethods {
@@ -18,6 +19,8 @@ export interface ModuleValueExpressionMethods {
   emitModuleExportValue(this: Generator, exported: ModuleExport): string;
   /** Build a namespace object holding every export of an imported module. */
   emitNamespaceObject(this: Generator, exports: ModuleExports): string;
+  /** Lower a non-literal `import(specifier)` to a rejected promise. */
+  emitDynamicImportReject(this: Generator, specifier: Expression): string;
 }
 
 export const moduleValueExpressionMethods: ModuleValueExpressionMethods = {
@@ -69,5 +72,24 @@ export const moduleValueExpressionMethods: ModuleValueExpressionMethods = {
       this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
     }
     return object;
+  },
+
+  emitDynamicImportReject(this: Generator, specifier: Expression): string {
+    // Evaluate the specifier for its side effects, then reject: a compiled
+    // binary has no runtime module loader to resolve a computed specifier.
+    this.emitExpression(specifier);
+    const message = this.stringValue(
+      "dynamic import with a non-literal specifier is not supported in compiled binaries",
+    );
+    const argPtr = `%dynimp${this.current.allocas.length}`;
+    this.current.allocas.push(`${argPtr} = alloca i64, i32 1`);
+    const argSlot = this.reg();
+    this.emit(`  ${argSlot} = getelementptr i64, i64* ${argPtr}, i32 0`);
+    this.emit(`  store i64 ${message}, i64* ${argSlot}`);
+    const error = this.reg();
+    this.emit(`  ${error} = call i64 @xt_error_ctor(i32 1, i64* ${argPtr})`);
+    const promise = this.reg();
+    this.emit(`  ${promise} = call i64 @xt_promise_reject(i64 ${error})`);
+    return promise;
   },
 };

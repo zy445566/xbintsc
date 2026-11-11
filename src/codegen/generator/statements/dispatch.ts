@@ -130,6 +130,15 @@ export const statementDispatchMethods: StatementDispatchMethods = {
       case SyntaxKind.EnumDeclaration:
         this.emitEnum(statement as EnumDeclaration);
         return;
+      case SyntaxKind.ModuleDeclaration: {
+        // `declare module "..."` augments an external module's type surface; it
+        // introduces no runtime value, so erase it. An identifier-named
+        // namespace may carry runtime members and is still unsupported.
+        const name = (statement as { name: { kind: SyntaxKind } }).name;
+        if (name.kind === SyntaxKind.StringLiteral) return;
+        this.unsupported(statement, "statement");
+        return;
+      }
       default:
         this.unsupported(statement, "statement");
     }

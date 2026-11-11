@@ -116,6 +116,11 @@ export function loadGraph(
         stack.pop();
         return undefined;
       }
+    } else if (extname(path).toLowerCase() === ".json") {
+      // `resolveJsonModule`: a JSON file imports as a module whose default
+      // export is the parsed value. JSON is a subset of expression syntax, so
+      // `export default <json>;` is always valid TypeScript.
+      text = `export default ${raw};\n`;
     }
     const file = new SourceFile(path, text);
     const parser = new Parser(file, diagnostics);

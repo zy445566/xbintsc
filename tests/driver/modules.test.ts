@@ -153,6 +153,16 @@ describe("bundleModules", () => {
     expect(names.some((name) => name.endsWith("value"))).toBe(true);
   });
 
+  it("bundles a JSON import as a module with a default export", () => {
+    const directory = writeFiles({
+      "data.json": '{"answer": 42}',
+      "main.ts": 'import data from "./data.json" with { type: "json" };\nconsole.log(data.answer);',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+  });
+
   it("keeps external (extension) imports in place", () => {
     const directory = writeFiles({
       "main.ts": 'import fs from "node:fs";\nfs.readFileSync("f.txt");',

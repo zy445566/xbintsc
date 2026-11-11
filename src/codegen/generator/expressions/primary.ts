@@ -73,6 +73,10 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
     switch (node.kind) {
       case SyntaxKind.Identifier:
         return this.emitIdentifier(node as Identifier);
+      case SyntaxKind.PrivateIdentifier:
+        // A bare `#field` (the `#field in obj` test) names the private field's
+        // literal storage key, which is the `#field` string.
+        return this.stringValue((node as { text: string }).text);
       case SyntaxKind.NumericLiteral: {
         const value = (node as { value: number }).value;
         return numberLiteral(value);

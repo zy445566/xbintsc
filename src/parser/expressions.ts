@@ -436,6 +436,11 @@ export const expressionMethods: ExpressionMethods = {
           return { kind: SyntaxKind.ImportExpression, specifier, start: importToken.start, end: close.end };
         }
         break;
+      case TokenKind.PrivateIdentifier:
+        // A bare `#field` in expression position is the `#field in obj`
+        // private-field existence test; the binary parser handles the `in`.
+        this.nextToken();
+        return { kind: SyntaxKind.PrivateIdentifier, text: token.text, start: token.start, end: token.end };
       default:
         break;
     }

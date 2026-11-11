@@ -51,6 +51,18 @@ describeE2E("end-to-end objects, functions and classes", (harness) => {
     expect(runProgram(source)).toBe("10 0 2\nsub:5");
   });
 
+  it("supports the private-field in operator", () => {
+    const source = `
+      class Box {
+        #secret = 1;
+        hasSecret(value: object): boolean { return #secret in value; }
+      }
+      const box = new Box();
+      console.log(box.hasSecret(box), box.hasSecret({}));
+    `;
+    expect(runProgram(source)).toBe("true false");
+  });
+
   it("gives declared functions the environment they capture", () => {
     /* A function declaration called by name used to be invoked with a null
      * environment: its free variables read `undefined` and writes to them were

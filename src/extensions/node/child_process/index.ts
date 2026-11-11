@@ -18,6 +18,8 @@ const builtins: Record<string, BuiltinFunction> = {
 const exports: ModuleExports = {
   spawnSync: { symbol: "xt_child_process_spawn_sync" },
   spawn: { symbol: "xt_child_process_spawn" },
+  execFile: { symbol: "xt_child_process_exec_file" },
+  execSync: { symbol: "xt_child_process_exec_sync" },
 };
 
 export const childProcessModule: NodeModule = {

@@ -23,6 +23,7 @@ typedef struct {
   char *env_block;
   int stdio_inherit;
   int stdio_ignore;
+  int exec_file;
   int exit_code;
   int failed;
   char *failed_message;
@@ -297,6 +298,23 @@ static void spawn_job_run(xt_async_job *base) {
 
 static void spawn_job_complete(xt_async_job *base) {
   spawn_job *job = (spawn_job *)base;
+  if (job->exec_file) {
+    xt_value callback = job->base.roots[3];
+    if (XT_IS_FUNCTION(callback)) {
+      if (job->failed) {
+        xt_value error = xt_object_new();
+        xt_node_set(error, "message", xt_string_from_cstr(job->failed_message ? job->failed_message : "spawn failed"));
+        xt_value args[2] = { error, xt_string_from_cstr("") };
+        xt_call_with_this(callback, XT_UNDEFINED, 2, args);
+      } else {
+        xt_value out = xt_string_new(job->stdout_data ? job->stdout_data : "", job->stdout_length);
+        xt_value args[2] = { XT_NULL, out };
+        xt_call_with_this(callback, XT_UNDEFINED, 2, args);
+      }
+    }
+    return;
+  }
+
   xt_value child = job->base.roots[0];
   xt_value stdout_stream = job->base.roots[1];
   xt_value stderr_stream = job->base.roots[2];
@@ -386,6 +404,64 @@ xt_value xt_child_process_spawn(int32_t argc, xt_value *argv) {
 
   xt_async_submit(&job->base);
   return child;
+}
+
+xt_value xt_child_process_spawn_sync(int32_t argc, xt_value *argv);
+
+/* `execFile(file, args, options, callback)`: async, no shell, callback gets
+ * (error, stdout). Reuses the spawn capture with the callback as a root. */
+xt_value xt_child_process_exec_file(int32_t argc, xt_value *argv) {
+  const char *file = argc > 0 ? xt_node_cstr(argv[0]) : "";
+  xt_value args = argc > 1 ? argv[1] : XT_UNDEFINED;
+  xt_value options = argc > 2 ? argv[2] : XT_UNDEFINED;
+  xt_value callback = argc > 3 ? argv[3] : XT_UNDEFINED;
+
+  spawn_job *job = (spawn_job *)calloc(1, sizeof(spawn_job));
+  if (!job) return XT_UNDEFINED;
+  job->base.run = spawn_job_run;
+  job->base.complete = spawn_job_complete;
+  job->base.release = spawn_job_release;
+  job->exec_file = 1;
+
+  job->command_line = build_command_line(file, args);
+  if (!job->command_line) {
+    free(job);
+    return XT_UNDEFINED;
+  }
+  if (XT_IS_OBJECT(options)) {
+    xt_value cwd = xt_object_get_cstr(options, "cwd");
+    if (XT_IS_STRING(cwd)) job->cwd = join_string(xt_string_data(cwd));
+    xt_value env = xt_object_get_cstr(options, "env");
+    job->env_block = build_env_block(env);
+    xt_value stdio = xt_object_get_cstr(options, "stdio");
+    if (XT_IS_STRING(stdio)) {
+      const char *mode = xt_string_data(stdio);
+      if (strcmp(mode, "inherit") == 0) job->stdio_inherit = 1;
+      else if (strcmp(mode, "ignore") == 0) job->stdio_ignore = 1;
+    }
+  }
+
+  job->base.roots[3] = callback;
+  xt_async_submit(&job->base);
+  return XT_UNDEFINED;
+}
+
+/* `execSync(command, options)`: synchronous, runs through the platform shell and
+ * returns the captured stdout string. */
+xt_value xt_child_process_exec_sync(int32_t argc, xt_value *argv) {
+  const char *command = argc > 0 ? xt_node_cstr(argv[0]) : "";
+  xt_value options = argc > 1 ? argv[1] : XT_UNDEFINED;
+#if defined(_WIN32)
+  const char *shell = "cmd";
+  xt_value shell_args[2] = { xt_string_from_cstr("/c"), xt_string_from_cstr(command) };
+#else
+  const char *shell = "/bin/sh";
+  xt_value shell_args[2] = { xt_string_from_cstr("-c"), xt_string_from_cstr(command) };
+#endif
+  xt_value args_array = xt_array_new(2, shell_args);
+  xt_value spawn_argv[3] = { xt_string_from_cstr(shell), args_array, options };
+  xt_value result = xt_child_process_spawn_sync(3, spawn_argv);
+  return xt_object_get_cstr(result, "stdout");
 }
 
 /* -- ChildProcess prototype ------------------------------------------------ */

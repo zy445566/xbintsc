@@ -495,7 +495,11 @@ export class TypeChecker {
     const target = unwrap(expression);
     if (target.kind === SyntaxKind.Identifier) {
       const symbol = this.binding.symbolOfIdentifier.get(target as Identifier);
-      return symbol ? this.lookup(symbol.id, flow) : ANY;
+      // A write target takes the variable's *declared* type, not the
+      // flow-narrowed type: inside `if (mode === "interactive")` the branch
+      // narrows `mode` to `"interactive"`, but `mode = "print"` is still valid
+      // because its declared type is the full `AppMode` union.
+      return symbol ? (this.resolver.typeOfSymbolId(symbol.id) ?? ANY) : ANY;
     }
     if (target.kind === SyntaxKind.PropertyAccessExpression) {
       const access = target as PropertyAccessExpression;

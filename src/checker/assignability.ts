@@ -16,6 +16,15 @@ export function isAssignable(source: Type, target: Type, depth = 0): boolean {
   if (depth > MAX_DEPTH) return true;
   if (isAny(source) || isAny(target)) return true;
 
+  // `null` / `undefined` / `void` are accepted everywhere (no strict-null
+  // checking), and that must hold uniformly: checking it here, before the
+  // union/literal target cases below, keeps a nullish value assignable to a
+  // literal union too (`f(x: "a" | "b")` then `f(undefined)`), instead of the
+  // union splitting and each literal member rejecting it.
+  if (source.kind === "primitive" && (source.name === "null" || source.name === "undefined" || source.name === "void")) {
+    return true;
+  }
+
   // Every member of a source union must fit; a target union accepts if any
   // member fits. Source first, so `("a" | "b")` fits `("a" | "b")`.
   if (source.kind === "union") {

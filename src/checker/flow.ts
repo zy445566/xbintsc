@@ -162,15 +162,19 @@ function positiveRefinement(expression: Expression, flow: Flow, resolver: TypeRe
       }
       return result;
     }
-    // `x === "literal"` narrows to that literal.
-    const leftLiteral = literalType(binary.left);
-    const rightLiteral = literalType(binary.right);
-    if (leftLiteral && !rightLiteral) {
-      const id = symbolIdOf(binary.right, resolver);
-      if (id !== undefined) result.set(id, leftLiteral);
-    } else if (rightLiteral && !leftLiteral) {
-      const id = symbolIdOf(binary.left, resolver);
-      if (id !== undefined) result.set(id, rightLiteral);
+    // `x === "literal"` narrows to that literal. `!==` must not: its truthy
+    // branch means x is *not* the literal, which the model cannot express, so
+    // leave the type alone instead of narrowing it to the wrong literal.
+    if (equality) {
+      const leftLiteral = literalType(binary.left);
+      const rightLiteral = literalType(binary.right);
+      if (leftLiteral && !rightLiteral) {
+        const id = symbolIdOf(binary.right, resolver);
+        if (id !== undefined) result.set(id, leftLiteral);
+      } else if (rightLiteral && !leftLiteral) {
+        const id = symbolIdOf(binary.left, resolver);
+        if (id !== undefined) result.set(id, rightLiteral);
+      }
     }
     return result;
   }

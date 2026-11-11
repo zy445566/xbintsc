@@ -194,6 +194,40 @@ describe("checker: types", () => {
     expect(codes(check("const anything: any = {}; anything.missing.deep;"), DiagnosticCode.PropertyNotFound)).toHaveLength(0);
     expect(codes(check("const anything: any = {}; anything();"), DiagnosticCode.NotCallable)).toHaveLength(0);
   });
+
+  it("accepts undefined for an optional parameter", () => {
+    expect(mismatches("function f(mode?: 'a' | 'b') {} f(undefined);")).toHaveLength(0);
+    expect(mismatches("function f(mode?: 'a' | 'b') {} f('c');")).toHaveLength(1);
+  });
+
+  it("allows reassignment to a variable narrowed inside a branch", () => {
+    const source = [
+      "type Mode = 'interactive' | 'print';",
+      "function pick(mode: Mode) {",
+      "  if (mode === 'interactive') { mode = 'print'; }",
+      "  console.log(mode);",
+      "}",
+    ].join("\n");
+    expect(mismatches(source)).toHaveLength(0);
+  });
+
+  it("does not narrow an inequality comparison to the wrong literal", () => {
+    const source = [
+      "let lastPart = '';",
+      "if (lastPart !== '' && !lastPart.endsWith('x')) {",
+      "  lastPart = '\\n';",
+      "}",
+    ].join("\n");
+    expect(mismatches(source)).toHaveLength(0);
+  });
+
+  it("still narrows an equality comparison to the literal", () => {
+    const source = [
+      "let value: 'a' | 'b' = 'a';",
+      "if (value === 'a') { const wrong: 'b' = value; console.log(wrong); }",
+    ].join("\n");
+    expect(mismatches(source)).toHaveLength(1);
+  });
 });
 
 describe("checker: property existence", () => {

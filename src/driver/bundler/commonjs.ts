@@ -128,7 +128,9 @@ export function prepareCommonJS(record: ModuleRecord): void {
   const prefixStatements: Statement[] = [
     variableStatement(moduleName, objectLiteral([propertyAssignment("exports", objectLiteral([]))]), anchor),
   ];
-  prefixStatements.push(variableStatement(exportsName, member(moduleName, "exports", anchor), anchor));
+  // `exports` may be reassigned (`exports = module.exports = {}`), so the alias
+  // is a `let`, not a `const`.
+  prefixStatements.push(variableStatement(exportsName, member(moduleName, "exports", anchor), anchor, "let"));
 
   const suffixStatements: Statement[] = [];
   const defaultName = `${record.prefix}$cjs_default`;
@@ -394,7 +396,12 @@ function undefinedLiteral(anchor: number): Expression {
   return { kind: SyntaxKind.UndefinedKeyword, start: anchor, end: anchor };
 }
 
-function variableStatement(name: string, initializer: Expression, anchor: number): VariableStatement {
+function variableStatement(
+  name: string,
+  initializer: Expression,
+  anchor: number,
+  kind: "const" | "let" = "const",
+): VariableStatement {
   const declaration: VariableDeclaration = {
     kind: SyntaxKind.VariableDeclaration,
     name: identifier(name, anchor),
@@ -405,7 +412,7 @@ function variableStatement(name: string, initializer: Expression, anchor: number
   };
   const list: VariableDeclarationList = {
     kind: SyntaxKind.VariableDeclarationList,
-    declarationKind: "const",
+    declarationKind: kind,
     declarations: [declaration],
     start: anchor,
     end: anchor,

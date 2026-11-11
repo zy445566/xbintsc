@@ -50,6 +50,7 @@ export interface PackageJson {
   readonly main?: string;
   readonly module?: string;
   readonly exports?: unknown;
+  readonly imports?: unknown;
 }
 
 export type DependencyResolution =

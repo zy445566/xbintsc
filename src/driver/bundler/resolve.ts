@@ -16,7 +16,7 @@ const RESOLVE_SUFFIXES = ["", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mj
 /** File extensions a directory `index` entry may use. */
 const INDEX_SUFFIXES = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 /** Conditions consulted, in order, when reading a package `exports` map. */
-const EXPORT_CONDITIONS = ["import", "module", "default", "node", "require"];
+const EXPORT_CONDITIONS = ["import", "module", "node", "require", "default"];
 
 /** A specifier is a file path (`./x`, `../x`, `/x`) rather than a package. */
 function isRelativeSpecifier(specifier: string): boolean {
@@ -155,6 +155,40 @@ function resolvePackageSubpath(packageDir: string, subpath: string): string | un
   return resolvePath(join(packageDir, subpath));
 }
 
+/** Resolve a package-internal `#name` import through the package `imports` map. */
+function resolvePackageImport(fromDir: string, specifier: string): string | undefined {
+  let directory = fromDir;
+  for (;;) {
+    const pkg = readPackageJson(directory);
+    const target = importsValue(pkg?.imports, specifier);
+    if (target) {
+      const resolved = resolvePath(resolve(directory, target));
+      if (resolved) return resolved;
+    }
+    const parent = dirname(directory);
+    if (parent === directory) return undefined;
+    directory = parent;
+  }
+}
+
+/** Pick the target for a `#name` specifier from a package `imports` map. */
+function importsValue(importsField: unknown, specifier: string): string | undefined {
+  if (!importsField || typeof importsField !== "object") return undefined;
+  const record = importsField as Record<string, unknown>;
+  if (specifier in record) return resolveExportTarget(record[specifier]);
+  for (const key of Object.keys(record)) {
+    const star = key.indexOf("*");
+    if (star === -1) continue;
+    const prefix = key.slice(0, star);
+    const suffix = key.slice(star + 1);
+    if (specifier.startsWith(prefix) && specifier.endsWith(suffix)) {
+      const matched = specifier.slice(prefix.length, specifier.length - suffix.length);
+      return resolveExportTarget(substituteStar(record[key], matched));
+    }
+  }
+  return undefined;
+}
+
 /** Pick the export target for a subpath (`"."` or `"./sub"`) from an exports map. */
 function subpathValue(exportsField: unknown, subpath: string): unknown {
   if (exportsField === undefined) return undefined;
@@ -235,6 +269,10 @@ export function classifyDependency(
   }
   if (specifier.startsWith("node:") || externalSpecifiers.has(specifier)) {
     return { kind: "external" };
+  }
+  if (specifier.startsWith("#")) {
+    const resolved = resolvePackageImport(fromDir, specifier);
+    return resolved ? { kind: "file", path: resolved } : { kind: "missing" };
   }
   const resolved = isRelativeSpecifier(specifier)
     ? resolveModule(fromDir, specifier)

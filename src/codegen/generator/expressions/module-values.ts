@@ -38,6 +38,16 @@ export const moduleValueExpressionMethods: ModuleValueExpressionMethods = {
       );
       return closure;
     }
+    if (exported.valueSymbol) {
+      // A plain value (`constants.O_WRONLY`, `worker_threads.isMainThread`):
+      // the getter has the uniform `(i32, i64*)` ABI and is invoked with no
+      // arguments. This makes it work inside a built namespace object, not just
+      // as a direct named import.
+      this.extraDeclarations.add(`declare i64 @${exported.valueSymbol}(i32, i64*)`);
+      const result = this.reg();
+      this.emit(`  ${result} = call i64 @${exported.valueSymbol}(i32 0, i64* null)`);
+      return result;
+    }
     if (exported.namespace && exported.method) {
       const dispatcher = NAMESPACE_STATICS[exported.namespace];
       if (dispatcher) {

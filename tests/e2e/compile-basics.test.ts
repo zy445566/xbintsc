@@ -32,6 +32,18 @@ describeE2E("end-to-end basics", (harness) => {
     expect(runProgram(source)).toBe("55");
   });
 
+  it("runs a named function expression that recurses through its own name", () => {
+    const source = `
+      function outer() {
+        return function countdown(n: number): string {
+          return n <= 0 ? "done" : countdown(n - 1);
+        };
+      }
+      console.log(outer()(3));
+    `;
+    expect(runProgram(source)).toBe("done");
+  });
+
   it("supports loops, arrays and string concatenation", () => {
     const source = `
       const numbers = [1, 2, 3, 4];

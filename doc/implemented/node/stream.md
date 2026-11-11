@@ -17,3 +17,6 @@ are EventEmitters with a **synchronous event model**: `on('data')` flushes the
 | `pipe(destination)` | forward data |
 | `on('data' / 'end' / 'finish')` | events |
 | `pause()` / `resume()` / `setEncoding(enc)` / `destroy()` | flow control |
+| `isReadable(stream)` | whether it is not a pure writable |
+| `isErrored(stream)` / `isDisturbed(stream)` | always false (synchronous model) |
+| `finished(stream, cb)` / `pipeline(...streams, cb)` | invoke `cb()` (delivery is synchronous) |

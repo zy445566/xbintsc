@@ -18,6 +18,34 @@ xt_value xt_buffer_static(xt_value name, int32_t argc, xt_value *argv) {
     return xt_buffer_alloc(size, argc > 1 ? argv[1] : XT_UNDEFINED, encoding);
   }
   if (strcmp(fn, "isBuffer") == 0) return xt_bool(xt_buffer_is(xt_arg_at(argc, argv, 0)));
+  if (strcmp(fn, "isUtf8") == 0) {
+    /* A Buffer stores raw bytes; the value is valid UTF-8 unless it contains an
+     * ill-formed sequence. */
+    xt_value value = xt_arg_at(argc, argv, 0);
+    if (!xt_buffer_is(value)) return XT_FALSE;
+    uint32_t length = xt_buffer_length(value);
+    uint32_t i = 0;
+    while (i < length) {
+      unsigned char c = xt_buffer_byte(value, i);
+      if (c < 0x80) {
+        i++;
+      } else if ((c & 0xE0) == 0xC0) {
+        if (i + 1 >= length || (xt_buffer_byte(value, i + 1) & 0xC0) != 0x80) return XT_FALSE;
+        i += 2;
+      } else if ((c & 0xF0) == 0xE0) {
+        if (i + 2 >= length || (xt_buffer_byte(value, i + 1) & 0xC0) != 0x80 ||
+            (xt_buffer_byte(value, i + 2) & 0xC0) != 0x80) return XT_FALSE;
+        i += 3;
+      } else if ((c & 0xF8) == 0xF0) {
+        if (i + 3 >= length || (xt_buffer_byte(value, i + 1) & 0xC0) != 0x80 ||
+            (xt_buffer_byte(value, i + 2) & 0xC0) != 0x80 || (xt_buffer_byte(value, i + 3) & 0xC0) != 0x80) return XT_FALSE;
+        i += 4;
+      } else {
+        return XT_FALSE;
+      }
+    }
+    return XT_TRUE;
+  }
   if (strcmp(fn, "byteLength") == 0) {
     xt_value value = xt_arg_at(argc, argv, 0);
     if (xt_buffer_is(value)) return xt_number((double)xt_buffer_length(value));
@@ -55,4 +83,15 @@ xt_value xt_buffer_static(xt_value name, int32_t argc, xt_value *argv) {
     return xt_number(la < lb ? -1 : la > lb ? 1 : 0);
   }
   return xt_undefined();
+}
+
+/* `buffer.constants`: the size limits Node exposes. */
+xt_value xt_buffer_constants_value(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  xt_value object = xt_object_new();
+  /* V8's maximum string / typed-array lengths. */
+  xt_node_set(object, "MAX_LENGTH", xt_number(4294967295.0));
+  xt_node_set(object, "MAX_STRING_LENGTH", xt_number(2147483647.0));
+  return object;
 }

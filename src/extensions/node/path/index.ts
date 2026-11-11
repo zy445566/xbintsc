@@ -23,12 +23,15 @@ const methods = [
   "extname",
   "relative",
   "toNamespacedPath",
+  "parse",
 ] as const;
 
 const exports: ModuleExports = {
   ...Object.fromEntries(methods.map((method) => [method, { namespace: "path", method }])),
   sep: { valueSymbol: "xt_path_sep_value" },
   delimiter: { valueSymbol: "xt_path_delimiter_value" },
+  posix: { valueSymbol: "xt_path_posix_value" },
+  win32: { valueSymbol: "xt_path_win32_value" },
 };
 
 export const pathModule: NodeModule = {

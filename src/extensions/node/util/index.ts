@@ -33,6 +33,7 @@ const symbols: Record<string, string> = {
   isRegExp: "xt_util_is_regexp",
   isPromise: "xt_util_is_promise",
   isError: "xt_util_is_error",
+  debuglog: "xt_util_debuglog",
 };
 
 const exports: ModuleExports = {

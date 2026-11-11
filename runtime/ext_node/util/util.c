@@ -418,6 +418,22 @@ xt_value xt_util_is_error(int32_t argc, xt_value *argv) {
                  xt_truthy(xt_object_has_own(value, xt_string_from_cstr("name"))));
 }
 
+/* `util.debuglog(section)` returns a no-op logger: NODE_DEBUG gating is not
+ * implemented, so the returned function silently drops its arguments. */
+static xt_value xt_util_debuglog_noop(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)thisValue;
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return XT_UNDEFINED;
+}
+
+xt_value xt_util_debuglog(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return xt_closure_new((void *)xt_util_debuglog_noop, 0, NULL);
+}
+
 /* -- namespace dispatcher ------------------------------------------------- */
 
 static const struct {
@@ -444,6 +460,7 @@ static const struct {
     {"isRegExp", xt_util_is_regexp},
     {"isPromise", xt_util_is_promise},
     {"isError", xt_util_is_error},
+    {"debuglog", xt_util_debuglog},
 };
 
 xt_value xt_util_static(xt_value name, int32_t argc, xt_value *argv) {

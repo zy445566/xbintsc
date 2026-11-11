@@ -13,9 +13,10 @@ import type { ModuleExports } from "../../registry.js";
 
 const methods = ["createServer", "request", "get"] as const;
 
-const exports: ModuleExports = Object.fromEntries(
-  methods.map((method) => [method, { namespace: "http", method }]),
-);
+const exports: ModuleExports = {
+  ...Object.fromEntries(methods.map((method) => [method, { namespace: "http", method }])),
+  STATUS_CODES: { valueSymbol: "xt_http_status_codes_value" },
+};
 
 export const httpModule: NodeModule = {
   name: "http",

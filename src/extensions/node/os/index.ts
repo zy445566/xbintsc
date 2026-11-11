@@ -26,9 +26,10 @@ const methods = [
   "cpus",
 ] as const;
 
-const exports: ModuleExports = Object.fromEntries(
-  methods.map((method) => [method, { namespace: "os", method }]),
-);
+const exports: ModuleExports = {
+  ...Object.fromEntries(methods.map((method) => [method, { namespace: "os", method }])),
+  constants: { valueSymbol: "xt_os_constants_value" },
+};
 
 export const osModule: NodeModule = {
   name: "os",

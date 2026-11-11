@@ -265,6 +265,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   util: "xt_util_static",
   querystring: "xt_querystring_static",
   assert: "xt_assert_static",
+  diagnostics_channel: "xt_diagnostics_channel_static",
   ...TYPED_ARRAY_STATICS,
 };
 

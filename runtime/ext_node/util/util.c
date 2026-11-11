@@ -409,6 +409,24 @@ xt_value xt_util_is_buffer(int32_t argc, xt_value *argv) { return xt_bool(xt_nod
 xt_value xt_util_is_date(int32_t argc, xt_value *argv) { return xt_bool(xt_is_date(xt_arg(argc, argv, 0))); }
 xt_value xt_util_is_regexp(int32_t argc, xt_value *argv) { return xt_bool(xt_is_regexp(xt_arg(argc, argv, 0))); }
 xt_value xt_util_is_promise(int32_t argc, xt_value *argv) { return xt_bool(xt_is_promise(xt_arg(argc, argv, 0))); }
+xt_value xt_util_is_map(int32_t argc, xt_value *argv) { return xt_bool(xt_is_map(xt_arg(argc, argv, 0))); }
+xt_value xt_util_is_set(int32_t argc, xt_value *argv) { return xt_bool(xt_is_set(xt_arg(argc, argv, 0))); }
+xt_value xt_util_is_weak_map(int32_t argc, xt_value *argv) { return xt_bool(xt_is_weak_map(xt_arg(argc, argv, 0))); }
+xt_value xt_util_is_weak_set(int32_t argc, xt_value *argv) { return xt_bool(xt_is_weak_set(xt_arg(argc, argv, 0))); }
+xt_value xt_util_is_array_buffer(int32_t argc, xt_value *argv) { return xt_bool(xt_is_array_buffer(xt_arg(argc, argv, 0))); }
+
+/* Kind 0 in the typed-array table is `Uint8Array`. */
+xt_value xt_util_is_typed_array(int32_t argc, xt_value *argv) { return xt_bool(xt_is_typed_array(xt_arg(argc, argv, 0))); }
+xt_value xt_util_is_uint8_array(int32_t argc, xt_value *argv) {
+  return xt_bool(xt_typed_array_kind_of(xt_arg(argc, argv, 0)) == 0);
+}
+
+/* Proxies are not yet a first-class runtime value, so this is always false. */
+xt_value xt_util_is_proxy(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return XT_FALSE;
+}
 
 /* Best-effort `Error` detection: error objects carry own `name`/`message`. */
 xt_value xt_util_is_error(int32_t argc, xt_value *argv) {
@@ -432,6 +450,47 @@ xt_value xt_util_debuglog(int32_t argc, xt_value *argv) {
   (void)argc;
   (void)argv;
   return xt_closure_new((void *)xt_util_debuglog_noop, 0, NULL);
+}
+
+/* `util.types`: an object whose methods are the type predicates. Each method
+ * captures its name and dispatches through the shared predicate table. */
+static const struct {
+  const char *name;
+  xt_value (*fn)(int32_t, xt_value *);
+} util_type_predicates[] = {
+    {"isAnyArrayBuffer", xt_util_is_array_buffer},
+    {"isArrayBuffer", xt_util_is_array_buffer},
+    {"isDate", xt_util_is_date},
+    {"isMap", xt_util_is_map},
+    {"isPromise", xt_util_is_promise},
+    {"isProxy", xt_util_is_proxy},
+    {"isRegExp", xt_util_is_regexp},
+    {"isSet", xt_util_is_set},
+    {"isTypedArray", xt_util_is_typed_array},
+    {"isUint8Array", xt_util_is_uint8_array},
+    {"isWeakMap", xt_util_is_weak_map},
+    {"isWeakSet", xt_util_is_weak_set},
+};
+
+static xt_value util_types_method(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)thisValue;
+  const char *name = xt_string_data(xt_closure_env(env, 0));
+  for (size_t i = 0; i < sizeof(util_type_predicates) / sizeof(util_type_predicates[0]); i++) {
+    if (name && strcmp(name, util_type_predicates[i].name) == 0) return util_type_predicates[i].fn(argc, argv);
+  }
+  return XT_FALSE;
+}
+
+xt_value xt_util_types_value(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  xt_value object = xt_object_new();
+  for (size_t i = 0; i < sizeof(util_type_predicates) / sizeof(util_type_predicates[0]); i++) {
+    xt_value captured[1] = { xt_string_from_cstr(util_type_predicates[i].name) };
+    xt_object_set(object, xt_string_from_cstr(util_type_predicates[i].name),
+                  xt_closure_new((void *)util_types_method, 1, captured));
+  }
+  return object;
 }
 
 /* -- namespace dispatcher ------------------------------------------------- */
@@ -460,6 +519,14 @@ static const struct {
     {"isRegExp", xt_util_is_regexp},
     {"isPromise", xt_util_is_promise},
     {"isError", xt_util_is_error},
+    {"isMap", xt_util_is_map},
+    {"isSet", xt_util_is_set},
+    {"isWeakMap", xt_util_is_weak_map},
+    {"isWeakSet", xt_util_is_weak_set},
+    {"isArrayBuffer", xt_util_is_array_buffer},
+    {"isTypedArray", xt_util_is_typed_array},
+    {"isUint8Array", xt_util_is_uint8_array},
+    {"isProxy", xt_util_is_proxy},
     {"debuglog", xt_util_debuglog},
 };
 

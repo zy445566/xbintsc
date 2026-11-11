@@ -135,6 +135,39 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
+  it("exposes timers/promises, perf_hooks, string_decoder, util/types, tty and console", () => {
+    const source = `
+      import { setTimeout as sleep, setImmediate } from "node:timers/promises";
+      import { performance } from "node:perf_hooks";
+      import { StringDecoder } from "node:string_decoder";
+      import { isProxy, isUint8Array } from "node:util/types";
+      import { isatty } from "node:tty";
+      import { Console } from "node:console";
+      import { createRequire } from "node:module";
+      import { channel } from "node:diagnostics_channel";
+      async function main() {
+        await sleep(1);
+        await setImmediate();
+        const start = performance.now();
+        const decoder = new StringDecoder("utf8");
+        console.log(decoder.write(Buffer.from("hello")), start >= 0);
+        console.log(isProxy({}), isUint8Array(new Uint8Array(1)), typeof isatty(0));
+        const logger = new Console({ stdout: { write() {} } });
+        const require = createRequire(import.meta.url);
+        const ch = channel("x");
+        console.log(typeof require, typeof ch.subscribe, typeof logger.table);
+      }
+      main();
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual([
+      "hello true",
+      "false true boolean",
+      "function function function",
+    ]);
+  });
+
   it("wraps fs operations in promises", () => {
     const target = join(workdir, `promise_${Math.random().toString(36).slice(2)}.txt`);
     const source = `

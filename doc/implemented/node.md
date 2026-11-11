@@ -41,6 +41,13 @@ work on another. Missing or different behaviour is recorded under
 | `zlib` | [zlib](./node/zlib.md) | `createGzip` only |
 | `worker_threads` | [worker_threads](./node/worker-threads.md) | emulated with child processes |
 
+Additional small modules are provided with their core surface: `timers`
+(`setTimeout`/`setInterval`/`setImmediate`), `timers/promises`, `console`
+(`Console` + the console methods), `perf_hooks` (`performance`), `tty`
+(`isatty`), `module` (`createRequire`/`isBuiltin`), `string_decoder`
+(`StringDecoder`), `diagnostics_channel` (`channel`/`tracingChannel`), and
+`util/types` (the type predicates).
+
 ## Where does a change belong?
 
 A Node module change normally touches `src/extensions/node/<module>/` and

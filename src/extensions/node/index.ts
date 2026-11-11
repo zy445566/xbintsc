@@ -43,6 +43,8 @@ import { timersPromisesModule } from "./timers-promises/index.js";
 import { utilTypesModule } from "./util-types/index.js";
 import { stringDecoderModule } from "./string-decoder/index.js";
 import { diagnosticsChannelModule } from "./diagnostics-channel/index.js";
+import { dnsModule } from "./dns/index.js";
+import { readlinePromisesModule } from "./readline-promises/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -77,6 +79,8 @@ const modules: readonly NodeModule[] = [
   utilTypesModule,
   stringDecoderModule,
   diagnosticsChannelModule,
+  dnsModule,
+  readlinePromisesModule,
 ];
 
 export const nodeExtension: Extension = {

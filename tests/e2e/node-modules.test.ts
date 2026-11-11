@@ -135,6 +135,25 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
+  it("provides dns.lookup and readline/promises.createInterface", () => {
+    const source = `
+      import { lookup } from "node:dns";
+      import { createInterface } from "node:readline/promises";
+      lookup("localhost", (err: unknown, addresses: unknown) => {
+        console.log("lookup", (err === null || err === undefined), Array.isArray(addresses));
+      });
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      console.log(typeof rl.question, typeof rl.on, typeof rl.off, typeof rl.close);
+      rl.close();
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual([
+      "lookup true true",
+      "function function function function",
+    ]);
+  });
+
   it("provides stream helpers and http.IncomingMessage", () => {
     const source = `
       import { Readable, isReadable, isErrored, isDisturbed, finished, pipeline } from "node:stream";

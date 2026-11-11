@@ -26,7 +26,7 @@ import {
   type YieldExpression,
   type ArrayLiteralExpression,
 } from "../../../ast/nodes.js";
-import { SymbolKind, type SymbolInfo } from "../../../binder/binder.js";
+import { implementationFunctionInfo, SymbolKind, type SymbolInfo } from "../../../binder/binder.js";
 import { DiagnosticCode } from "../../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_FALSE, XT_NULL, XT_TRUE, XT_UNDEFINED } from "../../values.js";
 import {
@@ -369,8 +369,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
   },
 
   emitFunctionValue(symbol: SymbolInfo): string {
-    const declaration = symbol.declarations[0];
-    const fn = declaration ? this.binding.functionOfNode.get(declaration) : undefined;
+    const fn = implementationFunctionInfo(this.binding, symbol);
     if (!fn) return i64(XT_UNDEFINED);
     /* A declared function is a value like any closure: it captures the outer
      * bindings its body mentions, so build the environment instead of calling

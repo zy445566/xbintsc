@@ -116,6 +116,34 @@ export const literalMethods: LiteralMethods = {
         const body = this.parseBlock();
         const fn: FunctionExpression = { kind: SyntaxKind.FunctionExpression, typeParameters, parameters, returnType, body, flags: NodeFlags.Generator, start, end: body.end };
         properties.push({ kind: SyntaxKind.PropertyAssignment, name, initializer: fn, start, end: body.end });
+      } else if (
+        this.at(TokenKind.AsyncKeyword) &&
+        !this.atAhead(1, TokenKind.Colon) &&
+        !this.atAhead(1, TokenKind.Comma) &&
+        !this.atAhead(1, TokenKind.CloseBrace) &&
+        !this.atAhead(1, TokenKind.Equals) &&
+        !this.atAhead(1, TokenKind.Question) &&
+        !this.atAhead(1, TokenKind.OpenParen)
+      ) {
+        // `{ async name() {} }` / `{ async *name() {} }`: an async (generator)
+        // method. `async` is the modifier, not the name.
+        const start = this.nextToken().start;
+        let flags = NodeFlags.Async;
+        if (this.at(TokenKind.Asterisk)) {
+          this.nextToken();
+          flags |= NodeFlags.Generator;
+        }
+        const name = this.parsePropertyName();
+        const typeParameters = this.at(TokenKind.LessThan) ? this.parseTypeParameters() : [];
+        const parameters = this.parseParameters();
+        let returnType: TypeNode | undefined;
+        if (this.at(TokenKind.Colon)) {
+          this.nextToken();
+          returnType = this.parseReturnType();
+        }
+        const body = this.parseBlock();
+        const fn: FunctionExpression = { kind: SyntaxKind.FunctionExpression, typeParameters, parameters, returnType, body, flags, start, end: body.end };
+        properties.push({ kind: SyntaxKind.PropertyAssignment, name, initializer: fn, start, end: body.end });
       } else {
         const start = this.token.start;
         const name = this.parsePropertyName();

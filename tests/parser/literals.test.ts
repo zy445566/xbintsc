@@ -27,6 +27,14 @@ describe("literal expressions", () => {
     expect(fn.returnType.kind).toBe(SyntaxKind.NumberKeywordType);
   });
 
+  it("parses object-literal async methods", () => {
+    const { init, diagnostics } = initializerOf("const o = { async run(x: number) { return x; } };");
+    expect(diagnostics).toHaveLength(0);
+    const fn = init.properties[0].initializer;
+    expect(fn.flags & NodeFlags.Async).toBe(NodeFlags.Async);
+    expect(fn.parameters).toHaveLength(1);
+  });
+
   it("reports invalid object literal members", () => {
     const { diagnostics } = parse("const o = { 1 2 };");
     expect(diagnostics.some((d) => d.code === DiagnosticCode.UnexpectedToken)).toBe(true);
@@ -55,6 +63,15 @@ describe("literal expressions", () => {
     expect(init.kind).toBe(SyntaxKind.BigIntLiteral);
     expect(typeof init.value).toBe("bigint");
     expect(init.value).toBe(123456789012345678901234567890n);
+  });
+
+  it("parses BigInt literals as object property keys", () => {
+    const { init, diagnostics } = initializerOf("const o = { 0n: 'NONE', 1n: 'ON' };");
+    expect(diagnostics).toHaveLength(0);
+    expect(init.properties).toHaveLength(2);
+    expect(init.properties[0].name.kind).toBe(SyntaxKind.StringLiteral);
+    expect(init.properties[0].name.value).toBe("0");
+    expect(init.properties[1].name.value).toBe("1");
   });
 
   it("parses regular expression literals with flags", () => {

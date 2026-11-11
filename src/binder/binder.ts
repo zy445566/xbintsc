@@ -38,6 +38,19 @@ export function bind(sourceFile: SourceFileNode): BindResult {
   return binder.bind();
 }
 
+/**
+ * The implementation `FunctionInfo` a function symbol refers to. Overload
+ * signatures have no body; the implementation is the declaration that has one,
+ * so `symbol.declarations[0]` would pick an empty signature.
+ */
+export function implementationFunctionInfo(binding: BindResult, symbol: SymbolInfo): FunctionInfo | undefined {
+  for (const declaration of symbol.declarations) {
+    const fn = binding.functionOfNode.get(declaration);
+    if (fn && (declaration as { body?: unknown }).body !== undefined) return fn;
+  }
+  return binding.functionOfNode.get(symbol.declarations[0]!);
+}
+
 export class Binder {
   readonly functions: FunctionInfo[] = [];
   readonly classes: ClassInfo[] = [];

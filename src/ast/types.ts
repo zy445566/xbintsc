@@ -145,6 +145,8 @@ export interface MappedTypeNode extends Node {
   readonly kind: SyntaxKind.MappedType;
   readonly readonlyToken: boolean | "+" | "-";
   readonly typeParameter: TypeParameterDeclaration;
+  /** Key remapping: `{ [K in T as U]: V }`. Type-only, erased. */
+  readonly nameType?: TypeNode;
   readonly questionToken: boolean | "+" | "-";
   readonly type?: TypeNode;
 }

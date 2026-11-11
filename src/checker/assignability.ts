@@ -97,8 +97,9 @@ export function isAssignable(source: Type, target: Type, depth = 0): boolean {
       // A function-typed value can also wear object members; do not guess.
       return source.kind === "object";
     }
-    const required = target.parameters.filter((parameter) => !parameter.optional && !parameter.rest).length;
-    if (source.parameters.length < required) return false;
+    // A function that declares fewer parameters still satisfies a target that
+    // declares more: JavaScript ignores extra arguments, so `(x) => x` is
+    // assignable to `(x, i) => x`. Compare only the overlapping parameters.
     for (let index = 0; index < target.parameters.length; index++) {
       const sourceParameter = source.parameters[index];
       const targetParameter = target.parameters[index];

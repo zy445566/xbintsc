@@ -48,6 +48,8 @@ export interface ObjectBindingPattern extends Node {
 export interface TypeParameterDeclaration extends Node {
   readonly kind: SyntaxKind.TypeParameterDeclaration;
   readonly name: Identifier;
+  /** `const` type parameter (TypeScript 5.0): `<const T>`. Type-only, erased. */
+  readonly const?: boolean;
   readonly constraint?: TypeNode;
   readonly default?: TypeNode;
 }

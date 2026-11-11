@@ -179,5 +179,6 @@ export const enum ModifierKind {
   Static = "static",
   Readonly = "readonly",
   Async = "async",
+  Override = "override",
   Const = "const",
 }

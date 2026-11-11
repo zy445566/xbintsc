@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bindSource } from "../helpers.js";
-import { SymbolKind } from "../../src/binder/binder.js";
+import { implementationFunctionInfo, SymbolKind } from "../../src/binder/binder.js";
 import { SyntaxKind } from "../../src/ast/nodes.js";
 
 describe("binder", () => {
@@ -18,6 +18,14 @@ describe("binder", () => {
     expect(moduleScope.symbols.get("b")?.kind).toBe(SymbolKind.Let);
     expect(moduleScope.symbols.get("c")?.kind).toBe(SymbolKind.Const);
     expect(moduleScope.symbols.get("d")?.kind).toBe(SymbolKind.Function);
+  });
+
+  it("resolves an overloaded function to its implementation declaration", () => {
+    const { result } = bindSource("function f(a: number): void;\nfunction f(a: string): void;\nfunction f(a: any): void {}");
+    const symbol = result.moduleFunction.scope.symbols.get("f")!;
+    expect(symbol.declarations).toHaveLength(3);
+    const implementation = implementationFunctionInfo(result, symbol)!;
+    expect(implementation.node).toBe(symbol.declarations[2]);
   });
 
   it("marks const bindings immutable", () => {

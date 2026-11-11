@@ -84,7 +84,10 @@ export function collectRequireSites(sourceFile: SourceFileNode, bind: BindResult
     if (callee.kind !== SyntaxKind.Identifier) return;
     if (!isFreeRequire(callee as Identifier, bind)) return;
     const first = call.arguments[0];
-    if (first && first.kind === SyntaxKind.StringLiteral) {
+    if (
+      first &&
+      (first.kind === SyntaxKind.StringLiteral || first.kind === SyntaxKind.NoSubstitutionTemplateLiteral)
+    ) {
       sites.push({ node: call, specifier: (first as StringLiteral).value });
     }
   });
@@ -167,7 +170,10 @@ export function lowerCommonJSRequires(record: ModuleRecord, context: CommonJSLow
     if (callee.kind !== SyntaxKind.Identifier) return undefined;
     if (!isFreeRequire(callee as Identifier, record.bind)) return undefined;
     const first = call.arguments[0];
-    if (!first || first.kind !== SyntaxKind.StringLiteral) {
+    if (
+      !first ||
+      (first.kind !== SyntaxKind.StringLiteral && first.kind !== SyntaxKind.NoSubstitutionTemplateLiteral)
+    ) {
       context.diagnostics.error(
         DiagnosticCode.UnsupportedFeature,
         "CommonJS `require()` with a non-literal argument is not supported",

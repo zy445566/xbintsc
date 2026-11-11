@@ -366,6 +366,18 @@ describe("CommonJS in node_modules", () => {
     expect(new Set(names.filter((name) => name.endsWith("$cjs_module"))).size).toBe(2);
   });
 
+  it("lowers a require with a no-substitution template specifier", () => {
+    const directory = writeFiles({
+      "node_modules/tpl/package.json": '{ "name": "tpl", "main": "index.js" }',
+      "node_modules/tpl/index.js": 'var e = require(`./dep.js`);\nmodule.exports = function () { return e.hello(); };',
+      "node_modules/tpl/dep.js": 'export function hello() { return "hi"; }',
+      "main.ts": 'import f from "tpl";\nconsole.log(f());',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(requireCalls(result!.sourceFile)).toBe(0);
+  });
+
   it("exposes CommonJS named exports to ESM imports", () => {
     const directory = writeFiles({
       "node_modules/n/package.json": '{ "name": "n", "main": "index.js" }',

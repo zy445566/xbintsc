@@ -24,6 +24,7 @@ import {
   type VariableStatement,
 } from "../../ast/nodes.js";
 import { namespaceImportToStatement } from "./namespace-import.js";
+import { resolveReexports } from "./reexport-fixup.js";
 import type { BindingName } from "../../ast/declarations.js";
 import { SymbolKind } from "../../binder/binder.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
@@ -341,6 +342,10 @@ export function bundleModules(
       }
     }
   }
+
+  // Phase 3b: re-resolve module re-exports and rebuild namespace objects with
+  // the final renamed names (multi-level re-export chains and cycle back-edges).
+  resolveReexports(records, dependencyOf, namespaceStatements);
 
   // Phase 4: concatenate statements, dropping imports and pure export wrappers.
   const merged: Statement[] = [];

@@ -34,6 +34,7 @@ const KNOWN_GLOBALS: ReadonlySet<string> = new Set<string>([
   "NaN",
   "Infinity",
   "arguments",
+  "new.target",
 ]);
 
 /** True when `name` is a runtime global (or an extension-provided builtin). */

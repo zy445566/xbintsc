@@ -292,10 +292,11 @@ export function eagerModuleFunctions(record: ModuleRecord): Statement[] {
 export function computeDeferredModules(
   records: readonly ModuleRecord[],
   externalSpecifiers: ReadonlySet<string>,
+  moduleOverrides?: Readonly<Record<string, string>>,
 ): Set<string> {
   const byPath = new Map(records.map((record) => [record.path, record]));
   const dependencyOf = (record: ModuleRecord, specifier: string): ModuleRecord | undefined => {
-    const resolution = classifyDependency(dirname(record.path), specifier, externalSpecifiers);
+    const resolution = classifyDependency(dirname(record.path), specifier, externalSpecifiers, moduleOverrides);
     return resolution.kind === "file" ? byPath.get(resolution.path) : undefined;
   };
   const specifierOf = (statement: Statement): string | undefined => {

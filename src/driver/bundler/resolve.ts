@@ -217,16 +217,22 @@ function resolveExportTarget(target: unknown): string | undefined {
 }
 
 /**
- * Classify an import specifier. Known platform modules (extension modules and
- * `node:` builtins) are left for code generation; relative paths and
- * `node_modules` packages are resolved to a source file to bundle; a relative
- * path that does not exist is an error.
+ * Classify an import specifier. A module override (a bare specifier mapped to a
+ * local replacement file) wins over node_modules resolution; known platform
+ * modules (extension modules and `node:` builtins) are left for code
+ * generation; relative paths and `node_modules` packages are resolved to a
+ * source file to bundle; a relative path that does not exist is an error.
  */
 export function classifyDependency(
   fromDir: string,
   specifier: string,
   externalSpecifiers: ReadonlySet<string>,
+  moduleOverrides?: Readonly<Record<string, string>>,
 ): DependencyResolution {
+  const override = moduleOverrides?.[specifier];
+  if (override !== undefined) {
+    return { kind: "file", path: override };
+  }
   if (specifier.startsWith("node:") || externalSpecifiers.has(specifier)) {
     return { kind: "external" };
   }

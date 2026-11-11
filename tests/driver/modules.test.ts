@@ -25,9 +25,12 @@ function writeFiles(files: Record<string, string>): string {
   return directory;
 }
 
-function bundle(entry: string): { result: ReturnType<typeof bundleModules>; bag: DiagnosticBag } {
+function bundle(
+  entry: string,
+  moduleOverrides?: Record<string, string>,
+): { result: ReturnType<typeof bundleModules>; bag: DiagnosticBag } {
   const bag = new DiagnosticBag();
-  const result = bundleModules(entry, bag);
+  const result = bundleModules(entry, bag, new Set(), {}, moduleOverrides);
   return { result, bag };
 }
 
@@ -134,6 +137,20 @@ describe("bundleModules", () => {
     expect(hasImportExpression).toBe(false);
     expect(names.has("resolve")).toBe(true);
     expect([...names].some((name) => name.startsWith("__xt_deferred_"))).toBe(true);
+  });
+
+  it("resolves a bare specifier through a module override", () => {
+    const directory = writeFiles({
+      "stub.ts": 'export const value = "stubbed";',
+      "main.ts": 'import { value } from "some-package";\nconsole.log(value);',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"), {
+      "some-package": join(directory, "stub.ts"),
+    });
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+    const names = identifierTexts(result!.sourceFile);
+    expect(names.some((name) => name.endsWith("value"))).toBe(true);
   });
 
   it("keeps external (extension) imports in place", () => {

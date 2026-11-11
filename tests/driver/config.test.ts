@@ -99,6 +99,14 @@ describe("parseProjectConfig", () => {
   it("rejects an unknown PGO stage", () => {
     expect(() => parseProjectConfig(JSON.stringify({ pgo: "train" }))).toThrow(/pgo/);
   });
+
+  it("parses module overrides as a string map", () => {
+    const config = parseProjectConfig(JSON.stringify({ moduleOverrides: { jiti: "stubs/jiti.ts" } }));
+    expect(config.moduleOverrides).toEqual({ jiti: "stubs/jiti.ts" });
+    expect(() => parseProjectConfig(JSON.stringify({ moduleOverrides: { jiti: 1 } }))).toThrow(
+      /must be strings/,
+    );
+  });
 });
 
 describe("loadProjectConfig", () => {
@@ -171,5 +179,16 @@ describe("resolveConfigPaths", () => {
     expect(resolved.entry).toBe(absolute);
     expect(resolved.app).toBeUndefined();
     expect(resolved.extensions).toEqual(["node"]);
+  });
+
+  it("resolves module override targets against the config directory", () => {
+    const directory = temporaryDirectory();
+    const loaded = {
+      path: join(directory, CONFIG_FILE_NAME),
+      directory,
+      config: parseProjectConfig(JSON.stringify({ moduleOverrides: { jiti: "stubs/jiti.ts" } })),
+    };
+    const resolved = resolveConfigPaths(loaded);
+    expect(resolved.moduleOverrides).toEqual({ jiti: join(directory, "stubs", "jiti.ts") });
   });
 });

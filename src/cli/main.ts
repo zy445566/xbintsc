@@ -402,6 +402,7 @@ function dispatch(argv: readonly string[], io: CliIo): number {
      * write output. The checker is on unless `--no-check` is passed. */
     const { diagnostics } = compileEntry(entry, registry, {
       check: !args.flags.has("no-check"),
+      ...(resolved.config.moduleOverrides ? { moduleOverrides: resolved.config.moduleOverrides } : {}),
     });
     const failed = diagnostics.some((diagnostic) => diagnostic.category === "error");
     if (args.flags.has("json")) {
@@ -455,6 +456,7 @@ function dispatch(argv: readonly string[], io: CliIo): number {
     const { ir, diagnostics } = compileEntry(entry, registry, {
       debug: Boolean(args.flags.get("debug")),
       check: !args.flags.has("no-check"),
+      ...(resolved.config.moduleOverrides ? { moduleOverrides: resolved.config.moduleOverrides } : {}),
     });
     if (diagnostics.some((d) => d.category === "error")) {
       if (args.flags.has("json")) {
@@ -525,6 +527,7 @@ function dispatch(argv: readonly string[], io: CliIo): number {
       ...(pgoDir ? { pgoDir } : {}),
       ...(features.length > 0 ? { features } : {}),
       ...(noFeatures.length > 0 ? { noFeatures } : {}),
+      ...(config.moduleOverrides ? { moduleOverrides: config.moduleOverrides } : {}),
     });
 
     if (result.diagnostics.some((d) => d.category === "error")) {

@@ -50,6 +50,19 @@ export function renameReferences(symbol: SymbolInfo, finalName: string): void {
   for (const reference of symbol.references) (reference as { text: string }).text = finalName;
 }
 
+/** `export { foo }` where `foo` is imported: point the export at the renamed target. */
+export function remapExports(record: ModuleRecord, fromName: string, toName: string): void {
+  for (const [name, value] of record.exports) {
+    if (value === fromName) record.exports.set(name, toName);
+  }
+}
+
+/** Rename an imported binding and fix any `export { foo }` that re-exports it. */
+export function renameImport(record: ModuleRecord, symbol: SymbolInfo, target: string): void {
+  renameReferences(symbol, target);
+  remapExports(record, symbol.name, target);
+}
+
 export function moduleScope(record: ModuleRecord) {
   return record.bind.scopes.get(record.sourceFile);
 }

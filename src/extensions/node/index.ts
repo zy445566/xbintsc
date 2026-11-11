@@ -47,6 +47,7 @@ import { dnsModule } from "./dns/index.js";
 import { readlinePromisesModule } from "./readline-promises/index.js";
 import { compressionFeature } from "./zlib/compression.js";
 import { constantsModule } from "./constants/index.js";
+import { asyncHooksModule } from "./async-hooks/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -84,6 +85,7 @@ const modules: readonly NodeModule[] = [
   dnsModule,
   readlinePromisesModule,
   constantsModule,
+  asyncHooksModule,
 ];
 
 export const nodeExtension: Extension = {

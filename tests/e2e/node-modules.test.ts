@@ -135,6 +135,18 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
+  it("provides async_hooks.AsyncResource with runInAsyncScope", () => {
+    const source = `
+      import { AsyncResource } from "node:async_hooks";
+      const resource = new AsyncResource("type");
+      const sum = resource.runInAsyncScope(function (a: number, b: number) { return a + b; }, null, 20, 22);
+      console.log(sum, typeof resource.runInAsyncScope);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim()).toBe("42 function");
+  });
+
   it("provides the deprecated constants module and its object methods", () => {
     const source = `
       import * as constants from "constants";

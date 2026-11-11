@@ -148,12 +148,8 @@ export class GeneratorContext {
         for (const specifierNode of bindings.elements) {
           if (specifierNode.isTypeOnly) continue;
           const importedName = specifierNode.propertyName?.text ?? specifierNode.name.text;
-          // `hasOwn` guards against `Object.prototype` members (`hasOwnProperty`,
-          // `toString`, ...) leaking into the lookup as fake exports.
           const exported =
-            module.exports && Object.prototype.hasOwnProperty.call(module.exports, importedName)
-              ? module.exports[importedName]
-              : undefined;
+            module.exports && Object.hasOwn(module.exports, importedName) ? module.exports[importedName] : undefined;
           const symbol = this.binding.symbolOfDeclaration.get(specifierNode.name);
           if (!symbol) continue;
           if (exported) {

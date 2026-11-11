@@ -227,7 +227,12 @@ export const invocationCallMethods: InvocationCallMethods = {
       // named exports, exactly like a named import of `readFileSync`.
       const moduleExports = this.moduleExportsOfSymbol(targetSymbol);
       if (moduleExports) {
-        const exported = moduleExports[method];
+        // `hasOwn` guards against `Object.prototype` members leaking in as
+        // fake exports (`ns.hasOwnProperty(...)` is an object method, not an
+        // imported function).
+        const exported = Object.prototype.hasOwnProperty.call(moduleExports, method)
+          ? moduleExports[method]
+          : undefined;
         if (exported) return this.emitModuleExport(node, exported);
       }
     }

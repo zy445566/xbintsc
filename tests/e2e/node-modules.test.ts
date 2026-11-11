@@ -135,6 +135,46 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
+  it("provides tls/http2/sqlite/stream-web as throwing stubs", () => {
+    const source = `
+      import { connect as tlsConnect } from "node:tls";
+      import { connect as http2Connect } from "node:http2";
+      import { DatabaseSync } from "node:sqlite";
+      import { ReadableStreamTee } from "node:stream/web";
+      function caught(fn: () => unknown) {
+        try { fn(); return false; } catch { return true; }
+      }
+      console.log(ReadableStreamTee === undefined, typeof DatabaseSync);
+      console.log(caught(() => tlsConnect(443, "example.com", () => {})), caught(() => http2Connect("https://example.com")));
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["true function", "true true"]);
+  });
+
+  it("provides async_hooks.AsyncResource with runInAsyncScope", () => {
+    const source = `
+      import { AsyncResource } from "node:async_hooks";
+      const resource = new AsyncResource("type");
+      const sum = resource.runInAsyncScope(function (a: number, b: number) { return a + b; }, null, 20, 22);
+      console.log(sum, typeof resource.runInAsyncScope);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim()).toBe("42 function");
+  });
+
+  it("provides the deprecated constants module and its object methods", () => {
+    const source = `
+      import * as constants from "constants";
+      console.log(constants.O_WRONLY | constants.O_SYMLINK, constants.hasOwnProperty("O_SYMLINK"));
+      console.log(constants.F_OK, constants.hasOwnProperty("nope"));
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["4097 true", "0 false"]);
+  });
+
   it("compresses with deflateRawSync via the miniz link feature", () => {
     const source = `
       import { deflateRawSync } from "node:zlib";

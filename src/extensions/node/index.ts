@@ -46,6 +46,12 @@ import { diagnosticsChannelModule } from "./diagnostics-channel/index.js";
 import { dnsModule } from "./dns/index.js";
 import { readlinePromisesModule } from "./readline-promises/index.js";
 import { compressionFeature } from "./zlib/compression.js";
+import { constantsModule } from "./constants/index.js";
+import { asyncHooksModule } from "./async-hooks/index.js";
+import { sqliteModule } from "./sqlite/index.js";
+import { streamWebModule } from "./stream-web/index.js";
+import { tlsModule } from "./tls/index.js";
+import { http2Module } from "./http2/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -82,6 +88,12 @@ const modules: readonly NodeModule[] = [
   diagnosticsChannelModule,
   dnsModule,
   readlinePromisesModule,
+  constantsModule,
+  asyncHooksModule,
+  sqliteModule,
+  streamWebModule,
+  tlsModule,
+  http2Module,
 ];
 
 export const nodeExtension: Extension = {

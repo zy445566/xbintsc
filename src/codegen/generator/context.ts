@@ -148,7 +148,8 @@ export class GeneratorContext {
         for (const specifierNode of bindings.elements) {
           if (specifierNode.isTypeOnly) continue;
           const importedName = specifierNode.propertyName?.text ?? specifierNode.name.text;
-          const exported = module.exports?.[importedName];
+          const exported =
+            module.exports && Object.hasOwn(module.exports, importedName) ? module.exports[importedName] : undefined;
           const symbol = this.binding.symbolOfDeclaration.get(specifierNode.name);
           if (!symbol) continue;
           if (exported) {

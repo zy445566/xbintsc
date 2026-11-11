@@ -255,8 +255,18 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           this.emit(`  ${result} = call i64 @${defaultExport.valueSymbol}(i32 0, i64* null)`);
           return result;
         }
-        // Imported runtime bindings have no first-class value: they are meant
-        // to be called (`readFileSync(...)`) or used as a namespace
+        // A function/method import used as a value (`const a = assert`,
+        // `import { strictEqual } from "assert"`) wraps the runtime symbol in a
+        // closure through a generic trampoline.
+        if (exported?.symbol || (exported?.namespace && exported?.method)) {
+          return this.emitModuleExportValue(exported);
+        }
+        // A whole-namespace import used as a value (`import assert from
+        // "node:assert"`) becomes an object holding every export.
+        const namespaceExports = this.moduleExportsOfSymbol(symbol);
+        if (namespaceExports) return this.emitNamespaceObject(namespaceExports);
+        // Imported namespace bindings have no first-class value yet: they are
+        // meant to be called (`readFileSync(...)`) or used as a namespace
         // (`path.join(...)`), both handled before identifier lowering.
         this.diagnostics.error(
           DiagnosticCode.CodegenError,

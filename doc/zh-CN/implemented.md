@@ -33,6 +33,7 @@
 - [类型化数组与二进制数据](./implemented/typed-arrays.md) —— 类型化数组、ArrayBuffer、DataView
 - [异步、Promise 与生成器](./implemented/async.md) —— async/await、异步生成器、Promise、定时器
 - [fetch](./implemented/fetch.md) —— 由 reactor 驱动的 HTTP/1.1 客户端与 Headers
+- [WebAssembly](./implemented/wasm.md) —— `WebAssembly` 命名空间表面（字节码执行尚未实现）
 
 ### 模块与工具
 

@@ -52,6 +52,17 @@ describe("checker: unresolved names", () => {
     expect(codes(check(source), DiagnosticCode.CannotFindName)).toEqual([]);
   });
 
+  it("recognizes the WebAssembly namespace", () => {
+    const source = [
+      "typeof WebAssembly;",
+      "typeof WebAssembly.compile;",
+      "typeof WebAssembly.Module;",
+      "typeof WebAssembly.Instance;",
+      "WebAssembly.validate(new Uint8Array());",
+    ].join("\n");
+    expect(codes(check(source), DiagnosticCode.CannotFindName)).toEqual([]);
+  });
+
   it("does not treat erased type positions as value references", () => {
     const source = [
       "const value = 1 as SomeType;",

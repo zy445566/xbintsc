@@ -24,6 +24,7 @@ export function resolveReexports(
   records: ModuleRecord[],
   dependencyOf: (record: ModuleRecord, specifier: string) => ModuleRecord | undefined,
   namespaceStatements: Map<Statement, Statement>,
+  deferredModules: ReadonlySet<string> = new Set(),
 ): void {
   let changed = true;
   // A re-export chain cannot be longer than the module count, so this bound
@@ -37,6 +38,12 @@ export function resolveReexports(
         if (declaration.isTypeOnly || !declaration.moduleSpecifier) continue;
         const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
         if (!dependency) continue;
+        /* Phase 3 (the merge pass) already lowered a deferred module's re-export
+         * of another deferred module to a wrapper alias that reads the exported
+         * value from `__xt_deferred_<dep>()`. Re-resolving that alias here would
+         * point it back at the dependency's final name, which is wrapper-local
+         * and no longer declared at top level (TS3002). */
+        if (deferredModules.has(record.path) && deferredModules.has(dependency.path)) continue;
         const clause = declaration.exportClause;
         if (clause && clause.kind === SyntaxKind.NamedExports) {
           for (const specifier of clause.elements) {

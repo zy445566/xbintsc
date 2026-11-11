@@ -345,7 +345,7 @@ export function bundleModules(
 
   // Phase 3b: re-resolve module re-exports and rebuild namespace objects with
   // the final renamed names (multi-level re-export chains and cycle back-edges).
-  resolveReexports(records, dependencyOf, namespaceStatements);
+  resolveReexports(records, dependencyOf, namespaceStatements, deferredModules);
 
   // Phase 4: concatenate statements, dropping imports and pure export wrappers.
   const merged: Statement[] = [];

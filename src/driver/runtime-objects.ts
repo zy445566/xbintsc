@@ -22,6 +22,7 @@ export const RUNTIME_SOURCES = [
   "xt_bigint.c",
   "xt_containers.c",
   "xt_weak.c",
+  "xt_webassembly.c",
   "xt_typed_array.c",
   "xt_stdlib.c",
   "xt_stdlib2.c",

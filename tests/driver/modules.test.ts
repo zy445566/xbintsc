@@ -143,6 +143,21 @@ describe("bundleModules", () => {
     expect(identifierTexts(result!.sourceFile).some((name) => name.includes("applyPatch"))).toBe(true);
   });
 
+  it("resolves a re-export chain through an import cycle", () => {
+    const directory = writeFiles({
+      "tools.ts": "export function foo() { return 1; }",
+      "sdk.ts": 'import { foo } from "./tools";\nexport { foo };\nimport "./extensions";',
+      "extensions.ts": 'import "./loader";',
+      "loader.ts": 'import "./virtual";',
+      "virtual.ts": 'import * as bundled from "./index";\nbundled.foo;',
+      "index.ts": 'export { foo } from "./sdk";',
+      "entry.ts": 'import "./index";',
+    });
+    const { result, bag } = bundle(join(directory, "entry.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(7);
+  });
+
   it("resolves a dynamic import into a Promise of the module namespace", () => {
     const directory = writeFiles({
       "util.ts": "export const answer = 42;",

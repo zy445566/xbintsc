@@ -361,6 +361,21 @@ xt_value xt_stream_static(xt_value name, int32_t argc, xt_value *argv) {
     xt_node_emit0(stream, "end");
     return stream;
   }
+  if (strcmp(fn, "isReadable") == 0) {
+    /* A Duplex/Transform/PassThrough is also readable; only a pure Writable is not. */
+    return xt_bool(xt_stream_kind_of(xt_arg(argc, argv, 0)) != XT_STREAM_WRITABLE);
+  }
+  if (strcmp(fn, "isErrored") == 0 || strcmp(fn, "isDisturbed") == 0) {
+    /* The synchronous stream model does not track these states. */
+    return XT_FALSE;
+  }
+  if (strcmp(fn, "finished") == 0 || strcmp(fn, "pipeline") == 0) {
+    /* Streams deliver synchronously, so the operation is already complete: call
+     * the trailing callback with no error. */
+    xt_value cb = xt_arg(argc, argv, argc - 1);
+    if (XT_IS_FUNCTION(cb)) xt_closure_call(cb, 0, NULL);
+    return XT_UNDEFINED;
+  }
   return xt_undefined();
 }
 

@@ -34,6 +34,14 @@ static xt_value xt_http_client_finish(xt_value thisValue, xt_value env, int32_t 
 #include "parts/client.inc"
 #include "parts/prototypes.inc"
 
+/* `http.IncomingMessage`: a constructor identity used by consumers that check
+ * `stream.constructor === IncomingMessage` to recognise a Node response. */
+xt_value xt_http_incoming_message_ctor(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return xt_object_new();
+}
+
 /* `http.STATUS_CODES`: numeric code (as a string key) -> reason phrase. */
 xt_value xt_http_status_codes_value(int32_t argc, xt_value *argv) {
   (void)argc;

@@ -13,34 +13,43 @@ export interface RegexMethods {
   scanRegex(this: Scanner, start: number, precededByLineBreak: boolean): Token;
 }
 
+/** True for a token that ends a complete value (`x`, `)`, `]`, `this`, …). */
+export function valueEndsExpression(kind: TokenKind): boolean {
+  switch (kind) {
+    case TokenKind.Identifier:
+    case TokenKind.PrivateIdentifier:
+    case TokenKind.NumericLiteral:
+    case TokenKind.BigIntLiteral:
+    case TokenKind.StringLiteral:
+    case TokenKind.NoSubstitutionTemplateLiteral:
+    case TokenKind.TemplateTail:
+    case TokenKind.RegularExpressionLiteral:
+    case TokenKind.CloseParen:
+    case TokenKind.CloseBracket:
+    case TokenKind.TrueKeyword:
+    case TokenKind.FalseKeyword:
+    case TokenKind.NullKeyword:
+    case TokenKind.UndefinedKeyword:
+    case TokenKind.ThisKeyword:
+    case TokenKind.PlusPlus:
+    case TokenKind.MinusMinus:
+      return true;
+    default:
+      return false;
+  }
+}
+
 export const regexMethods: RegexMethods = {
   /**
    * True when a `/` in this position starts a regular expression rather than a
    * division. The decision is made from the previous significant token.
    */
   regexAllowed(this: Scanner): boolean {
-    switch (this._token.kind) {
-      case TokenKind.Identifier:
-      case TokenKind.PrivateIdentifier:
-      case TokenKind.NumericLiteral:
-      case TokenKind.BigIntLiteral:
-      case TokenKind.StringLiteral:
-      case TokenKind.NoSubstitutionTemplateLiteral:
-      case TokenKind.TemplateTail:
-      case TokenKind.RegularExpressionLiteral:
-      case TokenKind.CloseParen:
-      case TokenKind.CloseBracket:
-      case TokenKind.TrueKeyword:
-      case TokenKind.FalseKeyword:
-      case TokenKind.NullKeyword:
-      case TokenKind.UndefinedKeyword:
-      case TokenKind.ThisKeyword:
-      case TokenKind.PlusPlus:
-      case TokenKind.MinusMinus:
-        return false;
-      default:
-        return true;
-    }
+    if (valueEndsExpression(this._token.kind)) return false;
+    // `x! / y` is division (the `!` is a postfix non-null assertion), while
+    // `!x / y` allows a regex after the logical-not prefix.
+    if (this._token.kind === TokenKind.Exclamation) return !this.postfixExclamation;
+    return true;
   },
 
   /** Scan a `/pattern/flags` literal, starting at the leading slash. */

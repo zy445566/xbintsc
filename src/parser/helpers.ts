@@ -42,6 +42,7 @@ export function isAssignmentTarget(expr: Expression): boolean {
     case SyntaxKind.PropertyAccessExpression:
     case SyntaxKind.ElementAccessExpression:
     case SyntaxKind.ParenthesizedExpression:
+    case SyntaxKind.NonNullExpression:
     case SyntaxKind.ArrayLiteralExpression:
     case SyntaxKind.ObjectLiteralExpression:
       return true;

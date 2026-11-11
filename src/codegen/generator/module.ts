@@ -228,12 +228,17 @@ export const moduleMethods: ModuleMethods = {
     // forwards every argument to the parent constructor (`super(...arguments)`).
     if (fn.isConstructor && fn.classInfo?.parentExpression) {
       const explicitBody = (fn.node as { body?: Block }).body;
-      const parent = fn.classInfo.parentExpression;
-      const errorName = this.errorFamilyName(parent);
+      const errorName = this.errorFamilyName(fn.classInfo.parentExpression);
       if (!explicitBody && !errorName) {
-        const parentValue = this.emitExpression(parent);
+        // Walk the class's own prototype chain (like `emitSuperConstructor`)
+        // rather than re-evaluating the parent expression: the heritage clause
+        // is a module-scope expression, and re-evaluating it here would read a
+        // binding the binder never captured into the constructor.
+        const owner = this.emitClassReference(fn.classInfo);
+        const proto = this.reg();
+        this.emit(`  ${proto} = call i64 @xt_function_get_prototype(i64 ${owner})`);
         const parentProto = this.reg();
-        this.emit(`  ${parentProto} = call i64 @xt_function_get_prototype(i64 ${parentValue})`);
+        this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${proto})`);
         const ctorKey = this.stringValue("__ctor");
         const parentCtor = this.reg();
         this.emit(`  ${parentCtor} = call i64 @xt_get(i64 ${parentProto}, i64 ${ctorKey})`);

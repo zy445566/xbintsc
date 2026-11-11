@@ -129,6 +129,19 @@ describeE2E("end-to-end objects, functions and classes", (harness) => {
     expect(runProgram(source)).toBe("11 CBA true D");
   });
 
+  it("derives from a class stored in a variable with an implicit constructor", () => {
+    const source = `
+      const Base = class {
+        greet(): string { return "base"; }
+      };
+      class Derived extends Base {
+        greet(): string { return super.greet() + "!"; }
+      }
+      console.log(new Derived().greet(), new Derived() instanceof Base);
+    `;
+    expect(runProgram(source)).toBe("base! true");
+  });
+
   it("supports classes with new, this, statics, inheritance and instanceof", () => {
     const source = `
       class Animal {

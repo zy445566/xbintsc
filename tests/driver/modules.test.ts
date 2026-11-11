@@ -193,18 +193,19 @@ describe("bundleModules", () => {
     expect(result!.sourceFile.statements[0]!.kind).toBe(SyntaxKind.ImportDeclaration);
   });
 
-  it("reports a circular import graph instead of failing in code generation", () => {
+  it("bundles a circular import graph instead of failing", () => {
     const directory = writeFiles({
-      "a.ts": 'import { b } from "./b";\nexport const a = 1;',
-      "b.ts": 'import { a } from "./a";\nexport const b = 2;',
+      "a.ts": 'import { b } from "./b";\nexport const a = "a";\nexport function aUsesB() { return "a+" + b; }',
+      "b.ts": 'import { a } from "./a";\nexport const b = "b";\nexport function bUsesA() { return "b+" + a; }',
     });
     const { result, bag } = bundle(join(directory, "a.ts"));
-    expect(result).toBeUndefined();
-    const cycle = bag.diagnostics.find((diagnostic) => diagnostic.code === DiagnosticCode.CircularDependency);
-    expect(cycle?.message).toContain("Circular import detected");
-    expect(cycle?.message).toContain("a.ts");
-    expect(cycle?.message).toContain("b.ts");
-    expect(cycle?.fileName?.endsWith("b.ts")).toBe(true);
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+    // The cross-module forward reference inside `bUsesA` resolves to the same
+    // renamed binding that `a.ts` declares.
+    const names = identifierTexts(result!.sourceFile);
+    const aBindings = names.filter((name) => /^m\d+_a$/.test(name));
+    expect(new Set(aBindings).size).toBe(1);
   });
 
   it("erases type-only imports instead of treating them as module edges", () => {

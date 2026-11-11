@@ -83,6 +83,22 @@ describeE2E("end-to-end module bundling", (harness) => {
     );
   });
 
+  it("bundles circular imports with forward references", () => {
+    const source = `
+      import { a, aUsesB } from "./cycle_a";
+      import { bUsesA } from "./cycle_b";
+      console.log(a, aUsesB(), bUsesA());
+    `;
+    expect(
+      runProgram(source, {
+        files: {
+          "cycle_a.ts": 'import { b } from "./cycle_b";\nexport const a = "a";\nexport function aUsesB() { return "a+" + b; }',
+          "cycle_b.ts": 'import { a } from "./cycle_a";\nexport const b = "b";\nexport function bUsesA() { return "b+" + a; }',
+        },
+      }),
+    ).toBe("a a+b b+a");
+  });
+
   it("renames destructured top-level bindings without breaking the read", () => {
     writeFileSync(
       join(harness.workdir, "destructure_dep.ts"),

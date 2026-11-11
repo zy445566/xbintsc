@@ -135,6 +135,17 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
+  it("provides the deprecated constants module and its object methods", () => {
+    const source = `
+      import * as constants from "constants";
+      console.log(constants.O_WRONLY | constants.O_SYMLINK, constants.hasOwnProperty("O_SYMLINK"));
+      console.log(constants.F_OK, constants.hasOwnProperty("nope"));
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["4097 true", "0 false"]);
+  });
+
   it("compresses with deflateRawSync via the miniz link feature", () => {
     const source = `
       import { deflateRawSync } from "node:zlib";

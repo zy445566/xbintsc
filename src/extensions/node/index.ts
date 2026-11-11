@@ -46,6 +46,7 @@ import { diagnosticsChannelModule } from "./diagnostics-channel/index.js";
 import { dnsModule } from "./dns/index.js";
 import { readlinePromisesModule } from "./readline-promises/index.js";
 import { compressionFeature } from "./zlib/compression.js";
+import { constantsModule } from "./constants/index.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -82,6 +83,7 @@ const modules: readonly NodeModule[] = [
   diagnosticsChannelModule,
   dnsModule,
   readlinePromisesModule,
+  constantsModule,
 ];
 
 export const nodeExtension: Extension = {

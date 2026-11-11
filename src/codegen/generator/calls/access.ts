@@ -115,7 +115,10 @@ export const accessCallMethods: AccessCallMethods = {
       const moduleExports = this.moduleExportsOfSymbol(
         this.binding.symbolOfIdentifier.get(node.expression as Identifier),
       );
-      const exported = moduleExports?.[node.name.text];
+      const exported =
+        moduleExports && Object.prototype.hasOwnProperty.call(moduleExports, node.name.text)
+          ? moduleExports[node.name.text]
+          : undefined;
       if (exported?.valueSymbol) {
         this.extraDeclarations.add(`declare i64 @${exported.valueSymbol}(i32, i64*)`);
         const result = this.reg();

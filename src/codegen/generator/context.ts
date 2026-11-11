@@ -410,7 +410,7 @@ export class GeneratorContext {
       if (this.unsupportedCount === 0) {
         this.diagnostics.error(
           DiagnosticCode.CodegenError,
-          `Internal: no slot for '${symbol.name}' in ${this.current.fn.name}`,
+          `Internal: no slot for '${symbol.name}' in ${this.current.fn.name} (${this.fileNameOf(this.current.fn.node)})`,
         );
       }
       return i64(XT_UNDEFINED);

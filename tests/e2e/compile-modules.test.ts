@@ -99,6 +99,22 @@ describeE2E("end-to-end module bundling", (harness) => {
     ).toBe("a a+b b+a");
   });
 
+  it("hoists module bindings so a cycle can forward-reference them at module scope", () => {
+    const source = `
+      import { aPlusB } from "./cycle_scope_a";
+      import { bPlusA } from "./cycle_scope_b";
+      console.log(aPlusB, bPlusA);
+    `;
+    expect(
+      runProgram(source, {
+        files: {
+          "cycle_scope_a.ts": 'import { b } from "./cycle_scope_b";\nexport const a = "A";\nexport const aPlusB = b;',
+          "cycle_scope_b.ts": 'import { a } from "./cycle_scope_a";\nexport const b = "B";\nexport const bPlusA = a;',
+        },
+      }),
+    ).toBe("B undefined");
+  });
+
   it("renames destructured top-level bindings without breaking the read", () => {
     writeFileSync(
       join(harness.workdir, "destructure_dep.ts"),

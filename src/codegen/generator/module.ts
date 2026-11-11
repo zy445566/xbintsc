@@ -68,7 +68,13 @@ export const moduleMethods: ModuleMethods = {
           symbol.kind === SymbolKind.Var || symbol.kind === SymbolKind.Let || symbol.kind === SymbolKind.Const;
         const isEnum = symbol.kind === SymbolKind.Enum;
         if ((!isVariable && !isEnum) || !symbol.fn?.isModule) continue;
-        if (isVariable && !symbol.boxed) continue;
+        // Every module-level binding lives in a global, not just the boxed
+        // (closure-captured) ones. An import cycle can reference a binding
+        // before its declaration statement runs (`require`ing a CommonJS module
+        // back through a cycle, or a re-exported `const` reached before its
+        // module body), and a stack slot would not exist yet; the global is
+        // hoisted, so the read sees the initial `undefined` instead of
+        // crashing with "no slot".
         const globalName = `@g.${symbol.id}`;
         this.moduleGlobals.set(symbol.id, globalName);
         this.globals.push(`${globalName} = internal global i64 ${i64(XT_UNDEFINED)}`);

@@ -202,6 +202,33 @@ describeE2E("end-to-end compilation (node extension)", (harness) => {
     expect(runProgram(source, { extensions: true })).toBe("0 true true");
   });
 
+  it("captures child output through the async spawn API", () => {
+    const source = `
+      import { spawn } from "node:child_process";
+      const isChild = process.argv.includes("xb-spawn-child");
+      if (isChild) { console.log("child-output"); }
+      else {
+        const child = spawn(process.argv[0], ["xb-spawn-child"]);
+        let out = "";
+        child.stdout.on("data", (d: string) => { out += d; });
+        child.on("close", (code: number) => console.log(code, JSON.stringify(out.trim())));
+      }
+    `;
+    expect(runProgram(source, { extensions: true })).toBe('0 "child-output"');
+  });
+
+  it("runs execSync and the execFile callback form", () => {
+    const source = `
+      import { execSync, execFile } from "node:child_process";
+      if (process.argv.includes("xb-exec-child")) { console.log("child-echo"); }
+      else {
+        const sync = execSync("echo hello", { encoding: "utf8" }).trim();
+        execFile(process.argv[0], ["xb-exec-child"], { encoding: "utf8" }, (err: unknown, out: string) => console.log(sync, err === null, out.trim()));
+      }
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("hello true child-echo");
+  });
+
   it("hashes with SHA-1 and the streaming crypto API", () => {
     const source = `
       import { createHash } from "node:crypto";

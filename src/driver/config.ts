@@ -48,6 +48,8 @@ export interface ProjectConfig {
   readonly features?: readonly string[];
   /** Optional link features to keep out even when auto-detection finds a use. */
   readonly noFeatures?: readonly string[];
+  /** Bare module specifiers mapped to local replacement files. */
+  readonly moduleOverrides?: Readonly<Record<string, string>>;
   readonly force?: boolean;
   readonly app?: AppConfig;
 }
@@ -96,6 +98,20 @@ function readStringArray(root: Record<string, unknown>, key: string, where: stri
   return value as string[];
 }
 
+function readStringMap(root: Record<string, unknown>, key: string, where: string): Record<string, string> | undefined {
+  const value = root[key];
+  if (value === undefined) return undefined;
+  const record = expectObject(value, `${where}: '${key}'`);
+  const map: Record<string, string> = {};
+  for (const [specifier, target] of Object.entries(record)) {
+    if (typeof target !== "string") {
+      throw new ProjectConfigError(`${where}: '${key}' values must be strings`);
+    }
+    map[specifier] = target;
+  }
+  return map;
+}
+
 /** Parse and validate config text. Throws {@link ProjectConfigError}. */
 export function parseProjectConfig(text: string, where: string = CONFIG_FILE_NAME): ProjectConfig {
   let raw: unknown;
@@ -142,6 +158,7 @@ export function parseProjectConfig(text: string, where: string = CONFIG_FILE_NAM
     extNative: readStringArray(root, "extNative", where),
     features: readStringArray(root, "features", where),
     noFeatures: readStringArray(root, "noFeatures", where),
+    moduleOverrides: readStringMap(root, "moduleOverrides", where),
     force: readBoolean(root, "force", where),
     app,
   };
@@ -193,6 +210,9 @@ export function resolveConfigPaths(loaded: LoadedProjectConfig): ProjectConfig {
     ...(config.output ? { output: resolvePath(directory, config.output) } : {}),
     ...(config.pgoDir ? { pgoDir: resolvePath(directory, config.pgoDir) } : {}),
     ...(config.extNative ? { extNative: config.extNative.map((path) => resolvePath(directory, path)) } : {}),
+    ...(config.moduleOverrides
+      ? { moduleOverrides: Object.fromEntries(Object.entries(config.moduleOverrides).map(([k, v]) => [k, resolvePath(directory, v)])) }
+      : {}),
     ...(app ? { app } : {}),
   };
 }

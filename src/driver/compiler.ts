@@ -127,7 +127,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
 
   // -- front end -----------------------------------------------------------
   const diagnostics = new DiagnosticBag();
-  const parsed = parseEntry(absoluteEntry, registry, diagnostics);
+  const parsed = parseEntry(absoluteEntry, registry, diagnostics, options.moduleOverrides);
   timings.push({ phase: "frontend", ms: Date.now() - buildStarted });
 
   /* Parse (or module-graph) errors leave missing nodes in the tree. Stop before

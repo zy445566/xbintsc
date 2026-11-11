@@ -38,6 +38,8 @@ export interface FrontendOptions {
   readonly debug?: boolean;
   /** Run the semantic checker (default true; `--no-check` disables it). */
   readonly check?: boolean;
+  /** Bare specifiers mapped to local replacement files (resolved first). */
+  readonly moduleOverrides?: Readonly<Record<string, string>>;
 }
 
 /** A parsed (and, for module entries, already bundled) entry file. */
@@ -58,6 +60,7 @@ export function parseEntry(
   entryPath: string,
   registry: ExtensionRegistry,
   diagnostics: DiagnosticBag,
+  moduleOverrides?: Readonly<Record<string, string>>,
 ): ParsedEntry {
   const absoluteEntry = resolve(entryPath);
   const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
@@ -73,7 +76,7 @@ export function parseEntry(
     ) || collectDynamicImportSites(sourceFile).length > 0;
   let cacheText = sourceText;
   if (isModule) {
-    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry), registry.assetLoaders());
+    const bundled = bundleModules(absoluteEntry, diagnostics, externalModuleSpecifiers(registry), registry.assetLoaders(), moduleOverrides);
     if (bundled) {
       sourceFile = bundled.sourceFile;
       cacheText = bundled.text;
@@ -119,7 +122,7 @@ export function compileEntry(
 ): CompileStringResult {
   const registry = extensions ?? createDefaultRegistry();
   const diagnostics = new DiagnosticBag();
-  const parsed = parseEntry(entryPath, registry, diagnostics);
+  const parsed = parseEntry(entryPath, registry, diagnostics, options.moduleOverrides);
   if (diagnostics.hasErrors) return { ir: "", diagnostics: diagnostics.diagnostics };
   const { ir } = generate(parsed.sourceFile, diagnostics, {
     builtins: registry.builtins(),

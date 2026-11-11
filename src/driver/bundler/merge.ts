@@ -57,13 +57,14 @@ export function bundleModules(
   diagnostics: DiagnosticBag,
   externalSpecifiers: ReadonlySet<string> = new Set(),
   assetLoaders: Readonly<Record<string, AssetLoader>> = {},
+  moduleOverrides?: Readonly<Record<string, string>>,
 ): BundleResult | undefined {
-  const records = loadGraph(entryPath, diagnostics, externalSpecifiers, assetLoaders);
+  const records = loadGraph(entryPath, diagnostics, externalSpecifiers, assetLoaders, moduleOverrides);
   if (!records) return undefined;
 
   const byPath = new Map(records.map((record) => [record.path, record]));
   const dependencyOf = (record: ModuleRecord, specifier: string): ModuleRecord | undefined => {
-    const resolution = classifyDependency(dirname(record.path), specifier, externalSpecifiers);
+    const resolution = classifyDependency(dirname(record.path), specifier, externalSpecifiers, moduleOverrides);
     return resolution.kind === "file" ? byPath.get(resolution.path) : undefined;
   };
 
@@ -142,7 +143,7 @@ export function bundleModules(
   // surface is known (a required ESM module becomes a namespace object).
   for (const record of records) {
     lowerCommonJSRequires(record, {
-      resolve: (fromDir, specifier) => classifyDependency(fromDir, specifier, externalSpecifiers),
+      resolve: (fromDir, specifier) => classifyDependency(fromDir, specifier, externalSpecifiers, moduleOverrides),
       recordFor: (path) => byPath.get(path),
       diagnostics,
     });
@@ -151,7 +152,7 @@ export function bundleModules(
   // Phase 3: rewrite imported names and record re-exports. Namespace imports
   // are lowered to a synthetic object literal holding every export, built
   // from the dependency's (already renamed) final names.
-  const deferredModules = computeDeferredModules(records, externalSpecifiers);
+  const deferredModules = computeDeferredModules(records, externalSpecifiers, moduleOverrides);
   const deferredAliases = new Map<string, DeferredAlias[]>();
   const markerTargets = new Set<string>();
   const namespaceStatements = new Map<Statement, Statement>();
@@ -385,9 +386,7 @@ export function bundleModules(
         if (statement.kind === SyntaxKind.ImportDeclaration) {
           const declaration = statement as ImportDeclaration;
           const resolution = classifyDependency(
-            dirname(record.path),
-            declaration.moduleSpecifier.value,
-            externalSpecifiers,
+            dirname(record.path), declaration.moduleSpecifier.value, externalSpecifiers, moduleOverrides,
           );
           if (resolution.kind === "external") topLevel.push(statement);
           const synthetic = namespaceStatements.get(statement);
@@ -422,9 +421,7 @@ export function bundleModules(
         // External (extension / built-in) imports stay in place for codegen.
         const declaration = statement as ImportDeclaration;
         const resolution = classifyDependency(
-          dirname(record.path),
-          declaration.moduleSpecifier.value,
-          externalSpecifiers,
+          dirname(record.path), declaration.moduleSpecifier.value, externalSpecifiers, moduleOverrides,
         );
         if (resolution.kind === "external") {
           push(record, statement);

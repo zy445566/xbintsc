@@ -69,6 +69,7 @@ export function loadGraph(
   diagnostics: DiagnosticBag,
   externalSpecifiers: ReadonlySet<string>,
   assetLoaders: Readonly<Record<string, AssetLoader>> = {},
+  moduleOverrides?: Readonly<Record<string, string>>,
 ): ModuleRecord[] | undefined {
   const records = new Map<string, ModuleRecord>();
   const order: ModuleRecord[] = [];
@@ -139,7 +140,7 @@ export function loadGraph(
     for (const statement of sourceFile.statements) {
       const specifier = moduleSpecifierOf(statement);
       if (!specifier) continue;
-      const dependency = classifyDependency(dirname(path), specifier, externalSpecifiers);
+      const dependency = classifyDependency(dirname(path), specifier, externalSpecifiers, moduleOverrides);
       if (dependency.kind === "external") continue;
       if (dependency.kind === "missing") {
         diagnostics.error(
@@ -157,7 +158,7 @@ export function loadGraph(
     // A dynamic `import("literal")` is a static edge too: the target must be
     // bundled so the merge can lower the import to a namespace-object factory.
     for (const site of collectDynamicImportSites(sourceFile)) {
-      const dependency = classifyDependency(dirname(path), site.specifier, externalSpecifiers);
+      const dependency = classifyDependency(dirname(path), site.specifier, externalSpecifiers, moduleOverrides);
       if (dependency.kind === "external") continue;
       if (dependency.kind === "missing") {
         diagnostics.error(
@@ -176,7 +177,7 @@ export function loadGraph(
     // target must be bundled (and evaluated) before this module runs.
     if (record.commonjs) {
       for (const site of collectRequireSites(sourceFile, bindResult)) {
-        const dependency = classifyDependency(dirname(path), site.specifier, externalSpecifiers);
+        const dependency = classifyDependency(dirname(path), site.specifier, externalSpecifiers, moduleOverrides);
         if (dependency.kind === "file") load(dependency.path);
       }
     }

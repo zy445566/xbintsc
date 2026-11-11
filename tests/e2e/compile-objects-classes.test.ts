@@ -63,6 +63,16 @@ describeE2E("end-to-end objects, functions and classes", (harness) => {
     expect(runProgram(source)).toBe("true false");
   });
 
+  it("evaluates new.target in a constructor and elsewhere", () => {
+    const source = `
+      class A { constructor() { console.log(new.target === A); } }
+      new A();
+      function f(): void { console.log(new.target); }
+      f();
+    `;
+    expect(runProgram(source)).toBe("true\nundefined");
+  });
+
   it("gives declared functions the environment they capture", () => {
     /* A function declaration called by name used to be invoked with a null
      * environment: its free variables read `undefined` and writes to them were

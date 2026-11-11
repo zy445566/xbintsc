@@ -248,6 +248,12 @@ export const SUPPORTED_CASES: readonly SupportedCase[] = [
     claim: "template substitutions evaluate from left to right",
     claimZh: "模板插值从左到右求值",
   },
+  {
+    path: "language/expressions/new.target/value-via-call.js",
+    area: "functions",
+    claim: "new.target is undefined when a function is called without new",
+    claimZh: "函数以普通方式调用时 new.target 为 undefined",
+  },
 ];
 
 export const UNSUPPORTED_CASES: readonly UnsupportedCase[] = [
@@ -259,13 +265,6 @@ export const UNSUPPORTED_CASES: readonly UnsupportedCase[] = [
     code: DiagnosticCode.UnexpectedToken,
   },
   {
-    path: "language/expressions/new.target/value-via-call.js",
-    area: "functions",
-    claim: "`new.target` has no lowering",
-    claimZh: "`new.target` 尚未实现",
-    code: DiagnosticCode.UnsupportedFeature,
-  },
-  {
     path: "language/expressions/comma/S11.14_A2.1_T3.js",
     area: "values",
     claim: "an unbound name is a compile-time error, not a runtime `ReferenceError`",
@@ -275,8 +274,8 @@ export const UNSUPPORTED_CASES: readonly UnsupportedCase[] = [
   {
     path: "language/expressions/dynamic-import/always-create-new-promise.js",
     area: "modules",
-    claim: "dynamic `import()` is not implemented",
-    claimZh: "动态 `import()` 尚未实现",
-    code: DiagnosticCode.UnexpectedToken,
+    claim: "dynamic `import()` is lowered only by the bundler, not a single-file compile",
+    claimZh: "动态 `import()` 仅由打包器降级，单文件编译尚不支持",
+    code: DiagnosticCode.UnsupportedFeature,
   },
 ];

@@ -68,6 +68,11 @@ describe("arrow functions", () => {
     expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
   });
 
+  it("parses new.target as a meta-property", () => {
+    const { diagnostics } = parse("class A { constructor() { console.log(new.target); } }");
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
   it("scans template defaults without counting literal parens", () => {
     /* The `}` of `${x}` must continue the template, not end it: the literal
      * text contains `)` and `}` that findMatchingParen would otherwise count. */
@@ -119,14 +124,6 @@ describe("assignment validation", () => {
   it("reports invalid assignment targets", () => {
     const { diagnostics } = parse("1 = 2;");
     expect(diagnostics.some((d) => d.code === DiagnosticCode.InvalidAssignmentTarget)).toBe(true);
-  });
-});
-
-describe("unsupported syntax", () => {
-  it("reports new.target as an unsupported feature, not a syntax error", () => {
-    const { diagnostics } = parse("function F() { return new.target; }");
-    expect(diagnostics.map((d) => d.code)).toContain(DiagnosticCode.UnsupportedFeature);
-    expect(diagnostics.map((d) => d.code)).not.toContain(DiagnosticCode.UnexpectedToken);
   });
 });
 

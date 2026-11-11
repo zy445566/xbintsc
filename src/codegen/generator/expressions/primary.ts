@@ -285,6 +285,13 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         this.emit(`  ${rest} = call i64 @xt_rest_args(i32 ${argc}, i64* ${argv}, i32 0)`);
         return rest;
       }
+      case "new.target": {
+        // `new.target` is the constructor inside a constructor body and
+        // undefined everywhere else.
+        const fn = this.current.fn;
+        if (fn.isConstructor && fn.classInfo) return this.emitClassReference(fn.classInfo);
+        return i64(XT_UNDEFINED);
+      }
       default: {
         const namespaceValue = NAMESPACE_VALUES[identifier.text];
         if (namespaceValue) {

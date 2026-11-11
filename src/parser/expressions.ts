@@ -20,7 +20,6 @@ import {
   type ConditionalExpression,
   type Expression,
   type Identifier,
-  type NewExpression,
   type NumericLiteral,
   type Parameter,
   type ParenthesizedExpression,
@@ -49,7 +48,7 @@ export interface ExpressionMethods {
   parseUnaryExpression(this: Parser): Expression;
   parsePostfixExpression(this: Parser): Expression;
   parseLeftHandSideExpression(this: Parser): Expression;
-  parseNewExpression(this: Parser): NewExpression;
+  parseNewExpression(this: Parser): Expression;
   parseMemberOnlyExpression(this: Parser): Expression;
   parsePrimaryExpression(this: Parser): Expression;
   parseCallAndMemberTail(this: Parser, base: Expression): Expression;
@@ -318,26 +317,14 @@ export const expressionMethods: ExpressionMethods = {
     return this.parseCallAndMemberTail(expression);
   },
 
-  parseNewExpression(this: Parser): NewExpression {
+  parseNewExpression(this: Parser): Expression {
     const newToken = this.parseExpected(TokenKind.NewKeyword);
     const start = newToken.start;
-    /* `new.target` is not part of the supported subset. Parsing it as a member
-     * access produced "Unexpected token '.'" pointing at the dot; report what
-     * is actually unsupported instead. */
+    /* `new.target` is a meta-property, not a constructor call. */
     if (this.at(TokenKind.Dot) && this.atAhead(1, TokenKind.Identifier) && this.lookAhead(1).text === "target") {
       this.nextToken(); // .
       const target = this.nextToken(); // target
-      this.error(DiagnosticCode.UnsupportedFeature, "xbintsc does not yet support new.target", {
-        ...newToken,
-        end: target.end,
-      });
-      const placeholder: Expression = {
-        kind: SyntaxKind.Identifier,
-        text: "undefined",
-        start: target.start,
-        end: target.end,
-      };
-      return { kind: SyntaxKind.NewExpression, expression: placeholder, typeArguments: [], arguments: [], start, end: target.end };
+      return { kind: SyntaxKind.Identifier, text: "new.target", start: newToken.start, end: target.end };
     }
     const callee = this.parseMemberOnlyExpression();
     const typeArguments = this.at(TokenKind.LessThan) ? this.parseTypeArguments() : [];

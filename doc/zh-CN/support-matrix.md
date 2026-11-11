@@ -23,7 +23,7 @@ harness 的适配说明见 [`SOURCE.md`](../../tests/conformance/test262/SOURCE.
 | 数组 | 2 | 0 | [参考](../implemented/stdlib.md) |
 | 对象 | 2 | 0 | [参考](../implemented/stdlib.md) |
 | 类与继承 | 2 | 0 | [参考](../implemented/codegen.md) |
-| 闭包与函数 | 2 | 1 | [参考](../implemented/binder.md) |
+| 闭包与函数 | 3 | 0 | [参考](../implemented/binder.md) |
 | 异常 | 2 | 0 | [参考](../implemented/runtime-core.md) |
 | 异步与 Promise | 2 | 0 | [参考](../implemented/async.md) |
 | JSON | 2 | 0 | [参考](../implemented/stdlib.md) |
@@ -71,12 +71,12 @@ harness 的适配说明见 [`SOURCE.md`](../../tests/conformance/test262/SOURCE.
 | `language/module-code/eval-export-fun-semi.js` | 模块 | 导出的函数声明不需要末尾分号 |
 | `language/expressions/optional-chaining/call-expression.js` | 可选链与模板字符串 | 可选链作用于调用表达式 |
 | `language/expressions/template-literal/evaluation-order.js` | 可选链与模板字符串 | 模板插值从左到右求值 |
+| `language/expressions/new.target/value-via-call.js` | 闭包与函数 | 函数以普通方式调用时 new.target 为 undefined |
 
 ## 不支持的用例（合法 JavaScript，预期诊断）
 
 | test262 用例 | 领域 | 诊断码 | 原因 |
 | --- | --- | ---: | --- |
 | `language/statements/with/12.10-0-1.js` | 可选链与模板字符串 | TS2001 | `with` 语句尚未实现 |
-| `language/expressions/new.target/value-via-call.js` | 闭包与函数 | TS4005 | `new.target` 尚未实现 |
 | `language/expressions/comma/S11.14_A2.1_T3.js` | 值与运算符 | TS3002 | 未绑定的名字是编译期错误，而不是运行时 `ReferenceError` |
-| `language/expressions/dynamic-import/always-create-new-promise.js` | 模块 | TS2001 | 动态 `import()` 尚未实现 |
+| `language/expressions/dynamic-import/always-create-new-promise.js` | 模块 | TS4005 | 动态 `import()` 仅由打包器降级，单文件编译尚不支持 |

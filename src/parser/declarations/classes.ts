@@ -219,6 +219,13 @@ export const declarationClassMethods: DeclarationClassMethods = {
       this.nextToken();
       return { kind: SyntaxKind.NumericLiteral, text: token.text, value: Number(token.value ?? 0), start: token.start, end: token.end };
     }
+    if (token.kind === TokenKind.BigIntLiteral) {
+      // A BigInt property key coerces to its decimal string (`{ 0n: "x" }` reads
+      // as the string key "0").
+      this.nextToken();
+      const text = token.text.endsWith("n") ? token.text.slice(0, -1) : token.text;
+      return { kind: SyntaxKind.StringLiteral, text, raw: token.text, value: text, start: token.start, end: token.end };
+    }
     if (token.kind === TokenKind.OpenBracket) {
       const start = this.nextToken().start;
       const expr = this.parseAssignmentExpression();

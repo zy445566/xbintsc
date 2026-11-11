@@ -59,7 +59,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 构造器参数属性 `constructor(public x: T)` | ✅ | |
 | `#private` 字段/方法/静态成员 | ⚠️ | 以字面量 `#x` 键存储；不做访问控制；父子类同名可能互相覆盖 |
 | `enum`/`const enum` | ✅ | 正向 + 反向映射 |
-| `private`/`protected`/`public`/`readonly`/`abstract`/`implements` | — | 被擦除，无访问控制 |
+| `private`/`protected`/`public`/`readonly`/`abstract`/`implements`/`override` | — | 被擦除，无访问控制 |
 | 生成器 `function*`、`yield`、`yield*` | ✅ | 同步与 `async function*`；支持 `for await...of` 与 `Symbol.asyncIterator` |
 | `arguments` 对象 | ✅ | 隐式提供；箭头函数看到的是自己的参数 |
 | 参数个数校验 | ⚠️ | 对本地可见函数 / `const` 箭头函数的直接调用会检查（`TS4004`）；方法、导入、展开实参与重新赋值后的绑定不检查。`--no-check` 可关闭 |
@@ -92,6 +92,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 未定义名（`TS3002`）、同作用域重复声明（`TS3001`）、实参个数（`TS4004`） | ✅ 默认检查；`--no-check` 可全部关闭 |
 | 简单泛型（`T`、`T[]`、显式类型实参） | ✅ 在调用处推断 |
 | 流收窄（`typeof`、`!== null`、`instanceof`、真值判断） | ✅ 在 `if`/`else` 与条件表达式内 |
+| `const` 类型参数、映射类型 `readonly`/`+`/`-` 修饰符、`as` 键重映射、具名元组成员 | ✅ 解析后擦除（仅类型） |
 | 泛型约束、映射/条件类型、重载、完整推断 | 🚫 解析为 `any` |
 | strict-null 与多余属性检查 | 🚫 |
 | `as`、`satisfies`、非空断言 `!` | — 被擦除的断言，不做校验 |
@@ -102,7 +103,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 ## 标准库
 
-已实现：`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`/`WeakSet`/`WeakRef`、
+已实现：`Math`、`JSON`、`Date`、`RegExp`、`Map`、`Set`、`WeakMap`/`WeakSet`/`WeakRef`/`FinalizationRegistry`、
 `Symbol`、`Error` 家族、`BigInt`、`Array`/`String`/`Number`/`Object` 方法、TypedArray、
 带捕获组的 `String.prototype.match`/`split`/`replace` 与 `*`/`+`/`?`/`{n,m}`
 正则量词、不可变数组方法
@@ -118,6 +119,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `structuredClone` | ✅ 数组、对象、Map、Set、Date、RegExp 与类型化数组 |
 | `Error.stack` 采集 | ⚠️ 函数级帧（名称/文件/行号），没有列号；生成器函数体不产生帧 |
 | 全局 RegExp `lastIndex` | ⚠️ `/g`、`/y` 下 `test`/`exec` 忽略它 |
+| `FinalizationRegistry` 回调 | ⚠️ 提供 `register`/`unregister`/`cleanupSome`，但回调从不执行（stop-the-world 收集器无法重入分配） |
 | 稀疏数组空洞、数组越界 | ⚠️ 不区分空洞；越界读得 `undefined` |
 
 完整列表见[未实现：标准库](../../unimplemented/stdlib.md)。

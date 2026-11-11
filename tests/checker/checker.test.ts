@@ -132,6 +132,16 @@ describe("checker: types", () => {
     expect(mismatches(source)).toHaveLength(1);
   });
 
+  it("accepts a callback with fewer parameters than the target signature", () => {
+    const source = [
+      "function mapItems(items: number[], fn: (item: number, index: number) => number): number[] {",
+      "  return items.map(fn);",
+      "}",
+      "mapItems([1, 2, 3], (item) => item);",
+    ].join("\n");
+    expect(mismatches(source)).toHaveLength(0);
+  });
+
   it("narrows nullish unions inside an if block", () => {
     const source = [
       "interface Box { value: number }",

@@ -74,6 +74,11 @@ export class Scanner {
   }
 
   scan(): Token {
+    // A leading `#!` hashbang (e.g. `#!/usr/bin/env node`) is a comment, not a
+    // private identifier: skip the whole first line.
+    if (this.pos === 0 && this.text.charCodeAt(0) === Char.Hash && this.text.charCodeAt(1) === Char.Exclamation) {
+      while (this.pos < this.text.length && !isLineBreak(this.text.charCodeAt(this.pos))) this.pos++;
+    }
     let precededByLineBreak = false;
     // Skip trivia.
     for (;;) {

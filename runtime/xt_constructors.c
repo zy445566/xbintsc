@@ -22,6 +22,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Defined in xt_weak.c; FinalizationRegistry is a no-op registration table. */
+xt_value xt_finalization_registry_ctor(int32_t argc, xt_value *argv);
+
 /* -- constructor table ---------------------------------------------------- */
 
 enum {
@@ -48,6 +51,7 @@ typedef struct {
   X(WeakMap, 0, XT_PROTO_PLAIN)                                            \
   X(WeakSet, 0, XT_PROTO_PLAIN)                                            \
   X(WeakRef, 1, XT_PROTO_PLAIN)                                            \
+  X(FinalizationRegistry, 1, XT_PROTO_PLAIN)                               \
   X(Date, 7, XT_PROTO_PLAIN)                                               \
   X(RegExp, 2, XT_PROTO_PLAIN)                                             \
   X(Promise, 1, XT_PROTO_PLAIN)                                            \
@@ -172,6 +176,7 @@ static xt_value xt_builtin_ctor_call(const char *name, int32_t argc, xt_value *a
   if (strcmp(name, "WeakMap") == 0) return xt_weak_map_ctor(argc, argv);
   if (strcmp(name, "WeakSet") == 0) return xt_weak_set_ctor(argc, argv);
   if (strcmp(name, "WeakRef") == 0) return xt_weak_ref_ctor(argc, argv);
+  if (strcmp(name, "FinalizationRegistry") == 0) return xt_finalization_registry_ctor(argc, argv);
   if (strcmp(name, "Date") == 0) return xt_date_ctor(argc, argv);
   if (strcmp(name, "RegExp") == 0) return xt_regexp_ctor(argc, argv);
   if (strcmp(name, "Promise") == 0) return xt_promise_ctor(argc, argv);

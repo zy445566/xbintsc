@@ -370,6 +370,7 @@ export class TypeResolver {
       case "Set":
       case "WeakMap":
       case "WeakSet":
+      case "FinalizationRegistry":
       case "Date":
       case "RegExp":
       case "Error":

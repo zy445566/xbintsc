@@ -84,6 +84,11 @@ export const declarationFunctionMethods: DeclarationFunctionMethods = {
     this.nextToken();
     const params: TypeParameterDeclaration[] = [];
     while (!this.at(TokenKind.GreaterThan) && !this.at(TokenKind.EndOfFile)) {
+      let isConst = false;
+      if (this.at(TokenKind.ConstKeyword)) {
+        this.nextToken();
+        isConst = true;
+      }
       const name = this.parseIdentifier();
       let constraint: TypeNode | undefined;
       if (this.at(TokenKind.ExtendsKeyword)) {
@@ -95,7 +100,7 @@ export const declarationFunctionMethods: DeclarationFunctionMethods = {
         this.nextToken();
         defaultType = this.parseType();
       }
-      params.push({ kind: SyntaxKind.TypeParameterDeclaration, name, constraint, default: defaultType, start: name.start, end: defaultType?.end ?? constraint?.end ?? name.end });
+      params.push({ kind: SyntaxKind.TypeParameterDeclaration, name, const: isConst || undefined, constraint, default: defaultType, start: name.start, end: defaultType?.end ?? constraint?.end ?? name.end });
       if (this.at(TokenKind.Comma)) this.nextToken();
       else break;
     }

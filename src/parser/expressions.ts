@@ -111,7 +111,7 @@ export const expressionMethods: ExpressionMethods = {
     let cursor = 0;
     if (this.at(TokenKind.AsyncKeyword) && !this.lookAhead(1).precededByLineBreak) {
       const next = this.lookAhead(1);
-      if (next.kind === TokenKind.OpenParen || this.isIdentifierLike(next)) async = true;
+      if (next.kind === TokenKind.OpenParen || next.kind === TokenKind.LessThan || this.isIdentifierLike(next)) async = true;
     }
     if (async) cursor = 1;
     const afterTypeParams = this.countTypeParameterTokens(cursor);
@@ -190,15 +190,23 @@ export const expressionMethods: ExpressionMethods = {
 
   skipTypeTokens(this: Parser, startIndex: number): number {
     let depth = 0;
+    let angle = 0;
     for (let i = startIndex; ; i++) {
       const t = this.lookAhead(i);
       if (t.kind === TokenKind.EndOfFile) return -1;
+      if (t.kind === TokenKind.LessThan) angle++;
+      else if (t.kind === TokenKind.GreaterThan) {
+        if (angle > 0) angle--;
+      } else if (t.kind === TokenKind.GreaterThanGreaterThan) {
+        if (angle > 1) angle -= 2;
+        else angle = 0;
+      }
       if (t.kind === TokenKind.OpenParen || t.kind === TokenKind.OpenBracket || t.kind === TokenKind.OpenBrace) depth++;
       else if (t.kind === TokenKind.CloseParen || t.kind === TokenKind.CloseBracket || t.kind === TokenKind.CloseBrace) {
         if (depth === 0) return -1;
         depth--;
-      } else if (t.kind === TokenKind.EqualsGreaterThan && depth === 0) return i;
-      else if (depth === 0 && (t.kind === TokenKind.Semicolon || t.kind === TokenKind.Comma)) return -1;
+      } else if (t.kind === TokenKind.EqualsGreaterThan && depth === 0 && angle === 0) return i;
+      else if (depth === 0 && angle === 0 && (t.kind === TokenKind.Semicolon || t.kind === TokenKind.Comma)) return -1;
     }
   },
 

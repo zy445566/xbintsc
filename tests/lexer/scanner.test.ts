@@ -17,6 +17,12 @@ describe("scanner", () => {
     expect(tokens[0]!.kind).toBe(TokenKind.EndOfFile);
   });
 
+  it("skips a leading hashbang line", () => {
+    const { tokens, diagnostics } = lex("#!/usr/bin/env node\nconst x = 1;");
+    expect(diagnostics).toHaveLength(0);
+    expect(tokens[0]!.kind).toBe(TokenKind.ConstKeyword);
+  });
+
   it("distinguishes keywords from identifiers", () => {
     expect(kinds("const x = 1")).toEqual([
       TokenKind.ConstKeyword,

@@ -101,6 +101,9 @@ export const statementMethods: StatementMethods = {
         case TokenKind.ReadonlyKeyword:
           modifierKind = ModifierKind.Readonly;
           break;
+        case TokenKind.OverrideKeyword:
+          modifierKind = ModifierKind.Override;
+          break;
         case TokenKind.ConstKeyword:
           if (this.atAhead(1, TokenKind.EnumKeyword)) modifierKind = ModifierKind.Const;
           break;

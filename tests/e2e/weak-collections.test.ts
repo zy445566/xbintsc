@@ -91,6 +91,21 @@ describeE2E("weak collections and weak references", (harness) => {
     ).toBe("true true");
   });
 
+  it("exposes a no-op FinalizationRegistry", () => {
+    expect(
+      harness.runProgram(`
+        const registry = new FinalizationRegistry(() => console.log("fired"));
+        const target = {};
+        registry.register(target, "held");
+        console.log(typeof FinalizationRegistry);
+        console.log(typeof registry.register, typeof registry.unregister, typeof registry.cleanupSome);
+        console.log(registry.unregister({}));
+        registry.cleanupSome(() => {});
+        console.log("done");
+      `),
+    ).toBe("function\nfunction function function\nfalse\ndone");
+  });
+
   it("keeps a WeakMap value alive while its key is alive", () => {
     expect(
       harness.runProgram(

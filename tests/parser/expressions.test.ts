@@ -32,6 +32,25 @@ describe("arrow functions", () => {
     expect(expr.typeParameters[0].name.text).toBe("T");
   });
 
+  it("parses an async generic arrow", () => {
+    const expr = initializer("const f = async <T>(x: T) => x;");
+    expect(expr.kind).toBe(SyntaxKind.ArrowFunction);
+    expect(expr.flags).toBe(NodeFlags.Async);
+    expect(expr.typeParameters).toHaveLength(1);
+  });
+
+  it("parses an arrow with a generic return type", () => {
+    const expr = initializer("const f = (x): Map<string, number> => new Map();");
+    expect(expr.kind).toBe(SyntaxKind.ArrowFunction);
+    expect(expr.returnType.kind).toBe(SyntaxKind.TypeReference);
+  });
+
+  it("parses a type-predicate return type on an arrow", () => {
+    const expr = initializer('const f = (x): x is string => typeof x === "string";');
+    expect(expr.kind).toBe(SyntaxKind.ArrowFunction);
+    expect(expr.returnType.kind).toBe(SyntaxKind.TypePredicate);
+  });
+
   it("scans template defaults without counting literal parens", () => {
     /* The `}` of `${x}` must continue the template, not end it: the literal
      * text contains `)` and `}` that findMatchingParen would otherwise count. */

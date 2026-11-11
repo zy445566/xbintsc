@@ -84,6 +84,13 @@ describe("parser type syntax", () => {
     expect(generic.typeArguments).toHaveLength(1);
   });
 
+  it("erases `typeof import(...)` type queries", () => {
+    const type = aliasType('type T = typeof import("@scope/pkg");');
+    expect(type.kind).toBe(SyntaxKind.AnyKeywordType);
+    const qualified = aliasType('type T = typeof import("@scope/pkg").Member;');
+    expect(qualified.kind).toBe(SyntaxKind.AnyKeywordType);
+  });
+
   it("parses parenthesized and function types", () => {
     expect(aliasType("type T = (number);").kind).toBe(SyntaxKind.ParenthesizedType);
     expect(aliasType("type T = (x: number) => string;").kind).toBe(SyntaxKind.FunctionType);
@@ -130,6 +137,17 @@ describe("parser type syntax", () => {
     ]);
   });
 
+  it("parses named tuple members, dropping the labels", () => {
+    const type = aliasType("type T = [code: number, arg?: unknown, ...rest: string[]];");
+    expect(type.kind).toBe(SyntaxKind.TupleType);
+    expect(type.elements.map((e: any) => e.kind)).toEqual([
+      SyntaxKind.NumberKeywordType,
+      SyntaxKind.OptionalType,
+      SyntaxKind.RestType,
+    ]);
+    expect(type.elements[1].type.kind).toBe(SyntaxKind.UnknownKeywordType);
+  });
+
   it("parses mapped types with question modifiers", () => {
     const optional = aliasType("type T = { [K in keyof U]?: U[K] };");
     expect(optional.kind).toBe(SyntaxKind.MappedType);
@@ -142,6 +160,19 @@ describe("parser type syntax", () => {
     const removed = aliasType("type T = { [K in keyof U]-?: U[K] };");
     expect(removed.kind).toBe(SyntaxKind.MappedType);
     expect(removed.questionToken).toBe("-");
+  });
+
+  it("parses mapped types with readonly modifiers and key remapping", () => {
+    const plain = aliasType("type T = { readonly [K in keyof U]: U[K] };");
+    expect(plain.kind).toBe(SyntaxKind.MappedType);
+    expect(plain.readonlyToken).toBe(true);
+
+    const removed = aliasType("type T = { -readonly [K in keyof U]: U[K] };");
+    expect(removed.readonlyToken).toBe("-");
+
+    const remapped = aliasType("type T = { [K in keyof U as P]: U[K] };");
+    expect(remapped.kind).toBe(SyntaxKind.MappedType);
+    expect(remapped.nameType.kind).toBe(SyntaxKind.TypeReference);
   });
 
   it("parses conditional types", () => {

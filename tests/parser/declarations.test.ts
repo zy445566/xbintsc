@@ -39,6 +39,14 @@ describe("function declarations", () => {
     expect(parameter.default.kind).toBe(SyntaxKind.LiteralType);
   });
 
+  it("parses a `const` type parameter", () => {
+    const { decl, diagnostics } = firstDeclaration("function lit<const V extends string>(value: V) {}");
+    expect(diagnostics).toHaveLength(0);
+    const parameter = decl.typeParameters[0];
+    expect(parameter.const).toBe(true);
+    expect(parameter.name.text).toBe("V");
+  });
+
   it("parses optional parameters", () => {
     const { decl } = firstDeclaration("function f(a?: number) {}");
     expect(decl.parameters[0].questionToken).toBe(true);
@@ -115,5 +123,13 @@ describe("class static blocks", () => {
       SyntaxKind.ClassStaticBlockDeclaration,
       SyntaxKind.PropertyDeclaration,
     ]);
+  });
+
+  it("parses `override` as an erased member modifier", () => {
+    const { decl, diagnostics } = firstDeclaration("class A { override render() {} }");
+    expect(diagnostics).toHaveLength(0);
+    const method = decl.members[0];
+    expect(method.name.text).toBe("render");
+    expect(method.modifiers.map((modifier: any) => modifier.modifierKind)).toContain("override");
   });
 });

@@ -172,6 +172,49 @@ xt_value xt_weak_ref_ctor(int32_t argc, xt_value *argv) {
   return XT_FROM_PTR(XT_TAG_OBJECT, ref);
 }
 
+/* -- FinalizationRegistry --------------------------------------------------- */
+
+/*
+ * A FinalizationRegistry schedules a callback when a registered target is
+ * collected. The collector is stop-the-world and single-threaded, so running a
+ * user callback at sweep time would re-enter allocation while the heap is
+ * inconsistent. This build therefore accepts the callback but never runs it:
+ * `register` / `cleanupSome` are no-ops and `unregister` reports "not
+ * registered". Programs that use the registry only for cache eviction keep
+ * working; they simply do not evict.
+ */
+
+static xt_value xt_finalization_noop(xt_value thisValue, xt_value env, int32_t argc,
+                                     xt_value *argv) {
+  (void)thisValue;
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return XT_UNDEFINED;
+}
+
+static xt_value xt_finalization_unregister(xt_value thisValue, xt_value env, int32_t argc,
+                                           xt_value *argv) {
+  (void)thisValue;
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return xt_bool(0);
+}
+
+xt_value xt_finalization_registry_ctor(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  xt_value registry = xt_object_new();
+  xt_object_set(registry, xt_string_from_cstr("register"),
+                xt_closure_new((void *)xt_finalization_noop, 0, NULL));
+  xt_object_set(registry, xt_string_from_cstr("unregister"),
+                xt_closure_new((void *)xt_finalization_unregister, 0, NULL));
+  xt_object_set(registry, xt_string_from_cstr("cleanupSome"),
+                xt_closure_new((void *)xt_finalization_noop, 0, NULL));
+  return registry;
+}
+
 xt_value xt_weak_method(xt_value target, const char *method, int32_t argc, xt_value *argv,
                         int *handled) {
   *handled = 1;

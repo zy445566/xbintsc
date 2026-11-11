@@ -62,7 +62,7 @@ Canonical detail (always current, much longer):
 | Constructor parameter properties `constructor(public x: T)` | ✅ | |
 | `#private` fields / methods / statics | ⚠️ | stored under a literal `#x` key; no access enforcement; parent/child name collisions may alias |
 | `enum` / `const enum` | ✅ | forward + reverse mapping |
-| `private` / `protected` / `public` / `readonly` / `abstract` / `implements` | — | erased, no access control |
+| `private` / `protected` / `public` / `readonly` / `abstract` / `implements` / `override` | — | erased, no access control |
 | Generators `function*`, `yield`, `yield*` | ✅ | sync and `async function*`; `for await...of` and `Symbol.asyncIterator` |
 | `arguments` object | ✅ | implicit; arrows see their own parameters |
 | Argument-count validation | ⚠️ | direct calls to locally visible functions / `const` arrows are checked (`TS4004`); methods, imports, spread arguments and reassigned bindings are not. `--no-check` disables |
@@ -96,6 +96,7 @@ erases all type syntax. The checker catches:
 | Unresolved names (`TS3002`), same-scope redeclarations (`TS3001`), call arity (`TS4004`) | ✅ checked by default; `--no-check` disables everything |
 | Simple generics (`T`, `T[]`, explicit type arguments) | ✅ inferred at the call site |
 | Flow narrowing (`typeof`, `!== null`, `instanceof`, truthiness) | ✅ inside `if`/`else` and conditional expressions |
+| `const` type parameters, mapped-type `readonly`/`+`/`-` modifiers, `as` key remapping, named tuple members | ✅ parsed, then erased (type-only) |
 | Generic constraints, mapped/conditional types, overloads, full inference | 🚫 resolve to `any` |
 | Strict-null and excess-property checks | 🚫 |
 | `as`, `satisfies`, non-null `!` | — erased assertions, not validated |
@@ -106,7 +107,7 @@ construct can hide a bug but never reject working code.
 
 ## Standard library
 
-Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`/`WeakRef`,
+Implemented: `Math`, `JSON`, `Date`, `RegExp`, `Map`, `Set`, `WeakMap`/`WeakSet`/`WeakRef`/`FinalizationRegistry`,
 `Symbol`, `Error` family, `BigInt`, `Array`/`String`/`Number`/`Object` methods,
 typed arrays, `String.prototype.match`/`split`/`replace` with capture groups and
 the `*`/`+`/`?`/`{n,m}` regex quantifiers,
@@ -123,6 +124,7 @@ Math`), and `Object.defineProperties` installs several descriptors at once.
 | `structuredClone` | ✅ arrays, objects, Map, Set, Date, RegExp and typed arrays |
 | `Error.stack` capture | ⚠️ function-level frames (name/file/line), no columns; generator bodies are omitted |
 | Global RegExp `lastIndex` | ⚠️ `test`/`exec` ignore it for `/g` and `/y` |
+| `FinalizationRegistry` callbacks | ⚠️ `register`/`unregister`/`cleanupSome` exist, but the callback never runs (the stop-the-world collector cannot re-enter allocation) |
 | Sparse array holes, array out-of-bounds | ⚠️ holes are not tracked distinctly; out-of-bounds reads give `undefined` |
 
 See [Unimplemented: standard library](../unimplemented/stdlib.md) for the full list.

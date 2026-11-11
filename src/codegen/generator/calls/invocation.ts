@@ -12,7 +12,7 @@ import {
   type PropertyAccessExpression,
   type SpreadElement,
 } from "../../../ast/nodes.js";
-import { SymbolKind } from "../../../binder/binder.js";
+import { implementationFunctionInfo, SymbolKind } from "../../../binder/binder.js";
 import type { ModuleExport } from "../../../extensions/registry.js";
 import { i64, XT_UNDEFINED } from "../../values.js";
 import {
@@ -107,8 +107,7 @@ export const invocationCallMethods: InvocationCallMethods = {
         if (defaultExport) return this.emitModuleExport(node, defaultExport);
       }
       if (symbol && symbol.kind === SymbolKind.Function) {
-        const declaration = symbol.declarations[0];
-        const fn = declaration ? this.binding.functionOfNode.get(declaration) : undefined;
+        const fn = implementationFunctionInfo(this.binding, symbol);
         /* Generator and `async` functions are not called directly: the call
          * must create a suspended generator / start a coroutine, so fall
          * through to the closure-call path. The same applies to a function that

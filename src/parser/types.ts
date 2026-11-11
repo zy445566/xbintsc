@@ -193,6 +193,20 @@ export const typeMethods: TypeMethods = {
         return { kind: SyntaxKind.ThisKeywordType, start, end: token.end };
       case TokenKind.TypeOfKeyword: {
         this.nextToken();
+        if (this.at(TokenKind.ImportKeyword)) {
+          // `typeof import("mod")` / `typeof import("mod").T`: erase to `any`.
+          this.nextToken();
+          if (this.at(TokenKind.OpenParen)) {
+            this.nextToken();
+            if (this.at(TokenKind.StringLiteral)) this.nextToken();
+            this.parseExpected(TokenKind.CloseParen);
+          }
+          while (this.at(TokenKind.Dot)) {
+            this.nextToken();
+            this.parseIdentifierName();
+          }
+          return { kind: SyntaxKind.AnyKeywordType, start, end: this.token.start };
+        }
         const exprName = this.parseEntityName();
         const typeArguments = this.at(TokenKind.LessThan) ? this.parseTypeArguments() : [];
         return { kind: SyntaxKind.TypeQuery, exprName, typeArguments, start, end: this.token.start };
@@ -303,17 +317,42 @@ export const typeMethods: TypeMethods = {
     const open = this.parseExpected(TokenKind.OpenBracket);
     const elements: TypeNode[] = [];
     while (!this.at(TokenKind.CloseBracket) && !this.at(TokenKind.EndOfFile)) {
+      const start = this.token.start;
       let element: TypeNode;
       if (this.at(TokenKind.DotDotDot)) {
-        const restStart = this.nextToken().start;
+        this.nextToken();
+        // A rest member may carry a label: `...rest: T[]`.
+        if (
+          this.isIdentifierLike(this.token) &&
+          (this.atAhead(1, TokenKind.Colon) || (this.atAhead(1, TokenKind.Question) && this.atAhead(2, TokenKind.Colon)))
+        ) {
+          this.parseIdentifierName();
+          if (this.at(TokenKind.Question)) this.nextToken();
+          this.parseExpected(TokenKind.Colon);
+        }
         const type = this.parseType();
-        element = { kind: SyntaxKind.RestType, type, start: restStart, end: type.end };
+        element = { kind: SyntaxKind.RestType, type, start, end: type.end };
+      } else if (
+        this.isIdentifierLike(this.token) &&
+        (this.atAhead(1, TokenKind.Colon) || (this.atAhead(1, TokenKind.Question) && this.atAhead(2, TokenKind.Colon)))
+      ) {
+        // Named tuple member: `code: number`, `arg?: unknown`. The label is a
+        // type-level annotation with no runtime effect, so it is dropped.
+        this.parseIdentifierName();
+        let question = false;
+        if (this.at(TokenKind.Question)) {
+          this.nextToken();
+          question = true;
+        }
+        this.parseExpected(TokenKind.Colon);
+        const type = this.parseType();
+        element = question ? { kind: SyntaxKind.OptionalType, type, start, end: type.end } : type;
       } else {
         element = this.parseType();
-      }
-      if (this.at(TokenKind.Question)) {
-        const end = this.nextToken().end;
-        element = { kind: SyntaxKind.OptionalType, type: element, start: element.start, end };
+        if (this.at(TokenKind.Question)) {
+          const end = this.nextToken().end;
+          element = { kind: SyntaxKind.OptionalType, type: element, start: element.start, end };
+        }
       }
       elements.push(element);
       if (this.at(TokenKind.Comma)) this.nextToken();
@@ -325,45 +364,69 @@ export const typeMethods: TypeMethods = {
 
   parseTypeLiteral(this: Parser): TypeLiteralNode | MappedTypeNode {
     const start = this.token.start;
-    // Detect mapped type: { [K in T]: U }
-    let cursor = 0;
-    if (this.atAhead(1, TokenKind.OpenBracket)) {
-      cursor = 1;
-      if (this.atAhead(2, TokenKind.Identifier)) {
-        const i = 3;
-        if (this.lookAhead(i).kind === TokenKind.InKeyword) {
-          const open = this.parseExpected(TokenKind.OpenBrace);
-          this.parseExpected(TokenKind.OpenBracket);
-          const name = this.parseIdentifier();
-          this.parseExpected(TokenKind.InKeyword);
-          const constraint = this.parseType();
-          this.parseExpected(TokenKind.CloseBracket);
-          let questionToken: boolean | "+" | "-" = false;
-          if (this.at(TokenKind.Question)) {
-            this.nextToken();
-            questionToken = true;
-          } else if (this.at(TokenKind.Plus)) {
-            this.nextToken();
-            this.nextToken();
-            questionToken = "+";
-          } else if (this.at(TokenKind.Minus)) {
-            this.nextToken();
-            this.nextToken();
-            questionToken = "-";
-          }
-          let type: TypeNode | undefined;
-          if (this.at(TokenKind.Colon)) {
-            this.nextToken();
-            type = this.parseType();
-          }
-          this.parseSemicolonOrComma();
-          const close = this.parseExpected(TokenKind.CloseBrace);
-          const typeParameter: TypeParameterDeclaration = { kind: SyntaxKind.TypeParameterDeclaration, name, constraint, start: name.start, end: constraint.end };
-          return { kind: SyntaxKind.MappedType, readonlyToken: false, typeParameter, questionToken, type, start: open.start, end: close.end };
-        }
-      }
+    // Detect a mapped type, skipping an optional `readonly` / `+readonly` /
+    // `-readonly` modifier before the `[`.
+    let ahead = 1;
+    if (this.lookAhead(ahead).kind === TokenKind.ReadonlyKeyword) {
+      ahead++;
+    } else if (
+      (this.lookAhead(ahead).kind === TokenKind.Plus || this.lookAhead(ahead).kind === TokenKind.Minus) &&
+      this.lookAhead(ahead + 1).kind === TokenKind.ReadonlyKeyword
+    ) {
+      ahead += 2;
     }
-    void cursor;
+    if (
+      this.lookAhead(ahead).kind === TokenKind.OpenBracket &&
+      this.lookAhead(ahead + 1).kind === TokenKind.Identifier &&
+      this.lookAhead(ahead + 2).kind === TokenKind.InKeyword
+    ) {
+      const open = this.parseExpected(TokenKind.OpenBrace);
+      let readonlyToken: boolean | "+" | "-" = false;
+      if (this.at(TokenKind.ReadonlyKeyword)) {
+        this.nextToken();
+        readonlyToken = true;
+      } else if (this.at(TokenKind.Plus) && this.atAhead(1, TokenKind.ReadonlyKeyword)) {
+        this.nextToken();
+        this.nextToken();
+        readonlyToken = "+";
+      } else if (this.at(TokenKind.Minus) && this.atAhead(1, TokenKind.ReadonlyKeyword)) {
+        this.nextToken();
+        this.nextToken();
+        readonlyToken = "-";
+      }
+      this.parseExpected(TokenKind.OpenBracket);
+      const name = this.parseIdentifier();
+      this.parseExpected(TokenKind.InKeyword);
+      const constraint = this.parseType();
+      let nameType: TypeNode | undefined;
+      if (this.at(TokenKind.AsKeyword)) {
+        this.nextToken();
+        nameType = this.parseType();
+      }
+      this.parseExpected(TokenKind.CloseBracket);
+      let questionToken: boolean | "+" | "-" = false;
+      if (this.at(TokenKind.Question)) {
+        this.nextToken();
+        questionToken = true;
+      } else if (this.at(TokenKind.Plus)) {
+        this.nextToken();
+        this.nextToken();
+        questionToken = "+";
+      } else if (this.at(TokenKind.Minus)) {
+        this.nextToken();
+        this.nextToken();
+        questionToken = "-";
+      }
+      let type: TypeNode | undefined;
+      if (this.at(TokenKind.Colon)) {
+        this.nextToken();
+        type = this.parseType();
+      }
+      this.parseSemicolonOrComma();
+      const close = this.parseExpected(TokenKind.CloseBrace);
+      const typeParameter: TypeParameterDeclaration = { kind: SyntaxKind.TypeParameterDeclaration, name, constraint, start: name.start, end: constraint.end };
+      return { kind: SyntaxKind.MappedType, readonlyToken, typeParameter, nameType, questionToken, type, start: open.start, end: close.end };
+    }
     const members = this.parseTypeMembers();
     return { kind: SyntaxKind.TypeLiteral, members, start, end: this.token.start };
   },

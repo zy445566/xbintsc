@@ -199,4 +199,14 @@ describe("unsupported semantics", () => {
     expect(unsupported?.message).toContain("namespace declaration");
     expect(unsupported?.message).not.toMatch(/\(\d+\)/);
   });
+
+  it("erases an ambient module declaration", () => {
+    const ir = irOf('declare module "some-package" { interface Extra { a: number } }');
+    expect(ir).not.toContain("namespace declaration");
+  });
+
+  it("lowers a non-literal dynamic import to a rejected promise", () => {
+    const ir = irOf('const specifier = "node:fs";\nconst p = import(specifier);');
+    expect(ir).toContain("@xt_promise_reject");
+  });
 });

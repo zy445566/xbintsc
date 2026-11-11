@@ -115,6 +115,21 @@ describeE2E("end-to-end module bundling", (harness) => {
     ).toBe("B undefined");
   });
 
+  it("rejects a non-literal dynamic import at runtime", () => {
+    const source = `
+      async function load(specifier: string) {
+        try {
+          await import(specifier);
+          return "loaded";
+        } catch {
+          return "rejected";
+        }
+      }
+      console.log(await load("node:fs"));
+    `;
+    expect(runProgram(source)).toBe("rejected");
+  });
+
   it("renames destructured top-level bindings without breaking the read", () => {
     writeFileSync(
       join(harness.workdir, "destructure_dep.ts"),

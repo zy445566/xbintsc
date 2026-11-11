@@ -163,6 +163,29 @@ describe("classifyDependency", () => {
     });
   });
 
+  it("resolves package-internal #imports through the imports map", () => {
+    const directory = writeFiles({
+      "pkg/package.json": JSON.stringify({
+        imports: {
+          "#ansi-styles": "./vendor/ansi-styles/index.js",
+          "#supports-color": { node: "./vendor/supports-color/index.js", default: "./vendor/supports-color/browser.js" },
+        },
+      }),
+      "pkg/vendor/ansi-styles/index.ts": "",
+      "pkg/vendor/supports-color/index.ts": "",
+      "pkg/vendor/supports-color/browser.ts": "",
+    });
+    const packageDir = join(directory, "pkg");
+    expect(resolveFile(packageDir, "#ansi-styles")).toEqual({
+      kind: "file",
+      path: join(packageDir, "vendor", "ansi-styles", "index.ts"),
+    });
+    expect(resolveFile(packageDir, "#supports-color")).toEqual({
+      kind: "file",
+      path: join(packageDir, "vendor", "supports-color", "index.ts"),
+    });
+  });
+
   it("ignores malformed, non-object and empty exports values", () => {
     const directory = writeFiles({
       "node_modules/bad/package.json": "{ not json",

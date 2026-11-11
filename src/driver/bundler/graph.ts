@@ -4,8 +4,8 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, extname, relative } from "node:path";
-import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type NamedExports, type Node, type Statement } from "../../ast/nodes.js";
+import { dirname, extname } from "node:path";
+import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type NamedExports, type Statement } from "../../ast/nodes.js";
 import { bind } from "../../binder/binder.js";
 import { DiagnosticBag, DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { SourceFile } from "../../diagnostics/source.js";
@@ -79,24 +79,14 @@ export function loadGraph(
   let counter = 0;
   let failed = false;
 
-  const load = (
-    path: string,
-    origin?: { readonly file: string; readonly statement: Node },
-  ): ModuleRecord | undefined => {
+  const load = (path: string): ModuleRecord | undefined => {
     const existing = records.get(path);
     if (existing) return existing;
     if (stack.includes(path)) {
-      const start = stack.indexOf(path);
-      const cycle = [...stack.slice(start), path]
-        .map((entry) => relative(dirname(entryPath), entry))
-        .join(" -> ");
-      diagnostics.error(
-        DiagnosticCode.CircularDependency,
-        `Circular import detected: ${cycle}`,
-        origin?.statement,
-        origin?.file,
-      );
-      failed = true;
+      /* A back-edge closes an import cycle. The target is already being loaded
+       * and will be added to `records` when its own load finishes; do not
+       * recurse into it again. The merge resolves the resulting forward
+       * reference through the hoisted top-level bindings. */
       return undefined;
     }
     if (!existsSync(path)) {
@@ -161,7 +151,7 @@ export function loadGraph(
         failed = true;
         continue;
       }
-      load(dependency.path, { file: path, statement });
+      load(dependency.path);
     }
 
     // A dynamic `import("literal")` is a static edge too: the target must be
@@ -179,7 +169,7 @@ export function loadGraph(
         failed = true;
         continue;
       }
-      load(dependency.path, { file: path, statement: site.expression });
+      load(dependency.path);
     }
 
     // A CommonJS module's `require("...")` calls are dynamic import edges: the

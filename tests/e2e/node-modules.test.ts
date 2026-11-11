@@ -135,6 +135,23 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
+  it("provides tls/http2/sqlite/stream-web as throwing stubs", () => {
+    const source = `
+      import { connect as tlsConnect } from "node:tls";
+      import { connect as http2Connect } from "node:http2";
+      import { DatabaseSync } from "node:sqlite";
+      import { ReadableStreamTee } from "node:stream/web";
+      function caught(fn: () => unknown) {
+        try { fn(); return false; } catch { return true; }
+      }
+      console.log(ReadableStreamTee === undefined, typeof DatabaseSync);
+      console.log(caught(() => tlsConnect(443, "example.com", () => {})), caught(() => http2Connect("https://example.com")));
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["true function", "true true"]);
+  });
+
   it("provides async_hooks.AsyncResource with runInAsyncScope", () => {
     const source = `
       import { AsyncResource } from "node:async_hooks";

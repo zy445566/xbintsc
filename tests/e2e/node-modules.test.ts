@@ -135,6 +135,26 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
+  it("provides stream helpers and http.IncomingMessage", () => {
+    const source = `
+      import { Readable, isReadable, isErrored, isDisturbed, finished, pipeline } from "node:stream";
+      import { IncomingMessage } from "node:http";
+      const readable = new Readable();
+      console.log(isReadable(readable), isErrored(readable), isDisturbed(readable));
+      finished(readable, (err: unknown) => console.log("finished", err === undefined));
+      pipeline(readable, (err: unknown) => console.log("piped", err === undefined));
+      console.log(typeof IncomingMessage);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual([
+      "true false false",
+      "finished true",
+      "piped true",
+      "function",
+    ]);
+  });
+
   it("exposes timers/promises, perf_hooks, string_decoder, util/types, tty and console", () => {
     const source = `
       import { setTimeout as sleep, setImmediate } from "node:timers/promises";

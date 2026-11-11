@@ -11,12 +11,15 @@ import type { NodeModule } from "../module.js";
 import { resolveFrom } from "../module.js";
 import type { ModuleExports } from "../../registry.js";
 
+const methods = ["isReadable", "isErrored", "isDisturbed", "finished", "pipeline"] as const;
+
 const exports: ModuleExports = {
   Readable: { symbol: "xt_readable_ctor", isConstructor: true },
   Writable: { symbol: "xt_writable_ctor", isConstructor: true },
   Duplex: { symbol: "xt_duplex_ctor", isConstructor: true },
   Transform: { symbol: "xt_transform_ctor", isConstructor: true },
   PassThrough: { symbol: "xt_pass_through_ctor", isConstructor: true },
+  ...Object.fromEntries(methods.map((method) => [method, { namespace: "stream", method }])),
 };
 
 export const streamModule: NodeModule = {

@@ -37,6 +37,21 @@ describe("checker: unresolved names", () => {
     expect(codes(check(source, { builtins: { print: {} } }), DiagnosticCode.CannotFindName)).toEqual([]);
   });
 
+  it("recognizes standard web-platform globals", () => {
+    const source = [
+      "typeof globalThis;",
+      "typeof AbortController;",
+      "typeof AbortSignal;",
+      "typeof Reflect;",
+      "typeof Proxy;",
+      "typeof Intl;",
+      "typeof FormData;",
+      "typeof Blob;",
+      "typeof Headers;",
+    ].join("\n");
+    expect(codes(check(source), DiagnosticCode.CannotFindName)).toEqual([]);
+  });
+
   it("recognizes the WebAssembly namespace", () => {
     const source = [
       "typeof WebAssembly;",

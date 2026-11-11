@@ -292,6 +292,28 @@ export const NAMESPACE_VALUES: Record<string, string> = {
   WebAssembly: "xt_webassembly_object",
 };
 
+/**
+ * Standard web-platform globals recognized so code reaching for them
+ * type-checks, but with no runtime implementation yet: they lower to
+ * `undefined`. A construct such as `new AbortController()` therefore fails at
+ * run time rather than being reported as an unknown name.
+ */
+export const WEB_GLOBALS: ReadonlySet<string> = new Set<string>([
+  "globalThis",
+  "AbortController",
+  "AbortSignal",
+  "Reflect",
+  "Proxy",
+  "Intl",
+  "FormData",
+  "Blob",
+  "Headers",
+  "Request",
+  "Response",
+  "ReadableStream",
+  "EventTarget",
+]);
+
 /** Namespace identifiers whose property access maps to a runtime getter. */
 export const NAMESPACE_PROPERTIES: Record<string, string> = {
   process: "xt_process_get",

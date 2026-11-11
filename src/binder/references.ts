@@ -342,10 +342,14 @@ export const referenceMethods: ReferenceMethods = {
     }
     (fn as { params: SymbolInfo[] }).params = params;
 
-    // Initialize a named function expression's own name inside its scope.
+    // Initialize a named function expression's own name inside its scope as a
+    // self-reference: a Function symbol so codegen lowers it to the closure
+    // value, with the function node as its declaration so the implementation
+    // lookup resolves the right FunctionInfo.
     if (node.kind === SyntaxKind.FunctionExpression && (node as FunctionExpression).name) {
       const selfName = (node as FunctionExpression).name!;
-      this.declare(selfName.text, SymbolKind.Const, selfName, scope, false);
+      const selfSymbol = this.declare(selfName.text, SymbolKind.Function, node, scope, false);
+      this.symbolOfDeclaration.set(selfName, selfSymbol);
     }
     if (symbol) this.symbolOfDeclaration.set(node, symbol);
 

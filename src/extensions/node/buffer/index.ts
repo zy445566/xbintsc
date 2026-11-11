@@ -18,6 +18,7 @@ const statics = [
   "allocUnsafe",
   "allocUnsafeSlow",
   "isBuffer",
+  "isUtf8",
   "byteLength",
   "concat",
   "compare",
@@ -26,6 +27,7 @@ const statics = [
 const exports: ModuleExports = {
   Buffer: { symbol: "xt_buffer_ctor", isConstructor: true },
   ...Object.fromEntries(statics.map((method) => [method, { namespace: "Buffer", method }])),
+  constants: { valueSymbol: "xt_buffer_constants_value" },
 };
 
 export const bufferModule: NodeModule = {

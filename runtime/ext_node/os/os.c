@@ -174,3 +174,45 @@ xt_value xt_os_static(xt_value name, int32_t argc, xt_value *argv) {
   }
   return xt_undefined();
 }
+
+/* `os.constants`: the errno and signal values programs read to map exit codes
+ * and file errors. POSIX numbering is used, matching Node on the Unix hosts. */
+xt_value xt_os_constants_value(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  xt_value object = xt_object_new();
+  xt_value errnoValues = xt_object_new();
+  const int errnos[][2] = {
+    { 1, 1 }, { 2, 2 }, { 9, 9 }, { 13, 13 }, { 17, 17 }, { 20, 20 },
+    { 21, 21 }, { 28, 28 }, { 32, 32 }, { 39, 39 }, { 48, 48 },
+  };
+  static const char *errnoNames[] = {
+    "EPERM", "ENOENT", "EBADF", "EACCES", "EEXIST", "ENOTDIR",
+    "EISDIR", "ENOSPC", "EPIPE", "ENOTEMPTY", "EADDRINUSE",
+  };
+  for (size_t i = 0; i < sizeof(errnos) / sizeof(errnos[0]); i++) {
+    xt_object_set(errnoValues, xt_string_from_cstr(errnoNames[i]), xt_number((double)errnos[i][1]));
+  }
+  xt_object_set(object, xt_string_from_cstr("errno"), errnoValues);
+
+  xt_value signals = xt_object_new();
+  const int signalNumbers[][2] = {
+    { 1, 1 }, { 2, 2 }, { 3, 3 }, { 4, 4 }, { 6, 6 }, { 7, 7 }, { 8, 8 },
+    { 9, 9 }, { 10, 10 }, { 11, 11 }, { 12, 12 }, { 13, 13 }, { 14, 14 },
+    { 15, 15 }, { 17, 17 }, { 18, 18 }, { 19, 19 }, { 20, 20 }, { 21, 21 },
+    { 22, 22 }, { 23, 23 }, { 24, 24 }, { 25, 25 }, { 26, 26 }, { 27, 27 },
+    { 28, 28 }, { 29, 29 }, { 31, 31 },
+  };
+  static const char *signalNames[] = {
+    "SIGHUP", "SIGINT", "SIGQUIT", "SIGILL", "SIGABRT", "SIGBUS", "SIGFPE",
+    "SIGKILL", "SIGUSR1", "SIGSEGV", "SIGUSR2", "SIGPIPE", "SIGALRM",
+    "SIGTERM", "SIGCHLD", "SIGCONT", "SIGSTOP", "SIGTSTP", "SIGTTIN",
+    "SIGTTOU", "SIGURG", "SIGXCPU", "SIGXFSZ", "SIGVTALRM", "SIGPROF",
+    "SIGWINCH", "SIGIO", "SIGSYS",
+  };
+  for (size_t i = 0; i < sizeof(signalNumbers) / sizeof(signalNumbers[0]); i++) {
+    xt_object_set(signals, xt_string_from_cstr(signalNames[i]), xt_number((double)signalNumbers[i][1]));
+  }
+  xt_object_set(object, xt_string_from_cstr("signals"), signals);
+  return object;
+}

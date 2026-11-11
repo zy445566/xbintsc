@@ -16,9 +16,11 @@ bytes across modules.
 | `Buffer.alloc(size[, fill])` | allocate and fill |
 | `Buffer.allocUnsafe(size)` | allocate |
 | `Buffer.isBuffer(value)` | test |
+| `Buffer.isUtf8(value)` | whether the bytes are valid UTF-8 |
 | `Buffer.byteLength(value[, encoding])` | byte length |
 | `Buffer.concat(list[, totalLength])` | concatenate |
 | `Buffer.compare(a, b)` | compare |
+| `buffer.constants` | `MAX_LENGTH` / `MAX_STRING_LENGTH` |
 
 Instance methods: `toString([encoding])`, `toJSON()`, `slice(start, end)`, `subarray(...)`, `equals(other)`, `compare(other)`, `copy(target[, targetStart, sourceStart, sourceEnd])`, `write(string[, offset[, length[, encoding]]])`, `fill(value)`, `reverse()`, `indexOf(value)`, `lastIndexOf(value)`, `includes(value)`, `keys()`, `values()`, plus `readUInt8/UInt16LE/UInt16BE/UInt32LE/UInt32BE`, `writeUInt8/UInt16LE/UInt16BE/UInt32LE/UInt32BE`.
 

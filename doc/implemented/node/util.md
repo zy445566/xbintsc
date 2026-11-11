@@ -16,6 +16,7 @@ Both named imports (`import { format } from "util"`) and namespace calls
 | `inherits(ctor, superCtor)` | prototype wiring |
 | `deprecate(fn, msg)` | returns `fn` unchanged (there is no warning channel) |
 | `promisify(fn)` | wraps a trailing-callback function into a `Promise` |
+| `debuglog(section)` | returns a no-op logger (no `NODE_DEBUG` gating) |
 | `isString` `isNumber` `isBoolean` `isUndefined` `isNull` `isFunction` `isArray` `isObject` `isBuffer` `isDate` `isRegExp` `isPromise` `isError` | type predicates |
 
 ```ts

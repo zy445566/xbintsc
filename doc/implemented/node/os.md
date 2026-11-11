@@ -20,3 +20,4 @@ functions (`import { platform } from "os"`).
 | `os.hostname()` | hostname |
 | `os.totalmem()` / `os.freemem()` | total / free memory (bytes) |
 | `os.cpus()` | array of CPU entries (`model` / `speed` placeholders) |
+| `os.constants` | `errno` and `signals` objects (POSIX numbering) |

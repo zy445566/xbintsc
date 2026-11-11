@@ -74,6 +74,67 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim().split("\n")).toEqual(["hello AAAA", "true foobar", "hey yo true"]);
   });
 
+  it("exposes buffer.isUtf8, buffer.constants, os.constants and http.STATUS_CODES", () => {
+    const source = `
+      import { Buffer, constants as bufferConstants, isUtf8 } from "node:buffer";
+      import { constants as osConstants } from "node:os";
+      import { STATUS_CODES } from "node:http";
+      console.log(isUtf8(Buffer.from("hello")), isUtf8(Buffer.from([0xff, 0xfe])));
+      console.log(bufferConstants.MAX_STRING_LENGTH > 0, bufferConstants.MAX_LENGTH > 0);
+      console.log(osConstants.signals.SIGINT, osConstants.signals.SIGTERM, osConstants.errno.ENOENT);
+      console.log(STATUS_CODES[200], STATUS_CODES[404]);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual([
+      "true false",
+      "true true",
+      "2 15 2",
+      "OK Not Found",
+    ]);
+  });
+
+  it("computes zlib.crc32 and exposes zlib constants", () => {
+    const source = `
+      import { crc32, constants, Z_DEFAULT_WINDOWBITS } from "node:zlib";
+      console.log(crc32(Buffer.from("hello")));
+      console.log(crc32(Buffer.from("The quick brown fox jumps over the lazy dog")));
+      console.log(Z_DEFAULT_WINDOWBITS, constants.Z_DEFAULT_WINDOWBITS, constants.Z_FINISH);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual(["907060870", "1095738169", "15 15 4"]);
+  });
+
+  it("parses paths and exposes path.posix / path.win32", () => {
+    const source = `
+      import { parse, posix, win32 } from "node:path";
+      const parts = parse("/home/user/file.txt");
+      console.log(parts.root, parts.dir, parts.base, parts.ext, parts.name);
+      console.log(posix.join("a", "b"), posix.sep, posix.parse("/x/y.txt").name);
+      console.log(win32.normalize("C:/a//b"), win32.sep);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim().split("\n")).toEqual([
+      "/ /home/user file.txt .txt file",
+      "a/b / y",
+      "C:/a/b /",
+    ]);
+  });
+
+  it("provides util.debuglog as a callable no-op logger", () => {
+    const source = `
+      import { debuglog } from "node:util";
+      const log = debuglog("section");
+      log("dropped", 1, true);
+      console.log(typeof log);
+    `;
+    const { status, stdout } = run(source);
+    expect(status).toBe(0);
+    expect(stdout.trim()).toBe("function");
+  });
+
   it("wraps fs operations in promises", () => {
     const target = join(workdir, `promise_${Math.random().toString(36).slice(2)}.txt`);
     const source = `

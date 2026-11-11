@@ -23,6 +23,9 @@ from "path"`) or pull in individual methods (`import { join } from "path"`).
 | `path.extname(path)` | extension |
 | `path.isAbsolute(path)` | whether it is an absolute path |
 | `path.relative(from, to)` | relative path |
+| `path.parse(path)` | `{ root, dir, base, ext, name }` |
+| `path.posix` / `path.win32` | namespace objects with the same methods (both use POSIX `/` separators) |
+| `path.sep` / `path.delimiter` | `/` and `:` |
 
 ```ts
 import path from "path";

@@ -347,6 +347,35 @@ static xt_value xt_path_relative(const char *from, const char *to) {
 /* Dispatch                                                                  */
 /* ------------------------------------------------------------------------- */
 
+/** `path.parse(path)` -> `{ root, dir, base, ext, name }`. */
+static xt_value xt_path_parse(const char *path) {
+  xt_value result = xt_object_new();
+  size_t root = xt_path_root_len(path);
+  char rootBuffer[4] = {0};
+  if (root > 0 && root < sizeof(rootBuffer)) {
+    memcpy(rootBuffer, path, root);
+    rootBuffer[root] = '\0';
+  }
+  xt_object_set(result, xt_string_from_cstr("root"), xt_string_from_cstr(rootBuffer));
+
+  xt_value dir = xt_path_dirname(path);
+  xt_object_set(result, xt_string_from_cstr("dir"), dir);
+  xt_value base = xt_path_basename(path, NULL);
+  xt_object_set(result, xt_string_from_cstr("base"), base);
+  xt_value ext = xt_path_extname(path);
+  xt_object_set(result, xt_string_from_cstr("ext"), ext);
+
+  const char *baseText = xt_string_data(base);
+  const char *extText = xt_string_data(ext);
+  size_t baseLength = strlen(baseText);
+  size_t extLength = strlen(extText);
+  xt_value name = (extLength > 0 && baseLength > extLength)
+    ? xt_string_new(baseText, baseLength - extLength)
+    : base;
+  xt_object_set(result, xt_string_from_cstr("name"), name);
+  return result;
+}
+
 xt_value xt_path_static(xt_value name, int32_t argc, xt_value *argv) {
   const char *method = xt_string_data(name);
   if (!method) return xt_undefined();
@@ -386,6 +415,10 @@ xt_value xt_path_static(xt_value name, int32_t argc, xt_value *argv) {
      * POSIX semantics, so the path is already valid as-is. */
     return argc > 0 ? xt_to_string(argv[0]) : xt_string_from_cstr("");
   }
+  if (strcmp(method, "parse") == 0) {
+    const char *path = argc > 0 ? xt_string_data(xt_to_string(argv[0])) : "";
+    return xt_path_parse(path ? path : "");
+  }
   return xt_undefined();
 }
 
@@ -401,4 +434,45 @@ xt_value xt_path_delimiter_value(int32_t argc, xt_value *argv) {
   (void)argc;
   (void)argv;
   return xt_string_from_cstr(":");
+}
+
+/* `path.posix` / `path.win32`: namespace objects whose methods dispatch to the
+ * same `xt_path_static` table, with the method name captured in the closure
+ * environment. xbintsc's path model uses POSIX separators on every platform,
+ * so the two names expose the same API for now (Windows-only code paths use it
+ * for their own comparisons). */
+static xt_value xt_path_api_method(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)thisValue;
+  return xt_path_static(xt_closure_env(env, 0), argc, argv);
+}
+
+static void xt_path_install_method(xt_value api, const char *method) {
+  xt_value captured[1] = { xt_string_from_cstr(method) };
+  xt_object_set(api, xt_string_from_cstr(method), xt_closure_new((void *)xt_path_api_method, 1, captured));
+}
+
+static xt_value xt_path_api_object(void) {
+  xt_value api = xt_object_new();
+  static const char *methods[] = {
+    "join", "resolve", "isAbsolute", "normalize", "dirname",
+    "basename", "extname", "relative", "toNamespacedPath", "parse",
+  };
+  for (size_t i = 0; i < sizeof(methods) / sizeof(methods[0]); i++) {
+    xt_path_install_method(api, methods[i]);
+  }
+  xt_object_set(api, xt_string_from_cstr("sep"), xt_string_from_cstr("/"));
+  xt_object_set(api, xt_string_from_cstr("delimiter"), xt_string_from_cstr(":"));
+  return api;
+}
+
+xt_value xt_path_posix_value(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return xt_path_api_object();
+}
+
+xt_value xt_path_win32_value(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return xt_path_api_object();
 }

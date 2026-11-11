@@ -5,6 +5,7 @@
 import { DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { Token, TokenKind } from "../token.js";
 import { Char, isDigit } from "../char.js";
+import { valueEndsExpression } from "./regex.js";
 import type { Scanner } from "../scanner.js";
 
 export interface PunctuationMethods {
@@ -65,6 +66,9 @@ export const punctuationMethods: PunctuationMethods = {
       case Char.Exclamation:
         if (next === Char.Equals && third === Char.Equals) return emit(TokenKind.ExclamationEqualsEquals, 3);
         if (next === Char.Equals) return emit(TokenKind.ExclamationEquals, 2);
+        // A `!` after a complete value is a postfix non-null assertion, so a
+        // following `/` is division, not a regex.
+        this.postfixExclamation = valueEndsExpression(this._token.kind);
         return emit(TokenKind.Exclamation, 1);
       case Char.Plus:
         if (next === Char.Plus) return emit(TokenKind.PlusPlus, 2);

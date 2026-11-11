@@ -29,6 +29,8 @@ export class Scanner {
     text: "",
     precededByLineBreak: false,
   };
+  /** Whether the just-scanned `!` was a postfix non-null assertion (`x!`). */
+  postfixExclamation = false;
 
   constructor(source: SourceFile, diagnostics: DiagnosticBag) {
     this.source = source;

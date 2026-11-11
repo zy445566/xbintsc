@@ -140,6 +140,7 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
         return;
       }
       case SyntaxKind.ParenthesizedExpression:
+      case SyntaxKind.NonNullExpression:
         this.emitAssignmentTarget((target as { expression: Expression }).expression, value);
         return;
       case SyntaxKind.ArrayLiteralExpression:

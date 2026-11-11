@@ -58,6 +58,11 @@ describe("arrow functions", () => {
     expect(expr.specifier.value).toBe("./x.ts");
   });
 
+  it("allows a non-null assertion as a compound-assignment target", () => {
+    const { diagnostics } = parse("const x = { a: 0 }; x.a! |= 1;");
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
   it("scans template defaults without counting literal parens", () => {
     /* The `}` of `${x}` must continue the template, not end it: the literal
      * text contains `)` and `}` that findMatchingParen would otherwise count. */

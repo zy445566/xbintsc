@@ -91,6 +91,13 @@ describe("scanner", () => {
     expect(division.tokens.filter((t) => t.kind === TokenKind.Slash)).toHaveLength(2);
   });
 
+  it("treats a slash after a non-null assertion as division", () => {
+    const { tokens, diagnostics } = lex("x! / y;");
+    expect(diagnostics).toHaveLength(0);
+    expect(tokens.map((t) => t.kind)).toContain(TokenKind.Slash);
+    expect(tokens.map((t) => t.kind)).not.toContain(TokenKind.RegularExpressionLiteral);
+  });
+
   it("skips line and block comments", () => {
     const { tokens, diagnostics } = lex("// line\n/* block */ x");
     expect(diagnostics).toHaveLength(0);

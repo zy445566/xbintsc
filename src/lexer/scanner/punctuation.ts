@@ -86,8 +86,10 @@ export const punctuationMethods: PunctuationMethods = {
         if (next === Char.Equals) return emit(TokenKind.AsteriskEquals, 2);
         return emit(TokenKind.Asterisk, 1);
       case Char.Slash:
-        if (next === Char.Equals) return emit(TokenKind.SlashEquals, 2);
+        // A `/` in regex position starts a regex even when followed by `=`
+        // (`illegal: /=/` is the regex `/=/`, not division-assign).
         if (this.regexAllowed()) return this.scanRegex(start, precededByLineBreak);
+        if (next === Char.Equals) return emit(TokenKind.SlashEquals, 2);
         return emit(TokenKind.Slash, 1);
       case Char.Percent:
         if (next === Char.Equals) return emit(TokenKind.PercentEquals, 2);

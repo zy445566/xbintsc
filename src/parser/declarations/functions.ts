@@ -225,13 +225,14 @@ export const declarationFunctionMethods: DeclarationFunctionMethods = {
       this.parseExpected(TokenKind.Colon);
       name = this.parseBindingName();
     } else if (allowPropertyName && !this.at(TokenKind.OpenBrace) && !this.at(TokenKind.OpenBracket)) {
-      const first = this.parseIdentifierName();
+      const first = this.parsePropertyName();
       if (this.at(TokenKind.Colon)) {
         this.nextToken();
         propertyName = first;
         name = this.parseBindingName();
       } else {
-        name = first;
+        // Shorthand `{ a }`: only an identifier can name the binding.
+        name = first as unknown as BindingName;
         /* `{ a }` reads the key `a`; record it in a separate node so a later
          * rename of the binding does not change which property is read. */
         propertyName =

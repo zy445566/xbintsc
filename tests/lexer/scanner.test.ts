@@ -98,6 +98,13 @@ describe("scanner", () => {
     expect(tokens.map((t) => t.kind)).not.toContain(TokenKind.RegularExpressionLiteral);
   });
 
+  it("scans a regex whose pattern begins with =", () => {
+    const { tokens, diagnostics } = lex("const r = /=/;");
+    expect(diagnostics).toHaveLength(0);
+    expect(tokens.map((t) => t.kind)).toContain(TokenKind.RegularExpressionLiteral);
+    expect(tokens.map((t) => t.kind)).not.toContain(TokenKind.SlashEquals);
+  });
+
   it("skips line and block comments", () => {
     const { tokens, diagnostics } = lex("// line\n/* block */ x");
     expect(diagnostics).toHaveLength(0);

@@ -35,9 +35,11 @@ const symbols: Record<string, string> = {
   isError: "xt_util_is_error",
 };
 
-const exports: ModuleExports = Object.fromEntries(
-  Object.entries(symbols).map(([name, symbol]) => [name, { symbol }]),
-);
+const exports: ModuleExports = {
+  ...Object.fromEntries(Object.entries(symbols).map(([name, symbol]) => [name, { symbol }])),
+  TextDecoder: { symbol: "xt_text_decoder_ctor", isConstructor: true },
+  TextEncoder: { symbol: "xt_text_encoder_ctor", isConstructor: true },
+};
 
 export const utilModule: NodeModule = {
   name: "util",

@@ -71,6 +71,17 @@ describe("function declarations", () => {
     expect(element.name.text).toBe("v");
   });
 
+  it("parses numeric and string property names in object binding patterns", () => {
+    const { decl, diagnostics } = firstDeclaration('function f({ 0: a, "x-y": b }: any) {}');
+    expect(diagnostics).toHaveLength(0);
+    const pattern = decl.parameters[0].name;
+    expect(pattern.kind).toBe(SyntaxKind.ObjectBindingPattern);
+    expect(pattern.elements[0].propertyName.kind).toBe(SyntaxKind.NumericLiteral);
+    expect(pattern.elements[0].name.text).toBe("a");
+    expect(pattern.elements[1].propertyName.kind).toBe(SyntaxKind.StringLiteral);
+    expect(pattern.elements[1].name.text).toBe("b");
+  });
+
   it("falls back to a placeholder for computed keys that are not names", () => {
     const { decl } = firstDeclaration("function f({ [k + 1]: v }: any) {}");
     expect(decl.parameters[0].name.elements[0].propertyName.text).toBe("<computed>");

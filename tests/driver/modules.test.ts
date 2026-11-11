@@ -120,6 +120,17 @@ describe("bundleModules", () => {
     expect(result?.moduleCount).toBe(3);
   });
 
+  it("lowers `export * as ns` into a namespace object", () => {
+    const directory = writeFiles({
+      "dep.ts": 'export const hello = "hi";',
+      "index.ts": 'export * as ns from "./dep";',
+      "main.ts": 'import { ns } from "./index";\nconsole.log(ns.hello);',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(3);
+  });
+
   it("resolves a dynamic import into a Promise of the module namespace", () => {
     const directory = writeFiles({
       "util.ts": "export const answer = 42;",

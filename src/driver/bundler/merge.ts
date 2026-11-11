@@ -17,14 +17,13 @@ import {
   type ImportDeclaration,
   type Modifier,
   type Node,
-  type ObjectLiteralExpression,
-  type PropertyAssignment,
   type SourceFileNode,
   type Statement,
   type VariableDeclaration,
   type VariableDeclarationList,
   type VariableStatement,
 } from "../../ast/nodes.js";
+import { namespaceImportToStatement } from "./namespace-import.js";
 import type { BindingName } from "../../ast/declarations.js";
 import { SymbolKind } from "../../binder/binder.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
@@ -85,6 +84,7 @@ export function bundleModules(
   for (const record of records) prepareCommonJS(record);
 
   // Phase 2: collect each module's exported names.
+  const namespaceStatements = new Map<Statement, Statement>();
   for (const record of records) {
     const scope = moduleScope(record);
     if (!scope) continue;
@@ -114,6 +114,15 @@ export function bundleModules(
           // `export * from "..."`: copy every re-exported name.
           const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
           if (dependency) for (const [name, value] of dependency.exports) record.exports.set(name, value);
+        } else if (declaration.exportClause?.kind === SyntaxKind.NamespaceImport && declaration.moduleSpecifier) {
+          // `export * as ns from "..."`: re-export the dependency's namespace.
+          const nsName = (declaration.exportClause as { name: Identifier }).name.text;
+          const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
+          if (dependency) {
+            const finalName = `${record.prefix}${nsName}`;
+            record.exports.set(nsName, finalName);
+            namespaceStatements.set(statement, namespaceImportToStatement(statement, finalName, dependency));
+          }
         }
         continue;
       }
@@ -155,7 +164,6 @@ export function bundleModules(
   const deferredModules = computeDeferredModules(records, externalSpecifiers, moduleOverrides);
   const deferredAliases = new Map<string, DeferredAlias[]>();
   const markerTargets = new Set<string>();
-  const namespaceStatements = new Map<Statement, Statement>();
   for (const record of records) {
     const scope = moduleScope(record);
     if (!scope) continue;
@@ -433,6 +441,11 @@ export function bundleModules(
       }
       if (statement.kind === SyntaxKind.ExportDeclaration) {
         const declaration = statement as ExportDeclaration;
+        const synthetic = namespaceStatements.get(statement);
+        if (synthetic) {
+          push(record, synthetic);
+          continue;
+        }
         const inner = (declaration as unknown as { declaration?: Statement }).declaration;
         if (inner) push(record, inner);
         continue;
@@ -514,52 +527,6 @@ function stripExportModifiers(statement: Statement): void {
 /** True for anything shaped like an AST node (constructed nodes carry no trivia). */
 function isNode(value: unknown): value is Node {
   return !!value && typeof value === "object" && "kind" in (value as object);
-}
-
-/** Lower `import * as ns from "./mod"` to `const m0_ns = { ...exports }`. */
-function namespaceImportToStatement(
-  statement: Statement,
-  finalName: string,
-  dependency: ModuleRecord,
-): Statement {
-  const properties: PropertyAssignment[] = [];
-  for (const [exportedName, target] of dependency.exports) {
-    properties.push({
-      kind: SyntaxKind.PropertyAssignment,
-      name: { kind: SyntaxKind.Identifier, text: exportedName, start: statement.start, end: statement.start },
-      initializer: { kind: SyntaxKind.Identifier, text: target, start: statement.start, end: statement.start },
-      start: statement.start,
-      end: statement.start,
-    });
-  }
-  const initializer: ObjectLiteralExpression = {
-    kind: SyntaxKind.ObjectLiteralExpression,
-    properties,
-    start: statement.start,
-    end: statement.end,
-  };
-  const declaration: VariableDeclaration = {
-    kind: SyntaxKind.VariableDeclaration,
-    name: { kind: SyntaxKind.Identifier, text: finalName, start: statement.start, end: statement.start },
-    exclamation: false,
-    initializer,
-    start: statement.start,
-    end: statement.end,
-  };
-  const list: VariableDeclarationList = {
-    kind: SyntaxKind.VariableDeclarationList,
-    declarationKind: "const" as const,
-    declarations: [declaration],
-    start: statement.start,
-    end: statement.end,
-  };
-  return {
-    kind: SyntaxKind.VariableStatement,
-    declarationList: list,
-    modifiers: [],
-    start: statement.start,
-    end: statement.end,
-  };
 }
 
 /** Turn `export default expr` into a synthetic `const` declaration. */

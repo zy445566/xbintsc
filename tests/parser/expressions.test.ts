@@ -63,6 +63,11 @@ describe("arrow functions", () => {
     expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
   });
 
+  it("parses the private-field in operator", () => {
+    const { diagnostics } = parse("const test = (o: any) => #field in o;");
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
   it("scans template defaults without counting literal parens", () => {
     /* The `}` of `${x}` must continue the template, not end it: the literal
      * text contains `)` and `}` that findMatchingParen would otherwise count. */

@@ -45,6 +45,7 @@ import {
   declarationName,
   hasModifier,
   moduleScope,
+  renameImport,
   renameReferences,
   renameSymbol,
   topLevelSymbols,
@@ -304,7 +305,7 @@ export function bundleModules(
       if (clause.name) {
         const target = dependency.exports.get("default") ?? dependency.exports.get("default");
         const local = scope.symbols.get(clause.name.text);
-        if (target && local) renameReferences(local, target);
+        if (target && local) renameImport(record, local, target);
       }
       const bindings = clause.namedBindings;
       if (bindings && bindings.kind === SyntaxKind.NamedImports) {
@@ -313,7 +314,7 @@ export function bundleModules(
           const importedName = specifier.propertyName?.text ?? specifier.name.text;
           const target = dependency.exports.get(importedName);
           const local = scope.symbols.get(specifier.name.text);
-          if (target && local) renameReferences(local, target);
+          if (target && local) renameImport(record, local, target);
         }
       } else if (bindings && bindings.kind === SyntaxKind.NamespaceImport) {
         const local = scope.symbols.get(bindings.name.text);

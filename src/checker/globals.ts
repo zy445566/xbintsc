@@ -16,6 +16,7 @@ import {
   NAMESPACE_STATICS,
   NAMESPACE_VALUES,
   TYPED_ARRAYS,
+  WEB_GLOBALS,
 } from "../codegen/generator/tables.js";
 
 const KNOWN_GLOBALS: ReadonlySet<string> = new Set<string>([
@@ -28,6 +29,7 @@ const KNOWN_GLOBALS: ReadonlySet<string> = new Set<string>([
   ...Object.keys(NAMESPACE_PROPERTIES),
   ...Object.keys(NAMESPACE_VALUES),
   ...FIRST_CLASS_CONSTRUCTORS,
+  ...WEB_GLOBALS,
   // Handled directly in `emitIdentifier` rather than through a table.
   "console",
   "undefined",

@@ -38,6 +38,7 @@ import {
   NAMESPACE_PROPERTIES,
   NAMESPACE_STATICS,
   NAMESPACE_VALUES,
+  WEB_GLOBALS,
 } from "../tables.js";
 import type { GlobalValue } from "../../../extensions/registry.js";
 import type { Generator } from "../generator.js";
@@ -335,6 +336,8 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           this.reportRequireUse(identifier);
           return i64(XT_UNDEFINED);
         }
+        // Recognized web globals with no runtime yet lower to `undefined`.
+        if (WEB_GLOBALS.has(identifier.text)) return i64(XT_UNDEFINED);
         /* The parser's recovery node for a missing expression. The syntax
          * error has already been reported; "Cannot find name '<error>'" is
          * pure noise on top of it. */

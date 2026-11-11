@@ -5,7 +5,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, relative } from "node:path";
-import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type NamedExports, type Statement } from "../../ast/nodes.js";
+import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type NamedExports, type Node, type Statement } from "../../ast/nodes.js";
 import { bind } from "../../binder/binder.js";
 import { DiagnosticBag, DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { SourceFile } from "../../diagnostics/source.js";
@@ -14,6 +14,7 @@ import { Parser } from "../../parser/parser.js";
 import type { AssetLoader } from "../../extensions/registry.js";
 import { classifyDependency } from "./resolve.js";
 import { collectRequireSites, isNodeModulesPath, usesCommonJS } from "./commonjs.js";
+import { collectDynamicImportSites } from "./dynamic-import.js";
 import type { ModuleRecord, OriginRange } from "./types.js";
 
 /**
@@ -80,7 +81,7 @@ export function loadGraph(
 
   const load = (
     path: string,
-    origin?: { readonly file: string; readonly statement: Statement },
+    origin?: { readonly file: string; readonly statement: Node },
   ): ModuleRecord | undefined => {
     const existing = records.get(path);
     if (existing) return existing;
@@ -161,6 +162,24 @@ export function loadGraph(
         continue;
       }
       load(dependency.path, { file: path, statement });
+    }
+
+    // A dynamic `import("literal")` is a static edge too: the target must be
+    // bundled so the merge can lower the import to a namespace-object factory.
+    for (const site of collectDynamicImportSites(sourceFile)) {
+      const dependency = classifyDependency(dirname(path), site.specifier, externalSpecifiers);
+      if (dependency.kind === "external") continue;
+      if (dependency.kind === "missing") {
+        diagnostics.error(
+          DiagnosticCode.CodegenError,
+          `Cannot resolve dynamic import '${site.specifier}' from '${path}'`,
+          site.expression,
+          path,
+        );
+        failed = true;
+        continue;
+      }
+      load(dependency.path, { file: path, statement: site.expression });
     }
 
     // A CommonJS module's `require("...")` calls are dynamic import edges: the

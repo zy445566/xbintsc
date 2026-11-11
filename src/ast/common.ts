@@ -20,6 +20,7 @@ import type {
   ElementAccessExpression,
   FunctionExpression,
   Identifier,
+  ImportExpression,
   NewExpression,
   NoSubstitutionTemplateLiteral,
   NonNullExpression,
@@ -135,6 +136,7 @@ export type Expression =
   | ClassExpression
   | CallExpression
   | NewExpression
+  | ImportExpression
   | PropertyAccessExpression
   | ElementAccessExpression
   | ParenthesizedExpression

@@ -440,6 +440,17 @@ describe("CommonJS in node_modules", () => {
     expect(identifierTexts(result!.sourceFile).some((name) => name.endsWith("$cjs_default"))).toBe(true);
   });
 
+  it("allows a CommonJS module to reassign exports to module.exports", () => {
+    const directory = writeFiles({
+      "node_modules/reassign/package.json": '{ "name": "reassign", "main": "index.js" }',
+      "node_modules/reassign/index.js": 'exports = module.exports = {};\nexports.re = [];',
+      "main.ts": 'import m from "reassign";\nm.re;',
+    });
+    const { result, bag } = bundle(join(directory, "main.ts"));
+    expect(bag.hasErrors).toBe(false);
+    expect(result?.moduleCount).toBe(2);
+  });
+
   it("exposes a required ESM module as a synthetic namespace object", () => {
     const directory = writeFiles({
       "node_modules/c/package.json": '{ "name": "c", "main": "index.js" }',

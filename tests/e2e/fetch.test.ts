@@ -268,7 +268,9 @@ describeWithClang("fetch builtin", () => {
         const cases = [
           "not-a-url",
           "ftp://example.com/",
-          "https://example.com/",
+          /* HTTPS is supported (see tls.test.ts); a scheme with no host is
+           * still a parse error. */
+          "https://",
           "http://",
           "http://127.0.0.1:1/nope",
           "",

@@ -94,33 +94,55 @@ export function resolveLinkFeatures(
     }
     if (specificallyForced || (forceAll && !specificallyBlocked)) forced.add(feature.name);
   }
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const { feature } of declarations) {
-      if (!forced.has(feature.name)) continue;
+  /* `strict` records the features whose absence is an error: everything the
+   * user asked for, plus its `requires` closure. An auto-detected feature is
+   * allowed to be unavailable (the driver warns), but a feature the user named
+   * must either link or fail the build. */
+  const strict = new Set(forced);
+  const expand = (target: Set<string>, roots: readonly string[]): void => {
+    const queue = [...roots];
+    while (queue.length > 0) {
+      const name = queue.pop()!;
+      const feature = byName.get(name);
+      if (feature === undefined) continue;
       for (const dependency of feature.requires ?? []) {
         if (!byName.has(dependency)) {
           diagnostics.error(
             DiagnosticCode.LinkFeatureUnavailable,
-            `link feature '${feature.name}' requires unknown feature '${dependency}'`,
+            `link feature '${name}' requires unknown feature '${dependency}'`,
           );
           continue;
         }
         if (disabled.has(dependency)) {
           diagnostics.error(
             DiagnosticCode.LinkFeatureUnavailable,
-            `link feature '${feature.name}' requires '${dependency}', which --no-feature disables`,
+            `link feature '${name}' requires '${dependency}', which --no-feature disables`,
           );
           continue;
         }
-        if (!forced.has(dependency)) {
-          forced.add(dependency);
-          changed = true;
+        if (!target.has(dependency)) {
+          target.add(dependency);
+          queue.push(dependency);
         }
       }
     }
+  };
+  expand(strict, [...strict]);
+  for (const name of strict) forced.add(name);
+
+  /* Select the program's auto-detected features and pull in `requires`
+   * transitively. Dependencies are resolved for every selected feature, not
+   * just the explicitly forced ones: `node:tls` is auto-detected from the
+   * import, and the transport it builds on (`tls`) must be linked with it. */
+  const autoRoots: string[] = [];
+  for (const { feature } of declarations) {
+    if (forced.has(feature.name) || disabled.has(feature.name)) continue;
+    if (disableAll && !requested.has(feature.name)) continue;
+    if (!feature.used(usage)) continue;
+    forced.add(feature.name);
+    autoRoots.push(feature.name);
   }
+  expand(forced, autoRoots);
   if (diagnostics.hasErrors) return [];
 
   const resolved: ResolvedLinkFeature[] = [];
@@ -139,7 +161,7 @@ export function resolveLinkFeatures(
       nativeObjects = feature.nativeObjects?.() ?? [];
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (forcedHere) {
+      if (strict.has(feature.name)) {
         diagnostics.error(DiagnosticCode.LinkFeatureUnavailable, message);
       } else {
         diagnostics.warning(

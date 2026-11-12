@@ -47,6 +47,6 @@ Location: `runtime/xt_async.c`, `runtime/xt_coroutine.c`, `runtime/xt_promise.c`
 - `fetch` runs each request/redirect hop as a job; `fs/promises` runs every file and descriptor operation as a job. Neither blocks timers, sockets or other `await`s.
 - The event loop stays alive while jobs are outstanding (`xt_loop_has_work`), and exits once the pool is idle again.
 
-Known limits of the asynchronous surface (no TLS/streaming `fetch`, inert
+Known limits of the asynchronous surface (streaming/abortable `fetch`, inert
 `fs.watch`, four-worker pool) are listed in
 [Runtime deviations](../unimplemented/deviations.md) and the Node pages.

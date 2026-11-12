@@ -1,5 +1,9 @@
 /**
- * Node's `http2` module — a stub (HTTP/2 is not implemented).
+ * Node's `http2` module — importable bindings.
+ *
+ * The implementation is the optional `http2` link feature (nghttp2 over
+ * cleartext h2c or TLS/ALPN `h2`); this module keeps the import surface stable
+ * and forwards to it. See `feature.ts` for the feature selection.
  */
 
 import type { NodeModule } from "../module.js";
@@ -10,6 +14,7 @@ const exports: ModuleExports = {
   connect: { symbol: "xt_http2_connect" },
   createServer: { symbol: "xt_http2_create_server" },
   createSecureServer: { symbol: "xt_http2_create_secure_server" },
+  constants: { valueSymbol: "xt_http2_constants" },
 };
 
 export const http2Module: NodeModule = {

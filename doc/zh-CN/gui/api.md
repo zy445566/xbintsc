@@ -101,7 +101,7 @@ requestAnimationFrame(frame);
 | `navigator` | `userAgent`（以 `xbintsc` 结尾的桌面 Chrome 字符串）、`platform`、`vendor`、`language(s)`、`hardwareConcurrency`、`maxTouchPoints`、`onLine`、`vibrate()` |
 | `localStorage` | 内存中的 `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` |
 | `AudioContext`、`webkitAudioContext` | 带真实混音器与解码器的 Web Audio 图（见下） |
-| `fetch(input, init)` | 核心运行时的 HTTP/1.1 客户端，GUI 程序同样可用：支持 `http://`、本地 `file://` 与相对路径；不支持 `https://` 与流式响应。见[已实现的 fetch](../../implemented/fetch.md)。 |
+| `fetch(input, init)` | 核心运行时的 HTTP/1.1 客户端，GUI 程序同样可用：支持 `http://` 与 `https://`（后者链接可选的 `tls` 特性）、本地 `file://` 与相对路径；响应整体缓冲。见[已实现的 fetch](../../implemented/fetch.md)。 |
 | `Event`、`CustomEvent`、`ProgressEvent`、`MouseEvent`、`KeyboardEvent`、`PointerEvent`、`WheelEvent`、`FocusEvent`、`InputEvent`、`SubmitEvent` | 事件构造器；`init` 参数按原样保留（`detail`、`composed`、鼠标/键盘字段等） |
 | `AbortController`、`AbortSignal` | 真实的 controller/signal 对，用于 `{ signal }` 移除监听器，支持 `abort()`、`aborted`、`reason`、`onabort` 与 `throwIfAborted()` |
 | `HTMLCanvasElement`、`HTMLImageElement`、`WebGLRenderingContext`、`WebGL2RenderingContext`、`WebGLBuffer`/`WebGLTexture`/`WebGLShader`/`WebGLProgram`/`WebGLFramebuffer`/`WebGLRenderbuffer`/`WebGLUniformLocation`/`WebGLActiveInfo`/`WebGLVertexArrayObject`/`WebGLSampler`/`WebGLQuery`/`WebGLSync`/`WebGLTransformFeedback` | 真实的构造函数值。`canvas.getContext("webgl")` 与 `getContext("webgl2")` 返回 GPU 上下文（见 [WebGL](./webgl.md)）。 |

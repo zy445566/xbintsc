@@ -2,12 +2,12 @@
 
 > 属于[Node 扩展：未实现](../node.md) · [English](../../../unimplemented/node/modules.md)
 
-以下 Node 内置模块没有任何对应扩展 / 内置函数（`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` / `dgram` / `http` / `events` / `util` / `querystring` / `readline` / `assert` / `test` 已实现，`crypto` / `url` / `child_process` / `zlib` / `stream/promises` / `worker_threads` 部分实现，见[已实现：Node 扩展](../../implemented/node.md)）：
+以下 Node 内置模块没有任何对应扩展 / 内置函数（`fs` / `fs/promises` / `path` / `os` / `process` / `buffer` / `stream` / `dgram` / `http` / `tls` / `http2` / `events` / `util` / `querystring` / `readline` / `assert` / `test` 已实现，`crypto` / `url` / `child_process` / `zlib` / `stream/promises` / `worker_threads` 部分实现，见[已实现：Node 扩展](../../implemented/node.md)）：
 
 | 模块 | 说明 |
 | --- | --- |
-| `https` | TLS 版 HTTP |
-| `tls` / `cluster` / `vm` | 其余未列出的核心模块 |
+| `https` | TLS 版 HTTP；可直接使用 `http2` / `tls`，或对 `https://` 使用 `fetch` |
+| `cluster` / `vm` | 其余未列出的核心模块 |
 
 > `crypto`（仅 `createHash`，现支持流式 API）、`url`（仅 `pathToFileURL` / `fileURLToPath`）、
 > `child_process`（仅 `spawnSync` / `spawn` / `execFile` / `execSync`）、

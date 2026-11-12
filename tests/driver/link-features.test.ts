@@ -75,6 +75,19 @@ describe("resolveLinkFeatures", () => {
     ).toEqual(["media"]);
   });
 
+  it("pulls in the requirements of an auto-detected feature", () => {
+    /* `node-tls` is found from the import string; `tls` is not used by the
+     * program directly and must still be linked because of `requires`. */
+    const registry = registryWith(
+      feature("tls", "https://"),
+      feature("node-tls", "node:tls", { requires: ["tls"] }),
+    );
+    expect(resolve(registry, { ...EMPTY_USAGE, strings: ["node:tls"] }).names).toEqual([
+      "tls",
+      "node-tls",
+    ]);
+  });
+
   it("activates required features and rejects a blocked dependency", () => {
     const registry = registryWith(
       feature("gpu", "webgl"),

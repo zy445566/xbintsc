@@ -43,6 +43,7 @@
     "runtime": "tsx scripts/build-runtime.ts",
     "gui": "tsx scripts/build-gui.ts",
     "media": "tsx scripts/build-media.ts",
+    "tls": "tsx scripts/build-tls.ts",
     "package-release": "tsx scripts/package-release.ts",
     "package-platform": "tsx scripts/package-platform.ts",
     "platform-versions": "tsx scripts/set-platform-version.ts",

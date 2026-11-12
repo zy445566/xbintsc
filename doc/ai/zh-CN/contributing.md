@@ -152,7 +152,13 @@ C 改动必须重建运行时才会生效：
 npm run runtime            # tsx scripts/build-runtime.ts -> runtime/lib/<os>-<arch>/
 npm run runtime:clean      # 删除 build/runtime-obj 与 runtime/lib
 npm run package-platform   # 把宿主归档打包 -> dist/npm-platform/*.tgz
+npm run tls                # 构建可选的 mbedTLS/nghttp2 特性归档
 ```
+
+`npm run tls` 会把固定版本的 mbedTLS 与 nghttp2 下载到 `vendor/`（与
+`gui`/`media` 一样被 git 忽略），并把 `tls`/`nghttp2` 写入
+`runtime/lib/<os>-<arch>/`。缺少这些归档时 `tls`/`http2`/https-fetch 端到端测试会
+跳过，因此改动 TLS 或 HTTP/2 后请先运行一次再跑 `npm test`。
 
 `package-platform` 生成可选的 `@xbintsc/<os>-<arch>` npm 包；CI 会为每个宿主上传
 它，`release.yml` 在发布 `xbintsc` 之前先发布这些平台包。发布前

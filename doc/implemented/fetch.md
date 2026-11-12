@@ -4,15 +4,23 @@
 
 Location: `runtime/xt_fetch.c`, `runtime/xt_fetch/async.inc`, `runtime/xt_async_io.c`.
 
-- Global `fetch(input, init)` is an HTTP/1.1 client. The blocking socket exchange
+- Global `fetch(input, init)` is an HTTP/1.1 client over either `http://` or
+  `https://`. The blocking socket exchange
   (`getaddrinfo`, connect, send, receive) runs on the asynchronous I/O worker
   pool, so a request in flight does **not** stall the event loop: timers, sockets
   and other `await`s keep running and the promise settles when the reactor
   dispatches the completed exchange.
 - Redirects are followed on the main thread: each hop is one offloaded
   exchange, up to 20 redirects, and a 301/302/303 switches POST to GET.
-- It accepts `http://` URLs only — `https://` rejects with a `TypeError` because
-  no TLS backend is linked.
+- It accepts `http://` and `https://` URLs. HTTPS is served by the optional
+  `tls` link feature (vendored mbedTLS): the compiler selects it for an
+  `https://` literal (or `--feature tls`), and a program that never makes an
+  HTTPS request pays nothing. Without the archive a request rejects with a
+  `TypeError` naming the missing feature. Certificates are verified against the
+  platform trust store (Windows `ROOT`, Linux CA bundles, macOS
+  `/etc/ssl/cert.pem`); `NODE_EXTRA_CA_CERTS` names an extra PEM bundle to
+  trust, which is how a private or self-signed CA is used. `fetch` takes no
+  `ca` option in `init`.
 - A reference with **no scheme** (a relative path) and `file://` URLs read a
   local file, so a compiled program can load an asset from disk without an HTTP
   server. Relative paths resolve against the working directory; `GET` / `HEAD`
@@ -45,5 +53,12 @@ setTimeout(() => console.log("timer"), 10); // runs before the 150ms response
 await pending;
 ```
 
-Known limits (only `http://`, no TLS, buffered body) are listed in
+An HTTPS request works the same way once the `tls` feature is linked:
+
+```ts
+const response = await fetch("https://example.com/status");
+console.log(response.status, await response.text());
+```
+
+Known limits (buffered body, no streaming or abort signal) are listed in
 [Runtime deviations](../unimplemented/deviations.md).

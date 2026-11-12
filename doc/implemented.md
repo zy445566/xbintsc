@@ -38,14 +38,14 @@ small file instead of a single monolithic document.
 - [Collections](./implemented/collections.md) — Map, Set, WeakMap, WeakSet, WeakRef, iteration
 - [Typed arrays and binary data](./implemented/typed-arrays.md) — typed arrays, ArrayBuffer, DataView
 - [Async, promises and generators](./implemented/async.md) — async/await, async generators, promises, timers
-- [fetch](./implemented/fetch.md) — reactor-driven HTTP/1.1 client and Headers
+- [fetch](./implemented/fetch.md) — reactor-driven HTTP/1.1 client (HTTP and HTTPS) and Headers
 - [WebAssembly](./implemented/wasm.md) — the `WebAssembly` namespace surface (bytecode execution is not implemented)
 
 ### Modules and tooling
 
 - [Module system](./implemented/modules.md) — import/export, bundling, `node_modules`, `import.meta`
 - [Extension mechanism](./implemented/extensions.md) — registry, the `node` extension, native C++/Rust extensions
-- [Node extension](./implemented/node.md) — 21 Node built-in modules, one page per module
+- [Node extension](./implemented/node.md) — 24 Node built-in modules, one page per module
 - [Storage extension](./implemented/storage.md) — SQLite-backed `localStorage`, `sessionStorage` and `indexedDB`
 - [Driver, incremental compilation and toolchain](./implemented/driver.md) — cache, clang/LTO/PGO, config, icons
 - [CLI and programmatic API](./implemented/cli.md) — commands, flags, embedder API

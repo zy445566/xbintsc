@@ -29,6 +29,8 @@ work on another. Missing or different behaviour is recorded under
 | `net` | [net](./node/net.md) | TCP server and client |
 | `dgram` | [dgram](./node/dgram.md) | UDP sockets |
 | `http` | [http](./node/http.md) | server and client, `Connection: close` |
+| `tls` | [tls](./node/tls.md) | mbedTLS client/server (`node-tls` link feature) |
+| `http2` | [http2](./node/http2.md) | nghttp2 h2c and TLS/ALPN (`http2` link feature) |
 | `child_process` | [child_process](./node/child-process.md) | `spawnSync` / `spawn` / `execFile` / `execSync` |
 | `events` | [events](./node/events.md) | `EventEmitter` (global and named export) |
 | `util` | [util](./node/util.md) | formatting, inspection and predicates |
@@ -47,6 +49,12 @@ Additional small modules are provided with their core surface: `timers`
 (`isatty`), `module` (`createRequire`/`isBuiltin`), `string_decoder`
 (`StringDecoder`), `diagnostics_channel` (`channel`/`tracingChannel`), and
 `util/types` (the type predicates).
+
+`tls` and `http2` are implemented as optional **link features** backed by the
+vendored mbedTLS and nghttp2 libraries: `npm run tls` fetches and builds
+`runtime/lib/<os>-<arch>/{tls,nghttp2}.{a,lib}`, and the driver links them only
+when the program may use them. A checkout without those archives still compiles,
+but the calls report a clear runtime error until `npm run tls` has run.
 
 ## Where does a change belong?
 

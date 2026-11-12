@@ -13,6 +13,7 @@
 
 import type { LinkFeature } from "./link-feature.js";
 import { storageGlobals, storageLinkFeatures } from "./storage.js";
+import { tlsFeature } from "./tls.js";
 
 export interface BuiltinFunction {
   /** Exported C symbol, called as `xt_value symbol(int32_t argc, xt_value *argv)`. */
@@ -355,7 +356,7 @@ export const coreExtension: Extension = {
     print: { symbol: "xt_println" },
   }),
   globalValues: () => storageGlobals,
-  linkFeatures: () => storageLinkFeatures,
+  linkFeatures: () => [...storageLinkFeatures, tlsFeature],
 };
 
 export function createDefaultRegistry(): ExtensionRegistry {

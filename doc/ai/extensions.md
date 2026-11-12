@@ -47,6 +47,7 @@ resolve to the same implementation.
 | `stream`, `stream/promises` | |
 | `events` | |
 | `net`, `dgram`, `http` | sockets and servers on the xbintsc event loop (see the async caveat below) |
+| `tls`, `http2` | mbedTLS client/server and nghttp2 h2c/TLS+ALPN; optional link features built by `npm run tls` |
 | `child_process` | |
 | `worker_threads` | |
 | `util`, `querystring`, `url`, `assert`, `test`, `zlib` | |
@@ -128,9 +129,10 @@ glslang. Queries, atomics and DOM-image uploads report validation errors; see
 [../gui/webgpu.md](../gui/webgpu.md). WebXR and streaming are **not**
 implemented: `typeof` answers `"undefined"` so a page takes its own fallback
 branch. `fetch`
-is **not** a GUI extension feature: the core runtime provides it (`http://`,
-plus local `file://` and relative paths; no HTTPS or streaming), so GUI
-programs can use it too. See [../implemented/fetch.md](../implemented/fetch.md).
+is **not** a GUI extension feature: the core runtime provides it (`http://` and
+`https://`, plus local `file://` and relative paths; HTTPS links the optional
+`tls` feature, and responses are buffered), so GUI programs can use it too. See
+[../implemented/fetch.md](../implemented/fetch.md).
 
 ### `storage` — SQLite-backed Web Storage and IndexedDB (a core link feature)
 

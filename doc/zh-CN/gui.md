@@ -99,7 +99,7 @@
 `vulkan-sdk-1.4.313.0`、FFmpeg `7.1`（供可选的 `media` 归档使用；可用
 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` / `GLSLANG_VERSION` /
 `SPIRV_CROSS_VERSION` / `FFMPEG_VERSION` 覆盖）。默认文本后端是内置的
-`stb_truetype.h`；它只接受 TrueType 轮廓（不支持 CFF/OTF 或可变字体）。
+`vendor/stb/stb_truetype.h`；它只接受 TrueType 轮廓（不支持 CFF/OTF 或可变字体）。
 `shaping` 特性会换成 HarfBuzz + FreeType，提供完整 OpenType 整形。
 
 如果否决 SDL3，备选是 **GLFW + OpenGL 3.3**（更简单，但 OpenGL 在 macOS 上

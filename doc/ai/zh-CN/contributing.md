@@ -7,10 +7,15 @@
 
 ```bash
 npm install
+npm run vendor           # 把固定版本的 stb/NanoSVG/miniz/SQLite 源码取到 vendor/
 npm run typecheck        # tsc --noEmit
 npm run lint             # eslint + 600 行文件预算
 npm test                 # 单元测试 + 端到端测试
 ```
+
+`vendor/` 不提交进仓库：`npm run vendor` 会按不可变的固定版本获取每个包并校验其
+SHA-256（`npm test` 通过 `pretest` 自动运行）。只有 `gui` 构建以及使用 `storage` 或
+`compression` 的程序需要这些文件。
 
 从源码运行编译器需要 Node.js ≥ 22；任何会链接二进制的操作都需要 **clang 16+** 工具链
 （见 [troubleshooting.md](./troubleshooting.md)）。`xbintsc emit` 既不需要 clang 也不需要
@@ -149,6 +154,7 @@ diff scratch/ref.ll scratch/gen2.ll
 C 改动必须重建运行时才会生效：
 
 ```bash
+npm run vendor             # 获取固定版本的 vendored 源码 -> vendor/
 npm run runtime            # tsx scripts/build-runtime.ts -> runtime/lib/<os>-<arch>/
 npm run runtime:clean      # 删除 build/runtime-obj 与 runtime/lib
 npm run package-platform   # 把宿主归档打包 -> dist/npm-platform/*.tgz

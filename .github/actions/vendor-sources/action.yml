@@ -1,0 +1,23 @@
+name: Vendored sources
+description: Fetch the pinned third-party C sources into vendor/ (cached by pin set)
+
+# The sources in vendor/ are vendored by version but not committed (see
+# scripts/fetch-vendored.ts). Every job that builds the runtime, the GUI archive,
+# tests a storage/compression program or packages a release needs them. Run this
+# after `npm ci` (tsx is a dev dependency) and before any build step.
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v5
+      with:
+        # Only the fetched packages, never the whole vendor/ tree: the GUI/media
+        # libraries have caches of their own, keyed by their build scripts.
+        path: |
+          vendor/stb
+          vendor/nanosvg
+          vendor/miniz
+          vendor/sqlite3
+        key: vendored-sources-${{ hashFiles('scripts/fetch-vendored.ts') }}
+    - name: Fetch vendored sources
+      run: npm run vendor
+      shell: bash

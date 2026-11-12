@@ -83,6 +83,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Fetch vendored sources
+        uses: ./.github/actions/vendor-sources
+
       # Building SDL3 from source is the slow part of the GUI
       # archive; cache them, keyed by the build script (which pins the versions).
       # The SDL3 *build* tree is deliberately absent: a CMake build tree records

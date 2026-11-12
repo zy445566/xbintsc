@@ -7,7 +7,9 @@
  * and installs its raw-DEFLATE backend into the `zlib` module.
  */
 
+import { join } from "node:path";
 import type { LinkFeature, ProgramUsage } from "../../link-feature.js";
+import { findVendorDir } from "../../../driver/paths.js";
 import { resolveFrom } from "../module.js";
 
 const COMPRESSION_IDENTIFIERS: ReadonlySet<string> = new Set([
@@ -37,12 +39,15 @@ const COMPRESSION_IDENTIFIERS: ReadonlySet<string> = new Set([
 export const compressionFeature: LinkFeature = {
   name: "compression",
   description: "miniz DEFLATE compression/decompression for node:zlib",
-  runtimeSources: () => [
-    resolveFrom(import.meta.url, "../../../../runtime/ext_node/zlib/miniz/miniz.c"),
-    resolveFrom(import.meta.url, "../../../../runtime/ext_node/zlib/miniz/miniz_tdef.c"),
-    resolveFrom(import.meta.url, "../../../../runtime/ext_node/zlib/miniz/miniz_tinfl.c"),
-    resolveFrom(import.meta.url, "../../../../runtime/ext_node/zlib/miniz/compression_bridge.c"),
-  ],
+  runtimeSources: () => {
+    const miniz = join(findVendorDir(), "miniz");
+    return [
+      join(miniz, "miniz.c"),
+      join(miniz, "miniz_tdef.c"),
+      join(miniz, "miniz_tinfl.c"),
+      resolveFrom(import.meta.url, "../../../../runtime/ext_node/zlib/compression_bridge.c"),
+    ];
+  },
   used: (usage: ProgramUsage): boolean =>
     [...usage.identifiers].some((name) => COMPRESSION_IDENTIFIERS.has(name)),
 };

@@ -17,7 +17,7 @@
 import { join } from "node:path";
 import type { GlobalValue } from "./registry.js";
 import type { LinkFeature, ProgramUsage } from "./link-feature.js";
-import { findRuntimeDir } from "../driver/paths.js";
+import { findRuntimeDir, findVendorDir } from "../driver/paths.js";
 
 /** The browser storage globals resolved by the core extension. */
 export const storageGlobals: Readonly<Record<string, GlobalValue>> = {
@@ -44,10 +44,11 @@ export const storageLinkFeatures: readonly LinkFeature[] = [
      * sources, so it is compiled and linked only when the feature is active.
      * `storage.c` defines the `xt_storage_local` / `xt_storage_session` globals
      * the code generator reaches for, and `indexed_db.c` / `indexed_db_store.c`
-     * define `xt_storage_indexed_db`; all three reference the vendored SQLite.
+     * define `xt_storage_indexed_db`; all three reference the vendored SQLite
+     * fetched into `vendor/sqlite3` (see `npm run vendor`).
      */
     runtimeSources: () => [
-      join(findRuntimeDir(), "xt_storage", "sqlite3", "sqlite3.c"),
+      join(findVendorDir(), "sqlite3", "sqlite3.c"),
       join(findRuntimeDir(), "xt_storage", "storage.c"),
       join(findRuntimeDir(), "xt_storage", "indexed_db.c"),
       join(findRuntimeDir(), "xt_storage", "indexed_db_store.c"),

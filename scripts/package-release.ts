@@ -21,6 +21,7 @@
  *   xbintsc-<os>-<arch>/
  *     bin/xbintsc[.exe]     the self-hosted compiler
  *     runtime/              C runtime sources + prebuilt runtime/lib/<slug>
+ *     vendor/               pinned third-party sources (fetched, not committed)
  *     README.md
  *
  * The compiler locates `runtime/` relative to its own executable (see
@@ -108,13 +109,22 @@ console.log("xbintsc: copying runtime/ into the staging tree");
 cpSync(findRuntimeDir(), join(stage, "runtime"), { recursive: true });
 console.log("xbintsc: packaged runtime/");
 
-// 3. Human-facing notes.
+// 3. Vendored sources the driver compiles on demand (SQLite for `storage`,
+// miniz for `compression`). They are fetched by `npm run vendor`, not committed.
+for (const name of ["stb", "nanosvg", "miniz", "sqlite3"]) {
+  const source = join(root, "vendor", name);
+  if (!existsSync(source)) fail(`missing vendor/${name}; run \`npm run vendor\` before packaging`);
+  cpSync(source, join(stage, "vendor", name), { recursive: true });
+}
+console.log("xbintsc: packaged vendor/");
+
+// 4. Human-facing notes.
 for (const name of ["README.md", "LICENSE"]) {
   const source = join(root, name);
   if (existsSync(source)) copyFileSync(source, join(stage, name));
 }
 
-// 4. Archive it. Prefer zstd when available, otherwise gzip.
+// 5. Archive it. Prefer zstd when available, otherwise gzip.
 const hasZstd = !spawnSync("zstd", ["--version"], { stdio: "ignore" }).error;
 const extension = releaseArchiveExtension(hasZstd);
 const archive = join(releaseRoot, `${archiveBase}${extension}`);
@@ -128,7 +138,7 @@ const tar = spawnSync("tar", tarArgs, { stdio: "inherit" });
 if (tar.error) fail(`failed to run tar: ${tar.error.message}`);
 if (tar.status !== 0) fail(`tar exited with ${tar.status}`);
 
-// 5. Checksum, so users can verify the download.
+// 6. Checksum, so users can verify the download.
 const digest = createHash("sha256").update(readFileSync(archive)).digest("hex");
 writeFileSync(`${archive}.sha256`, `${digest}  ${basename(archive)}\n`);
 

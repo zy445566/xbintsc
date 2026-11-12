@@ -4,7 +4,8 @@
 
 The three browser storage globals — `localStorage`, `sessionStorage` and
 `indexedDB` — are always available (they are core globals), backed by a
-vendored SQLite (`runtime/xt_storage/sqlite3`). No extension flag is needed.
+vendored SQLite (`vendor/sqlite3`, fetched by `npm run vendor`). No extension
+flag is needed.
 
 ## Backend selection
 

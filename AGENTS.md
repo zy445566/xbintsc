@@ -104,6 +104,11 @@ doc/                               the detailed, canonical documentation
 - **Run the gate before you claim done:** `npm run typecheck && npm run lint &&
   npm test`. End-to-end tests compile and run real binaries, so they need clang;
   they skip when it is missing.
+- **Third-party sources live in `vendor/`, not in git.** `npm run vendor`
+  fetches the pinned stb/NanoSVG/miniz/SQLite sources
+  (`scripts/fetch-vendored.ts`); `npm run gui` and the test scripts fetch what
+  they need. Never commit files under `vendor/`; change a pin deliberately and
+  update its SHA-256 instead.
 - **Runtime changes are C.** Compiled functions use one ABI —
   `xt_value fn(xt_value env, int32_t argc, xt_value *argv)` — and every value is
   one NaN-boxed 64-bit word (see `runtime/rt.h`, `src/codegen/values.ts`).

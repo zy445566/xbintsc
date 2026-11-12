@@ -51,6 +51,10 @@ const VENDORED_FILES = new Set([
   join("runtime", "ext_node", "zlib", "miniz", "miniz_tinfl.h"),
   join("runtime", "ext_node", "zlib", "miniz", "miniz_common.h"),
   join("runtime", "ext_node", "zlib", "miniz", "miniz_export.h"),
+  // SQLite, the single-file amalgamation backing the `storage` extension
+  // (localStorage / sessionStorage / indexedDB), ships verbatim.
+  join("runtime", "xt_storage", "sqlite3", "sqlite3.c"),
+  join("runtime", "xt_storage", "sqlite3", "sqlite3.h"),
 ]);
 
 /** Machine-generated files: they are reproduced from their sources by a script,

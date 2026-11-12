@@ -132,6 +132,32 @@ is **not** a GUI extension feature: the core runtime provides it (`http://`,
 plus local `file://` and relative paths; no HTTPS or streaming), so GUI
 programs can use it too. See [../implemented/fetch.md](../implemented/fetch.md).
 
+### `storage` — SQLite-backed Web Storage and IndexedDB (a core link feature)
+
+`localStorage`, `sessionStorage` and `indexedDB` are always-available globals
+(contributed by the core extension), implemented on a vendored SQLite (see
+[../implemented/storage.md](../implemented/storage.md)). No extension flag is
+needed:
+
+```bash
+xbintsc run app.ts
+```
+
+The backend is chosen at build time from `storage` in `xbintsc.config.json`; it
+defaults to an **in-memory** database, and `sessionStorage` is always in-memory:
+
+```json
+{ "storage": { "backend": "file", "path": "data/app.db" } }
+```
+
+`storage.path` resolves against the config file (absolute paths are used
+as-is). SQLite is heavy, so the whole implementation is a **link feature** named
+`storage`: the compiler scans the program and links it only when the code
+reaches one of the globals — a program that never touches storage pays nothing.
+`--feature storage` / `--no-feature storage` override the detection. `indexedDB`
+is a focused subset (`open`, object stores, `put`/`add`/`get`/`getAll`/`delete`/
+`clear`/`count`); no indexes, cursors or `IDBKeyRange`.
+
 ### Optional link features (`media`, `gpu`, `images`, `shaping`, `webgl`)
 
 `gui` is one extension, but its heavy halves are optional **link features**. The

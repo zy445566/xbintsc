@@ -21,6 +21,7 @@ import { BuildCache } from "./cache.js";
 import { findRuntimeDir, platformSlug } from "./paths.js";
 import { resolveToolchain, type ResolvedToolchain } from "./toolchain-provider.js";
 import { readIcon, IconError, type IconInfo } from "./icon.js";
+import { ensureStorageObject, resolveStorage } from "./storage.js";
 import { bundlePathFor, packageMacApp } from "./mac-bundle.js";
 import type { AppConfig } from "./config.js";
 import { compileIr, link, mergeProfileData, realRunner, ToolchainError } from "./toolchain.js";
@@ -178,6 +179,8 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     }
   }
 
+  const storage = resolveStorage(options.storage);
+
   const runtimeDir = findRuntimeDir();
   const cacheKey = buildCacheKey({
     sourceText: parsed.cacheText,
@@ -187,6 +190,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     runtimeDir,
     icon,
     app,
+    storage,
     debug: options.debug === true,
     lto,
     check: options.check !== false,
@@ -332,6 +336,14 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     return { outputPath, irPath, cached: false, diagnostics: diagnostics.diagnostics, ir };
   }
 
+  /* The storage extension reads its backend/path from an embedded object, the
+   * same way the GUI reads the icon. Only linked when the storage link feature
+   * is active (the program actually reaches a storage global). */
+  const storageObjects: string[] = [];
+  if (linkFeatures.some((feature) => feature.name === "storage")) {
+    storageObjects.push(ensureStorageObject(runner, clang, cacheDir, storage, toolchain.env, toolchain.sdkRoot));
+  }
+
   const linkAssembled = (runtimeObjects: RuntimeObjects): string => {
     const started = Date.now();
     const result = link(runner, {
@@ -349,6 +361,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
           ...runtimeObjects.nativeObjects,
           ...(artifacts.entryObject !== undefined ? [artifacts.entryObject] : []),
           ...artifacts.iconObjects,
+          ...storageObjects,
         ]),
       ],
       outputPath,

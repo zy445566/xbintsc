@@ -5,7 +5,7 @@
  * optional backend supplied by the separate `media` extension. That backend
  * installs its table through `xt_media_install` from a bridge object that is
  * linked directly when the extension is enabled (see
- * `runtime/ext_media/media_bridge.c`), so this translation unit stays tiny and
+ * `runtime/xt_media/media_bridge.c`), so this translation unit stays tiny and
  * FFmpeg-free.
  *
  * A program built with `--ext gui` alone leaves `g_api` null. `MediaPlayer::open`

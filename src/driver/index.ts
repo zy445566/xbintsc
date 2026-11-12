@@ -19,7 +19,15 @@ export {
   type AppConfig,
   type LoadedProjectConfig,
   type ProjectConfig,
+  type StorageConfig,
 } from "./config.js";
+export {
+  ensureStorageObject,
+  resolveStorage,
+  storageSource,
+  STORAGE_SYMBOLS,
+  type ResolvedStorage,
+} from "./storage.js";
 export {
   ensureIconObject,
   iconSource,

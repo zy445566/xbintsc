@@ -70,8 +70,8 @@ opacity、`display`——与任何其他元素一样。盒子内部的艺术内�
   声明播放器接口，并通过媒体后端在启动时安装的函数表分发
   （`runtime/ext_gui/media_api.h`）。
 - **`media`**（`media.a`，Windows 上 MSVC ABI 则为 `media.lib`；
-  `runtime/ext_media/`）是可选的解码后端：`runtime/ext_media/media.cpp`
-  封装静态 vendored 的 **FFmpeg** 构建，`runtime/ext_media/media_bridge.c`
+  `runtime/xt_media/`）是可选的解码后端：`runtime/xt_media/media.cpp`
+  封装静态 vendored 的 **FFmpeg** 构建，`runtime/xt_media/media_bridge.c`
   把它注册进引擎。编译器在程序可能用到媒体时（导入 HTML 里的
   `<video>`/`<audio>`、`createElement("video"/"audio")`、`new Audio()`、
   `decodeAudioData`，或运行时拼出的 HTML）自动选中该特性，只在那时才编译
@@ -104,7 +104,7 @@ opacity、`display`——与任何其他元素一样。盒子内部的艺术内�
 - **线程。** 引擎是单线程且非线程感知，因此所有解码都在主线程的
   `xt_gui_media_tick` 内完成——没有解码线程，也没有跨线程 GC 暴露。
 - **`decodeAudioData`。** 同一套 FFmpeg 还会为 `AudioContext.decodeAudioData`
-  解码内存中的音频文件（`runtime/ext_media/decode_audio.cpp`，经媒体表分发）；
+  解码内存中的音频文件（`runtime/xt_media/decode_audio.cpp`，经媒体表分发）；
   WAV 由 GUI 引擎自身处理（`audio_decode.cpp`），因此只有压缩格式需要该扩展。
 - **DOM API。** 元素句柄直接暴露媒体接口（见
   `runtime/ext_gui/dom_api_media.cpp` 与 `dom_api_proto.cpp` 中的原型）：

@@ -151,7 +151,9 @@ const browserGlobals: Record<string, { symbol: string; argument?: string }> = {
   self: { symbol: "xt_browser_window" },
   document: { symbol: "xt_browser_document" },
   navigator: { symbol: "xt_browser_navigator" },
-  localStorage: { symbol: "xt_browser_local_storage" },
+  /* `localStorage` (and `sessionStorage` / `indexedDB`) are core globals backed
+   * by the SQLite `storage` link feature, so a page reaches them through core
+   * rather than the engine's in-memory `window.localStorage` store. */
   __THREE_DEVTOOLS__: { symbol: "xt_browser_missing" },
   createImageBitmap: { symbol: "xt_browser_create_image_bitmap" },
 };

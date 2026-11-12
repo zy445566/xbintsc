@@ -84,9 +84,9 @@ not a separate extension:
   dispatches through a table the media backend installs at startup
   (`runtime/ext_gui/media_api.h`).
 - **`media`** (`media.a`, or `media.lib` with the MSVC ABI on Windows;
-  `runtime/ext_media/`) is the optional decoder backend:
-  `runtime/ext_media/media.cpp` wraps a statically vendored **FFmpeg** build,
-  and `runtime/ext_media/media_bridge.c` registers it with the engine. The
+  `runtime/xt_media/`) is the optional decoder backend:
+  `runtime/xt_media/media.cpp` wraps a statically vendored **FFmpeg** build,
+  and `runtime/xt_media/media_bridge.c` registers it with the engine. The
   compiler selects the feature when the program may use it (a `<video>`/`<audio>`
   element in imported HTML, `createElement("video"/"audio")`, `new Audio()`,
   `decodeAudioData`, or runtime-built markup) and only then compiles the bridge
@@ -128,7 +128,7 @@ platform media framework in the path either way.
   decoding happens on the main thread inside `xt_gui_media_tick` — no decode
   thread, no cross-thread GC exposure.
 - **`decodeAudioData`.** The same FFmpeg build also decodes an in-memory audio
-  file for `AudioContext.decodeAudioData` (`runtime/ext_media/decode_audio.cpp`,
+  file for `AudioContext.decodeAudioData` (`runtime/xt_media/decode_audio.cpp`,
   through the media table); WAV is handled by the GUI engine itself
   (`audio_decode.cpp`), so only compressed formats need this extension.
 - **DOM API.** Element handles expose the media surface directly (see

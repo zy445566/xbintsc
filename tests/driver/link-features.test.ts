@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DiagnosticBag, DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
-import { createDefaultRegistry, type Extension, type ExtensionRegistry } from "../../src/extensions/registry.js";
+import { createDefaultRegistry, ExtensionRegistry, type Extension } from "../../src/extensions/registry.js";
 import type { LinkFeature, ProgramUsage } from "../../src/extensions/link-feature.js";
 import { resolveLinkFeatures } from "../../src/driver/link-features.js";
 
@@ -34,7 +34,9 @@ function feature(
 
 function registryWith(...features: readonly LinkFeature[]): ExtensionRegistry {
   const extension: Extension = { name: "fake", linkFeatures: () => features };
-  return createDefaultRegistry().register(extension);
+  /* A bare registry keeps these tests isolated from the always-on core
+   * extension, which contributes its own `storage` link feature. */
+  return new ExtensionRegistry().register(extension);
 }
 
 function resolve(

@@ -5,7 +5,7 @@
 
 - Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`
   (gitignored; fetched on demand). Media decoding lives in
-  `runtime/ext_media/` and is built separately.
+  `runtime/xt_media/` and is built separately.
 - `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
   default `release-3.2.10`), builds a static SDL3, fetches and builds static
   **FreeType** (`FREETYPE_VERSION`, default `2.13.3`) and **HarfBuzz**
@@ -43,7 +43,7 @@
 - `npm run media` (`scripts/build-media.ts`) builds the optional **FFmpeg**
   backend. It fetches FFmpeg (`FFMPEG_VERSION`, default `7.1`), configures a
   minimal static build with only the demuxers/parsers/decoders the media
-  elements need, compiles `runtime/ext_media/media.cpp` against it and merges
+  elements need, compiles `runtime/xt_media/media.cpp` against it and merges
   everything into `runtime/lib/<os>-<arch>/media.a` (`media.lib` with the MSVC
   ABI on Windows). The download retries the transient TLS failures the release
   host is prone to, and the tarball is kept at
@@ -148,7 +148,7 @@ features conservatively.
 When a feature is active, the driver compiles its C **bridge only for that
 build** and links it before `gui.a`:
 
-- `media` → `runtime/ext_media/media_bridge.c`; its constructor installs the
+- `media` → `runtime/xt_media/media_bridge.c`; its constructor installs the
   decoder table and references `xt_media_backend_*`, which is what extracts the
   FFmpeg members from `media.a`.
 - `gpu` → `runtime/ext_gui/gpu_bridge.c`; its constructor calls

@@ -4,7 +4,7 @@
  * The GUI engine itself is always linked with `--ext gui`; these are the two
  * heavy halves a program may never touch:
  *
- *   - `media` — the FFmpeg decoder backend (`runtime/ext_media/`, `media.a`).
+ *   - `media` — the FFmpeg decoder backend (`runtime/xt_media/`, `media.a`).
  *     The DOM media surface lives in `gui.a`; only decoding is optional, and an
  *     element without the backend still exists and fires `error`.
  *   - `gpu` — glslang (+ SPIRV-Cross on macOS), the GLSL→SPIR-V translator used
@@ -108,7 +108,7 @@ export const guiLinkFeatures: readonly LinkFeature[] = [
      * the linker extract `media.a` — an archive whose only entry point is a
      * constructor would otherwise never be pulled in.
      */
-    runtimeSources: () => [join(findRuntimeDir(), "ext_media", "media_bridge.c")],
+    runtimeSources: () => [join(findRuntimeDir(), "xt_media", "media_bridge.c")],
     nativeObjects: () => {
       const archive = findRuntimeLibrary("media");
       if (archive === undefined) {

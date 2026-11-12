@@ -7,7 +7,7 @@
  *
  * The GUI engine (`gui.a` / `gui.lib`) deliberately contains no decoder. This
  * archive adds `<video>`/`<audio>` support: it bundles the FFmpeg-backed player
- * from `runtime/ext_media/media.cpp` together with a minimal static FFmpeg, and
+ * from `runtime/xt_media/media.cpp` together with a minimal static FFmpeg, and
  * the `media` extension links it only when the program asks for it. A program
  * built with `--ext gui` alone therefore stays FFmpeg-free.
  *
@@ -56,7 +56,7 @@ import { cxxCompileFlags } from "./gui-build-options.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeDir = join(root, "runtime");
-const sourceDir = join(runtimeDir, "ext_media");
+const sourceDir = join(runtimeDir, "xt_media");
 const vendorDir = join(root, "vendor");
 const ffmpegSrc = join(vendorDir, "ffmpeg");
 const isWindows = process.platform === "win32";

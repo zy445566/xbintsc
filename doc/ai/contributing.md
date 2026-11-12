@@ -8,10 +8,16 @@ get wrong.
 
 ```bash
 npm install
+npm run vendor           # fetch the pinned stb/NanoSVG/miniz/SQLite sources into vendor/
 npm run typecheck        # tsc --noEmit
 npm run lint             # eslint + the 600-line file budget
 npm test                 # unit + end-to-end
 ```
+
+`vendor/` is not committed: `npm run vendor` fetches each package at an
+immutable pinned revision and verifies its SHA-256 (`npm test` runs it through
+`pretest`). Only the `gui` build and programs that use `storage` or
+`compression` need the files.
 
 Node.js ≥ 22 is required to run the compiler from source, and a **clang 16+**
 toolchain is required for anything that links a binary (see
@@ -180,6 +186,7 @@ diff scratch/ref.ll scratch/gen2.ll
 effect:
 
 ```bash
+npm run vendor             # fetch the pinned vendored sources -> vendor/
 npm run runtime            # tsx scripts/build-runtime.ts -> runtime/lib/<os>-<arch>/
 npm run runtime:clean      # drop build/runtime-obj and runtime/lib
 npm run package-platform   # pack the host archives -> dist/npm-platform/*.tgz

@@ -35,6 +35,30 @@ export function runtimeFingerprint(runtimeDir: string): string {
 }
 
 /**
+ * Content hash of the vendored C sources a link feature compiles into the
+ * program (`vendor/miniz` for `compression`, `vendor/sqlite3` for `storage`).
+ *
+ * They live outside `runtime/` — the tree is fetched, not committed — so
+ * {@link runtimeFingerprint} cannot see them, yet changing one changes the
+ * linked binary. Only the two packages compiled at program-build time are
+ * hashed: `stb`/`nanosvg` are baked into `gui.a`, whose content the registry
+ * fingerprint already covers.
+ */
+export function vendoredRuntimeFingerprint(runtimeDir: string): string {
+  const vendorDir = resolve(runtimeDir, "..", "vendor");
+  const parts: string[] = [];
+  for (const name of ["miniz", "sqlite3"]) {
+    const dir = join(vendorDir, name);
+    if (!existsSync(dir)) continue;
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (!entry.isFile()) continue;
+      parts.push(name, entry.name, readFileSync(join(dir, entry.name)).toString("base64"));
+    }
+  }
+  return hashParts(parts);
+}
+
+/**
  * Content hash of the compiler's own TypeScript sources, when they are present.
  *
  * `COMPILER_VERSION` is bumped per release, but a developer editing codegen

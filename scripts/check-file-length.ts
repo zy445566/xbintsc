@@ -7,8 +7,9 @@
  * the runtime's C, C++, Rust and `#include`d `.inc` fragments plus shell
  * scripts, so *every* code file stays focused and small.
  *
- * Vendored third-party sources that must ship verbatim (notably the
- * single-header `stb_image.h`) are exempt: they are not ours to split.
+ * Third-party sources are fetched into `vendor/` instead of being committed
+ * (see `scripts/fetch-vendored.ts`), so the walk skips that directory: nothing
+ * vendored is ours to split, and it is not part of the tree this check owns.
  *
  * Run via `npm run lint` (or `tsx scripts/check-file-length.ts`).
  */
@@ -33,28 +34,6 @@ const IGNORED_DIRECTORIES = new Set([
   "scratch",
   "target",
   "vendor",
-]);
-
-/** Vendored third-party sources that ship verbatim and are not ours to split. */
-const VENDORED_FILES = new Set([
-  join("runtime", "ext_gui", "stb_image.h"),
-  join("runtime", "ext_gui", "stb_truetype.h"),
-  join("runtime", "ext_gui", "nanosvg.h"),
-  join("runtime", "ext_gui", "nanosvgrast.h"),
-  // miniz, the single-file DEFLATE library used by the `compression` link
-  // feature (`node:zlib`), ships verbatim.
-  join("runtime", "ext_node", "zlib", "miniz", "miniz.c"),
-  join("runtime", "ext_node", "zlib", "miniz", "miniz.h"),
-  join("runtime", "ext_node", "zlib", "miniz", "miniz_tdef.c"),
-  join("runtime", "ext_node", "zlib", "miniz", "miniz_tdef.h"),
-  join("runtime", "ext_node", "zlib", "miniz", "miniz_tinfl.c"),
-  join("runtime", "ext_node", "zlib", "miniz", "miniz_tinfl.h"),
-  join("runtime", "ext_node", "zlib", "miniz", "miniz_common.h"),
-  join("runtime", "ext_node", "zlib", "miniz", "miniz_export.h"),
-  // SQLite, the single-file amalgamation backing the `storage` extension
-  // (localStorage / sessionStorage / indexedDB), ships verbatim.
-  join("runtime", "xt_storage", "sqlite3", "sqlite3.c"),
-  join("runtime", "xt_storage", "sqlite3", "sqlite3.h"),
 ]);
 
 /** Machine-generated files: they are reproduced from their sources by a script,
@@ -88,7 +67,7 @@ function collect(dir: string, offenses: Offense[]): void {
     const dot = entry.name.lastIndexOf(".");
     if (dot < 0 || !CODE_EXTENSIONS.has(entry.name.slice(dot))) continue;
     const file = relative(root, full);
-    if (VENDORED_FILES.has(file) || GENERATED_FILES.has(file)) continue;
+    if (GENERATED_FILES.has(file)) continue;
     const lines = countLines(full);
     if (lines > MAX_LINES) offenses.push({ file, lines });
   }

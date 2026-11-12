@@ -495,13 +495,22 @@ export function compileC(
   clang: string,
   sourcePath: string,
   objectPath: string,
-  includeDir: string,
+  includeDir: string | readonly string[],
   env?: Record<string, string>,
   extraFlags: readonly string[] = [],
 ): void {
+  const includeDirs = typeof includeDir === "string" ? [includeDir] : includeDir;
   const result = runner.run(
     clang,
-    [...RUNTIME_CFLAGS, ...extraFlags, "-c", sourcePath, "-o", objectPath, `-I${includeDir}`],
+    [
+      ...RUNTIME_CFLAGS,
+      ...extraFlags,
+      "-c",
+      sourcePath,
+      "-o",
+      objectPath,
+      ...includeDirs.map((dir) => `-I${dir}`),
+    ],
     { env },
   );
   if (result.status !== 0) throw new ToolchainError(`${clang} ${sourcePath}`, result.status, result.stderr);

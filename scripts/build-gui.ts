@@ -12,22 +12,17 @@
  * Steps:
  *   1. fetch the pinned SDL3 source into `vendor/SDL` (gitignored),
  *   2. build `libSDL3.a` with CMake,
- *   2a. fetch + build static HarfBuzz and FreeType for the optional `shaping`
- *       feature; the default text path uses the bundled stb_truetype,
- *   2b. fetch + build static glslang (GLSL ES -> SPIR-V) and SPIRV-Cross
- *       (SPIR-V -> Metal Shading Language),
+ *   2a. fetch + build static HarfBuzz/FreeType (optional `shaping`) and
+ *       glslang/SPIRV-Cross (GLSL ES -> SPIR-V -> Metal Shading Language),
  *   3. compile the engine translation units,
  *   4. merge everything into `gui.a` (libtool on macOS, `ar -M` elsewhere;
  *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
- *
  * Media decoding is *not* part of this archive: it is an optional link feature
  * of the `gui` extension (`npm run media`, `runtime/xt_media/`), so a program
  * that only renders HTML/CSS never links FFmpeg.
- *
  * Every library and every engine object is compiled with function/data sections;
  * SDL is configured without the subsystems the engine never calls. The linker's
  * dead-section pass can then drop whatever a particular program does not reach.
- *
  * Environment:
  *   xbintsc_CXX    C++ compiler override (default: clang++ next to the resolved clang)
  *   xbintsc_CMAKE  CMake override (default: a vendored CMake, then `cmake`)
@@ -61,6 +56,7 @@ import {
   SECTION_FLAGS,
 } from "./gui-build-options.js";
 import { ensureDeploymentTarget } from "./gui-build-cache.js";
+import { ensureVendoredSources } from "./fetch-vendored.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeDir = join(root, "runtime");
@@ -105,6 +101,9 @@ const output = join(outDir, isWindows ? "gui.lib" : "gui.a");
 /* The vendored CMake builds and the direct engine compiles must target the
  * oldest supported macOS, not the build machine's version. */
 applyMacosDeploymentTarget();
+
+/* Fetch the stb/NanoSVG headers the engine's default text/image paths include. */
+ensureVendoredSources(["stb", "nanosvg"]);
 
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
 const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
@@ -522,6 +521,8 @@ if (metalBackend) {
 mkdirSync(objDir, { recursive: true });
 const includeFlags = [
   "-I", runtimeDir,
+  "-I", join(vendorDir, "stb"),
+  "-I", join(vendorDir, "nanosvg"),
   "-I", join(sdlSrc, "include"),
   "-I", join(freetypeSrc, "include"),
   "-I", join(freetypeBuild, "include"),

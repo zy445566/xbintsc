@@ -16,5 +16,7 @@ coverage/
 .DS_Store
 scratch/
 runtime/lib/
+# Fetched third-party sources and build trees (`npm run vendor`, `npm run gui`,
+# `npm run media`, `npm run tls`). Nothing under vendor/ is committed.
 vendor/
 package.json.gz

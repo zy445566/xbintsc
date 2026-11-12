@@ -4,8 +4,10 @@
 > decisions and roadmap live there.
 
 - Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`
-  (gitignored; fetched on demand). Media decoding lives in
-  `runtime/xt_media/` and is built separately.
+  (gitignored; fetched on demand). `npm run vendor` fetches the pinned
+  stb/NanoSVG headers (and the miniz/SQLite sources the link features compile);
+  `npm run gui` fetches just the two header sets it needs. Media decoding lives
+  in `runtime/xt_media/` and is built separately.
 - `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
   default `release-3.2.10`), builds a static SDL3, fetches and builds static
   **FreeType** (`FREETYPE_VERSION`, default `2.13.3`) and **HarfBuzz**
@@ -20,7 +22,7 @@
   Windows/Linux the script neither fetches nor merges SPIRV-Cross:
   `webgl_msl.cpp` compiles to nothing there and the ~2.5 MiB it contributes
   would be unreachable. The default text path uses the bundled
-  **stb_truetype** (`runtime/ext_gui/stb_truetype.h`); HarfBuzz + FreeType are
+  **stb_truetype** (`vendor/stb/stb_truetype.h`); HarfBuzz + FreeType are
   only extracted when the `shaping` feature is active.
   Every library (SDL3, FreeType, HarfBuzz, glslang, SPIRV-Cross and the engine)
   is compiled with `-ffunction-sections -fdata-sections`, and SDL is configured

@@ -197,7 +197,7 @@ unavailable it is skipped while the rest of the page still paints.
 
 `runtime/ext_gui/text.{h,cpp}` is the front-end; it dispatches through a small
 backend table. The default backend is the bundled **stb_truetype**
-(`text_stb.cpp`, `runtime/ext_gui/stb_truetype.h`). The optional **`shaping`**
+(`text_stb.cpp`, `vendor/stb/stb_truetype.h`). The optional **`shaping`**
 link feature installs `text_hb.cpp`, a HarfBuzz + FreeType backend, and is
 selected automatically for non-ASCII text or an author `@font-face` rule. Both
 backends share the font database in `text_font_db.cpp` (discovery and indexing)

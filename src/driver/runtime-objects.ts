@@ -7,7 +7,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, join, resolve, sep } from "node:path";
 import type { ExtensionRegistry } from "../extensions/registry.js";
 import type { ResolvedLinkFeature } from "./link-features.js";
 import { hashParts } from "./cache.js";
@@ -110,15 +110,24 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
     }
   };
   collectHeaders(runtimeDir);
+  /* The link features compile vendors from `vendor/`, so their headers must
+   * invalidate objects just like the runtime's own (the packages are sibling to
+   * `runtime/`, and absent in a checkout that has not run `npm run vendor`). */
+  const vendorDir = resolve(runtimeDir, "..", "vendor");
+  for (const name of ["miniz", "sqlite3"]) {
+    const dir = join(vendorDir, name);
+    if (existsSync(dir)) collectHeaders(dir);
+  }
   const headerStamp = hashParts(headerParts);
 
-  const compileOne = (sourcePath: string, tag: string): string => {
+  const compileOne = (sourcePath: string, tag: string, includeDirs: readonly string[]): string => {
     const body = readFileSync(sourcePath, "utf8");
     const key = hashParts([
       "runtime",
       COMPILER_VERSION,
       RUNTIME_CFLAGS.join(" "),
       compileFlags.join(" "),
+      includeDirs.join(";"),
       tag,
       headerStamp,
       body,
@@ -127,15 +136,16 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
     ]);
     const objectPath = join(cacheDir, `${tag}-${key}.o`);
     if (!existsSync(objectPath)) {
-      compileC(runner, clang, sourcePath, objectPath, runtimeDir, env, compileFlags);
+      compileC(runner, clang, sourcePath, objectPath, includeDirs, env, compileFlags);
     }
     return objectPath;
   };
 
+  const runtimeInclude = [runtimeDir];
   const coreArchive = preferPrebuilt ? findRuntimeLibrary("core", options.runtimeLibDirs) : undefined;
   const runtimeObjects = coreArchive
     ? [coreArchive]
-    : RUNTIME_SOURCES.map((source) => compileOne(join(runtimeDir, source), basename(source, ".c")));
+    : RUNTIME_SOURCES.map((source) => compileOne(join(runtimeDir, source), basename(source, ".c"), runtimeInclude));
 
   /** Prebuilt archives this link uses; the driver retries without them. */
   const prebuiltArchives: string[] = coreArchive ? [coreArchive] : [];
@@ -157,12 +167,20 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
       const dedupeKey = resolve(sourcePath);
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
-      extensionObjects.push(compileOne(sourcePath, `ext_${extensionObjects.length}_${basename(sourcePath, ".c")}`));
+      extensionObjects.push(
+        compileOne(sourcePath, `ext_${extensionObjects.length}_${basename(sourcePath, ".c")}`, runtimeInclude),
+      );
     }
   }
   // A native archive may be shared by several manifests; link each once.
   const featureObjects: string[] = [];
   for (const feature of options.features ?? []) {
+    /* A feature that compiles a vendored library needs `vendor/` on the include
+     * path for its bridge (`sqlite3/sqlite3.h`, `miniz/miniz.h`). */
+    const usesVendor = feature.runtimeSources.some((sourcePath) =>
+      resolve(sourcePath).startsWith(`${vendorDir}${sep}`),
+    );
+    const featureInclude = usesVendor ? [runtimeDir, vendorDir] : runtimeInclude;
     /* Feature bridges are always compiled: they are not part of any prebuilt
      * archive, and their references are what make the linker extract the
      * feature's implementation. */
@@ -171,7 +189,7 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
       extensionObjects.push(
-        compileOne(sourcePath, `feature_${feature.name}_${basename(sourcePath, ".c")}`),
+        compileOne(sourcePath, `feature_${feature.name}_${basename(sourcePath, ".c")}`, featureInclude),
       );
     }
     featureObjects.push(...feature.nativeObjects);

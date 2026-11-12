@@ -151,7 +151,7 @@ Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`
 `vulkan-sdk-1.4.313.0`, FFmpeg `7.1` for the optional `media` archive
 (overridable with `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
 `GLSLANG_VERSION` / `SPIRV_CROSS_VERSION` / `FFMPEG_VERSION`). The default text
-backend is the bundled `stb_truetype.h`; it accepts TrueType outlines (not
+backend is the bundled `vendor/stb/stb_truetype.h`; it accepts TrueType outlines (not
 CFF/OTF or variable fonts). The `shaping` feature swaps in HarfBuzz + FreeType
 for full OpenType shaping.
 

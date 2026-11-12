@@ -3,7 +3,8 @@
 > 属于[已实现语法与功能](../implemented.md) · [English](../../implemented/storage.md)
 
 三个浏览器存储全局变量 —— `localStorage`、`sessionStorage` 与 `indexedDB` —— **始终可用**
-（它们是核心全局），由内置的 SQLite（`runtime/xt_storage/sqlite3`）支撑。无需任何扩展开关。
+（它们是核心全局），由内置的 SQLite（`vendor/sqlite3`，由 `npm run vendor` 获取）支撑。
+无需任何扩展开关。
 
 ## 后端选择
 

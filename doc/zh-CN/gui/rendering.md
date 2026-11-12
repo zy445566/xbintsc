@@ -154,7 +154,7 @@ shader 合成到场景上。全部十六种 CSS 模式（`multiply`、`screen`�
 ## 文本技术栈（M4b）
 
 `runtime/ext_gui/text.{h,cpp}` 是前端，通过一个小型后端表分发。默认后端是内置的
-**stb_truetype**（`text_stb.cpp`、`runtime/ext_gui/stb_truetype.h`）。可选的
+**stb_truetype**（`text_stb.cpp`、`vendor/stb/stb_truetype.h`）。可选的
 **`shaping`** 链接特性会安装 `text_hb.cpp`（HarfBuzz + FreeType 后端），非 ASCII
 文本或作者的 `@font-face` 规则会自动选中它。两个后端共享 `text_font_db.cpp` 中的
 字体数据库（发现与索引）、`text_fonts.cpp` 中的 CSS 匹配器和

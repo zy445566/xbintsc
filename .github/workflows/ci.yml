@@ -96,6 +96,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Fetch vendored sources
+        uses: ./.github/actions/vendor-sources
+
       - name: Verify the toolchain gate
         env:
           xbintsc_CLANG: clang-16
@@ -158,6 +161,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Fetch vendored sources
+        uses: ./.github/actions/vendor-sources
 
       - name: Type check
         run: npm run typecheck
@@ -248,6 +254,9 @@ jobs:
           make: "true"
 
       - run: npm ci
+
+      - name: Fetch vendored sources
+        uses: ./.github/actions/vendor-sources
 
       # ffmpeg.org's TLS handshake intermittently fails from hosted runners
       # (`curl: (35) SSL connect error`), and the source cache below is keyed on
@@ -638,6 +647,9 @@ jobs:
           make: "true"
 
       - run: npm ci
+
+      - name: Fetch vendored sources
+        uses: ./.github/actions/vendor-sources
 
       # `npm run package-release` shells out to `tar` (and probes `zstd`), and
       # `tar` prints nothing while it runs: a step that stalls there produces no

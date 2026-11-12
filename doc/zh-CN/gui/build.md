@@ -5,7 +5,9 @@
 > 属于 [GUI 扩展](../gui.md) 的一部分；引擎总览、锁定决策与路线图在那里。
 
 - 源码位于 `runtime/ext_gui/`（C/C++），外加 `vendor/` 下的 vendored 库
-  （被 gitignore；按需获取）。媒体解码位于 `runtime/xt_media/`，单独构建。
+  （被 gitignore；按需获取）。`npm run vendor` 获取固定版本的 stb/NanoSVG 头文件
+  （以及链接特性要编译的 miniz/SQLite 源码）；`npm run gui` 只获取它需要的两组
+  头文件。媒体解码位于 `runtime/xt_media/`，单独构建。
 - `npm run gui`（`scripts/build-gui.ts`）获取固定版本的 SDL3（`SDL3_TAG`，
   默认 `release-3.2.10`），构建静态 SDL3，获取并构建静态 **FreeType**
   （`FREETYPE_VERSION`，默认 `2.13.3`）与 **HarfBuzz**（`HARFBUZZ_VERSION`，
@@ -17,7 +19,7 @@
   MSL（见 [WebGL](./webgl.md)），两者都与其他库一样合并进归档。Metal 是唯一消费
   MSL 的 SDL_GPU 后端，因此 Windows/Linux 上脚本既不获取也不合并 SPIRV-Cross：
   那里的 `webgl_msl.cpp` 编译为空，合并进来只会多出约 2.5 MiB 不可达代码。
-  默认文本路径使用内置的 **stb_truetype**（`runtime/ext_gui/stb_truetype.h`）；
+  默认文本路径使用内置的 **stb_truetype**（`vendor/stb/stb_truetype.h`）；
   HarfBuzz/FreeType 只在 `shaping` 特性启用时被取出。
   每个库（SDL3、FreeType、HarfBuzz、glslang、SPIRV-Cross 与引擎）都用
   `-ffunction-sections -fdata-sections` 编译；SDL 关闭引擎从不调用的子系统

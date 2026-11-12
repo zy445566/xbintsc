@@ -8,7 +8,7 @@
  * stored (uncompressed) blocks.
  */
 
-#include "miniz.h"
+#include "miniz/miniz.h"
 
 extern void xt_zlib_register_compression(
     unsigned char *(*compress_fn)(const unsigned char *data, size_t length, size_t *out_length),

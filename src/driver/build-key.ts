@@ -11,7 +11,12 @@
 import type { ExtensionRegistry } from "../extensions/registry.js";
 import { hashParts } from "./cache.js";
 import type { AppConfig } from "./config.js";
-import { compilerFingerprint, registryFingerprint, runtimeFingerprint } from "./fingerprint.js";
+import {
+  compilerFingerprint,
+  registryFingerprint,
+  runtimeFingerprint,
+  vendoredRuntimeFingerprint,
+} from "./fingerprint.js";
 import { COMPILER_VERSION } from "./version.js";
 import type { IconInfo } from "./icon.js";
 import type { ResolvedStorage } from "./storage.js";
@@ -50,6 +55,7 @@ export function buildCacheKey(input: CacheKeyInput): string {
     process.platform,
     registryFingerprint(input.registry),
     runtimeFingerprint(input.runtimeDir),
+    vendoredRuntimeFingerprint(input.runtimeDir),
     icon ? hashParts(["icon", icon.format, Buffer.from(icon.bytes).toString("base64")]) : "",
     app.name ?? "",
     String(app.bundle ?? false),

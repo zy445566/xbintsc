@@ -2,9 +2,9 @@
  * Shared helpers for the xbintsc `storage` extension.
  *
  * localStorage / sessionStorage / indexedDB are implemented on top of a vendored
- * SQLite (runtime/xt_storage/sqlite3). This header owns the small value helpers
- * and the two database handles; the Web Storage surface lives in `storage.c`
- * and the IndexedDB surface in `indexed_db.c`.
+ * SQLite (vendor/sqlite3, fetched by `npm run vendor`). This header owns the
+ * small value helpers and the two database handles; the Web Storage surface
+ * lives in `storage.c` and the IndexedDB surface in `indexed_db.c`.
  */
 #ifndef XT_STORAGE_INTERNAL_H
 #define XT_STORAGE_INTERNAL_H

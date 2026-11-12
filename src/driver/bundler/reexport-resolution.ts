@@ -1,13 +1,19 @@
 /**
- * Re-export fixpoint pass.
+ * Resolve re-export chains and rebuild namespace objects from final names.
  *
  * Phase 2 records `export { x } from "./dep"` by copying the dependency's
  * export *value* at that moment; if `dep` re-exports an import, that value is
  * the pre-rename local name and is only corrected by Phase 3's import rewrite.
  * A multi-level chain (`index -> sdk -> tools`) therefore needs a second pass,
  * and a namespace import reaching back across a cycle needs the final names.
- * This function re-resolves module re-exports until the export maps stop
- * changing, then rebuilds every namespace object from those final names.
+ * This pass re-resolves module re-exports until the export maps stop changing,
+ * then rebuilds every eager namespace object from those final names.
+ *
+ * Deferred modules (`<script src>`) are the exception: their bindings live in a
+ * wrapper function, so Phase 3 already lowered any namespace binding between
+ * two deferred modules to an alias that calls `__xt_deferred_<dep>()`. Such a
+ * binding must be left alone; rebuilding it here would reference wrapper-local
+ * names from the top level (TS3002 `Cannot find name`).
  */
 
 import {
@@ -18,7 +24,7 @@ import {
   type Statement,
 } from "../../ast/nodes.js";
 import type { ModuleRecord } from "./types.js";
-import { namespaceImportToStatement } from "./namespace-import.js";
+import { namespaceImportToStatement } from "./namespace-object.js";
 
 export function resolveReexports(
   records: ModuleRecord[],
@@ -89,7 +95,11 @@ export function resolveReexports(
         const bindings = clause?.namedBindings;
         if (bindings?.kind === SyntaxKind.NamespaceImport) {
           const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
-          if (dependency) {
+          /* Phase 3 already lowered a deferred module's namespace import of
+           * another deferred module to an alias read from the dependency's
+           * wrapper. Rebuilding the object here would reference the
+           * dependency's final names, which are wrapper-local (TS3002). */
+          if (dependency && !(deferredModules.has(record.path) && deferredModules.has(dependency.path))) {
             namespaceStatements.set(
               statement,
               namespaceImportToStatement(statement, `${record.prefix}${bindings.name.text}`, dependency),

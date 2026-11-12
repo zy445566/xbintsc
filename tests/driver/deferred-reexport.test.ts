@@ -68,4 +68,39 @@ describe("deferred module re-exports", () => {
       }),
     ).toEqual([]);
   });
+
+  it("keeps a namespace import that is one wrapper removed from the script", () => {
+    expect(
+      unresolvedNames({
+        "lib.ts": "const answer = 42;\nexport { answer };",
+        "mid.ts": "import * as lib from './lib';\nexport function run() { return lib.answer; }",
+        "app.ts": 'import { run } from "./mid";\nconsole.log(run());',
+        "main.ts": 'import { __xt_deferred_module as __xt_deferred_0_0 } from "./app.ts";',
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps a namespace import at the script's own top level", () => {
+    expect(
+      unresolvedNames({
+        "lib.ts": "const answer = 42;\nexport { answer };",
+        "app.ts": "import * as lib from './lib';\nconsole.log(lib.answer);",
+        "main.ts": 'import { __xt_deferred_module as __xt_deferred_0_0 } from "./app.ts";',
+      }),
+    ).toEqual([]);
+  });
+
+  it("still rebuilds a namespace import whose dependency stayed eager", () => {
+    expect(
+      unresolvedNames({
+        "lib.ts": "const answer = 42;\nexport { answer };",
+        "eager.ts": "import * as lib from './lib';\nexport const seen = lib.answer;",
+        "app.ts": 'import { seen } from "./eager";\nconsole.log(seen);',
+        "main.ts":
+          'import { seen } from "./eager";\n' +
+          'import { __xt_deferred_module as __xt_deferred_0_0 } from "./app.ts";\n' +
+          "console.log(seen);",
+      }),
+    ).toEqual([]);
+  });
 });

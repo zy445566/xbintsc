@@ -1,5 +1,9 @@
 /**
- * Synthetic AST statement builders used by the module merge.
+ * Build the synthetic object literal that stands in for a namespace binding.
+ *
+ * `import * as ns from "./mod"` and `export * as ns from "./mod"` are lowered
+ * to `const <final> = { exportName: finalName, ... }`, because the merged
+ * module has no runtime namespace object to point at.
  */
 
 import {

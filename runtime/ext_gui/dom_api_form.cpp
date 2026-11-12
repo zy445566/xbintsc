@@ -162,11 +162,21 @@ METHOD(node_type_set) {
       node->tag != "textarea") {
     return XT_UNDEFINED;
   }
+  /* Switching a text-like `<input>` to another text-like kind (the `text` <->
+   * `password` toggle a reveal-password button performs) keeps the live value:
+   * `xt_form_init` below would otherwise re-read the authored `value` attribute
+   * and drop what the user just typed. */
+  const bool was_text_like = xtgui::xt_form_is_text_like(node);
+  std::string live_value;
+  if (was_text_like) live_value = xtgui::xt_form_value(node);
   set_attribute(win, node, "type", argc >= 1 ? to_string_value(xt_arg(argc, argv, 0)) : "text");
   if (node->form) node->form->initialized = false;
   if (xtgui::xt_form_is_control(node)) {
     xtgui::xt_form_init(node);
     form_dirty(win);
+  }
+  if (was_text_like && xtgui::xt_form_is_text_like(node)) {
+    xtgui::xt_form_set_value(node, live_value);
   }
   return XT_UNDEFINED;
 }

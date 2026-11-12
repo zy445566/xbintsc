@@ -71,7 +71,7 @@ describe("gui link features", () => {
 
   it("links the media bridge and the prebuilt archive", () => {
     mocks.findRuntimeLibrary.mockReturnValue("/tmp/media.a");
-    expect(media.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_media", "media_bridge.c")]);
+    expect(media.runtimeSources?.()).toEqual([join("/tmp/runtime", "xt_media", "media_bridge.c")]);
     expect(media.nativeObjects?.()).toEqual(["/tmp/media.a"]);
     expect(mocks.findRuntimeLibrary).toHaveBeenCalledWith("media");
   });

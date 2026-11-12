@@ -8,7 +8,7 @@
 
 import type { Diagnostic } from "../diagnostics/diagnostic.js";
 import type { ExtensionRegistry } from "../extensions/registry.js";
-import type { AppConfig } from "./config.js";
+import type { AppConfig, StorageConfig } from "./config.js";
 import type { PgoMode, Runner } from "./toolchain.js";
 
 /** What `build` produces: an executable, an object file or LLVM IR only. */
@@ -39,6 +39,13 @@ export interface BuildOptions {
   readonly icon?: string;
   /** Application metadata: name, icon and macOS bundle settings. */
   readonly app?: AppConfig;
+  /**
+   * Storage backend for the `storage` extension (`localStorage`, `sessionStorage`,
+   * `indexedDB`). Defaults to memory; `{ backend: "file", path }` persists to
+   * the given file. `path` must already be absolute (config resolution does
+   * this), and sessionStorage is always memory-backed regardless.
+   */
+  readonly storage?: StorageConfig;
   /** Emit LLVM debug metadata so `-g` produces DWARF/CodeView (default false). */
   readonly debug?: boolean;
   /**

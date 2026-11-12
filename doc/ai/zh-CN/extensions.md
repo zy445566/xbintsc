@@ -119,6 +119,29 @@ VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷�
 运行时提供（`http://`，以及本地 `file://` 与相对路径；不支持 HTTPS 与流式），
 因此 GUI 程序同样可用。见 [../../implemented/fetch.md](../../implemented/fetch.md)。
 
+### `storage` —— 基于 SQLite 的 Web Storage 与 IndexedDB（核心链接特性）
+
+`localStorage`、`sessionStorage` 与 `indexedDB` 是**始终可用**的全局变量（由核心扩展贡献），
+基于内置的 SQLite 实现（见 [../../zh-CN/implemented/storage.md](../../zh-CN/implemented/storage.md)）。
+无需任何扩展开关：
+
+```bash
+xbintsc run app.ts
+```
+
+后端在编译期由 `xbintsc.config.json` 里的 `storage` 决定，默认是**内存**数据库，
+且 `sessionStorage` 始终在内存中：
+
+```json
+{ "storage": { "backend": "file", "path": "data/app.db" } }
+```
+
+`storage.path` 相对配置文件解析（绝对路径原样使用）。SQLite 很重，因此整个实现是名为
+`storage` 的**链接特性**：编译器扫描程序，只有当代码触达这些全局之一时才链接它 ——
+从不使用存储的程序不会付出任何体积。`--feature storage` / `--no-feature storage`
+可覆盖自动检测。`indexedDB` 是精简子集（`open`、对象仓库、
+`put`/`add`/`get`/`getAll`/`delete`/`clear`/`count`）；没有索引、游标或 `IDBKeyRange`。
+
 ### 可选链接特性（media、gpu、images、shaping、webgl）
 
 `gui` 仍然只有一个扩展，但其中的重型部分是可选的**链接特性**。编译器扫描打包后的

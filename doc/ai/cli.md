@@ -126,6 +126,8 @@ matching field. `--no-config` skips discovery entirely.
 | `features` | string[] | Optional link features to force on, e.g. `["media"]` / `["all"]` |
 | `noFeatures` | string[] | Optional link features to keep out even when detected |
 | `force` | boolean | Ignore the incremental cache |
+| `storage.backend` | `"memory"｜"file"` | Storage backend for `localStorage` / `sessionStorage` / `indexedDB` (default `memory`) |
+| `storage.path` | string | Database file for `backend: "file"`, resolved against this config |
 | `app.name` / `app.icon` / `app.bundle` / `app.bundleId` | | Application metadata ([icon.md](../icon.md)) |
 
 JSON schema: [xbintsc.config.schema.json](../xbintsc.config.schema.json). An

@@ -4,7 +4,7 @@
  * This unit bridges three pieces:
  *   - the DOM (`Node`) and the per-window media table on `XtGuiWindow`;
  *   - the optional decoders the `media` extension installs (the engine's
- *     `media.cpp` dispatch; FFmpeg itself lives in `runtime/ext_media/`);
+ *     `media.cpp` dispatch; FFmpeg itself lives in `runtime/xt_media/`);
  *   - the renderer (`renderer_image.cpp`), which owns the GPU textures.
  *
  * It also provides the SDL audio sink the decoder writes PCM to, which keeps

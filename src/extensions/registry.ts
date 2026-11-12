@@ -12,6 +12,7 @@
  */
 
 import type { LinkFeature } from "./link-feature.js";
+import { storageGlobals, storageLinkFeatures } from "./storage.js";
 
 export interface BuiltinFunction {
   /** Exported C symbol, called as `xt_value symbol(int32_t argc, xt_value *argv)`. */
@@ -342,14 +343,19 @@ export class ExtensionRegistry {
 
 /**
  * A built-in extension that exposes the runtime's own console/IO helpers. It is
- * always present so `console.log` works even without a platform extension.
+ * always present so `console.log` works even without a platform extension, and
+ * it also contributes the SQLite-backed Web Storage/IndexedDB globals as a link
+ * feature (see `./storage.js`) so `localStorage`/`sessionStorage`/`indexedDB`
+ * are always reachable while SQLite is linked only when used.
  */
 export const coreExtension: Extension = {
   name: "core",
-  description: "Core runtime helpers (console, print)",
+  description: "Core runtime helpers (console, print, Web Storage and IndexedDB)",
   builtins: () => ({
     print: { symbol: "xt_println" },
   }),
+  globalValues: () => storageGlobals,
+  linkFeatures: () => storageLinkFeatures,
 };
 
 export function createDefaultRegistry(): ExtensionRegistry {

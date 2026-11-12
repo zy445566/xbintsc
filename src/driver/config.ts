@@ -33,6 +33,17 @@ export interface AppConfig {
   readonly console?: boolean;
 }
 
+/**
+ * Persistent-storage backend for the `storage` extension (localStorage,
+ * sessionStorage, indexedDB). `backend` defaults to `memory`; `file` also needs
+ * `path`, which is resolved against the config file's directory (absolute paths
+ * are used as-is).
+ */
+export interface StorageConfig {
+  readonly backend?: "memory" | "file";
+  readonly path?: string;
+}
+
 /** The on-disk schema of `xbintsc.config.json`. Every field is optional. */
 export interface ProjectConfig {
   readonly entry?: string;
@@ -52,6 +63,8 @@ export interface ProjectConfig {
   readonly moduleOverrides?: Readonly<Record<string, string>>;
   readonly force?: boolean;
   readonly app?: AppConfig;
+  /** Storage backend for the `storage` extension (default: memory). */
+  readonly storage?: StorageConfig;
 }
 
 export class ProjectConfigError extends Error {
@@ -146,6 +159,23 @@ export function parseProjectConfig(text: string, where: string = CONFIG_FILE_NAM
     }
   }
 
+  let storage: StorageConfig | undefined;
+  if (root.storage !== undefined) {
+    const storageRoot = expectObject(root.storage, `${where}: 'storage'`);
+    const backend = readString(storageRoot, "backend", `${where}: 'storage'`);
+    if (backend !== undefined && backend !== "memory" && backend !== "file") {
+      throw new ProjectConfigError(`${where}: 'storage.backend' must be "memory" or "file"`);
+    }
+    const path = readString(storageRoot, "path", `${where}: 'storage'`);
+    if (backend === "file" && (path === undefined || path === "")) {
+      throw new ProjectConfigError(`${where}: 'storage.path' is required when 'storage.backend' is "file"`);
+    }
+    storage = { backend: backend as StorageConfig["backend"], path };
+    for (const key of Object.keys(storage) as (keyof StorageConfig)[]) {
+      if (storage[key] === undefined) delete storage[key];
+    }
+  }
+
   const config: ProjectConfig = {
     entry: readString(root, "entry", where),
     outDir: readString(root, "outDir", where),
@@ -161,6 +191,7 @@ export function parseProjectConfig(text: string, where: string = CONFIG_FILE_NAM
     moduleOverrides: readStringMap(root, "moduleOverrides", where),
     force: readBoolean(root, "force", where),
     app,
+    storage,
   };
   for (const key of Object.keys(config) as (keyof ProjectConfig)[]) {
     if (config[key] === undefined) delete config[key];
@@ -203,6 +234,9 @@ export function resolveConfigPaths(loaded: LoadedProjectConfig): ProjectConfig {
   const app: AppConfig | undefined = config.app
     ? { ...config.app, ...(config.app.icon ? { icon: resolvePath(directory, config.app.icon) } : {}) }
     : undefined;
+  const storage: StorageConfig | undefined = config.storage
+    ? { ...config.storage, ...(config.storage.path ? { path: resolvePath(directory, config.storage.path) } : {}) }
+    : undefined;
   return {
     ...config,
     ...(config.entry ? { entry: resolvePath(directory, config.entry) } : {}),
@@ -214,5 +248,6 @@ export function resolveConfigPaths(loaded: LoadedProjectConfig): ProjectConfig {
       ? { moduleOverrides: Object.fromEntries(Object.entries(config.moduleOverrides).map(([k, v]) => [k, resolvePath(directory, v)])) }
       : {}),
     ...(app ? { app } : {}),
+    ...(storage ? { storage } : {}),
   };
 }

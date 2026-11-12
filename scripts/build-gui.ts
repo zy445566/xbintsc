@@ -21,7 +21,7 @@
  *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
  *
  * Media decoding is *not* part of this archive: it is an optional link feature
- * of the `gui` extension (`npm run media`, `runtime/ext_media/`), so a program
+ * of the `gui` extension (`npm run media`, `runtime/xt_media/`), so a program
  * that only renders HTML/CSS never links FFmpeg.
  *
  * Every library and every engine object is compiled with function/data sections;

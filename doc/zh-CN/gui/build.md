@@ -5,7 +5,7 @@
 > 属于 [GUI 扩展](../gui.md) 的一部分；引擎总览、锁定决策与路线图在那里。
 
 - 源码位于 `runtime/ext_gui/`（C/C++），外加 `vendor/` 下的 vendored 库
-  （被 gitignore；按需获取）。媒体解码位于 `runtime/ext_media/`，单独构建。
+  （被 gitignore；按需获取）。媒体解码位于 `runtime/xt_media/`，单独构建。
 - `npm run gui`（`scripts/build-gui.ts`）获取固定版本的 SDL3（`SDL3_TAG`，
   默认 `release-3.2.10`），构建静态 SDL3，获取并构建静态 **FreeType**
   （`FREETYPE_VERSION`，默认 `2.13.3`）与 **HarfBuzz**（`HARFBUZZ_VERSION`，
@@ -37,7 +37,7 @@
 - `npm run media`（`scripts/build-media.ts`）构建可选的 **FFmpeg** 后端。它获取
   FFmpeg（`FFMPEG_VERSION`，默认 `7.1`），配置一个只启用媒体元素所需
   demuxer/parser/decoder 的最小静态构建，用它编译
-  `runtime/ext_media/media.cpp`，并把所有内容合并到
+  `runtime/xt_media/media.cpp`，并把所有内容合并到
   `runtime/lib/<os>-<arch>/media.a`（Windows 上 MSVC ABI 则为 `media.lib`）。
   下载会重试发布主机常见的瞬时 TLS 故障；解压后 tarball 保留为
   `vendor/ffmpeg-<version>.tar.xz`，因此重建（或按 `FFMPEG_VERSION` 缓存它的
@@ -121,7 +121,7 @@ markup 会让程序按“动态 markup”保守处理，启用可选特性。
 
 特性启用时，driver 只为本构建编译它的 C **bridge**，并链接在 `gui.a` 之前：
 
-- `media` → `runtime/ext_media/media_bridge.c`；构造函数安装解码表并引用
+- `media` → `runtime/xt_media/media_bridge.c`；构造函数安装解码表并引用
   `xt_media_backend_*`，从而把 FFmpeg 成员从 `media.a` 里取出。
 - `gpu` → `runtime/ext_gui/gpu_bridge.c`；构造函数调用 `gpu_feature.cpp` 里的
   `xt_gpu_feature_register`，安装 `XtGpuShaderApi` 表并引用 `compile_glsl` /

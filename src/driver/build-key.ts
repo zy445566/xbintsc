@@ -14,6 +14,7 @@ import type { AppConfig } from "./config.js";
 import { compilerFingerprint, registryFingerprint, runtimeFingerprint } from "./fingerprint.js";
 import { COMPILER_VERSION } from "./version.js";
 import type { IconInfo } from "./icon.js";
+import type { ResolvedStorage } from "./storage.js";
 import type { PgoMode } from "./toolchain.js";
 
 export interface CacheKeyInput {
@@ -25,6 +26,8 @@ export interface CacheKeyInput {
   readonly runtimeDir: string;
   readonly icon?: IconInfo;
   readonly app: AppConfig;
+  /** Storage backend/path embedded into the binary (storage extension). */
+  readonly storage: ResolvedStorage;
   readonly debug: boolean;
   readonly lto: boolean;
   /** Whether the semantic checker ran (default true). */
@@ -37,7 +40,7 @@ export interface CacheKeyInput {
 
 /** Hash every input that can change the produced binary. */
 export function buildCacheKey(input: CacheKeyInput): string {
-  const { app, icon, pgo } = input;
+  const { app, icon, pgo, storage } = input;
   return hashParts([
     COMPILER_VERSION,
     compilerFingerprint(),
@@ -51,6 +54,8 @@ export function buildCacheKey(input: CacheKeyInput): string {
     app.name ?? "",
     String(app.bundle ?? false),
     app.bundleId ?? "",
+    storage.backend,
+    storage.path,
     String(input.debug),
     String(input.lto),
     String(input.check !== false),

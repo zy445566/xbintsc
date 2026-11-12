@@ -51,7 +51,7 @@
     "features": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Optional link features to force on, e.g. [\"media\", \"gpu\", \"images\", \"shaping\", \"webgl\"] or [\"all\"]."
+      "description": "Optional link features to force on, e.g. [\"media\", \"gpu\", \"images\", \"shaping\", \"webgl\", \"storage\"] or [\"all\"]."
     },
     "noFeatures": {
       "type": "array",
@@ -61,6 +61,21 @@
     "force": {
       "type": "boolean",
       "description": "Ignore the incremental cache."
+    },
+    "storage": {
+      "type": "object",
+      "description": "Storage backend for the storage extension (localStorage, sessionStorage, indexedDB). Defaults to memory.",
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "enum": ["memory", "file"],
+          "description": "Where the database lives. Default: memory (an in-memory SQLite database)."
+        },
+        "path": {
+          "type": "string",
+          "description": "Database file path for backend: file, resolved against this config's directory (absolute paths are used as-is)."
+        }
+      }
     },
     "app": {
       "type": "object",

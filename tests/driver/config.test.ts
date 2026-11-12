@@ -107,6 +107,26 @@ describe("parseProjectConfig", () => {
       /must be strings/,
     );
   });
+
+  it("parses the storage backend and path", () => {
+    expect(parseProjectConfig(JSON.stringify({ storage: { backend: "memory" } }))).toEqual({
+      storage: { backend: "memory" },
+    });
+    expect(parseProjectConfig(JSON.stringify({ storage: { backend: "file", path: "data/app.db" } }))).toEqual(
+      { storage: { backend: "file", path: "data/app.db" } },
+    );
+  });
+
+  it("rejects a bad storage backend and a file backend without a path", () => {
+    expect(() => parseProjectConfig(JSON.stringify({ storage: { backend: "disk" } }))).toThrow(
+      /storage\.backend/,
+    );
+    expect(() => parseProjectConfig(JSON.stringify({ storage: { backend: "file" } }))).toThrow(
+      /storage\.path/,
+    );
+    expect(() => parseProjectConfig(JSON.stringify({ storage: { path: 1 } }))).toThrow(/must be a string/);
+    expect(() => parseProjectConfig(JSON.stringify({ storage: [] }))).toThrow(/must be a JSON object/);
+  });
 });
 
 describe("loadProjectConfig", () => {
@@ -190,5 +210,28 @@ describe("resolveConfigPaths", () => {
     };
     const resolved = resolveConfigPaths(loaded);
     expect(resolved.moduleOverrides).toEqual({ jiti: join(directory, "stubs", "jiti.ts") });
+  });
+
+  it("resolves a relative storage path and keeps an absolute one", () => {
+    const directory = temporaryDirectory();
+    const absolute = join(directory, "elsewhere", "app.db");
+    const loaded = {
+      path: join(directory, CONFIG_FILE_NAME),
+      directory,
+      config: parseProjectConfig(
+        JSON.stringify({ storage: { backend: "file", path: absolute } }),
+      ),
+    };
+    expect(resolveConfigPaths(loaded).storage).toEqual({ backend: "file", path: absolute });
+
+    const relativeLoaded = {
+      path: join(directory, CONFIG_FILE_NAME),
+      directory,
+      config: parseProjectConfig(JSON.stringify({ storage: { backend: "file", path: "data/app.db" } })),
+    };
+    expect(resolveConfigPaths(relativeLoaded).storage).toEqual({
+      backend: "file",
+      path: join(directory, "data", "app.db"),
+    });
   });
 });

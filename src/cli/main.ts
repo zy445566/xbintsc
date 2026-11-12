@@ -520,6 +520,7 @@ function dispatch(argv: readonly string[], io: CliIo): number {
       verbose: Boolean(args.flags.get("verbose")),
       extensions: registry,
       app: mergeAppConfig(args.flags, config),
+      storage: config.storage,
       debug: Boolean(args.flags.get("debug")),
       check: !args.flags.has("no-check"),
       lto: Boolean(args.flags.get("lto")) || config.lto === true,

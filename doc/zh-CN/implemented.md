@@ -40,6 +40,7 @@
 - [模块系统](./implemented/modules.md) —— import/export、打包、`node_modules`、`import.meta`
 - [扩展机制](./implemented/extensions.md) —— 注册表、`node` 扩展、原生 C++/Rust 扩展
 - [Node 扩展](./implemented/node.md) —— 21 个 Node 内置模块，每个模块一页
+- [Storage 扩展](./implemented/storage.md) —— 基于 SQLite 的 `localStorage`、`sessionStorage` 与 `indexedDB`
 - [驱动、增量编译与工具链](./implemented/driver.md) —— 缓存、clang/LTO/PGO、配置、图标
 - [CLI 与编程接口](./implemented/cli.md) —— 命令、参数、嵌入式 API
 - [测试](./implemented/tests.md) —— 单元测试、e2e 与差分测试
@@ -67,6 +68,7 @@
 | import/export 与打包 | [模块系统](./implemented/modules.md) |
 | 扩展注册表或 `node` 扩展 | [扩展机制](./implemented/extensions.md) |
 | 某个 Node 模块（`fs`、`path`、`http` 等） | [Node 扩展](./implemented/node.md) |
+| `localStorage` / `sessionStorage` / `indexedDB` | [Storage 扩展](./implemented/storage.md) |
 | 构建缓存、clang、LTO/PGO、配置、图标 | [驱动](./implemented/driver.md) |
 | CLI 参数或嵌入式 API | [CLI](./implemented/cli.md) |
 | 测试与差分测试 | [测试](./implemented/tests.md) |

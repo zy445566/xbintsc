@@ -289,7 +289,7 @@ engine were Rust.
       `tests/e2e/gui-retention.test.ts` (see [Memory & GC](./gui/runtime.md#memory--gc)).
 13. **M13 — video & audio** ✅
     - `<video>` / `<audio>` decode through a statically vendored minimal FFmpeg
-      in the optional `media` link feature (`runtime/ext_media/media.cpp`); the
+      in the optional `media` link feature (`runtime/xt_media/media.cpp`); the
       compiler selects it from the program and only then compiles the bridge and
       links `media.a`. Frames
       upload to GPU textures through the existing image pipeline, audio is
@@ -505,7 +505,7 @@ engine were Rust.
   merges it into `media.a` (or `media.lib` from clang-cl/MSVC objects on
   Windows). The compiler selects the feature from the program and only then
   compiles `media_bridge.c` and links `media.a`; a DOM/CSS program never links
-  FFmpeg. `runtime/ext_media/media.cpp` decodes video to RGBA
+  FFmpeg. `runtime/xt_media/media.cpp` decodes video to RGBA
   frames and audio to 48 kHz stereo PCM on the main thread,
   `runtime/ext_gui/gui_media.cpp` owns the players, implements the SDL audio
   sink and pumps the media clock and events each frame,

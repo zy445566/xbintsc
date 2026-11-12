@@ -46,6 +46,7 @@ small file instead of a single monolithic document.
 - [Module system](./implemented/modules.md) — import/export, bundling, `node_modules`, `import.meta`
 - [Extension mechanism](./implemented/extensions.md) — registry, the `node` extension, native C++/Rust extensions
 - [Node extension](./implemented/node.md) — 21 Node built-in modules, one page per module
+- [Storage extension](./implemented/storage.md) — SQLite-backed `localStorage`, `sessionStorage` and `indexedDB`
 - [Driver, incremental compilation and toolchain](./implemented/driver.md) — cache, clang/LTO/PGO, config, icons
 - [CLI and programmatic API](./implemented/cli.md) — commands, flags, embedder API
 - [Tests](./implemented/tests.md) — unit, e2e and the differential harness
@@ -74,6 +75,7 @@ same file.
 | import/export and bundling | [Modules](./implemented/modules.md) |
 | extension registry or the `node` extension | [Extensions](./implemented/extensions.md) |
 | a specific Node module (`fs`, `path`, `http`, ...) | [Node extension](./implemented/node.md) |
+| `localStorage` / `sessionStorage` / `indexedDB` | [Storage extension](./implemented/storage.md) |
 | build cache, clang, LTO/PGO, config, icons | [Driver](./implemented/driver.md) |
 | CLI flags or the embedder API | [CLI](./implemented/cli.md) |
 | tests and the differential harness | [Tests](./implemented/tests.md) |

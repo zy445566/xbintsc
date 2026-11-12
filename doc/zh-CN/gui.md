@@ -217,7 +217,7 @@
     - `win.stats()` 暴露引擎计数器；e2e 覆盖见
       `tests/e2e/gui-retention.test.ts`（见[内存与 GC](./gui/runtime.md)）。
 13. **M13 — 视频与音频** ✅
-    - `<video>` / `<audio>` 通过可选的 `media` **链接特性**（`runtime/ext_media/media.cpp`）
+    - `<video>` / `<audio>` 通过可选的 `media` **链接特性**（`runtime/xt_media/media.cpp`）
       使用静态 vendored 的最小 FFmpeg 解码。编译器从程序里检测到媒体用法时才编译
       `media_bridge.c` 并链接 `media.a`，只做 DOM/CSS 的程序不会链接 FFmpeg。
       帧沿用现有图像管线上传到 GPU 纹理，
@@ -405,7 +405,7 @@
   最小化的静态 FFmpeg（`scripts/build-media.ts`），合并进 `media.a`。编译器从程序里
   选中该特性后才编译 `media_bridge.c` 并链接 `media.a`；只做 DOM/CSS 的程序不会链接
   FFmpeg。
-  `runtime/ext_media/media.cpp` 在主线程把视频解码为 RGBA 帧、把音频解码为
+  `runtime/xt_media/media.cpp` 在主线程把视频解码为 RGBA 帧、把音频解码为
   48 kHz 立体声 PCM，`runtime/ext_gui/gui_media.cpp` 持有播放器、实现 SDL 音频
   sink 并在每帧推进媒体时钟与事件，`renderer_image.cpp` 把每个新视频帧沿图像纹理
   路径上传，`dom_api_media.cpp` 在元素句柄上暴露 `play`/`pause`/`load` 与媒体

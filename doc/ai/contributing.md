@@ -183,7 +183,14 @@ effect:
 npm run runtime            # tsx scripts/build-runtime.ts -> runtime/lib/<os>-<arch>/
 npm run runtime:clean      # drop build/runtime-obj and runtime/lib
 npm run package-platform   # pack the host archives -> dist/npm-platform/*.tgz
+npm run tls                # build the optional mbedTLS/nghttp2 feature archives
 ```
+
+`npm run tls` fetches the pinned mbedTLS and nghttp2 releases into `vendor/`
+(gitignored, like `gui`/`media`) and writes `tls`/`nghttp2` into
+`runtime/lib/<os>-<arch>/`. The `tls`/`http2`/https-fetch e2e suites skip when
+those archives are missing, so run it once before `npm test` when touching
+TLS or HTTP/2.
 
 `package-platform` produces the optional `@xbintsc/<os>-<arch>` npm package; CI
 uploads it for every host and `release.yml` publishes it before `xbintsc`. Before

@@ -45,6 +45,7 @@ xbintsc run app.ts --ext node
 | `stream`、`stream/promises` | |
 | `events` | |
 | `net`、`dgram`、`http` | 跑在 xbintsc 事件循环上的套接字与服务端（注意下面的异步限制） |
+| `tls`、`http2` | mbedTLS 客户端/服务端与 nghttp2 h2c/TLS+ALPN；由 `npm run tls` 构建的可选链接特性 |
 | `child_process` | |
 | `worker_threads` | |
 | `util`、`querystring`、`url`、`assert`、`test`、`zlib` | |
@@ -116,8 +117,9 @@ VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷�
 [../../zh-CN/gui/webgpu.md](../../zh-CN/gui/webgpu.md)。WebXR 与流式接口**尚未实现**：
 `typeof` 会回答
 `"undefined"`，让页面走自己的降级分支。`fetch` 不是 GUI 扩展的功能——它由核心
-运行时提供（`http://`，以及本地 `file://` 与相对路径；不支持 HTTPS 与流式），
-因此 GUI 程序同样可用。见 [../../implemented/fetch.md](../../implemented/fetch.md)。
+运行时提供（`http://` 与 `https://`，以及本地 `file://` 与相对路径；HTTPS 会链接可选的
+`tls` 特性，响应整体缓冲），因此 GUI 程序同样可用。见
+[../../implemented/fetch.md](../../implemented/fetch.md)。
 
 ### `storage` —— 基于 SQLite 的 Web Storage 与 IndexedDB（核心链接特性）
 

@@ -14,6 +14,9 @@
 
 #include "rt_internal.h"
 
+/* The optional mbedTLS backend's dispatch table (`tls` link feature). */
+#include "xt_tls_api.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

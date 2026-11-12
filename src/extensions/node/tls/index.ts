@@ -1,5 +1,9 @@
 /**
- * Node's `tls` module — a stub (TLS is not implemented).
+ * Node's `tls` module — importable bindings.
+ *
+ * The implementation is the optional `node-tls` link feature (mbedTLS-backed
+ * `TLSSocket`, `connect` and `createServer`); this module keeps the import
+ * surface stable and forwards to it. See `feature.ts` for feature selection.
  */
 
 import type { NodeModule } from "../module.js";

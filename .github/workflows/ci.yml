@@ -165,6 +165,13 @@ jobs:
       - name: Build the runtime (and prebuilt archives)
         run: npm run runtime
 
+      # The TLS/HTTP2 archives are native C libraries, so they build on every
+      # host without GUI/FFmpeg dependencies. Building them here makes the
+      # `tls`/`http2`/https-fetch e2e suites run (and contribute runtime
+      # coverage) in every matrix job.
+      - name: Build the TLS and HTTP/2 archives
+        run: npm run tls
+
       - name: Report the resolved toolchain
         run: npx tsx src/cli/main.ts doctor
 
@@ -705,6 +712,10 @@ jobs:
 
       - name: Build the prebuilt runtime archives
         run: npm run runtime
+
+      # mbedTLS and nghttp2 ship as `tls`/`nghttp2` archives in the release.
+      - name: Build the TLS and HTTP/2 archives
+        run: npm run tls
 
       # `package-release` copies all of `runtime/`, so the GUI and media archives
       # built here ship automatically. Windows x64 is built and shipped; Windows

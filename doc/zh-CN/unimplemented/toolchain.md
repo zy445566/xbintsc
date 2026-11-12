@@ -9,6 +9,6 @@
 | 类型检查器 | 部分：默认[语义检查](../implemented/checker.md)会报告未定义名、重复声明、实参个数、属性是否存在与确定的可赋值性错误，支持结构化接口/类、简单泛型与基础流收窄；没有完整推断与 strict-null |
 | 完整标准库 | 部分：Math / JSON / Date / Map / Set / RegExp / `Error` / `BigInt` / `Symbol` / `structuredClone` 已实现；String.normalize 缺失 |
 | 多文件模块打包 | 部分：相对路径 `.ts` 打包、ESM `node_modules` 包、命名空间导入、裸说明符扩展模块导入已实现；CommonJS 仅在 `node_modules` 内处理；循环依赖 / 实时绑定未实现 |
-| 异步运行时 | ✓ `async`/`await` 在 `select(2)` reactor 上对 pending promise 挂起：定时器、TCP 套接字、offload 的文件/HTTP 工作与 promise 回调都能恢复协程。仍缺：真正的 OS 级文件监听、非阻塞 `net.connect`、`fetch` 的 TLS，以及用户可见的 worker 线程（`worker_threads` 仍用子进程） |
+| 异步运行时 | ✓ `async`/`await` 在 `select(2)` reactor 上对 pending promise 挂起：定时器、TCP 套接字、offload 的文件/HTTP 工作与 promise 回调都能恢复协程。仍缺：真正的 OS 级文件监听、非阻塞 `net.connect`，以及用户可见的 worker 线程（`worker_threads` 仍用子进程） |
 | Windows 二进制产物验证 | 构建层已适配（`.exe` 后缀、链接参数分支），并在 CI 中验证 |
 | 精确的 ECMAScript 数值 / 字符串 / 比较语义 | 部分，见[运行时偏差](./deviations.md) |

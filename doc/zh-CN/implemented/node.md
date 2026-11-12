@@ -27,6 +27,8 @@ TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编
 | `net` | [net](./node/net.md) | TCP 服务端与客户端 |
 | `dgram` | [dgram](./node/dgram.md) | UDP 套接字 |
 | `http` | [http](./node/http.md) | 服务端与客户端，`Connection: close` |
+| `tls` | [tls](./node/tls.md) | mbedTLS 客户端/服务端（`node-tls` 链接特性） |
+| `http2` | [http2](./node/http2.md) | nghttp2 h2c 与 TLS/ALPN（`http2` 链接特性） |
 | `child_process` | [child_process](./node/child-process.md) | `spawnSync` / `spawn` / `execFile` / `execSync` |
 | `events` | [events](./node/events.md) | `EventEmitter`（全局与具名导出） |
 | `util` | [util](./node/util.md) | 格式化、inspect 与类型谓词 |
@@ -38,6 +40,11 @@ TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编
 | `url` | [url](./node/url.md) | `pathToFileURL` / `fileURLToPath` |
 | `zlib` | [zlib](./node/zlib.md) | 仅 `createGzip` |
 | `worker_threads` | [worker_threads](./node/worker-threads.md) | 以子进程模拟 |
+
+`tls` 与 `http2` 以可选**链接特性**实现，底层是随仓库引入的 mbedTLS 与 nghttp2：
+`npm run tls` 会下载并构建 `runtime/lib/<os>-<arch>/{tls,nghttp2}.{a,lib}`，
+驱动只在程序可能用到它们时才链接。没有这些归档的检出仍可编译，但在运行
+`npm run tls` 之前调用会返回明确的运行时错误。
 
 ## 改动应该写在哪一页？
 

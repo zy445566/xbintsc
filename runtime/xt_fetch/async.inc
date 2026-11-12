@@ -22,6 +22,7 @@ typedef struct {
   size_t request_length;
   xt_fetch_buffer raw;
   int failed;
+  char error[256];
 } xt_fetch_hop;
 
 struct xt_fetch_state {
@@ -67,13 +68,14 @@ static void xt_fetch_hop_run(xt_async_job *job) {
     hop->failed = 1;
     return;
   }
-  int fd = xt_fetch_connect(&parsed);
-  if (fd < 0) {
+  xt_fetch_stream stream;
+  if (xt_fetch_stream_open(&parsed, &stream, hop->error, sizeof(hop->error)) != 0) {
     hop->failed = 1;
     return;
   }
-  if (xt_fetch_send_all(fd, hop->request, hop->request_length) != 0) {
-    xt_fetch_close_socket(fd);
+  if (xt_fetch_stream_send(&stream, hop->request, hop->request_length) != 0) {
+    snprintf(hop->error, sizeof(hop->error), "cannot write the request");
+    xt_fetch_stream_close(&stream);
     hop->failed = 1;
     return;
   }
@@ -107,14 +109,18 @@ static void xt_fetch_hop_run(xt_async_job *job) {
         if (stop) break;
       }
     }
-    int count = xt_fetch_recv(fd, chunk, sizeof(chunk));
+    int count = xt_fetch_stream_recv(&stream, chunk, sizeof(chunk));
     if (count > 0) {
       xt_fetch_buffer_append(&hop->raw, chunk, (size_t)count);
       continue;
     }
+    if (count < 0 && hop->raw.length == 0) {
+      snprintf(hop->error, sizeof(hop->error), "connection failed");
+      hop->failed = 1;
+    }
     break;
   }
-  xt_fetch_close_socket(fd);
+  xt_fetch_stream_close(&stream);
 }
 
 #define XT_FETCH_HOP(c) ((xt_fetch_hop *)(c))
@@ -125,7 +131,13 @@ static void xt_fetch_hop_complete(xt_async_job *job) {
   xt_fetch_hop *hop = XT_FETCH_HOP(job);
   xt_fetch_state *state = hop->state;
   if (hop->failed) {
-    xt_fetch_state_reject(state, "fetch failed");
+    if (hop->error[0] != '\0') {
+      char message[320];
+      snprintf(message, sizeof(message), "fetch failed: %s", hop->error);
+      xt_fetch_state_reject(state, message);
+    } else {
+      xt_fetch_state_reject(state, "fetch failed");
+    }
     return;
   }
 
@@ -266,11 +278,6 @@ static void xt_fetch_start(xt_fetch_state *state) {
     xt_fetch_state_reject(state, "Failed to parse URL");
     return;
   }
-  if (parsed.secure) {
-    xt_fetch_state_reject(state, "fetch failed: https is not supported");
-    return;
-  }
-
   xt_value requestHeaders = xt_headers_from_source(state->headers_source);
   xt_fetch_buffer request;
   xt_fetch_buffer_init(&request);

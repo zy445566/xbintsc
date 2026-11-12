@@ -71,3 +71,58 @@ static int xt_fetch_recv(int fd, char *buffer, size_t capacity) {
   return count > 2147483647 ? 2147483647 : (int)count;
 #endif
 }
+
+/* -- transport abstraction (plain TCP or TLS) ------------------------------ */
+
+/*
+ * The worker is the same for both schemes: only connect/write/read/close
+ * differ. TLS is reached through the optional `tls` link feature's dispatch
+ * table, which is NULL in a program that never enables it; an `https://`
+ * request then rejects instead of failing to link.
+ */
+typedef struct {
+  int fd;
+  xt_tls_conn *tls;
+} xt_fetch_stream;
+
+static int xt_fetch_stream_open(const xt_fetch_url *url, xt_fetch_stream *stream, char *err,
+                                size_t errlen) {
+  stream->fd = -1;
+  stream->tls = NULL;
+  if (!url->secure) {
+    stream->fd = xt_fetch_connect(url);
+    return stream->fd < 0 ? -1 : 0;
+  }
+  if (xt_tls_core_api == NULL) {
+    snprintf(err, errlen, "https is not supported (the tls link feature is not linked)");
+    return -1;
+  }
+  int port = url->port[0] != '\0' ? atoi(url->port) : 443;
+  stream->tls = xt_tls_core_api->client_connect(url->host, port, url->host, 1, NULL, NULL, NULL,
+                                                "http/1.1", err, errlen);
+  if (stream->tls == NULL) return -1;
+  stream->fd = xt_tls_core_api->fd(stream->tls);
+  return 0;
+}
+
+static int xt_fetch_stream_send(xt_fetch_stream *stream, const char *data, size_t length) {
+  if (stream->tls != NULL) return xt_tls_core_api->write(stream->tls, (const unsigned char *)data, length);
+  return xt_fetch_send_all(stream->fd, data, length);
+}
+
+static int xt_fetch_stream_recv(xt_fetch_stream *stream, char *buffer, size_t capacity) {
+  if (stream->tls != NULL) {
+    return xt_tls_core_api->read(stream->tls, (unsigned char *)buffer, capacity);
+  }
+  return xt_fetch_recv(stream->fd, buffer, capacity);
+}
+
+static void xt_fetch_stream_close(xt_fetch_stream *stream) {
+  if (stream->tls != NULL) {
+    xt_tls_core_api->close(stream->tls);
+    stream->tls = NULL;
+  } else if (stream->fd >= 0) {
+    xt_fetch_close_socket(stream->fd);
+  }
+  stream->fd = -1;
+}

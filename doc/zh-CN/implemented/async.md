@@ -47,4 +47,4 @@
 - `fetch` 把每一跳请求/重定向作为 job 执行；`fs/promises` 把每个文件与描述符操作作为 job 执行。两者都不会阻塞定时器、套接字或其他 `await`。
 - 仍有 job 未完成时事件循环保持存活（`xt_loop_has_work`），线程池空闲后退出。
 
-异步表面的已知限制（`fetch` 无 TLS/流式、`fs.watch` 不触发、线程池固定 4 个 worker）列在[运行时偏差](../unimplemented/deviations.md)与各 Node 页面。
+异步表面的已知限制（`fetch` 无流式/abort、`fs.watch` 不触发、线程池固定 4 个 worker）列在[运行时偏差](../unimplemented/deviations.md)与各 Node 页面。

@@ -46,6 +46,7 @@ export const RUNTIME_SOURCES = [
   "xt_url_object.c",
   "xt_array_buffer.c",
   "xt_io.c",
+  "xt_protocol_registry.c",
 ] as const;
 
 export interface RuntimeObjects {

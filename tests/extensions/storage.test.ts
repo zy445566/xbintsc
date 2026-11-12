@@ -16,8 +16,9 @@ describe("core extension storage globals", () => {
 
   it("declares the storage link feature carrying the SQLite sources", () => {
     const features = coreExtension.linkFeatures?.() ?? [];
-    expect(features.map((feature) => feature.name)).toEqual(["storage"]);
-    const sources = features[0]?.runtimeSources?.() ?? [];
+    const storage = features.find((feature) => feature.name === "storage");
+    expect(storage).toBeDefined();
+    const sources = storage?.runtimeSources?.() ?? [];
     expect(sources.some((source) => /sqlite3\.c$/.test(source))).toBe(true);
     expect(sources.some((source) => /xt_storage[\\/]storage\.c$/.test(source))).toBe(true);
     expect(sources.some((source) => /xt_storage[\\/]indexed_db\.c$/.test(source))).toBe(true);

@@ -52,6 +52,8 @@ import { sqliteModule } from "./sqlite/index.js";
 import { streamWebModule } from "./stream-web/index.js";
 import { tlsModule } from "./tls/index.js";
 import { http2Module } from "./http2/index.js";
+import { nodeTlsFeature } from "./tls/feature.js";
+import { http2Feature } from "./http2/feature.js";
 
 /** Every Node module the extension currently provides. */
 const modules: readonly NodeModule[] = [
@@ -118,5 +120,5 @@ export const nodeExtension: Extension = {
     }
     return exposed;
   },
-  linkFeatures: () => [compressionFeature],
+  linkFeatures: () => [compressionFeature, nodeTlsFeature, http2Feature],
 };

@@ -1,0 +1,282 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0;
+        padding: 32px 20px;
+        background-color: #eef1f6;
+        font-family: sans-serif;
+        font-size: 15px;
+        color: #1f2733;
+      }
+      .card {
+        width: 340px;
+        margin: 0 auto;
+        padding: 24px;
+        background-color: #ffffff;
+        border: 1px solid #d7dee8;
+        border-radius: 10px;
+      }
+      h1 { margin: 0; font-size: 20px; }
+      .sub {
+        margin: 6px 0 20px 0;
+        color: #5b6b80;
+        font-size: 13px;
+      }
+      .field { margin-top: 14px; }
+      .field label { display: block; color: #33404f; }
+      .field input {
+        display: block;
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px 10px;
+        box-sizing: border-box;
+        border: 1px solid #c6d0dc;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      /* The password input and its reveal ("小眼睛") toggle share one row and
+         use the same 36px height, so they line up exactly. */
+      .password-row {
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .password-row input {
+        flex: 1;
+        margin-top: 0;
+        height: 36px;
+      }
+      button.eye {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 36px;
+        box-sizing: border-box;
+        padding: 0 14px;
+        border: 1px solid #c6d0dc;
+        background-color: #f5f7fa;
+        color: #33404f;
+        font-size: 14px;
+      }
+      .row {
+        margin-top: 20px;
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        padding: 8px 16px;
+        border: 1px solid #b9c6d6;
+        border-radius: 6px;
+        background-color: #f5f7fa;
+        color: #1f2733;
+        font-size: 14px;
+      }
+      button.primary {
+        background-color: #2b6cff;
+        border-color: #2b6cff;
+        color: #ffffff;
+      }
+      button.danger {
+        background-color: #ffffff;
+        border-color: #d23b3b;
+        color: #d23b3b;
+      }
+      /* The register/login buttons start `disabled` and are re-enabled once the
+         IndexedDB open completes (see the inline script). */
+      button:disabled { opacity: 0.5; }
+      /* The logout button (and, when signed in, the register/login buttons) is
+         toggled by the `.logged-in` class the script adds to the card. */
+      #logout { display: none; }
+      .card.logged-in .field { display: none; }
+      .card.logged-in #register,
+      .card.logged-in #login { display: none; }
+      .card.logged-in #logout { display: inline-block; }
+      #status { margin-top: 18px; min-height: 20px; font-size: 14px; }
+      #status.ok { color: #1a8a3a; }
+      #status.error { color: #c02a2a; }
+    </style>
+  </head>
+  <body>
+    <div class="card" id="card">
+      <h1>用户注册 / 登录</h1>
+      <p class="sub">用户数据存 IndexedDB · 登录状态存 sessionStorage</p>
+      <form id="auth-form">
+        <div class="field">
+          <label for="username">用户名</label>
+          <input id="username" type="text" placeholder="输入用户名" />
+        </div>
+        <div class="field">
+          <label for="password">密码</label>
+          <div class="password-row">
+            <input id="password" type="password" placeholder="输入密码" />
+            <button id="toggle-password" type="button" class="eye">显示</button>
+          </div>
+        </div>
+        <div class="row">
+          <button id="register" type="submit" class="primary" disabled>注册</button>
+          <button id="login" type="submit" disabled>登录</button>
+          <button id="logout" type="button" class="danger">注销</button>
+        </div>
+      </form>
+      <div id="status" class="ok">尚未登录</div>
+    </div>
+
+    <script lang="ts">
+      // This body is compiled ahead of time and runs once the document above is
+      // parsed, with `document` injected as a parameter. `sessionStorage` and
+      // `indexedDB` are the SQLite-backed core globals (bare names — NOT
+      // `window.sessionStorage`, which the gui engine does not provide).
+      const DB_NAME = "auth-demo";
+      const DB_VERSION = 1;
+      const STORE = "users";
+      const SESSION_KEY = "auth.currentUser";
+
+      const form = document.getElementById("auth-form");
+      const usernameInput = document.getElementById("username");
+      const passwordInput = document.getElementById("password");
+      const registerButton = document.getElementById("register");
+      const loginButton = document.getElementById("login");
+      const togglePasswordButton = document.getElementById("toggle-password");
+      const status = document.getElementById("status");
+      const card = document.getElementById("card");
+
+      // `indexedDB.open` settles from a microtask, so the store is not usable
+      // until `onsuccess` runs. The register/login buttons are `disabled` in the
+      // markup and re-enabled below; `dbReady` also guards the Enter-key path,
+      // which submits a form without a submitter and ignores a disabled button.
+      let db: any = null;
+      let dbReady = false;
+
+      // Demo-only digest (NOT cryptographic): stores/compares a hash so the raw
+      // password is not written to disk. Use node's `crypto` for a real app.
+      function hash(text: string): string {
+        let h = 0;
+        for (let i = 0; i < text.length; i++) {
+          h = (h * 31 + text.charCodeAt(i)) % 1000000007;
+        }
+        return "h" + h.toString();
+      }
+
+      function setStatus(message: string, isError: boolean): void {
+        status.textContent = message;
+        status.className = isError ? "error" : "ok";
+      }
+
+      // Reflect the sessionStorage login state into the UI: signed-in users see
+      // the logout button, signed-out users see register/login, and the fields
+      // are cleared so a password never lingers in the DOM.
+      function render(): void {
+        const currentUser = sessionStorage.getItem(SESSION_KEY);
+        if (currentUser) {
+          card.classList.add("logged-in");
+          status.textContent = "已登录：" + currentUser;
+        } else {
+          card.classList.remove("logged-in");
+          status.textContent = "尚未登录";
+        }
+        usernameInput.value = "";
+        passwordInput.value = "";
+        passwordInput.type = "password";
+        togglePasswordButton.textContent = "显示";
+      }
+
+      function register(username: string, password: string): void {
+        const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+        const getRequest = store.get(username);
+        getRequest.onsuccess = () => {
+          if (getRequest.result !== undefined) {
+            setStatus("用户名已存在，请直接登录", true);
+            return;
+          }
+          const putRequest = store.put({ username: username, passwordHash: hash(password) });
+          putRequest.onsuccess = () => {
+            sessionStorage.setItem(SESSION_KEY, username);
+            render();
+            setStatus("注册成功，已自动登录", false);
+          };
+          putRequest.onerror = () => setStatus("注册失败", true);
+        };
+        getRequest.onerror = () => setStatus("读取用户失败", true);
+      }
+
+      function login(username: string, password: string): void {
+        const store = db.transaction(STORE, "readonly").objectStore(STORE);
+        const getRequest = store.get(username);
+        getRequest.onsuccess = () => {
+          const user = getRequest.result;
+          if (user === undefined) {
+            setStatus("用户不存在，请先注册", true);
+            return;
+          }
+          if (user.passwordHash === hash(password)) {
+            sessionStorage.setItem(SESSION_KEY, username);
+            render();
+            setStatus("登录成功", false);
+          } else {
+            setStatus("密码错误", true);
+          }
+        };
+        getRequest.onerror = () => setStatus("读取用户失败", true);
+      }
+
+      function logout(): void {
+        sessionStorage.removeItem(SESSION_KEY);
+        render();
+        setStatus("已注销", false);
+      }
+
+      // The "小眼睛" toggle: switch the password field between masked and plain
+      // text. Changing `type` keeps the live value (the engine preserves it
+      // across text <-> password), so a reveal never erases what was typed.
+      function togglePassword(): void {
+        const show = passwordInput.type === "password";
+        passwordInput.type = show ? "text" : "password";
+        togglePasswordButton.textContent = show ? "隐藏" : "显示";
+        passwordInput.focus();
+      }
+
+      // Both submit buttons share one form; `event.submitter` tells them apart.
+      // Pressing Enter in a field submits implicitly (no submitter) → login.
+      form.addEventListener("submit", (event: any) => {
+        event.preventDefault();
+        if (!dbReady) {
+          setStatus("正在初始化数据库，请稍候", true);
+          return;
+        }
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+        if (username === "" || password === "") {
+          setStatus("请输入用户名和密码", true);
+          return;
+        }
+        if (event.submitter && event.submitter.id === "register") {
+          register(username, password);
+        } else {
+          login(username, password);
+        }
+      });
+
+      document.getElementById("logout").addEventListener("click", logout);
+      togglePasswordButton.addEventListener("click", togglePassword);
+
+      // Open the database once. `onupgradeneeded` creates the object store on
+      // the very first run; `onsuccess` fires after it (both settle from a
+      // microtask, like the browser), so render() runs against a live store.
+      const openRequest = indexedDB.open(DB_NAME, DB_VERSION);
+      openRequest.onupgradeneeded = () => {
+        openRequest.result.createObjectStore(STORE, { keyPath: "username" });
+      };
+      openRequest.onsuccess = () => {
+        db = openRequest.result;
+        dbReady = true;
+        registerButton.disabled = false;
+        loginButton.disabled = false;
+        render();
+      };
+      openRequest.onerror = () => setStatus("无法打开数据库", true);
+    </script>
+  </body>
+</html>

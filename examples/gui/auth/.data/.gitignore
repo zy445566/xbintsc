@@ -1,0 +1,5 @@
+# The SQLite database (and its -wal/-shm sidecars) is a runtime artifact; keep
+# the directory in git via .gitkeep, but never the user data written to it.
+*
+!.gitkeep
+!.gitignore

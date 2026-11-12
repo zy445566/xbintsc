@@ -230,6 +230,13 @@ const nghttp2Library: LibraryBuild = {
   // nghttp2's public header uses POSIX `ssize_t`; MSVC/UCRT has none.
   defines: [
     "-DNGHTTP2_STATICLIB",
+    // `nghttp2_net.h` only includes `<arpa/inet.h>`/`<netinet/in.h>` when its
+    // generated `config.h` (which this build has none of) says the host has
+    // them. Without those includes `htonl`/`htons` are implicit, which clang
+    // 16 and newer reject in C99 mode; declare them on every POSIX host.
+    // Windows takes `nghttp2_net.h`'s `WIN32` branch, which defines the
+    // byte-order helpers inline.
+    ...(isWindows ? [] : ["-DHAVE_ARPA_INET_H", "-DHAVE_NETINET_IN_H"]),
     "-include",
     join(root, "runtime", "xt_http2", "nghttp2_compat.h"),
   ],

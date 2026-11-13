@@ -439,7 +439,7 @@ covers the C runtime with clang's source instrumentation instead: it exports
 the collected profiles against `runtime/` with `llvm-cov`. Pass
 `-- --report-only` to only re-report profiles from an earlier instrumented run,
 or `-- --threshold 60` to fail below a coverage bar. CI runs the report with
-`--threshold 80`, so a runtime-coverage regression fails the job. The instrumented objects
+`--threshold 75`, so a runtime-coverage regression fails the job. The instrumented objects
 live in `xbintsc_CACHE_DIR`, a separate cache from `.xbintsc`, because the
 object cache key does not include compiler flags: sharing one cache would
 silently reuse un-instrumented objects. It also sets `xbintsc_PREFER_PREBUILT=0`

@@ -1,6 +1,6 @@
 {
   "name": "xbintsc",
-  "version": "0.6.26",
+  "version": "0.6.27",
   "description": "xbintsc - a TypeScript binary compiler (TypeScript -> LLVM IR -> native binary)",
   "type": "module",
   "license": "MIT",

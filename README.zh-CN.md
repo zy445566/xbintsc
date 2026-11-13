@@ -367,7 +367,7 @@ V8 只能看到编译器自身的源码，因此 `npm run coverage:runtime` 改�
 都会带上 `-fprofile-instr-generate -fcoverage-mapping`），运行测试后用
 `llvm-cov` 把采集到的 profile 映射回 `runtime/`。加 `-- --report-only`
 可只对上一次插桩运行留下的 profile 重新出报告，加 `-- --threshold 60`
-可在低于覆盖率门槛时失败；CI 固定以 `--threshold 75` 运行，runtime 覆盖率回退会直接
+可在低于覆盖率门槛时失败；CI 固定以 `--threshold 80` 运行，runtime 覆盖率回退会直接
 让 job 失败。插桩产物存放在 `xbintsc_CACHE_DIR` 指向的独立缓存，
 因为对象缓存的 key 不包含编译参数：与普通缓存共用会静默复用未插桩的对象。
 脚本还会设置 `xbintsc_PREFER_PREBUILT=0`，强制从源码编译 runtime，而不是链接

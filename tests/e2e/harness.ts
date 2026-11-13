@@ -23,6 +23,10 @@ export interface RunOptions {
   extensions?: boolean;
   /** Link the Web Worker extension (`--ext webworker`). */
   webworker?: boolean;
+  /** Link features to force on (`--feature`). */
+  features?: string[];
+  /** Link features to keep out even when the scan detects them (`--no-feature`). */
+  noFeatures?: string[];
   /** Entry file base name; defaults to a random name. */
   name?: string;
   /** Force a fresh build, bypassing the whole-program cache. */
@@ -137,6 +141,8 @@ export function describeE2E(
         outDir: join(workdir, "out"),
         cacheDir,
         extensions,
+        ...(runOptions.features ? { features: runOptions.features } : {}),
+        ...(runOptions.noFeatures ? { noFeatures: runOptions.noFeatures } : {}),
         ...(runOptions.force ? { force: true } : {}),
       });
       expect(result.diagnostics.filter((d) => d.category === "error")).toEqual([]);

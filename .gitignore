@@ -13,6 +13,7 @@ build/
 target/
 examples/extensions/rust/Cargo.lock
 coverage/
+*.profraw
 .DS_Store
 scratch/
 runtime/lib/

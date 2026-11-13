@@ -112,6 +112,56 @@ describeE2E("async fs/promises", (harness) => {
     expect(output).toBe("alpha beta gamma 3\n3 true\nalpha");
   });
 
+  it("walks and copies a directory tree recursively", () => {
+    const base = JSON.stringify(join(harness.workdir, `tree_${Math.random().toString(36).slice(2)}`));
+    const output = harness.runProgram(
+      `
+      import { promises as fsp, globSync, opendirSync } from "node:fs";
+
+      async function main(): Promise<void> {
+        const base = ${base};
+        await fsp.mkdir(base + "/nested/deeper", { recursive: true });
+        await fsp.writeFile(base + "/root.txt", "r");
+        await fsp.writeFile(base + "/nested/child.txt", "c");
+        await fsp.writeFile(base + "/nested/deeper/leaf.txt", "l");
+        const dir = opendirSync(base);
+        let names = 0;
+        while (dir.readSync() !== null) names++;
+        dir.closeSync();
+        console.log("opendir", names);
+        console.log("glob", globSync("**/*.txt", { cwd: base }).length);
+        const flat = await fsp.readdir(base, { recursive: true });
+        console.log("flat", flat.length, flat.includes("nested/child.txt"), flat.includes("nested/deeper/leaf.txt"));
+        const typed = await fsp.readdir(base, { recursive: true, withFileTypes: true });
+        let dirs = 0;
+        let files = 0;
+        for (const entry of typed) {
+          if (entry.isDirectory()) dirs++;
+          else files++;
+        }
+        console.log("typed", dirs, files);
+        await fsp.cp(base, base + "-copy", { recursive: true });
+        console.log("copy", await fsp.readFile(base + "-copy/nested/deeper/leaf.txt", "utf8"));
+        await fsp.rm(base + "-copy", { recursive: true, force: true });
+        await fsp.rm(base + "/nested/child.txt", { force: true });
+        console.log("rm", (await fsp.readdir(base + "/nested")).length);
+        let missing = false;
+        try {
+          await fsp.readdir(base + "/absent");
+        } catch (error) {
+          missing = true;
+        }
+        console.log("missing", missing);
+      }
+      main();
+      `,
+      { extensions: true },
+    );
+    expect(output).toBe(
+      "opendir 2\nglob 3\nflat 5 true true\ntyped 2 3\ncopy l\nrm 1\nmissing true",
+    );
+  });
+
   it("does not leave a pending job unrooted across a collection", () => {
     const target = JSON.stringify(join(harness.workdir, `fire_forget_${Math.random().toString(36).slice(2)}.txt`));
     // The promise returned by the fire-and-forget call is reachable only through

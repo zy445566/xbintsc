@@ -87,7 +87,6 @@ describeE2E("worker_threads", (harness) => {
             replies.push(msg);
             if (replies.length === 3) {
               console.log(replies.sort().join(","));
-              for (const each of workers) each.terminate();
             }
           });
         }
@@ -116,7 +115,6 @@ describeE2E("worker_threads", (harness) => {
             msg.buffer.byteLength,
             msg.floats[1],
           );
-          worker.terminate();
         });
         worker.postMessage("go");
       } else {
@@ -133,6 +131,7 @@ describeE2E("worker_threads", (harness) => {
             buffer: new ArrayBuffer(4),
             floats: new Float32Array([1.5, 2.5]),
           });
+          parentPort.close();
         });
       }
     `;

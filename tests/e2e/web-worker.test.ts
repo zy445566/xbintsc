@@ -46,12 +46,12 @@ describeE2E("Web Worker", (harness) => {
         const worker = new Worker(import.meta.filename, { workerData: { n: 2 } });
         worker.addEventListener("message", (event) => {
           console.log("data", event.data.total);
-          worker.terminate();
         });
         worker.postMessage("go");
       } else {
         self.onmessage = () => {
           self.postMessage({ total: 2 + 3 });
+          self.close();
         };
       }
     `;
@@ -65,11 +65,13 @@ describeE2E("Web Worker", (harness) => {
         const worker = new Worker(import.meta.filename);
         worker.onmessage = (event) => {
           console.log(event.data, nodeMainThread);
-          worker.terminate();
         };
         worker.postMessage("ok");
       } else {
-        self.onmessage = (event) => self.postMessage(event.data + "!");
+        self.onmessage = (event) => {
+          self.postMessage(event.data + "!");
+          self.close();
+        };
       }
     `;
     expect(runProgram(source, { extensions: true, webworker: true })).toBe("ok! true");

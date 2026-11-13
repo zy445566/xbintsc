@@ -163,6 +163,9 @@ int xt_wrk_listen_loopback(int *out_port) {
   *out_port = (int)ntohs(address.sin_port);
   xt_wrk_no_sigpipe(fd);
   xt_wrk_no_inherit(fd);
+  /* `accept` is also called when a worker is drained after exit, when no
+   * connection may be pending; a blocking listener would hang the program. */
+  xt_wrk_set_nonblocking(fd);
   return fd;
 }
 
@@ -236,6 +239,22 @@ int xt_wrk_wait_writable(int fd, int timeout_ms) {
   timeout.tv_sec = timeout_ms / 1000;
   timeout.tv_usec = (timeout_ms % 1000) * 1000;
   return select(fd + 1, NULL, &write_set, NULL, &timeout) > 0;
+}
+
+/* Wait for data (or EOF) when a link is drained outside the reactor, e.g. after
+ * its process was reaped. 1 when readable. */
+int xt_wrk_wait_readable(int fd, int timeout_ms) {
+  fd_set read_set;
+  FD_ZERO(&read_set);
+#if defined(_WIN32)
+  FD_SET((SOCKET)(uintptr_t)fd, &read_set);
+#else
+  FD_SET(fd, &read_set);
+#endif
+  struct timeval timeout;
+  timeout.tv_sec = timeout_ms / 1000;
+  timeout.tv_usec = (timeout_ms % 1000) * 1000;
+  return select(fd + 1, &read_set, NULL, NULL, &timeout) > 0;
 }
 
 /* -- processes ------------------------------------------------------------ */

@@ -152,9 +152,77 @@ void xt_wrk_link_close(xt_wrk_link *link) {
   link->connected = 0;
 }
 
+/* -- inbound frames ------------------------------------------------------- */
+
+/* Read everything the peer has written so far. Returns 1 once the socket
+ * reached EOF or failed, 0 when it is merely idle (would block). */
+static int xt_wrk_read_inbound(xt_wrk_link *link) {
+  char chunk[4096];
+  for (;;) {
+    long got = xt_wrk_recv_some(link->fd, chunk, sizeof(chunk));
+    if (got > 0) {
+      xt_wrk_in_append(link, chunk, (size_t)got);
+      continue;
+    }
+    return got == -2 ? 0 : 1;
+  }
+}
+
+/* Authenticate the child's first bytes. Returns 1 when frames may be parsed,
+ * 0 while the token is still incomplete or after a handshake failure. */
+static int xt_wrk_verify_handshake(xt_wrk_link *link) {
+  if (!link->handshaking) return 1;
+  if (link->in_length < link->token_length) return 0;
+  if (memcmp(link->in, link->token, link->token_length) != 0) {
+    xt_wrk_emit1(link->target, "error",
+                 xt_error_from_message("Error: worker handshake failed"));
+    xt_wrk_link_close(link);
+    return 0;
+  }
+  xt_wrk_in_consume(link, link->token_length);
+  link->handshaking = 0;
+  return 1;
+}
+
 /* -- parent transport ----------------------------------------------------- */
 
 static void xt_wrk_arm_poll(void);
+
+/*
+ * A worker may post its last message and exit immediately. By then the exit
+ * poll can run before the socket watcher delivered that frame — or even before
+ * the pending connection was accepted. Accept and read whatever the child wrote
+ * before the link is torn down, so `exit` never overtakes a message that was
+ * already sent.
+ */
+static void xt_wrk_drain_inbound(xt_wrk_link *link) {
+  if (!link->connected && link->listen_fd >= 0) {
+    int fd = xt_wrk_accept(link->listen_fd);
+    if (fd >= 0) {
+      xt_loop_remove(link->listen_fd);
+      xt_wrk_close_fd(link->listen_fd);
+      link->listen_fd = -1;
+      link->fd = fd;
+      link->connected = 1;
+      link->handshaking = 1;
+      /* The ordinary accept path reports `online` before the first message;
+       * keep that order when the connection is only picked up here. */
+      xt_wrk_emit0(link->target, "online");
+    }
+  }
+  if (!link->connected || link->fd < 0) return;
+  /* The process has ended, so its data is buffered or gone; a short bounded
+   * wait only covers a frame still in flight. */
+  for (int round = 0; round < 20; round++) {
+    int closed = xt_wrk_read_inbound(link);
+    if (link->handshaking && !xt_wrk_verify_handshake(link)) {
+      if (closed || link->fd < 0) return;
+    }
+    if (!link->handshaking) xt_wrk_consume_frames(link);
+    if (closed || link->fd < 0) return;
+    if (!xt_wrk_wait_readable(link->fd, 50)) return;
+  }
+}
 
 static void xt_wrk_finish(xt_wrk_link *link) {
   if (link->exited) return;
@@ -162,6 +230,7 @@ static void xt_wrk_finish(xt_wrk_link *link) {
   /* Node reports 1 for a terminated worker; SIGKILL (-9) is an implementation
    * detail of the emulation, not something a program should branch on. */
   if (link->terminating) link->exit_code = 1;
+  xt_wrk_drain_inbound(link);
   xt_wrk_link_close(link);
   if (link->terminate_promise != XT_UNDEFINED) {
     xt_promise_fulfill(link->terminate_promise, xt_number((double)link->exit_code));
@@ -234,30 +303,12 @@ static void xt_wrk_read_ready(void *userdata, int events) {
   xt_wrk_link *link = xt_wrk_unbox(userdata);
   if (!link || link->fd < 0) return;
   if (events & XT_IO_READ) {
-    char chunk[4096];
-    int closed = 0;
-    for (;;) {
-      long got = xt_wrk_recv_some(link->fd, chunk, sizeof(chunk));
-      if (got > 0) {
-        xt_wrk_in_append(link, chunk, (size_t)got);
-        continue;
-      }
-      if (got != -2) closed = 1;
-      break;
-    }
+    int closed = xt_wrk_read_inbound(link);
     if (link->handshaking) {
-      if (link->in_length < link->token_length) {
+      if (!xt_wrk_verify_handshake(link)) {
         if (closed) xt_wrk_link_close(link);
         return;
       }
-      if (memcmp(link->in, link->token, link->token_length) != 0) {
-        xt_wrk_emit1(link->target, "error",
-                     xt_error_from_message("Error: worker handshake failed"));
-        xt_wrk_link_close(link);
-        return;
-      }
-      xt_wrk_in_consume(link, link->token_length);
-      link->handshaking = 0;
       /* The child is authenticated: release whatever was posted before it
        * connected. */
       xt_wrk_flush(link);

@@ -311,6 +311,21 @@ void xt_wrk_require_self_script(xt_value script) {
 
 /* -- worker scope (the `self` / `parentPort` side) ------------------------ */
 
+/* Close the parent connection from the normal exit path. Letting the process
+ * teardown close it instead can abort the socket (TCP reset) before the parent
+ * has read the last frame, because the parent may still be starting other
+ * workers when this one finishes. */
+static void xt_wrk_scope_shutdown(void) {
+  if (xt_wrk_scope_channel) xt_wrk_link_close(xt_wrk_scope_channel);
+}
+
+static void xt_wrk_scope_record_shutdown(void) {
+  static int installed = 0;
+  if (installed) return;
+  installed = 1;
+  atexit(xt_wrk_scope_shutdown);
+}
+
 static xt_wrk_link *xt_wrk_scope_record(void) {
   if (xt_wrk_scope_channel) return xt_wrk_scope_channel;
   xt_wrk_link *link = (xt_wrk_link *)calloc(1, sizeof(xt_wrk_link));
@@ -323,6 +338,7 @@ static xt_wrk_link *xt_wrk_scope_record(void) {
   link->web_mode = mode != NULL && strcmp(mode, "web") == 0;
   xt_wrk_scope_channel = link;
   xt_wrk_gc_register();
+  xt_wrk_scope_record_shutdown();
   return link;
 }
 

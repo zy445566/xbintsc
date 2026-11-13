@@ -69,10 +69,12 @@ cycles. Classes arrive as plain objects; functions and symbols are rejected.
 The parent stays alive while a worker runs. A worker stays alive while it has a
 `message` listener (or other event-loop work); a worker that posts once and
 returns exits on its own, so `worker.on("message")` plus `terminate()` is the
-usual pattern for a long-lived worker. An uncaught exception in the worker is
-printed by that process on stderr and ends it with a non-zero code; the parent
-observes `exit`, not `error`. Closing the parent's last handle ends the worker
-through the socket EOF.
+usual pattern for a long-lived worker. A worker that returns closes its control
+channel before the process ends, so a message posted just before exit is still
+delivered. An uncaught exception in the worker is printed by that process on
+stderr and ends it with a non-zero code; the parent observes `exit`, not
+`error`. Closing the parent's last handle ends the worker through the socket
+EOF.
 
 ## Platform notes
 

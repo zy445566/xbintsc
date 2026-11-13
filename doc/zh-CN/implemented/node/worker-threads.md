@@ -63,7 +63,8 @@ if (isMainThread) {
 
 worker 运行期间父进程保持存活。worker 拥有 `message` 监听器（或其他事件循环
 工作）时保持存活；只 post 一次就返回的 worker 会自行退出，所以长驻 worker 的
-常见模式是 `worker.on("message")` 加 `terminate()`。worker 内未捕获的异常由该
+常见模式是 `worker.on("message")` 加 `terminate()`。worker 返回时会在进程结束前
+关闭控制通道，因此退出前 post 的消息仍会送达。worker 内未捕获的异常由该
 进程打印到 stderr 并非零退出；父进程看到的是 `exit`，而不是 `error`。父进程最后
 一个句柄关闭时，worker 会因 socket EOF 而结束。
 

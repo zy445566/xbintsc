@@ -88,6 +88,8 @@ long xt_wrk_send_some(int fd, const char *data, size_t length);
 long xt_wrk_recv_some(int fd, char *data, size_t capacity);
 /** Wait until `fd` is writable (or the timeout expires). 1 on writable. */
 int xt_wrk_wait_writable(int fd, int timeout_ms);
+/** Wait until `fd` is readable or at EOF (or the timeout expires). 1 on ready. */
+int xt_wrk_wait_readable(int fd, int timeout_ms);
 xt_wrk_pid xt_wrk_spawn_process(const char *path, char **error);
 /** 1 when ended (code in `*exit_code`), 0 while running. Reaps the child. */
 int xt_wrk_process_exited(xt_wrk_pid pid, int *exit_code);

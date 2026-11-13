@@ -161,7 +161,7 @@ export function resolveLinkFeatures(
       nativeObjects = feature.nativeObjects?.() ?? [];
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (strict.has(feature.name)) {
+      if (strict.has(feature.name) || feature.required === true) {
         diagnostics.error(DiagnosticCode.LinkFeatureUnavailable, message);
       } else {
         diagnostics.warning(

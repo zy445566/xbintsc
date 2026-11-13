@@ -27,6 +27,6 @@ under [implemented](./implemented.md); git history records when it changed.
 - [Classes and OO](./unimplemented/classes.md) — access control, `abstract`/`implements`, private-name collisions
 - [Type system](./unimplemented/types.md) — parsed and erased; only inference-free facts are checked
 - [Runtime deviations](./unimplemented/deviations.md) — compiles and runs, but differs from ECMAScript
-- [WebAssembly](./unimplemented/wasm.md) — bytecode execution is not implemented
+- [WebAssembly](./unimplemented/wasm.md) — imported memories/tables/globals, streaming and the remaining API gaps
 - [Toolchain and platform](./unimplemented/toolchain.md) — type checker, async I/O, GC modes, platform gaps
 - [Node extension](./unimplemented/node.md) — Node module gaps, one page per area

@@ -130,6 +130,17 @@ Math`), and `Object.defineProperties` installs several descriptors at once.
 
 See [Unimplemented: standard library](../unimplemented/stdlib.md) for the full list.
 
+## WebAssembly
+
+`WebAssembly.validate`, `compile`, `instantiate`, `Module`, `Instance`, exported
+functions/memories and JS function imports are backed by the vendored **wasm3**
+interpreter (the optional `wasm` link feature, selected automatically when the
+program mentions `WebAssembly`; `--feature wasm` forces it). `i64` values are
+BigInt, and `import bytes from "./x.wasm"` embeds a module as a `Uint8Array`.
+Exported tables/globals and non-function imports are not wrapped yet; see
+[Implemented: WebAssembly](../implemented/wasm.md) and
+[Unimplemented: WebAssembly](../unimplemented/wasm.md).
+
 ## Modules
 
 | Feature | Status | Notes |

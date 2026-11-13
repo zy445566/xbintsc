@@ -8,7 +8,7 @@ get wrong.
 
 ```bash
 npm install
-npm run vendor           # fetch the pinned stb/NanoSVG/miniz/SQLite sources into vendor/
+npm run vendor           # fetch the pinned stb/NanoSVG/miniz/SQLite/wasm3 sources into vendor/
 npm run typecheck        # tsc --noEmit
 npm run lint             # eslint + the 600-line file budget
 npm test                 # unit + end-to-end
@@ -16,8 +16,8 @@ npm test                 # unit + end-to-end
 
 `vendor/` is not committed: `npm run vendor` fetches each package at an
 immutable pinned revision and verifies its SHA-256 (`npm test` runs it through
-`pretest`). Only the `gui` build and programs that use `storage` or
-`compression` need the files.
+`pretest`). Only the `gui` build and programs that use `storage`, `compression`
+or `wasm` need the files.
 
 Node.js ≥ 22 is required to run the compiler from source, and a **clang 16+**
 toolchain is required for anything that links a binary (see

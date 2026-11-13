@@ -34,6 +34,7 @@
     "vendor/nanosvg",
     "vendor/miniz",
     "vendor/sqlite3",
+    "vendor/wasm3",
     "scripts",
     "bin",
     "doc",

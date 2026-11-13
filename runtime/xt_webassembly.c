@@ -1,15 +1,24 @@
 /*
  * xbintsc runtime — the `WebAssembly` namespace.
  *
- * The WebAssembly JavaScript API surface is recognized (so code that reaches
- * for `WebAssembly.compile`, `new WebAssembly.Module`, … compiles), but this
- * build has no WebAssembly interpreter: every entry point throws a clear
- * "not supported" error instead of executing bytecode.
+ * The namespace object and the dispatch entry points are core: every build
+ * recognises `WebAssembly`, so code that references it still compiles. The
+ * interpreter behind them is an optional link feature (`wasm`): its bridge
+ * installs `XtWasmApi` from a constructor before `main`. Without the feature
+ * the pointers are NULL and every entry point throws the original "not
+ * supported in this build" error, which is the behaviour a `--no-feature wasm`
+ * build intentionally keeps.
  */
 
 #include "rt_internal.h"
 
+#include "xt_wasm/wasm_api.h"
+
 #include <string.h>
+
+static const XtWasmApi *g_wasm_api = NULL;
+
+void xt_wasm_install(const XtWasmApi *api) { g_wasm_api = api; }
 
 static xt_value xt_wasm_unsupported(xt_value thisValue, xt_value env, int32_t argc,
                                     xt_value *argv) {
@@ -22,6 +31,7 @@ static xt_value xt_wasm_unsupported(xt_value thisValue, xt_value env, int32_t ar
 }
 
 xt_value xt_webassembly_static(xt_value name, int32_t argc, xt_value *argv) {
+  if (g_wasm_api != NULL) return g_wasm_api->dispatch(name, argc, argv);
   (void)name;
   (void)argc;
   (void)argv;
@@ -30,6 +40,7 @@ xt_value xt_webassembly_static(xt_value name, int32_t argc, xt_value *argv) {
 }
 
 xt_value xt_webassembly_object(int32_t argc, xt_value *argv) {
+  if (g_wasm_api != NULL) return g_wasm_api->object(argc, argv);
   (void)argc;
   (void)argv;
   xt_value object = xt_object_new();

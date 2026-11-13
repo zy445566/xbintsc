@@ -40,14 +40,14 @@ export function runtimeFingerprint(runtimeDir: string): string {
  *
  * They live outside `runtime/` — the tree is fetched, not committed — so
  * {@link runtimeFingerprint} cannot see them, yet changing one changes the
- * linked binary. Only the two packages compiled at program-build time are
- * hashed: `stb`/`nanosvg` are baked into `gui.a`, whose content the registry
+ * linked binary. Only the packages compiled at program-build time are hashed:
+ * `stb`/`nanosvg` are baked into `gui.a`, whose content the registry
  * fingerprint already covers.
  */
 export function vendoredRuntimeFingerprint(runtimeDir: string): string {
   const vendorDir = resolve(runtimeDir, "..", "vendor");
   const parts: string[] = [];
-  for (const name of ["miniz", "sqlite3"]) {
+  for (const name of ["miniz", "sqlite3", "wasm3"]) {
     const dir = join(vendorDir, name);
     if (!existsSync(dir)) continue;
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {

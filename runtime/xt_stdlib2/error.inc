@@ -7,6 +7,10 @@
 static const char *const XT_ERROR_NAMES[] = {
     "Error",     "TypeError", "RangeError",  "SyntaxError",
     "ReferenceError", "EvalError", "URIError", "AggregateError",
+    /* WebAssembly's three error constructors are ordinary Error members. The
+     * runtime names them so `instanceof WebAssembly.CompileError` and a real
+     * `.name`/`.message` work; they are not globals in the language. */
+    "CompileError", "LinkError", "RuntimeError",
 };
 
 static int xt_error_is_family(const char *name) {

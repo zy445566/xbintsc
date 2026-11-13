@@ -14,9 +14,10 @@
  *   vendor/nanosvg/nanosvg.h, nanosvgrast.h
  *   vendor/miniz/…                    the `compression` link feature
  *   vendor/sqlite3/sqlite3.{c,h}      the `storage` link feature
+ *   vendor/wasm3/…                    the `wasm` link feature
  *
  * `build-gui.ts` fetches just `stb`/`nanosvg`; `npm test` fetches everything.
- * CI caches the four directories keyed on this script.
+ * CI caches the fetched directories keyed on this script.
  *
  * Note: miniz's upstream tree has no `miniz_export.h` (its CMake build generates
  * one). The static-only shim below is written here rather than tracked.
@@ -26,7 +27,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { downloadTarball } from "./fetch-tarball.js";
@@ -35,11 +36,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const vendorDir = join(root, "vendor");
 
 /** The vendored packages, each a directory under `vendor/`. */
-export const VENDOR_PACKAGES = ["stb", "nanosvg", "miniz", "sqlite3"] as const;
+export const VENDOR_PACKAGES = ["stb", "nanosvg", "miniz", "sqlite3", "wasm3"] as const;
 export type VendorPackage = (typeof VENDOR_PACKAGES)[number];
 
 interface VendoredFile {
-  readonly package: Exclude<VendorPackage, "sqlite3">;
+  readonly package: Exclude<VendorPackage, "sqlite3" | "wasm3">;
   readonly name: string;
   readonly url: string;
   readonly sha256: string;
@@ -121,6 +122,15 @@ const SQLITE_FILES = [
     sha256: "d6c84557261893439b341d2e6c35187ae3ea24fbfd843ad94616f72d89242b8c",
   },
 ] as const;
+
+/* wasm3's interpreter is fetched as one commit archive: its `source/` tree is
+ * small but the headers and the `.c` files have to stay in lockstep, so a
+ * single pinned tarball is the reviewable unit. Only `source/` and the license
+ * are copied out; the archive's tools, tests and examples are not compiled. */
+const WASM3_COMMIT = "28ecb9af6d2040e474a70f7cb7f43666740141fb";
+const WASM3_TARBALL_URL = `https://github.com/wasm3/wasm3/archive/${WASM3_COMMIT}.tar.gz`;
+const WASM3_TARBALL_SHA256 = "5ecbb8851bd9acb54a83be10f0536167cb0da13b007406578761672b0bd94b18";
+const WASM3_PIN = `${WASM3_COMMIT} ${WASM3_TARBALL_SHA256}\n`;
 
 function sha256(file: string): string {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
@@ -213,6 +223,82 @@ function ensureSqlite(): void {
   rmSync(zip, { force: true });
 }
 
+/** Extract selected members of a gzip-compressed tarball.
+ *
+ * Windows' bsdtar rejects the wasm3 archive's platform symlinks, so the caller
+ * names just the `source/` tree and the license instead of extracting the whole
+ * repository. */
+function extractTarball(tarball: string, destination: string, members: readonly string[]): void {
+  const attempts: readonly (readonly [string, readonly string[]])[] =
+    process.platform === "win32"
+      ? [
+          ["tar", ["-xf", tarball, "-C", destination, ...members]],
+          ["tar", ["-xzf", tarball, "-C", destination, ...members]],
+        ]
+      : [
+          ["tar", ["-xzf", tarball, "-C", destination, ...members]],
+          ["tar", ["-xf", tarball, "-C", destination, ...members]],
+        ];
+  for (const [command, args] of attempts) {
+    if (spawnSync(command, args, { stdio: "ignore" }).status === 0) return;
+  }
+  throw new Error(`cannot extract ${basename(tarball)}; install tar`);
+}
+
+/**
+ * Fetch the pinned wasm3 archive and copy its interpreter sources into
+ * `vendor/wasm3`. A `.pin` marker records the commit and tarball hash, so an
+ * already-fetched tree is reused without touching the network and a changed
+ * pin re-extracts instead of silently mixing revisions.
+ */
+function ensureWasm3(): void {
+  const directory = join(vendorDir, "wasm3");
+  const pin = join(directory, ".pin");
+  if (
+    existsSync(join(directory, "wasm3.h")) &&
+    existsSync(pin) &&
+    readFileSync(pin, "utf8").replace(/\r\n/g, "\n") === WASM3_PIN
+  ) {
+    return;
+  }
+
+  const cache = join(vendorDir, ".cache");
+  mkdirSync(cache, { recursive: true });
+  const tarball = join(cache, `wasm3-${WASM3_COMMIT}.tar.gz`);
+  if (!isPinned(tarball, WASM3_TARBALL_SHA256)) {
+    rmSync(tarball, { force: true });
+    downloadTarball(tarball, WASM3_TARBALL_URL, `wasm3-${WASM3_COMMIT}.tar.gz`);
+    if (!isPinned(tarball, WASM3_TARBALL_SHA256)) {
+      const actual = sha256(tarball);
+      rmSync(tarball, { force: true });
+      throw new Error(`wasm3-${WASM3_COMMIT}.tar.gz: expected sha256 ${WASM3_TARBALL_SHA256}, got ${actual}`);
+    }
+  }
+
+  const extracted = join(cache, `wasm3-${WASM3_COMMIT}`);
+  rmSync(extracted, { recursive: true, force: true });
+  mkdirSync(extracted, { recursive: true });
+  const archiveRoot = `wasm3-${WASM3_COMMIT}`;
+  extractTarball(tarball, extracted, [`${archiveRoot}/source`, `${archiveRoot}/LICENSE`]);
+  const sourceDir = join(extracted, archiveRoot, "source");
+  if (!existsSync(join(sourceDir, "wasm3.h"))) {
+    throw new Error(`expected ${archiveRoot}/source/wasm3.h after extracting the archive`);
+  }
+
+  rmSync(directory, { recursive: true, force: true });
+  mkdirSync(directory, { recursive: true });
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith(".c") && !entry.name.endsWith(".h")) continue;
+    copyFileSync(join(sourceDir, entry.name), join(directory, entry.name));
+  }
+  const license = join(extracted, `wasm3-${WASM3_COMMIT}`, "LICENSE");
+  if (existsSync(license)) copyFileSync(license, join(directory, "LICENSE"));
+  writeFileSync(pin, WASM3_PIN);
+  rmSync(extracted, { recursive: true, force: true });
+  rmSync(tarball, { force: true });
+}
+
 /**
  * Ensure the requested vendored packages exist and match their pins.
  * Downloads only what is missing; everything else is a content check.
@@ -221,6 +307,10 @@ export function ensureVendoredSources(packages: readonly VendorPackage[] = VENDO
   for (const name of packages) {
     if (name === "sqlite3") {
       ensureSqlite();
+      continue;
+    }
+    if (name === "wasm3") {
+      ensureWasm3();
       continue;
     }
     for (const file of FILES) {

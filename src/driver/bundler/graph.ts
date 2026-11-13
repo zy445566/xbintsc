@@ -96,10 +96,14 @@ export function loadGraph(
       return undefined;
     }
     stack.push(path);
-    const raw = sourceTextBytes(readFileSync(path, "utf8"));
-    /* An extension may rewrite an imported asset (e.g. `.html`) into a TS
-     * module before it is parsed. The core only sees the transformed text. */
-    const loader = assetLoaders[extname(path).toLowerCase()];
+    const extension = extname(path).toLowerCase();
+    const loader = assetLoaders[extension];
+    /* A text asset is normalised from UTF-8; a binary asset loader (`.wasm`)
+     * receives one Latin-1 code unit per byte so no byte can be replaced. */
+    const fileBytes = readFileSync(path);
+    const raw = loader?.binary === true
+      ? fileBytes.toString("latin1")
+      : sourceTextBytes(fileBytes.toString("utf8"));
     let text = raw;
     let originRanges: readonly OriginRange[] | undefined;
     if (loader) {
@@ -116,7 +120,7 @@ export function loadGraph(
         stack.pop();
         return undefined;
       }
-    } else if (extname(path).toLowerCase() === ".json") {
+    } else if (extension === ".json") {
       // `resolveJsonModule`: a JSON file imports as a module whose default
       // export is the parsed value. JSON is a subset of expression syntax, so
       // `export default <json>;` is always valid TypeScript.

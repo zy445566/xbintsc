@@ -14,6 +14,8 @@
 import type { LinkFeature } from "./link-feature.js";
 import { storageGlobals, storageLinkFeatures } from "./storage.js";
 import { tlsFeature } from "./tls.js";
+import { wasmFeature } from "./wasm.js";
+import { loadWasmAsset } from "./wasm-asset.js";
 
 export interface BuiltinFunction {
   /** Exported C symbol, called as `xt_value symbol(int32_t argc, xt_value *argv)`. */
@@ -104,7 +106,15 @@ export interface AssetSourceRange {
 }
 
 /** Rewrites an imported file (selected by extension) into a TS module. */
-export type AssetLoader = (path: string, source: string) => AssetLoadResult;
+export type AssetLoader = {
+  (path: string, source: string): AssetLoadResult;
+  /**
+   * The loader consumes raw bytes rather than UTF-8 text. The bundler then
+   * decodes the file as a byte string (Latin-1) so every byte survives the
+   * `source` parameter; a `.wasm` loader uses this to embed a binary module.
+   */
+  readonly binary?: boolean;
+};
 
 export interface Extension {
   readonly name: string;
@@ -356,7 +366,8 @@ export const coreExtension: Extension = {
     print: { symbol: "xt_println" },
   }),
   globalValues: () => storageGlobals,
-  linkFeatures: () => [...storageLinkFeatures, tlsFeature],
+  linkFeatures: () => [...storageLinkFeatures, tlsFeature, wasmFeature],
+  assetLoaders: () => ({ ".wasm": loadWasmAsset }),
 };
 
 export function createDefaultRegistry(): ExtensionRegistry {

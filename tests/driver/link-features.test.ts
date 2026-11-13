@@ -15,7 +15,7 @@ const EMPTY_USAGE: ProgramUsage = {
 function feature(
   name: string,
   needle: string,
-  options: { unavailable?: boolean; requires?: readonly string[] } = {},
+  options: { unavailable?: boolean; requires?: readonly string[]; required?: boolean } = {},
 ): LinkFeature {
   return {
     name,
@@ -28,6 +28,7 @@ function feature(
       : () => [`/runtime/${name}.a`],
     linkerFlags: () => (name === "media" ? ["-lm"] : []),
     ...(options.requires ? { requires: options.requires } : {}),
+    ...(options.required ? { required: true } : {}),
     used: (usage) => usage.strings.some((value) => value.includes(needle)),
   };
 }
@@ -123,6 +124,15 @@ describe("resolveLinkFeatures", () => {
     expect(result.bag.diagnostics).toHaveLength(1);
     expect(result.bag.diagnostics[0]!.category).toBe("warning");
     expect(result.bag.diagnostics[0]!.message).toContain("detected but is unavailable");
+  });
+
+  it("errors when an auto-detected required feature is unavailable", () => {
+    const registry = registryWith(feature("wasm", "WebAssembly", { unavailable: true, required: true }));
+    const result = resolve(registry, { ...EMPTY_USAGE, strings: ["WebAssembly"] });
+    expect(result.names).toEqual([]);
+    expect(result.bag.hasErrors).toBe(true);
+    expect(result.bag.diagnostics[0]!.category).toBe("error");
+    expect(result.bag.diagnostics[0]!.message).toContain("wasm native library not found");
   });
 
   it("errors when a forced feature is unavailable", () => {

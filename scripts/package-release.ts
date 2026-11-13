@@ -110,8 +110,9 @@ cpSync(findRuntimeDir(), join(stage, "runtime"), { recursive: true });
 console.log("xbintsc: packaged runtime/");
 
 // 3. Vendored sources the driver compiles on demand (SQLite for `storage`,
-// miniz for `compression`). They are fetched by `npm run vendor`, not committed.
-for (const name of ["stb", "nanosvg", "miniz", "sqlite3"]) {
+// miniz for `compression`, wasm3 for `wasm`). They are fetched by `npm run vendor`,
+// not committed.
+for (const name of ["stb", "nanosvg", "miniz", "sqlite3", "wasm3"]) {
   const source = join(root, "vendor", name);
   if (!existsSync(source)) fail(`missing vendor/${name}; run \`npm run vendor\` before packaging`);
   cpSync(source, join(stage, "vendor", name), { recursive: true });

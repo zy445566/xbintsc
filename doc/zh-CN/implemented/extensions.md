@@ -2,18 +2,18 @@
 
 > 属于[已实现语法与功能](../implemented.md) · [English](../../implemented/extensions.md)
 
-实现位置：`src/extensions/registry.ts`、`src/extensions/node/`、`src/extensions/link-feature.ts`、`src/driver/usage.ts`、`src/driver/link-features.ts`
+实现位置：`src/extensions/registry.ts`、`src/extensions/node/`、`src/extensions/wasm.ts`、`src/extensions/link-feature.ts`、`runtime/xt_wasm/`、`src/driver/usage.ts`、`src/driver/link-features.ts`
 
 - 扩展是普通对象：`runtimeSources()`（额外 C 源）、`linkerFlags()`（额外链接参数）、`builtins()`（全局标识符 → 运行时符号，统一 `(argc, argv)` ABI）、`modules()`（导入说明符 → 命名导出 / 命名空间）与 `linkFeatures()`（可选的重型能力）。
 - `ExtensionRegistry`：注册 / 注销 / 查询 / 汇总 builtins、modules、runtime 源、链接参数与链接特性。
-- **可选链接特性**（`media`、`gpu`、`images`、`shaping`、`webgl`）：
-  - 特性声明 `runtimeSources()`（只在启用时编译的 C bridge）、`nativeObjects()`（只在启用时链接的归档）、`linkerFlags()`、可选的 `requires`（依赖的另一个特性）与 `used(usage)`。
+- **可选链接特性**（`media`、`gpu`、`images`、`shaping`、`webgl`、`storage`、`wasm`）：
+  - 特性声明 `runtimeSources()`（只在启用时编译的 C bridge）、`nativeObjects()`（只在启用时链接的归档）、`linkerFlags()`、可选的 `requires`（依赖的另一个特性）、可选的 `required`（源不可用时构建报错而不是 warning）与 `used(usage)`。
   - driver 从打包后的 AST 构造 `ProgramUsage`（`src/driver/usage.ts` 的 `collectUsage`）：字符串字面量（含导入 HTML 与内联 CSS）、标识符/属性名、`getContext(...)` 的 kind，以及 markup 是否可能在运行时拼出。简单的 `const` 别名会被解析；无法解析的 markup 让程序走保守回退。
-  - `resolveLinkFeatures` 应用 `--feature` / `--no-feature`（以及 `all`），展开 `requires`，把自动检测到但不可用的特性报为 warning、把强制开启却不可用的报为 error，并返回要链接的 bridge/归档/参数。
+  - `resolveLinkFeatures` 应用 `--feature` / `--no-feature`（以及 `all`），展开 `requires`，把自动检测到但不可用的可选特性报为 warning、把 required 或强制开启却不可用的报为 error，并返回要链接的 bridge/归档/参数。
   - bridge 就是强引用：构造函数安装特性的分发表，其引用迫使链接器取出实现；没有 bridge 时表保持 null，实现成员永不被链接。
-  - 当前客户端：`media`（FFmpeg，`runtime/xt_media/media_bridge.c` + `media.a`）、`gpu`（glslang/SPIRV-Cross，`runtime/ext_gui/gpu_bridge.c` + `gui.a` 内的 `gpu_feature.cpp`）、`images`（stb_image/NanoSVG，`runtime/ext_gui/image_bridge.c` + `image_feature.cpp`）、`shaping`（HarfBuzz/FreeType，`runtime/ext_gui/text_bridge.c` + `text_hb.cpp`）、`webgl`（context/DOM 绑定，`runtime/ext_gui/webgl_bridge.c` + `webgl_feature.cpp`，依赖 `gpu`）以及 `storage`（基于 SQLite 的 Web Storage/IndexedDB，其实现完全位于该特性的 `runtimeSources` —— `runtime/xt_storage/*.c`，因为这些全局变量本身就是强引用）。
+  - 当前客户端：`media`（FFmpeg，`runtime/xt_media/media_bridge.c` + `media.a`）、`gpu`（glslang/SPIRV-Cross，`runtime/ext_gui/gpu_bridge.c` + `gui.a` 内的 `gpu_feature.cpp`）、`images`（stb_image/NanoSVG，`runtime/ext_gui/image_bridge.c` + `image_feature.cpp`）、`shaping`（HarfBuzz/FreeType，`runtime/ext_gui/text_bridge.c` + `text_hb.cpp`）、`webgl`（context/DOM 绑定，`runtime/ext_gui/webgl_bridge.c` + `webgl_feature.cpp`，依赖 `gpu`）、`storage`（基于 SQLite 的 Web Storage/IndexedDB，其实现完全位于该特性的 `runtimeSources` —— `runtime/xt_storage/*.c`，因为这些全局变量本身就是强引用）以及 `wasm`（`WebAssembly` 命名空间背后的 wasm3；`runtime/xt_wasm/wasm_bridge.c` 安装分发表，`vendor/wasm3` 提供解释器）。
   - TLS/HTTP2 客户端：`tls`（`runtime/xt_tls/tls_core.c` 中的 mbedTLS 传输层加 `tls` 归档，供 `fetch` 与 `node:tls` 使用）、`node-tls`（`TLSSocket`/服务端接口，依赖 `tls`）与 `http2`（`runtime/ext_node/http2/http2_backend.c` 中的 nghttp2 后端，依赖 `tls` 与 `node-tls`；`npm run tls` 构建两个归档）。
-- 内置核心扩展 `core`：暴露 `print`（映射 `xt_println`），始终注册。
+- 内置核心扩展 `core`：暴露 `print`（映射 `xt_println`）、Web Storage 全局对象、`storage`/`tls`/`wasm` 链接特性以及二进制 `.wasm` 资源加载器，始终注册。
 - Node 扩展 `node`：
   - 模块化组织：`src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
   - 暴露可导入模块（`fs`、`fs/promises`、`path`、`os`、`process` 等），同时支持裸名称与 `node:` 前缀；`import { readFileSync } from "fs"` 解析到 `xt_node_read_text_file`，`path`/`os`/`process` 的导出映射到命名空间分发器。

@@ -173,6 +173,16 @@ export interface LinkFeatureDeclaration {
   readonly extension: string;
 }
 
+/**
+ * A lookup table keyed by names the program writes. A plain object literal
+ * inherits `Object.prototype`, so `table["toString"]` would answer with
+ * `Object.prototype.toString` and the generator would emit that function's text
+ * as an LLVM symbol.
+ */
+function lookupTable<T>(): Record<string, T> {
+  return Object.create(null) as Record<string, T>;
+}
+
 export class ExtensionRegistry {
   private readonly extensions = new Map<string, Extension>();
   /**
@@ -259,7 +269,7 @@ export class ExtensionRegistry {
 
   /** Flatten every registered builtin into one lookup table. */
   builtins(): Readonly<Record<string, BuiltinFunction>> {
-    const merged: Record<string, BuiltinFunction> = {};
+    const merged = lookupTable<BuiltinFunction>();
     for (const extension of this.extensions.values()) {
       const builtins = extension.builtins?.();
       if (builtins) Object.assign(merged, builtins);
@@ -269,7 +279,7 @@ export class ExtensionRegistry {
 
   /** Flatten every registered extension's global values into one lookup. */
   globalValues(): Readonly<Record<string, GlobalValue>> {
-    const merged: Record<string, GlobalValue> = {};
+    const merged = lookupTable<GlobalValue>();
     for (const extension of this.extensions.values()) {
       const values = extension.globalValues?.();
       if (values) Object.assign(merged, values);
@@ -279,7 +289,7 @@ export class ExtensionRegistry {
 
   /** Flatten every registered extension's importable modules. */
   modules(): Readonly<Record<string, ExtensionModule>> {
-    const merged: Record<string, ExtensionModule> = {};
+    const merged = lookupTable<ExtensionModule>();
     for (const extension of this.extensions.values()) {
       const modules = extension.modules?.();
       if (!modules) continue;
@@ -300,7 +310,7 @@ export class ExtensionRegistry {
    * extension (mirroring `modules()`).
    */
   assetLoaders(): Readonly<Record<string, AssetLoader>> {
-    const merged: Record<string, AssetLoader> = {};
+    const merged = lookupTable<AssetLoader>();
     for (const extension of this.extensions.values()) {
       const loaders = extension.assetLoaders?.();
       if (loaders) Object.assign(merged, loaders);

@@ -265,6 +265,9 @@ static xt_value xt_ctor_prototype(int index, xt_value nameValue) {
     default:
       if (xt_ctor_plain_protos[index] == XT_UNDEFINED) {
         xt_ctor_plain_protos[index] = xt_object_new();
+        /* `Map.prototype.get`, `String.prototype.slice`, ... are ordinary
+         * values; libraries bind them (`Map.prototype.get.bind(map)`). */
+        xt_install_proto_methods(xt_ctor_plain_protos[index], spec->name);
       }
       return xt_ctor_plain_protos[index];
   }

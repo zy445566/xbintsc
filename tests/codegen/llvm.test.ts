@@ -43,6 +43,24 @@ describe("codegen", () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
+  it("never resolves a lookup-table name through Object.prototype", () => {
+    /* The generator reads its builtin tables with `table[name]`. A plain object
+     * literal inherits `toString`/`constructor`/`valueOf`, so a program using a
+     * bare `toString` used to emit
+     * `declare i64 @function toString() { [native code] }(i32, i64*)`, which
+     * clang rejects. The checker reports the unknown name; codegen must not
+     * invent a symbol for it. */
+    const { ir, diagnostics } = compileToIr(`
+      const render: any = toString;
+      console.log(typeof render);
+    `);
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ code: DiagnosticCode.CannotFindName, category: "error" }),
+    );
+    expect(ir).not.toContain("[native code]");
+    expect(ir).not.toContain("@function");
+  });
+
   it("emits numeric constants using the NaN-boxed bit pattern", () => {
     const { ir } = compileToIr("const x = 42;");
     expect(ir).toContain(numberLiteral(42));

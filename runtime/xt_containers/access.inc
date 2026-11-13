@@ -479,3 +479,31 @@ xt_value xt_object_has_own(xt_value value, xt_value key) {
   }
   return XT_FALSE;
 }
+
+/* `length` / `name` / `prototype` are synthesised by `xt_get` for functions and
+ * have no property-bag entry, so `"length" in fn` must answer for them. */
+static int xt_in_function_key(xt_value value, xt_value key) {
+  if (!XT_IS_FUNCTION(value) || !XT_IS_STRING(key)) return 0;
+  xt_string *k = xt_as_string(key);
+  if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return 1;
+  if (k->length == 4 && memcmp(xt_string_bytes(k), "name", 4) == 0) return 1;
+  if (k->length == 9 && memcmp(xt_string_bytes(k), "prototype", 9) == 0) return 1;
+  return 0;
+}
+
+/* `key in value`, including the prototype chain and the built-in methods that
+ * live in the runtime's method tables rather than in a property bag. Without
+ * this the operator only answered for own properties, so `"map" in []` and
+ * `"call" in someFunction` were false. */
+xt_value xt_in(xt_value key, xt_value value) {
+  if (xt_truthy(xt_object_has_own(value, key))) return XT_TRUE;
+  if (xt_in_function_key(value, key)) return XT_TRUE;
+  if (xt_method_value(value, key) != XT_UNDEFINED) return XT_TRUE;
+  xt_value proto = xt_object_get_prototype(value);
+  while (proto != XT_UNDEFINED && proto != XT_NULL) {
+    if (xt_truthy(xt_object_has_own(proto, key))) return XT_TRUE;
+    if (xt_method_value(proto, key) != XT_UNDEFINED) return XT_TRUE;
+    proto = xt_object_get_prototype(proto);
+  }
+  return XT_FALSE;
+}

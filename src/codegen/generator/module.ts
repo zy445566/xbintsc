@@ -343,7 +343,10 @@ export const moduleMethods: ModuleMethods = {
         `  %result = call i64 @${moduleName}(i64 ${i64(XT_UNDEFINED)}, i64 ${i64(XT_UNDEFINED)}, i32 0, i64* null)`,
         "  call void @xt_drain_microtasks()",
         "  call void @xt_run_event_loop()",
-        "  ret i32 0",
+        /* Run the exit hook (Node's `process` "exit" listeners) and report the
+         * status the program asked for (`process.exitCode` / `process.exit`). */
+        "  %exitstatus = call i32 @xt_finish()",
+        "  ret i32 %exitstatus",
         "}",
         "",
       ].join(ARTIFACT_LINE_ENDING),

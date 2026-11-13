@@ -19,6 +19,7 @@ import {
 import { SymbolKind } from "../../../binder/binder.js";
 import { DiagnosticCode } from "../../../diagnostics/diagnostic.js";
 import { i64, numberLiteral, XT_UNDEFINED } from "../../values.js";
+import { NAMESPACE_PROPERTY_SETTERS } from "../lookup-tables.js";
 import { BINARY_RUNTIME, compoundToBinary, propertyNameText } from "../tables.js";
 import type { Generator } from "../generator.js";
 
@@ -127,6 +128,20 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
       }
       case SyntaxKind.PropertyAccessExpression: {
         const access = target as PropertyAccessExpression;
+        /* `process.exitCode = 1`: a namespace property with a runtime setter.
+         * Reads go through `NAMESPACE_PROPERTIES`, writes through the matching
+         * entry here; a namespace without one keeps the generic object path. */
+        const holder =
+          access.expression.kind === SyntaxKind.Identifier ? (access.expression as Identifier) : undefined;
+        const symbol = holder ? this.binding.symbolOfIdentifier.get(holder) : undefined;
+        const namespace = holder ? (symbol ? this.namespaceOfSymbol(symbol) : holder.text) : undefined;
+        const setter = namespace === undefined ? undefined : NAMESPACE_PROPERTY_SETTERS[namespace];
+        if (setter) {
+          const key = this.stringValue(access.name.text);
+          this.extraDeclarations.add(`declare i64 @${setter}(i64, i64)`);
+          this.emit(`  call i64 @${setter}(i64 ${key}, i64 ${value})`);
+          return;
+        }
         const object = this.emitExpression(access.expression);
         const key = this.stringValue(access.name.text);
         this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);

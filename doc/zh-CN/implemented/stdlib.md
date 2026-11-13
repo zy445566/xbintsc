@@ -16,6 +16,20 @@
 - `Object.defineProperty` / `defineProperties` / `getOwnPropertyDescriptor(s)` —— 数据属性与访问器属性，可单个也可批量定义；属性标志会被报告，但后续写入/枚举尚未强制执行。
 - `Object.freeze` / `is_frozen` / `from_entries`、`Object.getPrototypeOf`。
 - `Object.prototype`：`hasOwnProperty` / `toString` / `valueOf` / `isPrototypeOf` / `propertyIsEnumerable` / `__proto__`；`Object.getPrototypeOf({}) === Object.prototype`。
+- 函数值的 `.prototype` 在首次读取时创建（带 `constructor` 反向引用），并由同一
+  声明的所有闭包共享，因此 ES5 写法 `function Foo() {}; Foo.prototype.bar = ...;
+  new Foo().bar()` 可用。函数**值**本身仍是每次引用新建（`Foo === Foo` 为 false）。
+- `Object.getOwnPropertyNames` / `Object.keys` 对 `Map` / `Set` / `Date` /
+  `RegExp` / `Promise` / `Symbol` 返回空的自有字符串键，而不会越界读取。
+
+## `globalThis` 与 `Intl`
+
+- `globalThis.x` 与 `global.x` 按裸全局名读取（`globalThis.fetch`、`globalThis.Deno`）；
+  全局对象本身还不是值，所以 `const g = globalThis` 和 `globalThis.x = 1` 仍不支持。
+- `Intl.Segmenter` 支持 `granularity: "grapheme" | "word"`；`segment(text)` 返回
+  `{ segment, index, isWordLike }` 的**数组**。这是 UAX #29 的近似实现（未接入 ICU）：
+  字素按码点 + 组合符 / 变体选择符 / emoji 修饰符 / ZWJ 序列 / 区域指示符成对切分；
+  词按空白、单词字符、标点分段。`resolvedOptions()` 返回 `{ locale: "en", granularity }`。
 - 一等公民内建构造器（`const A = Array`、`new A(...)`、`A.isArray`、`x instanceof A`）见[代码生成](./codegen.md)。
 
 ## 数组

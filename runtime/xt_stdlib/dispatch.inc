@@ -266,6 +266,82 @@ xt_value xt_method_value(xt_value target, xt_value name) {
   return closure;
 }
 
+/* -- prototype method values ---------------------------------------------- */
+
+/*
+ * `Map.prototype.get`, `String.prototype.slice`, `Promise.prototype.then` are
+ * ordinary values in JavaScript, and libraries uncurry them:
+ *
+ *     const get = Map.prototype.get.bind(cache);
+ *     const toLower = Function.call.bind(String.prototype.toLowerCase);
+ *
+ * Instances already expose their methods through `xt_method_value` (keyed by
+ * the receiver's kind), but a prototype object is a plain object, so the lookup
+ * found nothing and `.bind` was read from `undefined`. Install the same table
+ * on the prototype as unbound closures; the receiver then arrives through
+ * `this`, exactly like the specification.
+ *
+ * `kind` is the constructor name the prototype belongs to.
+ */
+static const xt_method_spec *xt_proto_method_specs(const char *kind, size_t *count) {
+  if (!kind) return NULL;
+#define XT_PROTO_SPECS(name, table)                              \
+  if (strcmp(kind, name) == 0) {                                 \
+    *count = XT_NAME_COUNT(table);                               \
+    return table;                                                \
+  }
+  XT_PROTO_SPECS("Array", XT_ARRAY_METHODS)
+  XT_PROTO_SPECS("String", XT_STRING_METHODS)
+  XT_PROTO_SPECS("Function", XT_FUNCTION_METHODS)
+  XT_PROTO_SPECS("BigInt", XT_BIGINT_METHODS)
+  XT_PROTO_SPECS("Number", XT_NUMBER_METHODS)
+  XT_PROTO_SPECS("Boolean", XT_BOOLEAN_METHODS)
+  XT_PROTO_SPECS("Date", XT_DATE_METHODS)
+  XT_PROTO_SPECS("Map", XT_MAP_METHODS)
+  XT_PROTO_SPECS("Set", XT_SET_METHODS)
+  XT_PROTO_SPECS("WeakMap", XT_WEAKMAP_METHODS)
+  XT_PROTO_SPECS("WeakSet", XT_WEAKSET_METHODS)
+  XT_PROTO_SPECS("WeakRef", XT_WEAKREF_METHODS)
+  XT_PROTO_SPECS("RegExp", XT_REGEXP_METHODS)
+  XT_PROTO_SPECS("Promise", XT_PROMISE_METHODS)
+  XT_PROTO_SPECS("Error", XT_ERROR_METHODS)
+  XT_PROTO_SPECS("Symbol", XT_SYMBOL_METHODS)
+  XT_PROTO_SPECS("Generator", XT_GENERATOR_METHODS)
+#undef XT_PROTO_SPECS
+  return NULL;
+}
+
+void xt_install_proto_methods(xt_value proto, const char *kind) {
+  size_t count = 0;
+  const xt_method_spec *specs = xt_proto_method_specs(kind, &count);
+  if (!specs || !XT_IS_OBJECT(proto)) return;
+  for (size_t i = 0; i < count; i++) {
+    xt_value name = xt_string_from_cstr(specs[i].name);
+    xt_value closure = xt_closure_new((void *)xt_method_value_invoke, 1, &name);
+    xt_function_set_metadata(closure, name, specs[i].arity);
+    xt_object_set(proto, name, closure);
+  }
+}
+
+/* `Function.prototype[Symbol.hasInstance]`: `ctor[Symbol.hasInstance](value)`
+ * and `value instanceof ctor` share one implementation. */
+static xt_value xt_function_has_instance(xt_value thisValue, xt_value env, int32_t argc,
+                                         xt_value *argv) {
+  (void)env;
+  if (argc < 1) return xt_bool(0);
+  return xt_instance_of(argv[0], thisValue);
+}
+
+xt_value xt_function_has_instance_method(void) {
+  static xt_value cached = 0;
+  if (cached == 0) {
+    cached = xt_closure_new((void *)xt_function_has_instance, 0, NULL);
+    xt_function_set_metadata(cached, xt_string_from_cstr("[Symbol.hasInstance]"), 1);
+    xt_gc_add_root(&cached);
+  }
+  return cached;
+}
+
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv) {
   /* A symbol-named method (`obj[Symbol.iterator]()`) is never a built-in, so
    * resolve it as an ordinary property and call it with `target` as `this`. */

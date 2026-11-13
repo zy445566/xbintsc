@@ -32,7 +32,9 @@ Location: `src/codegen/llvm.ts` (`BINARY_RUNTIME`, `emitPrefix`, `emitPostfix`, 
 
 - Comma expression `,` (lowers to a `SequenceExpression`: every operand is
   evaluated left to right and the value of the last one is the result)
-- `in` operator (`key in obj`, mapped to `xt_in`)
+- `in` operator (`key in obj`, mapped to `xt_in`): own properties, built-in
+  methods and the whole prototype chain, so `"map" in []` and `"slice" in "abc"`
+  behave like JavaScript
 - `delete obj.key` / `delete obj[key]` (mapped to `xt_delete`)
 - `instanceof` (mapped to `xt_instance_of`, walking the prototype chain)
 

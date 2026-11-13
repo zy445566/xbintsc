@@ -296,6 +296,7 @@ export const NAMESPACE_VALUES: Record<string, string> = {
   Math: "xt_math_object",
   crypto: "xt_crypto_object",
   WebAssembly: "xt_webassembly_object",
+  Intl: "xt_intl_object",
 };
 
 /**
@@ -310,7 +311,6 @@ export const WEB_GLOBALS: ReadonlySet<string> = new Set<string>([
   "AbortSignal",
   "Reflect",
   "Proxy",
-  "Intl",
   "FormData",
   "Blob",
   "Headers",

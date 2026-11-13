@@ -17,6 +17,23 @@ import { MATH_CONSTANTS, NAMESPACE_PROPERTIES, NUMBER_CONSTANTS, SYMBOL_WELL_KNO
 import { isSuperKeyword } from "./super.js";
 import type { Generator } from "../generator.js";
 
+/** Strip `(...)`, `x as T`, `x satisfies T` and `x!` to the underlying expression. */
+function unwrapExpression(expression: Expression): Expression {
+  let current = expression;
+  for (;;) {
+    if (
+      current.kind === SyntaxKind.ParenthesizedExpression ||
+      current.kind === SyntaxKind.AsExpression ||
+      current.kind === SyntaxKind.SatisfiesExpression ||
+      current.kind === SyntaxKind.NonNullExpression
+    ) {
+      current = (current as { expression: Expression }).expression;
+      continue;
+    }
+    return current;
+  }
+}
+
 export interface AccessCallMethods {
   emitDelete(this: Generator, node: DeleteExpression): string;
   emitPropertyAccess(this: Generator, node: PropertyAccessExpression): string;
@@ -57,6 +74,22 @@ export const accessCallMethods: AccessCallMethods = {
       const value = this.reg();
       this.emit(`  ${value} = call i64 @xt_get(i64 ${parentProto}, i64 ${key})`);
       return value;
+    }
+    /* `globalThis.fetch` / `global.Deno`: the global object *is* the global
+     * scope, so read the property as the bare global name. Without this the
+     * receiver is `undefined` (there is no global object) and every feature
+     * probe (`globalThis.Deno ? ... : ...`) throws instead of reading
+     * `undefined`. `global` is Node's alias for the same object. Parentheses and
+     * `as`/`!` wrappers are transparent here. */
+    {
+      const receiver = unwrapExpression(node.expression);
+      if (
+        receiver.kind === SyntaxKind.Identifier &&
+        ((receiver as Identifier).text === "globalThis" || (receiver as Identifier).text === "global") &&
+        !this.binding.symbolOfIdentifier.get(receiver as Identifier)
+      ) {
+        return this.emitIdentifier(node.name);
+      }
     }
     if (
       node.name.text in MATH_CONSTANTS &&

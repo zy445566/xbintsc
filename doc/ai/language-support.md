@@ -78,6 +78,7 @@ Canonical detail (always current, much longer):
 | Sockets / servers (`http`, `net`, `dgram`) | ✅ | callbacks run on the event loop and can settle a promise you await (`net` / `http` examples included in the tests) |
 | `fs/promises` | ✅ | file, directory and `FileHandle` operations run on the async I/O worker pool and settle on the reactor, so timers and sockets keep running while they wait |
 | Global `fetch` | ✅ | HTTP/1.1 client whose connect/send/receive runs on the same worker pool; `await fetch(...)` yields and redirects are followed on the reactor. `http://` and `https://` (the optional `tls` link feature, mbedTLS; selected by an `https://` literal or `--feature tls`); the body is buffered before resolving |
+| Web Streams | ✅ | `ReadableStream` / `WritableStream` / `TransformStream`, default readers/writers, controllers, queuing strategies, `tee`, `pipeTo`/`pipeThrough`, async iteration, `ReadableStream.from` and text encoder/decoder streams. `start`/`pull`/`write`/`flush` may return promises. No BYOB byte streams or compression streams; `node:stream/web` re-exports the same classes |
 | Worker threads | 🚫 | workers are child processes |
 | `async` generators | ✅ | suspend at `await` and `yield`; every `.next()` returns a promise; `for await...of` supported |
 

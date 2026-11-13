@@ -44,7 +44,7 @@ resolve to the same implementation.
 | `process` | `process.cwd()`, `argv`, `env`, …; namespace dispatch too |
 | `buffer` | |
 | `crypto` | |
-| `stream`, `stream/promises` | |
+| `stream`, `stream/promises`, `stream/web` | `stream/web` re-exports the core WHATWG Streams |
 | `events` | |
 | `net`, `dgram`, `http` | sockets and servers on the xbintsc event loop (see the async caveat below) |
 | `tls`, `http2` | mbedTLS client/server and nghttp2 h2c/TLS+ALPN; optional link features built by `npm run tls` |

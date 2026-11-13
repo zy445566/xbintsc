@@ -33,13 +33,14 @@
 - [类型化数组与二进制数据](./implemented/typed-arrays.md) —— 类型化数组、ArrayBuffer、DataView
 - [异步、Promise 与生成器](./implemented/async.md) —— async/await、异步生成器、Promise、定时器
 - [fetch](./implemented/fetch.md) —— 由 reactor 驱动的 HTTP/1.1 客户端（HTTP 与 HTTPS）与 Headers
+- [Web Streams](./implemented/streams.md) —— `ReadableStream`、`WritableStream`、`TransformStream`、读写器与文本流
 - [WebAssembly](./implemented/wasm.md) —— `WebAssembly` 命名空间表面（字节码执行尚未实现）
 
 ### 模块与工具
 
 - [模块系统](./implemented/modules.md) —— import/export、打包、`node_modules`、`import.meta`
 - [扩展机制](./implemented/extensions.md) —— 注册表、`node` 扩展、原生 C++/Rust 扩展
-- [Node 扩展](./implemented/node.md) —— 24 个 Node 内置模块，每个模块一页
+- [Node 扩展](./implemented/node.md) —— 25 个 Node 内置模块，每个模块一页
 - [Storage 扩展](./implemented/storage.md) —— 基于 SQLite 的 `localStorage`、`sessionStorage` 与 `indexedDB`
 - [驱动、增量编译与工具链](./implemented/driver.md) —— 缓存、clang/LTO/PGO、配置、图标
 - [CLI 与编程接口](./implemented/cli.md) —— 命令、参数、嵌入式 API
@@ -65,6 +66,7 @@
 | 类型化数组、ArrayBuffer、DataView | [类型化数组](./implemented/typed-arrays.md) |
 | async/await、Promise、生成器、定时器 | [异步](./implemented/async.md) |
 | HTTP 客户端 | [fetch](./implemented/fetch.md) |
+| `ReadableStream` / `WritableStream` / `TransformStream` | [Web Streams](./implemented/streams.md) |
 | import/export 与打包 | [模块系统](./implemented/modules.md) |
 | 扩展注册表或 `node` 扩展 | [扩展机制](./implemented/extensions.md) |
 | 某个 Node 模块（`fs`、`path`、`http` 等） | [Node 扩展](./implemented/node.md) |

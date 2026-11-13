@@ -87,7 +87,6 @@ const hostTypes = [
   "Request",
   "Headers",
   "Response",
-  "ReadableStream",
   "WebGLRenderingContext",
   "WebGL2RenderingContext",
   "WebGLBuffer",

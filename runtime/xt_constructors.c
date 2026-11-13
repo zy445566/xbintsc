@@ -27,13 +27,34 @@ xt_value xt_finalization_registry_ctor(int32_t argc, xt_value *argv);
 
 /* -- constructor table ---------------------------------------------------- */
 
+/* Prototypes owned by the Web Streams runtime (xt_streams.c). */
+xt_value xt_stream_readable_proto(void);
+xt_value xt_stream_writable_proto(void);
+xt_value xt_stream_transform_proto(void);
+xt_value xt_stream_count_strategy_proto(void);
+xt_value xt_stream_byte_strategy_proto(void);
+xt_value xt_readable_stream_ctor(int32_t argc, xt_value *argv);
+xt_value xt_writable_stream_ctor(int32_t argc, xt_value *argv);
+xt_value xt_transform_stream_ctor(int32_t argc, xt_value *argv);
+xt_value xt_count_queuing_strategy_ctor(int32_t argc, xt_value *argv);
+xt_value xt_byte_length_queuing_strategy_ctor(int32_t argc, xt_value *argv);
+xt_value xt_text_encoder_stream_ctor(int32_t argc, xt_value *argv);
+xt_value xt_text_decoder_stream_ctor(int32_t argc, xt_value *argv);
+int xt_streams_has_static(const char *name, const char *method);
+xt_value xt_streams_static(xt_value name, int32_t argc, xt_value *argv);
+
 enum {
   XT_PROTO_OBJECT,
   XT_PROTO_ARRAY,
   XT_PROTO_FUNCTION,
   XT_PROTO_PLAIN,
   XT_PROTO_ERROR,
-  XT_PROTO_TYPED
+  XT_PROTO_TYPED,
+  XT_PROTO_READABLE_STREAM,
+  XT_PROTO_WRITABLE_STREAM,
+  XT_PROTO_TRANSFORM_STREAM,
+  XT_PROTO_COUNT_STRATEGY,
+  XT_PROTO_BYTE_STRATEGY
 };
 
 typedef struct {
@@ -76,7 +97,14 @@ typedef struct {
   X(String, 1, XT_PROTO_PLAIN)                                            \
   X(Boolean, 1, XT_PROTO_PLAIN)                                           \
   X(BigInt, 1, XT_PROTO_PLAIN)                                            \
-  X(Symbol, 0, XT_PROTO_PLAIN)
+  X(Symbol, 0, XT_PROTO_PLAIN)                                             \
+  X(ReadableStream, 0, XT_PROTO_READABLE_STREAM)                           \
+  X(WritableStream, 0, XT_PROTO_WRITABLE_STREAM)                           \
+  X(TransformStream, 0, XT_PROTO_TRANSFORM_STREAM)                         \
+  X(CountQueuingStrategy, 1, XT_PROTO_COUNT_STRATEGY)                      \
+  X(ByteLengthQueuingStrategy, 1, XT_PROTO_BYTE_STRATEGY)                  \
+  X(TextEncoderStream, 0, XT_PROTO_TRANSFORM_STREAM)                       \
+  X(TextDecoderStream, 0, XT_PROTO_TRANSFORM_STREAM)
 
 #define XT_CTOR_ENUM(name, arity, proto) XT_CTOR_##name,
 enum { XT_CTOR_SPECS(XT_CTOR_ENUM) XT_CTOR_COUNT };
@@ -185,6 +213,13 @@ static xt_value xt_builtin_ctor_call(const char *name, int32_t argc, xt_value *a
   if (strcmp(name, "Boolean") == 0) return xt_boolean_ctor(argc, argv);
   if (strcmp(name, "BigInt") == 0) return xt_bigint_ctor(argc, argv);
   if (strcmp(name, "Symbol") == 0) return xt_symbol(argc, argv);
+  if (strcmp(name, "ReadableStream") == 0) return xt_readable_stream_ctor(argc, argv);
+  if (strcmp(name, "WritableStream") == 0) return xt_writable_stream_ctor(argc, argv);
+  if (strcmp(name, "TransformStream") == 0) return xt_transform_stream_ctor(argc, argv);
+  if (strcmp(name, "CountQueuingStrategy") == 0) return xt_count_queuing_strategy_ctor(argc, argv);
+  if (strcmp(name, "ByteLengthQueuingStrategy") == 0) return xt_byte_length_queuing_strategy_ctor(argc, argv);
+  if (strcmp(name, "TextEncoderStream") == 0) return xt_text_encoder_stream_ctor(argc, argv);
+  if (strcmp(name, "TextDecoderStream") == 0) return xt_text_decoder_stream_ctor(argc, argv);
   if (xt_ctor_is_typed_array(name)) return xt_typed_array_ctor_by_name(nameValue, argc, argv);
   if (xt_ctor_is_error(name)) return xt_error_ctor_by_name(nameValue, argc, argv);
   return XT_UNDEFINED;
@@ -216,6 +251,16 @@ static xt_value xt_ctor_prototype(int index, xt_value nameValue) {
       return xt_error_prototype(nameValue);
     case XT_PROTO_TYPED:
       return xt_typed_array_prototype(nameValue);
+    case XT_PROTO_READABLE_STREAM:
+      return xt_stream_readable_proto();
+    case XT_PROTO_WRITABLE_STREAM:
+      return xt_stream_writable_proto();
+    case XT_PROTO_TRANSFORM_STREAM:
+      return xt_stream_transform_proto();
+    case XT_PROTO_COUNT_STRATEGY:
+      return xt_stream_count_strategy_proto();
+    case XT_PROTO_BYTE_STRATEGY:
+      return xt_stream_byte_strategy_proto();
     case XT_PROTO_PLAIN:
     default:
       if (xt_ctor_plain_protos[index] == XT_UNDEFINED) {
@@ -322,6 +367,7 @@ static int xt_ctor_has_static(const char *namespace, const char *method) {
     return xt_name_in(method, XT_PROMISE_STATICS, XT_NAMES_COUNT(XT_PROMISE_STATICS));
   if (xt_ctor_is_typed_array(namespace))
     return xt_name_in(method, XT_TYPED_ARRAY_STATICS, XT_NAMES_COUNT(XT_TYPED_ARRAY_STATICS));
+  if (xt_streams_has_static(namespace, method)) return 1;
   return 0;
 }
 
@@ -339,6 +385,7 @@ static xt_value xt_builtin_static_call(const char *namespace, const char *method
   if (strcmp(namespace, "Promise") == 0) return xt_promise_static(methodValue, argc, argv);
   if (xt_ctor_is_typed_array(namespace))
     return xt_typed_array_static_by_name(nameValue, methodValue, argc, argv);
+  if (xt_streams_has_static(namespace, method)) return xt_streams_static(methodValue, argc, argv);
   return XT_UNDEFINED;
 }
 

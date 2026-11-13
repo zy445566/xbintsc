@@ -524,9 +524,18 @@ enum {
   XT_INSTANCE_REGEXP = 6,
   XT_INSTANCE_PROMISE = 7,
   XT_INSTANCE_WEAK_MAP = 8, XT_INSTANCE_WEAK_SET = 9, XT_INSTANCE_WEAK_REF = 10,
+  XT_INSTANCE_READABLE_STREAM = 11,
+  XT_INSTANCE_WRITABLE_STREAM = 12,
+  XT_INSTANCE_TRANSFORM_STREAM = 13,
+  XT_INSTANCE_TEXT_ENCODER_STREAM = 14,
+  XT_INSTANCE_TEXT_DECODER_STREAM = 15,
   XT_INSTANCE_TYPED_ARRAY_FIRST = 16,
   XT_INSTANCE_TYPED_ARRAY_LAST = 24
 };
+
+/* Web Streams live in xt_streams.c; the id namespace is shared with the table
+ * in src/codegen/generator/tables.ts. */
+int xt_streams_instance_of(xt_value value, int32_t kind);
 
 static int xt_value_has_kind(xt_value value, uint8_t kind) {
   return XT_IS_OBJECT(value) && ((xt_object *)XT_GET_PTR(value))->header.kind == kind;
@@ -548,6 +557,12 @@ xt_value xt_instance_of_builtin(xt_value value, int32_t id) {
     case XT_INSTANCE_DATE: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_DATE));
     case XT_INSTANCE_REGEXP: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_REGEXP));
     case XT_INSTANCE_PROMISE: return xt_bool(xt_value_has_kind(value, XT_OBJECT_KIND_PROMISE));
+    case XT_INSTANCE_READABLE_STREAM:
+    case XT_INSTANCE_WRITABLE_STREAM:
+    case XT_INSTANCE_TRANSFORM_STREAM:
+    case XT_INSTANCE_TEXT_ENCODER_STREAM:
+    case XT_INSTANCE_TEXT_DECODER_STREAM:
+      return xt_bool(xt_streams_instance_of(value, id - XT_INSTANCE_READABLE_STREAM));
     default:
       if (id >= XT_INSTANCE_TYPED_ARRAY_FIRST && id <= XT_INSTANCE_TYPED_ARRAY_LAST) {
         return xt_bool(xt_typed_array_kind_of(value) == id - XT_INSTANCE_TYPED_ARRAY_FIRST);

@@ -31,7 +31,8 @@
 ## 其他表达式运算符
 
 - 逗号表达式 `,`（降级为 `SequenceExpression`：从左到右求值每个操作数，结果为最后一个）
-- `in` 运算符（`key in obj`，映射 `xt_in`）
+- `in` 运算符（`key in obj`，映射 `xt_in`）：查自有属性、内置方法和整条原型链，
+  因此 `"map" in []`、`"slice" in "abc"` 与 JavaScript 一致
 - `delete obj.key` / `delete obj[key]`（映射 `xt_delete`）
 - `instanceof`（映射 `xt_instance_of`，沿原型链判断）
 

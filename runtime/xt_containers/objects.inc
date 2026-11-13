@@ -125,6 +125,13 @@ xt_value xt_function_prototype(void) {
   xt_function_proto_ready = 1;
   xt_function_proto_root = xt_object_new_with_proto(xt_object_prototype());
   xt_gc_add_root(&xt_function_proto_root);
+  /* `Function.prototype.call` / `.apply` / `.bind` / `.toString` are values
+   * libraries uncurry (`Function.call.bind(...)`), and
+   * `Function.prototype[Symbol.hasInstance]` must be present for the same
+   * reason. */
+  xt_install_proto_methods(xt_function_proto_root, "Function");
+  xt_object_set(xt_function_proto_root, xt_symbol_well_known("hasInstance"),
+                xt_function_has_instance_method());
   /* `Array.constructor === Function` (every function inherits from here). The
    * factory sees the ready flag, so this does not recurse. */
   xt_value constructor = xt_builtin_constructor(xt_string_from_cstr("Function"));
@@ -282,9 +289,12 @@ static int xt_key_is_prototype(xt_value key) {
 xt_value xt_object_get(xt_value value, xt_value key) {
   /* A function's `.prototype` lives in a dedicated field (set by
      `xt_function_set_prototype`), not in its property bag. Expose it as a
-     normal property so `Class.prototype` returns the object instances use. */
+     normal property so `Class.prototype` returns the object instances use.
+     A plain function declaration starts without one — ES5 code assigns
+     `Foo.prototype.bar = ...` right after declaring `Foo`, so materialise it on
+     first read, like the specification's [[Construct]]-able function. */
   if (XT_IS_FUNCTION(value) && xt_key_is_prototype(key)) {
-    return ((xt_function *)XT_GET_PTR(value))->prototype;
+    return xt_function_prototype_object(value);
   }
   xt_object *obj = xt_as_object(value);
   if (!obj) return XT_UNDEFINED;
@@ -523,6 +533,12 @@ xt_value xt_object_keys(xt_value value) {
   }
   if (XT_IS_OBJECT(value)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(value);
+    /* Map/Set/Date/RegExp/Promise/Symbol use their own layout and have no
+     * property bag; reading `obj->count` there walked off the end of the
+     * allocation (`Object.getOwnPropertyNames(new Map())` crashed). */
+    if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+      return result;
+    }
     for (uint32_t i = 0; i < obj->count; i++) {
       if (XT_IS_STRING(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
     }

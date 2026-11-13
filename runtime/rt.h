@@ -215,6 +215,16 @@ xt_value xt_object_set_hooks(xt_value obj, const xt_object_hooks *hooks, void *d
 xt_value xt_object_prototype(void);
 /** The shared `Function.prototype` object. */
 xt_value xt_function_prototype(void);
+/** A function value's own `.prototype` object, created (with `constructor`) on
+ *  first use so `Foo.prototype.bar = ...` and `new Foo()` agree. */
+xt_value xt_function_prototype_object(xt_value value);
+/**
+ * Install the built-in methods of `kind` (a constructor name such as "Map") on
+ * `proto` as unbound first-class closures, so `Map.prototype.get.bind(m)` works.
+ */
+void xt_install_proto_methods(xt_value proto, const char *kind);
+/** `Function.prototype[Symbol.hasInstance]` (cached). */
+xt_value xt_function_has_instance_method(void);
 xt_value xt_object_get(xt_value obj, xt_value key);
 xt_value xt_object_get_prototype(xt_value obj);
 xt_value xt_object_set_prototype(xt_value obj, xt_value proto);
@@ -409,6 +419,23 @@ int xt_loop_poll(int timeout_ms);
  */
 typedef void (*xt_main_loop_fn)(void);
 void xt_loop_set_main(xt_main_loop_fn fn);
+
+/* -- program termination --------------------------------------------------- */
+/*
+ * The generated `main` ends with `xt_finish()`, which runs the registered exit
+ * hook once (Node's `process` "exit" listeners) and yields the status the
+ * program asked for, so `process.exitCode` and `process.exit(n)` reach the
+ * shell. Both are core runtime entry points; a program that never touches them
+ * links the same code and exits 0.
+ */
+typedef void (*xt_exit_hook)(void);
+/** Register the hook `xt_finish` runs once; replaces any previous hook. */
+void xt_at_exit(xt_exit_hook hook);
+/** Run the exit hook (at most once) and return the program's exit status. */
+int xt_finish(void);
+/** Status reported by `xt_finish`; `process.exitCode = n` sets it. */
+void xt_set_exit_status(int status);
+int xt_get_exit_status(void);
 
 /* -- timers --------------------------------------------------------------- */
 /* The JS timer globals, implemented on top of the reactor above. Each returns

@@ -19,6 +19,25 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 - `Object.freeze` / `is_frozen` / `from_entries`, `Object.getPrototypeOf`.
 - `Object.prototype`: `hasOwnProperty` / `toString` / `valueOf` / `isPrototypeOf` / `propertyIsEnumerable` / `__proto__`; `Object.getPrototypeOf({}) === Object.prototype`.
 - First-class built-in constructors (`const A = Array`, `new A(...)`, `A.isArray`, `x instanceof A`) are covered in [Codegen](./codegen.md#llvm-ir-code-generation-codegen).
+- A function value's `.prototype` is created on first read (with a
+  `constructor` back-reference) and shared by every closure of one declaration, so
+  the ES5 pattern `function Foo() {}; Foo.prototype.bar = ...; new Foo().bar()`
+  works. Function *values* are still fresh per reference (`Foo === Foo` is false).
+- `Object.getOwnPropertyNames` / `Object.keys` report no own string keys for
+  `Map` / `Set` / `Date` / `RegExp` / `Promise` / `Symbol` instead of reading past
+  their allocation.
+
+## `globalThis` and `Intl`
+
+- `globalThis.x` and `global.x` read the property as the bare global name
+  (`globalThis.fetch`, `globalThis.Deno`); the global object itself is not a
+  value, so `const g = globalThis` and `globalThis.x = 1` remain unsupported.
+- `Intl.Segmenter` with `granularity: "grapheme" | "word"`; `segment(text)`
+  returns an **array** of `{ segment, index, isWordLike }`. It is a documented
+  approximation of UAX #29 (no ICU): graphemes are code points plus combining
+  marks, variation selectors, emoji modifiers, ZWJ sequences and regional
+  indicator pairs; words are runs of whitespace, word characters and punctuation.
+  `resolvedOptions()` reports `{ locale: "en", granularity }`.
 
 ## Arrays
 

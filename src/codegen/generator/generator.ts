@@ -12,6 +12,7 @@ import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import { bind } from "../../binder/binder.js";
 import { checkProgram } from "../../checker/checker.js";
 import { GeneratorContext } from "./context.js";
+import { hardenLookupTables } from "./lookup-tables.js";
 import { moduleMethods, type ModuleMethods } from "./module.js";
 import { statementMethods, type StatementMethods } from "./statements.js";
 import { expressionMethods, type ExpressionMethods } from "./expressions.js";
@@ -47,6 +48,9 @@ export function generate(
   diagnostics: DiagnosticBag,
   options: CodegenOptions = {},
 ): CodegenResult {
+  // Lookup tables must not answer for inherited members (`toString`) before
+  // any name is lowered; see `lookup-tables.ts`.
+  hardenLookupTables();
   // Bind once: the checker and the generator must see the same symbol table.
   const binding = bind(sourceFile);
   if (options.check !== false) {

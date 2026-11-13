@@ -385,28 +385,6 @@ XT_BUILTIN_TRAMPOLINE(xt_builtin_value_queueMicrotask, xt_queue_microtask)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_structuredClone, xt_structured_clone)
 XT_BUILTIN_TRAMPOLINE(xt_builtin_value_fetch, xt_fetch)
 
-xt_value xt_in(xt_value key, xt_value value) {
-  if (XT_IS_OBJECT(value)) return xt_object_has(value, key);
-  if (XT_IS_ARRAY(value)) {
-    if (xt_is_symbol(key)) {
-      xt_array *array = (xt_array *)XT_GET_PTR(value);
-      if (!XT_IS_OBJECT(array->extra)) return XT_FALSE;
-      return xt_object_has_own(array->extra, key);
-    }
-    int32_t index = xt_to_int32(key);
-    return xt_bool(index >= 0 && (uint32_t)index < xt_as_array(value)->length);
-  }
-  if (XT_IS_STRING(value)) {
-    if (xt_is_symbol(key)) return XT_FALSE;
-    xt_string *s = xt_as_string(value);
-    xt_string *k = xt_as_string(xt_to_string(key));
-    if (k->length == 6 && memcmp(xt_string_bytes(k), "length", 6) == 0) return XT_TRUE;
-    int32_t index = xt_to_int32(key);
-    return xt_bool(index >= 0 && (uint32_t)index < xt_string_utf16_length(s));
-  }
-  return XT_FALSE;
-}
-
 xt_value xt_rest_args(int32_t argc, xt_value *argv, int32_t start) {
   if (start < 0) start = 0;
   int32_t count = argc - start;
@@ -482,7 +460,9 @@ xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv) {
     return XT_UNDEFINED;
   }
   xt_function *function = (xt_function *)XT_GET_PTR(ctor);
-  xt_value proto = function->prototype;
+  /* Share the lazily created `.prototype` with `ctor.prototype`, so ES5 code
+   * that assigns methods after the declaration builds a working chain. */
+  xt_value proto = xt_function_prototype_object(ctor);
   xt_value instance = xt_object_new_with_proto(XT_IS_OBJECT(proto) ? proto : XT_UNDEFINED);
   xt_value result = function->code(instance, ctor, argc, argv);
   if (XT_IS_OBJECT(result) || XT_IS_ARRAY(result) || XT_IS_FUNCTION(result)) return result;

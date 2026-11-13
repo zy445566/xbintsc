@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "xt_containers/shapes.inc"
+#include "xt_containers/function_prototypes.inc"
 #include "xt_containers/objects.inc"
 #include "xt_containers/arrays.inc"
 #include "xt_containers/access.inc"

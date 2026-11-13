@@ -2,7 +2,7 @@
 
 > Part of [Implemented syntax and features](../implemented.md) · [简体中文](../zh-CN/implemented/extensions.md)
 
-Location: `src/extensions/registry.ts`, `src/extensions/node/`, `src/extensions/link-feature.ts`, `src/driver/usage.ts`, `src/driver/link-features.ts`
+Location: `src/extensions/registry.ts`, `src/extensions/node/`, `src/extensions/webworker/`, `src/extensions/link-feature.ts`, `src/driver/usage.ts`, `src/driver/link-features.ts`
 
 - An extension is a plain object: `runtimeSources()` (extra C sources), `linkerFlags()` (extra link flags), `builtins()` (global identifier → runtime symbol, uniform `(argc, argv)` ABI), `modules()` (import specifier → named exports / namespace) and `linkFeatures()` (optional heavy capabilities).
 - `ExtensionRegistry`: register / unregister / lookup / aggregate builtins, modules, runtime sources, link flags and link features.
@@ -17,6 +17,7 @@ Location: `src/extensions/registry.ts`, `src/extensions/node/`, `src/extensions/
 - The Node extension `node`:
   - Modular organisation: `src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
   - Exposes importable modules (`fs`, `fs/promises`, `path`, `os`, `process`, ...) under both bare and `node:`-prefixed specifiers; `import { readFileSync } from "fs"` resolves to `xt_node_read_text_file`, and `path`/`os`/`process` map exports onto the namespace dispatchers.
+- The Web Worker extension `webworker`: browser globals `Worker`, `MessageChannel`, `MessagePort`, `self`, `isMainThread` and bare `postMessage`. A worker is a second process running the same executable (there are no threads), so `new Worker(import.meta.filename)` plus `isMainThread` is the entry pattern. The transport (`runtime/worker/`) is shared with `node:worker_threads`; see [Web Worker](./web-worker.md).
 - Adding a new module only requires a new directory plus a C implementation; the core compiler never changes.
 - Native C++/Rust extensions (`src/extensions/native.ts`, `--ext-native`):
   - `nativeObjects()` links pre-built objects/static archives that expose `extern "C"` symbols with the `(argc, argv)` ABI; a JSON manifest maps them onto builtins/modules (`linkerFlags` / `linkerFlagsByPlatform` cover C++/Rust runtimes).

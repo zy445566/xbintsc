@@ -13,8 +13,12 @@
 import type { Extension } from "./registry.js";
 import { nodeExtension } from "./node/index.js";
 import { guiExtension } from "./gui/index.js";
+import { webworkerExtension } from "./webworker/index.js";
 
 /** Every extension bundled with xbintsc, in registration order. */
 export function bundledExtensions(): readonly Extension[] {
-  return [nodeExtension, guiExtension];
+  /* `webworker` is registered after `gui`: both define `self`, and the worker
+   * extension's `self` must resolve to the worker scope (a page still reaches
+   * the window through `window`). */
+  return [nodeExtension, guiExtension, webworkerExtension];
 }

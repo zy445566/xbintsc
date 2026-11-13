@@ -17,6 +17,7 @@
 - Node 扩展 `node`：
   - 模块化组织：`src/extensions/node/fs/` + `runtime/ext_node/fs/read_file.c`
   - 暴露可导入模块（`fs`、`fs/promises`、`path`、`os`、`process` 等），同时支持裸名称与 `node:` 前缀；`import { readFileSync } from "fs"` 解析到 `xt_node_read_text_file`，`path`/`os`/`process` 的导出映射到命名空间分发器。
+- Web Worker 扩展 `webworker`：浏览器全局对象 `Worker`、`MessageChannel`、`MessagePort`、`self`、`isMainThread` 与裸 `postMessage`。worker 是运行同一可执行文件的第二个进程（没有线程），因此入口模式是 `new Worker(import.meta.filename)` 加 `isMainThread` 分支。传输层（`runtime/worker/`）与 `node:worker_threads` 共用；见 [Web Worker](./web-worker.md)。
 - 添加新模块只需新增目录 + C 实现，核心编译器无需改动。
 - 原生 C++/Rust 扩展（`src/extensions/native.ts`、`--ext-native`）：
   - `nativeObjects()` 链接以 `(argc, argv)` ABI 暴露 `extern "C"` 符号的预编译对象/静态库；JSON manifest 把它们映射为 builtins/modules（`linkerFlags` / `linkerFlagsByPlatform` 用于 C++/Rust 运行时）。

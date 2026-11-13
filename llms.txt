@@ -50,6 +50,7 @@
   - [doc/implemented/async.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/async.md): async/await, promises, generators and timers
   - [doc/implemented/fetch.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/fetch.md): the HTTP client
   - [doc/implemented/streams.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/streams.md): Web Streams (ReadableStream, WritableStream, TransformStream and node:stream/web)
+  - [doc/implemented/web-worker.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/web-worker.md): the Web Worker API (Worker, self, MessageChannel) and the `webworker` extension
   - [doc/implemented/modules.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/modules.md): import/export and bundling
   - [doc/implemented/extensions.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/extensions.md): the extension registry and the `node` extension
   - [doc/implemented/driver.md](https://raw.githubusercontent.com/zy445566/xbintsc/main/doc/implemented/driver.md): incremental cache, clang, LTO/PGO, config, icons

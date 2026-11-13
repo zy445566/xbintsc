@@ -23,5 +23,6 @@
 | `for` 头部中的 `let` | 每个循环只有一个绑定，而非每次迭代一个：循环体内创建的闭包都会看到最终值（`for (let i = 0; i < 3; i++) fns.push(() => i)` 得到 `3,3,3`） |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见[模块系统](./modules.md)） |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`，由可执行文件路径解析 |
+| Worker | worker 是独立的**进程**而不是线程：值通过结构化克隆复制、从不共享，`postMessage` 的 transfer 列表按复制处理，worker 脚本就是当前二进制（`import.meta.filename` 加 `isMainThread`） |
 
 > 数字格式化、宽松相等、`+` / 关系运算 `ToPrimitive`、整链可选链、`finally` 提前退出、对象键顺序等均已对齐 Node，并由差分测试覆盖，故不再列为偏差。

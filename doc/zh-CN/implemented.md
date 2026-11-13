@@ -35,6 +35,7 @@
 - [fetch](./implemented/fetch.md) —— 由 reactor 驱动的 HTTP/1.1 客户端（HTTP 与 HTTPS）与 Headers
 - [Web Streams](./implemented/streams.md) —— `ReadableStream`、`WritableStream`、`TransformStream`、读写器与文本流
 - [WebAssembly](./implemented/wasm.md) —— `WebAssembly` 命名空间表面（字节码执行尚未实现）
+- [Web Worker](./implemented/web-worker.md) —— `Worker`、`self`、`MessageChannel` 与 `webworker` 扩展
 
 ### 模块与工具
 
@@ -67,6 +68,7 @@
 | async/await、Promise、生成器、定时器 | [异步](./implemented/async.md) |
 | HTTP 客户端 | [fetch](./implemented/fetch.md) |
 | `ReadableStream` / `WritableStream` / `TransformStream` | [Web Streams](./implemented/streams.md) |
+| `Worker`、`self`、`MessageChannel` | [Web Worker](./implemented/web-worker.md) |
 | import/export 与打包 | [模块系统](./implemented/modules.md) |
 | 扩展注册表或 `node` 扩展 | [扩展机制](./implemented/extensions.md) |
 | 某个 Node 模块（`fs`、`path`、`http` 等） | [Node 扩展](./implemented/node.md) |

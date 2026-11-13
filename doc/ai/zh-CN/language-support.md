@@ -76,7 +76,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `fs/promises` | ✅ | 文件、目录与 `FileHandle` 操作跑在异步 I/O 线程池上，并在 reactor 上 settle，等待期间定时器与套接字继续运行 |
 | 全局 `fetch` | ✅ | HTTP/1.1 客户端，connect/send/receive 跑在同一线程池；`await fetch(...)` 会让出，重定向在 reactor 上处理。支持 `http://` 与 `https://`（可选 `tls` 链接特性，mbedTLS；由 `https://` 字面量或 `--feature tls` 选中），resolve 前缓冲整个响应体 |
 | Web Streams | ✅ | `ReadableStream` / `WritableStream` / `TransformStream`、默认读写器、控制器、队列策略、`tee`、`pipeTo`/`pipeThrough`、异步迭代、`ReadableStream.from` 以及文本编解码流。`start`/`pull`/`write`/`flush` 可返回 Promise。不支持 BYOB 字节流与压缩流；`node:stream/web` 重新导出同一批类 |
-| worker 线程 | 🚫 | worker 是子进程 |
+| worker 线程 / Web Worker | ⚠️ | 进程隔离的 worker：`node:worker_threads` 与 `webworker` 扩展共用回环控制 socket，双向 `postMessage` 加结构化克隆、`MessageChannel`、`terminate()`。没有真正的线程，不支持端口转移；worker 脚本就是当前二进制（`import.meta.filename` 加 `isMainThread`） |
 | `async` 生成器 | ✅ | 可在 `await` 与 `yield` 处挂起；每次 `.next()` 返回 Promise；支持 `for await...of` |
 
 ## 类型：结构化检查后擦除
@@ -148,7 +148,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 数字格式化与强转 | ✅ 与 Node 一致（`toFixed`、`toPrecision`、十六/八/二进制解析） |
 | `BigInt` | ✅ 已实现 |
 | 垃圾回收 | ✅ 非移动标记清扫；显式根 + C 栈保守扫描；单线程、stop-the-world。`WeakMap`/`WeakSet` 键使用 ephemeron 不动点，`WeakRef` 目标不可达时清空；保守栈上的残留字可能延迟清空 |
-| 线程 | 🚫 单线程；`worker_threads` 只存在于 Node 扩展中 |
+| 线程 | 🚫 没有操作系统线程；worker（`node:worker_threads` 与 `webworker` 扩展）是独立进程，消息靠复制 |
 
 ## 平台
 

@@ -23,6 +23,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | `let` in a `for` loop header | One binding per loop, not one per iteration: closures created inside the body all observe the final value (`for (let i = 0; i < 3; i++) fns.push(() => i)` gives `3,3,3`) |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see [Module system](./modules.md)) |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`, resolved from the executable path |
+| Workers | A worker is a separate **process**, not a thread: values are structured-cloned and never shared, `postMessage` transfer lists copy, and the worker script is the current binary (`import.meta.filename` plus `isMainThread`) |
 
 > Number formatting, loose equality, `+` / relational `ToPrimitive`, whole-chain
 > optional chaining, `finally` on early exit and object-key ordering have all

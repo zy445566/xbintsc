@@ -10,6 +10,7 @@ Node 扩展实现了 22 个模块以及事件循环集成；已实现表面按�
 - [`fs`](./node/fs.md) —— 回调式异步操作、真正的文件监听、选项回调
 - [`fs/promises`](./node/fs-promises.md) —— `FileHandle` 追加/读取偏移、`Dir` 回调立即完成、`watch` 不触发、无取消
 - [完全未实现的模块](./node/modules.md) —— `https`、`tls`、`cluster`、`vm` 等
+- [`worker_threads`](./node/worker-threads.md) —— 无端口转移、无真正线程、无 `BroadcastChannel`
 - [全局对象与命名空间](./node/globals.md) —— `global`、`__dirname`、`node_modules` 之外的 `require`
 - [异步与事件循环模型](./node/async.md) —— 文件监听缺失、阻塞式 `net.connect`、无 keep-alive、固定大小线程池
 - [Bun 扩展](./node/bun.md) —— 仅为设计示例

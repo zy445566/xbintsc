@@ -12,6 +12,7 @@ is missing or differs from Node.
 - [`fs`](./node/fs.md) — callback-style async operations, real file watching, option callbacks
 - [`fs/promises`](./node/fs-promises.md) — `FileHandle` append/read offsets, immediate `Dir` callbacks, inert `watch`, no cancellation
 - [Fully unimplemented modules](./node/modules.md) — `https`, `tls`, `cluster`, `vm`, ...
+- [`worker_threads`](./node/worker-threads.md) — no port transfer, no real threads, no `BroadcastChannel`
 - [Global objects and namespaces](./node/globals.md) — `global`, `__dirname`, `require` outside `node_modules`
 - [Async and the event-loop model](./node/async.md) — blocked file watching, blocking `net.connect`, no keep-alive, fixed-size offload pool
 - [The Bun extension](./node/bun.md) — design example only

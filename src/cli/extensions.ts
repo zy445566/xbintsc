@@ -18,10 +18,18 @@ export function buildRegistry(
 ): ExtensionRegistry {
   const registry = createDefaultRegistry();
   const bundled = bundledExtensions();
+  const requested = new Set(extNames);
   for (const name of extNames) {
-    const extension = bundled.find((candidate) => candidate.name === name);
-    if (!extension) throw new Error(`Unknown extension '${name}'`);
-    registry.register(extension);
+    if (!bundled.some((candidate) => candidate.name === name)) {
+      throw new Error(`Unknown extension '${name}'`);
+    }
+  }
+  /* Register in catalog order, not flag order: later extensions override
+   * earlier global names (`gui` and `webworker` both define `self`), and a
+   * deterministic winner is easier to document than "whatever the user typed
+   * last". */
+  for (const extension of bundled) {
+    if (requested.has(extension.name)) registry.register(extension);
   }
   // Each manifest describes a pre-built C++ or Rust library.
   for (const manifest of nativeManifests) {

@@ -49,7 +49,7 @@ resolve to the same implementation.
 | `net`, `dgram`, `http` | sockets and servers on the xbintsc event loop (see the async caveat below) |
 | `tls`, `http2` | mbedTLS client/server and nghttp2 h2c/TLS+ALPN; optional link features built by `npm run tls` |
 | `child_process` | |
-| `worker_threads` | |
+| `worker_threads` | process-isolated workers over a loopback control socket: two-way `postMessage`, `MessageChannel`, `terminate()`, structured clone |
 | `util`, `querystring`, `url`, `assert`, `test`, `zlib` | |
 
 Coverage per module (exact functions and options) is in
@@ -61,6 +61,17 @@ Remember the runtime model before building on `net`/`http`: the event loop runs
 promise settled from a socket callback, a timer or an offloaded file/HTTP job can
 be awaited. `net.connect` itself is still blocking. See
 [language-support.md](./language-support.md).
+
+### `webworker` — Web Worker globals
+
+Enable with `--ext webworker` for `Worker`, `MessageChannel`, `MessagePort`,
+`self`, `isMainThread` and the bare `postMessage` global. A worker is a second
+process running the same executable (xbintsc has no threads), so the script is
+`import.meta.filename` and the program branches on `isMainThread`. Messages use
+the same structured-clone codec as `worker_threads`; `worker.onmessage` and
+`self.onmessage` receive `MessageEvent`-shaped objects, while a Node
+`worker.on("message", ...)` listener on the same object receives the raw value.
+See [../implemented/web-worker.md](../implemented/web-worker.md).
 
 ### `gui` — HTML/CSS window
 

@@ -11,12 +11,25 @@ import { describeE2E } from "./harness.js";
 
 const TIMEOUT = 120000;
 
+/**
+ * `read()` resolves to an iteration result. xbintsc and Node <= 24 build that
+ * object as `{ value, done }`; Node 26 builds it as `{ done, value }`.
+ * Property order is not part of the contract, so the differential cases print
+ * the two fields instead of `JSON.stringify(result)`, which would pin the
+ * comparison to one Node version.
+ */
+const READ_RESULT = `
+        function showRead(result) {
+          console.log(result.done, result.value);
+        }
+`;
+
 describeE2E(
   "web streams",
   (h) => {
     it("reads chunks, closes and locks a ReadableStream", () => {
       h.expectSameOutputAsNode(
-        `
+        `${READ_RESULT}
         async function main(): Promise<void> {
           const stream = new ReadableStream<string>({
             start(controller) {
@@ -27,9 +40,9 @@ describeE2E(
           });
           const reader = stream.getReader();
           console.log(stream.locked);
-          console.log(JSON.stringify(await reader.read()));
-          console.log(JSON.stringify(await reader.read()));
-          console.log(JSON.stringify(await reader.read()));
+          showRead(await reader.read());
+          showRead(await reader.read());
+          showRead(await reader.read());
           try { stream.getReader(); } catch (error) { console.log((error as Error).name); }
           reader.releaseLock();
           console.log(stream.locked);
@@ -42,7 +55,7 @@ describeE2E(
 
     it("supports async start, async pull and cancel", () => {
       h.expectSameOutputAsNode(
-        `
+        `${READ_RESULT}
         async function main(): Promise<void> {
           const delayed = new ReadableStream<string>({
             start(controller) {
@@ -53,8 +66,8 @@ describeE2E(
             },
           });
           const delayedReader = delayed.getReader();
-          console.log(JSON.stringify(await delayedReader.read()));
-          console.log(JSON.stringify(await delayedReader.read()));
+          showRead(await delayedReader.read());
+          showRead(await delayedReader.read());
 
           let next = 0;
           const pulled = new ReadableStream<number>({
@@ -65,9 +78,9 @@ describeE2E(
             },
           });
           const pulledReader = pulled.getReader();
-          console.log(JSON.stringify(await pulledReader.read()));
-          console.log(JSON.stringify(await pulledReader.read()));
-          console.log(JSON.stringify(await pulledReader.read()));
+          showRead(await pulledReader.read());
+          showRead(await pulledReader.read());
+          showRead(await pulledReader.read());
 
           let reason = "";
           const cancelled = new ReadableStream<string>({
@@ -76,7 +89,7 @@ describeE2E(
           const cancelReader = cancelled.getReader();
           await cancelReader.cancel("stop");
           console.log(reason);
-          console.log(JSON.stringify(await cancelReader.read()));
+          showRead(await cancelReader.read());
         }
         main();
       `,
@@ -120,7 +133,7 @@ describeE2E(
 
     it("transforms chunks and pipes through a transform", () => {
       h.expectSameOutputAsNode(
-        `
+        `${READ_RESULT}
         async function main(): Promise<void> {
           const transform = new TransformStream<string, string>({
             transform(chunk, controller) {
@@ -134,11 +147,11 @@ describeE2E(
           const reader = transform.readable.getReader();
           const first = reader.read();
           await writer.write("ab");
-          console.log(JSON.stringify(await first));
+          showRead(await first);
           const second = reader.read();
           await writer.close();
-          console.log(JSON.stringify(await second));
-          console.log(JSON.stringify(await reader.read()));
+          showRead(await second);
+          showRead(await reader.read());
 
           const received: string[] = [];
           const destination = new WritableStream<string>({
@@ -153,8 +166,8 @@ describeE2E(
             }),
           );
           const pipedReader = piped.getReader();
-          console.log(JSON.stringify(await pipedReader.read()));
-          console.log(JSON.stringify(await pipedReader.read()));
+          showRead(await pipedReader.read());
+          showRead(await pipedReader.read());
         }
         main();
       `,
@@ -164,7 +177,7 @@ describeE2E(
 
     it("builds a stream from an async iterable and propagates transform errors", () => {
       h.expectSameOutputAsNode(
-        `
+        `${READ_RESULT}
         async function* numbers(): AsyncGenerator<number> {
           yield 1;
           yield 2;
@@ -172,9 +185,9 @@ describeE2E(
 
         async function main(): Promise<void> {
           const reader = ReadableStream.from(numbers()).getReader();
-          console.log(JSON.stringify(await reader.read()));
-          console.log(JSON.stringify(await reader.read()));
-          console.log(JSON.stringify(await reader.read()));
+          showRead(await reader.read());
+          showRead(await reader.read());
+          showRead(await reader.read());
 
           const failing = new TransformStream<string, string>({
             transform() { throw new Error("boom"); },
@@ -193,14 +206,17 @@ describeE2E(
 
     it("tees a stream and iterates it with for await", () => {
       h.expectSameOutputAsNode(
-        `
+        `${READ_RESULT}
         async function main(): Promise<void> {
           const [first, second] = ReadableStream.from(["1", "2"]).tee();
           const firstReader = first.getReader();
           const secondReader = second.getReader();
-          console.log(JSON.stringify(await firstReader.read()), JSON.stringify(await secondReader.read()));
-          console.log(JSON.stringify(await firstReader.read()), JSON.stringify(await secondReader.read()));
-          console.log(JSON.stringify(await firstReader.read()), JSON.stringify(await secondReader.read()));
+          showRead(await firstReader.read());
+          showRead(await secondReader.read());
+          showRead(await firstReader.read());
+          showRead(await secondReader.read());
+          showRead(await firstReader.read());
+          showRead(await secondReader.read());
 
           const values: string[] = [];
           for await (const value of ReadableStream.from(["m", "n"])) values.push(value);
@@ -214,7 +230,7 @@ describeE2E(
 
     it("encodes and decodes text through streams", () => {
       h.expectSameOutputAsNode(
-        `
+        `${READ_RESULT}
         async function main(): Promise<void> {
           const encoder = new TextEncoderStream();
           const writer = encoder.writable.getWriter();
@@ -232,7 +248,7 @@ describeE2E(
           const decodedPromise = decoderReader.read();
           await decoderWriter.write(Uint8Array.from([104, 105]));
           await decoderWriter.close();
-          console.log(JSON.stringify(await decodedPromise));
+          showRead(await decodedPromise);
         }
         main();
       `,
@@ -258,7 +274,7 @@ describeE2E(
 
     it("re-exports the same classes from node:stream/web", () => {
       h.expectSameOutputAsNode(
-        `
+        `${READ_RESULT}
         import {
           ReadableStream,
           WritableStream,
@@ -283,7 +299,7 @@ describeE2E(
             start(controller) { controller.enqueue("node"); controller.close(); },
           });
           console.log(stream instanceof ReadableStream);
-          console.log(JSON.stringify(await stream.getReader().read()));
+          showRead(await stream.getReader().read());
         }
         main();
       `,

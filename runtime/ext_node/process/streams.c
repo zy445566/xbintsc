@@ -230,10 +230,10 @@ static void xt_stdin_job_release(xt_async_job *job) {
 
 /* Worker thread: only plain memory and a blocking read. */
 static void xt_stdin_job_run(xt_async_job *job) {
-  xt_stdin_job *read = (xt_stdin_job *)job;
+  xt_stdin_job *req = (xt_stdin_job *)job;
   int32_t received = 0;
   for (;;) {
-    int got = (int)XT_STREAM_READ(0, read->buffer, (unsigned)XT_STDIN_CHUNK);
+    int got = (int)XT_STREAM_READ(0, req->buffer, (unsigned)XT_STDIN_CHUNK);
     if (got > 0) {
       received = (int32_t)got;
       break;
@@ -244,22 +244,22 @@ static void xt_stdin_job_run(xt_async_job *job) {
     received = 0;
     break;
   }
-  read->length = received;
-  read->eof = received <= 0;
+  req->length = received;
+  req->eof = received <= 0;
 }
 
 static void xt_stdin_submit(void);
 
 /* Main thread: turn the bytes into a `data` event and queue the next read. */
 static void xt_stdin_job_complete(xt_async_job *job) {
-  xt_stdin_job *read = (xt_stdin_job *)job;
+  xt_stdin_job *req = (xt_stdin_job *)job;
   xt_stdin_in_flight = 0;
   xt_value stream = xt_process_stdin_object();
-  if (read->length > 0) {
-    xt_value chunk = xt_string_new(read->buffer, (size_t)read->length);
+  if (req->length > 0) {
+    xt_value chunk = xt_string_new(req->buffer, (size_t)req->length);
     xt_node_emit(stream, "data", 1, &chunk);
   }
-  if (read->eof) {
+  if (req->eof) {
     xt_stdin_eof = 1;
     xt_stdin_active = 0;
     xt_node_emit0(stream, "end");
@@ -271,20 +271,20 @@ static void xt_stdin_job_complete(xt_async_job *job) {
 
 static void xt_stdin_submit(void) {
   if (xt_stdin_in_flight || xt_stdin_eof) return;
-  xt_stdin_job *read = (xt_stdin_job *)calloc(1, sizeof(xt_stdin_job));
-  if (!read) return;
-  read->buffer = (char *)malloc(XT_STDIN_CHUNK);
-  if (!read->buffer) {
-    free(read);
+  xt_stdin_job *req = (xt_stdin_job *)calloc(1, sizeof(xt_stdin_job));
+  if (!req) return;
+  req->buffer = (char *)malloc(XT_STDIN_CHUNK);
+  if (!req->buffer) {
+    free(req);
     return;
   }
-  read->job.run = xt_stdin_job_run;
-  read->job.complete = xt_stdin_job_complete;
-  read->job.release = xt_stdin_job_release;
+  req->job.run = xt_stdin_job_run;
+  req->job.complete = xt_stdin_job_complete;
+  req->job.release = xt_stdin_job_release;
   /* Keep the stream (and therefore its listeners) alive while the read runs. */
-  read->job.roots[0] = xt_process_stdin_object();
+  req->job.roots[0] = xt_process_stdin_object();
   xt_stdin_in_flight = 1;
-  xt_async_submit(&read->job);
+  xt_async_submit(&req->job);
 }
 
 /* -- stdin methods -------------------------------------------------------- */

@@ -25,11 +25,11 @@
  * Run via `npm run vendor` (or `tsx scripts/fetch-vendored.ts`).
  */
 
-import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { gunzipSync, inflateRawSync } from "node:zlib";
 import { downloadTarball } from "./fetch-tarball.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -164,22 +164,68 @@ function ensureMinizExportHeader(): void {
   writeFileSync(target, MINIZ_EXPORT_H);
 }
 
-/** Extract a zip archive; Windows' bsdtar and POSIX's unzip cover the hosts. */
+/** A 32-bit little-endian field of a zip record. */
+function zipU32(bytes: Uint8Array, offset: number): number {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true);
+}
+
+/** A 16-bit little-endian field of a zip record. */
+function zipU16(bytes: Uint8Array, offset: number): number {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint16(offset, true);
+}
+
+/**
+ * Extract a zip archive in Node.
+ *
+ * An external `unzip`/`tar` is not guaranteed on every runner image, and a CI
+ * cache miss (for example after editing this script) must not turn a missing
+ * shell tool into a failed job. The central directory is the authoritative
+ * index, so it is read instead of walking local headers; stored and deflated
+ * entries cover the pinned SQLite amalgamation. Contents are pinned by SHA-256
+ * after extraction, which is why the CRC is not rechecked here.
+ */
 function extractZip(zip: string, destination: string): void {
-  const attempts: readonly (readonly [string, readonly string[]])[] =
-    process.platform === "win32"
-      ? [
-          ["tar", ["-xf", zip, "-C", destination]],
-          ["unzip", ["-q", "-o", zip, "-d", destination]],
-        ]
-      : [
-          ["unzip", ["-q", "-o", zip, "-d", destination]],
-          ["tar", ["-xf", zip, "-C", destination]],
-        ];
-  for (const [command, args] of attempts) {
-    if (spawnSync(command, args, { stdio: "ignore" }).status === 0) return;
+  const archive = readFileSync(zip);
+  const SIGNATURE_EOCD = 0x06054b50;
+  const SIGNATURE_CENTRAL = 0x02014b50;
+  let eocd = -1;
+  for (let offset = archive.length - 22; offset >= 0 && offset >= archive.length - 65557; offset--) {
+    if (zipU32(archive, offset) === SIGNATURE_EOCD) {
+      eocd = offset;
+      break;
+    }
   }
-  throw new Error(`cannot extract ${basename(zip)}; install unzip (or a tar that reads zip archives)`);
+  if (eocd < 0) throw new Error(`${basename(zip)}: not a zip archive`);
+  const count = zipU16(archive, eocd + 10);
+  let offset = zipU32(archive, eocd + 16);
+  for (let index = 0; index < count; index++) {
+    if (zipU32(archive, offset) !== SIGNATURE_CENTRAL) {
+      throw new Error(`${basename(zip)}: corrupt central directory`);
+    }
+    const method = zipU16(archive, offset + 10);
+    const compressedSize = zipU32(archive, offset + 20);
+    const nameLength = zipU16(archive, offset + 28);
+    const extraLength = zipU16(archive, offset + 30);
+    const commentLength = zipU16(archive, offset + 32);
+    const localOffset = zipU32(archive, offset + 42);
+    const name = Buffer.from(archive.subarray(offset + 46, offset + 46 + nameLength)).toString("utf8");
+    offset += 46 + nameLength + extraLength + commentLength;
+    if (name.endsWith("/")) continue;
+    const localNameLength = zipU16(archive, localOffset + 26);
+    const localExtraLength = zipU16(archive, localOffset + 28);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const payload = archive.subarray(dataStart, dataStart + compressedSize);
+    let content: Buffer;
+    if (method === 0) content = Buffer.from(payload);
+    else if (method === 8) content = inflateRawSync(payload);
+    else throw new Error(`${basename(zip)}: unsupported compression method ${method}`);
+    const target = resolve(destination, name);
+    if (target !== destination && !target.startsWith(`${destination}${sep}`)) {
+      throw new Error(`refusing to extract ${name} outside ${destination}`);
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+  }
 }
 
 /** Fetch the pinned SQLite amalgamation and copy out its two sources. */
@@ -223,26 +269,57 @@ function ensureSqlite(): void {
   rmSync(zip, { force: true });
 }
 
-/** Extract selected members of a gzip-compressed tarball.
+/** Read a NUL/space-padded text field out of a tar block. */
+function tarText(bytes: Uint8Array, start: number, length: number): string {
+  let end = start;
+  while (end < start + length && bytes[end] !== 0) end++;
+  return Buffer.from(bytes.subarray(start, end)).toString("utf8").replace(/\s+$/, "");
+}
+
+/** Read an octal field (tar pads it with spaces and/or NULs). */
+function tarSize(bytes: Uint8Array, start: number, length: number): number {
+  const text = tarText(bytes, start, length);
+  return text.length === 0 ? 0 : parseInt(text, 8);
+}
+
+/**
+ * Extract selected members of a gzip-compressed tarball.
  *
- * Windows' bsdtar rejects the wasm3 archive's platform symlinks, so the caller
- * names just the `source/` tree and the license instead of extracting the whole
- * repository. */
+ * An external `tar` is not reliable here: an older bsdtar on the Windows
+ * runners rejects this archive, and a runner image may not ship `tar` at all.
+ * Node's gzip decoder plus a minimal ustar reader keeps a cache miss working —
+ * the GitHub archive is plain ustar. Only regular files under the named members
+ * are written; directories, symlinks and the other repository trees are
+ * skipped (which is also why the wasm3 archive's platform symlinks cannot
+ * break extraction).
+ */
 function extractTarball(tarball: string, destination: string, members: readonly string[]): void {
-  const attempts: readonly (readonly [string, readonly string[]])[] =
-    process.platform === "win32"
-      ? [
-          ["tar", ["-xf", tarball, "-C", destination, ...members]],
-          ["tar", ["-xzf", tarball, "-C", destination, ...members]],
-        ]
-      : [
-          ["tar", ["-xzf", tarball, "-C", destination, ...members]],
-          ["tar", ["-xf", tarball, "-C", destination, ...members]],
-        ];
-  for (const [command, args] of attempts) {
-    if (spawnSync(command, args, { stdio: "ignore" }).status === 0) return;
+  const archive = gunzipSync(readFileSync(tarball));
+  const wanted = (path: string): boolean =>
+    members.some((member) => path === member || path.startsWith(`${member}/`));
+  let offset = 0;
+  while (offset + 512 <= archive.length) {
+    const header = archive.subarray(offset, offset + 512);
+    /* Two zero blocks mark the end of the archive; one is enough to stop. */
+    if (header.every((byte) => byte === 0)) return;
+    const name = tarText(header, 0, 100);
+    const prefix = tarText(header, 345, 155);
+    const type = header[156] === 0 ? "0" : String.fromCharCode(header[156]);
+    const size = tarSize(header, 124, 12);
+    const path = prefix.length > 0 ? `${prefix}/${name}` : name;
+    const dataStart = offset + 512;
+    const next = dataStart + Math.ceil(size / 512) * 512;
+    if ((type === "0" || type === "7") && wanted(path)) {
+      const target = resolve(destination, path);
+      if (target !== destination && !target.startsWith(`${destination}${sep}`)) {
+        throw new Error(`refusing to extract ${path} outside ${destination}`);
+      }
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, archive.subarray(dataStart, dataStart + size));
+    }
+    offset = next;
   }
-  throw new Error(`cannot extract ${basename(tarball)}; install tar`);
+  throw new Error(`${basename(tarball)}: truncated tar archive`);
 }
 
 /**

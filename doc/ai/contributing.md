@@ -149,10 +149,17 @@ Verify locally:
 
 ```bash
 npx tsx src/cli/main.ts emit src/cli/main.ts --ext node > scratch/ref.ll
-npx tsx src/cli/main.ts build src/cli/main.ts --ext node --out scratch/self --force
+npx tsx src/cli/main.ts build src/cli/main.ts --ext node --no-feature all --out scratch/self --force
 ./scratch/self/main emit src/cli/main.ts --ext node > scratch/gen2.ll   # .exe on Windows
 diff scratch/ref.ll scratch/gen2.ll
 ```
+
+`--no-feature all` is part of the command: the compiler bundles the TypeScript
+surface of every extension, so the usage scan sees names such as `localStorage`
+and `TLSSocket` and would otherwise link SQLite/mbedTLS/miniz/wasm3 into the
+compiler. It never uses those runtimes itself — it compiles them into the
+programs it builds — so leaving them out also means the self-host job needs
+neither `vendor/` nor the optional TLS/HTTP2 archives.
 
 ### 2. The runtime ABI and value model
 

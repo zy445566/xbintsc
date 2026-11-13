@@ -125,10 +125,15 @@ gen2 --emit--> gen3.ll      # 必须等于 ref.ll
 
 ```bash
 npx tsx src/cli/main.ts emit src/cli/main.ts --ext node > scratch/ref.ll
-npx tsx src/cli/main.ts build src/cli/main.ts --ext node --out scratch/self --force
+npx tsx src/cli/main.ts build src/cli/main.ts --ext node --no-feature all --out scratch/self --force
 ./scratch/self/main emit src/cli/main.ts --ext node > scratch/gen2.ll   # Windows 上是 .exe
 diff scratch/ref.ll scratch/gen2.ll
 ```
+
+`--no-feature all` 是命令的一部分：编译器会打包每个扩展的 TypeScript 接口，用法扫描因此
+能看到 `localStorage`、`TLSSocket` 之类的名字，否则就会把 SQLite/mbedTLS/miniz/wasm3
+链进编译器。编译器自身并不使用这些运行时——它们只会被编译进编译器产出的程序——所以不链接
+它们也意味着 self-host 任务既不需要 `vendor/`，也不需要可选的 TLS/HTTP2 归档。
 
 ### 2. 运行时 ABI 与值模型
 

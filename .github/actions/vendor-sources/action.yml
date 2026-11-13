@@ -17,6 +17,7 @@ runs:
           vendor/nanosvg
           vendor/miniz
           vendor/sqlite3
+          vendor/wasm3
         key: vendored-sources-${{ hashFiles('scripts/fetch-vendored.ts') }}
     - name: Fetch vendored sources
       run: npm run vendor

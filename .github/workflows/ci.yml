@@ -542,16 +542,25 @@ jobs:
 
           mkdir -p scratch dist
 
+          # The compiler bundles the TypeScript surface of every extension (they
+          # are part of its own source), so the link-feature scan sees names
+          # such as `localStorage`, `TLSSocket` and `node:zlib` and would link
+          # SQLite/mbedTLS/miniz/wasm3 into the compiler. The compiler does not
+          # use those runtimes itself — it compiles them into the *programs* it
+          # builds — so keep them out. That also means this job needs neither
+          # `vendor/` nor the optional TLS/HTTP2 archives.
+          no_features="--no-feature all"
+
           # Reference IR: the source (TypeScript, run through tsx) compiles itself.
           npx tsx src/cli/main.ts emit src/cli/main.ts --ext node > scratch/ref.ll
 
           # Generation 1: the source compiler builds itself into a native binary.
-          npx tsx src/cli/main.ts build src/cli/main.ts --ext node --out scratch/self --force
+          npx tsx src/cli/main.ts build src/cli/main.ts --ext node ${no_features} --out scratch/self --force
           gen1="$(binary scratch/self main)"
 
           # Generation 2: the self-hosted binary re-emits the IR and rebuilds itself.
           "${gen1}" emit src/cli/main.ts --ext node > scratch/gen2.ll
-          "${gen1}" build src/cli/main.ts --ext node --out scratch/self2 --force
+          "${gen1}" build src/cli/main.ts --ext node ${no_features} --out scratch/self2 --force
           gen2="$(binary scratch/self2 main)"
 
           # Generation 3: the second-generation binary re-emits the IR.

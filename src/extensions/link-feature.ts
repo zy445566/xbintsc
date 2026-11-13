@@ -67,6 +67,14 @@ export interface LinkFeature {
   linkerFlags?(): readonly string[];
   /** Other link features this one needs (activated with it). */
   readonly requires?: readonly string[];
+  /**
+   * A required feature has no graceful degradation: if its sources are
+   * unavailable the build fails with the feature's own message even when the
+   * feature was selected by the usage scan rather than `--feature`. Optional
+   * features (GUI media, image decoders, ...) warn and let the program fall
+   * back at run time instead.
+   */
+  readonly required?: boolean;
   /** Whether the program may use this feature. */
   used(usage: ProgramUsage): boolean;
 }

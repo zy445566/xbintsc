@@ -125,6 +125,16 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 
 完整列表见[未实现：标准库](../../unimplemented/stdlib.md)。
 
+## WebAssembly
+
+`WebAssembly.validate`、`compile`、`instantiate`、`Module`、`Instance`、导出的
+函数/内存以及 JS 函数导入都由 vendored **wasm3** 解释器支撑（可选的 `wasm`
+链接特性，程序提到 `WebAssembly` 时自动选择；`--feature wasm` 可强制启用）。
+`i64` 值使用 BigInt，`import bytes from "./x.wasm"` 会把模块作为
+`Uint8Array` 嵌入。导出的 table/global 和非函数导入尚未包装；见
+[已实现：WebAssembly](../../implemented/wasm.md) 与
+[未实现：WebAssembly](../../unimplemented/wasm.md)。
+
 ## 模块
 
 | 特性 | 状态 | 说明 |

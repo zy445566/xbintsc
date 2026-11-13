@@ -126,7 +126,7 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
    * invalidate objects just like the runtime's own (the packages are sibling to
    * `runtime/`, and absent in a checkout that has not run `npm run vendor`). */
   const vendorDir = resolve(runtimeDir, "..", "vendor");
-  for (const name of ["miniz", "sqlite3"]) {
+  for (const name of ["miniz", "sqlite3", "wasm3"]) {
     const dir = join(vendorDir, name);
     if (existsSync(dir)) collectHeaders(dir);
   }

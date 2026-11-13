@@ -33,12 +33,16 @@ export function findRuntimeDir(): string {
  */
 export function findVendorDir(): string {
   const candidate = resolve(findRuntimeDir(), "..", "vendor");
-  const markers = [join("sqlite3", "sqlite3.c"), join("miniz", "miniz.c")];
+  const markers = [
+    join("sqlite3", "sqlite3.c"),
+    join("miniz", "miniz.c"),
+    join("wasm3", "wasm3.h"),
+  ];
   if (markers.some((marker) => existsSync(join(candidate, marker)))) return candidate;
   throw new Error(
-    "Unable to locate the xbintsc vendor directory (missing vendor/miniz/miniz.c or " +
-      "vendor/sqlite3/sqlite3.c); run `npm run vendor` in a source checkout, or reinstall " +
-      "xbintsc so the package's vendored sources are present.",
+    "Unable to locate the xbintsc vendor directory (missing vendor/miniz/miniz.c, " +
+      "vendor/sqlite3/sqlite3.c or vendor/wasm3/wasm3.h); run `npm run vendor` in a " +
+      "source checkout, or reinstall xbintsc so the package's vendored sources are present.",
   );
 }
 

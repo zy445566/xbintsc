@@ -40,7 +40,7 @@ small file instead of a single monolithic document.
 - [Async, promises and generators](./implemented/async.md) — async/await, async generators, promises, timers
 - [fetch](./implemented/fetch.md) — reactor-driven HTTP/1.1 client (HTTP and HTTPS) and Headers
 - [Web Streams](./implemented/streams.md) — `ReadableStream`, `WritableStream`, `TransformStream`, readers/writers and text streams
-- [WebAssembly](./implemented/wasm.md) — the `WebAssembly` namespace surface (bytecode execution is not implemented)
+- [WebAssembly](./implemented/wasm.md) — wasm3-backed compilation/execution, the `WebAssembly` namespace and `.wasm` imports
 - [Web Worker](./implemented/web-worker.md) — `Worker`, `self`, `MessageChannel` and the `webworker` extension
 
 ### Modules and tooling

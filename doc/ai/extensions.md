@@ -73,6 +73,18 @@ the same structured-clone codec as `worker_threads`; `worker.onmessage` and
 `worker.on("message", ...)` listener on the same object receives the raw value.
 See [../implemented/web-worker.md](../implemented/web-worker.md).
 
+### `wasm` — WebAssembly (a core link feature)
+
+No extension flag is needed: the core extension declares a **`wasm` link
+feature**, and the usage scan selects it when the bundled program mentions
+`WebAssembly`. It compiles the pinned wasm3 interpreter and the JS bridge, so a
+program that never uses WebAssembly links neither. `--feature wasm` forces it
+on and `--no-feature wasm` keeps it out (the namespace then reports "not
+supported in this build"). The core extension also installs a binary `.wasm`
+asset loader, so `import bytes from "./add.wasm"` embeds a module as a
+`Uint8Array` for `WebAssembly.instantiate`. See
+[../implemented/wasm.md](../implemented/wasm.md).
+
 ### `gui` — HTML/CSS window
 
 Enable with `--ext gui` and import the `gui` module:

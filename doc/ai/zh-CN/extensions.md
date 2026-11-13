@@ -69,6 +69,17 @@ xbintsc run app.ts --ext node
 Node 的 `worker.on("message", ...)` 监听器收到原始值。见
 [../../implemented/web-worker.md](../../implemented/web-worker.md)。
 
+### `wasm` —— WebAssembly（核心链接特性）
+
+不需要扩展开关：核心扩展声明了 **`wasm` 链接特性**，当打包程序提到
+`WebAssembly` 时由用法扫描自动选择。它会编译固定版本的 wasm3 解释器和 JS
+桥接层，因此从不使用 WebAssembly 的程序不会链入它们。`--feature wasm` 强制
+启用，`--no-feature wasm` 保持不链入（此时命名空间报“not supported in this
+build”）。核心扩展还安装了二进制 `.wasm` 资源加载器，因此
+`import bytes from "./add.wasm"` 会把模块作为 `Uint8Array` 嵌入，可直接传给
+`WebAssembly.instantiate`。见
+[../../implemented/wasm.md](../../implemented/wasm.md)。
+
 ### `gui` —— HTML/CSS 窗口
 
 用 `--ext gui` 开启并导入 `gui` 模块：

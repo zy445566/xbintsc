@@ -105,7 +105,7 @@ doc/                               the detailed, canonical documentation
   npm test`. End-to-end tests compile and run real binaries, so they need clang;
   they skip when it is missing.
 - **Third-party sources live in `vendor/`, not in git.** `npm run vendor`
-  fetches the pinned stb/NanoSVG/miniz/SQLite sources
+  fetches the pinned stb/NanoSVG/miniz/SQLite/wasm3 sources
   (`scripts/fetch-vendored.ts`); `npm run gui` and the test scripts fetch what
   they need. Never commit files under `vendor/`; change a pin deliberately and
   update its SHA-256 instead.

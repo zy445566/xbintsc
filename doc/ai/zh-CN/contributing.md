@@ -14,8 +14,8 @@ npm test                 # 单元测试 + 端到端测试
 ```
 
 `vendor/` 不提交进仓库：`npm run vendor` 会按不可变的固定版本获取每个包并校验其
-SHA-256（`npm test` 通过 `pretest` 自动运行）。只有 `gui` 构建以及使用 `storage` 或
-`compression` 的程序需要这些文件。
+SHA-256（`npm test` 通过 `pretest` 自动运行）。只有 `gui` 构建以及使用
+`storage`、`compression` 或 `wasm` 的程序需要这些文件。
 
 从源码运行编译器需要 Node.js ≥ 22；任何会链接二进制的操作都需要 **clang 16+** 工具链
 （见 [troubleshooting.md](./troubleshooting.md)）。`xbintsc emit` 既不需要 clang 也不需要

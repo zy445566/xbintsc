@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect } from "vitest";
 import { build } from "../../src/driver/compiler.js";
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
+import { webworkerExtension } from "../../src/extensions/webworker/index.js";
 import { hasClang } from "../helpers.js";
 import { normalizeEol } from "../platform.js";
 
@@ -20,6 +21,8 @@ const describeWithClang = hasClang() ? describe : describe.skip;
 export interface RunOptions {
   /** Link the Node compatibility extension. */
   extensions?: boolean;
+  /** Link the Web Worker extension (`--ext webworker`). */
+  webworker?: boolean;
   /** Entry file base name; defaults to a random name. */
   name?: string;
   /** Force a fresh build, bypassing the whole-program cache. */
@@ -122,7 +125,13 @@ export function describeE2E(
       const entry = join(workdir, `${runOptions.name ?? `program_${Math.random().toString(36).slice(2)}`}.ts`);
       writeProgramFiles(runOptions.files ?? {});
       writeFileSync(entry, source);
-      const extensions = runOptions.extensions ? createDefaultRegistry().register(nodeExtension) : undefined;
+      const extensions = (() => {
+        if (!runOptions.extensions && !runOptions.webworker) return undefined;
+        const registry = createDefaultRegistry();
+        if (runOptions.extensions) registry.register(nodeExtension);
+        if (runOptions.webworker) registry.register(webworkerExtension);
+        return registry;
+      })();
       const result = build(entry, {
         emit: "exe",
         outDir: join(workdir, "out"),

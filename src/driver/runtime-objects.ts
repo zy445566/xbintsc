@@ -48,6 +48,17 @@ export const RUNTIME_SOURCES = [
   "xt_array_buffer.c",
   "xt_io.c",
   "xt_protocol_registry.c",
+  /* Worker transport. It lives in the core runtime (not in an extension's
+   * sources) because both `node:worker_threads` and the `webworker` extension
+   * link it; a single definition avoids duplicate symbols when both are
+   * enabled. Unused members are dropped by the linker's section GC. */
+  "worker/worker_platform.c",
+  "worker/worker_wire.c",
+  "worker/worker_codec.c",
+  "worker/worker_core.c",
+  "worker/worker_transport.c",
+  "worker/worker_api.c",
+  "worker/worker_ports.c",
 ] as const;
 
 export interface RuntimeObjects {

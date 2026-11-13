@@ -79,7 +79,7 @@ Canonical detail (always current, much longer):
 | `fs/promises` | ✅ | file, directory and `FileHandle` operations run on the async I/O worker pool and settle on the reactor, so timers and sockets keep running while they wait |
 | Global `fetch` | ✅ | HTTP/1.1 client whose connect/send/receive runs on the same worker pool; `await fetch(...)` yields and redirects are followed on the reactor. `http://` and `https://` (the optional `tls` link feature, mbedTLS; selected by an `https://` literal or `--feature tls`); the body is buffered before resolving |
 | Web Streams | ✅ | `ReadableStream` / `WritableStream` / `TransformStream`, default readers/writers, controllers, queuing strategies, `tee`, `pipeTo`/`pipeThrough`, async iteration, `ReadableStream.from` and text encoder/decoder streams. `start`/`pull`/`write`/`flush` may return promises. No BYOB byte streams or compression streams; `node:stream/web` re-exports the same classes |
-| Worker threads | 🚫 | workers are child processes |
+| Worker threads / Web Worker | ⚠️ | process-isolated workers: `node:worker_threads` and the `webworker` extension share a loopback control socket, two-way `postMessage` with structured clone, `MessageChannel`, `terminate()`. No real threads, no port transfer; the worker script is the current binary (`import.meta.filename` plus `isMainThread`) |
 | `async` generators | ✅ | suspend at `await` and `yield`; every `.next()` returns a promise; `for await...of` supported |
 
 ## Types: structurally checked, then erased
@@ -153,7 +153,7 @@ See [Unimplemented: standard library](../unimplemented/stdlib.md) for the full l
 | Number formatting and coercion | ✅ matches Node (`toFixed`, `toPrecision`, hex/octal/binary parsing) |
 | `BigInt` | ✅ implemented |
 | Garbage collection | ✅ non-moving mark-sweep; explicit roots plus a conservative C-stack scan; single-threaded and stop-the-world. WeakMap/WeakSet keys use an ephemeron fixed point and WeakRef targets are cleared when unreachable; a stale conservative stack word can delay clearing |
-| Threads | 🚫 single-threaded; `worker_threads` exists in the Node extension only |
+| Threads | 🚫 no OS threads; workers (`node:worker_threads` and the `webworker` extension) are separate processes with copied messages |
 
 ## Platform
 

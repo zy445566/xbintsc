@@ -40,7 +40,7 @@ TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编
 | `crypto` | [crypto](./node/crypto.md) | `createHash`（SHA-1 / SHA-256） |
 | `url` | [url](./node/url.md) | `pathToFileURL` / `fileURLToPath` |
 | `zlib` | [zlib](./node/zlib.md) | 仅 `createGzip` |
-| `worker_threads` | [worker_threads](./node/worker-threads.md) | 以子进程模拟 |
+| `worker_threads` | [worker_threads](./node/worker-threads.md) | 进程隔离的 worker：双向消息、`MessageChannel`、结构化克隆 |
 
 `tls` 与 `http2` 以可选**链接特性**实现，底层是随仓库引入的 mbedTLS 与 nghttp2：
 `npm run tls` 会下载并构建 `runtime/lib/<os>-<arch>/{tls,nghttp2}.{a,lib}`，

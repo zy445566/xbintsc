@@ -47,7 +47,7 @@ xbintsc run app.ts --ext node
 | `net`、`dgram`、`http` | 跑在 xbintsc 事件循环上的套接字与服务端（注意下面的异步限制） |
 | `tls`、`http2` | mbedTLS 客户端/服务端与 nghttp2 h2c/TLS+ALPN；由 `npm run tls` 构建的可选链接特性 |
 | `child_process` | |
-| `worker_threads` | |
+| `worker_threads` | 基于回环控制 socket 的进程隔离 worker：双向 `postMessage`、`MessageChannel`、`terminate()`、结构化克隆 |
 | `util`、`querystring`、`url`、`assert`、`test`、`zlib` | |
 
 各模块的具体覆盖（确切函数与选项）见
@@ -58,6 +58,16 @@ xbintsc run app.ts --ext node
 但 `async`/`await` 会在 pending Promise 上挂起，因此由套接字回调、定时器或 offload 的
 文件/HTTP job settle 的 Promise 都可以 await。`net.connect` 本身仍是阻塞的。见
 [language-support.md](./language-support.md)。
+
+### `webworker` —— Web Worker 全局对象
+
+用 `--ext webworker` 获得 `Worker`、`MessageChannel`、`MessagePort`、`self`、
+`isMainThread` 以及裸 `postMessage` 全局函数。worker 是运行同一可执行文件的第二个
+进程（xbintsc 没有线程），所以脚本就是 `import.meta.filename`，程序用
+`isMainThread` 分支。消息复用 `worker_threads` 的结构化克隆编解码器；
+`worker.onmessage` 与 `self.onmessage` 收到 `MessageEvent` 形状的对象，而同一对象上
+Node 的 `worker.on("message", ...)` 监听器收到原始值。见
+[../../implemented/web-worker.md](../../implemented/web-worker.md)。
 
 ### `gui` —— HTML/CSS 窗口
 

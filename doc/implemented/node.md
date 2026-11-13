@@ -42,7 +42,7 @@ work on another. Missing or different behaviour is recorded under
 | `crypto` | [crypto](./node/crypto.md) | `createHash` (SHA-1 / SHA-256) |
 | `url` | [url](./node/url.md) | `pathToFileURL` / `fileURLToPath` |
 | `zlib` | [zlib](./node/zlib.md) | `createGzip` only |
-| `worker_threads` | [worker_threads](./node/worker-threads.md) | emulated with child processes |
+| `worker_threads` | [worker_threads](./node/worker-threads.md) | process-isolated workers: two-way messaging, `MessageChannel`, structured clone |
 
 Additional small modules are provided with their core surface: `timers`
 (`setTimeout`/`setInterval`/`setImmediate`), `timers/promises`, `console`

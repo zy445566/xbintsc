@@ -35,6 +35,7 @@ export type { LinkFeature, ProgramUsage } from "./extensions/link-feature.js";
 export type { LinkFeatureRequest, ResolvedLinkFeature } from "./driver/link-features.js";
 export { bundledExtensions } from "./extensions/catalog.js";
 export { nodeExtension } from "./extensions/node/index.js";
+export { webworkerExtension } from "./extensions/webworker/index.js";
 export type { NodeModule } from "./extensions/node/module.js";
 export {
   NativeExtensionError,

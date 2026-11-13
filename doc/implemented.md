@@ -41,6 +41,7 @@ small file instead of a single monolithic document.
 - [fetch](./implemented/fetch.md) — reactor-driven HTTP/1.1 client (HTTP and HTTPS) and Headers
 - [Web Streams](./implemented/streams.md) — `ReadableStream`, `WritableStream`, `TransformStream`, readers/writers and text streams
 - [WebAssembly](./implemented/wasm.md) — the `WebAssembly` namespace surface (bytecode execution is not implemented)
+- [Web Worker](./implemented/web-worker.md) — `Worker`, `self`, `MessageChannel` and the `webworker` extension
 
 ### Modules and tooling
 
@@ -74,6 +75,7 @@ same file.
 | async/await, promises, generators, timers | [Async](./implemented/async.md) |
 | HTTP client | [fetch](./implemented/fetch.md) |
 | `ReadableStream` / `WritableStream` / `TransformStream` | [Web Streams](./implemented/streams.md) |
+| `Worker`, `self`, `MessageChannel` | [Web Worker](./implemented/web-worker.md) |
 | import/export and bundling | [Modules](./implemented/modules.md) |
 | extension registry or the `node` extension | [Extensions](./implemented/extensions.md) |
 | a specific Node module (`fs`, `path`, `http`, ...) | [Node extension](./implemented/node.md) |

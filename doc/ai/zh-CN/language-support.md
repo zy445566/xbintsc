@@ -75,6 +75,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | 套接字/服务端（`http`、`net`、`dgram`） | ✅ | 回调在事件循环上执行，可以 settle 你正在 await 的 Promise（测试含 `net`/`http` 示例） |
 | `fs/promises` | ✅ | 文件、目录与 `FileHandle` 操作跑在异步 I/O 线程池上，并在 reactor 上 settle，等待期间定时器与套接字继续运行 |
 | 全局 `fetch` | ✅ | HTTP/1.1 客户端，connect/send/receive 跑在同一线程池；`await fetch(...)` 会让出，重定向在 reactor 上处理。支持 `http://` 与 `https://`（可选 `tls` 链接特性，mbedTLS；由 `https://` 字面量或 `--feature tls` 选中），resolve 前缓冲整个响应体 |
+| Web Streams | ✅ | `ReadableStream` / `WritableStream` / `TransformStream`、默认读写器、控制器、队列策略、`tee`、`pipeTo`/`pipeThrough`、异步迭代、`ReadableStream.from` 以及文本编解码流。`start`/`pull`/`write`/`flush` 可返回 Promise。不支持 BYOB 字节流与压缩流；`node:stream/web` 重新导出同一批类 |
 | worker 线程 | 🚫 | worker 是子进程 |
 | `async` 生成器 | ✅ | 可在 `await` 与 `yield` 处挂起；每次 `.next()` 返回 Promise；支持 `for await...of` |
 

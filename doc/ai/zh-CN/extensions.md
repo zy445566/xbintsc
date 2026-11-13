@@ -42,7 +42,7 @@ xbintsc run app.ts --ext node
 | `process` | `process.cwd()`、`argv`、`env` 等；也接入命名空间分发 |
 | `buffer` | |
 | `crypto` | |
-| `stream`、`stream/promises` | |
+| `stream`、`stream/promises`、`stream/web` | `stream/web` 重新导出核心运行时的 WHATWG Streams |
 | `events` | |
 | `net`、`dgram`、`http` | 跑在 xbintsc 事件循环上的套接字与服务端（注意下面的异步限制） |
 | `tls`、`http2` | mbedTLS 客户端/服务端与 nghttp2 h2c/TLS+ALPN；由 `npm run tls` 构建的可选链接特性 |

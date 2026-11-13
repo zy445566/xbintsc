@@ -33,7 +33,8 @@
 | Generators (`function*`, `yield`, `yield*`, `next`/`throw`/`return`) | ✓ implemented with stackful coroutines; `for...of`, spread and delegation supported. `return()` completes without running `finally` |
 | Timers and microtasks | ✓ `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` / `setImmediate` / `clearImmediate` / `queueMicrotask` and `performance.now` (numeric ids, no `Timeout` / `Immediate` object). A promise settled from a timer can be awaited: the async body suspends on the pending promise and resumes when the timer fires |
 | I/O / process and other host APIs | only via extensions (e.g. Node `fs`) |
-| Web-platform globals (`globalThis`, `AbortController`, `AbortSignal`, `Reflect`, `Proxy`, `Intl`, `FormData`, `Blob`, `Headers`, `Request`, `Response`, `ReadableStream`, `EventTarget`) | ✗ recognized (they type-check and lower to `undefined`), but no runtime implementation |
+| Web-platform globals (`globalThis`, `AbortController`, `AbortSignal`, `Reflect`, `Proxy`, `Intl`, `FormData`, `Blob`, `Headers`, `Request`, `Response`, `EventTarget`) | ✗ recognized (they type-check and lower to `undefined`), but no runtime implementation |
+| Web Streams (`ReadableStream`, `WritableStream`, `TransformStream`, readers/writers, text streams) | ✓ implemented as core globals; see [Web Streams](../implemented/streams.md). BYOB byte streams and compression streams are not implemented |
 
 ## Typed arrays
 

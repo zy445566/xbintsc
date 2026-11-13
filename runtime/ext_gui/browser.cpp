@@ -535,7 +535,7 @@ xt_value xt_browser_type(int32_t argc, xt_value *argv) {
   std::string name = cstr(xt_arg(argc, argv, 0));
   if (name == "XRWebGLLayer" || name == "XRWebGLBinding" ||
       name == "ImageData" || name == "Response" ||
-      name == "ReadableStream" || name == "Request" || name == "Headers" ||
+      name == "Request" || name == "Headers" ||
       name == "DOMParser") {
     return XT_UNDEFINED;
   }

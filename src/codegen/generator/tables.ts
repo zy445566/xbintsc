@@ -49,6 +49,11 @@ export const BUILTIN_INSTANCEOF: Readonly<Record<string, number>> = {
   Int32Array: 22,
   Float32Array: 23,
   Float64Array: 24,
+  ReadableStream: 11,
+  WritableStream: 12,
+  TransformStream: 13,
+  TextEncoderStream: 14,
+  TextDecoderStream: 15,
 };
 
 export const BINARY_RUNTIME: Record<string, string | undefined> = {
@@ -311,7 +316,6 @@ export const WEB_GLOBALS: ReadonlySet<string> = new Set<string>([
   "Headers",
   "Request",
   "Response",
-  "ReadableStream",
   "EventTarget",
 ]);
 
@@ -349,6 +353,13 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   URLSearchParams: "xt_url_search_params_ctor",
   TextEncoder: "xt_text_encoder_ctor",
   TextDecoder: "xt_text_decoder_ctor",
+  ReadableStream: "xt_readable_stream_ctor",
+  WritableStream: "xt_writable_stream_ctor",
+  TransformStream: "xt_transform_stream_ctor",
+  CountQueuingStrategy: "xt_count_queuing_strategy_ctor",
+  ByteLengthQueuingStrategy: "xt_byte_length_queuing_strategy_ctor",
+  TextEncoderStream: "xt_text_encoder_stream_ctor",
+  TextDecoderStream: "xt_text_decoder_stream_ctor",
   ArrayBuffer: "xt_array_buffer_ctor",
   DataView: "xt_data_view_ctor",
   ...ERROR_CONSTRUCTORS,
@@ -381,6 +392,13 @@ export const FIRST_CLASS_CONSTRUCTORS = new Set<string>([
   "Boolean",
   "BigInt",
   "Symbol",
+  "ReadableStream",
+  "WritableStream",
+  "TransformStream",
+  "CountQueuingStrategy",
+  "ByteLengthQueuingStrategy",
+  "TextEncoderStream",
+  "TextDecoderStream",
 ]);
 
 export const BUILTIN_METHODS = new Set<string>([

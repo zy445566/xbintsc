@@ -26,6 +26,7 @@ work on another. Missing or different behaviour is recorded under
 | `buffer` | [buffer](./node/buffer.md) | `Buffer` represented as a plain object |
 | `stream` | [stream](./node/stream.md) | `Readable` / `Writable` / `Duplex` / `Transform` / `PassThrough` |
 | `stream/promises` | [stream/promises](./node/stream-promises.md) | `pipeline` only |
+| `stream/web` | [stream/web](./node/stream-web.md) | WHATWG streams, re-exported from the core runtime |
 | `net` | [net](./node/net.md) | TCP server and client |
 | `dgram` | [dgram](./node/dgram.md) | UDP sockets |
 | `http` | [http](./node/http.md) | server and client, `Connection: close` |

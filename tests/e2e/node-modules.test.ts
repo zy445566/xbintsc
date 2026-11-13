@@ -135,7 +135,7 @@ describeWithClang("node compatibility modules", () => {
     expect(stdout.trim()).toBe("function");
   });
 
-  it("provides sqlite/stream-web as throwing stubs", () => {
+  it("provides sqlite as a throwing stub and stream-web's internal tee shim", () => {
     const source = `
       import { DatabaseSync } from "node:sqlite";
       import { ReadableStreamTee } from "node:stream/web";

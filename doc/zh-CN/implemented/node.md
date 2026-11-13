@@ -24,6 +24,7 @@ TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编
 | `buffer` | [buffer](./node/buffer.md) | `Buffer` 以普通对象表示 |
 | `stream` | [stream](./node/stream.md) | `Readable` / `Writable` / `Duplex` / `Transform` / `PassThrough` |
 | `stream/promises` | [stream/promises](./node/stream-promises.md) | 仅 `pipeline` |
+| `stream/web` | [stream/web](./node/stream-web.md) | WHATWG 流，重新导出核心运行时的实现 |
 | `net` | [net](./node/net.md) | TCP 服务端与客户端 |
 | `dgram` | [dgram](./node/dgram.md) | UDP 套接字 |
 | `http` | [http](./node/http.md) | 服务端与客户端，`Connection: close` |

@@ -59,7 +59,7 @@ export interface ProjectConfig {
   readonly features?: readonly string[];
   /** Optional link features to keep out even when auto-detection finds a use. */
   readonly noFeatures?: readonly string[];
-  /** Bare module specifiers mapped to local replacement files. */
+  /** Exact module specifiers mapped to local replacement files. */
   readonly moduleOverrides?: Readonly<Record<string, string>>;
   readonly force?: boolean;
   readonly app?: AppConfig;

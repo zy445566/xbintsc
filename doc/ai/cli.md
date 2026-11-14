@@ -125,6 +125,7 @@ matching field. `--no-config` skips discovery entirely.
 | `extNative` | string[] | Native extension manifest paths |
 | `features` | string[] | Optional link features to force on, e.g. `["media"]` / `["all"]` |
 | `noFeatures` | string[] | Optional link features to keep out even when detected |
+| `moduleOverrides` | `{ [specifier: string]: string }` | Map imports to local files, e.g. `{ "jiti": "stubs/jiti.ts" }` (exact match) |
 | `force` | boolean | Ignore the incremental cache |
 | `storage.backend` | `"memory"｜"file"` | Storage backend for `localStorage` / `sessionStorage` / `indexedDB` (default `memory`) |
 | `storage.path` | string | Database file for `backend: "file"`, resolved against this config |

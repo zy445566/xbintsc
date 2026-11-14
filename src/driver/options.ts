@@ -71,10 +71,7 @@ export interface BuildOptions {
   readonly features?: readonly string[];
   /** Optional link features to keep out even when the scan detects a use. */
   readonly noFeatures?: readonly string[];
-  /**
-   * Bare module specifiers mapped to local replacement files. A specifier in
-   * this map resolves to its file (an absolute path) before `node_modules`.
-   */
+  /** Specifiers mapped to local replacement files, checked before `node_modules`. */
   readonly moduleOverrides?: Readonly<Record<string, string>>;
 }
 

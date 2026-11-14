@@ -58,6 +58,11 @@
       "items": { "type": "string" },
       "description": "Optional link features to keep out even when auto-detection finds a use."
     },
+    "moduleOverrides": {
+      "type": "object",
+      "description": "Replace module specifiers with local files, e.g. { \"jiti\": \"stubs/jiti.ts\" }. Keys match the exact specifier text; values are file paths (with extension) resolved against this config's directory. An override wins over node_modules, Node built-ins and extension modules.",
+      "additionalProperties": { "type": "string" }
+    },
     "force": {
       "type": "boolean",
       "description": "Ignore the incremental cache."

@@ -57,6 +57,19 @@ describe("classifyDependency", () => {
     expect(classifyDependency(directory, "react", new Set(["react"]))).toEqual({ kind: "external" });
   });
 
+  it("prefers a module override and matches the exact specifier", () => {
+    const directory = writeFiles({ "stub.ts": "" });
+    const target = join(directory, "stub.ts");
+    const overrides = { dep: target, fs: target };
+    /* A mapped bare specifier wins over node_modules and over a specifier the
+     * extension registry would otherwise handle. */
+    expect(classifyDependency(directory, "dep", NONE, overrides)).toEqual({ kind: "file", path: target });
+    expect(classifyDependency(directory, "fs", new Set(["fs"]), overrides)).toEqual({ kind: "file", path: target });
+    /* Keys are exact: a subpath and the node: spelling need their own entries. */
+    expect(classifyDependency(directory, "dep/sub", NONE, overrides)).toEqual({ kind: "external" });
+    expect(classifyDependency(directory, "node:fs", NONE, overrides)).toEqual({ kind: "external" });
+  });
+
   it("reports a missing relative path and an unresolved bare specifier", () => {
     const directory = writeFiles({});
     expect(resolveFile(directory, "./nope")).toEqual({ kind: "missing" });

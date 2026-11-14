@@ -106,6 +106,7 @@ profile 数据可能独立于源码变化。
 | `extNative` | string[] | 原生扩展清单路径 |
 | `features` | string[] | 强制开启的可选链接特性，如 `["media"]` / `["all"]` |
 | `noFeatures` | string[] | 即使检测到也保持关闭的可选链接特性 |
+| `moduleOverrides` | `{ [说明符: string]: string }` | 把导入映射到本地文件，如 `{ "jiti": "stubs/jiti.ts" }`（精确匹配） |
 | `force` | boolean | 忽略增量缓存 |
 | `storage.backend` | `"memory"｜"file"` | `localStorage` / `sessionStorage` / `indexedDB` 的存储后端（默认 `memory`） |
 | `storage.path` | string | `backend: "file"` 时的数据库文件，相对本配置解析 |

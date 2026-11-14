@@ -29,6 +29,11 @@ else as `any`:
 - classes: instance fields, methods, accessors, parameter properties,
   `this.x = ...` members and local ancestor classes. Static members are not
   instance members;
+- declaration visibility: interfaces, type aliases and classes declared at
+  module top level are visible to the whole bundle, while one declared *inside a
+  function body* only counts in the file that declares it. Bundled dependencies
+  are full of function-local classes (`babel.cjs` has its own `class Token`), and
+  those must not capture a type name the importing file meant;
 - arrays, tuples, function types, object literals and `new LocalClass()`;
 - simple generics: a type parameter is `any` at its declaration, and a call
   infers it from an argument (`T`, `T[]`, `Array<T>`) or takes it from an

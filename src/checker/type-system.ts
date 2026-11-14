@@ -68,7 +68,10 @@ type TypeDeclaration =
 
 /** Resolve type syntax and symbol annotations into the small model above. */
 export class TypeResolver {
+  /** Module-scope declarations, visible from every file in the bundle. */
   private readonly declarations = new Map<string, TypeDeclaration | undefined>();
+  /** Declarations nested inside a function body, visible only in their file. */
+  private readonly localDeclarations = new Map<string, Map<string, TypeDeclaration | undefined>>();
   private readonly symbolTypes = new Map<number, Type>();
   private readonly resolvingSymbols = new Set<number>();
   private readonly resolvingAliases = new Set<string>();
@@ -116,9 +119,26 @@ export class TypeResolver {
   }
 
   private addDeclaration(name: string, declaration: TypeDeclaration): void {
-    // A duplicate means bundling or shadowing made the name ambiguous; treating
-    // it as `any` is the only safe answer without a full binder for types.
+    /* A class declared inside a function body is scoped to that function: a
+     * bundled dependency is full of them (`babel.cjs` has its own `class
+     * Token`), and treating those as program-wide would hijack a type the
+     * importing file meant (`import type { Token } from "marked"`). */
+    const symbol = this.binding.symbolOfDeclaration.get(declaration.node);
+    if (symbol && !symbol.fn.isModule) {
+      const file = this.sourceFile.origins?.get(declaration.node) ?? this.sourceFile.fileName;
+      const local = this.localDeclarations.get(file) ?? new Map<string, TypeDeclaration | undefined>();
+      this.localDeclarations.set(file, local);
+      local.set(name, local.has(name) ? undefined : declaration);
+      return;
+    }
+    // A duplicate means bundling made the name ambiguous; `any` is the only safe answer.
     this.declarations.set(name, this.declarations.has(name) ? undefined : declaration);
+  }
+
+  /** The declaration a type reference in `node` names, if one is in scope. */
+  private declarationFor(name: string, node: Node): TypeDeclaration | undefined {
+    const file = this.sourceFile.origins?.get(node) ?? this.sourceFile.fileName;
+    return this.localDeclarations.get(file)?.get(name) ?? this.declarations.get(name);
   }
 
   private collectDynamicClasses(): void {
@@ -334,7 +354,7 @@ export class TypeResolver {
     if (typeParams.has(name)) return typeParams.get(name)!;
     const builtin = this.builtinType(name, node.typeArguments.map((argument) => this.resolve(argument, typeParams)));
     if (builtin) return builtin;
-    const declaration = this.declarations.get(name);
+    const declaration = this.declarationFor(name, node);
     if (!declaration) return { kind: "typeParam", name };
     if (declaration.kind === "interface") return this.interfaceType(declaration.node, node.typeArguments.map((argument) => this.resolve(argument, typeParams)));
     if (declaration.kind === "alias") return this.aliasType(declaration.node, node.typeArguments.map((argument) => this.resolve(argument, typeParams)));

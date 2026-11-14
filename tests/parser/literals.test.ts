@@ -81,6 +81,28 @@ describe("literal expressions", () => {
     expect(init.flags).toBe("gi");
   });
 
+  it("accepts a contextual keyword as a function expression name", () => {
+    /* A minified bundle writes `function constructor(...)` / `function get()`;
+     * only reserved words are illegal there (`static` is strict-mode reserved,
+     * so it stays out). */
+    for (const name of ["constructor", "get", "set", "type", "async"]) {
+      const { init, diagnostics } = initializerOf(`const f = function ${name}() { return 1; };`);
+      expect(diagnostics.filter((d) => d.category === "error"), name).toHaveLength(0);
+      expect(init.name?.text, name).toBe(name);
+    }
+  });
+
+  it("accepts a contextual keyword as a class expression name", () => {
+    const { init, diagnostics } = initializerOf("const C = class type {};");
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    expect(init.name?.text).toBe("type");
+  });
+
+  it("rejects a hard reserved word as a function expression name", () => {
+    const { diagnostics } = parse("const f = function class() {};");
+    expect(diagnostics.some((d) => d.code === DiagnosticCode.ExpectedToken)).toBe(true);
+  });
+
   it("reports an unterminated regular expression", () => {
     const { diagnostics } = parse("const r = /abc;");
     expect(diagnostics.some((d) => d.code === DiagnosticCode.InvalidCharacter)).toBe(true);

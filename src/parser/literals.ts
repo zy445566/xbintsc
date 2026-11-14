@@ -198,7 +198,10 @@ export const literalMethods: LiteralMethods = {
       flags |= NodeFlags.Generator;
     }
     let name: Identifier | undefined;
-    if (this.at(TokenKind.Identifier)) name = this.parseIdentifier();
+    /* A function *expression* may be named after a contextual keyword:
+     * `(function get() {})`, `(function constructor() {})`, `(function type() {})`.
+     * Only hard-reserved words are excluded, which `isIdentifierLike` decides. */
+    if (this.isIdentifierLike(this.token)) name = this.parseIdentifier();
     const typeParameters = this.parseTypeParameters();
     const parameters = this.parseParameters();
     let returnType: TypeNode | undefined;
@@ -213,7 +216,8 @@ export const literalMethods: LiteralMethods = {
   parseClassExpression(this: Parser): ClassExpression {
     const start = this.parseExpected(TokenKind.ClassKeyword).start;
     let name: Identifier | undefined;
-    if (this.at(TokenKind.Identifier)) name = this.parseIdentifier();
+    /* `(class type {})` — same contextual-keyword allowance as a function name. */
+    if (this.isIdentifierLike(this.token)) name = this.parseIdentifier();
     const typeParameters = this.parseTypeParameters();
     const heritage = this.parseHeritageClauses();
     const members = this.parseClassMembers();

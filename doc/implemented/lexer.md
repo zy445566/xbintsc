@@ -16,7 +16,7 @@ Location: `src/lexer/scanner.ts`, `src/lexer/token.ts`
   - Single / double quotes
   - Escapes: `\n \t \r \b \f \0 \\ \' \"`, `\xHH`, `\uHHHH`, `\u{...}`
 - Template literals (lexer level): no-substitution templates, `TemplateHead`, `TemplateMiddle`, `TemplateTail`, with `${}` and escapes.
-- Regex literal scanning (`/pattern/flags`), distinguishing division `/`.
+- Regex literal scanning (`/pattern/flags`), distinguishing division `/`. The scanner decides from the previous token, which cannot be right everywhere (`for (;;) /re/.test(x)` looks like a division); the parser keeps a regex fallback that re-reads the raw source, so a mis-scan only has to stay silent.
 - Private identifiers `#name`.
 - Comments: line `//` and block `/* */` (with unterminated diagnostics).
 - Newline and whitespace tracking (for ASI), BOM / CRLF normalization (`SourceFile`).

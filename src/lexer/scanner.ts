@@ -20,7 +20,7 @@ import { punctuationMethods, type PunctuationMethods } from "./scanner/punctuati
 export class Scanner {
   text: string;
   pos = 0;
-  readonly diagnostics: DiagnosticBag;
+  diagnostics: DiagnosticBag;
   readonly source: SourceFile;
   _token: Token = {
     kind: TokenKind.EndOfFile,
@@ -52,6 +52,21 @@ export class Scanner {
    */
   seek(offset: number): void {
     this.pos = Math.max(0, Math.min(offset, this.text.length));
+  }
+
+  /**
+   * Run `scan` with diagnostics collected into `sink` instead of the main bag.
+   * The parser uses this for lookahead: tokens read only to decide how to
+   * parse must not report errors, because the parser may discard them.
+   */
+  withDiagnostics<T>(sink: DiagnosticBag, scan: () => T): T {
+    const saved = this.diagnostics;
+    this.diagnostics = sink;
+    try {
+      return scan();
+    } finally {
+      this.diagnostics = saved;
+    }
   }
 
   /** Advance to the next token. */

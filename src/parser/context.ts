@@ -7,7 +7,7 @@
  * needs.
  */
 
-import { DiagnosticBag, DiagnosticCode } from "../diagnostics/diagnostic.js";
+import { DiagnosticBag, DiagnosticCode, type Diagnostic } from "../diagnostics/diagnostic.js";
 import type { SourceFile } from "../diagnostics/source.js";
 import { Scanner } from "../lexer/scanner.js";
 import { isIdentifierNameToken, isKeywordKind, Token, TokenKind } from "../lexer/token.js";
@@ -56,6 +56,10 @@ export class ParserContext {
    * current token so a template that was only seen by lookahead stays coherent.
    */
   private readonly templateStates = new WeakMap<Token, TemplateState>();
+  /** Side bag that receives the diagnostics of lookahead-only scans. */
+  private readonly lookaheadSink = new DiagnosticBag();
+  /** Scan errors held back until the parser reaches the token that produced them. */
+  private readonly deferredTokenDiagnostics = new WeakMap<Token, Diagnostic[]>();
 
   constructor(source: SourceFile, diagnostics: DiagnosticBag) {
     this.source = source;
@@ -85,7 +89,7 @@ export class ParserContext {
 
   lookAhead(k: number): Token {
     while (this.tokens.length <= this.index + k) {
-      this.tokens.push(this.scanToken());
+      this.tokens.push(this.scanToken(true));
     }
     return this.tokens[this.index + k]!;
   }
@@ -99,7 +103,19 @@ export class ParserContext {
       this.tokens = [this.scanToken()];
       this.index = 0;
     }
+    this.reportDeferred(this.tokens[this.index]!);
     return current;
+  }
+
+  /**
+   * Report the scan errors held back for `token` once the parser actually
+   * reaches it (see {@link scanToken}).
+   */
+  private reportDeferred(token: Token): void {
+    const pending = this.deferredTokenDiagnostics.get(token);
+    if (pending === undefined) return;
+    this.deferredTokenDiagnostics.delete(token);
+    for (const diagnostic of pending) this.diagnostics.add(diagnostic);
   }
 
   /**
@@ -111,7 +127,27 @@ export class ParserContext {
    * lookahead - and `findMatchingParen` would then count characters that are
    * part of the literal.
    */
-  private scanToken(): Token {
+  private scanToken(quiet = false): Token {
+    if (!quiet) return this.scanTokenBody();
+    /* Lookahead may read source the parser never consumes, and it may read it
+     * with the wrong `/` interpretation (a regex is scanned as a division
+     * because the previous token ended an expression, as in
+     * `for (;;) /re/.test(x)`). Collect scan errors in a side bag and attach
+     * them to the scanned token: they are reported only if the parser reaches
+     * that token, and dropped when the token is discarded by `rescanFrom`. */
+    const mark = this.lookaheadSink.mark();
+    const token = this.scanner.withDiagnostics(this.lookaheadSink, () => this.scanTokenBody());
+    const produced = this.lookaheadSink.diagnostics.slice(mark);
+    if (produced.length > 0) {
+      this.lookaheadSink.reset(mark);
+      const pending = this.deferredTokenDiagnostics.get(token);
+      if (pending === undefined) this.deferredTokenDiagnostics.set(token, produced);
+      else pending.push(...produced);
+    }
+    return token;
+  }
+
+  private scanTokenBody(): Token {
     let token: Token;
     if (this.pendingTemplateOffset !== undefined) {
       const offset = this.pendingTemplateOffset;

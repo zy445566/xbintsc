@@ -16,7 +16,7 @@
   - 单引号 / 双引号
   - 转义：`\n \t \r \b \f \0 \\ \' \"`、`\xHH`、`\uHHHH`、`\u{...}`
 - 模板字面量（词法层）：无替换模板、模板头 `TemplateHead`、模板中 `TemplateMiddle`、模板尾 `TemplateTail`，支持 `${}` 与转义。
-- 正则字面量扫描（`/pattern/flags`），并区分除法 `/`。
+- 正则字面量扫描（`/pattern/flags`），并区分除法 `/`。判定依赖上一个 token，因此不可能处处正确（`for (;;) /re/.test(x)` 看起来像除法）；parser 保留了重新读取原始源码的兜底，误判只需保持静默。
 - 私有标识符 `#name`。
 - 注释：单行 `//` 与块注释 `/* */`（含未闭合诊断）。
 - 换行与空白跟踪（用于 ASI），BOM / CRLF 规范化（`SourceFile`）。

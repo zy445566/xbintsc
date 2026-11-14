@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "../helpers.js";
 import { SyntaxKind } from "../../src/ast/nodes.js";
+import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
 
 function statements(source: string): { stmts: any[]; diagnostics: readonly any[] } {
   const { file, diagnostics } = parse(source);
@@ -101,6 +102,20 @@ describe("class member parsing", () => {
     expect(diagnostics).toHaveLength(0);
     expect(stmts[0].members[0].questionToken).toBe(true);
     expect(stmts[0].members[1].exclamationToken).toBe(true);
+  });
+
+  it("reads a regex that starts a for-loop body as a regex", () => {
+    /* After `e++)` the scanner has to decide whether `/` divides or starts a
+     * regex; the paren that ends the header looks like the end of an
+     * expression, so lookahead reads the pattern as code. The parser's regex
+     * fallback rescans it correctly, and the mis-scan must stay silent. */
+    const { diagnostics } = statements('for (let e = 0; e < r.length; e++) /[^ \\t]/.exec(r[e]) && (i = e);');
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
+  it("still reports an invalid character that lookahead scanned first", () => {
+    const { diagnostics } = statements("function f(x: number) { return x; }\nf(1);\n\\\n");
+    expect(diagnostics.some((d) => d.code === DiagnosticCode.InvalidCharacter)).toBe(true);
   });
 
   it("parses bodyless accessor, method and constructor signatures", () => {

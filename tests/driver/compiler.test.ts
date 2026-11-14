@@ -103,6 +103,24 @@ describe("compileString", () => {
     expect(errors[0]!.message).toContain("ESM `import` statement");
   });
 
+  it("reads `globalThis.require` as the absent global property it is", () => {
+    /* Bundled CommonJS probes the loader with `globalThis.require`; that is a
+     * property read, not a CommonJS call, so it must not be reported. */
+    const { diagnostics } = compileString(
+      'const probe = (globalThis as any).require;\nconsole.log(typeof probe);',
+      "require-probe.ts",
+    );
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
+  it("still steers a globalThis.require() call at the ESM import form", () => {
+    const { diagnostics } = compileString('(globalThis as any).require("fs");', "require-global-call.ts");
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.code).toBe(DiagnosticCode.UnsupportedFeature);
+    expect(errors[0]!.message).toContain("`require()` is not supported");
+  });
+
   it("names a missing export of a registered module", () => {
     const registry = createDefaultRegistry().register(nodeExtension);
     const { diagnostics } = compileString(

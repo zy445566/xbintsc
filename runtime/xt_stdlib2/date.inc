@@ -387,7 +387,13 @@ static xt_value xt_date_method(xt_value target, const char *method, int32_t argc
              tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, (int)fmod(date->time, 1000.0));
     return xt_string_from_cstr(buffer);
   }
-  if (strcmp(method, "toJSON") == 0 || strcmp(method, "toString") == 0) return xt_call_method(target, xt_string_from_cstr("toISOString"), 0, NULL);
+  /* `toJSON` is the JSON hook: an invalid date serializes as `null` instead of
+   * throwing the way `toISOString` does. */
+  if (strcmp(method, "toJSON") == 0) {
+    if (isnan(date->time)) return XT_NULL;
+    return xt_call_method(target, xt_string_from_cstr("toISOString"), 0, NULL);
+  }
+  if (strcmp(method, "toString") == 0) return xt_call_method(target, xt_string_from_cstr("toISOString"), 0, NULL);
   *handled = 0;
   return XT_UNDEFINED;
 }

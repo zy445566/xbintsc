@@ -57,12 +57,12 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 ## JSON
 
 - `JSON.parse` with a `reviver`; malformed input (bad numbers/strings, trailing text, missing separators) throws a catchable `SyntaxError` instead of returning `undefined`.
-- `JSON.stringify` with a function or array `replacer`, `toJSON`, and `space` (number or string, clamped to 10). `undefined` / function / symbol values follow the standard omission rules.
+- `JSON.stringify` with a function or array `replacer`, `toJSON`, and `space` (number or string, clamped to 10). `toJSON` runs for every object and receives the property key (`""` at the top level, the index for an array element), before the value is inspected, so a value whose `toJSON` returns `undefined` is omitted from an object and becomes `null` in an array. `undefined` / function / symbol values follow the standard omission rules.
 - Object keys are emitted in insertion order, with integer keys ordered numerically; circular references throw.
 
 ## Date
 
-- `Date` backed by `gmtime_r`; ISO 8601 parsing through `Date.parse` / `new Date(string)`.
+- `Date` backed by `gmtime_r`; ISO 8601 parsing through `Date.parse` / `new Date(string)`. `toJSON` returns `null` for an invalid (NaN) time instead of throwing.
 - `toLocaleDateString` / `toLocaleTimeString` / `toLocaleString` format the local time (`M/D/YYYY`, `h:mm:ss AM`); a small options subset (`weekday`/`year`/`month`/`day`/`hour`/`minute`/`second`/`hour12`) is honoured. `toDateString` / `toTimeString` / `toUTCString` are available too, and an invalid date formats as `Invalid Date`.
 
 ## RegExp

@@ -1,5 +1,6 @@
 
-static void xt_json_stringify_value(xt_value value, xt_value indent, int depth, xt_value *out);
+static int xt_json_stringify_value(xt_value value, xt_value key, xt_value indent, int depth,
+                                  xt_value *out);
 
 /* The indentation unit for the `space` argument: up to 10 spaces for a
  * number, or the first 10 UTF-16 code units of a string (any characters,
@@ -69,15 +70,35 @@ static void xt_json_leave(void) {
   if (xt_json_path_count > 0) xt_json_path_count--;
 }
 
+/* SerializeJSONProperty step: when the value is an object it may define
+ * `toJSON`, which runs with the property key before anything else is inspected.
+ * Every object with a JSON form relies on this (Date included — its
+ * `toJSON` is what turns it into a string), so the fast path no longer has to
+ * special-case individual kinds. */
+static void xt_json_apply_to_json(xt_value *value, xt_value key) {
+  if (!XT_IS_OBJECT(*value) && !XT_IS_FUNCTION(*value)) return;
+  xt_value toJSON = xt_get(*value, xt_string_from_cstr("toJSON"));
+  if (!XT_IS_FUNCTION(toJSON)) return;
+  xt_value args[1] = {key};
+  *value = xt_call_with_this(toJSON, *value, 1, args);
+}
+
 static void xt_json_stringify_array(xt_value value, xt_value indent, int depth, xt_value *out) {
   xt_array *array = xt_as_array(value);
   if (!array || array->length == 0) { *out = xt_add(*out, xt_string_from_cstr("[]")); return; }
-  *out = xt_add(*out, xt_string_from_cstr("["));
   xt_json_enter(value);
+  *out = xt_add(*out, xt_string_from_cstr("["));
   for (uint32_t i = 0; i < array->length; i++) {
     if (i > 0) *out = xt_add(*out, xt_string_from_cstr(","));
     xt_json_indent(out, indent, depth + 1);
-    xt_json_stringify_value(array->items[i], indent, depth + 1, out);
+    /* An array index is the key `toJSON` sees, and the element that serializes
+     * to nothing (`undefined`, a function, a symbol) becomes `null`. */
+    char keyBuffer[16];
+    snprintf(keyBuffer, sizeof(keyBuffer), "%u", i);
+    xt_value item = xt_string_from_cstr("");
+    int wrote = xt_json_stringify_value(array->items[i], xt_string_from_cstr(keyBuffer), indent,
+                                        depth + 1, &item);
+    *out = xt_add(*out, wrote ? item : xt_string_from_cstr("null"));
   }
   xt_json_indent(out, indent, depth);
   xt_json_leave();
@@ -87,50 +108,50 @@ static void xt_json_stringify_array(xt_value value, xt_value indent, int depth, 
 static void xt_json_stringify_object(xt_value value, xt_value indent, int depth, xt_value *out) {
   xt_value keys = xt_object_keys(value);
   xt_array *array = xt_as_array(keys);
-  if (!array) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
-  int any = 0;
-  for (uint32_t i = 0; i < array->length; i++) {
-    xt_value item = xt_get(value, array->items[i]);
-    if (item != XT_UNDEFINED && !XT_IS_FUNCTION(item) && !xt_is_symbol(item)) { any = 1; break; }
-  }
-  if (!any) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
-  *out = xt_add(*out, xt_string_from_cstr("{"));
-  xt_json_enter(value);
+  xt_value body = xt_string_from_cstr("");
   int written = 0;
-  for (uint32_t i = 0; i < array->length; i++) {
-    xt_value key = array->items[i];
-    xt_value item = xt_get(value, key);
-    /* `undefined`, functions and symbols are omitted from objects. */
-    if (item == XT_UNDEFINED || XT_IS_FUNCTION(item) || xt_is_symbol(item)) continue;
-    if (written > 0) *out = xt_add(*out, xt_string_from_cstr(","));
-    written++;
-    xt_json_indent(out, indent, depth + 1);
-    *out = xt_add(*out, xt_string_from_cstr("\""));
-    *out = xt_add(*out, key);
-    *out = xt_add(*out, xt_string_from_cstr("\":"));
-    if (xt_json_indented(indent)) *out = xt_add(*out, xt_string_from_cstr(" "));
-    xt_json_stringify_value(item, indent, depth + 1, out);
+  xt_json_enter(value);
+  if (array) {
+    for (uint32_t i = 0; i < array->length; i++) {
+      xt_value key = array->items[i];
+      xt_value item = xt_string_from_cstr("");
+      /* `undefined`, functions and symbols are omitted from objects - including
+       * a value whose `toJSON` returned one, which is why the decision is made
+       * after serializing the child. */
+      if (!xt_json_stringify_value(xt_get(value, key), key, indent, depth + 1, &item)) continue;
+      if (written > 0) body = xt_add(body, xt_string_from_cstr(","));
+      written++;
+      xt_json_indent(&body, indent, depth + 1);
+      body = xt_add(body, xt_string_from_cstr("\""));
+      body = xt_add(body, key);
+      body = xt_add(body, xt_string_from_cstr("\":"));
+      if (xt_json_indented(indent)) body = xt_add(body, xt_string_from_cstr(" "));
+      body = xt_add(body, item);
+    }
   }
-  xt_json_indent(out, indent, depth);
   xt_json_leave();
+  if (written == 0) { *out = xt_add(*out, xt_string_from_cstr("{}")); return; }
+  *out = xt_add(*out, xt_string_from_cstr("{"));
+  *out = xt_add(*out, body);
+  xt_json_indent(out, indent, depth);
   *out = xt_add(*out, xt_string_from_cstr("}"));
 }
 
-static void xt_json_stringify_value(xt_value value, xt_value indent, int depth, xt_value *out) {
-  if (value == XT_UNDEFINED || value == XT_NULL || XT_IS_FUNCTION(value) || xt_is_symbol(value)) {
-    *out = xt_add(*out, xt_string_from_cstr("null"));
-    return;
-  }
+static int xt_json_stringify_value(xt_value value, xt_value key, xt_value indent, int depth,
+                                  xt_value *out) {
+  xt_json_apply_to_json(&value, key);
+  if (value == XT_UNDEFINED || XT_IS_FUNCTION(value) || xt_is_symbol(value)) return 0;
+  if (value == XT_NULL) { *out = xt_add(*out, xt_string_from_cstr("null")); return 1; }
   if (XT_IS_BIGINT(value)) {
     xt_throw(xt_error_from_message("TypeError: Do not know how to serialize a BigInt"));
-    return;
+    return 0;
   }
-  if (XT_IS_BOOL(value)) { *out = xt_add(*out, value == XT_TRUE ? xt_string_from_cstr("true") : xt_string_from_cstr("false")); return; }
+  if (XT_IS_BOOL(value)) { *out = xt_add(*out, value == XT_TRUE ? xt_string_from_cstr("true") : xt_string_from_cstr("false")); return 1; }
   if (XT_IS_NUMBER(value)) {
     double d = xt_to_double(value);
     if (!isfinite(d)) *out = xt_add(*out, xt_string_from_cstr("null"));
     else *out = xt_add(*out, xt_to_string(value));
-    return;
+    return 1;
   }
   if (XT_IS_STRING(value)) {
     xt_string *s = xt_as_string(value);
@@ -158,14 +179,14 @@ static void xt_json_stringify_value(xt_value value, xt_value indent, int depth, 
       offset += width;
     }
     *out = xt_add(*out, xt_string_from_cstr("\""));
-    return;
+    return 1;
   }
-  if (XT_IS_ARRAY(value)) { xt_json_stringify_array(value, indent, depth, out); return; }
+  if (XT_IS_ARRAY(value)) { xt_json_stringify_array(value, indent, depth, out); return 1; }
   if (XT_IS_OBJECT(value)) {
-    /* Map/Set/Date/RegExp/Promise/generators are not property-bag objects;
+    /* Map/Set/RegExp/Promise/generators are not property-bag objects;
      * handing them to xt_json_stringify_object reads their fields as a property
      * table and crashed with an access violation. JSON sees no enumerable own
-     * properties on the first group and calls Date.prototype.toJSON. */
+     * properties, so they serialize as `{}` unless they define `toJSON`. */
     xt_object *object = (xt_object *)XT_GET_PTR(value);
     switch (object->header.kind) {
       case XT_OBJECT_KIND_MAP:
@@ -176,24 +197,21 @@ static void xt_json_stringify_value(xt_value value, xt_value indent, int depth, 
       case XT_OBJECT_KIND_ITERATOR:
       case XT_OBJECT_KIND_ASYNC:
         *out = xt_add(*out, xt_string_from_cstr("{}"));
-        return;
-      case XT_OBJECT_KIND_DATE: {
-        xt_value time = xt_call_method(value, xt_string_from_cstr("getTime"), 0, NULL);
-        if (isnan(xt_to_number(time))) {
-          *out = xt_add(*out, xt_string_from_cstr("null"));
-          return;
-        }
-        xt_value text = xt_call_method(value, xt_string_from_cstr("toJSON"), 0, NULL);
-        xt_json_stringify_value(text, indent, depth, out);
-        return;
-      }
+        return 1;
+      case XT_OBJECT_KIND_DATE:
+        /* Only reachable when `toJSON` was deleted or shadowed: a Date has no
+         * enumerable own properties, and reading its struct as a property table
+         * is unsafe. */
+        *out = xt_add(*out, xt_string_from_cstr("{}"));
+        return 1;
       default:
         break;
     }
     xt_json_stringify_object(value, indent, depth, out);
-    return;
+    return 1;
   }
   *out = xt_add(*out, xt_string_from_cstr("null"));
+  return 1;
 }
 
 /* -- replacer-aware stringify -------------------------------------------- */
@@ -338,8 +356,7 @@ static int xt_json_replacer_write(xt_json_replacer_context *ctx, xt_value holder
     }
     return xt_json_replacer_container(ctx, value, depth, out);
   }
-  xt_json_stringify_value(value, ctx->indent, depth, out);
-  return 1;
+  return xt_json_stringify_value(value, key, ctx->indent, depth, out);
 }
 
 xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
@@ -363,6 +380,6 @@ xt_value xt_json_stringify(int32_t argc, xt_value *argv) {
    * top-level serialization with a clean path. */
   xt_json_path_count = 0;
   xt_value out = xt_string_from_cstr("");
-  xt_json_stringify_value(value, indent, 0, &out);
+  if (!xt_json_stringify_value(value, xt_string_from_cstr(""), indent, 0, &out)) return XT_UNDEFINED;
   return out;
 }

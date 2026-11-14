@@ -50,12 +50,12 @@
 ## JSON
 
 - `JSON.parse` 支持 `reviver`；畸形输入（错误数字/字符串、尾随内容、缺少分隔符）会抛出可捕获的 `SyntaxError`，而不是返回 `undefined`。
-- `JSON.stringify` 支持函数或数组 `replacer`、`toJSON`，以及 `space`（数字或字符串，最多 10 个单位）。`undefined` / 函数 / symbol 值遵循标准省略规则。
+- `JSON.stringify` 支持函数或数组 `replacer`、`toJSON`，以及 `space`（数字或字符串，最多 10 个单位）。`toJSON` 对每个对象都会调用，并接收属性名（顶层为空字符串 `""`，数组元素为其下标），且先于其他判断执行，因此 `toJSON` 返回 `undefined` 的值在对象中被省略、在数组中变为 `null`。`undefined` / 函数 / symbol 值遵循标准省略规则。
 - 对象键按插入序输出，整数键按数值排序；循环引用抛错。
 
 ## Date
 
-- `Date` 基于 `gmtime_r`；`Date.parse` / `new Date(string)` 支持 ISO 8601 解析。
+- `Date` 基于 `gmtime_r`；`Date.parse` / `new Date(string)` 支持 ISO 8601 解析。时间不可用（NaN）时 `toJSON` 返回 `null` 而不是抛错。
 - `toLocaleDateString` / `toLocaleTimeString` / `toLocaleString` 按本地时间格式化（`M/D/YYYY`、`h:mm:ss AM`）；支持少量 options（`weekday`/`year`/`month`/`day`/`hour`/`minute`/`second`/`hour12`）。另有 `toDateString` / `toTimeString` / `toUTCString`；无效日期格式化为 `Invalid Date`。
 
 ## RegExp

@@ -176,6 +176,13 @@ locates the MSVC/SDK headers and libraries itself:
 - **Rust**: build the `x86_64-pc-windows-msvc` (x64) or
   `aarch64-pc-windows-msvc` (arm64) target and add the Windows system libraries
   Rust's `std` needs to `linkerFlagsByPlatform.win32` (see the example manifest).
+  `-lsynchronization` is one of them and the easiest to miss: `std` takes its
+  mutex and panic/backtrace locks through the Windows 8 address-waiting API
+  (`WaitOnAddress`, `WakeByAddressSingle`, `WakeByAddressAll`), and those three
+  symbols live in `Synchronization.lib`
+  (`API-MS-Win-Core-Synch-l1-2-0.dll`), not in `kernel32.lib`. Without it a
+  Rust archive links on some toolchains and fails on others with
+  `lld-link: error: undefined symbol: __declspec(dllimport) WaitOnAddress`.
 - The example manifests list the exact per-platform flags.
 
 The `compile-examples` CI job (`.github/workflows/ci.yml`) builds both language

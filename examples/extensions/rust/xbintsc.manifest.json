@@ -9,6 +9,7 @@
       "-ladvapi32",
       "-lbcrypt",
       "-lkernel32",
+      "-lsynchronization",
       "-lntdll",
       "-luserenv",
       "-lws2_32",

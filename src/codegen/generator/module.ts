@@ -215,6 +215,19 @@ export const moduleMethods: ModuleMethods = {
       this.declareSlot(symbol, i64(XT_UNDEFINED));
     }
 
+    /* `var` is function scoped and hoisted, so a reference textually *before*
+     * the declaration must already have a slot holding `undefined`:
+     * `tsIsDeclarationStart() { return (e = this.state.type) >= 124; var e }`.
+     * The binder lifts every `var` into the function scope, so declaring the
+     * slots now makes the later statement a plain store (minified bundles use
+     * this idiom constantly — it used to report "no slot for 'e'"). */
+    for (const symbol of fn.locals) {
+      if (symbol.kind !== SymbolKind.Var) continue;
+      if (this.moduleGlobals.has(symbol.id)) continue;
+      if (this.current.slots.has(symbol.id)) continue;
+      this.declareSlot(symbol, i64(XT_UNDEFINED));
+    }
+
     // Hoisted function declarations: create their closure values in this
     // frame (before the body runs) so a nested function that references one
     // gets the closure built against the declaring frame, not against the

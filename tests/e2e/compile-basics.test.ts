@@ -8,6 +8,28 @@ import { describeE2E } from "./harness.js";
 describeE2E("end-to-end basics", (harness) => {
   const { runProgram } = harness;
 
+  it("keeps a `var` declared inside a block visible to the whole function", () => {
+    const source = `
+      function pick(n: number): string {
+        var label = "small";
+        if (n > 3) { var label = "big"; }
+        return label;
+      }
+      console.log(pick(1), pick(5));
+      function counter(): number {
+        for (var i = 0; i < 3; i++) {}
+        return i;
+      }
+      console.log(counter());
+      function early(): number {
+        return value;
+        var value = 1;
+      }
+      console.log(early());
+    `;
+    expect(runProgram(source)).toBe("small big\n3\nundefined");
+  });
+
   it("evaluates arithmetic and prints results", () => {
     expect(runProgram('console.log("sum", 2 + 3 * 4);')).toBe("sum 14");
   });

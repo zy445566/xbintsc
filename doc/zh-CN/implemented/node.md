@@ -21,7 +21,7 @@ TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编
 | `path` | [path](./node/path.md) | `path.<name>(...)` 命名空间调用 |
 | `os` | [os](./node/os.md) | `os.<name>(...)` 命名空间调用 |
 | `process` | [process](./node/process.md) | 对象：方法与属性 |
-| `buffer` | [buffer](./node/buffer.md) | `Buffer` 以普通对象表示 |
+| `buffer` | [buffer](./node/buffer.md) | `Buffer` 的字节存在 `ArrayBuffer` 里，而不是属性里 |
 | `stream` | [stream](./node/stream.md) | `Readable` / `Writable` / `Duplex` / `Transform` / `PassThrough` |
 | `stream/promises` | [stream/promises](./node/stream-promises.md) | 仅 `pipeline` |
 | `stream/web` | [stream/web](./node/stream-web.md) | WHATWG 流，重新导出核心运行时的实现 |

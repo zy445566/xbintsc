@@ -2,10 +2,11 @@
  * Node.js `Buffer` for xbintsc.
  *
  * xbintsc has no dedicated binary value type, so a Buffer is represented as a
- * plain object: indexed properties hold the individual bytes and a `length`
- * property records the size. Instance methods come from a shared prototype of
- * native closures, added by `xt_buffer_static` (`Buffer.from`, `Buffer.alloc`,
- * ...) and the `Buffer` constructor.
+ * plain object: an `ArrayBuffer` under a private symbol holds the bytes, the
+ * dynamically installed hooks answer `buf[i]` / `buf[i] = 65` from it, and a
+ * `length` property records the size. Instance methods come from a shared
+ * prototype of native closures, added by `xt_buffer_static` (`Buffer.from`,
+ * `Buffer.alloc`, ...) and the `Buffer` constructor.
  */
 
 #include "../node_common.h"

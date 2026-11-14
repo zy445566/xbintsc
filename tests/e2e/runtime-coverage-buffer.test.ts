@@ -98,6 +98,38 @@ describeE2E(
         "aGVsbG8= 656c []",
       ]);
     });
+
+    /* The bytes live in an ArrayBuffer behind dynamic hooks, not in indexed
+     * properties, so a large Buffer is linear to build. Building 200000 bytes
+     * through `xt_object_insert_property` would never finish inside the
+     * timeout. */
+    it("keeps buffer bytes out of the property table", () => {
+      const source = `
+        const b = Buffer.alloc(4);
+        b[0] = 65;
+        b[1] = 300;
+        b[2] = -1;
+        console.log(b.toString("hex"), b[0], b[3], 0 in b, 9 in b);
+        b[9] = 1;
+        console.log(b.length, b[9], b.toString("hex"));
+        b.note = "x";
+        console.log(b.note, b.length, Object.keys(b).join(","));
+        console.log(Buffer.from("abc")[1], Buffer.from(b).toString("hex"));
+        const big = Buffer.alloc(200000, 7);
+        console.log(big.length, big[199999], big.subarray(0, 2).toString("hex"));
+        const text = "QUJDREVG".repeat(7335);
+        console.log(Buffer.from(text, "base64").length, Buffer.from(text, "base64").toString("base64") === text);
+      `;
+      const stdout = h.runProgram(source, { extensions: true, timeout: TIMEOUT });
+      expect(stdout.split("\n")).toEqual([
+        "412cff00 65 0 true false",
+        "4 undefined 412cff00",
+        "x 4 length,note,0,1,2,3",
+        "98 412cff00",
+        "200000 7 0707",
+        "44010 true",
+      ]);
+    });
   },
   { tmpPrefix: "xbintsc-runtime-coverage-" },
 );

@@ -23,7 +23,7 @@ work on another. Missing or different behaviour is recorded under
 | `path` | [path](./node/path.md) | `path.<name>(...)` namespace calls |
 | `os` | [os](./node/os.md) | `os.<name>(...)` namespace calls |
 | `process` | [process](./node/process.md) | object: methods and properties |
-| `buffer` | [buffer](./node/buffer.md) | `Buffer` represented as a plain object |
+| `buffer` | [buffer](./node/buffer.md) | `Buffer` keeps its bytes in an `ArrayBuffer` store, not in properties |
 | `stream` | [stream](./node/stream.md) | `Readable` / `Writable` / `Duplex` / `Transform` / `PassThrough` |
 | `stream/promises` | [stream/promises](./node/stream-promises.md) | `pipeline` only |
 | `stream/web` | [stream/web](./node/stream-web.md) | WHATWG streams, re-exported from the core runtime |

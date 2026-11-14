@@ -1,10 +1,11 @@
 /**
  * Node's `Buffer` module.
  *
- * Buffers are represented as plain xbintsc objects (indexed byte properties
- * plus `length`) with methods supplied by the C runtime, so `Buffer.from`,
- * `Buffer.alloc` and the instance methods (`toString`, `slice`, ...) work
- * without a dedicated binary value type in the compiler.
+ * Buffers are ordinary xbintsc objects whose bytes live in an `ArrayBuffer`
+ * store behind dynamic-property hooks (plus a `length` property) with methods
+ * supplied by the C runtime, so `Buffer.from`, `Buffer.alloc` and the instance
+ * methods (`toString`, `slice`, ...) work without a dedicated binary value type
+ * in the compiler, and `buf[i]` still reads a byte.
  */
 
 import type { NodeModule } from "../module.js";

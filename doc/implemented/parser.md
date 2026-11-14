@@ -29,7 +29,7 @@ Module syntax (`import` / `export`, import attributes) and the driver-level bund
 - Conditional (ternary) expressions `a ? b : c`
 - Comma / sequence expressions `a, b, c` (in `for` headers, parenthesized groups and expression statements)
 - Arrow functions `() => expr` / `() => { ... }` (including type parameters and return type annotations)
-- Function expressions `function () {}` and named function expressions `function g() {}` (also `async function` expressions)
+- Function expressions `function () {}` and named function expressions `function g() {}` (also `async function` expressions); the name may be a contextual keyword (`function get() {}`, `function constructor() {}`), like a class expression name
 - Call expressions `f(...)`, member access `a.b`, element access `a[i]`
 - Array literals `[1, 2]`, sparse array elision, spread `[...a]` (also over strings, `Map` and `Set`)
 - Object literals `{ a: 1 }`, shorthand properties `{ a }`, method shorthand `{ m() {} }`, getter / setter shorthand `{ get x() {} }` / `{ set x(v) {} }`, computed keys `{ [expr]: 1 }`, object spread `{ ...obj }`

@@ -16,23 +16,7 @@ import { i64, numberLiteral, XT_TRUE, XT_UNDEFINED } from "../../values.js";
 import { MATH_CONSTANTS, NAMESPACE_PROPERTIES, NUMBER_CONSTANTS, SYMBOL_WELL_KNOWN, TYPED_ARRAYS } from "../tables.js";
 import { isSuperKeyword } from "./super.js";
 import type { Generator } from "../generator.js";
-
-/** Strip `(...)`, `x as T`, `x satisfies T` and `x!` to the underlying expression. */
-function unwrapExpression(expression: Expression): Expression {
-  let current = expression;
-  for (;;) {
-    if (
-      current.kind === SyntaxKind.ParenthesizedExpression ||
-      current.kind === SyntaxKind.AsExpression ||
-      current.kind === SyntaxKind.SatisfiesExpression ||
-      current.kind === SyntaxKind.NonNullExpression
-    ) {
-      current = (current as { expression: Expression }).expression;
-      continue;
-    }
-    return current;
-  }
-}
+import { globalObjectReceiver } from "./unwrap.js";
 
 export interface AccessCallMethods {
   emitDelete(this: Generator, node: DeleteExpression): string;
@@ -82,12 +66,13 @@ export const accessCallMethods: AccessCallMethods = {
      * `undefined`. `global` is Node's alias for the same object. Parentheses and
      * `as`/`!` wrappers are transparent here. */
     {
-      const receiver = unwrapExpression(node.expression);
-      if (
-        receiver.kind === SyntaxKind.Identifier &&
-        ((receiver as Identifier).text === "globalThis" || (receiver as Identifier).text === "global") &&
-        !this.binding.symbolOfIdentifier.get(receiver as Identifier)
-      ) {
+      const receiver = globalObjectReceiver(node.expression);
+      if (receiver && !this.binding.symbolOfIdentifier.get(receiver)) {
+        /* `globalThis.require` is how bundled CommonJS detects the loader. It is
+         * a probe, not a use: an absent global property reads as `undefined`.
+         * Only invoking it (`globalThis.require("x")`) is a CommonJS call, and
+         * the invocation path reports that. */
+        if (node.name.text === "require") return i64(XT_UNDEFINED);
         return this.emitIdentifier(node.name);
       }
     }

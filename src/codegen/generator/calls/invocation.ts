@@ -25,6 +25,7 @@ import {
   NAMESPACE_STATICS,
 } from "../tables.js";
 import { isSuperKeyword } from "./super.js";
+import { globalObjectReceiver } from "./unwrap.js";
 import type { Generator } from "../generator.js";
 
 export interface InvocationCallMethods {
@@ -71,6 +72,14 @@ export const invocationCallMethods: InvocationCallMethods = {
     }
     if (callee.kind === SyntaxKind.PropertyAccessExpression) {
       const access = callee as PropertyAccessExpression;
+      /* Reading `globalThis.require` is a CommonJS loader probe and reads as
+       * `undefined`; calling it is a real CommonJS use, which xbintsc has no
+       * runtime for. */
+      const globalReceiver = globalObjectReceiver(access.expression);
+      if (globalReceiver && !this.binding.symbolOfIdentifier.get(globalReceiver) && access.name.text === "require") {
+        this.reportRequireUse(node);
+        return i64(XT_UNDEFINED);
+      }
       const special = this.tryEmitBuiltinCall(node, access);
       if (special) return special;
       if (isSuperKeyword(access.expression)) return this.emitSuperCall(node, access);

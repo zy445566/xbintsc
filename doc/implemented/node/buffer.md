@@ -4,11 +4,17 @@
 
 Location: `src/extensions/node/buffer/index.ts`, `runtime/ext_node/buffer/buffer.c`
 
-xbintsc has no native binary value type, so `Buffer` is represented as a
-**plain object**: each byte is a numeric property `"0".."n-1"`, plus a `length`
-property, sharing the `xt_buffer_proto()` prototype that provides instance
-methods. `xt_node_is_buffer` / `xt_node_buffer_bytes` let other modules access
-bytes across modules.
+xbintsc has no native binary value type, so a `Buffer` is an ordinary object
+that keeps its bytes in an `ArrayBuffer` under a private symbol, plus a
+`length` property, sharing the `xt_buffer_proto()` prototype that provides
+instance methods. Dynamic-property hooks answer `buf[i]` and `buf[i] = 65` from
+that store, so index access behaves like a real Buffer while the bytes stay out
+of the property table: building one is a single bulk copy instead of one
+property insert per byte (which was quadratic and stalled on multi-kilobyte
+decodes). `xt_node_is_buffer` / `xt_node_buffer_bytes` let other modules access
+bytes across modules; `xt_node_buffer_bytes` copies through
+`xt_array_buffer_copy_bytes_out`, so the fs module does not pay one lookup per
+byte.
 
 | Static method | Notes |
 | --- | --- |
@@ -23,6 +29,13 @@ bytes across modules.
 | `buffer.constants` | `MAX_LENGTH` / `MAX_STRING_LENGTH` |
 
 Instance methods: `toString([encoding])`, `toJSON()`, `slice(start, end)`, `subarray(...)`, `equals(other)`, `compare(other)`, `copy(target[, targetStart, sourceStart, sourceEnd])`, `write(string[, offset[, length[, encoding]]])`, `fill(value)`, `reverse()`, `indexOf(value)`, `lastIndexOf(value)`, `includes(value)`, `keys()`, `values()`, plus `readUInt8/UInt16LE/UInt16BE/UInt32LE/UInt32BE`, `writeUInt8/UInt16LE/UInt16BE/UInt32LE/UInt32BE`.
+
+Index access works through the object hooks: `buf[0]` reads a byte, `buf[0] =
+65` writes one (out-of-range writes are dropped and cannot grow the buffer),
+`0 in buf` is true inside the range, and `Object.keys(buf)` lists the indices
+after the real properties. The store is an `ArrayBuffer`, so each byte costs
+one `xt_value` slot (the representation `ArrayBuffer` already uses) in exchange
+for garbage collection without a finalizer.
 
 ```ts
 const buf = Buffer.from("hello");

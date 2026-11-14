@@ -6,7 +6,8 @@
 
 - 作用域种类：模块、函数、块、`for`、`catch`
 - 符号种类：`var` / `let` / `const` / `function` / `parameter` / `class` / `interface` / `type` / `enum` / `import` / `namespace`
-- `var` 与函数声明提升到函数作用域；`let` / `const` 保持块作用域
+- `var` 与函数声明提升到函数作用域；`let` / `const` 保持块作用域。写在嵌套块内或 `for` 头部的 `var` 复用同一个提升符号，因此 `{ var x = 1 }` 在块之后依然可见（可赋值）
+- 解构**参数**先声明其名字，再绑定模式内部的默认值，因此 `({ a = () => 1 }) => a()` 中的箭头函数能拿到自己的函数信息
 - `switch` 主体是一个共享块作用域：所有 `case` / `default` 子句中的声明会在绑定任意子句之前预先声明
 - `static { ... }` 类静态块绑定为类的隐藏静态函数（见[类与面向对象](../unimplemented/classes.md)）
 - 标识符 → 声明 的解析；未解析标识符收集（`CannotFindName`）

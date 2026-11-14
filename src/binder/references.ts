@@ -339,6 +339,12 @@ export const referenceMethods: ReferenceMethods = {
       const paramSymbol = this.declareBinding(parameter.name, SymbolKind.Parameter, parameter, scope, true);
       if (paramSymbol) params.push(paramSymbol);
       if (parameter.initializer) this.bindNode(parameter.initializer, scope);
+      /* A destructuring parameter binds its names through `declareBinding`
+       * above, but the *default values* inside the pattern are expressions:
+       * `({ noNewArrows = !(e => e) })` contains an arrow that has to get a
+       * FunctionInfo of its own, or codegen reports "does not yet support this
+       * closure". */
+      this.bindBindingPattern(parameter.name, scope);
     }
     (fn as { params: SymbolInfo[] }).params = params;
 

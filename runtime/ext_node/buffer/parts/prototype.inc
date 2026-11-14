@@ -49,7 +49,10 @@ int xt_node_is_buffer(xt_value value) { return xt_buffer_is(value); }
 unsigned char *xt_node_buffer_bytes(xt_value value, size_t *outLength) {
   uint32_t length = xt_buffer_length(value);
   unsigned char *bytes = (unsigned char *)malloc(length ? length : 1);
-  for (uint32_t i = 0; i < length; i++) bytes[i] = xt_buffer_byte(value, i);
+  xt_value store = xt_buffer_store(value);
+  if (length > 0 && !XT_IS_UNDEFINED(store)) {
+    xt_array_buffer_copy_bytes_out(store, 0, bytes, length);
+  }
   *outLength = length;
   return bytes;
 }

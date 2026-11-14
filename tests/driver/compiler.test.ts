@@ -147,6 +147,32 @@ describe("compileEntry", () => {
     expect(ir).toContain("@xt_add");
   });
 
+  it("does not let a dependency's function-local class hijack a type name", () => {
+    /* Bundling merges every module into one source file, and minified packages
+     * declare short-named classes inside functions all the time
+     * (`babel.cjs` has its own `class Token`). Those are invisible to an
+     * importer, so a `Token` annotation in the entry must stay `any` instead of
+     * resolving to the dependency's class and reporting a bogus property. */
+    const directory = temporaryDirectory();
+    writeFileSync(
+      join(directory, "dep.js"),
+      'export function make() { class Token { constructor() { this.raw = ""; } } return new Token(); }\n',
+    );
+    const entry = join(directory, "main.ts");
+    writeFileSync(
+      entry,
+      [
+        'import { make } from "./dep.js";',
+        "function describe(token: Token): string { return token.type; }",
+        "console.log(describe(make() as Token));",
+      ].join("\n"),
+    );
+
+    const { diagnostics } = compileEntry(entry);
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors.map((error) => error.message)).toEqual([]);
+  });
+
   it("bundles a package from node_modules", () => {
     const directory = temporaryDirectory();
     const packageDir = join(directory, "node_modules", "mathx");

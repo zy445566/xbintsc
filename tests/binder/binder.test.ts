@@ -125,6 +125,51 @@ describe("binder: switch clauses and static blocks", () => {
     expect(moduleScope.symbols.get("inDefault")?.kind).toBe(SymbolKind.Let);
   });
 
+  it("hoists a `var` declared in a nested block into the function scope", () => {
+    /* Declaring it again in the block would shadow the hoisted name, so
+     * `{ var x = 1 }` would write a binding the rest of the function never
+     * reads (the shape minified bundles rely on). */
+    const { result } = bindSource(`
+      function f(c) {
+        if (c) { var label = "big"; }
+        return typeof label;
+      }
+    `);
+    const fn = result.functions.find((entry) => entry.name === "f")!;
+    const hoisted = fn.scope.symbols.get("label")!;
+    expect(hoisted.kind).toBe(SymbolKind.Var);
+    expect(result.scopes.size).toBeGreaterThan(0);
+    for (const scope of result.scopes.values()) {
+      if (scope === fn.scope) continue;
+      expect(scope.symbols.get("label")).toBeUndefined();
+    }
+    expect(fn.locals.filter((symbol) => symbol.name === "label")).toEqual([hoisted]);
+  });
+
+  it("reuses the hoisted `var` for a `for (var i = ...)` loop counter", () => {
+    const { result } = bindSource(`
+      function f() {
+        for (var i = 0; i < 3; i++) {}
+        return i;
+      }
+    `);
+    const fn = result.functions.find((entry) => entry.name === "f")!;
+    const counter = fn.scope.symbols.get("i")!;
+    expect(counter.kind).toBe(SymbolKind.Var);
+    expect(counter.references.length).toBeGreaterThan(0);
+  });
+
+  it("binds default values nested in a destructuring parameter", () => {
+    const { result } = bindSource(`
+      function f({ a = () => 1 } = {}) { return a(); }
+    `);
+    const fd = result.functions.find((entry) => entry.name === "f")!;
+    const arrow = result.functions.find((entry) => entry.name === "(arrow)");
+    expect(arrow).toBeDefined();
+    expect(arrow!.parent).toBe(fd);
+    expect([...result.functionOfNode.keys()]).toContain(arrow!.node);
+  });
+
   it("binds every `static { }` block as a function of the class", () => {
     const { result } = bindSource(`
       class A {

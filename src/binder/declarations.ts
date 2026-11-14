@@ -92,6 +92,7 @@ export interface DeclarationMethods {
   predeclareVariableList(this: Binder, list: VariableDeclarationList, scope: Scope): void;
   predeclareImport(this: Binder, node: ImportDeclaration, scope: Scope): void;
   collectFunctionScoped(this: Binder, statements: readonly Statement[], fn: MutableFunction): void;
+  reuseHoistedVar(this: Binder, name: BindingName, scope: Scope): boolean;
 }
 
 export const declarationMethods: DeclarationMethods = {
@@ -215,8 +216,41 @@ export const declarationMethods: DeclarationMethods = {
           ? SymbolKind.Var
           : SymbolKind.Let;
     for (const declaration of list.declarations) {
+      if (kind === SymbolKind.Var) {
+        if (this.reuseHoistedVar(declaration.name, scope)) continue;
+        /* `var` is function scoped even when the declaration sits in a block
+         * or in a `for` head, so it always lands in the function scope. */
+        this.declareBinding(declaration.name, kind, declaration, scope.fn.scope ?? scope, true);
+        continue;
+      }
       this.declareBinding(declaration.name, kind, declaration, scope, kind !== SymbolKind.Const);
     }
+  },
+
+  /**
+   * Point a `var` declaration that sits in a nested block (or in a `for` head)
+   * at the symbol `collectFunctionScoped` already hoisted into the function
+   * scope. Declaring it again in the block would *shadow* the hoisted name, so
+   * `{ var x = 1 }` would write a block-local `x` the rest of the function
+   * never sees — the bug behind `if (c) { var label = "big" }` losing its
+   * value in minified bundles.
+   */
+  reuseHoistedVar(name: BindingName, scope: Scope): boolean {
+    const functionScope = scope.fn.scope;
+    if (functionScope === undefined || scope === functionScope) return false;
+    if (name.kind === SyntaxKind.Identifier) {
+      const hoisted = functionScope.symbols.get(name.text);
+      if (!hoisted || hoisted.kind !== SymbolKind.Var) return false;
+      this.symbolOfDeclaration.set(name, hoisted);
+      return true;
+    }
+    const pattern = name as ArrayBindingPattern | ObjectBindingPattern;
+    let reused = true;
+    for (const element of pattern.elements) {
+      if (!element) continue;
+      if (!this.reuseHoistedVar(element.name, scope)) reused = false;
+    }
+    return reused;
   },
 
   predeclareImport(node: ImportDeclaration, scope: Scope): void {

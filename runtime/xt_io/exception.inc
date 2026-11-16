@@ -166,8 +166,13 @@ static LONG WINAPI xt_fatal_exception(EXCEPTION_POINTERS *info) {
                       "    thread: %s\n", xt_gc_worker_thread ? "I/O worker" : "main");
   /* A fault inside a block the collector already released is a
    * use-after-free; naming the block turns a mystery crash into a lead. */
-  if (info && info->ExceptionRecord && info->ExceptionRecord->NumberParameters >= 2) {
+  if (info && info->ExceptionRecord) {
+    unsigned long parameters = (unsigned long)info->ExceptionRecord->NumberParameters;
+    uintptr_t access = (uintptr_t)info->ExceptionRecord->ExceptionInformation[0];
     uintptr_t address = (uintptr_t)info->ExceptionRecord->ExceptionInformation[1];
+    written += snprintf(g_crash_report + written, sizeof(g_crash_report) - (size_t)written,
+                        "    detail: %lu parameters, access 0x%llx, address 0x%llx\n", parameters,
+                        (unsigned long long)access, (unsigned long long)address);
     if (address != 0) {
       written += xt_gc_debug_describe(address, g_crash_report + written,
                                       sizeof(g_crash_report) - (size_t)written);

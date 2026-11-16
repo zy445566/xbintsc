@@ -298,7 +298,21 @@ export const moduleMethods: ModuleMethods = {
 
     // Body.
     if (fn.node.kind === SyntaxKind.SourceFile) {
-      this.emitStatements(this.sourceFile.statements);
+      /* Record which module is initialising. Every module of a bundle shares
+       * this one function, so without it a crash (or an `Error.stack`) inside a
+       * module body points at the entry file's offsets — the coordinates say
+       * `cli.ts:653` no matter where it really happened. */
+      let currentModule: string | undefined;
+      for (const statement of this.sourceFile.statements) {
+        const origin = this.sourceFile.origins?.get(statement);
+        if (origin !== undefined && origin !== currentModule) {
+          currentModule = origin;
+          this.emit(`  call void @xt_stack_set_module(i8* ${this.internStatic(artifactPath(origin))})`);
+        }
+        this.emitStatement(statement);
+      }
+      /* Module bodies are done; later errors should not name the last module. */
+      this.emit(`  call void @xt_stack_set_module(i8* null)`);
     } else if (fn.node.kind === SyntaxKind.ArrowFunction && (fn.node as ArrowFunction).body.kind !== SyntaxKind.Block) {
       const value = this.emitExpression((fn.node as ArrowFunction).body as Expression);
       this.emitFunctionReturn(value);
@@ -350,9 +364,11 @@ export const moduleMethods: ModuleMethods = {
         "  call void @xt_gc_init()",
         ...rootLines,
         ...stringInit,
+        "  call void @xt_gc_begin_startup()",
         "  call void @xt_gc_arm()",
         "  call void @xt_set_program_args(i32 %argc, i8** %argv)",
         `  %result = call i64 @${moduleName}(i64 ${i64(XT_UNDEFINED)}, i64 ${i64(XT_UNDEFINED)}, i32 0, i64* null)`,
+        "  call void @xt_gc_end_startup()",
         "  call void @xt_drain_microtasks()",
         "  call void @xt_run_event_loop()",
         /* Run the exit hook (Node's `process` "exit" listeners) and report the

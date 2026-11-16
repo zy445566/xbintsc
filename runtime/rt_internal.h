@@ -38,11 +38,9 @@
 #define XT_RT_INTERNAL_H
 
 #include "rt.h"
-
 #include <setjmp.h>
 #include <stddef.h>
 #include <stdint.h>
-
 /* Allocation kinds recorded in `xt_header.kind`. */
 #define XT_OBJECT_KIND_STRING 1
 #define XT_OBJECT_KIND_OBJECT 2
@@ -212,6 +210,8 @@ void xt_gc_arm(void);
 void xt_gc_collect(void);
 /* Override the automatic trigger threshold (bytes of live heap). */
 void xt_gc_set_threshold(size_t bytes);
+/* Set by the I/O worker pool: workers allocate but never collect. */
+extern _Thread_local int xt_gc_worker_thread;
 
 /* Explicit roots: the address of a slot that always holds a live value (a
  * module global, a runtime prototype cache, ...). */

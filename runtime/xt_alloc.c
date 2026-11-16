@@ -1,33 +1,21 @@
 /*
  * xbintsc runtime — heap allocation and garbage collection.
  *
- * Every heap object is a `calloc`-backed block whose first bytes are an
- * `xt_header`. Live blocks are threaded through `g_heap_head` (`gc_next`), and
- * the collector is a non-moving mark-sweep over that list:
+ * Blocks are `calloc`-ed with an `xt_header` first and threaded through
+ * `g_heap_head` (`gc_next`); the collector is a non-moving mark-sweep:
+ * build an address -> header table, mark from the roots (registered slots, root
+ * providers, a conservative scan of the active C stack including the `jmp_buf`
+ * registers), trace payloads, then free what stayed unmarked. A non-moving
+ * collector keeps the NaN-boxed `xt_value` representation untouched.
  *
- *   1. build an address -> header hash set of every live allocation;
- *   2. mark from the roots — registered slots, root providers and a
- *      conservative scan of the active C stack (the whole `jmp_buf` plus the
- *      stack words up to the region's high bound);
- *   3. trace each marked object. Value fields are visited precisely where the
- *      layout is known, but the object payload and its separately allocated
- *      backing buffers are also scanned conservatively, so a raw pointer held
- *      by older code is still followed;
- *   4. sweep: unmarked blocks are released (including their backing buffers)
- *      and unlinked, survivors keep their block and have the mark bit cleared.
- *
- * A non-moving collector keeps the NaN-boxed `xt_value` representation
- * untouched: a pointer never changes, so no write barriers or handle
- * indirection are needed. `gc_next` doubles as the live list and, once a block
- * is released, the memory simply returns to `malloc`.
- *
- * The collector is single-threaded, like the rest of the runtime (workers are
- * child processes, not threads).
+ * The collector is single-threaded; I/O worker threads allocate but never
+ * collect (see `xt_gc_worker_thread`).
  */
 
 #include "rt_internal.h"
 
 #include <setjmp.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -146,8 +134,37 @@ static void xt_gc_table_free(void) {
 /* Allocation                                                                */
 /* ------------------------------------------------------------------------- */
 
+_Thread_local int xt_gc_worker_thread = 0;
+
+/* Workers allocate result values, so linking takes a spinlock; a block born
+ * while a collection runs is marked, or the sweep would free it. */
+static atomic_flag g_heap_lock = ATOMIC_FLAG_INIT;
+
+static void xt_heap_link(xt_header *header) {
+  while (atomic_flag_test_and_set(&g_heap_lock)) {
+  }
+  header->gc_next = g_heap_head;
+  g_heap_head = header;
+  if (g_gc_running && header->kind < 32) header->flags |= XT_GC_MARK;
+  g_heap_bytes += header->size;
+  g_heap_allocations++;
+  atomic_flag_clear(&g_heap_lock);
+}
+
 void *xt_alloc(size_t size, int kind) {
   if (!g_gc_initialised) xt_gc_init();
+  if (xt_gc_worker_thread) {
+    void *block = calloc(1, size);
+    if (!block) {
+      fprintf(stderr, "xbintsc: out of memory allocating %zu bytes\n", size);
+      abort();
+    }
+    xt_header *header = (xt_header *)block;
+    header->kind = (uint8_t)kind;
+    header->size = (uint32_t)size;
+    xt_heap_link(header);
+    return header;
+  }
   /* Collect before handing out the new block: the block being allocated here
    * is guaranteed not to be swept, and references held by the caller survive
    * the conservative stack scan. */
@@ -161,10 +178,8 @@ void *xt_alloc(size_t size, int kind) {
   header->kind = (uint8_t)kind;
   header->flags = 0;
   header->size = (uint32_t)size;
-  header->gc_next = g_heap_head;
-  g_heap_head = header;
-  g_heap_bytes += size;
-  g_heap_allocations++;
+  header->size = (uint32_t)size;
+  xt_heap_link(header);
   return header;
 }
 
@@ -216,6 +231,20 @@ void xt_gc_init(void) {
 }
 
 void xt_gc_arm(void) { g_gc_armed = 1; }
+
+/* Module initialisation runs with a much higher threshold: a bundle allocates
+ * its module graph inside one generated function, and collecting in the middle
+ * of it has produced access violations in large programs. Startup is bounded,
+ * so collect only if it exceeds this grace size. */
+#define XT_GC_STARTUP_THRESHOLD ((size_t)512 << 20) /* 512 MiB */
+
+void xt_gc_begin_startup(void) {
+  if (!g_gc_threshold_pinned) g_gc_threshold = XT_GC_STARTUP_THRESHOLD;
+}
+
+void xt_gc_end_startup(void) {
+  if (!g_gc_threshold_pinned) g_gc_threshold = (size_t)16 << 20;
+}
 
 void xt_gc_set_threshold(size_t bytes) {
   g_gc_threshold = bytes > XT_GC_MIN_THRESHOLD ? bytes : XT_GC_MIN_THRESHOLD;
@@ -280,7 +309,6 @@ void xt_gc_pop_stack(void) {
 /* ------------------------------------------------------------------------- */
 /* Marking                                                                   */
 /* ------------------------------------------------------------------------- */
-
 static void xt_gc_gray_push(xt_header *header) {
   if (!header || (header->flags & XT_GC_MARK)) return;
   header->flags |= XT_GC_MARK;
@@ -293,7 +321,6 @@ static void xt_gc_gray_push(xt_header *header) {
   }
   g_gray[g_gray_count++] = header;
 }
-
 void xt_gc_mark_header(xt_header *header) { xt_gc_gray_push(header); }
 
 void xt_gc_mark_value(xt_value value) {
@@ -302,7 +329,6 @@ void xt_gc_mark_value(xt_value value) {
     xt_gc_gray_push((xt_header *)XT_GET_PTR(value));
   }
 }
-
 int xt_gc_value_is_marked(xt_value value) {
   if (!(XT_IS_STRING(value) || XT_IS_OBJECT(value) || XT_IS_ARRAY(value) ||
         XT_IS_FUNCTION(value) || XT_IS_BIGINT(value))) {
@@ -311,7 +337,6 @@ int xt_gc_value_is_marked(xt_value value) {
   xt_header *header = xt_gc_table_lookup((uintptr_t)XT_GET_PTR(value));
   return header != NULL && (header->flags & XT_GC_MARK) != 0;
 }
-
 xt_header *xt_gc_heap_head(void) { return g_heap_head; }
 
 void xt_gc_scan_region(const void *base, size_t bytes) {
@@ -330,11 +355,9 @@ void xt_gc_scan_region(const void *base, size_t bytes) {
     if (header) xt_gc_gray_push(header);
   }
 }
-
 /* ------------------------------------------------------------------------- */
 /* Tracing                                                                   */
 /* ------------------------------------------------------------------------- */
-
 /* Visit the payload (everything after the header) plus any separately
  * allocated backing buffer owned by the object. */
 static void xt_gc_process(xt_header *header) {
@@ -419,11 +442,9 @@ static void xt_gc_process(xt_header *header) {
       return;
   }
 }
-
 /* ------------------------------------------------------------------------- */
 /* Release                                                                   */
 /* ------------------------------------------------------------------------- */
-
 static void xt_gc_release(xt_header *header) {
   switch (header->kind) {
     case XT_OBJECT_KIND_STRING:
@@ -470,11 +491,9 @@ static void xt_gc_release(xt_header *header) {
   }
   free(header);
 }
-
 /* ------------------------------------------------------------------------- */
 /* Collection                                                                */
 /* ------------------------------------------------------------------------- */
-
 static void xt_gc_mark_roots(void) {
   for (size_t i = 0; i < g_root_count; i++) {
     if (g_root_slots[i]) xt_gc_mark_value(*g_root_slots[i]);
@@ -494,7 +513,6 @@ static void xt_gc_mark_roots(void) {
     if (high > low) xt_gc_scan_region((const void *)low, high - low);
   }
 }
-
 void xt_gc_collect(void) {
   if (g_gc_running) return;
   if (!g_gc_initialised) xt_gc_init();

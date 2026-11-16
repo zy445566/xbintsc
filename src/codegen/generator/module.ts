@@ -364,9 +364,11 @@ export const moduleMethods: ModuleMethods = {
         "  call void @xt_gc_init()",
         ...rootLines,
         ...stringInit,
+        "  call void @xt_gc_begin_startup()",
         "  call void @xt_gc_arm()",
         "  call void @xt_set_program_args(i32 %argc, i8** %argv)",
         `  %result = call i64 @${moduleName}(i64 ${i64(XT_UNDEFINED)}, i64 ${i64(XT_UNDEFINED)}, i32 0, i64* null)`,
+        "  call void @xt_gc_end_startup()",
         "  call void @xt_drain_microtasks()",
         "  call void @xt_run_event_loop()",
         /* Run the exit hook (Node's `process` "exit" listeners) and report the

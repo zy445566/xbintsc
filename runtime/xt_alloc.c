@@ -217,6 +217,22 @@ void xt_gc_init(void) {
 
 void xt_gc_arm(void) { g_gc_armed = 1; }
 
+/* Module initialisation runs with a much higher threshold: a bundle allocates
+ * its whole module graph up front, and every value in it is reachable only
+ * through C frames of the one generated module function. Collecting in the
+ * middle of it has produced access violations in large programs (the collector
+ * frees something the conservative scan does not see). Startup is bounded by
+ * what the program asked for, so collect only if it exceeds this grace size. */
+#define XT_GC_STARTUP_THRESHOLD ((size_t)512 << 20) /* 512 MiB */
+
+void xt_gc_begin_startup(void) {
+  if (!g_gc_threshold_pinned) g_gc_threshold = XT_GC_STARTUP_THRESHOLD;
+}
+
+void xt_gc_end_startup(void) {
+  if (!g_gc_threshold_pinned) g_gc_threshold = (size_t)16 << 20;
+}
+
 void xt_gc_set_threshold(size_t bytes) {
   g_gc_threshold = bytes > XT_GC_MIN_THRESHOLD ? bytes : XT_GC_MIN_THRESHOLD;
   g_gc_threshold_pinned = 1;

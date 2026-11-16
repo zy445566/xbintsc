@@ -15,7 +15,7 @@
 - [异步、Promise 与生成器](./async.md)
 - [fetch](./fetch.md)
 
-- 分配器：`xt_alloc` 背后的非移动标记-清扫回收器（显式根、子系统根提供者与保守 C 栈扫描）。
+- 分配器：`xt_alloc` 背后的非移动标记-清扫回收器（显式根、子系统根提供者与保守 C 栈扫描）。bundle 的模块体执行期间会推迟回收（`xt_gc_begin_startup` 把阈值提到 512 MiB，直到 `xt_gc_end_startup`）：庞大的模块图全部在一个生成函数里构建，中途回收会破坏存活对象。`XT_GC_THRESHOLD` 仍然覆盖这两个值。
 - 值构造：`xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`。
 - 类型转换：`xt_truthy`、`xt_to_number`、`xt_to_string`、`xt_typeof`。
 - 算术：`add/sub/mul/div/mod/pow/neg/pos`。

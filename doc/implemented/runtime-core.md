@@ -16,7 +16,7 @@ standard-library surface have their own pages:
 - [Async, promises and generators](./async.md)
 - [fetch](./fetch.md)
 
-- Allocator: non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem root providers and a conservative C-stack scan).
+- Allocator: non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem root providers and a conservative C-stack scan). Collection is deferred while a bundle's module bodies run (`xt_gc_begin_startup` raises the threshold to 512 MiB until `xt_gc_end_startup`): a large module graph is built entirely inside one generated function, and collecting in the middle of it has corrupted live objects. `XT_GC_THRESHOLD` still overrides both values.
 - Value construction: `xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`.
 - Type conversion: `xt_truthy`, `xt_to_number`, `xt_to_string`, `xt_typeof`.
 - Arithmetic: `add/sub/mul/div/mod/pow/neg/pos`.

@@ -149,6 +149,8 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare void @xt_gc_init()",
   "declare void @xt_gc_set_stack_base(i8*)",
   "declare void @xt_gc_arm()",
+  "declare void @xt_gc_begin_startup()",
+  "declare void @xt_gc_end_startup()",
   "declare void @xt_gc_add_root(i64*)",
   "declare i64 @xt_promise_resolve(i64)",
   "declare i64 @xt_promise_reject(i64)",

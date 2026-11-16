@@ -408,6 +408,12 @@ export const referenceMethods: ReferenceMethods = {
 
     const classScope = this.createScope(ScopeKind.Block, node, scope);
     this.scopes.set(node, classScope);
+    /* A class *expression* binds its own name inside the class body only: the
+     * enclosing scope never sees it (`const A = class Inner { m() { return Inner } }`).
+     * A declaration's name already lives in the enclosing scope. */
+    if (node.kind === SyntaxKind.ClassExpression && node.name && !classScope.symbols.has(node.name.text)) {
+      this.declare(node.name.text, SymbolKind.Class, node, classScope, false);
+    }
 
     let constructor: FunctionInfo | undefined;
     /* `static { ... }` functions, so the field pass below can interleave them

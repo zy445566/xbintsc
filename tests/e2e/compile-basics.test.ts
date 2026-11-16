@@ -193,6 +193,21 @@ describeE2E("end-to-end basics", (harness) => {
     );
   });
 
+  it("binds a class expression name inside its body", () => {
+    // `const A = class Inner { static make() { return new Inner(); } }`: the
+    // name is visible only inside the class body, and the self-reference must
+    // resolve to the class itself (lru-cache's Stack.create relies on it).
+    const source = `
+      const Box = class Inner {
+        value = 41;
+        static make(): Inner { return new Inner(); }
+        answer(): number { return this.value + 1; }
+      };
+      console.log(Box.make().answer());
+    `;
+    expect(runProgram(source)).toBe("42");
+  });
+
   it("iterates object keys with for...in", () => {
     const source = `
       const obj = { x: 1, y: 2 };

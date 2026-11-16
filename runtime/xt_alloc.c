@@ -234,8 +234,7 @@ void xt_gc_arm(void) { g_gc_armed = 1; }
 
 /* Module initialisation runs with a much higher threshold: a bundle allocates
  * its module graph inside one generated function, and collecting in the middle
- * of it has produced access violations in large programs. Startup is bounded,
- * so collect only if it exceeds this grace size. */
+ * of it has produced access violations. Startup is bounded. */
 #define XT_GC_STARTUP_THRESHOLD ((size_t)512 << 20) /* 512 MiB */
 
 void xt_gc_begin_startup(void) {
@@ -292,20 +291,17 @@ void xt_gc_push_stack(uintptr_t low, uintptr_t high) {
   g_stack_regions[g_stack_depth].scan_low = low;
   g_stack_depth++;
 }
-
 void xt_gc_suspend(uintptr_t sp) {
   if (g_stack_depth <= 0) return;
   uintptr_t *scan = &g_stack_regions[g_stack_depth - 1].scan_low;
   if (*scan == UINTPTR_MAX || sp < *scan) *scan = sp;
 }
-
 void xt_gc_pop_stack(void) {
   if (g_stack_depth <= 1) return;
   g_stack_depth--;
   /* Back on the underlying stack: resume scanning it from the current frame. */
   if (g_stack_depth > 0) g_stack_regions[g_stack_depth - 1].scan_low = UINTPTR_MAX;
 }
-
 /* ------------------------------------------------------------------------- */
 /* Marking                                                                   */
 /* ------------------------------------------------------------------------- */
@@ -338,6 +334,8 @@ int xt_gc_value_is_marked(xt_value value) {
   return header != NULL && (header->flags & XT_GC_MARK) != 0;
 }
 xt_header *xt_gc_heap_head(void) { return g_heap_head; }
+
+xt_header *xt_gc_lookup_raw(uintptr_t address) { return xt_gc_table_lookup(address); }
 
 void xt_gc_scan_region(const void *base, size_t bytes) {
   if (!base) return;
@@ -536,6 +534,7 @@ void xt_gc_collect(void) {
   }
   xt_weak_gc_clear();
   xt_weak_gc_compact();
+  if (getenv("XT_GC_VERIFY") != NULL) xt_gc_verify_payloads();
 
   xt_header **link = &g_heap_head;
   xt_header *header = g_heap_head;
@@ -559,6 +558,7 @@ void xt_gc_collect(void) {
       *link = next;
       g_heap_bytes -= header->size;
       g_heap_allocations--;
+      xt_gc_debug_record_free((uintptr_t)header, header->size, header->kind);
       xt_gc_release(header);
     }
     header = next;

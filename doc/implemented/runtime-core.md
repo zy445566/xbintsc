@@ -16,7 +16,10 @@ standard-library surface have their own pages:
 - [Async, promises and generators](./async.md)
 - [fetch](./fetch.md)
 
-- Allocator: non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem root providers and a conservative C-stack scan). Collection is deferred while a bundle's module bodies run (`xt_gc_begin_startup` raises the threshold to 512 MiB until `xt_gc_end_startup`): a large module graph is built entirely inside one generated function, and collecting in the middle of it has corrupted live objects. `XT_GC_THRESHOLD` still overrides both values. I/O worker threads allocate result values but never collect (`xt_gc_worker_thread`): the collector scans the main stack region and is not thread-safe, and a block born during a collection is marked so the sweep keeps it.
+- Allocator: non-moving mark-sweep collector behind `xt_alloc` (explicit roots, subsystem root providers and a conservative C-stack scan). Collection is deferred while a bundle's module bodies run (`xt_gc_begin_startup` raises the threshold to 512 MiB until `xt_gc_end_startup`): a large module graph is built entirely inside one generated function, and collecting in the middle of it has corrupted live objects. `XT_GC_THRESHOLD` still overrides both values. Two environment switches exist for this class of bug: `XT_GC_VERIFY=1` re-scans
+every marked object's payload before the sweep and prints any block it
+references that stayed unmarked (a tracer or root gap), and the crash report
+names a fault address that falls inside a block the collector freed. I/O worker threads allocate result values but never collect (`xt_gc_worker_thread`): the collector scans the main stack region and is not thread-safe, and a block born during a collection is marked so the sweep keeps it.
 - Value construction: `xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`.
 - Type conversion: `xt_truthy`, `xt_to_number`, `xt_to_string`, `xt_typeof`.
 - Arithmetic: `add/sub/mul/div/mod/pow/neg/pos`.

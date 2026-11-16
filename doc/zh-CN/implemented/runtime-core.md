@@ -15,7 +15,7 @@
 - [异步、Promise 与生成器](./async.md)
 - [fetch](./fetch.md)
 
-- 分配器：`xt_alloc` 背后的非移动标记-清扫回收器（显式根、子系统根提供者与保守 C 栈扫描）。bundle 的模块体执行期间会推迟回收（`xt_gc_begin_startup` 把阈值提到 512 MiB，直到 `xt_gc_end_startup`）：庞大的模块图全部在一个生成函数里构建，中途回收会破坏存活对象。`XT_GC_THRESHOLD` 仍然覆盖这两个值。I/O worker 线程会分配返回值但从不回收（`xt_gc_worker_thread`）：回收器只扫描主线程栈区间且不是线程安全的，而回收进行中新建的块会带上标记，避免被清扫掉。
+- 分配器：`xt_alloc` 背后的非移动标记-清扫回收器（显式根、子系统根提供者与保守 C 栈扫描）。bundle 的模块体执行期间会推迟回收（`xt_gc_begin_startup` 把阈值提到 512 MiB，直到 `xt_gc_end_startup`）：庞大的模块图全部在一个生成函数里构建，中途回收会破坏存活对象。`XT_GC_THRESHOLD` 仍然覆盖这两个值。针对这类问题有两个环境开关：`XT_GC_VERIFY=1` 会在清扫前重新扫描每个已标记对象的 payload，打印出它引用但未被标记的块（标记器或根的缺口）；崩溃报告会指出落在“已被回收块”内的故障地址。I/O worker 线程会分配返回值但从不回收（`xt_gc_worker_thread`）：回收器只扫描主线程栈区间且不是线程安全的，而回收进行中新建的块会带上标记，避免被清扫掉。
 - 值构造：`xt_undefined/xt_null/xt_bool/xt_number/xt_string_new/xt_string_from_cstr`。
 - 类型转换：`xt_truthy`、`xt_to_number`、`xt_to_string`、`xt_typeof`。
 - 算术：`add/sub/mul/div/mod/pow/neg/pos`。

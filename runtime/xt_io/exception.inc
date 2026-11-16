@@ -161,7 +161,15 @@ static LONG WINAPI xt_fatal_exception(EXCEPTION_POINTERS *info) {
   unsigned long code =
       info && info->ExceptionRecord ? (unsigned long)info->ExceptionRecord->ExceptionCode : 0UL;
   int written = snprintf(g_crash_report, sizeof(g_crash_report), "\nxbintsc: fatal exception 0x%08lx\n", code);
-
+  /* A fault inside a block the collector already released is a
+   * use-after-free; naming the block turns a mystery crash into a lead. */
+  if (info && info->ExceptionRecord && info->ExceptionRecord->NumberParameters >= 2) {
+    uintptr_t address = (uintptr_t)info->ExceptionRecord->ExceptionInformation[1];
+    if (address != 0) {
+      written += xt_gc_debug_describe(address, g_crash_report + written,
+                                      sizeof(g_crash_report) - (size_t)written);
+    }
+  }
   written += xt_format_stack(g_crash_report + written, sizeof(g_crash_report) - (size_t)written);
   _write(2, g_crash_report, (unsigned int)written);
   _exit(1);

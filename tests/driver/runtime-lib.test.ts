@@ -2,11 +2,17 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { dirname } from "node:path";
 import {
+  RUNTIME_STAMP_FILE,
   findRuntimeLibrary,
+  freshRuntimeLibrary,
   platformRuntimeLibDirs,
+  readRuntimeStamp,
   runtimeLibDir,
   runtimeLibDirs,
+  runtimeSourceFingerprint,
+  writeRuntimeStamp,
 } from "../../src/driver/runtime-lib.js";
 import { findRuntimeDir, platformSlug } from "../../src/driver/paths.js";
 
@@ -77,5 +83,65 @@ describe("runtime libraries", () => {
     expect(findRuntimeLibrary("core", [directory])).toBe(join(directory, "core.lib"));
     writeFileSync(join(directory, "core.a"), "archive");
     expect(findRuntimeLibrary("core", [directory])).toBe(join(directory, "core.a"));
+  });
+});
+
+describe("runtime archive freshness", () => {
+  const FLAGS = ["-O2", "-std=c11"] as const;
+
+  function writeFile(path: string, content: string): void {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, content);
+  }
+
+  it("changes the fingerprint when a runtime source changes", () => {
+    const root = temporaryDirectory();
+    const runtime = join(root, "runtime");
+    writeFile(join(runtime, "xt_builtins.c"), "int a(void) { return 1; }");
+    writeFile(join(runtime, "rt.h"), "#define A 1");
+    const before = runtimeSourceFingerprint(runtime, "0.0.0", FLAGS);
+    expect(runtimeSourceFingerprint(runtime, "0.0.0", FLAGS)).toBe(before);
+
+    writeFile(join(runtime, "xt_builtins.c"), "int a(void) { return 2; }");
+    expect(runtimeSourceFingerprint(runtime, "0.0.0", FLAGS)).not.toBe(before);
+    // The compiler version and flags are part of the identity too.
+    expect(runtimeSourceFingerprint(runtime, "0.0.0", ["-O0"])).not.toBe(
+      runtimeSourceFingerprint(runtime, "0.0.0", FLAGS),
+    );
+    expect(runtimeSourceFingerprint(runtime, "9.9.9", FLAGS)).not.toBe(
+      runtimeSourceFingerprint(runtime, "0.0.0", FLAGS),
+    );
+  });
+
+  it("ignores the folder the archives and stamp live in", () => {
+    const root = temporaryDirectory();
+    const runtime = join(root, "runtime");
+    writeFile(join(runtime, "xt_builtins.c"), "int a(void) { return 1; }");
+    const before = runtimeSourceFingerprint(runtime, "0.0.0", FLAGS);
+    writeFile(join(runtime, "lib", "win32-x64", "core.lib"), "not a source file");
+    writeFile(join(runtime, "lib", "win32-x64", RUNTIME_STAMP_FILE), "{}");
+    expect(runtimeSourceFingerprint(runtime, "0.0.0", FLAGS)).toBe(before);
+  });
+
+  it("rejects an archive whose stamp is missing or stale", () => {
+    const root = temporaryDirectory();
+    const runtime = join(root, "runtime");
+    writeFile(join(runtime, "xt_builtins.c"), "int a(void) { return 1; }");
+    const libDir = join(runtime, "lib", "test");
+    writeFile(join(libDir, "core.a"), "archive bytes");
+    const fingerprint = runtimeSourceFingerprint(runtime, "0.0.0", FLAGS);
+
+    // No stamp at all: treat as stale (a release always writes one).
+    expect(freshRuntimeLibrary("core", [libDir], fingerprint).stale).toBe(join(libDir, "core.a"));
+
+    writeRuntimeStamp(libDir, fingerprint, "0.0.0");
+    expect(readRuntimeStamp(libDir)).toBe(fingerprint);
+    expect(freshRuntimeLibrary("core", [libDir], fingerprint).path).toBe(join(libDir, "core.a"));
+
+    // A changed source invalidates the archive recorded next to it.
+    writeFile(join(runtime, "xt_builtins.c"), "int a(void) { return 2; }");
+    const changed = runtimeSourceFingerprint(runtime, "0.0.0", FLAGS);
+    expect(freshRuntimeLibrary("core", [libDir], changed).stale).toBe(join(libDir, "core.a"));
+    expect(freshRuntimeLibrary("core", [libDir], changed).path).toBeUndefined();
   });
 });

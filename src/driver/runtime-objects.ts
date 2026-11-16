@@ -11,7 +11,7 @@ import { basename, join, resolve, sep } from "node:path";
 import type { ExtensionRegistry } from "../extensions/registry.js";
 import type { ResolvedLinkFeature } from "./link-features.js";
 import { hashParts } from "./cache.js";
-import { findRuntimeLibrary } from "./runtime-lib.js";
+import { freshRuntimeLibrary, runtimeLibDirs, runtimeSourceFingerprint } from "./runtime-lib.js";
 import { compileC, optimizationFlags, RUNTIME_CFLAGS, sysrootFlags, type PgoMode, type Runner } from "./toolchain.js";
 import { COMPILER_VERSION } from "./version.js";
 
@@ -157,7 +157,17 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
   };
 
   const runtimeInclude = [runtimeDir];
-  const coreArchive = preferPrebuilt ? findRuntimeLibrary("core", options.runtimeLibDirs) : undefined;
+  /* A shipped archive is only used when it was built from the sources on disk;
+   * a stale one links silently and the program runs an old runtime. */
+  const fingerprint = runtimeSourceFingerprint(runtimeDir, COMPILER_VERSION, RUNTIME_CFLAGS);
+  const staleArchives: string[] = [];
+  const prebuilt = (name: string): string | undefined => {
+    if (!preferPrebuilt) return undefined;
+    const found = freshRuntimeLibrary(name, options.runtimeLibDirs ?? runtimeLibDirs(), fingerprint);
+    if (found.stale !== undefined) staleArchives.push(found.stale);
+    return found.path;
+  };
+  const coreArchive = prebuilt("core");
   const runtimeObjects = coreArchive
     ? [coreArchive]
     : RUNTIME_SOURCES.map((source) => compileOne(join(runtimeDir, source), basename(source, ".c"), runtimeInclude));
@@ -170,9 +180,7 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
   for (const extension of registry.all()) {
     const sources = extension.runtimeSources ? extension.runtimeSources() : [];
     if (sources.length === 0) continue;
-    const archive = preferPrebuilt
-      ? findRuntimeLibrary(`ext_${extension.name}`, options.runtimeLibDirs)
-      : undefined;
+    const archive = prebuilt(`ext_${extension.name}`);
     if (archive) {
       extensionObjects.push(archive);
       prebuiltArchives.push(archive);
@@ -186,6 +194,12 @@ export function ensureRuntimeObjects(options: RuntimeObjectsOptions): RuntimeObj
         compileOne(sourcePath, `ext_${extensionObjects.length}_${basename(sourcePath, ".c")}`, runtimeInclude),
       );
     }
+  }
+  if (staleArchives.length > 0) {
+    /* Once per process: the archives stay stale until `npm run runtime` . */
+    process.stderr.write(
+      "xbintsc: prebuilt runtime archive is stale (the runtime sources changed); compiling the C runtime from source\n",
+    );
   }
   // A native archive may be shared by several manifests; link each once.
   const featureObjects: string[] = [];

@@ -35,6 +35,10 @@ typedef socklen_t xt_fetch_socklen_t;
 #define xt_fetch_close_socket close
 #endif
 
+/* Prototypes of the `Headers` / `Response` globals (defined in webapi.inc). */
+xt_value xt_web_headers_proto(void);
+xt_value xt_web_response_proto(void);
+
 #include "xt_fetch/buffer.inc"
 #include "xt_fetch/url.inc"
 #include "xt_fetch/socket.inc"
@@ -42,3 +46,4 @@ typedef socklen_t xt_fetch_socklen_t;
 #include "xt_fetch/response.inc"
 #include "xt_fetch/request.inc"
 #include "xt_fetch/async.inc"
+#include "xt_fetch/webapi.inc"

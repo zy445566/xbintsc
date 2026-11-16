@@ -595,6 +595,6 @@ uint32_t xt_array_buffer_byte_length(xt_value value);
 uint8_t xt_array_buffer_get_byte(xt_value buffer, uint32_t index);
 void xt_array_buffer_set_byte(xt_value buffer, uint32_t index, uint8_t value);
 xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv);
+#include "xt_web.h"
 #include "xt_async_io.h"
-
 #endif /* XT_RT_INTERNAL_H */

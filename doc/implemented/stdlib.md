@@ -127,3 +127,25 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 - `crypto.getRandomValues(typedArray)` fills an integer typed array (up to 65 536 bytes) from the OS CSPRNG and returns it; `crypto.randomUUID()` returns a v4 UUID string. `crypto` is also a first-class object and the methods can be detached (`const uuid = crypto.randomUUID`).
 - `Math.random` draws from a xoshiro256** stream seeded from the OS CSPRNG (53 random bits), not from the C `rand()`.
 - Node's `crypto.randomBytes` / `randomInt` / `randomFillSync` / `pbkdf2Sync` surface is documented in [node/crypto](../implemented/node/crypto.md).
+
+## Web platform globals
+
+Implemented in `runtime/xt_web_abort.c` (aborts) and `runtime/xt_fetch/webapi.inc`
+(`Headers` / `Response`, built on the `fetch` implementation):
+
+- `AbortController` / `AbortSignal`: `abort(reason?)`, the `aborted` / `reason` /
+  `onabort` accessors, `addEventListener("abort", fn[, { once }])` /
+  `removeEventListener`, `throwIfAborted()`, and the statics `AbortSignal.abort()`,
+  `AbortSignal.timeout(ms)` and `AbortSignal.any([...])`. The default reasons are
+  `AbortError` / `TimeoutError` errors (`error.name`). `fetch` does not consume a
+  signal yet, so aborting does not cancel an in-flight request.
+- `Headers`: the case-insensitive map `get` / `has` / `set` / `append` / `delete`
+  / `forEach` / `keys` / `values` / `entries` / `getSetCookie`, constructible from
+  a plain object, an array of pairs or another `Headers`. `fetch` hands out
+  `Headers` instances (`instanceof` holds).
+- `Response`: `new Response(body?, init?)` with `status` / `statusText` /
+  `headers`, and `text()` / `json()` / `arrayBuffer()` / `bytes()` / `clone()`.
+  `arrayBuffer()` resolves to a real `ArrayBuffer`, `bytes()` to a `Uint8Array`.
+- `JSON`, `ArrayBuffer` and `DataView` are values too (`const s = JSON.stringify`,
+  `ArrayBuffer.prototype`, `new DataView(buffer)`); `JSON` keeps its dedicated
+  call lowering and also works when read as an object.

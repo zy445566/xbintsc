@@ -8,6 +8,9 @@
  * though the value is already available.
  */
 
+/* Typed-array constructor (xt_typed_array.c); `bytes()` wraps the body buffer. */
+xt_value xt_ta_u8_ctor(int32_t argc, xt_value *argv);
+
 static void *xt_response_method_impl(xt_value name);
 static xt_value xt_method_value_for_response(xt_value name);
 
@@ -31,19 +34,34 @@ static xt_value xt_response_method_json(xt_value thisValue, xt_value env, int32_
   return xt_promise_resolve(xt_json_parse(1, &body));
 }
 
-static xt_value xt_response_method_array_buffer(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
-  (void)env;
-  (void)argc;
-  (void)argv;
+/* The body as a real `ArrayBuffer` (the platform type), built from the buffered
+ * bytes. `bytes()` wraps the same buffer in a `Uint8Array`. */
+static xt_value xt_response_body_buffer(xt_value thisValue) {
   xt_value body = xt_response_body(thisValue);
   const char *data = xt_string_data(body);
   int32_t length = xt_string_length_value(body);
   if (!data || length < 0) length = 0;
-  xt_value bytes = xt_array_new(0, NULL);
+  xt_value lengthValue = xt_number((double)length);
+  xt_value buffer = xt_array_buffer_ctor(1, &lengthValue);
   for (int32_t i = 0; i < length; i++) {
-    xt_array_push(bytes, xt_number((double)(unsigned char)data[i]));
+    xt_array_buffer_set_byte(buffer, (uint32_t)i, (uint8_t)data[i]);
   }
-  return xt_promise_resolve(bytes);
+  return buffer;
+}
+
+static xt_value xt_response_method_array_buffer(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return xt_promise_resolve(xt_response_body_buffer(thisValue));
+}
+
+static xt_value xt_response_method_bytes(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xt_value buffer = xt_response_body_buffer(thisValue);
+  return xt_promise_resolve(xt_ta_u8_ctor(1, &buffer));
 }
 
 static xt_value xt_response_method_clone(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
@@ -51,6 +69,7 @@ static xt_value xt_response_method_clone(xt_value thisValue, xt_value env, int32
   (void)argc;
   (void)argv;
   xt_value clone = xt_object_new();
+  xt_object_set_prototype(clone, xt_web_response_proto());
   xt_value keys = xt_object_keys(thisValue);
   int32_t count = (int32_t)xt_to_number(xt_array_length(keys));
   for (int32_t i = 0; i < count; i++) {
@@ -101,7 +120,8 @@ static xt_value xt_response_new(xt_value headers, int status, const char *status
   xt_fetch_set_method(response, "text", (void *)xt_response_method_text);
   xt_fetch_set_method(response, "json", (void *)xt_response_method_json);
   xt_fetch_set_method(response, "arrayBuffer", (void *)xt_response_method_array_buffer);
-  xt_fetch_set_method(response, "bytes", (void *)xt_response_method_array_buffer);
+  xt_fetch_set_method(response, "bytes", (void *)xt_response_method_bytes);
   xt_fetch_set_method(response, "clone", (void *)xt_response_method_clone);
+  xt_object_set_prototype(response, xt_web_response_proto());
   return response;
 }

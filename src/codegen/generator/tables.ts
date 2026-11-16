@@ -263,6 +263,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   Duplex: "xt_stream_static",
   Transform: "xt_stream_static",
   PassThrough: "xt_stream_static",
+  AbortSignal: "xt_abort_signal_static",
   net: "xt_net_static",
   dgram: "xt_dgram_static",
   http: "xt_http_static",
@@ -294,28 +295,21 @@ export const SYMBOL_WELL_KNOWN = new Set<string>([
 /** Namespaces that also exist as a first-class object value (`Math.cos`). */
 export const NAMESPACE_VALUES: Record<string, string> = {
   Math: "xt_math_object",
+  JSON: "xt_json_object",
   crypto: "xt_crypto_object",
   WebAssembly: "xt_webassembly_object",
   Intl: "xt_intl_object",
 };
 
-/**
- * Standard web-platform globals recognized so code reaching for them
- * type-checks, but with no runtime implementation yet: they lower to
- * `undefined`. A construct such as `new AbortController()` therefore fails at
- * run time rather than being reported as an unknown name.
- */
+/** Web-platform globals recognized for type checking but not implemented: they
+ *  lower to `undefined` and fail at run time, not as an unknown name. */
 export const WEB_GLOBALS: ReadonlySet<string> = new Set<string>([
   "globalThis",
-  "AbortController",
-  "AbortSignal",
   "Reflect",
   "Proxy",
   "FormData",
   "Blob",
-  "Headers",
   "Request",
-  "Response",
   "EventTarget",
 ]);
 
@@ -362,6 +356,10 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   TextDecoderStream: "xt_text_decoder_stream_ctor",
   ArrayBuffer: "xt_array_buffer_ctor",
   DataView: "xt_data_view_ctor",
+  AbortController: "xt_abort_controller_ctor",
+  AbortSignal: "xt_abort_signal_ctor",
+  Headers: "xt_headers_ctor",
+  Response: "xt_response_ctor",
   ...ERROR_CONSTRUCTORS,
   ...TYPED_ARRAY_CTORS,
 };
@@ -399,6 +397,12 @@ export const FIRST_CLASS_CONSTRUCTORS = new Set<string>([
   "ByteLengthQueuingStrategy",
   "TextEncoderStream",
   "TextDecoderStream",
+  "AbortController",
+  "AbortSignal",
+  "Headers",
+  "Response",
+  "ArrayBuffer",
+  "DataView",
 ]);
 
 export const BUILTIN_METHODS = new Set<string>([

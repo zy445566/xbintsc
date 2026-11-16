@@ -8,7 +8,7 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
 ## Syntax
 
 - `import default, { named } from "..."`, `import * as ns from "..."` (namespace imports of relative modules are lowered to a synthetic object literal; extension modules such as `path` are also supported), `import "./side-effect"`, `import type`
-- `export default`, `export { a as b }`, `export *`, `export =`
+- `export default`, `export { a as b }`, `export *`, `export * as ns from "..."`, `export =`
 - Import attributes (`with` / `assert`)
 
 ## Runtime semantics

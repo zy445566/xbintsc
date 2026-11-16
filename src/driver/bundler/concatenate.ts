@@ -125,6 +125,14 @@ export function concatenateModules(options: ConcatenateOptions): SourceFileNode 
         }
         if (statement.kind === SyntaxKind.ExportDeclaration) {
           const declaration = statement as ExportDeclaration;
+          /* `export * as ns from "..."` needs its synthetic namespace binding
+           * inside the wrapper: it reads the dependency's exports, which only
+           * exist once that dependency's wrapper has run. */
+          const synthetic = namespaceStatements.get(statement);
+          if (synthetic) {
+            body.push(synthetic);
+            continue;
+          }
           const inner = (declaration as unknown as { declaration?: Statement }).declaration;
           if (inner) body.push(inner);
           continue;

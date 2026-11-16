@@ -41,8 +41,9 @@ xt_value xt_byte_length_queuing_strategy_ctor(int32_t argc, xt_value *argv);
 xt_value xt_text_encoder_stream_ctor(int32_t argc, xt_value *argv);
 xt_value xt_text_decoder_stream_ctor(int32_t argc, xt_value *argv);
 /* DataView's constructor and ArrayBuffer's statics live with the ArrayBuffer
- * implementation. */
+ * implementation; the proxy constructor lives with its hooks. */
 xt_value xt_data_view_ctor(int32_t argc, xt_value *argv);
+xt_value xt_proxy_ctor(int32_t argc, xt_value *argv);
 xt_value xt_array_buffer_static(xt_value method, int32_t argc, xt_value *argv);
 int xt_streams_has_static(const char *name, const char *method);
 xt_value xt_streams_static(xt_value name, int32_t argc, xt_value *argv);
@@ -118,7 +119,8 @@ typedef struct {
   X(Headers, 1, XT_PROTO_HEADERS)                                          \
   X(Response, 2, XT_PROTO_RESPONSE)                                        \
   X(ArrayBuffer, 1, XT_PROTO_PLAIN)                                        \
-  X(DataView, 1, XT_PROTO_PLAIN)
+  X(DataView, 1, XT_PROTO_PLAIN)                                           \
+  X(Proxy, 2, XT_PROTO_PLAIN)
 
 #define XT_CTOR_ENUM(name, arity, proto) XT_CTOR_##name,
 enum { XT_CTOR_SPECS(XT_CTOR_ENUM) XT_CTOR_COUNT };
@@ -240,6 +242,7 @@ static xt_value xt_builtin_ctor_call(const char *name, int32_t argc, xt_value *a
   if (strcmp(name, "Response") == 0) return xt_response_ctor(argc, argv);
   if (strcmp(name, "ArrayBuffer") == 0) return xt_array_buffer_ctor(argc, argv);
   if (strcmp(name, "DataView") == 0) return xt_data_view_ctor(argc, argv);
+  if (strcmp(name, "Proxy") == 0) return xt_proxy_ctor(argc, argv);
   if (xt_ctor_is_typed_array(name)) return xt_typed_array_ctor_by_name(nameValue, argc, argv);
   if (xt_ctor_is_error(name)) return xt_error_ctor_by_name(nameValue, argc, argv);
   return XT_UNDEFINED;

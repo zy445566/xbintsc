@@ -118,6 +118,22 @@
 - `Math.random` 使用由操作系统 CSPRNG 播种的 xoshiro256** 流（53 位随机性），不再使用 C `rand()`。
 - Node 的 `crypto.randomBytes` / `randomInt` / `randomFillSync` / `pbkdf2Sync` 见 [node/crypto](../implemented/node/crypto.md)。
 
+## Proxy
+
+`new Proxy(target, handler)` 以宿主视图实现（`runtime/xt_proxy.c`）：代理对象的自有属性袋
+始终为空，因此每个字符串键查找都会落空并进入 handler。
+
+- 支持的 trap：`get(target, key, receiver)`、`set(target, key, value, receiver)`、
+  `has(target, key)`、`deleteProperty(target, key)`、`ownKeys(target)`。缺失的 trap
+  把操作转发给 target，所以 `new Proxy(obj, {})` 与 `obj` 行为一致（含写入与删除）。
+- `Object.keys` / `JSON.stringify` / `for...in` 使用 `ownKeys` 的结果；读取这些键会走
+  `get`。`typeof` 为 `"object"`，代理继承 target 的原型，因此继承方法与 `instanceof` 可用。
+- 未建模：函数 target（`apply` / `construct`）、`Proxy.revocable`、原型与属性描述符类
+  trap（`getPrototypeOf`、`setPrototypeOf`、`getOwnPropertyDescriptor`、
+  `defineProperty`、`isExtensible` …），以及不变量校验（trap 可以报告 target 上并不存在
+  的键）。target 与 handler 以隐藏的 symbol 键属性存放，因此
+  `Object.getOwnPropertySymbols(proxy)` 会看到它们。
+
 ## Web 平台全局对象
 
 实现位于 `runtime/xt_web_abort.c`（中止）与 `runtime/xt_fetch/webapi.inc`

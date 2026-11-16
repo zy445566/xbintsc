@@ -128,6 +128,26 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 - `Math.random` draws from a xoshiro256** stream seeded from the OS CSPRNG (53 random bits), not from the C `rand()`.
 - Node's `crypto.randomBytes` / `randomInt` / `randomFillSync` / `pbkdf2Sync` surface is documented in [node/crypto](../implemented/node/crypto.md).
 
+## Proxy
+
+`new Proxy(target, handler)` is implemented as a host view (`runtime/xt_proxy.c`):
+the proxy is an object whose own property bag stays empty, so every string-keyed
+lookup misses and reaches the handler.
+
+- Traps: `get(target, key, receiver)`, `set(target, key, value, receiver)`,
+  `has(target, key)`, `deleteProperty(target, key)` and `ownKeys(target)`.
+  An absent trap forwards the operation to the target, so `new Proxy(obj, {})`
+  behaves like `obj` (writes and deletes included).
+- `Object.keys` / `JSON.stringify` / `for...in` use the `ownKeys` result; reads
+  of those keys go through `get`. `typeof` is `"object"`, and the proxy inherits
+  the target's prototype, so inherited methods and `instanceof` work.
+- Not modelled: function targets (`apply` / `construct` traps), `Proxy.revocable`,
+  the prototype and property-descriptor traps (`getPrototypeOf`,
+  `setPrototypeOf`, `getOwnPropertyDescriptor`, `defineProperty`,
+  `isExtensible`, …), and invariant checking (a trap may report a key the target
+  does not have). The target and handler are stored as hidden symbol-keyed
+  properties, so `Object.getOwnPropertySymbols(proxy)` reports them.
+
 ## Web platform globals
 
 Implemented in `runtime/xt_web_abort.c` (aborts) and `runtime/xt_fetch/webapi.inc`

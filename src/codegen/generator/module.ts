@@ -298,7 +298,21 @@ export const moduleMethods: ModuleMethods = {
 
     // Body.
     if (fn.node.kind === SyntaxKind.SourceFile) {
-      this.emitStatements(this.sourceFile.statements);
+      /* Record which module is initialising. Every module of a bundle shares
+       * this one function, so without it a crash (or an `Error.stack`) inside a
+       * module body points at the entry file's offsets — the coordinates say
+       * `cli.ts:653` no matter where it really happened. */
+      let currentModule: string | undefined;
+      for (const statement of this.sourceFile.statements) {
+        const origin = this.sourceFile.origins?.get(statement);
+        if (origin !== undefined && origin !== currentModule) {
+          currentModule = origin;
+          this.emit(`  call void @xt_stack_set_module(i8* ${this.internStatic(artifactPath(origin))})`);
+        }
+        this.emitStatement(statement);
+      }
+      /* Module bodies are done; later errors should not name the last module. */
+      this.emit(`  call void @xt_stack_set_module(i8* null)`);
     } else if (fn.node.kind === SyntaxKind.ArrowFunction && (fn.node as ArrowFunction).body.kind !== SyntaxKind.Block) {
       const value = this.emitExpression((fn.node as ArrowFunction).body as Expression);
       this.emitFunctionReturn(value);

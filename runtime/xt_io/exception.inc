@@ -64,6 +64,15 @@ void xt_stack_trim(int32_t depth) {
   if (depth < g_stack_depth) g_stack_depth = depth;
 }
 
+/* The module whose top-level code is running. Every module of a bundle shares
+ * one generated function, so a crash inside a module body would otherwise be
+ * reported at the entry file's offsets. Codegen emits one call per module
+ * boundary. */
+static const char *g_current_module = NULL;
+
+void xt_stack_set_module(const char *name) { g_current_module = name; }
+
+
 static void xt_stack_append(char **buffer, size_t *length, size_t *capacity, const char *text) {
   size_t count = strlen(text);
   if (*length + count + 1 > *capacity) {
@@ -90,6 +99,11 @@ xt_value xt_stack_capture(const char *name, const char *message) {
     xt_stack_append(&buffer, &length, &capacity, message);
   }
   xt_stack_append(&buffer, &length, &capacity, "\n");
+  if (g_current_module != NULL) {
+    xt_stack_append(&buffer, &length, &capacity, "    module: ");
+    xt_stack_append(&buffer, &length, &capacity, g_current_module);
+    xt_stack_append(&buffer, &length, &capacity, "\n");
+  }
   for (int32_t index = g_stack_depth - 1; index >= 0; index--) {
     const xt_stack_entry *entry = &g_stack[index];
     char line[24];
@@ -123,6 +137,13 @@ static char g_crash_report[16384];
 
 static int xt_format_stack(char *out, size_t size) {
   int written = 0;
+  /* While a bundle's module bodies run, name the module whose top-level code is
+   * executing: every module shares one generated function, so its frames all
+   * carry the entry file's coordinates. */
+  if (g_current_module != NULL) {
+    int count = snprintf(out, size, "    module: %s\n", g_current_module);
+    if (count > 0) written = count;
+  }
   for (int32_t index = g_stack_depth - 1; index >= 0 && written < (int)size; index--) {
     const xt_stack_entry *entry = &g_stack[index];
     int count = snprintf(out + written, size - (size_t)written, "    at %s (%s:%d)\n",
@@ -140,6 +161,7 @@ static LONG WINAPI xt_fatal_exception(EXCEPTION_POINTERS *info) {
   unsigned long code =
       info && info->ExceptionRecord ? (unsigned long)info->ExceptionRecord->ExceptionCode : 0UL;
   int written = snprintf(g_crash_report, sizeof(g_crash_report), "\nxbintsc: fatal exception 0x%08lx\n", code);
+
   written += xt_format_stack(g_crash_report + written, sizeof(g_crash_report) - (size_t)written);
   _write(2, g_crash_report, (unsigned int)written);
   _exit(1);
@@ -152,6 +174,7 @@ void xt_install_crash_handler(void) { SetUnhandledExceptionFilter(xt_fatal_excep
 
 static void xt_fatal_signal(int sig) {
   int written = snprintf(g_crash_report, sizeof(g_crash_report), "\nxbintsc: fatal signal %d\n", sig);
+
   written += xt_format_stack(g_crash_report + written, sizeof(g_crash_report) - (size_t)written);
   ssize_t ignored = write(STDERR_FILENO, g_crash_report, (size_t)written);
   (void)ignored;

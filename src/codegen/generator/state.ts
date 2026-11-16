@@ -386,6 +386,7 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_try_exception(i8*)",
   "declare void @xt_try_leave(i8*)",
   "declare void @xt_stack_push(i8*, i8*, i32)",
+  "declare void @xt_stack_set_module(i8*)",
   "declare void @xt_stack_pop()",
   "declare void @xt_stack_set_line(i32)",
   "declare void @xt_console_log(i32, i64*)",

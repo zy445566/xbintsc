@@ -253,6 +253,9 @@ export const invocationCallMethods: InvocationCallMethods = {
   /** Lower a call to an imported module binding to its runtime symbol. */
   emitModuleExport(node: CallExpression, exported: ModuleExport): string {
     const args = this.emitArguments(node.arguments);
+    /* `createRequire(url)` hands back a `require` that answers from the table
+     * of modules linked into this binary, so it has to exist first. */
+    if (exported.symbol === "xt_module_create_require") this.ensureModuleRegistry();
     if (exported.symbol) {
       this.extraDeclarations.add(
         exported.returnVoid

@@ -86,3 +86,26 @@ xt_value xt_defer_module(int32_t argc, xt_value *argv) {
   }
   return exports;
 }
+
+/* -- linked-module registry ------------------------------------------------ *
+ *
+ * A compiled program has no module loader, but the modules linked into it are
+ * known: the code generator builds a table mapping every enabled extension
+ * module name (bare and `node:`-prefixed) to its namespace object and registers
+ * it before the first `createRequire(...)` / computed `import(...)` runs. Both
+ * entry points answer from that table instead of failing outright. */
+static xt_value g_module_registry = 0;
+static int g_module_registry_rooted = 0;
+
+void xt_module_registry_set(xt_value table) {
+  g_module_registry = table;
+  if (!g_module_registry_rooted) {
+    xt_gc_add_root(&g_module_registry);
+    g_module_registry_rooted = 1;
+  }
+}
+
+xt_value xt_module_registry_lookup(xt_value specifier) {
+  if (g_module_registry == 0 || !XT_IS_STRING(specifier)) return XT_UNDEFINED;
+  return xt_object_get(g_module_registry, specifier);
+}

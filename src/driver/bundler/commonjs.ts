@@ -105,9 +105,16 @@ export interface CommonJSLoweringContext {
  * free references, and record its export surface (whole-object `default` plus
  * every syntactically detectable named export). Runs before the ESM export
  * collection so re-exports of a CommonJS module resolve.
+ *
+ * Returns the statements that must run *before any* module body: the
+ * `module`/`exports` pair. Node creates them when a module starts loading, so a
+ * `require` cycle sees the earlier module's (partly filled) object; keeping them
+ * in the module's own block would leave the later module reading an object that
+ * does not exist yet. The caller hoists them into a program-wide prelude, and
+ * the module keeps only its body plus the export snapshot at the end.
  */
-export function prepareCommonJS(record: ModuleRecord): void {
-  if (!record.commonjs) return;
+export function prepareCommonJS(record: ModuleRecord): Statement[] {
+  if (!record.commonjs) return [];
   const statements = record.sourceFile.statements as Statement[];
   const anchor = statements[0]?.start ?? record.sourceFile.start;
 
@@ -125,12 +132,12 @@ export function prepareCommonJS(record: ModuleRecord): void {
     else if (identifier.text === "exports" && hasExports) (identifier as { text: string }).text = exportsName;
   }
 
-  const prefixStatements: Statement[] = [
+  const preludeStatements: Statement[] = [
     variableStatement(moduleName, objectLiteral([propertyAssignment("exports", objectLiteral([]))]), anchor),
   ];
   // `exports` may be reassigned (`exports = module.exports = {}`), so the alias
   // is a `let`, not a `const`.
-  prefixStatements.push(variableStatement(exportsName, member(moduleName, "exports", anchor), anchor, "let"));
+  preludeStatements.push(variableStatement(exportsName, member(moduleName, "exports", anchor), anchor, "let"));
 
   const suffixStatements: Statement[] = [];
   const defaultName = `${record.prefix}$cjs_default`;
@@ -142,8 +149,8 @@ export function prepareCommonJS(record: ModuleRecord): void {
     record.exports.set(name, local);
   }
 
-  statements.unshift(...prefixStatements);
   statements.push(...suffixStatements);
+  return preludeStatements;
 }
 
 /**

@@ -24,8 +24,13 @@
 
 ## `globalThis` 与 `Intl`
 
-- `globalThis.x` 与 `global.x` 按裸全局名读取（`globalThis.fetch`、`globalThis.Deno`）；
-  全局对象本身还不是值，所以 `const g = globalThis` 和 `globalThis.x = 1` 仍不支持。
+- `globalThis.x` 与 `global.x` 读取**已知**全局名时按裸全局名处理（`globalThis.fetch`、
+  `globalThis.Deno`）；其他属性则是全局对象上的普通读取，因此 `globalThis.missing` 为
+  `undefined`，`global[key] = v` 也能读回。
+- `globalThis`（以及 Node 的别名 `global`）是值：两种写法共享同一个普通属性袋，所以
+  `const g = globalThis`、`globalThis.x = 1` 以及用 symbol 键在 `global` 上发布状态都可用。
+  它不是运行时作用域对象——库用 `global.foo = ...` 写入的名字，若编译器不认识，读取仍是
+  `undefined`。
 - `Intl.Segmenter` 支持 `granularity: "grapheme" | "word"`；`segment(text)` 返回
   `{ segment, index, isWordLike }` 的**数组**。这是 UAX #29 的近似实现（未接入 ICU）：
   字素按码点 + 组合符 / 变体选择符 / emoji 修饰符 / ZWJ 序列 / 区域指示符成对切分；

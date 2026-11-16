@@ -136,6 +136,20 @@ int32_t xt_closure_arity(xt_value fn);
 xt_value xt_function_set_metadata(xt_value fn, xt_value name, int32_t arity);
 xt_value xt_this(void);
 xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv);
+/** The global object value (`globalThis` / Node's `global`), a plain bag. */
+xt_value xt_global_object(void);
+/** The prototype a class chains onto for its `extends` clause. */
+xt_value xt_parent_prototype(xt_value ctor);
+/**
+ * `super(...)` from a derived constructor: run the parent constructor on the
+ * instance the subclass already created. A user class keeps its constructor
+ * closure in `__ctor` on its prototype; a native/extension class has no such
+ * hook, so the parent constructor function (the class value's own
+ * [[Prototype]]) is invoked as a constructor and its own properties are copied
+ * onto the instance.
+ */
+xt_value xt_super_construct(xt_value thisValue, xt_value owner, xt_value parentProto,
+                            int32_t argc, xt_value *argv);
 xt_value xt_instance_of(xt_value value, xt_value ctor);
 /** `value instanceof <built-in constructor>`; id from `BUILTIN_INSTANCEOF`. */
 xt_value xt_instance_of_builtin(xt_value value, int32_t id);

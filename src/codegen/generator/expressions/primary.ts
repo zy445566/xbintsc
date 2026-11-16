@@ -349,10 +349,9 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           return this.runtimeCall("xt_error_constructor", [nameValue]);
         }
         // A bare `require` reference is CommonJS; steer the user to `import`.
-        if (identifier.text === "require") {
-          this.reportRequireUse(identifier);
-          return i64(XT_UNDEFINED);
-        }
+        if (identifier.text === "require") { this.reportRequireUse(identifier); return i64(XT_UNDEFINED); }
+        // `globalThis` / Node's `global` as a value is the (plain-bag) global object.
+        if (identifier.text === "globalThis" || identifier.text === "global") return this.runtimeCall("xt_global_object", []);
         // Recognized web globals with no runtime yet lower to `undefined`.
         if (WEB_GLOBALS.has(identifier.text)) return i64(XT_UNDEFINED);
         /* The parser's recovery node for a missing expression. The syntax

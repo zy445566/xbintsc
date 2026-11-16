@@ -39,6 +39,7 @@ import { classifyDependency } from "./resolve.js";
 import {
   declarationName,
   hasModifier,
+  isTypeOnlySymbol,
   moduleScope,
   renameImport,
   renameReferences,
@@ -99,7 +100,10 @@ export function bundleModules(
               if (target) record.exports.set(exportedName, target);
             } else {
               const symbol = symbolByName.get(localName);
-              if (symbol) {
+              /* A type-only local (`export { FooOptions }`) has no runtime
+               * binding; exporting its name would make every namespace import
+               * of this module read a slot that does not exist. */
+              if (symbol && !isTypeOnlySymbol(symbol)) {
                 const finalName = record.finalNames.get(symbol.id) ?? symbol.name;
                 record.exports.set(exportedName, finalName);
               }
@@ -129,7 +133,7 @@ export function bundleModules(
         const name = declarationName(statement) ?? declarationName((statement as { declaration?: Node }).declaration ?? statement);
         if (name) {
           const symbol = symbolByName.get(name.text);
-          if (symbol) record.exports.set("default", record.finalNames.get(symbol.id) ?? symbol.name);
+          if (symbol && !isTypeOnlySymbol(symbol)) record.exports.set("default", record.finalNames.get(symbol.id) ?? symbol.name);
         }
         continue;
       }
@@ -137,7 +141,7 @@ export function bundleModules(
         const names = exportedNames(statement);
         for (const name of names) {
           const symbol = symbolByName.get(name);
-          if (symbol) record.exports.set(name, record.finalNames.get(symbol.id) ?? symbol.name);
+          if (symbol && !isTypeOnlySymbol(symbol)) record.exports.set(name, record.finalNames.get(symbol.id) ?? symbol.name);
         }
       }
     }

@@ -55,12 +55,13 @@ export const superCallMethods: SuperCallMethods = {
     this.emit(`  ${proto} = call i64 @xt_function_get_prototype(i64 ${owner})`);
     const parentProto = this.reg();
     this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${proto})`);
-    const key = this.stringValue("__ctor");
-    const ctor = this.reg();
-    this.emit(`  ${ctor} = call i64 @xt_get(i64 ${parentProto}, i64 ${key})`);
     const args = this.emitArguments(node.arguments);
     const result = this.reg();
-    this.emit(`  ${result} = call i64 @xt_call_with_this(i64 ${ctor}, i64 ${thisValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+    /* The runtime resolves the parent's `__ctor` hook, and falls back to
+     * calling a native/extension parent constructor (which has none). */
+    this.emit(
+      `  ${result} = call i64 @xt_super_construct(i64 ${thisValue}, i64 ${owner}, i64 ${parentProto}, i32 ${args.argc}, i64* ${args.ptr})`,
+    );
     return result;
   },
 

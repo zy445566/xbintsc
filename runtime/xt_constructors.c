@@ -453,3 +453,46 @@ xt_value xt_builtin_prototype_for_kind(int32_t kind) {
   xt_value constructor = xt_builtin_constructor(xt_string_from_cstr(name));
   return xt_function_get_prototype(constructor);
 }
+
+/*
+ * `super(...)` and the `extends` prototype link.
+ *
+ * A class statement chains its prototype onto the parent class's prototype and
+ * runs the parent constructor from the derived one. A user class publishes its
+ * constructor closure as `__ctor` on its prototype, which is what a subclass's
+ * `super(...)` must run. A native/extension class (`class X extends
+ * EventEmitter`) has no such hook: its constructor function is the class
+ * value's own [[Prototype]] (the class statement links the two for static
+ * inheritance), and its prototype object only exists once it has constructed
+ * something. Both helpers hide that difference from the code generator.
+ */
+
+xt_value xt_super_construct(xt_value thisValue, xt_value owner, xt_value parentProto,
+                            int32_t argc, xt_value *argv) {
+  xt_value ctor = xt_get(parentProto, xt_string_from_cstr("__ctor"));
+  if (XT_IS_FUNCTION(ctor)) return xt_call_with_this(ctor, thisValue, argc, argv);
+  xt_value parentCtor = xt_object_get_prototype(owner);
+  if (!XT_IS_FUNCTION(parentCtor)) return XT_UNDEFINED;
+  /* Run the parent constructor and carry over the state it put on the instance
+   * it allocated. Constructors exposed this way (EventEmitter, the streams) are
+   * stateful only in lazily created properties, so this is usually a no-op. */
+  xt_value parent = xt_new(parentCtor, argc, argv);
+  if (!XT_IS_OBJECT(parent)) return thisValue;
+  xt_value keys = xt_object_keys(parent);
+  int32_t count = (int32_t)xt_to_number(xt_array_length(keys));
+  for (int32_t index = 0; index < count; index++) {
+    xt_value key = xt_array_get(keys, xt_number((double)index));
+    xt_set(thisValue, key, xt_get(parent, key));
+  }
+  return thisValue;
+}
+
+xt_value xt_parent_prototype(xt_value ctor) {
+  if (!XT_IS_FUNCTION(ctor)) return XT_UNDEFINED;
+  xt_value proto = xt_function_get_prototype(ctor);
+  if (XT_IS_OBJECT(proto) || XT_IS_ARRAY(proto) || XT_IS_FUNCTION(proto)) return proto;
+  /* No published prototype (an imported native constructor): construct one
+   * argument-less instance and take the prototype it installs. */
+  xt_value instance = xt_new(ctor, 0, NULL);
+  return xt_object_get_prototype(instance);
+}

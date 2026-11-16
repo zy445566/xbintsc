@@ -469,6 +469,28 @@ xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv) {
   return instance;
 }
 
+/* The global object (`globalThis`, and Node's alias `global`).
+ *
+ * xbintsc resolves a bare global *name* directly (there is no scope object), so
+ * this object is a plain property bag: it exists for code that treats the
+ * global object as a value — feature probes, `global[key]` lookups, and
+ * libraries that publish state under a symbol key on `global`. Property access
+ * spelled `globalThis.foo` still lowers to the bare global `foo`, so the two
+ * forms agree for names the compiler knows; a miss simply reads `undefined`. */
+static xt_value g_global_object = XT_UNDEFINED;
+static int g_global_object_rooted = 0;
+
+xt_value xt_global_object(void) {
+  if (g_global_object == XT_UNDEFINED) {
+    g_global_object = xt_object_new();
+    if (!g_global_object_rooted) {
+      xt_gc_add_root_range(&g_global_object, 1);
+      g_global_object_rooted = 1;
+    }
+  }
+  return g_global_object;
+}
+
 xt_value xt_instance_of(xt_value value, xt_value ctor) {
   if (!XT_IS_FUNCTION(ctor)) return XT_FALSE;
   xt_value proto = ((xt_function *)XT_GET_PTR(ctor))->prototype;

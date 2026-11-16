@@ -31,7 +31,7 @@ describeE2E("end-to-end compilation (fs callbacks)", (harness) => {
         });
       });
     `;
-    expect(runProgram(source, { extensions: "node" })).toBe(
+    expect(runProgram(source, { extensions: true })).toBe(
       ["read hello size 5", "realpath true", "exists true"].join("\n"),
     );
   });
@@ -46,6 +46,6 @@ describeE2E("end-to-end compilation (fs callbacks)", (harness) => {
         console.log("code", shaped ? shaped.code : "none", "syscall", shaped ? shaped.syscall : "none");
       });
     `;
-    expect(runProgram(source, { extensions: "node" })).toBe("code ENOENT syscall open");
+    expect(runProgram(source, { extensions: true })).toBe("code ENOENT syscall open");
   });
 });

@@ -210,23 +210,23 @@ void xt_gc_arm(void);
 void xt_gc_collect(void);
 /* Override the automatic trigger threshold (bytes of live heap). */
 void xt_gc_set_threshold(size_t bytes);
-/* Set by the I/O worker pool: workers allocate but never collect. */
 extern _Thread_local int xt_gc_worker_thread;
-
+void xt_gc_verify_payloads(void); /* XT_GC_VERIFY=1 */
+void xt_gc_debug_record_free(uintptr_t address, size_t size, int kind);
+int xt_gc_debug_describe(uintptr_t address, char *out, size_t capacity);
+void xt_gc_verify_rejected(uintptr_t address); /* XT_GC_VERIFY */
 /* Explicit roots: the address of a slot that always holds a live value (a
  * module global, a runtime prototype cache, ...). */
 void xt_gc_add_root(xt_value *slot);
-void xt_gc_add_root_range(xt_value *base, size_t count);
 /* Subsystems whose live set is not reachable through value slots (the event
  * loop's timers, the promise microtask queue, ...) register a provider that
  * marks its reachable objects. Providers run during every collection. */
 void xt_gc_register_root_provider(void (*provider)(void));
 
-/* Track the active C stack so the conservative scan has an upper bound. The
- * initial region is installed by `xt_gc_init`; each generator pushes its own
- * private stack while it runs. Before switching to a deeper region the caller
- * records where its own stack was suspended, so every active region is scanned
- * and suspended callers stay reachable. */
+/* Track the active C stack so the conservative scan has an upper bound. A
+ * generator runs on its own private stack; before switching to a deeper
+ * region the caller records where its stack was suspended, so every active
+ * region is scanned and suspended callers stay reachable. */
 void xt_gc_push_stack(uintptr_t low, uintptr_t high);
 /* Mark the currently-executing region as suspended at `sp` (its frames above
  * `sp` stay live while a deeper generator region runs). */

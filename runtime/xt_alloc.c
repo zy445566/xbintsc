@@ -1,15 +1,7 @@
 /*
  * xbintsc runtime — heap allocation and garbage collection.
  *
- * Blocks are `calloc`-ed with an `xt_header` first and threaded through
- * `g_heap_head` (`gc_next`); the collector is a non-moving mark-sweep:
- * build an address -> header table, mark from the roots (registered slots, root
- * providers, a conservative scan of the active C stack including the `jmp_buf`
- * registers), trace payloads, then free what stayed unmarked. A non-moving
- * collector keeps the NaN-boxed `xt_value` representation untouched.
- *
- * The collector is single-threaded; I/O worker threads allocate but never
- * collect (see `xt_gc_worker_thread`).
+ * Non-moving mark-sweep over a `calloc`-ed block list; see `xt_gc_collect`.
  */
 
 #include "rt_internal.h"
@@ -229,28 +221,23 @@ void xt_gc_init(void) {
    * most useful thing to print; install the handler once per process. */
   xt_install_crash_handler();
 }
-
 void xt_gc_arm(void) { g_gc_armed = 1; }
 
 /* Module initialisation runs with a much higher threshold: a bundle allocates
  * its module graph inside one generated function, and collecting in the middle
- * of it has produced access violations in large programs. Startup is bounded,
- * so collect only if it exceeds this grace size. */
+ * of it has produced access violations. Startup is bounded. */
 #define XT_GC_STARTUP_THRESHOLD ((size_t)512 << 20) /* 512 MiB */
 
 void xt_gc_begin_startup(void) {
   if (!g_gc_threshold_pinned) g_gc_threshold = XT_GC_STARTUP_THRESHOLD;
 }
-
 void xt_gc_end_startup(void) {
   if (!g_gc_threshold_pinned) g_gc_threshold = (size_t)16 << 20;
 }
-
 void xt_gc_set_threshold(size_t bytes) {
   g_gc_threshold = bytes > XT_GC_MIN_THRESHOLD ? bytes : XT_GC_MIN_THRESHOLD;
   g_gc_threshold_pinned = 1;
 }
-
 void xt_gc_add_root(xt_value *slot) {
   if (!slot) return;
   for (size_t i = 0; i < g_root_count; i++) {
@@ -265,11 +252,9 @@ void xt_gc_add_root(xt_value *slot) {
   }
   g_root_slots[g_root_count++] = slot;
 }
-
 void xt_gc_add_root_range(xt_value *base, size_t count) {
   for (size_t i = 0; i < count; i++) xt_gc_add_root(base + i);
 }
-
 void xt_gc_register_root_provider(void (*provider)(void)) {
   if (!provider) return;
   for (size_t i = 0; i < g_root_provider_count; i++) {
@@ -284,7 +269,6 @@ void xt_gc_register_root_provider(void (*provider)(void)) {
   }
   g_root_providers[g_root_provider_count++] = provider;
 }
-
 void xt_gc_push_stack(uintptr_t low, uintptr_t high) {
   if (g_stack_depth >= XT_GC_MAX_STACKS) return;
   g_stack_regions[g_stack_depth].low = low;
@@ -292,20 +276,17 @@ void xt_gc_push_stack(uintptr_t low, uintptr_t high) {
   g_stack_regions[g_stack_depth].scan_low = low;
   g_stack_depth++;
 }
-
 void xt_gc_suspend(uintptr_t sp) {
   if (g_stack_depth <= 0) return;
   uintptr_t *scan = &g_stack_regions[g_stack_depth - 1].scan_low;
   if (*scan == UINTPTR_MAX || sp < *scan) *scan = sp;
 }
-
 void xt_gc_pop_stack(void) {
   if (g_stack_depth <= 1) return;
   g_stack_depth--;
   /* Back on the underlying stack: resume scanning it from the current frame. */
   if (g_stack_depth > 0) g_stack_regions[g_stack_depth - 1].scan_low = UINTPTR_MAX;
 }
-
 /* ------------------------------------------------------------------------- */
 /* Marking                                                                   */
 /* ------------------------------------------------------------------------- */
@@ -321,7 +302,21 @@ static void xt_gc_gray_push(xt_header *header) {
   }
   g_gray[g_gray_count++] = header;
 }
-void xt_gc_mark_header(xt_header *header) { xt_gc_gray_push(header); }
+xt_header *xt_gc_lookup_raw(uintptr_t address);
+
+/* Typed pointers (a promise's `reaction->promise`, a coroutine's active async
+ * frame, ...) are only *probably* live: a stale one must be skipped, not
+ * dereferenced. Dereferencing it here is how a crash turned into "read at
+ * 0xffffffffffffffff" instead of a diagnosis. */
+static void xt_gc_gray_push_checked(xt_header *header) {
+  if (!header) return;
+  if (xt_gc_lookup_raw((uintptr_t)header) == header) {
+    xt_gc_gray_push(header);
+    return;
+  }
+  xt_gc_verify_rejected((uintptr_t)header);
+}
+void xt_gc_mark_header(xt_header *header) { xt_gc_gray_push_checked(header); }
 
 void xt_gc_mark_value(xt_value value) {
   if (XT_IS_STRING(value) || XT_IS_OBJECT(value) || XT_IS_ARRAY(value) || XT_IS_FUNCTION(value) ||
@@ -338,6 +333,8 @@ int xt_gc_value_is_marked(xt_value value) {
   return header != NULL && (header->flags & XT_GC_MARK) != 0;
 }
 xt_header *xt_gc_heap_head(void) { return g_heap_head; }
+
+xt_header *xt_gc_lookup_raw(uintptr_t address) { return xt_gc_table_lookup(address); }
 
 void xt_gc_scan_region(const void *base, size_t bytes) {
   if (!base) return;
@@ -370,8 +367,8 @@ static void xt_gc_process(xt_header *header) {
        * children must stay alive until `xt_string_bytes` materialises it. */
       xt_string *string = (xt_string *)header;
       if (string->flat == NULL) {
-        if (string->left) xt_gc_gray_push(&string->left->header);
-        if (string->right) xt_gc_gray_push(&string->right->header);
+        if (string->left) xt_gc_gray_push_checked(&string->left->header);
+        if (string->right) xt_gc_gray_push_checked(&string->right->header);
       }
       return;
     }
@@ -518,6 +515,7 @@ void xt_gc_collect(void) {
   if (!g_gc_initialised) xt_gc_init();
   g_gc_running = 1;
   const int trace = xt_gc_trace_enabled();
+  const int leak = getenv("XT_GC_LEAK") != NULL;
   const size_t heap_before = g_heap_bytes;
   const size_t allocations_before = g_heap_allocations;
 
@@ -536,6 +534,7 @@ void xt_gc_collect(void) {
   }
   xt_weak_gc_clear();
   xt_weak_gc_compact();
+  if (getenv("XT_GC_VERIFY") != NULL) xt_gc_verify_payloads();
 
   xt_header **link = &g_heap_head;
   xt_header *header = g_heap_head;
@@ -559,7 +558,8 @@ void xt_gc_collect(void) {
       *link = next;
       g_heap_bytes -= header->size;
       g_heap_allocations--;
-      xt_gc_release(header);
+      xt_gc_debug_record_free((uintptr_t)header, header->size, header->kind);
+      if (!leak) xt_gc_release(header);
     }
     header = next;
   }

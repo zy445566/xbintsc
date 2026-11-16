@@ -160,8 +160,24 @@ static int xt_format_stack(char *out, size_t size) {
 static LONG WINAPI xt_fatal_exception(EXCEPTION_POINTERS *info) {
   unsigned long code =
       info && info->ExceptionRecord ? (unsigned long)info->ExceptionRecord->ExceptionCode : 0UL;
-  int written = snprintf(g_crash_report, sizeof(g_crash_report), "\nxbintsc: fatal exception 0x%08lx\n", code);
-
+  int written = snprintf(g_crash_report, sizeof(g_crash_report), "\nxbintsc: fatal exception 0x%08lx\n",
+                         code);
+  written += snprintf(g_crash_report + written, sizeof(g_crash_report) - (size_t)written,
+                      "    thread: %s\n", xt_gc_worker_thread ? "I/O worker" : "main");
+  /* A fault inside a block the collector already released is a
+   * use-after-free; naming the block turns a mystery crash into a lead. */
+  if (info && info->ExceptionRecord) {
+    unsigned long parameters = (unsigned long)info->ExceptionRecord->NumberParameters;
+    uintptr_t access = (uintptr_t)info->ExceptionRecord->ExceptionInformation[0];
+    uintptr_t address = (uintptr_t)info->ExceptionRecord->ExceptionInformation[1];
+    written += snprintf(g_crash_report + written, sizeof(g_crash_report) - (size_t)written,
+                        "    detail: %lu parameters, access 0x%llx, address 0x%llx\n", parameters,
+                        (unsigned long long)access, (unsigned long long)address);
+    if (address != 0) {
+      written += xt_gc_debug_describe(address, g_crash_report + written,
+                                      sizeof(g_crash_report) - (size_t)written);
+    }
+  }
   written += xt_format_stack(g_crash_report + written, sizeof(g_crash_report) - (size_t)written);
   _write(2, g_crash_report, (unsigned int)written);
   _exit(1);

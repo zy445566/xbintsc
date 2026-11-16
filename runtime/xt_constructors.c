@@ -40,8 +40,10 @@ xt_value xt_count_queuing_strategy_ctor(int32_t argc, xt_value *argv);
 xt_value xt_byte_length_queuing_strategy_ctor(int32_t argc, xt_value *argv);
 xt_value xt_text_encoder_stream_ctor(int32_t argc, xt_value *argv);
 xt_value xt_text_decoder_stream_ctor(int32_t argc, xt_value *argv);
-/* DataView's constructor lives with the ArrayBuffer implementation. */
+/* DataView's constructor and ArrayBuffer's statics live with the ArrayBuffer
+ * implementation. */
 xt_value xt_data_view_ctor(int32_t argc, xt_value *argv);
+xt_value xt_array_buffer_static(xt_value method, int32_t argc, xt_value *argv);
 int xt_streams_has_static(const char *name, const char *method);
 xt_value xt_streams_static(xt_value name, int32_t argc, xt_value *argv);
 
@@ -367,6 +369,7 @@ static const char *const XT_PROMISE_STATICS[] = {
     "resolve", "reject", "all", "allSettled", "race", "any", "withResolvers",
 };
 static const char *const XT_ABORT_SIGNAL_STATICS[] = {"abort", "timeout", "any"};
+static const char *const XT_ARRAY_BUFFER_STATICS[] = {"isView"};
 static const char *const XT_TYPED_ARRAY_STATICS[] = {"from", "of"};
 
 static int xt_name_in(const char *name, const char *const *names, size_t count) {
@@ -399,6 +402,8 @@ static int xt_ctor_has_static(const char *namespace, const char *method) {
     return xt_name_in(method, XT_TYPED_ARRAY_STATICS, XT_NAMES_COUNT(XT_TYPED_ARRAY_STATICS));
   if (strcmp(namespace, "AbortSignal") == 0)
     return xt_name_in(method, XT_ABORT_SIGNAL_STATICS, XT_NAMES_COUNT(XT_ABORT_SIGNAL_STATICS));
+  if (strcmp(namespace, "ArrayBuffer") == 0)
+    return xt_name_in(method, XT_ARRAY_BUFFER_STATICS, XT_NAMES_COUNT(XT_ARRAY_BUFFER_STATICS));
   if (xt_streams_has_static(namespace, method)) return 1;
   return 0;
 }
@@ -418,6 +423,7 @@ static xt_value xt_builtin_static_call(const char *namespace, const char *method
   if (xt_ctor_is_typed_array(namespace))
     return xt_typed_array_static_by_name(nameValue, methodValue, argc, argv);
   if (strcmp(namespace, "AbortSignal") == 0) return xt_abort_signal_static(methodValue, argc, argv);
+  if (strcmp(namespace, "ArrayBuffer") == 0) return xt_array_buffer_static(methodValue, argc, argv);
   if (xt_streams_has_static(namespace, method)) return xt_streams_static(methodValue, argc, argv);
   return XT_UNDEFINED;
 }

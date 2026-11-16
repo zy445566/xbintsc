@@ -9,7 +9,21 @@
  * and is left in place for the code generator to reject.
  */
 
-import { SyntaxKind, type CallExpression, type Expression, type Identifier, type ImportExpression, type Node, type PropertyAccessExpression, type SourceFileNode, type StringLiteral } from "../../ast/nodes.js";
+import {
+  SyntaxKind,
+  type CallExpression,
+  type Expression,
+  type Identifier,
+  type ImportDeclaration,
+  type ImportExpression,
+  type ImportSpecifier,
+  type NamedImports,
+  type Node,
+  type PropertyAccessExpression,
+  type SourceFileNode,
+  type Statement,
+  type StringLiteral,
+} from "../../ast/nodes.js";
 import { deferredWrapperName } from "./deferred.js";
 import type { ModuleRecord } from "./types.js";
 
@@ -65,6 +79,47 @@ function member(object: string, name: string, anchor: number): PropertyAccessExp
   };
 }
 
+/** `import { __xt_deferred_module as <name> } from "<specifier>"`. */
+function markerImport(name: string, specifier: string, anchor: number): ImportDeclaration {
+  const moduleSpecifier: StringLiteral = {
+    kind: SyntaxKind.StringLiteral,
+    text: JSON.stringify(specifier),
+    value: specifier,
+    raw: JSON.stringify(specifier),
+    start: anchor,
+    end: anchor,
+  };
+  const element: ImportSpecifier = {
+    kind: SyntaxKind.ImportSpecifier,
+    isTypeOnly: false,
+    propertyName: identifier("__xt_deferred_module", anchor),
+    name: identifier(name, anchor),
+    start: anchor,
+    end: anchor,
+  };
+  const namedBindings: NamedImports = {
+    kind: SyntaxKind.NamedImports,
+    elements: [element],
+    start: anchor,
+    end: anchor,
+  };
+  return {
+    kind: SyntaxKind.ImportDeclaration,
+    importClause: {
+      kind: SyntaxKind.ImportClause,
+      name: undefined,
+      isTypeOnly: false,
+      namedBindings,
+      start: anchor,
+      end: anchor,
+    },
+    moduleSpecifier,
+    attributes: [],
+    start: anchor,
+    end: anchor,
+  };
+}
+
 function call(expression: Expression, args: Expression[], anchor: number): CallExpression {
   return { kind: SyntaxKind.CallExpression, expression, typeArguments: [], arguments: args, optional: false, start: anchor, end: anchor };
 }
@@ -115,6 +170,12 @@ export function rewriteDynamicImports(
  * Rewrite every module's dynamic imports in place and return the set of module
  * paths that are reached only through a dynamic import (so the merge can emit a
  * namespace wrapper for them).
+ *
+ * A literal dynamic import must not evaluate its target at startup: it is
+ * deferred by marking the target with the same synthetic import the GUI
+ * `<script src>` loader uses (see `deferred.ts`). The marker edge is skipped by
+ * the eager-reachability walk, so a module that *only* appears in an
+ * `import(...)` is wrapped and its body runs on the first call.
  */
 export function prepareDynamicImports(
   records: readonly ModuleRecord[],
@@ -122,13 +183,25 @@ export function prepareDynamicImports(
 ): Set<string> {
   const targets = new Set<string>();
   for (const record of records) {
+    const markers: Statement[] = [];
+    const marked = new Set<string>();
     const resolve = (specifier: string): string | undefined => {
       const dependency = dependencyOf(record, specifier);
-      if (dependency) targets.add(dependency.path);
+      if (!dependency) return undefined;
+      targets.add(dependency.path);
+      if (!marked.has(dependency.path)) {
+        marked.add(dependency.path);
+        markers.push(
+          markerImport(`__xt_dynamic_${markers.length}`, specifier, record.sourceFile.start),
+        );
+      }
       return dependency ? deferredWrapperName(dependency) : undefined;
     };
     for (const statement of record.sourceFile.statements) {
       rewriteDynamicImports(statement, resolve, record.sourceFile.start);
+    }
+    if (markers.length > 0) {
+      (record.sourceFile.statements as Statement[]).unshift(...markers);
     }
   }
   return targets;

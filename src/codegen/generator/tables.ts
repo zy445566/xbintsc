@@ -166,6 +166,7 @@ export const GLOBAL_FUNCTIONS: Record<string, string> = {
   queueMicrotask: "xt_queue_microtask",
   structuredClone: "xt_structured_clone",
   fetch: "xt_fetch",
+  __xt_defer: "xt_defer_module",
   Number: "xt_number_ctor",
   String: "xt_string_ctor",
   Boolean: "xt_boolean_ctor",

@@ -148,6 +148,19 @@ describeE2E("end-to-end module bundling", (harness) => {
     expect(runProgram(source, { extensions: true })).toBe("function function\nrejected true");
   });
 
+  it("does not evaluate a dynamic-import target until it is called", () => {
+    writeFileSync(join(harness.workdir, "lazy_dep.ts"), 'console.log("dep body");\nexport const value = 7;');
+    const source = `
+      async function load() {
+        const loaded = await import("./lazy_dep.js");
+        console.log("loaded", loaded.value);
+      }
+      console.log("ready");
+    `;
+    // The target's body must not run at startup — only when `load()` is called.
+    expect(runProgram(source)).toBe("ready");
+  });
+
   it("renames destructured top-level bindings without breaking the read", () => {
     writeFileSync(
       join(harness.workdir, "destructure_dep.ts"),

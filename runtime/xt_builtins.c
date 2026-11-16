@@ -491,6 +491,7 @@ xt_value xt_global_object(void) {
   return g_global_object;
 }
 
+
 xt_value xt_instance_of(xt_value value, xt_value ctor) {
   if (!XT_IS_FUNCTION(ctor)) return XT_FALSE;
   xt_value proto = ((xt_function *)XT_GET_PTR(ctor))->prototype;

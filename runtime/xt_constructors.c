@@ -533,3 +533,16 @@ xt_value xt_parent_prototype(xt_value ctor) {
    * real prototype publishes it when its constructor value is built. */
   return xt_function_prototype_object(ctor);
 }
+
+/* `new <name>(...)` where the callee is not a constructor: name the callee so
+ * the error points at the source (`new missing.Thing()`), not at nothing. */
+xt_value xt_new_named(xt_value ctor, xt_value name, int32_t argc, xt_value *argv) {
+  if (!XT_IS_FUNCTION(ctor)) {
+    xt_value label = XT_IS_STRING(name) ? name : xt_string_from_cstr("(expression)");
+    xt_value message = xt_add(xt_string_from_cstr("TypeError: new "),
+                              xt_add(label, xt_string_from_cstr(" is not a constructor")));
+    xt_throw(xt_error_from_message(xt_string_data(message)));
+    return XT_UNDEFINED;
+  }
+  return xt_new(ctor, argc, argv);
+}

@@ -126,6 +126,7 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_call_with_this(i64, i64, i32, i64*)",
   "declare i64 @xt_this()",
   "declare i64 @xt_new(i64, i32, i64*)",
+  "declare i64 @xt_new_named(i64, i64, i32, i64*)",
   "declare i64 @xt_super_construct(i64, i64, i64, i32, i64*)",
   "declare i64 @xt_parent_prototype(i64)",
   "declare i64 @xt_global_object()",

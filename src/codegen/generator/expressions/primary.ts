@@ -43,6 +43,7 @@ import {
 } from "../tables.js";
 import type { GlobalValue } from "../../../extensions/registry.js";
 import type { Generator } from "../generator.js";
+import { newCalleeName } from "../calls/unwrap.js";
 
 export interface PrimaryExpressionMethods {
   emitExpression(this: Generator, node: Expression): string;
@@ -445,9 +446,9 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
 
   emitNew(node: NewExpression): string {
     const callee = node.expression;
-    // A `new` expression is where the innermost frame's line should point for
-    // `Error.stack`; harmless for every other constructor.
     this.emit(`  call void @xt_stack_set_line(i32 ${this.lineOf(node)})`);
+    const calleeText = newCalleeName(callee);
+    const calleeName = calleeText === undefined ? i64(XT_UNDEFINED) : this.stringValue(calleeText);
     if (callee.kind === SyntaxKind.Identifier) {
       const identifier = callee as Identifier;
       const symbol = this.binding.symbolOfIdentifier.get(identifier);
@@ -458,7 +459,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           const ctor = this.emitClassReference(info);
           const args = this.emitArguments(node.arguments);
           const result = this.reg();
-          this.emit(`  ${result} = call i64 @xt_new(i64 ${ctor}, i32 ${args.argc}, i64* ${args.ptr})`);
+          this.emit(`  ${result} = call i64 @xt_new_named(i64 ${ctor}, i64 ${calleeName}, i32 ${args.argc}, i64* ${args.ptr})`);
           return result;
         }
       }
@@ -475,7 +476,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           const ctorValue = this.emitGlobalValue(extensionConstructor);
           const args = this.emitArguments(node.arguments);
           const result = this.reg();
-          this.emit(`  ${result} = call i64 @xt_new(i64 ${ctorValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+          this.emit(`  ${result} = call i64 @xt_new_named(i64 ${ctorValue}, i64 ${calleeName}, i32 ${args.argc}, i64* ${args.ptr})`);
           return result;
         }
         if (identifier.text === "Object") {
@@ -499,7 +500,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
     const ctorValue = this.emitExpression(callee);
     const args = this.emitArguments(node.arguments);
     const result = this.reg();
-    this.emit(`  ${result} = call i64 @xt_new(i64 ${ctorValue}, i32 ${args.argc}, i64* ${args.ptr})`);
+    this.emit(`  ${result} = call i64 @xt_new_named(i64 ${ctorValue}, i64 ${calleeName}, i32 ${args.argc}, i64* ${args.ptr})`);
     return result;
   },
 

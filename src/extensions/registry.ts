@@ -63,6 +63,13 @@ export interface ModuleExport {
    * used as `new EventEmitter()`.
    */
   readonly isConstructor?: boolean;
+  /**
+   * Runtime getter `(i32, i64*)` returning the prototype object a constructor
+   * *value* carries, so `class X extends EventEmitter` chains onto
+   * `EventEmitter.prototype` instead of a fresh plain object. Only meaningful
+   * together with `isConstructor`.
+   */
+  readonly prototypeSymbol?: string;
 }
 
 export type ModuleExports = Readonly<Record<string, ModuleExport>>;

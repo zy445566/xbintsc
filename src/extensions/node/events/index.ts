@@ -14,7 +14,14 @@ import type { ModuleExports } from "../../registry.js";
 const methods = ["listenerCount", "getEventListeners", "getMaxListeners", "setMaxListeners", "once", "addAbortListener"] as const;
 
 const exports: ModuleExports = {
-  EventEmitter: { symbol: "xt_event_emitter_ctor", isConstructor: true },
+  EventEmitter: {
+    symbol: "xt_event_emitter_ctor",
+    isConstructor: true,
+    // `class X extends EventEmitter` chains onto this prototype, so the
+    // inherited listener API is reachable (and `x instanceof EventEmitter`
+    // holds when the same constructor value is compared).
+    prototypeSymbol: "xt_events_prototype",
+  },
   defaultMaxListeners: { valueSymbol: "xt_events_default_max_listeners" },
   ...Object.fromEntries(methods.map((method) => [method, { namespace: "events", method }])),
 };

@@ -36,6 +36,15 @@ export const moduleValueExpressionMethods: ModuleValueExpressionMethods = {
       this.emit(
         `  ${closure} = call i64 @xt_closure_new(i8* bitcast (i64 (i64, i64, i32, i64*)* @xt_fnptr_trampoline to i8*), i32 1, i64* ${env})`,
       );
+      /* A native constructor publishes its prototype object, so a class that
+       * extends this value chains onto the real `X.prototype` (with its
+       * methods) instead of a fresh plain object. */
+      if (exported.prototypeSymbol) {
+        this.extraDeclarations.add(`declare i64 @${exported.prototypeSymbol}(i32, i64*)`);
+        const prototype = this.reg();
+        this.emit(`  ${prototype} = call i64 @${exported.prototypeSymbol}(i32 0, i64* null)`);
+        this.emit(`  call i64 @xt_function_set_prototype(i64 ${closure}, i64 ${prototype})`);
+      }
       return closure;
     }
     if (exported.valueSymbol) {

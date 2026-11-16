@@ -172,6 +172,27 @@ describeE2E("end-to-end basics", (harness) => {
     expect(runProgram(source)).toBe("a,b 1,2\na=1,b=2\n1 2 3 9 true false\nfalse b");
   });
 
+  it("reports function source without recursing through the prototype", () => {
+    // `fn.toString()` resolves to `Function.prototype.toString`; its body used
+    // to dispatch back into the same method until the native stack died, so
+    // any `.toString()` on a function (and `Function.prototype.toString.call(f)`)
+    // crashed the program.
+    const source = `
+      function add(a: number, b: number): number { return a + b; }
+      console.log(add.toString());
+      const indirect = Function.prototype.toString.call(add);
+      console.log(indirect);
+      console.log(Function.prototype.toString.call(Error).startsWith("function Error"));
+    `;
+    expect(runProgram(source)).toBe(
+      [
+        "function add() { [native code] }",
+        "function add() { [native code] }",
+        "true",
+      ].join("\n"),
+    );
+  });
+
   it("iterates object keys with for...in", () => {
     const source = `
       const obj = { x: 1, y: 2 };

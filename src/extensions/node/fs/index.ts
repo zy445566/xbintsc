@@ -1,8 +1,7 @@
 /**
  * Node's `fs` module: synchronous file and directory operations backed by
- * `runtime/ext_node/fs`, plus the `fs.promises` namespace (implemented in
- * `async_*.c` on top of the asynchronous I/O pool). The callback-style
- * `readFile`/`writeFile` forms are not supported; `*Sync` and `fs.promises` are.
+ * `runtime/ext_node/fs`, the callback forms (`readFile`, `writeFile`, `stat`,
+ * …) built on the asynchronous I/O pool, and the `fs.promises` namespace.
  * `watch`/`watchFile` return API-shaped watchers that never emit.
  *
  * `fs.constants` and `fs.promises` are exposed as value getters, so both
@@ -16,9 +15,16 @@ import type { ModuleExports } from "../../registry.js";
 import { readFileBuiltins } from "./read-file.js";
 import { writeFileBuiltins } from "./write-file.js";
 import { fsOpsBuiltins } from "./fs-ops.js";
+import { fsCallbackBuiltins } from "./callbacks.js";
 import { fsStreamBuiltins } from "./streams.js";
 
-const builtins = { ...readFileBuiltins, ...writeFileBuiltins, ...fsOpsBuiltins, ...fsStreamBuiltins };
+const builtins = {
+  ...readFileBuiltins,
+  ...writeFileBuiltins,
+  ...fsOpsBuiltins,
+  ...fsCallbackBuiltins,
+  ...fsStreamBuiltins,
+};
 
 const exports: ModuleExports = {
   ...builtins,
@@ -31,6 +37,7 @@ export const fsModule: NodeModule = {
   runtimeSources: () => [
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/read_file.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/write_file.c"),
+    resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/callbacks.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/fs_ops.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/fd_ops.c"),
     resolveFrom(import.meta.url, "../../../../runtime/ext_node/fs/meta_ops.c"),

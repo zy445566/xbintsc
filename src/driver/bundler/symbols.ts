@@ -36,6 +36,23 @@ export function declarationName(node: Node): Identifier | undefined {
   }
 }
 
+/** True when every declaration of this symbol is erased before codegen: an
+ *  interface, a type alias, or an ambient `declare`. Such a symbol has no
+ *  runtime slot, so a module namespace object must not reference it. */
+export function isTypeOnlySymbol(symbol: SymbolInfo): boolean {
+  return symbol.declarations.length > 0 && symbol.declarations.every(isErasedDeclaration);
+}
+
+function isErasedDeclaration(node: Node): boolean {
+  if (
+    node.kind === SyntaxKind.InterfaceDeclaration ||
+    node.kind === SyntaxKind.TypeAliasDeclaration
+  ) {
+    return true;
+  }
+  return hasModifier(node, ModifierKind.Declare);
+}
+
 /** Rewrite a symbol's declaration and every reference to `finalName`. */
 export function renameSymbol(symbol: SymbolInfo, finalName: string): void {
   for (const declaration of symbol.declarations) {

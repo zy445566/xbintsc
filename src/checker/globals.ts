@@ -32,6 +32,7 @@ const KNOWN_GLOBALS: ReadonlySet<string> = new Set<string>([
   ...WEB_GLOBALS,
   // Handled directly in `emitIdentifier` rather than through a table.
   "console",
+  "global",
   "undefined",
   "NaN",
   "Infinity",

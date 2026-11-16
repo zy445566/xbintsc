@@ -60,11 +60,16 @@ export const accessCallMethods: AccessCallMethods = {
       return value;
     }
     /* `globalThis.fetch` / `global.Deno`: the global object *is* the global
-     * scope, so read the property as the bare global name. Without this the
-     * receiver is `undefined` (there is no global object) and every feature
-     * probe (`globalThis.Deno ? ... : ...`) throws instead of reading
-     * `undefined`. `global` is Node's alias for the same object. Parentheses and
-     * `as`/`!` wrappers are transparent here. */
+     * scope, so a *known* global reads as the bare global name. Without this the
+     * receiver would be the global bag and every feature probe
+     * (`globalThis.Deno ? ... : ...`) would miss the real global. `global` is
+     * Node's alias for the same object. Parentheses and `as`/`!` wrappers are
+     * transparent here.
+     *
+     * A name the compiler does not know is an ordinary property read on the
+     * global bag instead: `global.gracefulQueue = q` stores there, so
+     * `global.gracefulQueue` must read it back (libraries publish state on
+     * `global` this way). */
     {
       const receiver = globalObjectReceiver(node.expression);
       if (receiver && !this.binding.symbolOfIdentifier.get(receiver)) {
@@ -73,7 +78,7 @@ export const accessCallMethods: AccessCallMethods = {
          * Only invoking it (`globalThis.require("x")`) is a CommonJS call, and
          * the invocation path reports that. */
         if (node.name.text === "require") return i64(XT_UNDEFINED);
-        return this.emitIdentifier(node.name);
+        if (this.globalTypeOf(node.name.text) !== undefined) return this.emitIdentifier(node.name);
       }
     }
     if (

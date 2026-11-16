@@ -13,6 +13,7 @@
 | `static get` / `static set` 访问器 | ✓（定义在构造函数值上；继承的静态 setter 会被调用） |
 | `super[key]` / `super[key](...)` | ✓ |
 | 继承 `extends` / `super` | ✓（单级正确；`super` 取 `this` 原型的原型，理论缺陷见[运行时偏差](./deviations.md)） |
+| `extends` 原生 / 扩展类（`class X extends EventEmitter`） | ✓（父原型从父构造函数读取；导入的原生构造函数值本身不带原型时，在类定义时构造一个实例来取得它。`super(...)` 先走父类的 `__ctor` 钩子，没有则直接调用父构造函数） |
 | 原型链 / 方法查找 | ✓ |
 | `instanceof` | ✓ |
 | `new` / 实例化 | ✓ |

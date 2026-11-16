@@ -258,11 +258,10 @@ export const moduleMethods: ModuleMethods = {
         this.emit(`  ${proto} = call i64 @xt_function_get_prototype(i64 ${owner})`);
         const parentProto = this.reg();
         this.emit(`  ${parentProto} = call i64 @xt_object_get_prototype(i64 ${proto})`);
-        const ctorKey = this.stringValue("__ctor");
-        const parentCtor = this.reg();
-        this.emit(`  ${parentCtor} = call i64 @xt_get(i64 ${parentProto}, i64 ${ctorKey})`);
         const superThis = this.emitThis();
-        this.emit(`  call i64 @xt_call_with_this(i64 ${parentCtor}, i64 ${superThis}, i32 %argc, i64* %argv)`);
+        this.emit(
+          `  call i64 @xt_super_construct(i64 ${superThis}, i64 ${owner}, i64 ${parentProto}, i32 %argc, i64* %argv)`,
+        );
       } else if (!explicitBody && errorName) {
         // `extends Error` / `extends TypeError` with no explicit constructor:
         // initialise the instance's name and message from the arguments.
@@ -459,7 +458,7 @@ export const moduleMethods: ModuleMethods = {
         this.emit(`  call i64 @xt_object_set_prototype(i64 ${proto}, i64 ${parentProto})`);
       } else {
         const parentProto = this.reg();
-        this.emit(`  ${parentProto} = call i64 @xt_function_get_prototype(i64 ${parentValue})`);
+        this.emit(`  ${parentProto} = call i64 @xt_parent_prototype(i64 ${parentValue})`);
         this.emit(`  call i64 @xt_object_set_prototype(i64 ${proto}, i64 ${parentProto})`);
       }
     }

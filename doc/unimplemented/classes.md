@@ -13,6 +13,7 @@
 | `static get` / `static set` accessors | ✓ (accessors on the constructor value; inherited static setters are honoured) |
 | `super[key]` / `super[key](...)` | ✓ |
 | Inheritance `extends` / `super` | ✓ (single level correct; `super` takes the prototype of `this`'s prototype — see [Runtime deviations](./deviations.md)) |
+| `extends` a native/extension class (`class X extends EventEmitter`) | ✓ (the parent prototype is read from the parent constructor; when the constructor value carries none — an imported native constructor — one instance is constructed at class-definition time to learn it. `super(...)` runs the parent's `__ctor` hook, or the parent constructor itself when it has none) |
 | Prototype chain / method lookup | ✓ |
 | `instanceof` | ✓ |
 | `new` / instantiation | ✓ |

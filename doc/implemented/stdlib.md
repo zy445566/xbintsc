@@ -29,9 +29,15 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 
 ## `globalThis` and `Intl`
 
-- `globalThis.x` and `global.x` read the property as the bare global name
-  (`globalThis.fetch`, `globalThis.Deno`); the global object itself is not a
-  value, so `const g = globalThis` and `globalThis.x = 1` remain unsupported.
+- `globalThis.x` / `global.x` read a *known* global as the bare name
+  (`globalThis.fetch`, `globalThis.Deno`); any other property is an ordinary
+  read on the global object, so `globalThis.missing` is `undefined` and
+  `global[key] = v` round-trips.
+- `globalThis` (and Node's alias `global`) is a value: one plain property bag
+  shared by both spellings, so `const g = globalThis`, `globalThis.x = 1` and
+  publishing state under a symbol key on `global` all work. It is not the
+  runtime's scope object — a name the compiler does not resolve is `undefined`
+  even when a library wrote it with `global.foo = ...`.
 - `Intl.Segmenter` with `granularity: "grapheme" | "word"`; `segment(text)`
   returns an **array** of `{ segment, index, isWordLike }`. It is a documented
   approximation of UAX #29 (no ICU): graphemes are code points plus combining

@@ -39,6 +39,11 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
 
 - `import.meta.url` / `.dirname` / `.filename`, resolved from the running executable's path.
 
+## Dynamic `import()`
+
+- A *literal* specifier is a static edge: the module is bundled and the call resolves to its namespace object.
+- A *computed* specifier cannot be loaded at run time (a compiled binary has no module loader), but the modules linked into the build are known: `import(<expression>)` resolves to the namespace of any enabled extension module, accepting both its bare and its `node:`-prefixed name — `const fs = await import("node:" + "fs")`. Any other specifier rejects with an error that names it.
+
 ## Extension modules
 
 - Extension modules (such as `fs`) are importable by bare or `node:`-prefixed specifier and resolve to their runtime entries; see [Extensions](./extensions.md).

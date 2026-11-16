@@ -32,3 +32,16 @@ export function globalObjectReceiver(expression: Expression): Identifier | undef
   const name = (receiver as Identifier).text;
   return name === "globalThis" || name === "global" ? (receiver as Identifier) : undefined;
 }
+
+/**
+ * Source text of a `new` callee (`Foo`, `ns.Bar`, `expr.Baz`), for the runtime's
+ * "new X is not a constructor" message. `undefined` when the callee is an
+ * arbitrary expression.
+ */
+export function newCalleeName(callee: Expression): string | undefined {
+  const name = unwrapExpression(callee);
+  if (name.kind === SyntaxKind.Identifier) return (name as Identifier).text;
+  if (name.kind !== SyntaxKind.PropertyAccessExpression) return undefined;
+  const access = name as { name: { text: string } };
+  return access.name.text;
+}

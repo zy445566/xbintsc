@@ -206,6 +206,7 @@ static xt_value xt_headers_method_to_string(xt_value thisValue, xt_value env, in
 
 static xt_value xt_headers_new(void) {
   xt_value headers = xt_object_new();
+  xt_object_set_prototype(headers, xt_web_headers_proto());
   xt_object_set(headers, xt_string_from_cstr("__map"), xt_object_new());
   xt_fetch_set_method(headers, "get", (void *)xt_headers_method_get);
   xt_fetch_set_method(headers, "has", (void *)xt_headers_method_has);

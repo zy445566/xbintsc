@@ -26,7 +26,7 @@ import type { ModuleRecord, OriginRange } from "./types.js";
  * and, in particular, must not turn the mutual `import type` references
  * between source files into a circular-import error.
  */
-function isTypeOnlyImport(declaration: ImportDeclaration): boolean {
+export function isTypeOnlyImport(declaration: ImportDeclaration): boolean {
   const clause = declaration.importClause;
   if (!clause) return false;
   if (clause.isTypeOnly) return true;
@@ -39,7 +39,7 @@ function isTypeOnlyImport(declaration: ImportDeclaration): boolean {
 }
 
 /** True when an export declaration only re-exports types. */
-function isTypeOnlyExport(declaration: ExportDeclaration): boolean {
+export function isTypeOnlyExport(declaration: ExportDeclaration): boolean {
   if (declaration.isTypeOnly) return true;
   const clause = declaration.exportClause;
   if (!clause || clause.kind !== SyntaxKind.NamedExports) return false;

@@ -59,3 +59,30 @@ xt_value xt_voidptr_trampoline(xt_value thisValue, xt_value env, int32_t argc, x
   fn(argc, argv);
   return XT_UNDEFINED;
 }
+
+/* `__xt_defer(id, init)`: evaluate `init` once and return its exports.
+ *
+ * The bundler wraps a module that is only reached through a dynamic import in
+ * such a function, so the body runs on the first `import(...)` instead of at
+ * startup. The placeholder is published before `init` runs, so a cycle among
+ * deferred modules sees the same object rather than recursing. */
+xt_value xt_defer_module(int32_t argc, xt_value *argv) {
+  if (argc < 1) return XT_UNDEFINED;
+  static xt_value registry = 0;
+  if (registry == 0) {
+    registry = xt_object_new();
+    xt_gc_add_root(&registry);
+  }
+  xt_value key = xt_to_string(xt_arg(argc, argv, 0));
+
+  xt_value found = xt_object_get(registry, key);
+  if (found != XT_UNDEFINED) return found;
+  xt_value exports = xt_object_new();
+  xt_object_set(registry, key, exports);
+  xt_value init = xt_arg(argc, argv, 1);
+  if (XT_IS_FUNCTION(init)) {
+    exports = xt_call_with_this(init, XT_UNDEFINED, 0, NULL);
+    xt_object_set(registry, key, exports);
+  }
+  return exports;
+}

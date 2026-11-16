@@ -342,6 +342,16 @@ xt_value xt_function_has_instance_method(void) {
   return cached;
 }
 
+/* Source text is not retained, so a function's `toString()` reports a
+ * native-style representation of its name. */
+static xt_value xt_function_source_text(xt_value target) {
+  xt_function *self = (xt_function *)XT_GET_PTR(target);
+  const char *selfName = self->name ? xt_string_bytes(self->name) : "";
+  char buffer[256];
+  snprintf(buffer, sizeof(buffer), "function %s() { [native code] }", selfName);
+  return xt_string_from_cstr(buffer);
+}
+
 xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *argv) {
   /* A symbol-named method (`obj[Symbol.iterator]()`) is never a built-in, so
    * resolve it as an ordinary property and call it with `target` as `this`. */
@@ -448,7 +458,17 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
       return bound;
     }
     xt_value fn = xt_object_get(target, name);
-    if (XT_IS_FUNCTION(fn)) return xt_call_with_this(fn, target, argc, argv);
+    if (XT_IS_FUNCTION(fn)) {
+      /* `fn.toString()` resolves to `Function.prototype.toString`, whose body
+       * dispatches back through this function (`xt_method_value_invoke` →
+       * `xt_call_method`) — calling it would recurse until the stack dies.
+       * Recognise the prototype's own method and answer the native-style
+       * source here; a function's own `toString` still takes the normal path. */
+      if (strcmp(method, "toString") == 0 && fn == xt_object_get(xt_function_prototype(), name)) {
+        return xt_function_source_text(target);
+      }
+      return xt_call_with_this(fn, target, argc, argv);
+    }
     /* Statics of a first-class built-in constructor (`const A = Array;
      * A.isArray(x)`). */
     xt_value builtinStatic = xt_builtin_static_value(target, name);
@@ -456,14 +476,7 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
       if (XT_IS_FUNCTION(builtinStatic)) return xt_call_with_this(builtinStatic, target, argc, argv);
       return builtinStatic;
     }
-    if (strcmp(method, "toString") == 0) {
-      /* Source text is not retained; report a native-style representation. */
-      xt_function *self = (xt_function *)XT_GET_PTR(target);
-      const char *selfName = self->name ? xt_string_bytes(self->name) : "";
-      char buffer[256];
-      snprintf(buffer, sizeof(buffer), "function %s() { [native code] }", selfName);
-      return xt_string_from_cstr(buffer);
-    }
+    if (strcmp(method, "toString") == 0) return xt_function_source_text(target);
     {
       char message[256];
       snprintf(message, sizeof(message), "TypeError: function has no callable method '%s'", method);

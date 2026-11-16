@@ -158,7 +158,7 @@ describeWithClang("fetch builtin", () => {
         console.log("head", head.status, JSON.stringify(await head.text()));
 
         const bytes = await (await fetch("${base}/bytes")).arrayBuffer();
-        console.log("bytes", bytes.join(","));
+        console.log("bytes", new Uint8Array(bytes).join(","));
 
         const reused = await (await fetch("${base}/bytes")).bytes();
         console.log("bytes2", reused.length);

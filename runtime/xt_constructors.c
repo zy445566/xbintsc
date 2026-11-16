@@ -40,6 +40,10 @@ xt_value xt_count_queuing_strategy_ctor(int32_t argc, xt_value *argv);
 xt_value xt_byte_length_queuing_strategy_ctor(int32_t argc, xt_value *argv);
 xt_value xt_text_encoder_stream_ctor(int32_t argc, xt_value *argv);
 xt_value xt_text_decoder_stream_ctor(int32_t argc, xt_value *argv);
+/* DataView's constructor and ArrayBuffer's statics live with the ArrayBuffer
+ * implementation. */
+xt_value xt_data_view_ctor(int32_t argc, xt_value *argv);
+xt_value xt_array_buffer_static(xt_value method, int32_t argc, xt_value *argv);
 int xt_streams_has_static(const char *name, const char *method);
 xt_value xt_streams_static(xt_value name, int32_t argc, xt_value *argv);
 
@@ -54,7 +58,11 @@ enum {
   XT_PROTO_WRITABLE_STREAM,
   XT_PROTO_TRANSFORM_STREAM,
   XT_PROTO_COUNT_STRATEGY,
-  XT_PROTO_BYTE_STRATEGY
+  XT_PROTO_BYTE_STRATEGY,
+  XT_PROTO_ABORT_CONTROLLER,
+  XT_PROTO_ABORT_SIGNAL,
+  XT_PROTO_HEADERS,
+  XT_PROTO_RESPONSE
 };
 
 typedef struct {
@@ -104,7 +112,13 @@ typedef struct {
   X(CountQueuingStrategy, 1, XT_PROTO_COUNT_STRATEGY)                      \
   X(ByteLengthQueuingStrategy, 1, XT_PROTO_BYTE_STRATEGY)                  \
   X(TextEncoderStream, 0, XT_PROTO_TRANSFORM_STREAM)                       \
-  X(TextDecoderStream, 0, XT_PROTO_TRANSFORM_STREAM)
+  X(TextDecoderStream, 0, XT_PROTO_TRANSFORM_STREAM)                       \
+  X(AbortController, 0, XT_PROTO_ABORT_CONTROLLER)                         \
+  X(AbortSignal, 0, XT_PROTO_ABORT_SIGNAL)                                 \
+  X(Headers, 1, XT_PROTO_HEADERS)                                          \
+  X(Response, 2, XT_PROTO_RESPONSE)                                        \
+  X(ArrayBuffer, 1, XT_PROTO_PLAIN)                                        \
+  X(DataView, 1, XT_PROTO_PLAIN)
 
 #define XT_CTOR_ENUM(name, arity, proto) XT_CTOR_##name,
 enum { XT_CTOR_SPECS(XT_CTOR_ENUM) XT_CTOR_COUNT };
@@ -220,6 +234,12 @@ static xt_value xt_builtin_ctor_call(const char *name, int32_t argc, xt_value *a
   if (strcmp(name, "ByteLengthQueuingStrategy") == 0) return xt_byte_length_queuing_strategy_ctor(argc, argv);
   if (strcmp(name, "TextEncoderStream") == 0) return xt_text_encoder_stream_ctor(argc, argv);
   if (strcmp(name, "TextDecoderStream") == 0) return xt_text_decoder_stream_ctor(argc, argv);
+  if (strcmp(name, "AbortController") == 0) return xt_abort_controller_ctor(argc, argv);
+  if (strcmp(name, "AbortSignal") == 0) return xt_abort_signal_ctor(argc, argv);
+  if (strcmp(name, "Headers") == 0) return xt_headers_ctor(argc, argv);
+  if (strcmp(name, "Response") == 0) return xt_response_ctor(argc, argv);
+  if (strcmp(name, "ArrayBuffer") == 0) return xt_array_buffer_ctor(argc, argv);
+  if (strcmp(name, "DataView") == 0) return xt_data_view_ctor(argc, argv);
   if (xt_ctor_is_typed_array(name)) return xt_typed_array_ctor_by_name(nameValue, argc, argv);
   if (xt_ctor_is_error(name)) return xt_error_ctor_by_name(nameValue, argc, argv);
   return XT_UNDEFINED;
@@ -261,6 +281,14 @@ static xt_value xt_ctor_prototype(int index, xt_value nameValue) {
       return xt_stream_count_strategy_proto();
     case XT_PROTO_BYTE_STRATEGY:
       return xt_stream_byte_strategy_proto();
+    case XT_PROTO_ABORT_CONTROLLER:
+      return xt_web_abort_controller_proto();
+    case XT_PROTO_ABORT_SIGNAL:
+      return xt_web_abort_signal_proto();
+    case XT_PROTO_HEADERS:
+      return xt_web_headers_proto();
+    case XT_PROTO_RESPONSE:
+      return xt_web_response_proto();
     case XT_PROTO_PLAIN:
     default:
       if (xt_ctor_plain_protos[index] == XT_UNDEFINED) {
@@ -340,6 +368,8 @@ static const char *const XT_DATE_STATICS[] = {"now", "parse", "UTC"};
 static const char *const XT_PROMISE_STATICS[] = {
     "resolve", "reject", "all", "allSettled", "race", "any", "withResolvers",
 };
+static const char *const XT_ABORT_SIGNAL_STATICS[] = {"abort", "timeout", "any"};
+static const char *const XT_ARRAY_BUFFER_STATICS[] = {"isView"};
 static const char *const XT_TYPED_ARRAY_STATICS[] = {"from", "of"};
 
 static int xt_name_in(const char *name, const char *const *names, size_t count) {
@@ -370,6 +400,10 @@ static int xt_ctor_has_static(const char *namespace, const char *method) {
     return xt_name_in(method, XT_PROMISE_STATICS, XT_NAMES_COUNT(XT_PROMISE_STATICS));
   if (xt_ctor_is_typed_array(namespace))
     return xt_name_in(method, XT_TYPED_ARRAY_STATICS, XT_NAMES_COUNT(XT_TYPED_ARRAY_STATICS));
+  if (strcmp(namespace, "AbortSignal") == 0)
+    return xt_name_in(method, XT_ABORT_SIGNAL_STATICS, XT_NAMES_COUNT(XT_ABORT_SIGNAL_STATICS));
+  if (strcmp(namespace, "ArrayBuffer") == 0)
+    return xt_name_in(method, XT_ARRAY_BUFFER_STATICS, XT_NAMES_COUNT(XT_ARRAY_BUFFER_STATICS));
   if (xt_streams_has_static(namespace, method)) return 1;
   return 0;
 }
@@ -388,6 +422,8 @@ static xt_value xt_builtin_static_call(const char *namespace, const char *method
   if (strcmp(namespace, "Promise") == 0) return xt_promise_static(methodValue, argc, argv);
   if (xt_ctor_is_typed_array(namespace))
     return xt_typed_array_static_by_name(nameValue, methodValue, argc, argv);
+  if (strcmp(namespace, "AbortSignal") == 0) return xt_abort_signal_static(methodValue, argc, argv);
+  if (strcmp(namespace, "ArrayBuffer") == 0) return xt_array_buffer_static(methodValue, argc, argv);
   if (xt_streams_has_static(namespace, method)) return xt_streams_static(methodValue, argc, argv);
   return XT_UNDEFINED;
 }
@@ -496,4 +532,17 @@ xt_value xt_parent_prototype(xt_value ctor) {
    * side effects the program did not ask for). An extension class that wants a
    * real prototype publishes it when its constructor value is built. */
   return xt_function_prototype_object(ctor);
+}
+
+/* `new <name>(...)` where the callee is not a constructor: name the callee so
+ * the error points at the source (`new missing.Thing()`), not at nothing. */
+xt_value xt_new_named(xt_value ctor, xt_value name, int32_t argc, xt_value *argv) {
+  if (!XT_IS_FUNCTION(ctor)) {
+    xt_value label = XT_IS_STRING(name) ? name : xt_string_from_cstr("(expression)");
+    xt_value message = xt_add(xt_string_from_cstr("TypeError: new "),
+                              xt_add(label, xt_string_from_cstr(" is not a constructor")));
+    xt_throw(xt_error_from_message(xt_string_data(message)));
+    return XT_UNDEFINED;
+  }
+  return xt_new(ctor, argc, argv);
 }

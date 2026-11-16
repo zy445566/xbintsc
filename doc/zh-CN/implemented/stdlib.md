@@ -117,3 +117,24 @@
 - `crypto.getRandomValues(typedArray)` 从操作系统 CSPRNG 填充整数类型化数组（最多 65 536 字节）并返回；`crypto.randomUUID()` 返回 v4 UUID 字符串。`crypto` 也是一等对象，方法可脱离对象使用（`const uuid = crypto.randomUUID`）。
 - `Math.random` 使用由操作系统 CSPRNG 播种的 xoshiro256** 流（53 位随机性），不再使用 C `rand()`。
 - Node 的 `crypto.randomBytes` / `randomInt` / `randomFillSync` / `pbkdf2Sync` 见 [node/crypto](../implemented/node/crypto.md)。
+
+## Web 平台全局对象
+
+实现位于 `runtime/xt_web_abort.c`（中止）与 `runtime/xt_fetch/webapi.inc`
+（`Headers` / `Response`，复用 `fetch` 的实现）：
+
+- `AbortController` / `AbortSignal`：`abort(reason?)`、`aborted` / `reason` /
+  `onabort` 访问器、`addEventListener("abort", fn[, { once }])` /
+  `removeEventListener`、`throwIfAborted()`，以及静态方法 `AbortSignal.abort()`、
+  `AbortSignal.timeout(ms)`、`AbortSignal.any([...])`。默认原因是 `AbortError` /
+  `TimeoutError` 错误（看 `error.name`）。`fetch` 尚未消费 signal，因此中止不会取消
+  进行中的请求。
+- `Headers`：大小写不敏感的 `get` / `has` / `set` / `append` / `delete` /
+  `forEach` / `keys` / `values` / `entries` / `getSetCookie`，可由普通对象、键值对数组
+  或另一个 `Headers` 构造。`fetch` 返回的就是 `Headers` 实例（`instanceof` 成立）。
+- `Response`：`new Response(body?, init?)`，含 `status` / `statusText` / `headers`
+  以及 `text()` / `json()` / `arrayBuffer()` / `bytes()` / `clone()`。
+  `arrayBuffer()` 解析为真正的 `ArrayBuffer`，`bytes()` 为 `Uint8Array`。
+- `JSON`、`ArrayBuffer`、`DataView` 也是值（`const s = JSON.stringify`、
+  `ArrayBuffer.prototype`、`new DataView(buffer)`）；`JSON` 保留专用调用降级，同时
+  支持作为对象读取。

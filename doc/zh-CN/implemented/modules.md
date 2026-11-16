@@ -8,7 +8,7 @@
 ## 语法
 
 - `import default, { named } from "..."`、`import * as ns from "..."`（相对模块的命名空间导入会降级为合成对象字面量；扩展模块如 `path` 亦已支持）、`import "./side-effect"`、`import type`
-- `export default`、`export { a as b }`、`export *`、`export =`
+- `export default`、`export { a as b }`、`export *`、`export * as ns from "..."`、`export =`
 - import attributes（`with` / `assert`）
 
 ## 运行时语义

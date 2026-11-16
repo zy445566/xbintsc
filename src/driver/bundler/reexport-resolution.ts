@@ -24,7 +24,8 @@ import {
   type Statement,
 } from "../../ast/nodes.js";
 import type { ModuleRecord } from "./types.js";
-import { namespaceImportToStatement } from "./namespace-object.js";
+import { deferredNamespaceToStatement, namespaceImportToStatement } from "./namespace-object.js";
+import { deferredWrapperName } from "./deferred.js";
 
 export function resolveReexports(
   records: ModuleRecord[],
@@ -82,9 +83,18 @@ export function resolveReexports(
           const nsName = (declaration.exportClause as { name: Identifier }).name.text;
           const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
           if (dependency) {
+            /* Both deferred: the dependency's final names live inside its
+             * wrapper, so read its exports object instead of building one. */
+            const deferred = deferredModules.has(record.path) && deferredModules.has(dependency.path);
             namespaceStatements.set(
               statement,
-              namespaceImportToStatement(statement, `${record.prefix}${nsName}`, dependency),
+              deferred
+                ? deferredNamespaceToStatement(
+                    statement,
+                    `${record.prefix}${nsName}`,
+                    deferredWrapperName(dependency),
+                  )
+                : namespaceImportToStatement(statement, `${record.prefix}${nsName}`, dependency),
             );
           }
         }

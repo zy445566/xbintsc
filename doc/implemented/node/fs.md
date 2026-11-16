@@ -22,7 +22,7 @@ Location: `src/extensions/node/fs/*.ts`, `runtime/ext_node/fs/*.c`
 | `copyFileSync(src, dest[, flags])` | `xt_node_copy_file` | copy a file; honours `COPYFILE_EXCL` |
 | `cpSync(src, dest[, options])` | `xt_node_cp` | recursive copy; `recursive`, `force`, `errorOnExist`, `dereference`, `preserveTimestamps` |
 | `realpathSync(path)` | `xt_node_realpath` | resolve to an absolute path |
-| `statSync(path)` | `xt_node_stat` | file metadata object (follows symlinks) |
+| `statSync(path)` | `xt_node_stat` | file metadata object (follows symlinks); `mtime` / `atime` / `ctime` / `birthtime` are `Date`s, with the matching `*Ms` numbers |
 | `lstatSync(path)` | `xt_node_lstat` | file metadata object (does not follow symlinks) |
 | `statfsSync(path)` | `xt_node_statfs` | filesystem statistics (`bsize`, `blocks`, `bfree`, …) |
 | `accessSync(path[, mode])` | `xt_node_access` | check accessibility |

@@ -335,6 +335,12 @@ static double xt_fs_seconds_ms(long seconds, long nanoseconds) {
   return (double)seconds * 1000.0 + (double)nanoseconds / 1000000.0;
 }
 
+/** A `Date` value for a millisecond timestamp (`stat.mtime`, ...). */
+static xt_value xt_fs_date_value(double milliseconds) {
+  xt_value argument = xt_number(milliseconds);
+  return xt_date_ctor(1, &argument);
+}
+
 xt_value xt_node_stat_result(const xt_fs_stat_t *info) {
   xt_value object = xt_object_new();
   xt_object_set(object, xt_string_from_cstr("size"), xt_number((double)info->st_size));
@@ -345,29 +351,36 @@ xt_value xt_node_stat_result(const xt_fs_stat_t *info) {
   xt_object_set(object, xt_string_from_cstr("ino"), xt_number((double)info->st_ino));
   xt_object_set(object, xt_string_from_cstr("nlink"), xt_number((double)info->st_nlink));
   xt_object_set(object, xt_string_from_cstr("rdev"), xt_number((double)info->st_rdev));
+  double mtimeMs;
+  double atimeMs;
+  double ctimeMs;
 #if defined(__APPLE__)
   xt_object_set(object, xt_string_from_cstr("blocks"), xt_number((double)info->st_blocks));
   xt_object_set(object, xt_string_from_cstr("blksize"), xt_number((double)info->st_blksize));
-  xt_object_set(object, xt_string_from_cstr("mtimeMs"),
-                xt_number(xt_fs_seconds_ms(info->st_mtimespec.tv_sec, info->st_mtimespec.tv_nsec)));
-  xt_object_set(object, xt_string_from_cstr("atimeMs"),
-                xt_number(xt_fs_seconds_ms(info->st_atimespec.tv_sec, info->st_atimespec.tv_nsec)));
-  xt_object_set(object, xt_string_from_cstr("ctimeMs"),
-                xt_number(xt_fs_seconds_ms(info->st_ctimespec.tv_sec, info->st_ctimespec.tv_nsec)));
+  mtimeMs = xt_fs_seconds_ms(info->st_mtimespec.tv_sec, info->st_mtimespec.tv_nsec);
+  atimeMs = xt_fs_seconds_ms(info->st_atimespec.tv_sec, info->st_atimespec.tv_nsec);
+  ctimeMs = xt_fs_seconds_ms(info->st_ctimespec.tv_sec, info->st_ctimespec.tv_nsec);
 #elif defined(_WIN32)
-  xt_object_set(object, xt_string_from_cstr("mtimeMs"), xt_number((double)info->st_mtime * 1000.0));
-  xt_object_set(object, xt_string_from_cstr("atimeMs"), xt_number((double)info->st_atime * 1000.0));
-  xt_object_set(object, xt_string_from_cstr("ctimeMs"), xt_number((double)info->st_ctime * 1000.0));
+  mtimeMs = (double)info->st_mtime * 1000.0;
+  atimeMs = (double)info->st_atime * 1000.0;
+  ctimeMs = (double)info->st_ctime * 1000.0;
 #else
   xt_object_set(object, xt_string_from_cstr("blocks"), xt_number((double)info->st_blocks));
   xt_object_set(object, xt_string_from_cstr("blksize"), xt_number((double)info->st_blksize));
-  xt_object_set(object, xt_string_from_cstr("mtimeMs"),
-                xt_number(xt_fs_seconds_ms(info->st_mtim.tv_sec, info->st_mtim.tv_nsec)));
-  xt_object_set(object, xt_string_from_cstr("atimeMs"),
-                xt_number(xt_fs_seconds_ms(info->st_atim.tv_sec, info->st_atim.tv_nsec)));
-  xt_object_set(object, xt_string_from_cstr("ctimeMs"),
-                xt_number(xt_fs_seconds_ms(info->st_ctim.tv_sec, info->st_ctim.tv_nsec)));
+  mtimeMs = xt_fs_seconds_ms(info->st_mtim.tv_sec, info->st_mtim.tv_nsec);
+  atimeMs = xt_fs_seconds_ms(info->st_atim.tv_sec, info->st_atim.tv_nsec);
+  ctimeMs = xt_fs_seconds_ms(info->st_ctim.tv_sec, info->st_ctim.tv_nsec);
 #endif
+  xt_object_set(object, xt_string_from_cstr("mtimeMs"), xt_number(mtimeMs));
+  xt_object_set(object, xt_string_from_cstr("atimeMs"), xt_number(atimeMs));
+  xt_object_set(object, xt_string_from_cstr("ctimeMs"), xt_number(ctimeMs));
+  /* Node reports timestamps as `Date` objects too, and libraries call
+   * `stat.mtime.getTime()` (`proper-lockfile` probes the filesystem this way). */
+  xt_object_set(object, xt_string_from_cstr("mtime"), xt_fs_date_value(mtimeMs));
+  xt_object_set(object, xt_string_from_cstr("atime"), xt_fs_date_value(atimeMs));
+  xt_object_set(object, xt_string_from_cstr("ctime"), xt_fs_date_value(ctimeMs));
+  xt_object_set(object, xt_string_from_cstr("birthtime"), xt_fs_date_value(ctimeMs));
+  xt_object_set(object, xt_string_from_cstr("birthtimeMs"), xt_number(ctimeMs));
 
   unsigned int mode = (unsigned int)info->st_mode;
   xt_fs_define_stat_method(object, "isFile", mode);

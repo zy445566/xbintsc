@@ -307,7 +307,6 @@ export const NAMESPACE_VALUES: Record<string, string> = {
 export const WEB_GLOBALS: ReadonlySet<string> = new Set<string>([
   "globalThis",
   "Reflect",
-  "Proxy",
   "FormData",
   "Blob",
   "Request",
@@ -361,6 +360,7 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   AbortSignal: "xt_abort_signal_ctor",
   Headers: "xt_headers_ctor",
   Response: "xt_response_ctor",
+  Proxy: "xt_proxy_ctor",
   ...ERROR_CONSTRUCTORS,
   ...TYPED_ARRAY_CTORS,
 };
@@ -404,6 +404,7 @@ export const FIRST_CLASS_CONSTRUCTORS = new Set<string>([
   "Response",
   "ArrayBuffer",
   "DataView",
+  "Proxy",
 ]);
 
 export const BUILTIN_METHODS = new Set<string>([

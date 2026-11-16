@@ -22,7 +22,7 @@
 | `copyFileSync(src, dest[, flags])` | `xt_node_copy_file` | 复制文件；支持 `COPYFILE_EXCL` |
 | `cpSync(src, dest[, options])` | `xt_node_cp` | 递归复制；`recursive` / `force` / `errorOnExist` / `dereference` / `preserveTimestamps` |
 | `realpathSync(path)` | `xt_node_realpath` | 解析为绝对路径 |
-| `statSync(path)` | `xt_node_stat` | 文件元信息对象（跟随符号链接） |
+| `statSync(path)` | `xt_node_stat` | 文件元信息对象（跟随符号链接）；`mtime` / `atime` / `ctime` / `birthtime` 为 `Date`，并带对应的 `*Ms` 数字 |
 | `lstatSync(path)` | `xt_node_lstat` | 文件元信息对象（不跟随符号链接） |
 | `statfsSync(path)` | `xt_node_statfs` | 文件系统统计（`bsize` / `blocks` / `bfree` …） |
 | `accessSync(path[, mode])` | `xt_node_access` | 检查可访问性 |

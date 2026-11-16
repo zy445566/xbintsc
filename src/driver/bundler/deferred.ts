@@ -24,6 +24,7 @@ import {
   type Expression,
   type FunctionDeclaration,
   type Identifier,
+  type ExportDeclaration,
   type ImportDeclaration,
   type ObjectLiteralElementLike,
   type PropertyAssignment,
@@ -35,6 +36,7 @@ import {
   type VariableStatement,
 } from "../../ast/nodes.js";
 import { SymbolKind } from "../../binder/types.js";
+import { isTypeOnlyExport, isTypeOnlyImport } from "./graph.js";
 import { classifyDependency } from "./resolve.js";
 import { topLevelSymbols } from "./symbols.js";
 import type { ModuleRecord } from "./types.js";
@@ -299,14 +301,18 @@ export function computeDeferredModules(
     const resolution = classifyDependency(dirname(record.path), specifier, externalSpecifiers, moduleOverrides);
     return resolution.kind === "file" ? byPath.get(resolution.path) : undefined;
   };
+  /* A type-only import or re-export is erased, so it is not a module edge: it
+   * must not make its target eager (`export type { T } from "pkg"` used to
+   * pull a whole package into the startup path). */
   const specifierOf = (statement: Statement): string | undefined => {
     if (statement.kind === SyntaxKind.ImportDeclaration) {
       const declaration = statement as ImportDeclaration;
-      if (declaration.importClause?.isTypeOnly) return undefined;
+      if (isTypeOnlyImport(declaration)) return undefined;
       return declaration.moduleSpecifier.value;
     }
     if (statement.kind === SyntaxKind.ExportDeclaration) {
-      const declaration = statement as { moduleSpecifier?: { value: string } };
+      const declaration = statement as ExportDeclaration;
+      if (isTypeOnlyExport(declaration)) return undefined;
       return declaration.moduleSpecifier?.value;
     }
     return undefined;

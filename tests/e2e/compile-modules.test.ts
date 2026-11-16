@@ -161,6 +161,21 @@ describeE2E("end-to-end module bundling", (harness) => {
     expect(runProgram(source)).toBe("ready");
   });
 
+  it("does not make a type-only re-export eager", () => {
+    // `export type { T } from "./b.js"` is erased, so it must not pull `b` into
+    // the startup path (the module can still be present through `import()`).
+    writeFileSync(join(harness.workdir, "type_only_dep.ts"), 'console.log("dep body");\nexport type T = number;\nexport const value = 1;\n');
+    writeFileSync(
+      join(harness.workdir, "type_only_mid.ts"),
+      'export type { T } from "./type_only_dep.js";\nexport async function load() { return await import("./type_only_dep.js"); }\n',
+    );
+    const source = `
+      import { load } from "./type_only_mid.js";
+      console.log("main", typeof load);
+    `;
+    expect(runProgram(source)).toBe("main function");
+  });
+
   it("renames destructured top-level bindings without breaking the read", () => {
     writeFileSync(
       join(harness.workdir, "destructure_dep.ts"),

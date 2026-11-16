@@ -74,6 +74,7 @@ xt_value xt_defer_module(int32_t argc, xt_value *argv) {
     xt_gc_add_root(&registry);
   }
   xt_value key = xt_to_string(xt_arg(argc, argv, 0));
+
   xt_value found = xt_object_get(registry, key);
   if (found != XT_UNDEFINED) return found;
   xt_value exports = xt_object_new();

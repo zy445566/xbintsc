@@ -4,6 +4,27 @@
 
 Location: `src/extensions/node/fs/*.ts`, `runtime/ext_node/fs/*.c`
 
+## Callback forms
+
+Every operation below also has Node's callback form, running on the
+asynchronous I/O pool: `readFile(path[, options], callback)`,
+`writeFile`, `appendFile`, `stat`, `lstat`, `statfs`, `realpath`, `access`,
+`mkdir`, `mkdtemp`, `readdir`, `rm`, `rmdir`, `unlink`, `rename`, `copyFile`,
+`cp`, `open`, `chmod`, `lchmod`, `chown`, `lchown`, `truncate`, `utimes`,
+`lutimes`, `link`, `symlink`, `readlink`, `opendir` and `glob`. The callback
+receives `(error, value)` — `error` is `null` on success and a Node-shaped
+`Error` (`code`, `errno`, `syscall`, `path`) on failure. `exists(path, cb)` is
+the exception: `cb(boolean)` with no error argument.
+
+```ts
+import { readFile } from "node:fs";
+
+readFile("package.json", "utf8", (error, text) => {
+  if (error) throw error;
+  console.log(text.length);
+});
+```
+
 ## Available functions (imported from `fs`)
 
 | Imported function | Runtime symbol | Notes |

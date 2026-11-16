@@ -4,6 +4,24 @@
 
 实现位置：`src/extensions/node/fs/*.ts`、`runtime/ext_node/fs/*.c`
 
+## 回调形式
+
+下面的每个操作也有 Node 的回调形式，运行在异步 I/O 线程池上：`readFile(path[, options], callback)`、
+`writeFile`、`appendFile`、`stat`、`lstat`、`statfs`、`realpath`、`access`、`mkdir`、`mkdtemp`、
+`readdir`、`rm`、`rmdir`、`unlink`、`rename`、`copyFile`、`cp`、`open`、`chmod`、`lchmod`、
+`chown`、`lchown`、`truncate`、`utimes`、`lutimes`、`link`、`symlink`、`readlink`、`opendir`、
+`glob`。回调收到 `(error, value)`——成功时 `error` 为 `null`，失败时是 Node 形状的 `Error`
+（`code`、`errno`、`syscall`、`path`）。`exists(path, cb)` 是例外：`cb(boolean)`，没有错误参数。
+
+```ts
+import { readFile } from "node:fs";
+
+readFile("package.json", "utf8", (error, text) => {
+  if (error) throw error;
+  console.log(text.length);
+});
+```
+
 ## 可用函数（从 `fs` 导入）
 
 | 导入函数 | 运行时符号 | 说明 |

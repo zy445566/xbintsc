@@ -124,3 +124,12 @@ int xt_gc_debug_describe(uintptr_t address, char *out, size_t capacity) {
   }
   return 0;
 }
+
+/** A typed pointer that is not a live block: name it under `XT_GC_VERIFY=1`. */
+void xt_gc_verify_rejected(uintptr_t address) {
+  static int reported = 0;
+  if (getenv("XT_GC_VERIFY") == NULL) return;
+  if (reported++ >= 8) return;
+  fprintf(stderr, "xbintsc: gc verify: skipped stale typed pointer 0x%llx\n",
+          (unsigned long long)address);
+}

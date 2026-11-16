@@ -214,10 +214,10 @@ extern _Thread_local int xt_gc_worker_thread;
 void xt_gc_verify_payloads(void); /* XT_GC_VERIFY=1 */
 void xt_gc_debug_record_free(uintptr_t address, size_t size, int kind);
 int xt_gc_debug_describe(uintptr_t address, char *out, size_t capacity);
+void xt_gc_verify_rejected(uintptr_t address); /* XT_GC_VERIFY */
 /* Explicit roots: the address of a slot that always holds a live value (a
  * module global, a runtime prototype cache, ...). */
 void xt_gc_add_root(xt_value *slot);
-void xt_gc_add_root_range(xt_value *base, size_t count);
 /* Subsystems whose live set is not reachable through value slots (the event
  * loop's timers, the promise microtask queue, ...) register a provider that
  * marks its reachable objects. Providers run during every collection. */

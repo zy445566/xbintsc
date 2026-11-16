@@ -230,6 +230,9 @@ static void xt_async_register_roots(void) {
 /* -- worker threads -------------------------------------------------------- */
 
 static void xt_async_worker_run(void) {
+  /* Workers allocate result values but must never collect: the collector scans
+   * the main thread's stack region and is not thread-safe. */
+  xt_gc_worker_thread = 1;
   for (;;) {
     XT_ASYNC_LOCK();
     xt_async_job *job = xt_async_pop_work();

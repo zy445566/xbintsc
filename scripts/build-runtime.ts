@@ -26,9 +26,11 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RUNTIME_SOURCES } from "../src/driver/compiler.js";
 import { platformSlug } from "../src/driver/paths.js";
+import { runtimeSourceFingerprint, writeRuntimeStamp } from "../src/driver/runtime-lib.js";
 import { applyMacosDeploymentTarget } from "../src/driver/platform-support.js";
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 import { RUNTIME_CFLAGS, sysrootFlags } from "../src/driver/toolchain.js";
+import { COMPILER_VERSION } from "../src/driver/version.js";
 import { nodeExtension } from "../src/extensions/node/index.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -117,3 +119,9 @@ const nodeSources = nodeExtension.runtimeSources?.() ?? [];
 if (nodeSources.length > 0) {
   archive(`ext_node${archiveSuffix}`, compile(nodeSources, "node"), ar);
 }
+
+/* Record which sources these archives came from: the driver only links them
+ * while the runtime sources on disk still match, and otherwise compiles from
+ * source (a stale archive would silently run an old runtime). */
+writeRuntimeStamp(outDir, runtimeSourceFingerprint(runtimeDir, COMPILER_VERSION, RUNTIME_CFLAGS), COMPILER_VERSION);
+console.log(`xbintsc: stamped ${join(outDir, "runtime-stamp.json")}`);

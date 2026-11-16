@@ -51,6 +51,12 @@ Additional small modules are provided with their core surface: `timers`
 (`StringDecoder`), `diagnostics_channel` (`channel`/`tracingChannel`), and
 `util/types` (the type predicates).
 
+`createRequire(url)` returns a `require` that resolves the modules linked into
+the binary: `require("fs")` / `require("node:fs")` answer the same namespace a
+static import would. A specifier that names nothing linked (an arbitrary file or
+an npm package the program never imported) throws — a compiled binary has no
+module loader.
+
 `tls` and `http2` are implemented as optional **link features** backed by the
 vendored mbedTLS and nghttp2 libraries: `npm run tls` fetches and builds
 `runtime/lib/<os>-<arch>/{tls,nghttp2}.{a,lib}`, and the driver links them only

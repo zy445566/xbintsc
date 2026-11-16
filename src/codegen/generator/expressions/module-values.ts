@@ -17,6 +17,12 @@ import type { Generator } from "../generator.js";
 export interface ModuleValueExpressionMethods {
   /** Lower one module export to a first-class closure value. */
   emitModuleExportValue(this: Generator, exported: ModuleExport): string;
+  /**
+   * Build (once) and register the table of linked extension modules, and return
+   * the table value. `createRequire`'s function and a computed `import()` look
+   * their specifier up in it.
+   */
+  ensureModuleRegistry(this: Generator): string;
   /** Build a namespace object holding every export of an imported module. */
   emitNamespaceObject(this: Generator, exports: ModuleExports): string;
   /** Lower a non-literal `import(specifier)` to a rejected promise. */
@@ -99,6 +105,27 @@ export const moduleValueExpressionMethods: ModuleValueExpressionMethods = {
     return object;
   },
 
+  ensureModuleRegistry(this: Generator): string {
+    /* Built at each use site: the value is a local register, so a cached one
+     * would not be readable from another function. Programs that both call
+     * `createRequire` and use a computed `import()` are rare enough that the
+     * duplicate table is cheaper than a program-wide global plus a guard. */
+    const table = this.reg();
+    this.emit(`  ${table} = call i64 @xt_object_new()`);
+    for (const [name, linked] of Object.entries(this.modules)) {
+      const exports = linked.exports;
+      if (!exports) continue;
+      const namespace = this.emitNamespaceObject(exports);
+      const keys = name.startsWith("node:") ? [name] : [name, `node:${name}`];
+      for (const key of keys) {
+        this.emit(`  call i64 @xt_set(i64 ${table}, i64 ${this.stringValue(key)}, i64 ${namespace})`);
+      }
+    }
+    this.extraDeclarations.add("declare void @xt_module_registry_set(i64)");
+    this.emit(`  call void @xt_module_registry_set(i64 ${table})`);
+    return table;
+  },
+
   emitDynamicImportReject(this: Generator, specifier: Expression): string {
     /* A compiled binary has no module loader, but the modules linked into it
      * are still there: the specifier can name any enabled extension module, so
@@ -107,17 +134,7 @@ export const moduleValueExpressionMethods: ModuleValueExpressionMethods = {
      * what makes `import("node:" + "fs")` — the usual "load Node built-ins
      * without a bundler" idiom — work. */
     const value = this.emitExpression(specifier);
-    const table = this.reg();
-    this.emit(`  ${table} = call i64 @xt_object_new()`);
-    for (const [name, module] of Object.entries(this.modules)) {
-      const exports = module.exports;
-      if (!exports) continue;
-      const namespace = this.emitNamespaceObject(exports);
-      const keys = name.startsWith("node:") ? [name] : [name, `node:${name}`];
-      for (const key of keys) {
-        this.emit(`  call i64 @xt_set(i64 ${table}, i64 ${this.stringValue(key)}, i64 ${namespace})`);
-      }
-    }
+    const table = this.ensureModuleRegistry();
     this.extraDeclarations.add("declare i64 @xt_dynamic_import(i64, i64)");
     const result = this.reg();
     this.emit(`  ${result} = call i64 @xt_dynamic_import(i64 ${table}, i64 ${value})`);

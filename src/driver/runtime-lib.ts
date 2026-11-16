@@ -19,8 +19,9 @@
  * dependency.
  */
 
-import { existsSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, relative, sep } from "node:path";
+import { hashParts } from "./cache.js";
 import { findRuntimeDir, platformSlug } from "./paths.js";
 
 /** Archive suffixes, in the order a name is probed. */
@@ -93,4 +94,88 @@ export function findRuntimeLibrary(
     }
   }
   return undefined;
+}
+
+
+/** Name of the file recording which sources an archive was built from. */
+export const RUNTIME_STAMP_FILE = "runtime-stamp.json";
+
+/** Source files that make up the runtime archives (the archives' own folder is
+ *  skipped: it holds the `.a`/`.lib` outputs and the stamp). */
+function runtimeSourceFiles(runtimeDir: string): string[] {
+  const files: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of entries.sort()) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) {
+        if (name === "lib") continue;
+        walk(full);
+      } else if (/\.(c|h|inc)$/.test(name)) {
+        files.push(full);
+      }
+    }
+  };
+  walk(runtimeDir);
+  return files;
+}
+
+/**
+ * Fingerprint of the C runtime sources an archive is compiled from.
+ *
+ * A prebuilt `core`/`ext_<name>` archive is only usable when it was built from
+ * exactly these sources: the driver compares the archive's stamp with this
+ * value and compiles from source when they differ. Without the stamp a stale
+ * archive links silently whenever every symbol it needs still exists — the
+ * program then runs the *old* runtime, which is very hard to diagnose.
+ */
+export function runtimeSourceFingerprint(runtimeDir: string, compilerVersion: string, flags: readonly string[]): string {
+  const parts: string[] = ["runtime-archive", compilerVersion, process.platform, process.arch, [...flags].join(" ")];
+  for (const file of runtimeSourceFiles(runtimeDir)) {
+    parts.push(relative(runtimeDir, file).split(sep).join("/"), readFileSync(file, "utf8"));
+  }
+  return hashParts(parts);
+}
+
+/** The recorded fingerprint of the archives in `dir`, if any. */
+export function readRuntimeStamp(dir: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(join(dir, RUNTIME_STAMP_FILE), "utf8"));
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const fingerprint = (parsed as { fingerprint?: unknown }).fingerprint;
+    return typeof fingerprint === "string" ? fingerprint : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Record the fingerprint next to the archives a build just produced. */
+export function writeRuntimeStamp(dir: string, fingerprint: string, compilerVersion: string): void {
+  writeFileSync(
+    join(dir, RUNTIME_STAMP_FILE),
+    `${JSON.stringify({ compilerVersion, fingerprint }, null, "\t")}\n`,
+    "utf8",
+  );
+}
+
+/**
+ * A prebuilt archive, but only when it was built from the sources now on disk.
+ *
+ * Returns `undefined` for a missing archive *and* for a stale one, so the caller
+ * falls back to compiling the runtime; `stale` tells the two apart for the
+ * message.
+ */
+export function freshRuntimeLibrary(
+  name: string,
+  dirs: readonly string[],
+  fingerprint: string,
+): { path?: string; stale?: string } {
+  const path = findRuntimeLibrary(name, dirs);
+  if (!path) return {};
+  return readRuntimeStamp(dirname(path)) === fingerprint ? { path } : { stale: path };
 }

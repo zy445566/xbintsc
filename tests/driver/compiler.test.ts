@@ -6,7 +6,10 @@ import { build, compileEntry, compileString, resolvePreferPrebuilt } from "../..
 import { createDefaultRegistry } from "../../src/extensions/registry.js";
 import { nodeExtension } from "../../src/extensions/node/index.js";
 import { DiagnosticCode } from "../../src/diagnostics/diagnostic.js";
-import { ToolchainError, type CommandResult, type Runner } from "../../src/driver/toolchain.js";
+import { ToolchainError, RUNTIME_CFLAGS, type CommandResult, type Runner } from "../../src/driver/toolchain.js";
+import { runtimeSourceFingerprint, writeRuntimeStamp } from "../../src/driver/runtime-lib.js";
+import { findRuntimeDir } from "../../src/driver/paths.js";
+import { COMPILER_VERSION } from "../../src/driver/version.js";
 
 const directories: string[] = [];
 
@@ -19,6 +22,16 @@ function temporaryDirectory(): string {
 afterEach(() => {
   while (directories.length > 0) rmSync(directories.pop()!, { recursive: true, force: true });
 });
+
+/** Record the current runtime sources on a fake archive so the driver uses it
+ *  (an unstamped archive is treated as stale and never linked). */
+function stampFakeArchive(libDir: string): void {
+  writeRuntimeStamp(
+    libDir,
+    runtimeSourceFingerprint(findRuntimeDir(), COMPILER_VERSION, RUNTIME_CFLAGS),
+    COMPILER_VERSION,
+  );
+}
 
 describe("compileString", () => {
   it("turns source into LLVM IR", () => {
@@ -298,6 +311,7 @@ describe("build", () => {
     const libDir = join(directory, "runtime-lib");
     mkdirSync(libDir, { recursive: true });
     writeFileSync(join(libDir, "core.a"), "archive built by a newer Xcode");
+    stampFakeArchive(libDir);
 
     const calls: { command: string; args: string[] }[] = [];
     let links = 0;
@@ -346,6 +360,7 @@ describe("build", () => {
     const libDir = join(directory, "runtime-lib");
     mkdirSync(libDir, { recursive: true });
     writeFileSync(join(libDir, "core.a"), "archive built by a newer Xcode");
+    stampFakeArchive(libDir);
     let links = 0;
     const runner: Runner = {
       run(_command, args): CommandResult {

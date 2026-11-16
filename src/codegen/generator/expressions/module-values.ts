@@ -27,15 +27,30 @@ export const moduleValueExpressionMethods: ModuleValueExpressionMethods = {
   emitModuleExportValue(this: Generator, exported: ModuleExport): string {
     if (exported.symbol) {
       // A direct runtime function: wrap its `(argc, argv)` pointer in a closure.
-      this.extraDeclarations.add(`declare i64 @${exported.symbol}(i32, i64*)`);
+      // A `void` binding (the console output methods) keeps that return type so
+      // the declaration matches the runtime's, and gets a trampoline that
+      // answers `undefined`.
+      const returnsVoid = exported.returnVoid === true;
+      const resultType = returnsVoid ? "void" : "i64";
+      this.extraDeclarations.add(`declare ${resultType} @${exported.symbol}(i32, i64*)`);
       const fnPtr = this.reg();
-      this.emit(`  ${fnPtr} = ptrtoint i64 (i32, i64*)* @${exported.symbol} to i64`);
+      this.emit(`  ${fnPtr} = ptrtoint ${resultType} (i32, i64*)* @${exported.symbol} to i64`);
       const env = this.alloca();
       this.emit(`  store i64 ${fnPtr}, i64* ${env}`);
+      const trampoline = returnsVoid ? "xt_voidptr_trampoline" : "xt_fnptr_trampoline";
       const closure = this.reg();
       this.emit(
-        `  ${closure} = call i64 @xt_closure_new(i8* bitcast (i64 (i64, i64, i32, i64*)* @xt_fnptr_trampoline to i8*), i32 1, i64* ${env})`,
+        `  ${closure} = call i64 @xt_closure_new(i8* bitcast (i64 (i64, i64, i32, i64*)* @${trampoline} to i8*), i32 1, i64* ${env})`,
       );
+      /* A native constructor publishes its prototype object, so a class that
+       * extends this value chains onto the real `X.prototype` (with its
+       * methods) instead of a fresh plain object. */
+      if (exported.prototypeSymbol) {
+        this.extraDeclarations.add(`declare i64 @${exported.prototypeSymbol}(i32, i64*)`);
+        const prototype = this.reg();
+        this.emit(`  ${prototype} = call i64 @${exported.prototypeSymbol}(i32 0, i64* null)`);
+        this.emit(`  call i64 @xt_function_set_prototype(i64 ${closure}, i64 ${prototype})`);
+      }
       return closure;
     }
     if (exported.valueSymbol) {
@@ -85,21 +100,27 @@ export const moduleValueExpressionMethods: ModuleValueExpressionMethods = {
   },
 
   emitDynamicImportReject(this: Generator, specifier: Expression): string {
-    // Evaluate the specifier for its side effects, then reject: a compiled
-    // binary has no runtime module loader to resolve a computed specifier.
-    this.emitExpression(specifier);
-    const message = this.stringValue(
-      "dynamic import with a non-literal specifier is not supported in compiled binaries",
-    );
-    const argPtr = `%dynimp${this.current.allocas.length}`;
-    this.current.allocas.push(`${argPtr} = alloca i64, i32 1`);
-    const argSlot = this.reg();
-    this.emit(`  ${argSlot} = getelementptr i64, i64* ${argPtr}, i32 0`);
-    this.emit(`  store i64 ${message}, i64* ${argSlot}`);
-    const error = this.reg();
-    this.emit(`  ${error} = call i64 @xt_error_ctor(i32 1, i64* ${argPtr})`);
-    const promise = this.reg();
-    this.emit(`  ${promise} = call i64 @xt_promise_reject(i64 ${error})`);
-    return promise;
+    /* A compiled binary has no module loader, but the modules linked into it
+     * are still there: the specifier can name any enabled extension module, so
+     * build a table of their namespace objects and let the runtime look it up.
+     * Anything else rejects with a message that names the specifier. This is
+     * what makes `import("node:" + "fs")` — the usual "load Node built-ins
+     * without a bundler" idiom — work. */
+    const value = this.emitExpression(specifier);
+    const table = this.reg();
+    this.emit(`  ${table} = call i64 @xt_object_new()`);
+    for (const [name, module] of Object.entries(this.modules)) {
+      const exports = module.exports;
+      if (!exports) continue;
+      const namespace = this.emitNamespaceObject(exports);
+      const keys = name.startsWith("node:") ? [name] : [name, `node:${name}`];
+      for (const key of keys) {
+        this.emit(`  call i64 @xt_set(i64 ${table}, i64 ${this.stringValue(key)}, i64 ${namespace})`);
+      }
+    }
+    this.extraDeclarations.add("declare i64 @xt_dynamic_import(i64, i64)");
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_dynamic_import(i64 ${table}, i64 ${value})`);
+    return result;
   },
 };

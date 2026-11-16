@@ -38,6 +38,13 @@ export interface ConcatenateOptions {
   readonly namespaceStatements: ReadonlyMap<Statement, Statement>;
   readonly externalSpecifiers: ReadonlySet<string>;
   readonly moduleOverrides?: Readonly<Record<string, string>>;
+  /**
+   * `module`/`exports` state for every CommonJS module, emitted above the first
+   * module body. Node creates the pair when a module starts loading, so a
+   * `require` cycle reads the earlier module's partly filled object instead of
+   * one that is declared later in the concatenated program.
+   */
+  readonly cjsPrelude?: readonly { readonly record: ModuleRecord; readonly statement: Statement }[];
 }
 
 export function concatenateModules(options: ConcatenateOptions): SourceFileNode {
@@ -50,6 +57,7 @@ export function concatenateModules(options: ConcatenateOptions): SourceFileNode 
     namespaceStatements,
     externalSpecifiers,
     moduleOverrides,
+    cjsPrelude,
   } = options;
   const merged: Statement[] = [];
   /* Every node keeps the module it was parsed from, so a later codegen
@@ -91,6 +99,11 @@ export function concatenateModules(options: ConcatenateOptions): SourceFileNode 
     trackOrigin(record, statement);
     merged.push(statement);
   };
+  /* A module's `module`/`exports` pair exists as soon as the module starts
+   * loading, so hoist every pair above the first module body. A `require`
+   * cycle then reads the earlier module's object (partly filled, like Node)
+   * instead of a variable declared later in the concatenated program. */
+  for (const entry of cjsPrelude ?? []) push(entry.record, entry.statement);
   const first = records[records.length - 1]!;
   for (const record of records) {
     if (deferredModules.has(record.path)) {

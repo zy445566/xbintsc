@@ -129,6 +129,8 @@ typedef xt_value (*xt_code_fn)(xt_value thisValue, xt_value env, int32_t argc, x
 
 xt_value xt_arg(int32_t argc, xt_value *argv, int32_t index);
 xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env);
+/** `import(<expr>)`: resolve a specifier against the linked module table. */
+xt_value xt_dynamic_import(xt_value table, xt_value specifier);
 xt_value xt_closure_call(xt_value fn, int32_t argc, xt_value *argv);
 xt_value xt_call_with_this(xt_value fn, xt_value thisValue, int32_t argc, xt_value *argv);
 xt_value xt_closure_env(xt_value fn, int32_t index);
@@ -140,14 +142,7 @@ xt_value xt_new(xt_value ctor, int32_t argc, xt_value *argv);
 xt_value xt_global_object(void);
 /** The prototype a class chains onto for its `extends` clause. */
 xt_value xt_parent_prototype(xt_value ctor);
-/**
- * `super(...)` from a derived constructor: run the parent constructor on the
- * instance the subclass already created. A user class keeps its constructor
- * closure in `__ctor` on its prototype; a native/extension class has no such
- * hook, so the parent constructor function (the class value's own
- * [[Prototype]]) is invoked as a constructor and its own properties are copied
- * onto the instance.
- */
+/** `super(...)` from a derived constructor: see `xt_constructors.c`. */
 xt_value xt_super_construct(xt_value thisValue, xt_value owner, xt_value parentProto,
                             int32_t argc, xt_value *argv);
 xt_value xt_instance_of(xt_value value, xt_value ctor);

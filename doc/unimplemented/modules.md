@@ -13,6 +13,7 @@
 | Live bindings | ✗ namespace objects and imported bindings are snapshots at module-evaluation time |
 | ESM `node_modules` packages | ✓ bare specifiers resolve up the tree through `exports` / `module` / `main`, including scoped packages and subpaths; the package sources are bundled like relative modules |
 | CommonJS `require` / `module.exports` | ✓ inside `node_modules` only: the bundler gives each CommonJS package a synthetic `module` / `exports` pair, lowers `require("x")` to the bundled dependency's exports, and hoists external/built-in `require`s into ESM imports. `require()` in user code (outside `node_modules`) is still rejected with a diagnostic pointing at the ESM `import` form. |
+| Dynamic `import()` | ✓ a literal specifier is bundled as a deferred module; a computed one resolves at run time against the extension modules linked into the build (bare and `node:` names) and rejects otherwise. It cannot load an arbitrary file or npm package at run time |
 
 > Extension modules (such as `fs`) are importable by bare or `node:`-prefixed
 > specifier — `import { readFileSync } from "fs"` / `import path from "path"` —

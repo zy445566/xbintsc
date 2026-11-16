@@ -291,3 +291,12 @@ static xt_value xt_events_proto(void) {
   xt_node_define_method(proto, "getMaxListeners", (void *)xt_events_method_get_max);
   return proto;
 }
+
+/* Prototype of `EventEmitter` as a first-class value: `import { EventEmitter }
+ * from "events"` wraps the constructor in a closure, and a class that extends
+ * it chains onto this object so the inherited listener API is reachable. */
+xt_value xt_events_prototype(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  return xt_events_proto();
+}

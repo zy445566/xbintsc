@@ -13,6 +13,7 @@
 | 实时绑定（live bindings） | ✗ 命名空间对象与导入绑定是模块求值时的快照 |
 | ESM `node_modules` 包 | ✓ 裸说明符沿目录树解析，支持 `exports` / `module` / `main`、作用域包与子路径；包源码与相对模块一样被打包 |
 | CommonJS `require` / `module.exports` | ✓ 仅限 `node_modules` 内：打包器为每个 CommonJS 包注入合成的 `module` / `exports`，将 `require("x")` 降级为依赖的导出对象，并把外部/内置 `require` 提升为 ESM `import`。用户代码（`node_modules` 之外）的 `require()` 仍会报错并提示改用 ESM `import` |
+| 动态 `import()` | ✓ 字面量说明符按延迟模块打包；计算出来的说明符在运行时对构建时链接进来的扩展模块（裸名称与 `node:` 名称）解析，其他则拒绝。它无法在运行时加载任意文件或 npm 包 |
 
 > 扩展模块（如 `fs`）可通过裸名称或 `node:` 前缀的 `import` 引入 —— `import { readFileSync } from "fs"` / `import path from "path"` —— 并解析到运行时入口（具名、默认与命名空间形式均可）。相对模块与 `node_modules` 中的 ESM/CJS 包均在驱动层打包。
 

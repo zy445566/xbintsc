@@ -28,10 +28,11 @@ describeE2E("end-to-end compilation (native classes and globals)", (harness) => 
       let heard = 0;
       counter.on("bump", (value: number) => { heard = value; });
       console.log(counter.bump(), heard);
-      console.log(counter instanceof Counter, typeof counter.on, typeof counter.listenerCount);
+      console.log(counter instanceof Counter, counter instanceof EventEmitter);
+      console.log(typeof counter.on, typeof counter.listenerCount);
     `;
     expect(runProgram(source, { extensions: true })).toBe(
-      ["2 2", "true function function"].join("\n"),
+      ["2 2", "true true", "function function"].join("\n"),
     );
   });
 

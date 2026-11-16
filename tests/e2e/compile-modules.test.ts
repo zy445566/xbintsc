@@ -130,6 +130,24 @@ describeE2E("end-to-end module bundling", (harness) => {
     expect(runProgram(source)).toBe("rejected");
   });
 
+  it("resolves a computed dynamic import against the linked modules", () => {
+    const source = `
+      async function main() {
+        const fs = await import("node:" + "fs");
+        const path = await import("p" + "ath");
+        console.log(typeof fs.readFileSync, typeof path.join);
+        const missing = "not-" + "a-module";
+        try {
+          await import(missing);
+        } catch (error) {
+          console.log("rejected", String(error).includes("not-a-module"));
+        }
+      }
+      main();
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("function function\nrejected true");
+  });
+
   it("renames destructured top-level bindings without breaking the read", () => {
     writeFileSync(
       join(harness.workdir, "destructure_dep.ts"),

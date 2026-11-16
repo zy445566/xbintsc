@@ -489,10 +489,11 @@ xt_value xt_super_construct(xt_value thisValue, xt_value owner, xt_value parentP
 
 xt_value xt_parent_prototype(xt_value ctor) {
   if (!XT_IS_FUNCTION(ctor)) return XT_UNDEFINED;
-  xt_value proto = xt_function_get_prototype(ctor);
-  if (XT_IS_OBJECT(proto) || XT_IS_ARRAY(proto) || XT_IS_FUNCTION(proto)) return proto;
-  /* No published prototype (an imported native constructor): construct one
-   * argument-less instance and take the prototype it installs. */
-  xt_value instance = xt_new(ctor, 0, NULL);
-  return xt_object_get_prototype(instance);
+  /* A class value publishes its prototype object. Every other callable gets the
+   * lazily created plain object a function's `.prototype` is in JavaScript —
+   * never an instance: `class X extends SomeConstructor` must not run the
+   * parent's body at class-definition time (it may need arguments, or have
+   * side effects the program did not ask for). An extension class that wants a
+   * real prototype publishes it when its constructor value is built. */
+  return xt_function_prototype_object(ctor);
 }

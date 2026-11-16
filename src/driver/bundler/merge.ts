@@ -76,8 +76,12 @@ export function bundleModules(
   }
 
   // Phase 1b: give every CommonJS module its `module`/`exports` state and
-  // record its export surface, so later phases can re-export it.
-  for (const record of records) prepareCommonJS(record);
+  // record its export surface, so later phases can re-export it. The state
+  // itself is hoisted above every module body (see `cjsPrelude` below).
+  const cjsPrelude: Array<{ record: ModuleRecord; statement: Statement }> = [];
+  for (const record of records) {
+    for (const statement of prepareCommonJS(record)) cjsPrelude.push({ record, statement });
+  }
 
   // Phase 2: collect each module's exported names.
   const namespaceStatements = new Map<Statement, Statement>();
@@ -355,6 +359,7 @@ export function bundleModules(
     namespaceStatements,
     externalSpecifiers,
     moduleOverrides,
+    cjsPrelude,
   });
   return { sourceFile, text: sourceFile.text, moduleCount: records.length };
 }

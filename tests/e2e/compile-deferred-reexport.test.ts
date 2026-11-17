@@ -60,4 +60,30 @@ describeE2E("end-to-end compilation (deferred namespace re-export)", (harness) =
     expect(result.stderr).toBe("");
     expect(result.stdout.trim()).toBe("instantiate-record");
   });
+  it("evaluates a dynamically imported module once, at the import", () => {
+    const result = runProgramFull(
+      'console.log("before");\n' +
+        'const first = await import("./app");\n' +
+        'const second = await import("./app");\n' +
+        'console.log("after", first === second, first.value);',
+      { files: { "app.ts": 'console.log("side-effect");\nexport const value = "app";' } },
+    );
+    expect(result.stderr).toBe("");
+    expect(result.stdout.trim().split("\n")).toEqual(["before", "side-effect", "after true app"]);
+  });
+
+  it("resolves a top-level binding from inside a hoisted function", () => {
+    const result = runProgramFull(
+      'const { addBase } = await import("./lib");\nconsole.log(addBase(5));',
+      {
+        files: {
+          "lib.ts":
+            "export const base = 10;\n" +
+            "export function addBase(n: number): number { return n + base; }",
+        },
+      },
+    );
+    expect(result.stderr).toBe("");
+    expect(result.stdout.trim()).toBe("15");
+  });
 });

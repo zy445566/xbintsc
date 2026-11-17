@@ -34,6 +34,9 @@ const PAGE = `<html><body>
   <script src="./app9.ts"></script>
   <script src="./app10.ts"></script>
   <script src="./app11.ts"></script>
+  <script src="./app12.ts"></script>
+  <script src="./app13.ts"></script>
+  <script src="./app14.ts"></script>
 </body></html>`;
 
 describe.skipIf(!guiAvailable)("gui extension — deferred <script src> imports", () => {
@@ -110,6 +113,25 @@ export function bump(): number { n += seed; return n; }
           "value.ts": 'export const value = "v";',
           "app4.ts": 'import { value } from "./wide"; console.log("app4=" + value);',
           "wide.ts": 'export * from "./value";',
+          /* A cycle between two imported modules: the hoisted `cycleBFn` is
+           * callable while `cycleA` is still initialising. */
+          "app12.ts": 'import { fromCycle } from "./cycleA"; console.log("app12=" + fromCycle());',
+          "cycleA.ts": [
+            'import { cycleBFn } from "./cycleB";',
+            'export function cycleAFn(): string { return "A"; }',
+            "export function fromCycle(): string { return cycleBFn(); }",
+          ].join("\n"),
+          "cycleB.ts": [
+            'import { cycleAFn } from "./cycleA";',
+            'export function cycleBFn(): string { return "B+" + cycleAFn(); }',
+          ].join("\n"),
+          "app13.ts": 'import { Inner } from "./barrel"; console.log("app13=" + Inner.value);',
+          "barrel.ts": 'export * as Inner from "./inner-value";',
+          "inner-value.ts": "export const value = 42;",
+          /* A hoisted function that reads a top-level `const`. */
+          "app14.ts": 'import { addBase } from "./const-lib"; console.log("app14=" + addBase(5));',
+          "const-lib.ts":
+            "export const base = 10;\nexport function addBase(n: number): number { return n + base; }",
         },
       },
     );
@@ -135,6 +157,9 @@ export function bump(): number { n += seed; return n; }
     expect(stdout).toContain("app9=3");
     expect(stdout).toContain("app10=5m");
     expect(stdout).toContain("app11=true");
+    expect(stdout).toContain("app12=B+A");
+    expect(stdout).toContain("app13=42");
+    expect(stdout).toContain("app14=15");
     expect(stdout).toContain("shared-main=s");
     /* The shared module was already reachable eagerly and must not run twice. */
     expect(stdout.match(/shared-eager/g)?.length).toBe(1);

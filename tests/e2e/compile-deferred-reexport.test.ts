@@ -86,4 +86,25 @@ describeE2E("end-to-end compilation (deferred namespace re-export)", (harness) =
     expect(result.stderr).toBe("");
     expect(result.stdout.trim()).toBe("15");
   });
+  it("lets a dynamically imported module import the entry back", () => {
+    /* Node-specific: the entry is a module, so the deferred target may import
+     * it (the edge closes a cycle). An HTML `<script src>` is not a module, so
+     * the marker path has no equivalent — see compile-deferred-marker.test.ts. */
+    const result = runProgramFull(
+      'export const fromEntry = "entry";\n' +
+        'const mod = await import("./target");\n' +
+        'console.log("cross", mod.readEntry());',
+      {
+        /* The entry needs a stable file name for `./entry` to resolve. */
+        name: "entry",
+        files: {
+          "target.ts":
+            'import { fromEntry } from "./entry";\n' +
+            "export function readEntry(): string { return fromEntry; }",
+        },
+      },
+    );
+    expect(result.stderr).toBe("");
+    expect(result.stdout.trim()).toBe("cross entry");
+  });
 });

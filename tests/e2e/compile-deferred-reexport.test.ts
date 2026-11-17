@@ -45,4 +45,19 @@ describeE2E("end-to-end compilation (deferred namespace re-export)", (harness) =
     expect(result.stderr).toBe("");
     expect(result.stdout.trim()).toBe("b a");
   });
+  it("hoists function declarations so a module cycle can call them", () => {
+    const result = runProgramFull('const mod = await import("./ca");\nconsole.log(mod.aValue);', {
+      files: {
+        "ca.ts":
+          'import { recordFn } from "./cb";\n' +
+          'export function instantiateFn(): string { return "instantiate"; }\n' +
+          "export const aValue = recordFn();",
+        "cb.ts":
+          'import { instantiateFn } from "./ca";\n' +
+          'export function recordFn(): string { return instantiateFn() + "-record"; }',
+      },
+    });
+    expect(result.stderr).toBe("");
+    expect(result.stdout.trim()).toBe("instantiate-record");
+  });
 });

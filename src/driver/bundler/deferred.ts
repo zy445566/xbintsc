@@ -36,6 +36,8 @@ import {
   type VariableStatement,
 } from "../../ast/nodes.js";
 import { SymbolKind } from "../../binder/types.js";
+import { AssignmentOperator } from "../../ast/operators.js";
+import { TokenKind } from "../../lexer/token.js";
 import { isTypeOnlyExport, isTypeOnlyImport } from "./graph.js";
 import { classifyDependency } from "./resolve.js";
 import { topLevelSymbols } from "./symbols.js";
@@ -107,6 +109,7 @@ function constDeclaration(
   initializer: Expression | undefined,
   start: number,
   end: number,
+  declarationKind: "const" | "let" = "const",
 ): VariableStatement {
   const declaration: VariableDeclaration = {
     kind: SyntaxKind.VariableDeclaration,
@@ -119,22 +122,80 @@ function constDeclaration(
   const list: VariableDeclarationList = {
     kind: SyntaxKind.VariableDeclarationList,
     declarations: [declaration],
-    declarationKind: "const",
+    declarationKind,
     start,
     end,
   };
   return { kind: SyntaxKind.VariableStatement, declarationList: list, modifiers: [], start, end };
 }
 
-/** `const <alias> = <wrapper>()[.<importedName>];` */
-function aliasStatement(alias: DeferredAlias): VariableStatement {
+/**
+ * `<alias> = <wrapper>()[.<importedName>];`
+ *
+ * The alias itself is declared at top level (see
+ * {@link deferredAliasDeclarations}) so that a function declaration hoisted
+ * out of the wrapper can reference it: a module cycle calls that function
+ * before the wrapper body has run.
+ */
+function aliasStatement(alias: DeferredAlias): Statement {
   const callee = identifier(alias.wrapper, alias.start, alias.end);
   const namespace = call(callee, [], alias.start, alias.end);
   const value =
     alias.importedName === undefined || alias.namespace
       ? namespace
       : property(namespace, alias.importedName, alias.start, alias.end);
-  return constDeclaration(alias.name, value, alias.start, alias.end);
+  return assignmentStatement(alias.name, value, alias.start, alias.end);
+}
+
+/** `<name> = <value>;` — used to assign a top-level `let` from inside a wrapper. */
+export function assignmentStatement(name: string, value: Expression, start: number, end: number): Statement {
+  const assignment = {
+    kind: SyntaxKind.BinaryExpression,
+    left: identifier(name, start, end),
+    operator: AssignmentOperator.Assign,
+    right: value,
+    operatorToken: { kind: TokenKind.Equals, text: "=", precededByLineBreak: false, start, end },
+    start,
+    end,
+  } as unknown as Expression;
+  return {
+    kind: SyntaxKind.ExpressionStatement,
+    expression: assignment,
+    start,
+    end,
+  };
+}
+
+/** `let a, b;` for bindings a deferred module declares at its top level. */
+export function letDeclaration(
+  names: readonly { readonly name: string; readonly start: number; readonly end: number }[],
+): Statement {
+  const declarations: VariableDeclaration[] = names.map((entry) => ({
+    kind: SyntaxKind.VariableDeclaration,
+    name: identifier(entry.name, entry.start, entry.end),
+    exclamation: false,
+    initializer: undefined,
+    start: entry.start,
+    end: entry.end,
+  }));
+  const list: VariableDeclarationList = {
+    kind: SyntaxKind.VariableDeclarationList,
+    declarations,
+    declarationKind: "let",
+    start: declarations[0]!.start,
+    end: declarations[declarations.length - 1]!.end,
+  };
+  return { kind: SyntaxKind.VariableStatement, declarationList: list, modifiers: [], start: list.start, end: list.end };
+}
+
+/** `let <alias>;` for every alias that binds a name, emitted at top level. */
+export function deferredAliasDeclarations(aliases: readonly DeferredAlias[]): Statement[] {
+  const statements: Statement[] = [];
+  for (const alias of aliases) {
+    if (alias.sideEffect || alias.name.length === 0) continue;
+    statements.push(constDeclaration(alias.name, undefined, alias.start, alias.end, "let"));
+  }
+  return statements;
 }
 
 /** A wrapper call used for a side-effect-only import. */
@@ -355,4 +416,53 @@ export function computeDeferredModules(
     }
   }
   return deferred;
+}
+/** The declarations of a `const`/`let`/`var` statement with plain identifiers. */
+export function simpleVariableDeclarations(
+  statement: Statement,
+): { name: string; initializer?: Expression; start: number; end: number }[] | undefined {
+  if (statement.kind !== SyntaxKind.VariableStatement) return undefined;
+  const list = (statement as VariableStatement).declarationList;
+  const declarations: { name: string; initializer?: Expression; start: number; end: number }[] = [];
+  for (const declaration of list.declarations) {
+    if (declaration.name.kind !== SyntaxKind.Identifier) return undefined;
+    declarations.push({
+      name: (declaration.name as Identifier).text,
+      initializer: declaration.initializer,
+      start: declaration.start,
+      end: declaration.end,
+    });
+  }
+  return declarations;
+}
+
+/**
+ * Whether a deferred module's top-level declarations can be split into
+ * top-level bindings plus in-wrapper initialisation.
+ *
+ * Function declarations are hoisted (a cycle may call them before any body
+ * runs), so the bindings they reference must be top level too. That works for
+ * plain `const`/`let`/`var x = ...`; a destructuring pattern, a class or an
+ * enum needs code we do not synthesise, so those modules keep everything inside
+ * the wrapper (and behave as before).
+ */
+export function deferredModuleSplit(record: ModuleRecord): boolean {
+  for (const statement of record.sourceFile.statements) {
+    if (
+      statement.kind === SyntaxKind.ImportDeclaration ||
+      statement.kind === SyntaxKind.ExportDeclaration ||
+      statement.kind === SyntaxKind.ExportAssignment ||
+      statement.kind === SyntaxKind.FunctionDeclaration
+    ) {
+      continue;
+    }
+    if (statement.kind === SyntaxKind.VariableStatement) {
+      if (simpleVariableDeclarations(statement) === undefined) return false;
+      continue;
+    }
+    if (statement.kind === SyntaxKind.ClassDeclaration || statement.kind === SyntaxKind.EnumDeclaration) {
+      return false;
+    }
+  }
+  return true;
 }

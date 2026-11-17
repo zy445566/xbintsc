@@ -27,6 +27,7 @@ import { lowerCommonJSRequires, prepareCommonJS } from "./commonjs.js";
 import {
   computeDeferredModules,
   deferredAliasName,
+  deferredModuleSplit,
   deferredWrapperName,
   isDeferredMarkerImport,
   type DeferredAlias,
@@ -277,6 +278,22 @@ export function bundleModules(
             if (specifier.isTypeOnly) continue;
             const importedName = specifier.propertyName?.text ?? specifier.name.text;
             const local = scope.symbols.get(specifier.name.text);
+            /* A function declaration is hoisted out of the dependency's wrapper
+             * (see `concatenateModules`), so referring to its final name works
+             * even inside a module cycle — which is exactly when the alias
+             * would still be `undefined`. The dependency is still initialised
+             * once, through a side-effect alias. */
+            const target = dependency.exports.get(importedName);
+            const dependencyScope = moduleScope(dependency);
+            const hoisted =
+              target !== undefined &&
+              deferredModuleSplit(dependency) &&
+              dependencyScope?.symbols.get(importedName)?.kind === SymbolKind.Function;
+            if (hoisted) {
+              if (local) renameReferences(local, target);
+              aliases.push({ name: "", wrapper, sideEffect: true, start, end });
+              continue;
+            }
             const alias = deferredAliasName(record, aliases.length, importedName);
             if (local) renameReferences(local, alias);
             aliases.push({

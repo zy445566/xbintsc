@@ -34,6 +34,13 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
   a thin wrapper over their already-initialised exports.
 - The wrapper body is synchronous: top-level `await` inside a deferred script
   module is not supported.
+- Function declarations and the bindings of simple top-level `const`/`let`/`var`
+  declarations are *hoisted* out of the wrapper, and a wrapper assigns their
+  values in source order. That is what lets a module cycle call a dependency's
+  function before either body has run (an import of such a function refers to it
+  directly instead of copying it into an alias). Modules with destructuring, a
+  `class` or an `enum` at the top level keep every declaration inside the
+  wrapper, so a cycle that calls *their* functions still sees `undefined`.
 
 ## import.meta
 

@@ -24,9 +24,18 @@ import {
   type VariableDeclarationList,
 } from "../../ast/nodes.js";
 import { SymbolKind } from "../../binder/binder.js";
-import { deferredModuleFunctions, eagerModuleFunctions, type DeferredAlias } from "./deferred.js";
+import {
+  assignmentStatement,
+  deferredAliasDeclarations,
+  deferredModuleFunctions,
+  deferredModuleSplit,
+  eagerModuleFunctions,
+  letDeclaration,
+  simpleVariableDeclarations,
+  type DeferredAlias,
+} from "./deferred.js";
 import { classifyDependency } from "./resolve.js";
-import { renameSymbol, topLevelSymbols } from "./symbols.js";
+import { moduleScope, renameSymbol, topLevelSymbols } from "./symbols.js";
 import type { ModuleRecord } from "./types.js";
 
 export interface ConcatenateOptions {
@@ -111,7 +120,15 @@ export function concatenateModules(options: ConcatenateOptions): SourceFileNode 
        * external imports stay top-level (codegen resolves them there); eager
        * namespace objects likewise. */
       const topLevel: Statement[] = [];
+      const hoisted: Statement[] = [];
+      const hoistedVariables: { name: string; start: number; end: number }[] = [];
       const body: Statement[] = [];
+      /* A module cycle calls a dependency's *function declarations* before its
+       * body has run — that is what hoisting means in JavaScript. Keeping them
+       * inside the wrapper makes them `undefined` at that moment, so the
+       * declarations move to the top level and their module-level variable
+       * bindings become top-level `let`s whose values the wrapper assigns. */
+      const split = deferredModuleSplit(record);
       for (const statement of record.sourceFile.statements) {
         if (statement.kind === SyntaxKind.ImportDeclaration) {
           const declaration = statement as ImportDeclaration;
@@ -142,14 +159,42 @@ export function concatenateModules(options: ConcatenateOptions): SourceFileNode 
           continue;
         }
         stripExportModifiers(statement);
+        if (split) {
+          if (statement.kind === SyntaxKind.FunctionDeclaration) {
+            hoisted.push(statement);
+            continue;
+          }
+          const declarations = simpleVariableDeclarations(statement);
+          if (declarations) {
+            const scope = moduleScope(record);
+            for (const declaration of declarations) {
+              /* The rename pass rewrites references to the final name, so the
+               * synthetic binding and its assignment must use it too. */
+              const symbol = scope?.symbols.get(declaration.name);
+              const finalName =
+                (symbol ? record.finalNames.get(symbol.id) : undefined) ?? declaration.name;
+              hoistedVariables.push({
+                name: finalName,
+                start: declaration.start,
+                end: declaration.end,
+              });
+              if (declaration.initializer) {
+                body.push(
+                  assignmentStatement(finalName, declaration.initializer, statement.start, statement.end),
+                );
+              }
+            }
+            continue;
+          }
+        }
         body.push(statement);
       }
+      const aliases = deferredAliases.get(record.path) ?? [];
       for (const statement of topLevel) push(record, statement);
-      for (const statement of deferredModuleFunctions(
-        record,
-        deferredAliases.get(record.path) ?? [],
-        body,
-      )) {
+      for (const statement of deferredAliasDeclarations(aliases)) push(record, statement);
+      if (hoistedVariables.length > 0) push(record, letDeclaration(hoistedVariables));
+      for (const statement of hoisted) push(record, statement);
+      for (const statement of deferredModuleFunctions(record, aliases, body)) {
         push(record, statement);
       }
       continue;
@@ -263,3 +308,14 @@ function exportAssignmentToStatement(record: ModuleRecord, assignment: ExportAss
     end: assignment.end,
   };
 }
+
+/**
+ * Whether a deferred module's top-level declarations can be split into
+ * top-level bindings plus in-wrapper initialisation.
+ *
+ * Function declarations are hoisted (a cycle may call them before any body
+ * runs), so the bindings they reference must be top level too. That works for
+ * plain `const`/`let`/`var x = ...`; a destructuring pattern, a class or an
+ * enum needs code we do not synthesise, so those modules keep everything inside
+ * the wrapper (and behave as before).
+ */

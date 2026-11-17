@@ -32,6 +32,16 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
   stripped, so a bare or `node:` specifier links like any ordinary module import.
 - Modules also reachable through a normal (non-marker) import stay eager and get
   a thin wrapper over their already-initialised exports.
+- Two triggers share that machinery. An HTML page's `<script src>` (or inline
+  script) imports are marked with `__xt_deferred_module`, and the generated
+  script calls the marker when the engine runs it after `loadHTML`; a literal
+  `import("…")` calls the same wrapper at the import site. Both evaluate the
+  module once (`__xt_defer` memoises by module id) and both see identical
+  wrapper semantics — hoisted functions, `export * as` bindings and cycles
+  behave the same in either. Both calls end up in the same runtime helper
+  (`xt_defer_module`, the bundler emits it as a bare global call), so the only
+  difference is *who* triggers the evaluation; the engine decides the moment for
+  a script, the program for `import("…")`.
 - The wrapper body is synchronous: top-level `await` inside a deferred script
   module is not supported.
 - Function declarations and the bindings of simple top-level `const`/`let`/`var`

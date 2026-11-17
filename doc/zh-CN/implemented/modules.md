@@ -31,6 +31,17 @@
   import 一样链接。
 - 同时被普通（非标记）import 引用的模块保持立即求值，并获得一个返回已初始化
   导出的薄包装。
+- 函数声明与简单顶层 `const`/`let`/`var` 的绑定会*提升*到 wrapper 之外，wrapper 按源码
+  顺序给它们赋值。这样模块循环才能在对模块体执行前调用依赖的函数（对这类函数的 import
+  直接引用其最终名字，而不是复制成别名）。顶层含解构、`class` 或 `enum` 的模块仍把
+  所有声明留在 wrapper 内，因此循环调用它们的函数仍会拿到 `undefined`。
+- 同一条机制有两个触发点。HTML 页面里 `<script src>`（或内联脚本）的 import 会带上
+  `__xt_deferred_module` 标记，脚本在 `loadHTML` 之后由引擎执行时调用该标记；字面量
+  `import("…")` 则在 import 处直接调用同一个 wrapper。两者都只求值一次（`__xt_defer`
+  按模块 id 记忆），wrapper 语义完全一致——函数提升、`export * as` 绑定、模块循环在两种
+  触发方式下表现相同。两者的调用最终都进入同一个运行时助手（`xt_defer_module`，bundler
+  以裸全局调用的形式发射它），区别只在*谁*触发求值：脚本由引擎决定时机，`import("…")`
+  由程序自己决定。
 - 包装体是同步的：延迟脚本模块中的顶层 `await` 不受支持。
 
 ## import.meta

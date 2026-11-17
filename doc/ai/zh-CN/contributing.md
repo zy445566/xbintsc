@@ -117,9 +117,12 @@ gen2 --emit--> gen3.ll      # 必须等于 ref.ll
 第二个推论是字符串模型：编译器自身源码文本在各代中必须含义一致。编译后的字符串以 UTF-8
 存储，但索引按 UTF-16 码元进行，所以自举后的 `readFileSync`（`--ext node`）交给扫描器的是
 字节串（一个码元一个字节，全部 `<= 0xFF`），而 Node 交给它的是同一个文件已解码后的文本——
-读取源码文件一律走 `sourceTextBytes`（[src/diagnostics/source-text.ts](../../../src/diagnostics/source-text.ts)），
-不要假设一个码元就是一个字节或一个字符。弄错的表现是：`gen2.ll` 里非 ASCII 字面量（比如提示语里的 `—`）
-被重新编码，这也正是这里逐字节比较 IR 而不是逐行比较的原因。
+读取源码文件一律走 `readSourceText`（[src/diagnostics/source-text.ts](../../../src/diagnostics/source-text.ts)），
+它保留文件原始字节；只有宿主已解码的文本（`compileString` 参数、测试夹具）才交给
+`sourceTextBytes`。不要假设一个码元就是一个字节或一个字符：`é` 这类 Latin-1 范围字符
+两种形态下都是同一个码元，靠“看起来像文本吗”的启发式会静默写出原始字节。弄错的表现是：
+`gen2.ll` 里非 ASCII 字面量（比如提示语里的 `—`）被重新编码，这也正是这里逐字节比较 IR
+而不是逐行比较的原因。
 
 本地验证：
 

@@ -115,9 +115,15 @@ export function bundleModules(
             }
           }
         } else if (!declaration.exportClause && declaration.moduleSpecifier) {
-          // `export * from "..."`: copy every re-exported name.
+          // `export * from "..."`: copy every re-exported name. A star export
+          // never re-exports `default`; the module's own default must win.
           const dependency = dependencyOf(record, declaration.moduleSpecifier.value);
-          if (dependency) for (const [name, value] of dependency.exports) record.exports.set(name, value);
+          if (dependency) {
+            for (const [name, value] of dependency.exports) {
+              if (name === "default") continue;
+              record.exports.set(name, value);
+            }
+          }
         } else if (declaration.exportClause?.kind === SyntaxKind.NamespaceImport && declaration.moduleSpecifier) {
           // `export * as ns from "..."`: re-export the dependency's namespace.
           const nsName = (declaration.exportClause as { name: Identifier }).name.text;
@@ -198,9 +204,10 @@ export function bundleModules(
           }
         } else if (!clause) {
           /* `export * from "./dep"`: alias every runtime export the deferred
-           * dependency contributes, so our own wrapper can return them. */
+           * dependency contributes, so our own wrapper can return them.
+           * `default` is not part of a star export. */
           for (const [name, target] of dependency.exports) {
-            if (!target) continue;
+            if (name === "default" || !target) continue;
             const alias = deferredAliasName(record, aliases.length, `re_${name}`);
             aliases.push({
               name: alias,

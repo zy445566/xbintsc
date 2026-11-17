@@ -9,7 +9,7 @@ import { SyntaxKind, type ExportDeclaration, type ImportDeclaration, type NamedE
 import { bind } from "../../binder/binder.js";
 import { DiagnosticBag, DiagnosticCode } from "../../diagnostics/diagnostic.js";
 import { SourceFile } from "../../diagnostics/source.js";
-import { sourceTextBytes } from "../../diagnostics/source-text.js";
+import { sourceTextFromBytes } from "../../diagnostics/source-text.js";
 import { Parser } from "../../parser/parser.js";
 import type { AssetLoader } from "../../extensions/registry.js";
 import { classifyDependency } from "./resolve.js";
@@ -103,7 +103,7 @@ export function loadGraph(
     const fileBytes = readFileSync(path);
     const raw = loader?.binary === true
       ? fileBytes.toString("latin1")
-      : sourceTextBytes(fileBytes.toString("utf8"));
+      : sourceTextFromBytes(fileBytes);
     let text = raw;
     let originRanges: readonly OriginRange[] | undefined;
     if (loader) {

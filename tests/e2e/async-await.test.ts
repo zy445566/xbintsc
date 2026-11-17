@@ -246,6 +246,23 @@ console.log("top-level");`;
     expect(runProgram(source)).toBe("top-level");
   });
 
+  it("keeps more than 64 nested coroutine stack regions registered", () => {
+    // More nested async calls than the old fixed 64-region table: a dropped
+    // push desynchronised push/pop, so an unwind evicted a live parent region
+    // and the collector could sweep values still referenced by its stack.
+    const source = `${prelude}
+async function depth(n: number): Promise<number> {
+  if (n === 0) return 0;
+  const value = await depth(n - 1);
+  return value + 1;
+}
+async function main(): Promise<void> {
+  console.log("depth", await depth(90));
+}
+main();`;
+    expect(runProgram(source, { env: { XT_GC_THRESHOLD: "8192" }, timeout: 60000 })).toBe("depth 90");
+  });
+
   it("keeps suspended coroutines reachable across collections", () => {
     const source = `${prelude}
 async function worker(id: number): Promise<number> {

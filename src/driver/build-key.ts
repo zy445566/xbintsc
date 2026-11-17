@@ -27,6 +27,8 @@ export interface CacheKeyInput {
   readonly sourceText: string;
   readonly emit: string;
   readonly optimize: string;
+  /** Host architecture; a shared cache must not serve an x64 binary to arm64. */
+  readonly arch: string;
   readonly registry: ExtensionRegistry;
   readonly runtimeDir: string;
   readonly icon?: IconInfo;
@@ -41,11 +43,24 @@ export interface CacheKeyInput {
   readonly pgoDir: string;
   /** Active optional link features; they change which objects/archives link. */
   readonly features?: readonly string[];
+  /**
+   * The compiler the build will invoke. `undefined` for `emit: "ir"`, which
+   * needs no toolchain. A different clang/SDK produces a different binary, so
+   * it must invalidate the cache.
+   */
+  readonly toolchain?: CacheKeyToolchain;
+}
+
+/** The toolchain inputs that change the linked output. */
+export interface CacheKeyToolchain {
+  readonly clang: string;
+  readonly sdkRoot?: string;
+  readonly linkerArgs: readonly string[];
 }
 
 /** Hash every input that can change the produced binary. */
 export function buildCacheKey(input: CacheKeyInput): string {
-  const { app, icon, pgo, storage } = input;
+  const { app, icon, pgo, storage, toolchain } = input;
   return hashParts([
     COMPILER_VERSION,
     compilerFingerprint(),
@@ -53,6 +68,10 @@ export function buildCacheKey(input: CacheKeyInput): string {
     input.emit,
     input.optimize,
     process.platform,
+    input.arch,
+    toolchain?.clang ?? "",
+    toolchain?.sdkRoot ?? "",
+    [...(toolchain?.linkerArgs ?? [])].join(" "),
     registryFingerprint(input.registry),
     runtimeFingerprint(input.runtimeDir),
     vendoredRuntimeFingerprint(input.runtimeDir),
@@ -60,6 +79,7 @@ export function buildCacheKey(input: CacheKeyInput): string {
     app.name ?? "",
     String(app.bundle ?? false),
     app.bundleId ?? "",
+    String(app.console === true),
     storage.backend,
     storage.path,
     String(input.debug),

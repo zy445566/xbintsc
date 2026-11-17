@@ -54,20 +54,10 @@ static size_t g_root_provider_capacity = 0;
 
 /* ------------------------------------------------------------------------- */
 /* Active stack regions                                                      */
+/*                                                                           */
+/* The region table lives in `xt_gc_stack.c`; it grows on demand because an   */
+/* async call chain can be deeper than any fixed limit.                      */
 /* ------------------------------------------------------------------------- */
-
-#define XT_GC_MAX_STACKS 64
-typedef struct {
-  uintptr_t low;
-  uintptr_t high;
-  /* Lower bound captured from the stack below this region when a deeper region
-   * was entered on top of it. `UINTPTR_MAX` means "this is the top region"; the
-   * collector then scans from the current stack pointer. */
-  uintptr_t scan_low;
-} xt_stack_region;
-
-static xt_stack_region g_stack_regions[XT_GC_MAX_STACKS];
-static int g_stack_depth = 0;
 
 /* ------------------------------------------------------------------------- */
 /* Mark stack and address set                                                */
@@ -185,30 +175,16 @@ size_t xt_heap_allocations(void) { return g_heap_allocations; }
 void xt_gc_set_stack_base(void *base) {
   uintptr_t high = (uintptr_t)base;
   if (high == 0) return;
-  if (g_stack_depth == 0) {
-    g_stack_regions[0].low = 0;
-    g_stack_regions[0].high = high;
-    g_stack_regions[0].scan_low = UINTPTR_MAX;
-    g_stack_depth = 1;
-  } else if (high > g_stack_regions[0].high) {
-    g_stack_regions[0].high = high;
-  }
+  xt_gc_init_main_stack(high);
 }
 
 void xt_gc_init(void) {
   if (g_gc_initialised) return;
   g_gc_initialised = 1;
   uintptr_t high = (uintptr_t)&high;
-  if (g_stack_depth == 0) {
-    g_stack_regions[0].low = 0;
-    g_stack_regions[0].high = high;
-    g_stack_regions[0].scan_low = UINTPTR_MAX;
-    g_stack_depth = 1;
-  } else if (high > g_stack_regions[0].high) {
-    /* `xt_gc_set_stack_base` normally installed a bound above the caller's
-     * frame already; keep the higher of the two. */
-    g_stack_regions[0].high = high;
-  }
+  /* `xt_gc_set_stack_base` normally installed a bound above the caller's frame
+   * already; the helper keeps the higher of the two. */
+  xt_gc_init_main_stack(high);
   const char *env = getenv("XT_GC_THRESHOLD");
   if (env && *env) {
     long long value = atoll(env);
@@ -268,24 +244,6 @@ void xt_gc_register_root_provider(void (*provider)(void)) {
     g_root_provider_capacity = capacity;
   }
   g_root_providers[g_root_provider_count++] = provider;
-}
-void xt_gc_push_stack(uintptr_t low, uintptr_t high) {
-  if (g_stack_depth >= XT_GC_MAX_STACKS) return;
-  g_stack_regions[g_stack_depth].low = low;
-  g_stack_regions[g_stack_depth].high = high;
-  g_stack_regions[g_stack_depth].scan_low = low;
-  g_stack_depth++;
-}
-void xt_gc_suspend(uintptr_t sp) {
-  if (g_stack_depth <= 0) return;
-  uintptr_t *scan = &g_stack_regions[g_stack_depth - 1].scan_low;
-  if (*scan == UINTPTR_MAX || sp < *scan) *scan = sp;
-}
-void xt_gc_pop_stack(void) {
-  if (g_stack_depth <= 1) return;
-  g_stack_depth--;
-  /* Back on the underlying stack: resume scanning it from the current frame. */
-  if (g_stack_depth > 0) g_stack_regions[g_stack_depth - 1].scan_low = UINTPTR_MAX;
 }
 /* ------------------------------------------------------------------------- */
 /* Marking                                                                   */
@@ -504,9 +462,11 @@ static void xt_gc_mark_roots(void) {
   _setjmp(registers);
   xt_gc_scan_region(&registers, sizeof(registers));
   uintptr_t stack_pointer = (uintptr_t)&registers;
-  for (int i = 0; i < g_stack_depth; i++) {
-    uintptr_t high = g_stack_regions[i].high;
-    uintptr_t low = (i == g_stack_depth - 1) ? stack_pointer : g_stack_regions[i].scan_low;
+  size_t regionCount = xt_gc_stack_region_count();
+  for (size_t i = 0; i < regionCount; i++) {
+    uintptr_t high = 0;
+    uintptr_t low = 0;
+    xt_gc_stack_region_bounds(i, stack_pointer, &low, &high);
     if (high > low) xt_gc_scan_region((const void *)low, high - low);
   }
 }

@@ -328,7 +328,15 @@ xt_value xt_object_get(xt_value value, xt_value key) {
       continue;
     }
     if (!XT_IS_OBJECT(cur->prototype)) break;
-    cur = (xt_object *)XT_GET_PTR(cur->prototype);
+    xt_object *next = (xt_object *)XT_GET_PTR(cur->prototype);
+    if (next == cur) break;
+    /* A prototype may be any object value (`Object.setPrototypeOf(o, new Map())`
+     * is legal). Only plain objects and errors share the property-table layout;
+     * walking into a Map/Set/Date would read `count`/`properties` at the wrong
+     * offsets. Stop the chain instead, which is what the lookup would find
+     * anyway: those containers keep their state outside their property bag. */
+    if (next->header.kind != XT_OBJECT_KIND_OBJECT && next->header.kind != XT_OBJECT_KIND_ERROR) break;
+    cur = next;
   }
   /* A host view (`element.style`, `element.dataset`, computed style) answers the
    * keys it owns dynamically. Only a miss reaches this point, so prototype

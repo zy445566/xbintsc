@@ -24,7 +24,7 @@
  * "eager" execution point), i.e. every script is effectively `defer`red.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import {
   ModifierKind,
@@ -37,6 +37,7 @@ import {
 } from "../../ast/nodes.js";
 import { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import { SourceFile } from "../../diagnostics/source.js";
+import { readSourceText } from "../../diagnostics/source-text.js";
 import { Parser } from "../../parser/parser.js";
 import { artifactPath } from "../../canonical.js";
 import { hashString } from "../../driver/cache.js";
@@ -322,7 +323,7 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
       if (!existsSync(scriptPath)) {
         throw new Error(`gui: <script src="${src}"> not found (looked for ${scriptPath})`);
       }
-      const compiled = compileModuleSource(path, scriptPath, readFileSync(scriptPath, "utf8"), scripts.length);
+      const compiled = compileModuleSource(path, scriptPath, readSourceText(scriptPath), scripts.length);
       hoistImports(compiled, `<script src="${src}">`, `alias it in ${scriptPath}`);
       const id = register(compiled, scriptPath);
       return `<script data-xt-id="${id}"></script>`;

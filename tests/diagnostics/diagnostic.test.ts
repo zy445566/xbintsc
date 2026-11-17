@@ -8,6 +8,7 @@ import {
   type Diagnostic,
 } from "../../src/diagnostics/diagnostic.js";
 import { SourceFile } from "../../src/diagnostics/source.js";
+import { sourceTextBytes } from "../../src/diagnostics/source-text.js";
 
 describe("DiagnosticBag", () => {
   it("records errors and warnings with optional locations", () => {
@@ -110,6 +111,18 @@ describe("formatDiagnostic", () => {
     expect(text).toContain("a.ts:2:5 - error TS3002: no b");
     expect(text).toContain("let b = 2;");
     expect(text).toContain("\n    ^");
+  });
+
+  it("maps a byte offset to a UTF-16 column on a non-ASCII line", () => {
+    const source = new SourceFile("a.ts", sourceTextBytes("a中文b"));
+    // `b` starts at byte 7 but at display column 4.
+    const text = formatDiagnostic(
+      { category: "error", code: DiagnosticCode.CannotFindName, message: "no b", start: 7, end: 8 },
+      source,
+    );
+    expect(text).toContain("a.ts:1:4 - error TS3002: no b");
+    expect(text).toContain("a中文b");
+    expect(text).toContain("\n   ^");
   });
 
   it("widens the caret to cover the diagnostic range", () => {

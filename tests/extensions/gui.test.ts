@@ -7,6 +7,7 @@ import { loadScriptAsset } from "../../src/extensions/gui/three.js";
 import { guiExtension } from "../../src/extensions/gui/index.js";
 import { DiagnosticBag } from "../../src/diagnostics/diagnostic.js";
 import { SourceFile } from "../../src/diagnostics/source.js";
+import { sourceTextBytes } from "../../src/diagnostics/source-text.js";
 import { Parser } from "../../src/parser/parser.js";
 import { hashString } from "../../src/driver/cache.js";
 
@@ -31,7 +32,7 @@ afterEach(() => {
 /** Parse a generated module and return its diagnostics. */
 function parseDiagnostics(source: string): number {
   const bag = new DiagnosticBag();
-  new Parser(new SourceFile("generated.ts", source), bag).parseSourceFile();
+  new Parser(new SourceFile("generated.ts", sourceTextBytes(source)), bag).parseSourceFile();
   return bag.diagnostics.filter((diagnostic) => diagnostic.category === "error").length;
 }
 

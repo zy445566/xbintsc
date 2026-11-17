@@ -34,13 +34,36 @@ export const realRunner: Runner = {
     };
     if (options.env) spawnOptions.env = Object.assign({}, process.env, options.env);
     const result = spawnSync(command, [...args], spawnOptions);
-    return {
-      status: result.status ?? (result.error ? 1 : 0),
-      stdout: result.stdout?.toString() ?? "",
-      stderr: result.stderr?.toString() ?? (result.error ? String(result.error.message) : ""),
-    };
+    const stdout = result.stdout?.toString() ?? "";
+    const baseStderr = result.stderr?.toString() ?? "";
+    /* `status === null` is never success: the child either failed to start
+     * (`error`) or was terminated by a signal. Treating the signal case as 0
+     * made a killed clang look like a successful compile and let `build`
+     * record a missing/truncated artifact. */
+    if (result.error) {
+      const detail = result.error.message;
+      return {
+        status: result.status ?? 1,
+        stdout,
+        stderr: appendLine(baseStderr, detail),
+      };
+    }
+    if (result.status === null) {
+      return {
+        status: 1,
+        stdout,
+        stderr: appendLine(baseStderr, `terminated by signal ${result.signal ?? "unknown"}`),
+      };
+    }
+    return { status: result.status, stdout, stderr: baseStderr };
   },
 };
+
+/** Append `line` to `text` without losing an existing final newline. */
+function appendLine(text: string, line: string): string {
+  if (text.length === 0) return line;
+  return text.endsWith("\n") ? `${text}${line}` : `${text}\n${line}`;
+}
 
 export class ToolchainError extends Error {
   readonly command: string;

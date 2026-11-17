@@ -133,6 +133,18 @@ show(s.indexOf("😀"));
     expectSameOutputAsNode(source, { name: "utf16_lazy_boundary" });
   });
 
+  it("keeps Latin-1-range literals as UTF-8", () => {
+    // `é` is one UTF-16 code unit but two UTF-8 bytes; a file with no character
+    // above 0xFF must still emit C3 A9, not the raw E9 code unit.
+    expectSameOutputAsNode('console.log("café", "naïve", "Grüße");', { name: "latin1_literals" });
+    expect(
+      runProgram('import { word } from "./word";\nconsole.log(word);', {
+        name: "latin1_module",
+        files: { "word.ts": 'export const word = "café";' },
+      }),
+    ).toBe("café");
+  });
+
   it("prints a lone surrogate as the replacement character", () => {
     expect(runProgram('console.log("😀"[0], "中".length);', { name: "utf16_console" })).toBe("� 1");
   });

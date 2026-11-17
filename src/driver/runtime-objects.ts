@@ -18,6 +18,7 @@ import { COMPILER_VERSION } from "./version.js";
 /** Core runtime translation units (each compiled and cached independently). */
 export const RUNTIME_SOURCES = [
   "xt_alloc.c",
+  "xt_gc_stack.c",
   "xt_values.c",
   "xt_bigint.c",
   "xt_containers.c",

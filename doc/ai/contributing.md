@@ -139,11 +139,14 @@ mean the same thing in every generation. A compiled string stores UTF-8 bytes
 but indexes them in UTF-16 code units, so the self-hosted `readFileSync`
 (`--ext node`) hands the scanner a byte string (one byte per code unit, all
 `<= 0xFF`), while Node hands it the same file already decoded — read source
-files through `sourceTextBytes` ([src/diagnostics/source-text.ts](../../src/diagnostics/source-text.ts))
-and never assume a code unit is a byte or a character. Getting this wrong shows
-up as a non-ASCII literal (`—` in a hint string) coming out re-encoded in
-`gen2.ll`, which is why the emitted IR is compared byte-for-byte rather than
-line-by-line.
+files through `readSourceText` ([src/diagnostics/source-text.ts](../../src/diagnostics/source-text.ts)),
+which keeps the file's bytes, and pass only host-decoded text (a
+`compileString` argument, a test fixture) to `sourceTextBytes`. Never assume a
+code unit is a byte or a character: a Latin-1-range character such as `é` is
+one code unit either way, so a "looks like text" heuristic silently emits the
+raw byte. Getting this wrong shows up as a non-ASCII literal (`—` in a hint
+string) coming out re-encoded in `gen2.ll`, which is why the emitted IR is
+compared byte-for-byte rather than line-by-line.
 
 Verify locally:
 

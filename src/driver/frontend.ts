@@ -7,11 +7,10 @@
  * `run` and `build`.
  */
 
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { DiagnosticBag } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
-import { sourceTextBytes } from "../diagnostics/source-text.js";
+import { readSourceText, sourceTextBytes } from "../diagnostics/source-text.js";
 import { Parser } from "../parser/parser.js";
 import { generate } from "../codegen/llvm.js";
 import { SyntaxKind, type SourceFileNode } from "../ast/nodes.js";
@@ -63,7 +62,7 @@ export function parseEntry(
   moduleOverrides?: Readonly<Record<string, string>>,
 ): ParsedEntry {
   const absoluteEntry = resolve(entryPath);
-  const sourceText = sourceTextBytes(readFileSync(absoluteEntry, "utf8"));
+  const sourceText = readSourceText(absoluteEntry);
   const file = new SourceFile(absoluteEntry, sourceText);
   const parser = new Parser(file, diagnostics);
   let sourceFile = parser.parseSourceFile();
@@ -92,7 +91,7 @@ export function compileString(
   extensions?: ExtensionRegistry,
   options: FrontendOptions = {},
 ): CompileStringResult {
-  const file = new SourceFile(fileName, source);
+  const file = new SourceFile(fileName, sourceTextBytes(source));
   const diagnostics = new DiagnosticBag();
   const parser = new Parser(file, diagnostics);
   const sourceFile = parser.parseSourceFile();

@@ -31,6 +31,22 @@ describeE2E("end-to-end module bundling", (harness) => {
     expect(runProgram(source)).toBe("5 3.14\nhi ada");
   });
 
+  it("does not re-export default through export *", () => {
+    const source = `
+      import mine from "./barrel_star";
+      console.log(mine);
+    `;
+    expect(
+      runProgram(source, {
+        name: "export_star_default",
+        files: {
+          "dep_star.ts": 'export default "dep";\nexport const named = 1;',
+          "barrel_star.ts": 'export default "mine";\nexport * from "./dep_star";',
+        },
+      }),
+    ).toBe("mine");
+  });
+
   it("resolves `.js` specifiers to their TypeScript sources", () => {
     writeFileSync(join(harness.workdir, "esm_dep.ts"), `export const value = 42;`);
     const source = `

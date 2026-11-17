@@ -64,6 +64,8 @@ export function resolveReexports(
           }
         } else if (!clause) {
           for (const [name, value] of dependency.exports) {
+            // `export *` re-exports named exports only, never `default`.
+            if (name === "default") continue;
             if (record.exports.get(name) !== value) {
               record.exports.set(name, value);
               changed = true;

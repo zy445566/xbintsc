@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SourceFile, combineHashes, hashText } from "../../src/diagnostics/source.js";
+import { sourceTextBytes } from "../../src/diagnostics/source-text.js";
 
 describe("SourceFile", () => {
   it("normalizes a leading BOM and CRLF/CR line endings", () => {
@@ -27,6 +28,24 @@ describe("SourceFile", () => {
     const source = new SourceFile("a.ts", "abc");
     expect(source.positionAt(-5)).toEqual({ line: 1, column: 1 });
     expect(source.positionAt(100)).toEqual({ line: 1, column: 4 });
+  });
+
+  it("maps byte offsets to UTF-16 columns for non-ASCII lines", () => {
+    // Offsets are bytes: `中` and `文` are three bytes but one UTF-16 unit each.
+    const source = new SourceFile("a.ts", sourceTextBytes("a中文b"));
+    expect(source.positionAt(0)).toEqual({ line: 1, column: 1 });
+    expect(source.positionAt(1)).toEqual({ line: 1, column: 2 });
+    expect(source.positionAt(7)).toEqual({ line: 1, column: 4 });
+    expect(source.positionAt(8)).toEqual({ line: 1, column: 5 });
+  });
+
+  it("returns the display text of each line", () => {
+    const source = new SourceFile("a.ts", sourceTextBytes("第一行\ncafé\nthird"));
+    expect(source.lineText(1)).toBe("第一行");
+    expect(source.lineText(2)).toBe("café");
+    expect(source.lineText(3)).toBe("third");
+    expect(source.lineText(0)).toBe("");
+    expect(source.lineText(9)).toBe("");
   });
 
   it("slices the raw text of a range", () => {

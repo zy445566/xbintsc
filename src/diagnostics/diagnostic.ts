@@ -120,7 +120,7 @@ export function formatDiagnostic(d: Diagnostic, source?: SourceFile): string {
   if (source && d.start !== undefined) {
     const { line, column } = source.positionAt(d.start);
     location = `${source.fileName}:${line}:${column}`;
-    const lineText = source.text.split("\n")[line - 1] ?? "";
+    const lineText = source.lineText(line);
     const end = d.end ?? d.start;
     const endCol = source.positionAt(end).column;
 

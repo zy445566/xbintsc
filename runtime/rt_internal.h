@@ -228,11 +228,11 @@ void xt_gc_register_root_provider(void (*provider)(void));
  * region the caller records where its stack was suspended, so every active
  * region is scanned and suspended callers stay reachable. */
 void xt_gc_push_stack(uintptr_t low, uintptr_t high);
-/* Mark the currently-executing region as suspended at `sp` (its frames above
- * `sp` stay live while a deeper generator region runs). */
+void xt_gc_init_main_stack(uintptr_t high);
 void xt_gc_suspend(uintptr_t sp);
 void xt_gc_pop_stack(void);
-
+size_t xt_gc_stack_region_count(void);
+void xt_gc_stack_region_bounds(size_t index, uintptr_t current, uintptr_t *low, uintptr_t *high);
 /* Marking primitives used by root providers and per-kind trace hooks. */
 void xt_gc_mark_value(xt_value value);
 void xt_gc_mark_header(xt_header *header);

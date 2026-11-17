@@ -13,11 +13,11 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { formatDiagnostic, type Diagnostic } from "../diagnostics/diagnostic.js";
 import { SourceFile } from "../diagnostics/source.js";
+import { readSourceText } from "../diagnostics/source-text.js";
 import { build, compileEntry, COMPILER_VERSION, type EmitKind, type PhaseTiming } from "../driver/compiler.js";
 import { findRuntimeDir, platformSlug } from "../driver/paths.js";
 import { supportFloor } from "../driver/platform-support.js";
@@ -149,7 +149,7 @@ function printDiagnostics(diagnostics: readonly Diagnostic[], fileName: string, 
   const sourceFor = (name: string): SourceFile | undefined => {
     if (!sources.has(name)) {
       try {
-        sources.set(name, new SourceFile(name, readFileSync(name, "utf8")));
+        sources.set(name, new SourceFile(name, readSourceText(name)));
       } catch {
         sources.set(name, undefined);
       }
@@ -558,7 +558,18 @@ function dispatch(argv: readonly string[], io: CliIo): number {
       return 1;
     }
     const executed = spawnSync(result.outputPath, args.passthrough, { stdio: "inherit" });
-    return executed.status ?? 0;
+    /* `status === null` means the program never ran or was killed by a signal;
+     * reporting 0 there would hide a crash from CI. */
+    if (executed.error) {
+      io.stderr(`xbintsc: failed to run ${result.outputPath}: ${executed.error.message}\n`);
+      return 1;
+    }
+    if (executed.status !== null) return executed.status;
+    if (executed.signal) {
+      io.stderr(`xbintsc: ${result.outputPath} terminated by signal ${executed.signal}\n`);
+      return 1;
+    }
+    return 1;
   }
 
   io.stderr(`xbintsc: unknown command '${command}'\n\n${HELP}`);

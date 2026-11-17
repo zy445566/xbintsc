@@ -378,6 +378,16 @@ describe("cli", () => {
     });
   });
 
+  it("reports UTF-16 columns when the source contains non-ASCII text", () => {
+    const entry = writeProgram('const s: string = "中文中文";\nconst n: number = "hello";\n');
+    const { io, err } = capture();
+    expect(run(["check", entry], io)).toBe(1);
+    const text = err.join("");
+    // `"hello"` starts at UTF-16 column 19; a byte column would report 27.
+    expect(text).toContain("program.ts:2:19 - error TS4001");
+    expect(text).toContain("\n                  ^^^^^^^");
+  });
+
   it("reports a missing icon file", () => {
     const entry = writeProgram();
     const { io, err } = capture();

@@ -11,6 +11,7 @@ import {
   MINIMUM_CLANG_MAJOR,
   parseClangVersion,
   probeClang,
+  realRunner,
   ToolchainError,
   visualStudioLlvmDirs,
   type CommandResult,
@@ -34,6 +35,14 @@ function recordingRunner(status = 0): { runner: Runner; calls: Recorded[] } {
 }
 
 describe("toolchain", () => {
+  it.skipIf(process.platform === "win32")("reports a signal-killed child as a failure", () => {
+    // `spawnSync` returns status null (not 0) for a child killed by a signal;
+    // treating that as success made a killed clang look like a clean compile.
+    const result = realRunner.run(process.execPath, ["-e", "process.kill(process.pid, 'SIGKILL')"]);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("terminated by signal");
+  });
+
   it("parses clang version strings from the common spellings", () => {
     expect(parseClangVersion("clang version 19.1.5 (https://github.com/llvm/llvm-project.git)")).toEqual({
       major: 19,

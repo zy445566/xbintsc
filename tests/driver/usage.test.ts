@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Parser } from "../../src/parser/parser.js";
 import { SourceFile } from "../../src/diagnostics/source.js";
+import { sourceTextBytes } from "../../src/diagnostics/source-text.js";
 import { DiagnosticBag } from "../../src/diagnostics/diagnostic.js";
 import { collectUsage } from "../../src/driver/usage.js";
 import type { ProgramUsage } from "../../src/extensions/link-feature.js";
@@ -8,7 +9,7 @@ import type { ProgramUsage } from "../../src/extensions/link-feature.js";
 /** Parse `source` and collect its usage facts. */
 function usage(source: string): ProgramUsage {
   const bag = new DiagnosticBag();
-  const file = new SourceFile("usage.ts", source);
+  const file = new SourceFile("usage.ts", sourceTextBytes(source));
   const ast = new Parser(file, bag).parseSourceFile();
   expect(bag.diagnostics.filter((diagnostic) => diagnostic.category === "error")).toEqual([]);
   return collectUsage(ast);

@@ -182,10 +182,20 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   const storage = resolveStorage(options.storage);
 
   const runtimeDir = findRuntimeDir();
+  /* The toolchain is part of the cache key, so it has to be resolved before
+   * the freshness check. `emit: "ir"` is front-end only and must keep working
+   * without clang, so it is the one build that does not resolve one. */
+  const toolchain: Pick<ResolvedToolchain, "clang" | "linkerArgs" | "env" | "sdkRoot"> | undefined =
+    emit === "ir"
+      ? undefined
+      : options.clang
+        ? { clang: options.clang, linkerArgs: [], env: {} }
+        : resolveToolchain(runner);
   const cacheKey = buildCacheKey({
     sourceText: parsed.cacheText,
     emit,
     optimize,
+    arch: process.arch,
     registry,
     runtimeDir,
     icon,
@@ -197,6 +207,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     pgo,
     pgoDir,
     features: linkFeatures.map((feature) => feature.name),
+    ...(toolchain === undefined ? {} : { toolchain }),
   });
 
   // A `.app` bundle is deterministic from the output path and name, so it can be
@@ -255,10 +266,10 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
   }
 
   // -- toolchain -----------------------------------------------------------
+  if (toolchain === undefined) {
+    throw new Error("xbintsc: internal error: no toolchain resolved for a linked build");
+  }
   const clangStarted = Date.now();
-  const toolchain: Pick<ResolvedToolchain, "clang" | "linkerArgs" | "env" | "sdkRoot"> = options.clang
-    ? { clang: options.clang, linkerArgs: [], env: {} }
-    : resolveToolchain(runner);
   const clang = toolchain.clang;
   if (pgo === "use") {
     try {

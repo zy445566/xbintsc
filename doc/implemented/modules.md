@@ -38,8 +38,10 @@ Location: `src/parser/parser.ts` (syntax), `src/driver/modules.ts` (bundling),
   `import("…")` calls the same wrapper at the import site. Both evaluate the
   module once (`__xt_defer` memoises by module id) and both see identical
   wrapper semantics — hoisted functions, `export * as` bindings and cycles
-  behave the same in either. The `gui` extension binds `__xt_defer` to the
-  engine's registry; a program without it uses the core runtime's.
+  behave the same in either. Both calls end up in the same runtime helper
+  (`xt_defer_module`, the bundler emits it as a bare global call), so the only
+  difference is *who* triggers the evaluation; the engine decides the moment for
+  a script, the program for `import("…")`.
 - The wrapper body is synchronous: top-level `await` inside a deferred script
   module is not supported.
 - Function declarations and the bindings of simple top-level `const`/`let`/`var`

@@ -174,6 +174,36 @@ describe("codegen unary operators", () => {
   });
 });
 
+describe("extension global values", () => {
+  /* `{ symbol, member }` declares a global that is a *member of a host object*
+   * (the browser window), so a bare `innerWidth` stays a live read. */
+  const registry = () =>
+    createDefaultRegistry().register({
+      name: "fake-browser",
+      globalValues: () => ({
+        innerWidth: { symbol: "xt_browser_window", member: "innerWidth" },
+        addEventListener: { symbol: "xt_browser_window", member: "addEventListener" },
+      }),
+    });
+
+  function irWithGlobals(source: string): string {
+    const { ir, diagnostics } = compileToIr(source, registry());
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+    return ir;
+  }
+
+  it("reads a window member as a live property, not a constant", () => {
+    const ir = irWithGlobals("console.log(innerWidth);");
+    expect(ir).toContain("call i64 @xt_browser_window(i32 0, i64* null)");
+    expect(ir).toContain("call i64 @xt_get(i64");
+  });
+
+  it("calls a window member method through the host object", () => {
+    const ir = irWithGlobals('addEventListener("resize", () => {});');
+    expect(ir).toContain("call i64 @xt_call_method(i64");
+  });
+});
+
 describe("unsupported semantics", () => {
   it("marks async generator functions with the combined runtime flag", () => {
     const ir = irOf("async function* g() { yield 1; }");

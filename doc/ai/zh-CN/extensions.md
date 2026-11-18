@@ -123,7 +123,12 @@ import { createWindow, run } from "gui";
 `getComputedStyle`、`alert`/`prompt`、`escape`、`Event` 家族，以及可用的 Web Audio
 实现（`AudioContext` 提供 gain、oscillator、buffer-source、biquad、compressor、
 stereo-panner、constant-source 与 delay 节点、真实的 48 kHz 混音器、逐采样的
-AudioParam 自动化，`decodeAudioData` 引擎内解码 WAV，压缩格式则通过 `media` 特性）—— 另外还有帧泵：
+AudioParam 自动化，`decodeAudioData` 引擎内解码 WAV，压缩格式则通过 `media` 特性）。
+浏览器的全局作用域其实就是 window，所以裸的 window 成员同样可用：`innerWidth`/`innerHeight`、
+`devicePixelRatio`、`location`、`screen`、`scrollX`/`scrollY`、`addEventListener`/`dispatchEvent`、
+`setTimeout` 等 —— 每一项都是从 window 实时读取（见
+[../../zh-CN/gui/api.md](../../zh-CN/gui/api.md)）。内联 `<script>` 默认是 JavaScript
+（除非写 `lang="ts"`），因此塞进页面的压缩 bundle 不做类型检查。另外还有帧泵：
 它在 `loadHTML` 时启动，仅在仍有动画帧回调时重新排程，因此从不调用 `run()` 的页面
 也能绘制并最终退出。**WebGL 1.0 与 2.0 已实现**：`canvas.getContext("webgl")` /
 `"webgl2"` 返回 GPU 上下文，其 GLSL ES 着色器由内置 glslang 编译为 SPIR-V

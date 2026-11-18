@@ -9,12 +9,14 @@
  */
 
 import { primaryExpressionMethods, type PrimaryExpressionMethods } from "./expressions/primary.js";
+import { globalValueMethods, type GlobalValueMethods } from "./expressions/global-values.js";
 import { moduleValueExpressionMethods, type ModuleValueExpressionMethods } from "./expressions/module-values.js";
 import { operatorExpressionMethods, type OperatorExpressionMethods } from "./expressions/operators.js";
 import { assignmentExpressionMethods, type AssignmentExpressionMethods } from "./expressions/assignment.js";
 
 export interface ExpressionMethods
   extends PrimaryExpressionMethods,
+    GlobalValueMethods,
     ModuleValueExpressionMethods,
     OperatorExpressionMethods,
     AssignmentExpressionMethods {}
@@ -22,6 +24,7 @@ export interface ExpressionMethods
 export const expressionMethods: ExpressionMethods = Object.assign(
   {},
   primaryExpressionMethods,
+  globalValueMethods,
   moduleValueExpressionMethods,
   operatorExpressionMethods,
   assignmentExpressionMethods,

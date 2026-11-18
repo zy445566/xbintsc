@@ -57,7 +57,7 @@ JS”的含义。
 | 1 | **没有页面 JS 引擎。** 行为由原生 TS 实现。`<script>` 主体由 xbintsc *AOT 编译*为原生代码，并通过 `xt_call_with_this` 调用——仍然没有解释器。 |
 | 8 | **脚本是编译期资产。** HTML 资产加载器把内联 `<script>` 主体转换为已编译模块，并替换为 `data-xt-id` 标记；运行时只*调用*已编译的函数。 |
 | 9 | **DOM 由引擎拥有；句柄是引擎对象。** 句柄使用与窗口句柄相同的共享原型对象模型；隐藏字段携带窗口引用、文档代（generation）与节点索引。 |
-| 10 | **`window`/`document` 作为参数注入**，而非全局变量，因此不会向编译器添加全局对象机制。 |
+| 10 | **`window`/`document` 作为参数注入**，而非全局变量，因此不会向编译器添加全局对象机制。浏览器里同样以裸全局形式存在的 *window 成员*（`innerWidth`、`location`、`addEventListener`、`screen` 等）由扩展声明为「window 值的成员读取」：`innerWidth` 会降低为 `xt_get(window, "innerWidth")`，因此始终是实时值。 |
 | 11 | **`<script>` 默认是 JavaScript，除非写了 `lang="ts"`。** 这既是浏览器规则，也让压缩后的 bundle（以及任何纯 JS 页面）不进入类型检查器 —— 检查器的推断只对标注过类型的代码成立。名字解析与重复声明仍会检查，因为生成代码需要它们。 |
 
 ## 架构

@@ -139,7 +139,23 @@ export const invocationCallMethods: InvocationCallMethods = {
         this.emit(`  ${result} = call i64 @${globalFunction}(i32 ${args.argc}, i64* ${args.ptr})`);
         return result;
       }
+      /* A browser global that is really a window method (`addEventListener`):
+       * dispatch through the host object so `this` is the window. The builtin
+       * table is consulted first — a host that needs to do extra work for a
+       * global callable (`requestAnimationFrame` also arms the frame pump)
+       * declares a builtin, and that must win over the plain member call. */
+      const windowMember = !symbol ? this.globalValues[identifier.text] : undefined;
       const builtin = this.builtins[(callee as Identifier).text];
+      if (windowMember?.member !== undefined && !builtin) {
+        const host = this.emitGlobalValue({ symbol: windowMember.symbol });
+        const name = this.stringValue(windowMember.member);
+        const args = this.emitArguments(node.arguments);
+        const result = this.reg();
+        this.emit(
+          `  ${result} = call i64 @xt_call_method(i64 ${host}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`,
+        );
+        return result;
+      }
       if (!symbol && builtin) {
         this.extraDeclarations.add(
           builtin.returnVoid ? `declare void @${builtin.symbol}(i32, i64*)` : `declare i64 @${builtin.symbol}(i32, i64*)`,

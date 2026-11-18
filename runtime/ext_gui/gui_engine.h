@@ -302,6 +302,8 @@ void xt_gui_render_window(XtGuiWindow *win);
 void xt_gui_run_animation_frames(XtGuiWindow *win, double timestamp_ms);
 /** Current logical window size (CSS viewport), in pixels. */
 void xt_gui_window_viewport(XtGuiWindow *win, float *width, float *height);
+/** The `screen` object (display size and usable bounds), built once. */
+xt_value xt_gui_screen_object(xt_value windowHandle);
 /** Scroll the page to `(x, y)` (clamped to the content bounds), repaint and
  * notify live `matchMedia` lists. */
 void xt_gui_scroll_to(XtGuiWindow *win, float x, float y);

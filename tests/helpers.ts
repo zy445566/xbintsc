@@ -48,6 +48,7 @@ export function compileToIr(
   const { ir, binding } = generate(file, diagnostics, {
     builtins: registry.builtins(),
     modules: registry.modules(),
+    globalValues: registry.globalValues(),
     check: options.check !== false,
     ...(target ? { target } : {}),
     debug: options.debug === true,

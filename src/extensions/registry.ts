@@ -38,6 +38,20 @@ export interface GlobalValue {
   readonly symbol: string;
   /** Passed as the only argument; omit to call the getter with none. */
   readonly argument?: string;
+  /**
+   * Read (and call) this global as a *member of the object `symbol` returns*
+   * instead of as the getter's own result.
+   *
+   * Browsers put `innerWidth`, `location` or `addEventListener` in the global
+   * scope because the global object *is* the window; xbintsc's globals are
+   * compiler-provided names with no global object behind them. Declaring
+   * `{ symbol: "xt_browser_window", member: "innerWidth" }` gives the name the
+   * browser semantics with the host object the extension already exposes: a
+   * read lowers to `xt_get(window, "innerWidth")` (getters run with the window
+   * as `this`, so the value is live rather than snapshotted at startup) and a
+   * call lowers to `xt_call_method(window, "addEventListener", …)`.
+   */
+  readonly member?: string;
 }
 
 /**

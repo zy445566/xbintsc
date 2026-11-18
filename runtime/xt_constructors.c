@@ -487,6 +487,7 @@ xt_value xt_builtin_prototype_for_kind(int32_t kind) {
     case XT_OBJECT_KIND_REGEXP: name = "RegExp"; break;
     case XT_OBJECT_KIND_PROMISE: name = "Promise"; break;
     case XT_OBJECT_KIND_SYMBOL: name = "Symbol"; break;
+    case XT_OBJECT_KIND_ARRAY_BUFFER: name = "ArrayBuffer"; break;
     default: return XT_UNDEFINED;
   }
   xt_value constructor = xt_builtin_constructor(xt_string_from_cstr(name));

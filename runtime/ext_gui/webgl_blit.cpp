@@ -1,11 +1,14 @@
 /*
  * xbintsc GUI engine — `blitFramebuffer`.
  *
- * SDL_GPU's blit copies a colour texture region to another colour texture, so
- * the colour bit maps directly. Depth/stencil blits are not supported by the
+ * SDL_GPU's blit copies a single-sampled colour texture region to another
+ * single-sampled colour texture, so the colour bit maps directly. A
+ * multisampled source is first resolved into an internal single-sampled
+ * texture (the drawing buffer is already resolved, so the default framebuffer
+ * needs no extra pass); a multisampled *destination* is an error, as
+ * OpenGL ES 3.0 requires. Depth/stencil blits are not supported by the
  * backend; those bits are ignored (the call is still accepted, like a driver
- * that cannot expand the blit). Sources must be single-sampled, which is what
- * this engine allocates today.
+ * that cannot expand the blit).
  */
 
 #include "webgl.h"
@@ -25,6 +28,16 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
   end_pass();
   ensure_command();
   if (cmd_ == nullptr) return false;
+
+  const int source_samples = framebuffer_samples(read_framebuffer_);
+  const int destination_samples = framebuffer_samples(bound_framebuffer_);
+  if (destination_samples > 1) {
+    /* ES 3.0 §4.3.2: an INVALID_OPERATION is generated when the draw
+     * framebuffer is multisampled, so a page renders into its own resolve
+     * target instead of the antialiased canvas. */
+    set_error(GL_INVALID_OPERATION);
+    return false;
+  }
   if (depth_bit) {
     /* SDL_GPU's blit API is colour-only; the depth copy is a sampling pass that
      * writes `gl_FragDepth`. Stencil bits have no sampleable representation and
@@ -34,21 +47,40 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
     ensure_command();
   }
   if (!color_bit) return true;
-  SDL_GPUTexture *source_texture = framebuffer_color(read_framebuffer_);
-  SDL_GPUTexture *destination_texture = framebuffer_color(bound_framebuffer_);
+
+  int source_width = 0;
+  int source_height = 0;
+  int source_format = 0;
+  int destination_width = 0;
+  int destination_height = 0;
+  int destination_format = 0;
+  int destination_samples_unused = 1;
+  SDL_GPUTexture *source_texture = read_color_texture(read_framebuffer_, &source_width,
+                                                      &source_height, &source_format);
+  SDL_GPUTexture *destination_texture =
+      color_attachment(bound_framebuffer_, 0, &destination_format, &destination_samples_unused,
+                       &destination_width, &destination_height);
   if (source_texture == nullptr || destination_texture == nullptr ||
       source_texture == destination_texture) {
     return false;
   }
-  int source_width = 0;
-  int source_height = 0;
-  int destination_width = 0;
-  int destination_height = 0;
-  framebuffer_size(read_framebuffer_, &source_width, &source_height);
-  framebuffer_size(bound_framebuffer_, &destination_width, &destination_height);
   if (source_width <= 0 || source_height <= 0 || destination_width <= 0 ||
       destination_height <= 0) {
     return false;
+  }
+  if (source_samples > 1) {
+    /* Resolving is only defined for identical rectangles and identical colour
+     * formats; with a different rectangle or format the ES 3.0 spec raises
+     * INVALID_OPERATION instead of filtering the samples. */
+    if (source[0] != destination[0] || source[1] != destination[1] ||
+        source[2] != destination[2] || source[3] != destination[3]) {
+      set_error(GL_INVALID_OPERATION);
+      return false;
+    }
+    if (source_format != destination_format || filter != GL_NEAREST) {
+      set_error(GL_INVALID_OPERATION);
+      return false;
+    }
   }
   int sx0 = source[0];
   int sy0 = source[1];

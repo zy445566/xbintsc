@@ -75,8 +75,7 @@ METHOD(webgl_check_framebuffer_status) {
   if (context == nullptr) return xt_number(GL_FRAMEBUFFER_COMPLETE);
   const uint32_t framebuffer = context->bound_framebuffer_id();
   if (framebuffer == 0) return xt_number(GL_FRAMEBUFFER_COMPLETE);
-  return xt_number(context->framebuffer_status(framebuffer) ? GL_FRAMEBUFFER_COMPLETE
-                                                            : GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT);
+  return xt_number(context->framebuffer_status(framebuffer));
 }
 
 METHOD(webgl_create_renderbuffer) {
@@ -111,8 +110,22 @@ METHOD(webgl_renderbuffer_storage) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
-    context->renderbuffer_storage(context->bound_renderbuffer_id(), webgl_int(argc, argv, 3, 0),
-                                  webgl_int(argc, argv, 4, 0), false);
+    /* renderbufferStorage(target, internalformat, width, height) */
+    context->renderbuffer_storage(context->bound_renderbuffer_id(),
+                                  webgl_int(argc, argv, 2, 0), webgl_int(argc, argv, 3, 0),
+                                  webgl_int(argc, argv, 1, GL_RGBA8), 1);
+  }
+  return XT_UNDEFINED;
+}
+
+METHOD(webgl_renderbuffer_storage_multisample) {
+  (void)env;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    context->renderbuffer_storage(context->bound_renderbuffer_id(),
+                                  webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0),
+                                  webgl_int(argc, argv, 2, GL_RGBA8),
+                                  webgl_int(argc, argv, 1, 0));
   }
   return XT_UNDEFINED;
 }
@@ -122,7 +135,7 @@ METHOD(webgl_framebuffer_renderbuffer) {
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
     context->framebuffer_renderbuffer(
-        context->bound_framebuffer_id(),
+        context->bound_framebuffer_id(), webgl_int(argc, argv, 1, GL_COLOR_ATTACHMENT0),
         webgl_object_id(xt_arg(argc, argv, 3), "__xt_gl_renderbuffer"));
   }
   return XT_UNDEFINED;
@@ -137,6 +150,29 @@ METHOD(webgl_get_renderbuffer_parameter) {
   const int pname = webgl_int(argc, argv, 1, 0);
   if (pname == GL_RENDERBUFFER_WIDTH) return xt_number(renderbuffer->width);
   if (pname == GL_RENDERBUFFER_HEIGHT) return xt_number(renderbuffer->height);
+  if (pname == GL_RENDERBUFFER_INTERNAL_FORMAT) return xt_number(renderbuffer->internalformat);
+  if (pname == GL_RENDERBUFFER_SAMPLES) {
+    /* A single-sampled renderbuffer reports 0 samples, like a browser. */
+    return xt_number(renderbuffer->samples > 1 ? renderbuffer->samples : 0);
+  }
+  if (renderbuffer->depth) {
+    if (pname == GL_RENDERBUFFER_DEPTH_SIZE) {
+      return xt_number(renderbuffer->internalformat == GL_DEPTH_COMPONENT16 ? 16 : 24);
+    }
+    if (pname == GL_RENDERBUFFER_STENCIL_SIZE) {
+      return xt_number(renderbuffer->internalformat == GL_STENCIL_INDEX8 ||
+                               renderbuffer->internalformat == GL_DEPTH_STENCIL ||
+                               renderbuffer->internalformat == GL_DEPTH24_STENCIL8 ||
+                               renderbuffer->internalformat == GL_DEPTH32F_STENCIL8
+                           ? 8
+                           : 0);
+    }
+    return xt_number(0);
+  }
+  if (pname == GL_RENDERBUFFER_RED_SIZE || pname == GL_RENDERBUFFER_GREEN_SIZE ||
+      pname == GL_RENDERBUFFER_BLUE_SIZE || pname == GL_RENDERBUFFER_ALPHA_SIZE) {
+    return xt_number(8);
+  }
   return xt_number(0);
 }
 

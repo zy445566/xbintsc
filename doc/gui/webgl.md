@@ -34,7 +34,9 @@ reports the type as well.
 - Each context owns one offscreen `R8G8B8A8_UNORM` colour texture (the drawing
   buffer) and a `D32_FLOAT` depth texture, sized from the canvas's `width` /
   `height` attributes. `canvas.width = …` recreates them and discards the
-  contents, like the DOM rule.
+  contents, like the DOM rule. With MSAA the draws go into a 4× colour texture
+  and every render pass resolves it into the colour texture the page composites
+  (see [Multisample antialiasing](#multisample-antialiasing-msaa)).
 - The context records into its own SDL_GPU command buffer. `clear`/`draw*`
   keep a render pass open; only a buffer/texture upload or a framebuffer
   change ends it and starts a new pass with `LOAD`, so the drawing buffer
@@ -61,6 +63,45 @@ reports the type as well.
   grew without bound. `tests/e2e/gui-webgl-pipeline-cache.test.ts` pins the
   steady state: two draws with the same layout and different buffers create no
   pipeline after the first frame.
+
+## Multisample antialiasing (MSAA)
+
+`getContext("webgl2")` — and `getContext("webgl")` — honour the `antialias`
+context-creation attribute, which defaults to `true` like WebGL's. On a
+supported backend the drawing buffer is **4× multisampled**:
+
+- `getContextAttributes().antialias` reports `true`, `getParameter(SAMPLES)`
+  reports `4`, `SAMPLE_BUFFERS` reports `1` and `MAX_SAMPLES` reports `4` for the
+  default framebuffer. `getContext("webgl2", { antialias: false })` keeps the
+  single-sampled path (`SAMPLES`/`SAMPLE_BUFFERS` report `0`).
+- Draws render into a multisampled colour texture with a matching 4× depth
+  texture. Every `end` of a render pass resolves the colour target into the
+  single-sampled texture the page composites, so the compositor, `readPixels` and
+  `blitFramebuffer` all see the resolved image without an extra call.
+- A scissored `clear` draws a textured quad into the multisampled target
+  (`SDL_BlitGPUTexture` cannot target one); the quad's edges fall on pixel
+  boundaries, so every pixel inside the scissor rectangle gets full coverage.
+- `renderbufferStorageMultisample(target, samples, internalformat, width,
+  height)` allocates a 4× colour or depth(-stencil) renderbuffer;
+  `texStorage2DMultisample`/`texImage2DMultisample` do the same for a texture.
+  Attaching one to a framebuffer makes it a render target, and
+  `checkFramebufferStatus` reports `FRAMEBUFFER_INCOMPLETE_MULTISAMPLE` when the
+  attached colour and depth buffers disagree on the sample count.
+- `blitFramebuffer` resolves a multisampled source into a single-sampled
+  destination when the source and destination rectangles and colour formats are
+  identical and the filter is `NEAREST` — the ES 3.0 resolve rules. Blitting into
+  a multisampled draw framebuffer is `INVALID_OPERATION`, and `readPixels` from a
+  multisampled user framebuffer is `INVALID_OPERATION` too (resolve it first).
+
+SDL_GPU's Metal resolve returns undefined pixels with scissor tests and
+instanced draws, so **Metal keeps the single-sampled path**: `antialias` reports
+`false`, `MAX_SAMPLES` is `0`, and `renderbufferStorageMultisample` /
+`texStorage2DMultisample` degrade to single-sampled storage
+(`RENDERBUFFER_SAMPLES` reports `0`) so a page that still asks for MSAA keeps a
+working attachment. Vulkan (Windows/Linux) enables MSAA. Depth and stencil
+attachments cannot be resolved through SDL_GPU, so a multisampled depth blit is
+accepted and leaves the destination depth untouched (stencil bits were already
+unsupported).
 
 ## Shaders: GLSL ES to SPIR-V (and on to MSL)
 
@@ -198,11 +239,12 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   (`FRAMEBUFFER`/`READ_FRAMEBUFFER`/`DRAW_FRAMEBUFFER`),
   `framebufferTexture2D` (`COLOR_ATTACHMENT0`, `DEPTH_ATTACHMENT`,
   `DEPTH_STENCIL_ATTACHMENT`), `checkFramebufferStatus`, `createRenderbuffer`,
-  `bindRenderbuffer`, `renderbufferStorage` (depth or depth-stencil),
-  `framebufferRenderbuffer`, `delete*`, and `blitFramebuffer` (colour through
-  SDL's blit; depth through a sampling pass that writes `gl_FragDepth`; stencil
-  bits are accepted but not copied). This is enough for render-to-texture,
-  shadow maps and post-processing passes.
+  `bindRenderbuffer`, `renderbufferStorage` (colour, depth or depth-stencil),
+  `renderbufferStorageMultisample`, `framebufferRenderbuffer`, `delete*`, and
+  `blitFramebuffer` (colour through SDL's blit, or a resolve for a multisampled
+  source; depth through a sampling pass that writes `gl_FragDepth`; stencil bits
+  are accepted but not copied). This is enough for render-to-texture,
+  multisampled render targets, shadow maps and post-processing passes.
 - **State**: `enable`/`disable`/`isEnabled` for `BLEND`, `DEPTH_TEST`,
   `CULL_FACE`, `SCISSOR_TEST` and `STENCIL_TEST`,
   `clearColor`/`clearDepth`/`clearStencil`, `clear` (with `SCISSOR_TEST` it
@@ -218,8 +260,10 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   pair that differs uses the front value.
 - **Readback**: `readPixels` (RGBA/UNSIGNED_BYTE) from the default framebuffer
   or a bound RGBA8 framebuffer; a float/depth attachment is sampled into an
-  RGBA8 target first. It blocks until the GPU finishes; use it for tests and
-  screenshots, not per frame.
+  RGBA8 target first, and the default framebuffer's multisampled colour target
+  is resolved into the readable texture automatically. Reading a multisampled
+  user framebuffer directly is `INVALID_OPERATION`. It blocks until the GPU
+  finishes; use it for tests and screenshots, not per frame.
 
 WebGL 2 adds:
 
@@ -272,11 +316,12 @@ backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
 ## Not implemented
 
 Transform feedback (the entry points are no-ops: SDL_GPU has no transform
-feedback stage) and MSAA/sample buffers (SDL_GPU 3.2 can resolve multisampled
-colour targets, but its Metal resolve returns undefined pixels with scissor
-tests and instanced draws, so contexts stay single-sampled and `SAMPLE_BUFFERS`
-reports 0). `blitFramebuffer` copies colour and depth; stencil bits are accepted
-but not copied because SDL_GPU cannot sample a stencil attachment.
+feedback stage) and multisampled *depth/stencil* resolves (SDL_GPU can resolve
+colour targets only, so a multisample depth blit leaves the destination depth
+untouched). `blitFramebuffer` copies colour and depth; stencil bits are accepted
+but not copied because SDL_GPU cannot sample a stencil attachment. Shaders
+cannot sample a multisampled texture (`sampler2DMS`): reading one requires a
+resolve through `blitFramebuffer`.
 
 Shader limitations that remain: struct-typed uniforms and user uniform blocks
 are flattened, but built-in interface blocks (`gl_PerVertex` redeclarations) are
@@ -331,6 +376,11 @@ SPIRV-Cross, nor any `webgl_*` member (see [Link features](./build.md#link-featu
   colour attachments and reads each back.
 - `tests/e2e/gui-webgl2-ubo.test.ts` binds a std140 block, updates its members
   and verifies the drawn colour.
+- `tests/e2e/gui-webgl2-msaa.test.ts` checks the antialiased default drawing
+  buffer (a partially covered edge pixel resolves to a blend), resolves a
+  multisampled renderbuffer and `texStorage2DMultisample` texture through
+  `blitFramebuffer`, reports `FRAMEBUFFER_INCOMPLETE_MULTISAMPLE` for mismatched
+  attachments and rejects `readPixels` from a multisampled framebuffer.
 - `examples/gui/webgl-cube` is a spinning, lit, textured cube; it runs in a
   browser unchanged and is covered by
   `tests/e2e/gui-example-webgl.test.ts`.
@@ -358,9 +408,10 @@ Canvas2D fallback is bundled any more**. Verified with three.js r160 through SDL
 `Sprite`, `Line`, `Points` and `InstancedMesh`.
 
 Features outside this engine's subset still cannot be emulated: transform
-feedback and MSAA. Depth textures, float render targets and compressed textures
-are available, and comparative `sampler2DShadow` sampling is translated, so
-three.js shadow maps can use the hardware depth compare on both backends (see
-[known issues](./known-issues.md) for an Intel-Mac driver caveat). A
-scene that needs transform feedback or MSAA will not render correctly;
-everything the previous Canvas2D fallback could show now goes through the GPU.
+feedback and multisampled depth resolves. Depth textures, float render targets
+and compressed textures are available, MSAA colour resolves run on Vulkan, and
+comparative `sampler2DShadow` sampling is translated, so three.js shadow maps can
+use the hardware depth compare on both backends (see
+[known issues](./known-issues.md) for an Intel-Mac driver caveat). A scene that
+needs transform feedback will not render correctly; everything the previous
+Canvas2D fallback could show now goes through the GPU.

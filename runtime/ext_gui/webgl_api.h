@@ -18,8 +18,9 @@
 struct XtGuiWindow;
 
 struct XtWebglApi {
-  /** Create/find the context of a canvas; `node` is a `xtgui::Node*`. */
-  void *(*get)(XtGuiWindow *win, const void *node, bool webgl2);
+  /** Create/find the context of a canvas; `node` is a `xtgui::Node*`.
+   * `antialias` is the context-creation attribute (WebGL defaults it to true). */
+  void *(*get)(XtGuiWindow *win, const void *node, bool webgl2, bool antialias);
   /** The existing context of a canvas, or null (no side effects). */
   void *(*find)(XtGuiWindow *win, const void *node);
   /** Drop a canvas's context (called when its handle is forgotten). */

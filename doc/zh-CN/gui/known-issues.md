@@ -12,16 +12,25 @@
   后端直接消费，Metal 上再由内置 SPIRV-Cross 交叉编译为 MSL——绘图缓冲
   是一张离屏颜色纹理，页面直接合成而无须读回。WebGL 2 增加了 VAO、实例化、
   整数属性、采样器对象、`texStorage2D`、缓冲拷贝、Uniform 块、立方体/3D/数组
-  纹理、浮点/深度/压缩纹理、多渲染目标与 scissor 清除。`blitFramebuffer` 复制
-  颜色与深度；transform feedback、MSAA 与模板 blit 尚未实现（SDL_GPU 没有
-  transform feedback 阶段，其 Metal 多采样 resolve 不可靠，模板附件也无法采样）。
-  因此上下文上没有 `renderbufferStorageMultisample`：用 `typeof` 或 `try` 探测的
-  页面会走自己的非多重采样分支。
-  在两种格式都不接受的 SDL_GPU 后端（Direct3D 12，需要 DXIL）上两种上下文都为
-  `null`。`.js` 资源加载器现在只修补 three.js 的着色器循环展开；
+  纹理、浮点/深度/压缩纹理、多渲染目标、scissor 清除，以及 Vulkan 上的 4×
+  多重采样抗锯齿。`blitFramebuffer` 复制颜色与深度，并解析多重采样颜色源；
+  transform feedback、模板 blit 与多重采样深度 blit 尚未实现（SDL_GPU 没有
+  transform feedback 阶段、无法解析深度，也无法采样模板附件）。
+  在两种着色器格式都不接受的 SDL_GPU 后端（Direct3D 12，需要 DXIL）上两种
+  上下文都为 `null`。`.js` 资源加载器现在只修补 three.js 的着色器循环展开；
   `WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。阴影贴图
   （比较型 `sampler2DShadow` 采样深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标
   均已支持。
+- **MSAA 只在 Vulkan 上启用，并且改变了哪些 blit 合法。**
+  `antialias` 属性默认开启；Vulkan 上下文得到 4× 绘图缓冲，每个渲染 pass
+  结束时解析到页面合成的颜色纹理，因此 `getParameter(SAMPLES)` 为 4，部分覆盖的
+  边缘像素会是混合色。SDL_GPU 的 Metal resolve 在 scissor 与实例化绘制下会返回
+  未定义像素，因此 macOS 保持单采样路径（`antialias` 为 false、`MAX_SAMPLES` 为 0，
+  多重采样存储请求会降级为单采样的 renderbuffer/纹理且 `SAMPLES` 为 0）。与浏览器一致，
+  blit 到抗锯齿的默认帧缓冲是 `INVALID_OPERATION`：页面若要自己把离屏目标解析到
+  canvas，应传入 `getContext("webgl2", { antialias: false })`。多重采样颜色源只有在
+  源/目标矩形完全相同、格式相同且过滤为 `NEAREST` 时才能解析；多重采样深度附件可以
+  渲染（深度测试按样本工作），但无法通过 SDL_GPU 解析。
 - **部分 Intel Mac 上比较型采样器会被错误编译。** 在 Intel GPU（在 Intel Iris
   Plus Graphics + macOS 26 上观察到）上，Metal 着色器编译器会丢弃调用
   `sample_compare` 的片元函数：绘制不产生任何像素，于是

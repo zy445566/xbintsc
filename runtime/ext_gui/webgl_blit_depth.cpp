@@ -51,6 +51,13 @@ bool WebGLContext::blit_depth(uint32_t source_framebuffer, uint32_t destination_
                               const int source[4], const int destination[4]) {
   if (guidev::g_device == nullptr) return false;
   if (source_framebuffer == destination_framebuffer) return false;
+  /* SDL_GPU has no depth resolve: a multisampled source or destination cannot
+   * be copied through a sampling pass. The call is accepted and the depth bits
+   * are left untouched, like the stencil bits below. */
+  if (framebuffer_samples(source_framebuffer) > 1 ||
+      framebuffer_samples(destination_framebuffer) > 1) {
+    return false;
+  }
   /* A renderbuffer depth attachment is never created with SAMPLER usage. */
   if (source_framebuffer != 0) {
     WebGLFramebuffer *framebuffer = this->framebuffer(source_framebuffer);
@@ -175,13 +182,14 @@ bool WebGLContext::blit_depth(uint32_t source_framebuffer, uint32_t destination_
   }
   if (state_.color_target_count == 0) state_.color_target_count = 1;
   state_.depth_format = target_depth_format();
+  state_.sample_count = target_samples();
   current_program_ = blit_program_;
 
   std::string key = "blit-depth/";
   for (int i = 0; i < state_.color_target_count; i++) {
     key += std::to_string(state_.color_formats[i]) + ",";
   }
-  key += std::to_string(state_.depth_format);
+  key += std::to_string(state_.depth_format) + "/" + std::to_string(state_.sample_count);
   SDL_GPUVertexAttribute attribute;
   memset(&attribute, 0, sizeof(attribute));
   attribute.location = 0;

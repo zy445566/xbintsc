@@ -476,11 +476,13 @@ METHOD(webgl_get_context_attributes) {
   (void)env;
   (void)argc;
   (void)argv;
+  xtgui::WebGLContext *context = webgl_from_context(self);
   xt_value attributes = xt_object_new();
   xt_object_set(attributes, xt_string_from_cstr("alpha"), XT_TRUE);
   xt_object_set(attributes, xt_string_from_cstr("depth"), XT_TRUE);
   xt_object_set(attributes, xt_string_from_cstr("stencil"), XT_TRUE);
-  xt_object_set(attributes, xt_string_from_cstr("antialias"), XT_FALSE);
+  xt_object_set(attributes, xt_string_from_cstr("antialias"),
+                context != nullptr && context->antialias() ? XT_TRUE : XT_FALSE);
   xt_object_set(attributes, xt_string_from_cstr("premultipliedAlpha"), XT_TRUE);
   xt_object_set(attributes, xt_string_from_cstr("preserveDrawingBuffer"), XT_TRUE);
   xt_object_set(attributes, xt_string_from_cstr("desynchronized"), XT_FALSE);

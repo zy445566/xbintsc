@@ -98,6 +98,9 @@ const MethodEntry kMethods[] = {
     {"readBuffer", (void *)webgl2_read_buffer},
     {"blitFramebuffer", (void *)webgl2_blit_framebuffer},
     {"framebufferTextureLayer", (void *)webgl2_framebuffer_texture_layer},
+    {"renderbufferStorageMultisample", (void *)webgl_renderbuffer_storage_multisample},
+    {"texStorage2DMultisample", (void *)webgl2_tex_storage_2d_multisample},
+    {"texImage2DMultisample", (void *)webgl2_tex_image_2d_multisample},
     {"invalidateFramebuffer", (void *)webgl2_invalidate_framebuffer},
     {"invalidateSubFramebuffer", (void *)webgl2_invalidate_sub_framebuffer},
     {"getInternalformatParameter", (void *)webgl2_get_internalformat_parameter},
@@ -430,6 +433,7 @@ METHOD(webgl2_tex_storage_2d) {
   return XT_UNDEFINED;
 }
 
+
 METHOD(webgl2_tex_storage_3d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
@@ -564,12 +568,6 @@ METHOD(webgl2_read_buffer) {
 
 /* -- misc ---------------------------------------------------------------- */
 
-METHOD(webgl2_get_internalformat_parameter) {
-  (void)env;
-  (void)argc;
-  (void)argv;
-  return xt_array_new(0, nullptr);
-}
 
 METHOD(webgl2_get_frag_data_location) {
   (void)env;

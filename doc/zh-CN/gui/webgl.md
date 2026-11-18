@@ -20,7 +20,7 @@ if (gl == null) {
 
 ## 一帧如何到达屏幕
 
-- 每个上下文拥有一张离屏 `R8G8B8A8_UNORM` 颜色纹理（绘图缓冲）和一张 `D32_FLOAT` 深度纹理，尺寸取自 canvas 的 `width` / `height` 属性。`canvas.width = …` 会重建它们并丢弃内容，与 DOM 规则一致。
+- 每个上下文拥有一张离屏 `R8G8B8A8_UNORM` 颜色纹理（绘图缓冲）和一张 `D32_FLOAT` 深度纹理，尺寸取自 canvas 的 `width` / `height` 属性。`canvas.width = …` 会重建它们并丢弃内容，与 DOM 规则一致。启用 MSAA 时绘制进入 4× 颜色纹理，每个渲染 pass 结束都会解析到页面合成的颜色纹理（见 [多重采样抗锯齿（MSAA）](#多重采样抗锯齿msaa)）。
 - 上下文记录到自己的 SDL_GPU 命令缓冲。`clear`/`draw*` 保持一个渲染 pass 打开；只有缓冲区/纹理上传或切换 framebuffer 才会结束它，并以 `LOAD` 开始新 pass，因此绘图缓冲在多次绘制之间保留，和 WebGL 一样；没有上传的绘制不会中断 pass。
 - 每帧一次，在页面自己的渲染 pass 之前，引擎提交所有 WebGL 命令缓冲。随后图像管线把颜色纹理当作普通 `PaintImage` 采样，没有 CPU 拷贝。
 - WebGL 原点在左下，SDL_GPU 渲染目标原点在左上，因此帧缓冲按自上而下存储：转换 `viewport`/`scissor`，`readPixels` 再把行翻回去，合成器看到的是正立的纹理。
@@ -40,6 +40,18 @@ if (gl == null) {
 （2,000 次绘制只开一个 pass、稳定状态不再创建管线、4 MiB 缓冲只重传 64 KiB 区间）。
 剩余的每次 draw 开销来自后端自身的提交；大量相同对象仍应由应用改用
 `drawElementsInstanced`。
+
+## 多重采样抗锯齿（MSAA）
+
+`getContext("webgl2")`（以及 `getContext("webgl")`）会遵循 `antialias` 上下文创建属性，其默认值与 WebGL 一样为 `true`。在后端支持时，绘图缓冲是 **4× 多重采样** 的：
+
+- `getContextAttributes().antialias` 报告 `true`，默认帧缓冲的 `getParameter(SAMPLES)` 为 `4`、`SAMPLE_BUFFERS` 为 `1`、`MAX_SAMPLES` 为 `4`。`getContext("webgl2", { antialias: false })` 保持单采样路径（`SAMPLES`/`SAMPLE_BUFFERS` 报告 `0`）。
+- 绘制写入多重采样颜色纹理，并配有同样 4× 的深度纹理。每个渲染 pass 结束时都会把颜色目标解析到页面合成的单采样纹理，因此合成器、`readPixels` 与 `blitFramebuffer` 看到的都是已解析的图像，无需额外调用。
+- 带 scissor 的 `clear` 用一个纹理四边形绘制进多重采样目标（`SDL_BlitGPUTexture` 不能以它为目的地）；四边形边缘落在像素边界上，所以 scissor 矩形内的每个像素都获得完整覆盖。
+- `renderbufferStorageMultisample(target, samples, internalformat, width, height)` 分配 4× 颜色或深度（模板）renderbuffer；`texStorage2DMultisample` / `texImage2DMultisample` 对纹理做同样的事。把它们挂到 framebuffer 上就成为渲染目标；当颜色附件与深度附件的采样数不一致时，`checkFramebufferStatus` 返回 `FRAMEBUFFER_INCOMPLETE_MULTISAMPLE`。
+- 当源与目标矩形、颜色格式都相同且过滤为 `NEAREST` 时，`blitFramebuffer` 会把多重采样源解析到单采样目标——即 ES 3.0 的解析规则。blit 到多重采样的 draw framebuffer 是 `INVALID_OPERATION`；从用户的多重采样 framebuffer `readPixels` 同样是 `INVALID_OPERATION`（需先解析）。
+
+SDL_GPU 的 Metal resolve 在 scissor 与实例化绘制下会返回未定义像素，因此 **Metal 保持单采样路径**：`antialias` 报告 `false`，`MAX_SAMPLES` 为 `0`，`renderbufferStorageMultisample` / `texStorage2DMultisample` 会降级为单采样存储（`RENDERBUFFER_SAMPLES` 报告 `0`），仍请求 MSAA 的页面不会丢失附件。Vulkan（Windows/Linux）启用 MSAA。深度/模板附件无法通过 SDL_GPU 解析，因此多重采样的深度 blit 会被接受但不改动目标深度（模板位本来就不支持）。
 
 ## 着色器：GLSL ES 到 SPIR-V（再到 MSL）
 
@@ -88,9 +100,9 @@ SDL_GPU 不能在运行时编译 GLSL，且每个后端只消费自己的格式�
 - **缓冲与顶点属性**：`createBuffer`、`bindBuffer`、`bufferData`、`bufferSubData`、`deleteBuffer`、`getBufferParameter`、`enableVertexAttribArray`、`disableVertexAttribArray`、`vertexAttribPointer`、`vertexAttrib1f`…`4f` / `1fv`…`4fv`、`getVertexAttrib`。`bufferData` 的 `usage` 提示（`STREAM_DRAW`/`STATIC_DRAW`/`DYNAMIC_DRAW`）会被记录，`getBufferParameter(…, BUFFER_USAGE)` 可读回。
 - **绘制**：`drawArrays`、`drawElements`（UNSIGNED_BYTE、UNSIGNED_SHORT、UNSIGNED_INT；`TRIANGLE_FAN` 与 `LINE_LOOP` 会展开为列表）。`POINTS`、`LINES`、`LINE_STRIP`、`TRIANGLES`、`TRIANGLE_STRIP` 映射到对应的 SDL 图元。
 - **纹理**：`createTexture`、`bindTexture`、`activeTexture`、`texParameteri`/`texParameterf`、`getTexParameter`、`texImage2D`（原始像素、`<img>`、`<canvas>`、`ImageData`）、`texSubImage2D`、`generateMipmap`、`deleteTexture`。支持 `UNPACK_FLIP_Y_WEBGL` 与 `UNPACK_PREMULTIPLY_ALPHA_WEBGL`。默认转换为 RGBA8；`RGBA`/`RGB`/`LUMINANCE`/`ALPHA`/`LUMINANCE_ALPHA` 配 `UNSIGNED_BYTE` 可用。浮点纹理（`RGBA32F`、`RGBA16F`、`RGB32F`、`RGB16F`、`RG32F`/`RG16F`、`R32F`/`R16F`，`FLOAT` 或 `HALF_FLOAT` 数据，以及 WebGL 1 的 `OES_texture_float`/`OES_texture_half_float`）映射到 SDL 的 RGBA32F/RGBA16F；深度纹理（`DEPTH_COMPONENT16/24/32F`、`DEPTH_STENCIL`、`DEPTH24_STENCIL8`）映射到 `D32_FLOAT`/`D32_FLOAT_S8_UINT`，可作为采样源或深度附件。压缩纹理通过 `compressedTexImage2D`/`compressedTexSubImage2D` 上传，支持 `WEBGL_compressed_texture_s3tc`（BC1/BC2/BC3）、`WEBGL_compressed_texture_s3tc_srgb` 与 `WEBGL_compressed_texture_astc`；扩展只在设备确实支持对应格式时公布。`texImage2D` 还接受 `<video>` 的最新解码帧与 `createImageBitmap` 产生的 `ImageBitmap`。立方体贴图（`bindTexture(TEXTURE_CUBE_MAP)` + 六个 `texImage2D` 面）与 3D/数组纹理（`texImage3D`/`texStorage3D`）可用对应采样器（`samplerCube`、`sampler3D`、`sampler2DArray`）采样；`texSubImage3D` 可更新 3D/数组纹理的子区域，`framebufferTextureLayer` 可把数组/立方体贴图的指定层作为颜色附件渲染。
-- **Framebuffer**：`createFramebuffer`、`bindFramebuffer`（`FRAMEBUFFER`/`READ_FRAMEBUFFER`/`DRAW_FRAMEBUFFER`）、`framebufferTexture2D`（`COLOR_ATTACHMENT0`、`DEPTH_ATTACHMENT`、`DEPTH_STENCIL_ATTACHMENT`）、`checkFramebufferStatus`、`createRenderbuffer`、`bindRenderbuffer`、`renderbufferStorage`（深度/深度模板）、`framebufferRenderbuffer`、`delete*`，以及 `blitFramebuffer`（颜色走 SDL blit；深度走一个写 `gl_FragDepth` 的采样 pass；模板位被接受但不复制）。足以实现渲染到纹理、阴影贴图与后处理。
+- **Framebuffer**：`createFramebuffer`、`bindFramebuffer`（`FRAMEBUFFER`/`READ_FRAMEBUFFER`/`DRAW_FRAMEBUFFER`）、`framebufferTexture2D`（`COLOR_ATTACHMENT0`、`DEPTH_ATTACHMENT`、`DEPTH_STENCIL_ATTACHMENT`）、`checkFramebufferStatus`、`createRenderbuffer`、`bindRenderbuffer`、`renderbufferStorage`（颜色、深度或深度模板）、`renderbufferStorageMultisample`、`framebufferRenderbuffer`、`delete*`，以及 `blitFramebuffer`（颜色走 SDL blit，多重采样源则先解析；深度走一个写 `gl_FragDepth` 的采样 pass；模板位被接受但不复制）。足以实现渲染到纹理、多重采样渲染目标、阴影贴图与后处理。
 - **状态**：`enable`/`disable`/`isEnabled`（`BLEND`、`DEPTH_TEST`、`CULL_FACE`、`SCISSOR_TEST`、`STENCIL_TEST`）、`clearColor`/`clearDepth`/`clearStencil`、`clear`（开启 `SCISSOR_TEST` 时颜色、深度与模板都只清除 scissor 矩形）、`blendColor`、`blendFunc`/`blendFuncSeparate`、`blendEquation`/`blendEquationSeparate`、`depthFunc`、`depthMask`、`colorMask`、`stencilFunc`/`stencilFuncSeparate`、`stencilOp`/`stencilOpSeparate`、`stencilMask`/`stencilMaskSeparate`、`cullFace`、`frontFace`、`viewport`、`scissor`、`pixelStorei`、`finish`。模板测试真正参与光栅化，`clear(STENCIL_BUFFER_BIT)` 会清空模板附件；SDL_GPU 只有一份前后脸共用的 reference 与 compare/write mask，若前后脸设置不同，使用前脸值。
-- **读回**：`readPixels`（RGBA/UNSIGNED_BYTE），可从默认帧缓冲或绑定的 RGBA8 framebuffer 读取；浮点/深度附件先采样到 RGBA8 目标再读回。它会阻塞到 GPU 完成；用于测试和截图，不要每帧调用。
+- **读回**：`readPixels`（RGBA/UNSIGNED_BYTE），可从默认帧缓冲或绑定的 RGBA8 framebuffer 读取；浮点/深度附件先采样到 RGBA8 目标再读回，默认帧缓冲的多重采样颜色目标会自动解析到可读纹理。直接从用户的多重采样 framebuffer 读取会得到 `INVALID_OPERATION`。它会阻塞到 GPU 完成；用于测试和截图，不要每帧调用。
 
 WebGL 2 额外提供：
 
@@ -110,7 +122,7 @@ WebGL 2 额外提供：
 
 ## 未实现
 
-transform feedback（入口为空操作：SDL_GPU 没有 transform feedback 阶段）与 MSAA/采样缓冲（SDL_GPU 3.2 能解析多采样颜色目标，但其 Metal resolve 在 scissor 与实例化绘制下会返回未定义像素，因此上下文保持单采样，`SAMPLE_BUFFERS` 报告 0）。`blitFramebuffer` 复制颜色与深度；模板位被接受但不复制，因为 SDL_GPU 无法采样模板附件。
+transform feedback（入口为空操作：SDL_GPU 没有 transform feedback 阶段）与多重采样的**深度/模板**解析（SDL_GPU 只能解析颜色目标，因此多重采样深度 blit 不会改动目标深度）。`blitFramebuffer` 复制颜色与深度；模板位被接受但不复制，因为 SDL_GPU 无法采样模板附件。着色器不能采样多重采样纹理（`sampler2DMS`）：读取它需要先通过 `blitFramebuffer` 解析。
 
 仍存在的着色器限制：结构体 uniform 与用户 uniform 块会被展平，但内建接口块（如重声明 `gl_PerVertex`）不在翻译子集内；使用它的着色器仍会以编译/链接日志失败，而不是静默出错。
 
@@ -130,6 +142,7 @@ transform feedback（入口为空操作：SDL_GPU 没有 transform feedback 阶�
 - `tests/e2e/gui-webgl2-3d.test.ts` 覆盖 2D 数组纹理与 3D 纹理的多层采样、`texSubImage3D` 子区域更新与 `framebufferTextureLayer` 渲染到数组层。
 - `tests/e2e/gui-webgl2-mrt.test.ts` 覆盖两个片元输出分别写入两个颜色附件。
 - `tests/e2e/gui-webgl2-ubo.test.ts` 覆盖 uniform 块的绑定、std140 成员与运行时更新。
+- `tests/e2e/gui-webgl2-msaa.test.ts` 覆盖抗锯齿的默认绘图缓冲（部分覆盖的边缘像素解析为混合色）、通过 `blitFramebuffer` 解析多重采样 renderbuffer 与 `texStorage2DMultisample` 纹理、采样数不一致时的 `FRAMEBUFFER_INCOMPLETE_MULTISAMPLE`，以及从多重采样 framebuffer 读取时的拒绝行为。
 - `tests/e2e/gui-media.test.ts` 还会把 `<video>` 的最新解码帧上传为纹理并读回像素。
 - `examples/gui/webgl-cube` 是一个旋转、受光、带纹理的立方体；它在浏览器中原样运行，并由 `tests/e2e/gui-example-webgl.test.ts` 覆盖。
 - `examples/gui/webgl2-cubes` 用一次绘制调用画出 64 个实例化立方体，使用 `#version 300 es` 与 VAO；由 `tests/e2e/gui-example-webgl2.test.ts` 覆盖。
@@ -141,4 +154,4 @@ transform feedback（入口为空操作：SDL_GPU 没有 transform feedback 阶�
 
 着色器改写器会把 three.js 的 `#pragma unroll_loop_start` 循环展开为常量索引（否则其采样器数组无法通过 Vulkan GLSL），`.js` 资源加载器则避免渲染器自带的展开器重复处理。`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
 
-本引擎子集之外的能力仍无法模拟：transform feedback 与 MSAA。立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标、压缩纹理与比较型 `sampler2DShadow` 采样都已可用（three.js 阴影贴图可在两个后端使用硬件深度比较，Intel Mac 上的驱动问题见[已知问题](./known-issues.md)）。需要 transform feedback 或 MSAA 的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。
+本引擎子集之外的能力仍无法模拟：transform feedback 与多重采样深度解析。立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标、压缩纹理、Vulkan 上的 MSAA 颜色解析与比较型 `sampler2DShadow` 采样都已可用（three.js 阴影贴图可在两个后端使用硬件深度比较，Intel Mac 上的驱动问题见[已知问题](./known-issues.md)）。需要 transform feedback 的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。

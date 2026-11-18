@@ -54,6 +54,8 @@ struct WebGLDrawState {
       SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM};
   int color_target_count = 1;
   int depth_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+  /** Samples per texel of the render targets; a pipeline bakes it in. */
+  int sample_count = 1;
 };
 
 /**

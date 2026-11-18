@@ -13,15 +13,31 @@
   colour texture that the page composites without a readback. WebGL 2 adds VAOs,
   instancing, integer attributes, sampler objects, `texStorage2D`, buffer copies,
   uniform blocks, cube/3D/array textures, float/depth/compressed textures,
-  multiple render targets and scissored clears. `blitFramebuffer` copies colour
-  and depth; transform feedback, MSAA and stencil blits are not implemented (so enderbufferStorageMultisample does not exist on the context: a page that probes for it with 	ypeof or a 	ry takes its non-multisampled path)
-  (SDL_GPU has no transform-feedback stage, its Metal multisample resolve is
-  unreliable, and a stencil attachment is not sampleable). On an SDL_GPU backend
-  that accepts neither SPIR-V nor MSL (Direct3D 12, which would need DXIL) both
+  multiple render targets, scissored clears and 4× multisample antialiasing on
+  Vulkan. `blitFramebuffer` copies colour and depth and resolves a multisampled
+  colour source; transform feedback and stencil or multisampled-depth blits are
+  not implemented (SDL_GPU has no transform-feedback stage, cannot resolve
+  depth, and cannot sample a stencil attachment). On an SDL_GPU backend that
+  accepts neither SPIR-V nor MSL (Direct3D 12, which would need DXIL) both
   context kinds are `null`. The `.js` asset loader now patches only three.js's
   shader unroller; `WebGLRenderer` runs on the real backend and there is no
   Canvas2D fallback. Shadow maps (comparative `sampler2DShadow` targeting depth
   textures), cube textures/environment maps and HDR render targets are supported.
+- **MSAA is Vulkan-only, and it changes what may be blitted where.** The
+  `antialias` attribute defaults to true; Vulkan contexts get a 4× drawing
+  buffer that resolves into the composited colour texture at the end of every
+  render pass, so `getParameter(SAMPLES)` is 4 and a partially covered edge
+  pixel is a blend. SDL_GPU's Metal resolve returns undefined pixels with
+  scissor tests and instanced draws, so macOS keeps the single-sampled path
+  (`antialias` false, `MAX_SAMPLES` 0, and multisample storage requests degrade
+  to single-sampled renderbuffers/textures with `SAMPLES` 0). As in a browser,
+  `blitFramebuffer` into the antialiased
+  default framebuffer is `INVALID_OPERATION`: request
+  `getContext("webgl2", { antialias: false })` when the page resolves its own
+  offscreen target to the canvas. A multisampled colour source resolves only
+  with identical source/destination rectangles, an identical format and
+  `NEAREST`; multisampled depth attachments render (depth testing works per
+  sample) but cannot be resolved through SDL_GPU.
 - **Comparative samplers can miscompile on Intel Macs.** On an Intel GPU (seen
   on Intel Iris Plus Graphics with macOS 26), the Metal shader compiler drops a
   fragment function that calls `sample_compare`: the draw produces no pixels at

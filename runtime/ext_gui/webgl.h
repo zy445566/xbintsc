@@ -89,13 +89,21 @@ struct WebGLProgram {
 
 class WebGLContext {
  public:
-  WebGLContext(uint64_t id, int width, int height, bool webgl2);
+  WebGLContext(uint64_t id, int width, int height, bool webgl2, bool antialias);
   ~WebGLContext();
 
   uint64_t id() const { return id_; }
   bool is_webgl2() const { return webgl2_; }
   int width() const { return width_; }
   int height() const { return height_; }
+  /** Whether the drawing buffer is multisampled (`antialias` and a backend
+   * whose resolve is reliable). */
+  bool antialias() const { return default_samples_ > 1; }
+  int default_samples() const { return default_samples_; }
+  /** Highest sample count this context can allocate (0 when unsupported). */
+  int max_samples() const { return multisample_supported_ ? kWebGLMaxSamples : 0; }
+  /** Sample count of the colour attachment a draw would render into. */
+  int target_samples();
   /** Resize the drawing buffer; GL semantics discard its contents. */
   void resize(int width, int height);
 
@@ -257,6 +265,10 @@ class WebGLContext {
   bool tex_storage_2d(uint32_t id, int levels, int width, int height);
   bool tex_storage_format(uint32_t id, int levels, int width, int height,
                           SDL_GPUTextureFormat format);
+  /** `texStorage2DMultisample` / `texImage2DMultisample`: a render-target-only
+   * texture with `samples` samples per texel. */
+  bool tex_storage_2d_multisample(uint32_t id, int samples, SDL_GPUTextureFormat format,
+                                  int width, int height);
   /** Allocate (and optionally upload) a 3D or 2D-array texture. */
   bool tex_storage_3d(uint32_t id, int levels, int width, int height, int depth,
                       SDL_GPUTextureFormat format, int target);
@@ -289,7 +301,8 @@ class WebGLContext {
                            int attachment = GL_COLOR_ATTACHMENT0);
   bool framebuffer_texture_layer(uint32_t framebuffer, uint32_t texture, int attachment,
                                  int layer);
-  bool framebuffer_status(uint32_t id);
+  /** The `checkFramebufferStatus` enum for `id` (COMPLETE, INCOMPLETE_*). */
+  int framebuffer_status(uint32_t id);
   /** WebGL 2 `drawBuffers` / `readBuffer`. */
   void draw_buffers(int count, const int *buffers);
   void read_buffer(int mode) { read_buffer_ = mode; }
@@ -298,8 +311,8 @@ class WebGLContext {
   uint32_t create_renderbuffer();
   void delete_renderbuffer(uint32_t id);
   void bind_renderbuffer(uint32_t id) { bound_renderbuffer_ = id; }
-  bool renderbuffer_storage(uint32_t id, int width, int height, bool stencil);
-  bool framebuffer_renderbuffer(uint32_t framebuffer, uint32_t renderbuffer);
+  bool renderbuffer_storage(uint32_t id, int width, int height, int internalformat, int samples);
+  bool framebuffer_renderbuffer(uint32_t framebuffer, int attachment, uint32_t renderbuffer);
 
   /* -- drawing ----------------------------------------------------------- */
   void draw_arrays(int mode, int first, int count);
@@ -347,6 +360,27 @@ class WebGLContext {
   SDL_GPUTexture *framebuffer_color(uint32_t id);
   SDL_GPUTexture *framebuffer_depth(uint32_t id);
   void framebuffer_size(uint32_t id, int *width, int *height);
+  /** Sample count of one draw-buffer slot's attachment (1 when none). */
+  int draw_color_samples(int slot);
+  /** Sample count of `id`'s colour attachment (the bound one for 0). */
+  int framebuffer_samples(uint32_t id);
+  /** Colour attachment `index` of `id`: its GPU texture, format, samples and
+   * size. Returns null when nothing is attached. */
+  SDL_GPUTexture *color_attachment(uint32_t id, int index, int *format, int *samples,
+                                   int *width, int *height);
+  /** The single-sampled texture holding the read buffer's current pixels:
+   * the resolved drawing buffer, a colour attachment, or a resolved copy. */
+  SDL_GPUTexture *read_color_texture(uint32_t id, int *width, int *height, int *format);
+  /** One scratch texture that receives a multisampled colour resolve. */
+  SDL_GPUTexture *ensure_resolve_target(int width, int height, SDL_GPUTextureFormat format);
+  /** Resolve `source` (multisampled) into `destination` (1×1-sampled) with a
+   * render pass that draws nothing and resolves on store. */
+  bool resolve_color_pass(SDL_GPUTexture *source, SDL_GPUTexture *destination);
+  /** Draw a textured quad from a single-sampled source into the bound target.
+   * Used for a scissored clear when the destination is multisampled and
+   * therefore cannot be the destination of `SDL_BlitGPUTexture`. */
+  bool draw_color_quad(SDL_GPUTexture *source, int source_width, int source_height,
+                       const int destination[4]);
   /** Release every GPU handle this context owns, keeping the CPU-side object
    * table. Used by the destructor and by `lose_context`. */
   void release_gpu_resources();
@@ -419,6 +453,18 @@ class WebGLContext {
 
   SDL_GPUTexture *color_ = nullptr;
   SDL_GPUTexture *depth_ = nullptr;
+  /** The multisampled colour target the default framebuffer draws into; every
+   * pass resolves it into `color_`, which the page composites. */
+  SDL_GPUTexture *color_msaa_ = nullptr;
+  /** Scratch resolve destination for a multisampled user framebuffer. */
+  SDL_GPUTexture *resolve_texture_ = nullptr;
+  int resolve_width_ = 0;
+  int resolve_height_ = 0;
+  SDL_GPUTextureFormat resolve_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  /** `antialias` context attribute actually granted; 1 when single-sampled. */
+  int default_samples_ = 1;
+  /** Whether SDL_GPU can allocate and reliably resolve multisampled targets. */
+  bool multisample_supported_ = false;
   SDL_GPUTexture *fallback_texture_ = nullptr;
   SDL_GPUSampler *fallback_sampler_ = nullptr;
   /** 1×1 RGBA8 source for a scissored colour clear. */
@@ -430,6 +476,8 @@ class WebGLContext {
   uint32_t blit_program_ = 0;
   uint32_t blit_buffer_ = 0;
   SDL_GPUSampler *blit_sampler_ = nullptr;
+  /** Internal program for a colour blit into a multisampled target. */
+  uint32_t blit_color_program_ = 0;
 
   float clear_color_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float clear_depth_ = 1.0f;
@@ -496,6 +544,14 @@ SDL_GPUTextureFormat webgl_storage_format(int internalformat);
 /** Map a WebGL compressed-texture internal format to its SDL_GPU format, or
  * `SDL_GPU_TEXTUREFORMAT_INVALID` for anything else. */
 SDL_GPUTextureFormat webgl_compressed_format(int internalformat);
+
+/** Map a WebGL sample count to the backend enum (`1` when unsupported). */
+inline SDL_GPUSampleCount webgl_sample_count(int samples) {
+  if (samples >= 8) return SDL_GPU_SAMPLECOUNT_8;
+  if (samples >= 4) return SDL_GPU_SAMPLECOUNT_4;
+  if (samples >= 2) return SDL_GPU_SAMPLECOUNT_2;
+  return SDL_GPU_SAMPLECOUNT_1;
+}
 
 }  // namespace xtgui
 

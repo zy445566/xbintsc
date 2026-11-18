@@ -190,6 +190,20 @@ not tracked because they switch stacks. A fatal native signal prints
 `xbintsc: fatal signal …` followed by the same frames, so a crash without a
 debugger still shows which JavaScript functions were running.
 
+### The program seems to hang
+
+A program that spins prints nothing, so there is no stack to read. Run it with
+`XT_STACK_WATCHDOG_MS=5000` and a sampler thread prints those same frames
+whenever no function has been entered or left for five seconds:
+
+```bash
+XT_STACK_WATCHDOG_MS=5000 ./build/app      # Windows: $env:XT_STACK_WATCHDOG_MS=5000; .\build\app.exe
+```
+
+The printed block names the file and line that is spinning (or says that no
+JavaScript frame is on the stack, which points at a blocking host call or the
+event loop instead). The thread is only started when the variable is set.
+
 ## Debugging with gdb / lldb / WinDbg
 
 `xbintsc build app.ts --debug` emits LLVM debug metadata and passes `-g

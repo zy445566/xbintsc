@@ -38,8 +38,39 @@ typedef struct {
 
 static xt_stack_entry g_stack[XT_STACK_MAX_DEPTH];
 static int32_t g_stack_depth = 0;
+/* Bumped on every push/pop so the hang watchdog (`watchdog.inc`) can tell a
+ * program that is working from one that is spinning without calling anything. */
+static volatile unsigned long long g_stack_ticks = 0;
+
+/* The module whose top-level code is running. Every module of a bundle shares
+ * one generated function, so a crash inside a module body would otherwise be
+ * reported at the entry file's offsets. Codegen emits one call per module
+ * boundary. */
+static const char *g_current_module = NULL;
+
+/* Defined in `watchdog.inc`, which is included after this file. */
+static void xt_stack_watchdog_start_once(void);
+
+/** Print the shadow stack, innermost frame first (used by the hang watchdog
+ * and by hosts that want the JavaScript frames on a fatal signal). */
+static void xt_stack_dump_frames(void) {
+  int32_t depth = g_stack_depth;
+  if (depth < 0) depth = 0;
+  if (depth > XT_STACK_MAX_DEPTH) depth = XT_STACK_MAX_DEPTH;
+  for (int32_t index = depth - 1; index >= 0; index--) {
+    const xt_stack_entry *entry = &g_stack[index];
+    fprintf(stderr, "    at %s (%s:%d)\n",
+            entry->name && entry->name[0] ? entry->name : "anonymous",
+            entry->file && entry->file[0] ? entry->file : "<anonymous>", entry->line);
+  }
+  if (depth == 0 && g_current_module != NULL) {
+    fprintf(stderr, "    (no JavaScript frame; module %s)\n", g_current_module);
+  }
+}
 
 void xt_stack_push(const char *name, const char *file, int32_t line) {
+  g_stack_ticks++;
+  xt_stack_watchdog_start_once();
   if (g_stack_depth >= XT_STACK_MAX_DEPTH) return;
   xt_stack_entry *entry = &g_stack[g_stack_depth++];
   entry->name = name;
@@ -48,6 +79,7 @@ void xt_stack_push(const char *name, const char *file, int32_t line) {
 }
 
 void xt_stack_pop(void) {
+  g_stack_ticks++;
   if (g_stack_depth > 0) g_stack_depth--;
 }
 
@@ -63,12 +95,6 @@ void xt_stack_trim(int32_t depth) {
   if (depth < 0) depth = 0;
   if (depth < g_stack_depth) g_stack_depth = depth;
 }
-
-/* The module whose top-level code is running. Every module of a bundle shares
- * one generated function, so a crash inside a module body would otherwise be
- * reported at the entry file's offsets. Codegen emits one call per module
- * boundary. */
-static const char *g_current_module = NULL;
 
 void xt_stack_set_module(const char *name) { g_current_module = name; }
 

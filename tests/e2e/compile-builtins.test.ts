@@ -292,4 +292,20 @@ describeE2E("end-to-end built-in library", (harness) => {
       ["Y", "Y", "a|X <common>", "a", "[common]", "b"].join("\n"),
     );
   });
+
+  it("exposes console as a first-class object, not only a namespace", () => {
+    const source = `
+      const c = console;
+      const { log } = console;
+      log("destructured");
+      c.log("read through a binding");
+      const bound = console.log.bind(console);
+      bound("bound");
+      console.log(typeof console.log, typeof console.error);
+    `;
+    expect(runProgram(source)).toBe(
+      ["destructured", "read through a binding", "bound", "function function"].join("\n"),
+    );
+  });
 });
+

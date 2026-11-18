@@ -129,3 +129,69 @@ xt_value xt_console_time_end(int32_t argc, xt_value *argv) {
   }
   return XT_UNDEFINED;
 }
+
+/* ------------------------------------------------------------------------- */
+/* The global `console` object                                               */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * `console` is a global *value* as well as a namespace: code writes
+ * `const log = console.log`, `console.error.bind(console)` and
+ * `const { warn } = console`, so the binding has to be a real object whose
+ * methods are ordinary first-class functions. The object is built once and
+ * rooted; each method is a closure over the raw `(argc, argv)` runtime symbol,
+ * so a method keeps its behaviour when detached from the object.
+ */
+
+typedef void (*xt_console_void_method)(int32_t, xt_value *);
+typedef xt_value (*xt_console_value_method)(int32_t, xt_value *);
+
+static xt_value xt_console_void_bridge(xt_value thisValue, xt_value env, int32_t argc,
+                                       xt_value *argv) {
+  (void)thisValue;
+  ((xt_console_void_method)(uintptr_t)xt_closure_env(env, 0))(argc, argv);
+  return XT_UNDEFINED;
+}
+
+static xt_value xt_console_value_bridge(xt_value thisValue, xt_value env, int32_t argc,
+                                        xt_value *argv) {
+  (void)thisValue;
+  return ((xt_console_value_method)(uintptr_t)xt_closure_env(env, 0))(argc, argv);
+}
+
+static void xt_console_add(xt_value object, const char *name, void *method, int returnsValue) {
+  xt_value env[1];
+  env[0] = (xt_value)(uintptr_t)method;
+  xt_value closure = xt_closure_new(
+      returnsValue ? (void *)xt_console_value_bridge : (void *)xt_console_void_bridge, 1, env);
+  xt_value key = xt_string_from_cstr(name);
+  xt_function_set_metadata(closure, key, returnsValue ? 1 : 0);
+  xt_object_set(object, key, closure);
+}
+
+xt_value xt_console_object(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  static xt_value cached = 0;
+  if (cached != 0) return cached;
+  xt_value object = xt_object_new();
+  xt_console_add(object, "log", (void *)xt_console_log, 0);
+  xt_console_add(object, "info", (void *)xt_console_info, 0);
+  xt_console_add(object, "warn", (void *)xt_console_warn, 0);
+  xt_console_add(object, "error", (void *)xt_console_error, 0);
+  xt_console_add(object, "debug", (void *)xt_console_log, 0);
+  xt_console_add(object, "dir", (void *)xt_console_dir, 1);
+  xt_console_add(object, "trace", (void *)xt_console_trace, 1);
+  xt_console_add(object, "assert", (void *)xt_console_assert, 1);
+  xt_console_add(object, "count", (void *)xt_console_count, 1);
+  xt_console_add(object, "countReset", (void *)xt_console_count_reset, 1);
+  xt_console_add(object, "group", (void *)xt_console_group, 1);
+  xt_console_add(object, "groupEnd", (void *)xt_console_group_end, 1);
+  xt_console_add(object, "table", (void *)xt_console_table, 1);
+  xt_console_add(object, "time", (void *)xt_console_time, 1);
+  xt_console_add(object, "timeEnd", (void *)xt_console_time_end, 1);
+  xt_console_add(object, "timeLog", (void *)xt_console_time_log, 1);
+  cached = object;
+  xt_gc_add_root(&cached);
+  return object;
+}

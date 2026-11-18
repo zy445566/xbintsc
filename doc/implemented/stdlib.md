@@ -112,6 +112,7 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 ## console
 
 - `xt_print` / `xt_println` / `xt_console_log` / `info` / `warn` / `error`; `info` / `log` go to stdout, `warn` / `error` to stderr.
+- `console` is a first-class object as well as a namespace: `const log = console.log`, `const { warn } = console`, `console.error.bind(console)` and `console.error = ...` all work, because reading `console` produces a cached object whose methods are ordinary functions (`xt_console_object`). Call sites stay direct (`console.log(...)` lowers to the runtime symbol), so the object costs nothing until a program uses it as a value.
 - Node-style inspection: arrays `[ a, b ]`, objects `{ k: v }`, UTF-8-aware, with circular references marked.
 - `dir` / `trace` / `assert` / `count` / `countReset` / `group` / `groupEnd` / `table` / `time` / `timeEnd` / `timeLog`.
 

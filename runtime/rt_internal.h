@@ -61,10 +61,14 @@
 #define XT_OBJECT_KIND_WEAK_MAP 17
 #define XT_OBJECT_KIND_WEAK_SET 18
 #define XT_OBJECT_KIND_WEAK_REF 19
+/* An ArrayBuffer: an ordinary object whose *bytes* live in a plain `uint8_t`
+ * block instead of boxed values. Typed arrays and DataViews index that block
+ * directly, which is the difference between a geometry loop running at memory
+ * speed and one paying a runtime call per byte. */
+#define XT_OBJECT_KIND_ARRAY_BUFFER 20
 
 /* Common header for every heap object. `flags` bit 0 is the collector's mark
- * bit; it is cleared on every surviving object at the end of a sweep. */
-typedef struct xt_header {
+ * bit; it is cleared on every surviving object at the end of a sweep. */typedef struct xt_header {
   uint8_t kind;
   uint8_t flags;
   uint16_t reserved;
@@ -73,6 +77,19 @@ typedef struct xt_header {
 } xt_header;
 
 #define XT_GC_MARK 0x01u
+
+/**
+ * Whether an allocation kind is an ordinary object with a property bag — the
+ * kinds the generic `xt_object_get`/`xt_set`/`keys`/inspect paths accept.
+ *
+ * An ArrayBuffer is one of them: it is an object that *also* owns a byte block,
+ * so its `byteLength`/`slice` stay ordinary properties and `Object.keys`
+ * behaves like it does for any other object.
+ */
+static inline int xt_kind_is_object(int kind) {
+  return kind == XT_OBJECT_KIND_OBJECT || kind == XT_OBJECT_KIND_ERROR ||
+         kind == XT_OBJECT_KIND_ARRAY_BUFFER;
+}
 
 /* A string is either *flat* (`flat` points at `capacity` bytes, the last one
  * NUL) or a *cons* node (`flat == NULL`, `left`/`right` name the operands).
@@ -103,61 +120,7 @@ typedef struct {
   uint32_t *limbs;
 } xt_bigint;
 
-typedef struct {
-  /* String or Symbol value (see `xt_to_property_key`). */
-  xt_value key;
-  xt_value value;
-  /* Accessor properties (`get x()` / `set x(v)`) store the functions here;
-   * when set, `value` is ignored and property access invokes the getter. */
-  xt_value getter;
-  xt_value setter;
-} xt_property;
-
-/* Hidden-class descriptor for ordinary objects. Shapes are interned by their
- * (parent, key) transition and never freed, so an object's shape pointer is a
- * stable layout identity. Shape keys are rooted by a collector provider in
- * xt_containers/shapes.inc. */
-typedef struct xt_shape {
-  xt_value key;
-  uint32_t count;
-  struct xt_shape *parent;
-  struct xt_shape *next;     /* hash-bucket chain */
-  struct xt_shape *all_next; /* every shape, for the GC root provider */
-} xt_shape;
-
-typedef struct {
-  xt_header header;
-  uint32_t count;
-  uint32_t capacity;
-  xt_property *properties;
-  xt_shape *shape;
-  xt_value prototype;
-  uint8_t frozen;
-  uint8_t is_array_base;
-  uint16_t reserved2;
-  /* Captured `Error.stack` for XT_OBJECT_KIND_ERROR, XT_UNDEFINED otherwise.
-   * Deliberately not a property: `Object.keys`, `for...in` and JSON.stringify
-   * must not see it, while `error.stack` returns it through `xt_get`. */
-  xt_value error_stack;
-  /* Optional dynamic-property view (host objects such as `element.style`); see
-   * `xt_object_hooks` in `rt.h`. NULL for ordinary objects. */
-  const xt_object_hooks *hooks;
-  void *hook_data;
-} xt_object;
-
-typedef struct {
-  xt_header header;
-  uint32_t length;
-  uint32_t capacity;
-  xt_value *items;
-  /* Named (non-index) properties such as `raw` on template strings or
-   * `index`/`input` on RegExp match results, stored in an `xt_object`. */
-  xt_value extra;
-  /* The array's [[Prototype]] (`Array.prototype` for ordinary arrays). Arrays
-   * are a distinct allocation kind, so this field is what lets
-   * `Object.getPrototypeOf([])` and `x instanceof <Array alias>` work. */
-  xt_value prototype;
-} xt_array;
+#include "rt_object.h"
 
 typedef struct {
   xt_header header;
@@ -592,9 +555,16 @@ const char *xt_typed_array_name_of(int kind);
 /* ArrayBuffer helpers (xt_array_buffer.c). */
 int xt_is_array_buffer(xt_value value);
 uint32_t xt_array_buffer_byte_length(xt_value value);
+/* The backing bytes, or NULL for a detached/zero-length/unrelated value.
+ * `byte_length` receives the buffer's length. Valid until the buffer is
+ * detached or resized — callers use it within one operation. */
+uint8_t *xt_array_buffer_bytes(xt_value buffer, uint32_t *byte_length);
 uint8_t xt_array_buffer_get_byte(xt_value buffer, uint32_t index);
 void xt_array_buffer_set_byte(xt_value buffer, uint32_t index, uint8_t value);
 xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv);
+/** The `ArrayBuffer.prototype.slice` method value `xt_get` serves. */
+xt_value xt_array_buffer_slice_value(void);
 #include "xt_web.h"
 #include "xt_async_io.h"
 #endif /* XT_RT_INTERNAL_H */
+

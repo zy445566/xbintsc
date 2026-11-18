@@ -302,7 +302,7 @@ xt_value xt_object_get(xt_value value, xt_value key) {
      layout. Containers such as Map/Set/Date/RegExp/Promise/Array must not be
      interpreted as property tables, or property lookup reads past the end of
      their real representation. */
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+  if (!xt_kind_is_object(obj->header.kind))
     return XT_UNDEFINED;
   xt_value k = xt_to_property_key(key);
   /* Walk the prototype chain like JavaScript property lookup. */
@@ -335,7 +335,7 @@ xt_value xt_object_get(xt_value value, xt_value key) {
      * walking into a Map/Set/Date would read `count`/`properties` at the wrong
      * offsets. Stop the chain instead, which is what the lookup would find
      * anyway: those containers keep their state outside their property bag. */
-    if (next->header.kind != XT_OBJECT_KIND_OBJECT && next->header.kind != XT_OBJECT_KIND_ERROR) break;
+    if (!xt_kind_is_object(next->header.kind)) break;
     cur = next;
   }
   /* A host view (`element.style`, `element.dataset`, computed style) answers the
@@ -354,7 +354,7 @@ xt_value xt_object_get(xt_value value, xt_value key) {
 static xt_object *xt_object_prototype_of(xt_value prototype, xt_object *current) {
   xt_object *next = xt_as_object(prototype);
   if (!next || next == current) return NULL;
-  if (next->header.kind != XT_OBJECT_KIND_OBJECT && next->header.kind != XT_OBJECT_KIND_ERROR)
+  if (!xt_kind_is_object(next->header.kind))
     return NULL;
   return next;
 }
@@ -365,7 +365,7 @@ xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
   }
   xt_object *obj = xt_as_object(value);
   if (!obj) return newValue;
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+  if (!xt_kind_is_object(obj->header.kind))
     return newValue;
   if (obj->frozen) return newValue;
   xt_value k = xt_to_property_key(key);
@@ -444,6 +444,7 @@ xt_value xt_object_get_prototype(xt_value value) {
     switch (obj->header.kind) {
       case XT_OBJECT_KIND_OBJECT:
       case XT_OBJECT_KIND_ERROR:
+      case XT_OBJECT_KIND_ARRAY_BUFFER:
         return obj->prototype;
       case XT_OBJECT_KIND_SYMBOL:
       case XT_OBJECT_KIND_MAP:
@@ -468,7 +469,12 @@ xt_value xt_object_set_prototype(xt_value value, xt_value proto) {
     return value;
   }
   xt_object *obj = xt_as_object(value);
-  if (obj && !obj->frozen) obj->prototype = proto;
+  if (obj && !obj->frozen) {
+    obj->prototype = proto;
+    /* `reserved2` memoizes a typed array's element kind from its prototype
+     * (`xt_typed_array_kind_of`); a re-prototyped view is no longer that kind. */
+    obj->reserved2 = 0;
+  }
   return value;
 }
 
@@ -499,7 +505,7 @@ xt_value xt_object_from_entries(xt_value entries) {
 xt_value xt_object_has(xt_value value, xt_value key) {
   if (!XT_IS_OBJECT(value)) return XT_FALSE;
   xt_object *obj = (xt_object *)XT_GET_PTR(value);
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+  if (!xt_kind_is_object(obj->header.kind)) {
     return XT_FALSE;
   }
   xt_value propertyKey = xt_to_property_key(key);
@@ -517,7 +523,7 @@ xt_value xt_object_own_property_symbols(xt_value value) {
   xt_value result = xt_array_new(0, NULL);
   if (!XT_IS_OBJECT(value)) return result;
   xt_object *obj = (xt_object *)XT_GET_PTR(value);
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR)
+  if (!xt_kind_is_object(obj->header.kind))
     return result;
   for (uint32_t i = 0; i < obj->count; i++) {
     if (xt_is_symbol(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
@@ -544,7 +550,7 @@ xt_value xt_object_keys(xt_value value) {
     /* Map/Set/Date/RegExp/Promise/Symbol use their own layout and have no
      * property bag; reading `obj->count` there walked off the end of the
      * allocation (`Object.getOwnPropertyNames(new Map())` crashed). */
-    if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+    if (!xt_kind_is_object(obj->header.kind)) {
       return result;
     }
     for (uint32_t i = 0; i < obj->count; i++) {
@@ -588,3 +594,4 @@ xt_value xt_object_get_cstr(xt_value value, const char *key) {
   xt_value k = xt_string_from_cstr(key);
   return xt_object_get(value, k);
 }
+

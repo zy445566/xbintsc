@@ -166,19 +166,13 @@ export const accessCallMethods: AccessCallMethods = {
      * inside a `static` method), not from the `super` keyword itself. */
     const isSuper = isSuperKeyword(node.expression);
     const object = isSuper ? this.emitSuperHolder() : this.emitExpression(node.expression);
-    const access = (): string => {
+    if (isSuper) {
       const key = this.emitExpression(node.argumentExpression);
       const result = this.reg();
-      /* Array-index reads are not object property layouts, so skip the IC for
-       * a numeric literal; every other key may benefit from it. */
-      if (isSuper || node.argumentExpression.kind === SyntaxKind.NumericLiteral) {
-        this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
-      } else {
-        const cache = this.icCachePointer();
-        this.emit(`  ${result} = call i64 @xt_get_ic(i64 ${object}, i64 ${key}, i64* ${cache})`);
-      }
+      this.emit(`  ${result} = call i64 @xt_get(i64 ${object}, i64 ${key})`);
       return result;
-    };
+    }
+    const access = (): string => this.emitElementRead(object, this.emitExpression(node.argumentExpression));
     return node.optional ? this.emitOptional(object, access) : access();
   },
 
@@ -344,3 +338,4 @@ export const accessCallMethods: AccessCallMethods = {
     return merged;
   },
 };
+

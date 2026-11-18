@@ -58,6 +58,16 @@ static xt_value xt_ta_view(int kind, xt_value buffer, uint32_t byteOffset, uint3
   xt_object_set(array, xt_string_from_cstr("byteOffset"), xt_number((double)byteOffset));
   xt_object_set(array, xt_ta_buffer_key(), buffer);
   xt_object_set(array, xt_ta_offset_key(), xt_number((double)byteOffset));
+  /* Resolve the storage once for the per-element path (`xt_typed_array_read`).
+   * A buffer's byte block never moves while the buffer is alive and this view
+   * keeps the buffer reachable, so the pointer needs no invalidation. */
+  uint32_t buffer_length = 0;
+  uint8_t *bytes = xt_array_buffer_bytes(buffer, &buffer_length);
+  if (bytes != NULL && byteOffset <= buffer_length) {
+    xt_object *object = (xt_object *)XT_GET_PTR(array);
+    object->view_bytes = bytes + byteOffset;
+    object->view_length = buffer_length - byteOffset;
+  }
   return array;
 }
 

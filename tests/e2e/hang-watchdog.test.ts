@@ -25,8 +25,11 @@ describeE2E("hang watchdog", (harness) => {
       spin();
     `;
     const result = harness.runProgramFull(source, {
-      env: { XT_STACK_WATCHDOG_MS: "600" },
-      timeout: 5000,
+      env: { XT_STACK_WATCHDOG_MS: "300" },
+      /* The program never returns, so the harness timeout is what ends it: long
+       * enough that a loaded suite still lets the sampler thread print, short
+       * enough to keep the case cheap. */
+      timeout: 8000,
     });
     /* The process is killed by the timeout, so there is no exit status to
      * assert (and its buffered stdout may be lost) — the evidence is the dump

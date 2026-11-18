@@ -590,4 +590,6 @@ describeE2E("end-to-end objects, functions and classes", (harness) => {
     `;
     expect(runProgram(source)).toBe("default");
   });
+
 });
+

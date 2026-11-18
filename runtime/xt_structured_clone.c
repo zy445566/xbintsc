@@ -136,7 +136,7 @@ static xt_value xt_clone_value(xt_clone_context *context, xt_value value) {
   /* Plain objects and Errors are cloned as data: own enumerable string keys,
    * no prototype. That is what the platform algorithm does for ordinary
    * objects and class instances. */
-  if (object->header.kind != XT_OBJECT_KIND_OBJECT && object->header.kind != XT_OBJECT_KIND_ERROR) {
+  if (!xt_kind_is_object(object->header.kind)) {
     xt_clone_fail("value");
   }
   xt_value clone = xt_object_new();
@@ -157,3 +157,4 @@ xt_value xt_structured_clone(int32_t argc, xt_value *argv) {
   free(context.entries);
   return clone;
 }
+

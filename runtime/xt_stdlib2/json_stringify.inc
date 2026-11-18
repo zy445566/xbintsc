@@ -330,8 +330,7 @@ static int xt_json_replacer_write(xt_json_replacer_context *ctx, xt_value holder
     value = xt_call_method(value, xt_string_from_cstr("toJSON"), 1, &key);
   } else if (XT_IS_ARRAY(value) ||
              (XT_IS_OBJECT(value) &&
-              (((xt_object *)XT_GET_PTR(value))->header.kind == XT_OBJECT_KIND_OBJECT ||
-               ((xt_object *)XT_GET_PTR(value))->header.kind == XT_OBJECT_KIND_ERROR))) {
+              xt_kind_is_object(((xt_object *)XT_GET_PTR(value))->header.kind))) {
     xt_value toJSON = XT_IS_ARRAY(value) ? xt_get(value, xt_string_from_cstr("toJSON"))
                                          : xt_object_get(value, xt_string_from_cstr("toJSON"));
     if (XT_IS_FUNCTION(toJSON)) {

@@ -7,6 +7,8 @@
 - 生成 LLVM IR 文本（`.ll`），无需自建寄存器分配（依赖 `alloca` + mem2reg）。
 - 语句 / 块边界值放在 `alloca`；条件与短路运算物化为临时槽，不使用 `phi`。
 - 属性读取按源码位置生成内联缓存：每个访问点拥有一个零初始化的 `[2 x i64]` 全局（`@ic.N`），传给 `xt_get_ic`。普通对象带有驻留的隐藏类 shape（`xt_shape`，`(parent, key)` 转移树），缓存保存 `(shape, 属性下标)`，命中时只需比较 shape 指针并校验一次键，无需线性扫描属性表。插入/删除属性以及整数键重排会重建或转移 shape，从而使旧缓存失效；数组、函数与容器回退到 `xt_get`。
+- 元素访问 `obj[key]` 直接内联进 IR（`calls/element-inline.ts`），不再是一次运行时调用。生成的快路径先把键限定为规范数组索引（整数、`0 .. 2^32-2`，因此 `ta[1.5]`、`ta[-1]` 仍是普通属性访问），然后直接从容器头部读出实时的 `length`/`items`（类型化数组视图则读 `view_bytes` 与元素种类）并自行完成元素读写；字符串、`Map`、宿主视图、越界索引以及整数类型化数组的**写入**（需要 `ToUintN`/`ToIntN` 取模回绕）一律跳到 `xt_get_element` / `xt_set_element`，语义与运行时完全一致。字段偏移定义在 `layout.ts`，并由 `tests/codegen/element-layout.test.ts` 用 `offsetof` 与 `runtime/rt_object.h` 对拍。在此之前，每次元素访问都是一次 clang 无法内联的调用（没有 LTO），类型化数组元素访问比普通数组慢约 50 倍。
+- 方法调用 obj.name(...) 携带一个三字单态内联缓存（@mt.N），传给 xt_call_method_ic：命中时比较接收者的原型值与 holder 的 shape，重新读取缓存槽并以其**当前值**作为 	his 调用，因此方法被重新赋值/删除/新增都能立即观察到；其余情况（内建方法、Map/Set、宿主视图、更深的原型链、getter、非函数值）走完整的 xt_call_method 分派。这去掉了数值代码里每次调用的解析遍历（此前约为 V8 调用的 26 倍）。
 - 数值运算符保留内联双精度快路径；数值字面量操作数跳过标签检查。若条件表达式本身是比较、`in`、`instanceof` 或 `!`，其值已经是布尔标签，代码生成用 `icmp eq i64 value, XT_TRUE` 代替调用 `xt_truthy`（热循环条件因此少一次调用）。
 - 控制流：`if` / `while` / `do` / `for` / `for...of` / `for...in`，`switch`，`try/catch/finally`，`break` / `continue` / `return`。
   - `for...of` 与展开通过 `xt_iter_open` → `xt_iter_has` / `xt_iter_value` 迭代数组、字符串、类型化数组、`Map`、`Set`、生成器以及任何暴露 `[Symbol.iterator]()` 的对象（`Map` 产出 `[key, value]` 对）；非可迭代值抛出 `TypeError`。数组还暴露稳定的 `Array.prototype[Symbol.iterator]`，调用后返回带 `next()` 且自身可迭代的迭代器对象。
@@ -32,3 +34,5 @@
 - 内置调用：`console.log` / `info` / `warn` / `error`、`Math.*`、`Object.*`、数组 / 字符串方法、全局函数、扩展 builtins（统一 `(argc, argv)` ABI）。
 - `main` 入口（返回 0，调用模块函数，并在返回前 `xt_drain_microtasks`）。
 - 未支持节点统一报 `UnsupportedFeature`，不会崩溃。
+
+

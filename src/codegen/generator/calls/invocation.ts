@@ -87,7 +87,18 @@ export const invocationCallMethods: InvocationCallMethods = {
       const name = this.stringValue(access.name.text);
       const args = this.emitArguments(node.arguments);
       const result = this.reg();
-      this.emit(`  ${result} = call i64 @xt_call_method(i64 ${object}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr})`);
+      /* Method dispatch is monomorphic at most sites, so the call carries a
+       * three-word inline cache: a shape/slot hit calls the cached method value
+       * directly instead of walking the dispatch tables and the prototype
+       * chain. See `runtime/xt_containers/access.inc`. */
+      this.extraDeclarations.add("declare i64 @xt_call_method_ic(i64, i64, i32, i64*, i64*)");
+      const cache = `@mt.${this.icCounter++}`;
+      this.globals.push(`${cache} = internal global [3 x i64] zeroinitializer`);
+      const slot = this.reg();
+      this.emit(`  ${slot} = getelementptr [3 x i64], [3 x i64]* ${cache}, i64 0, i64 0`);
+      this.emit(
+        `  ${result} = call i64 @xt_call_method_ic(i64 ${object}, i64 ${name}, i32 ${args.argc}, i64* ${args.ptr}, i64* ${slot})`,
+      );
       return result;
     }
     if (callee.kind === SyntaxKind.ElementAccessExpression) {

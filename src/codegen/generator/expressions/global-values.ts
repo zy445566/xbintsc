@@ -16,6 +16,7 @@ import type { Generator } from "../generator.js";
 
 export interface GlobalValueMethods {
   emitGlobalValue(this: Generator, value: GlobalValue): string;
+  emitConsoleObject(this: Generator): string;
 }
 
 export const globalValueMethods: GlobalValueMethods = {
@@ -45,5 +46,12 @@ export const globalValueMethods: GlobalValueMethods = {
      * off the host object so a getter runs and answers a live value. */
     const name = this.stringValue(value.member);
     return this.runtimeCall("xt_get", [result, name]);
+  },
+
+  /** The global `console` object (see `runtime/xt_io/console.inc`). */
+  emitConsoleObject(): string {
+    const result = this.reg();
+    this.emit(`  ${result} = call i64 @xt_console_object(i32 0, i64* null)`);
+    return result;
   },
 };

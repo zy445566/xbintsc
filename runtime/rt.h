@@ -561,6 +561,9 @@ xt_value xt_console_table(int32_t argc, xt_value *argv);
 xt_value xt_console_time(int32_t argc, xt_value *argv);
 xt_value xt_console_time_end(int32_t argc, xt_value *argv);
 xt_value xt_console_time_log(int32_t argc, xt_value *argv);
+/** The global `console` object: one cached object whose methods are closures,
+ * so `const log = console.log` / `console.error.bind(console)` work. */
+xt_value xt_console_object(int32_t argc, xt_value *argv);
 void xt_print(xt_value v);
 void xt_println(xt_value v);
 

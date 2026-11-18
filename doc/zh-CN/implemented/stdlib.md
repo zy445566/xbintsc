@@ -102,6 +102,7 @@
 ## console
 
 - `xt_print` / `xt_println` / `xt_console_log` / `info` / `warn` / `error`；`info` / `log` 到 stdout，`warn` / `error` 到 stderr。
+- `console` 既是命名空间，也是可当作值使用的一等对象：`const log = console.log`、`const { warn } = console`、`console.error.bind(console)`、`console.error = ...` 都能工作 —— 读取 `console` 会返回一个缓存的对象，其方法都是普通函数（`xt_console_object`）。调用点仍然是直接调用（`console.log(...)` 会降低为运行时符号），因此程序不把它当值用时没有额外开销。
 - Node 风格 inspect：数组 `[ a, b ]`、对象 `{ k: v }`，感知 UTF-8，循环引用会被标记。
 - `dir` / `trace` / `assert` / `count` / `countReset` / `group` / `groupEnd` / `table` / `time` / `timeEnd` / `timeLog`。
 

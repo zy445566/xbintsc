@@ -395,4 +395,5 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare void @xt_console_info(i32, i64*)",
   "declare void @xt_console_warn(i32, i64*)",
   "declare void @xt_console_error(i32, i64*)",
+  "declare i64 @xt_console_object(i32, i64*)",
 ];

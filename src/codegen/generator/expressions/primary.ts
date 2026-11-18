@@ -292,7 +292,10 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
       case "Infinity":
         return numberLiteral(Infinity);
       case "console":
-        return i64(XT_UNDEFINED);
+        /* `console` is a namespace at call sites (`console.log(...)`) and a
+         * first-class object as a value: `const log = console.log`,
+         * `console.error.bind(console)`, `const { warn } = console`. */
+        return this.emitConsoleObject();
       case "arguments": {
         const argc = this.reg();
         this.emit(`  ${argc} = load i32, i32* %saved.argc`);

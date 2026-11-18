@@ -9,6 +9,12 @@
  * constants. A layout change without updating the compiler therefore fails here
  * instead of silently reading the wrong field of every array in every compiled
  * program.
+ *
+ * The probe must be built with the same flags the driver uses, macOS SDK
+ * included: `resolveToolchain().clang` is an absolute path in CI, and an Apple
+ * clang invoked that way has no sysroot of its own. Without `-isysroot` the
+ * first runtime header — `setjmp.h` — is not found on macOS, even though every
+ * other case here passes because the driver hands clang that flag.
  */
 
 import { spawnSync } from "node:child_process";
@@ -18,6 +24,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { XT_LAYOUT } from "../../src/codegen/generator/layout.js";
 import { resolveToolchain } from "../../src/driver/toolchain-provider.js";
+import { sysrootFlags } from "../../src/driver/toolchain.js";
 import { findRuntimeDir } from "../../src/driver/paths.js";
 import { hasClang } from "../helpers.js";
 
@@ -49,10 +56,14 @@ afterAll(() => rmSync(workdir, { recursive: true, force: true }));
 describeWithClang("inline element layout", () => {
   it("matches the offsets the compiler hardcodes", () => {
     writeFileSync(probe, SOURCE);
-    const clang = resolveToolchain().clang;
-    const compiled = spawnSync(clang, ["-I", findRuntimeDir(), probe, "-o", binary], {
-      encoding: "utf8",
-    });
+    const toolchain = resolveToolchain();
+    /* Same flags as the driver's C compile: `-isysroot` is mandatory on macOS,
+     * where `runtime/rt_internal.h` pulls `setjmp.h` out of the SDK. */
+    const compiled = spawnSync(
+      toolchain.clang,
+      [...sysrootFlags(toolchain.sdkRoot), "-I", findRuntimeDir(), probe, "-o", binary],
+      { encoding: "utf8" },
+    );
     expect(compiled.status, compiled.stderr).toBe(0);
     const ran = spawnSync(binary, [], { encoding: "utf8" });
     expect(ran.status).toBe(0);

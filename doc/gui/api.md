@@ -138,12 +138,32 @@ Implemented nodes: `createGain`, `createOscillator` (sine, square, sawtooth,
 triangle), `createBufferSource` (buffer, loop, loopStart/loopEnd,
 playbackRate/detune), `createBiquadFilter` (lowpass, highpass, bandpass,
 lowshelf, highshelf, peaking, notch, allpass), `createDynamicsCompressor`,
-`createStereoPanner`, `createConstantSource` and `createDelay(maxDelayTime)`.
+`createStereoPanner`, `createConstantSource`, `createDelay(maxDelayTime)`,
+`createWaveShaper` (`curve`, `oversample`), `createConvolver` (`buffer`,
+`normalize`), `createAnalyser` (`fftSize`, `frequencyBinCount`,
+`smoothingTimeConstant`, `minDecibels`/`maxDecibels` and the four
+`get…Data` methods), `createPanner` (`positionX/Y/Z` and `orientationX/Y/Z` as
+AudioParams, the distance/cone properties, `setPosition`/`setOrientation`),
+`createMediaElementSource` and `createMediaStreamSource`, plus
+`context.listener` with its nine AudioParams.
 `connect` returns the destination so chains chain (`src.connect(gain).connect(ctx.destination)`),
 `disconnect()` / `disconnect(target)` update the native graph, and `start(when, offset, duration)` /
 `stop(when)` are honoured on the graph's clock. Nodes outside this list
-(`createAnalyser`, `createConvolver`, `createWaveShaper`, `createChannelSplitter`,
-`createPeriodicWave`, …) are not provided, so their methods are simply absent.
+(`createChannelSplitter`, `createChannelMerger`, `createPeriodicWave`,
+`createIIRFilter`, `createScriptProcessor`, …) are not provided, so their
+methods are simply absent.
+
+The convolver is a **partitioned FFT** convolution (128-frame partitions, 256-point
+transforms) so a reverb impulse response of a second or two stays affordable;
+`normalize` (the default) scales the response so a white-noise input keeps its
+level. A 1.4 s response costs about 10 % of realtime, a 2.2 s one about 18 %.
+The analyser applies the spec's Blackman window and decibel mapping, and keeps
+`smoothingTimeConstant` as a moving average across calls. The panner uses
+equal-power panning against `context.listener` plus the linear/inverse/exponential
+distance models and the cone attenuation; `panningModel = "HRTF"` is accepted but
+runs the same equal-power path (no HRIR data set is shipped). The two media
+sources are valid nodes with no signal — the engine has no media-capture or
+element-audio pipeline, so they are silent rather than absent.
 
 Every `AudioParam` has a live `value` plus `setValueAtTime` /
 `linearRampToValueAtTime` / `exponentialRampToValueAtTime` / `setTargetAtTime` /

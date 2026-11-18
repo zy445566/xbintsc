@@ -302,8 +302,11 @@ xt_value xt_object_get(xt_value value, xt_value key) {
      layout. Containers such as Map/Set/Date/RegExp/Promise/Array must not be
      interpreted as property tables, or property lookup reads past the end of
      their real representation. */
-  if (!xt_kind_is_object(obj->header.kind))
-    return XT_UNDEFINED;
+  if (!xt_kind_is_object(obj->header.kind)) return XT_UNDEFINED;
+  if (obj->header.kind == XT_OBJECT_KIND_ARRAY_BUFFER) {
+    xt_value served = xt_array_buffer_served_property(value, key);
+    if (served != XT_UNDEFINED) return served; /* `byteLength` / `slice` */
+  }
   xt_value k = xt_to_property_key(key);
   /* Walk the prototype chain like JavaScript property lookup. */
   xt_object *cur = obj;

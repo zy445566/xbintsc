@@ -47,6 +47,17 @@ enum AudioNodeKind {
   kAudioStereoPanner,
   kAudioConstantSource,
   kAudioDelay,
+  kAudioWaveShaper,
+  kAudioConvolver,
+  kAudioAnalyser,
+  kAudioPanner,
+  /** A media element / media stream source. The engine has no capture or media
+   * pipeline, so the node is silent; it exists so `createMediaElementSource`
+   * and friends behave like the platform instead of throwing. */
+  kAudioMediaSource,
+  /** The `AudioContext.listener`: no audio of its own, but it owns the nine
+   * AudioParams (`positionX`…`upZ`) the panner reads. */
+  kAudioListener,
 };
 
 enum AudioOscType { kAudioOscSine, kAudioOscSquare, kAudioOscSawtooth, kAudioOscTriangle };
@@ -116,7 +127,9 @@ struct AudioNode {
   uint64_t id = 0;
   AudioNodeKind kind = kAudioGain;
   std::vector<uint64_t> inputs;
-  AudioParamState params[5];
+  /** Panner (6) and listener (9) are the widest users; effects use fewer. */
+  static constexpr int kMaxParams = 9;
+  AudioParamState params[kMaxParams];
   int param_count = 0;
 
   /* Per-quantum cache: 2 * kAudioQuantum interleaved floats. */
@@ -158,6 +171,55 @@ struct AudioNode {
   size_t delay_size = 0;
   size_t delay_write = 0;
   double delay_max = 1.0;
+
+  /* WaveShaper: the transfer curve sampled uniformly over [-1, 1]. A missing
+   * curve passes the signal through unchanged, as on the platform.
+   * `shaper_oversample` is 1, 2 or 4: the number of sub-samples averaged per
+   * frame, which softens the aliasing a hard curve would fold back. */
+  std::vector<float> shaper_curve;
+  int shaper_oversample = 1;
+
+  /* Convolver: uniformly partitioned overlap-save convolution. The impulse
+   * response is cut into `conv_partitions` slices of `kAudioQuantum` frames,
+   * each zero-padded to `2 * kAudioQuantum` and transformed once; the recent
+   * input blocks are kept as spectra in a ring so each quantum costs one FFT,
+   * one complex multiply-accumulate per partition, and one inverse FFT. */
+  struct ConvolverState {
+    bool ready = false;
+    size_t partitions = 0;
+    size_t ring_index = 0;
+    float gain = 1.0f;
+    /** Spectral history of the input, per channel, `partitions * spectrum` floats. */
+    std::vector<float> input_re[2];
+    std::vector<float> input_im[2];
+    /** The impulse response's partition spectra, same layout. */
+    std::vector<float> ir_re[2];
+    std::vector<float> ir_im[2];
+    /** The last `2 * kAudioQuantum` input samples, per channel (overlap-save). */
+    std::vector<float> window[2];
+  };
+  ConvolverState convolver;
+
+  /* Analyser: a ring of the most recent mono samples, plus the transform size
+   * the page asked for (`fft_size`), which also bounds the ring. The smoothed
+   * spectrum carries the previous call's magnitudes so
+   * `smoothingTimeConstant` is a moving average, as on the platform. */
+  int analyser_fft = 2048;
+  std::vector<float> analyser_ring;
+  size_t analyser_write = 0;
+  std::vector<float> analyser_smoothed;
+  float analyser_smoothing = 0.8f;
+
+  /* Panner: spatialization parameters that are plain values (the moving parts —
+   * position and orientation — are AudioParams, indices 0…5). */
+  int panning_model = 0;       /* 0 = equal power, 1 = HRTF (same path here) */
+  int distance_model = 1;      /* 0 = linear, 1 = inverse, 2 = exponential */
+  double ref_distance = 1.0;
+  double max_distance = 10000.0;
+  double rolloff = 1.0;
+  double cone_inner = 360.0;
+  double cone_outer = 360.0;
+  double cone_gain = 0.0;
 };
 
 /** One AudioContext's graph, its device stream and its clock. */
@@ -185,6 +247,31 @@ class AudioMixer {
                   double loop_end);
   void start_source(uint64_t node, double when, double offset, double duration);
   void stop_source(uint64_t node, double when);
+
+  /* -- effect nodes ------------------------------------------------------- */
+  /** WaveShaper: the curve (may be empty, which passes the signal through) and
+   * the oversample factor (1, 2 or 4). */
+  void set_shaper_curve(uint64_t node, const std::vector<float> &curve, int oversample);
+  void set_shaper_oversample(uint64_t node, int oversample);
+  /** Convolver: build the partition spectra from an impulse response. The
+   * response is resampled to the mix rate and, when `normalize` is set, scaled
+   * so the convolution does not change a white-noise input's level. */
+  void set_convolver_impulse(uint64_t node, std::shared_ptr<AudioClip> clip, bool normalize);
+  /** `fftSize` of an AnalyserNode (32…32768, power of two). */
+  void set_analyser_fft(uint64_t node, int fft_size);
+  /** `smoothingTimeConstant` of an AnalyserNode (0…1). */
+  void set_analyser_smoothing(uint64_t node, float smoothing);
+  /** Copy the analyser's most recent `count` mono samples, oldest first. */
+  bool analyser_time_domain(uint64_t node, int count, std::vector<float> *out);
+  /** Magnitude spectrum in dB of the analyser's window (`fft_size / 2` bins). */
+  bool analyser_spectrum(uint64_t node, std::vector<float> *out);
+  /** Panner values that are not AudioParams. */
+  void set_panner(uint64_t node, int distance_model, double ref_distance, double max_distance,
+                  double rolloff, double cone_inner, double cone_outer, double cone_gain,
+                  int panning_model);
+  /** The listener the panners are mixed against. */
+  uint64_t listener_id() const { return listener_id_; }
+  void set_listener(uint64_t node) { listener_id_ = node; }
 
   /* -- AudioParam -------------------------------------------------------- */
   double param_value(uint64_t node, int index);
@@ -222,6 +309,7 @@ class AudioMixer {
   std::unordered_map<uint64_t, std::shared_ptr<AudioNode>> nodes_;
   uint64_t next_node_id_ = 1;
   uint64_t destination_id_ = 0;
+  uint64_t listener_id_ = 0;
   uint64_t serial_ = 0;
   uint64_t frames_rendered_ = 0;
   std::vector<float> pending_;

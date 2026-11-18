@@ -25,6 +25,27 @@ uint64_t audio_context_id(xt_value object);
 /** Build the `AudioParam` value that belongs to `node`'s slot `index`. */
 xt_value audio_param_build(uint64_t context, uint64_t node, int index);
 
+/** The `AudioContext.listener` object: nine AudioParams the panners read. */
+xt_value audio_listener_object(xt_value context_value);
+
+/* -- helpers shared with `audio_nodes.cpp` --------------------------------- */
+
+/** Wrap a native `(self, env, argc, argv)` function as a closure value. */
+xt_value audio_fn_value(void *fn);
+void audio_set_method(xt_value target, const char *name, void *fn);
+void audio_set_number(xt_value target, const char *name, double value);
+void audio_set_string(xt_value target, const char *name, const char *value);
+double audio_number_prop(xt_value object, const char *name);
+
+/** The mixer behind a context/node/param object plus the node's native id. */
+std::shared_ptr<AudioMixer> audio_mixer_of(xt_value object);
+bool audio_node_ref(xt_value object, uint64_t *context, uint64_t *node);
+
+/** Create a node object with the uniform methods, `channelCount` and one
+ * AudioParam per entry of `params`. Used by every `create*` factory. */
+xt_value audio_build_node(uint64_t context, AudioNodeKind kind, const char *type,
+                          const char *const *params, int param_count);
+
 }  // namespace xtgui
 
 #endif /* XT_GUI_AUDIO_INTERNAL_H */

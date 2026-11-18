@@ -6,6 +6,14 @@
 
 ## 已知问题
 
+- **Web Audio 没有 `MediaStream`/采集管线，且两个节点的行为是近似实现。**
+  `createMediaElementSource` 与 `createMediaStreamSource` 返回合法但**静音**的节点：引擎没有
+  麦克风/摄像头采集，也不会把媒体元素自身的播放接入音频图，因此页面把二者接入图里得到的是静音，
+  而不是报错。`WaveShaperNode.oversample` 在 2 或 4 个子采样点上平均曲线，而不是对输入做带限滤波，
+  它能减轻硬曲线引入的混叠但不能消除。`PannerNode.panningModel = "HRTF"` 会被接受，但走等功率
+  路径——引擎不带 HRIR 数据集，因此结果是带距离/锥角衰减的立体声声像，而不是双耳滤波。
+  `ConvolverNode` 按能量归一化（把响应缩放到「白噪声输入电平不变」），与浏览器的归一化接近但不
+  逐位一致。
 - **WebGL 1.0 与 2.0 运行在 GPU 上，但只实现了各自的子集。**
   `canvas.getContext("webgl")` / `"webgl2"` 返回真正的 GPU 上下文（见
   [WebGL](./webgl.md)）：GLSL ES 着色器由内置 glslang 翻译为 SPIR-V——Vulkan

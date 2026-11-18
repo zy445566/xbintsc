@@ -114,6 +114,22 @@ for (const v of results) console.log(JSON.stringify(v));`,
   );
 
   diff(
+    "ArrayBuffer identity, instanceof and byte views",
+    printAll([
+      /* An ArrayBuffer serves `byteLength`/`slice` from its kind, so C helpers
+       * (audio decoding, text encoding) and JavaScript must agree. */
+      "new ArrayBuffer(8) instanceof ArrayBuffer",
+      "Object.keys(new ArrayBuffer(4)).length",
+      "new ArrayBuffer(8).byteLength",
+      "new ArrayBuffer(8).slice(2, 5).byteLength",
+      "new Uint8Array(4).buffer instanceof ArrayBuffer",
+      "ArrayBuffer.isView(new DataView(new ArrayBuffer(4)))",
+      "ArrayBuffer.isView(new ArrayBuffer(4))",
+      "new DataView(new ArrayBuffer(4), 1, 2).byteLength",
+    ]),
+  );
+
+  diff(
     "immutable array methods and Object statics",
     printAll([
       "[3, 1, 2].toSorted((x, y) => x - y)",

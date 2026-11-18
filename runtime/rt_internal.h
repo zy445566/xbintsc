@@ -564,6 +564,9 @@ void xt_array_buffer_set_byte(xt_value buffer, uint32_t index, uint8_t value);
 xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv);
 /** The `ArrayBuffer.prototype.slice` method value `xt_get` serves. */
 xt_value xt_array_buffer_slice_value(void);
+/* `byteLength`/`slice` as served from the buffer's kind (XT_UNDEFINED for any
+ * other key); shared by `xt_get` and `xt_object_get`. */
+xt_value xt_array_buffer_served_property(xt_value buffer, xt_value key);
 #include "xt_web.h"
 #include "xt_async_io.h"
 #endif /* XT_RT_INTERNAL_H */

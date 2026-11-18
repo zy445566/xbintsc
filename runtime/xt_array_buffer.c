@@ -38,7 +38,11 @@ static int xt_ab_is_buffer(xt_value value) {
 }
 
 static xt_value xt_ab_new(uint32_t length) {
-  xt_value buffer = xt_object_new();
+  /* Instances sit on `ArrayBuffer.prototype`, so `buffer instanceof ArrayBuffer`
+   * and `buffer.constructor` behave like the platform (the properties are still
+   * served from the kind, not from the prototype). */
+  xt_value proto = xt_builtin_prototype_for_kind(XT_OBJECT_KIND_ARRAY_BUFFER);
+  xt_value buffer = XT_IS_OBJECT(proto) ? xt_object_new_with_proto(proto) : xt_object_new();
   xt_object *object = (xt_object *)XT_GET_PTR(buffer);
   object->header.kind = (uint8_t)XT_OBJECT_KIND_ARRAY_BUFFER;
   /* A zero-length buffer keeps a NULL block: nothing ever indexes it. */
@@ -56,6 +60,23 @@ xt_value xt_array_buffer_slice_value(void) {
   cached = xt_closure_new((void *)xt_ab_slice, 0, NULL);
   xt_gc_add_root(&cached);
   return cached;
+}
+
+/** The properties an ArrayBuffer serves from its kind rather than from a
+ * property bag: `byteLength` and `slice`. `xt_get` and `xt_object_get` both
+ * consult this, so a C helper and JavaScript code agree. */
+xt_value xt_array_buffer_served_property(xt_value buffer, xt_value key) {
+  if (!XT_IS_STRING(key)) return XT_UNDEFINED;
+  xt_object *object = (xt_object *)XT_GET_PTR(buffer);
+  xt_string *name = xt_as_string(key);
+  if (name == NULL) return XT_UNDEFINED;
+  if (name->length == 10 && memcmp(xt_string_bytes(name), "byteLength", 10) == 0) {
+    return xt_number((double)object->buffer_length);
+  }
+  if (name->length == 5 && memcmp(xt_string_bytes(name), "slice", 5) == 0) {
+    return xt_array_buffer_slice_value();
+  }
+  return XT_UNDEFINED;
 }
 
 xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv) {

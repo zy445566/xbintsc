@@ -145,6 +145,10 @@ void xt_style_apply_user_agent(const Node *node, XtStyle *style) {
     style->has_border_color = true;
     style->margin.top = style->margin.bottom = {8.0f, Unit::Px};
   }
+  /* The HTML UA sheet's `[hidden] { display: none }`, applied last so it wins
+   * over the tag defaults above. An author rule still overrides it, and
+   * `element.hidden = true` is what most pages use to take a node away. */
+  if (node->attr("hidden") != nullptr) style->display = Display::None;
 }
 
 }  // namespace xtgui

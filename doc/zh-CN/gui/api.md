@@ -127,12 +127,24 @@ requestAnimationFrame(frame);
 已实现的节点：`createGain`、`createOscillator`（sine、square、sawtooth、triangle）、
 `createBufferSource`（buffer、loop、loopStart/loopEnd、playbackRate/detune）、
 `createBiquadFilter`（lowpass、highpass、bandpass、lowshelf、highshelf、peaking、notch、allpass）、
-`createDynamicsCompressor`、`createStereoPanner`、`createConstantSource` 与
-`createDelay(maxDelayTime)`。`connect` 返回目标节点，因此可链式连接
+`createDynamicsCompressor`、`createStereoPanner`、`createConstantSource`、
+`createDelay(maxDelayTime)`、`createWaveShaper`（`curve`、`oversample`）、
+`createConvolver`（`buffer`、`normalize`）、`createAnalyser`（`fftSize`、`frequencyBinCount`、
+`smoothingTimeConstant`、`minDecibels`/`maxDecibels` 及四个 `get…Data` 方法）、
+`createPanner`（`positionX/Y/Z` 与 `orientationX/Y/Z` 是 AudioParam，另有距离/锥角属性与
+`setPosition`/`setOrientation`）、`createMediaElementSource`、`createMediaStreamSource`，
+以及带九个 AudioParam 的 `context.listener`。`connect` 返回目标节点，因此可链式连接
 （`src.connect(gain).connect(ctx.destination)`）；`disconnect()` / `disconnect(target)`
 会更新原生图；`start(when, offset, duration)` / `stop(when)` 按图的时钟生效。
-列表之外的节点（`createAnalyser`、`createConvolver`、`createWaveShaper`、
-`createChannelSplitter`、`createPeriodicWave` 等）不提供，其方法就是缺失的。
+列表之外的节点（`createChannelSplitter`、`createChannelMerger`、`createPeriodicWave`、
+`createIIRFilter`、`createScriptProcessor` 等）不提供，其方法就是缺失的。
+
+卷积器是**分块 FFT** 卷积（128 帧一块、256 点变换），因此一两秒的混响脉冲响应也能承受；
+`normalize`（默认）会把响应缩放到「白噪声输入电平不变」。1.4 秒响应约占实时 10%，2.2 秒约 18%。
+分析器使用规范中的 Blackman 窗与分贝映射，`smoothingTimeConstant` 是跨调用的滑动平均。
+声像器按 `context.listener` 做等功率声像，并支持 linear/inverse/exponential 距离模型与锥角衰减；
+`panningModel = "HRTF"` 会被接受但走同一条等功率路径（引擎不带 HRIR 数据集）。
+两个媒体源是**合法的静音节点**——引擎没有采集或媒体元素音频管线，所以它们静音而不是缺失。
 
 每个 `AudioParam` 都有实时 `value`，以及 `setValueAtTime` / `linearRampToValueAtTime` /
 `exponentialRampToValueAtTime` / `setTargetAtTime` / `cancelScheduledValues` /

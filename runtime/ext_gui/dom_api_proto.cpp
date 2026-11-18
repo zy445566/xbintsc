@@ -31,6 +31,7 @@ xt_value node_proto() {
   define_getter(proto, "localName", (void *)node_local_name_get);
   define_getter(proto, "prefix", (void *)node_prefix_get);
   define_getter(proto, "id", (void *)node_id_get);
+  define_getter(proto, "hidden", (void *)node_hidden_get);
   define_getter(proto, "className", (void *)node_class_name_get);
   define_getter(proto, "htmlFor", (void *)node_html_for_get);
   define_getter(proto, "textContent", (void *)node_text_content_get);
@@ -92,6 +93,7 @@ xt_value node_proto() {
   define_getter(proto, "height", (void *)node_height_get);
   /* Setters. */
   define_setter(proto, "id", (void *)node_id_set);
+  define_setter(proto, "hidden", (void *)node_hidden_set);
   define_setter(proto, "className", (void *)node_class_name_set);
   define_setter(proto, "htmlFor", (void *)node_html_for_set);
   define_setter(proto, "textContent", (void *)node_text_content_set);

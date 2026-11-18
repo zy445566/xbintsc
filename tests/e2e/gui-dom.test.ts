@@ -52,6 +52,62 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
     expect(value("cleared")).toBe(":false");
   });
 
+  it("reflects the hidden property and applies the UA [hidden] rule", () => {
+    const { value } = harness.compileAndRun(
+      "dom-hidden",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        #toggled { display: flex; opacity: 1; transition: opacity .2s ease; }
+        #toggled.done { opacity: 0; }
+      </style></head><body>
+        <div id="toggled">panel</div>
+        <div id="bare">bare</div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "hidden", width: 400, height: 200 });
+      win.on("ready", () => {
+        const doc: any = win.document;
+        const toggled: any = doc.getElementById("toggled");
+        console.log("initial=" + toggled.hidden + ":" + toggled.hasAttribute("hidden"));
+        toggled.hidden = true;
+        /* An author rule that sets display still wins over the UA [hidden]
+         * rule, exactly as in a browser. */
+        console.log("set=" + toggled.hidden + ":" + toggled.getAttribute("hidden") + ":" +
+          getComputedStyle(toggled).display);
+        toggled.hidden = false;
+        console.log("cleared=" + toggled.hidden + ":" + toggled.hasAttribute("hidden") + ":" +
+          getComputedStyle(toggled).display);
+        /* The class path stays the usual way to fade an overlay out; the
+         * transition means the computed opacity only reaches 0 later. */
+        toggled.classList.add("done");
+        console.log("start=" + getComputedStyle(toggled).opacity);
+        /* A plain element has no author display, so [hidden] gives it no box. */
+        const bare: any = doc.getElementById("bare");
+        bare.hidden = true;
+        console.log("bare=" + bare.hidden + ":" + getComputedStyle(bare).display + ":" +
+          bare.getBoundingClientRect().height);
+        setTimeout(() => {
+          console.log("faded=" + getComputedStyle(toggled).opacity);
+          win.close();
+        }, 400);
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+      { console: true, autocloseMs: 2000 },
+    );
+
+    expect(value("initial")).toBe("false:false");
+    expect(value("set")).toBe("true::flex");
+    expect(value("cleared")).toBe("false:false:flex");
+    expect(value("start")).toBe("1");
+    expect(value("bare")).toBe("true:none:0");
+    expect(value("faded")).toBe("0");
+  });
+
   it("synthesizes html/head/body for fragments and keeps innerHTML fragments unwrapped", () => {
     const { value } = harness.compileAndRun(
       "document-structure",

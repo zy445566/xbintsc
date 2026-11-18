@@ -3,7 +3,29 @@
  */
 
 import { SyntaxKind } from "../ast/kinds.js";
+import { TokenKind } from "../lexer/token.js";
 import type { Expression, PropertyName } from "../ast/nodes.js";
+
+/**
+ * Whether a token can never begin an expression, so an operand-optional prefix
+ * operator (`yield`, `return`) placed before it has no operand. `yield, x` and
+ * `[yield]` are the common minified shapes: `yield` on its own is a valid
+ * expression, and a comma or a closing bracket ends it.
+ */
+export function endsExpression(kind: TokenKind): boolean {
+  switch (kind) {
+    case TokenKind.Comma:
+    case TokenKind.Semicolon:
+    case TokenKind.Colon:
+    case TokenKind.CloseParen:
+    case TokenKind.CloseBracket:
+    case TokenKind.CloseBrace:
+    case TokenKind.EndOfFile:
+      return true;
+    default:
+      return false;
+  }
+}
 
 export function expressionToPropertyName(expr: Expression): PropertyName | undefined {
   switch (expr.kind) {

@@ -9,7 +9,7 @@ Module syntax (`import` / `export`, import attributes) and the driver-level bund
 ## Statements
 
 - Variable declarations: `var` / `let` / `const`, with multiple declarators `const a = 1, b = 2;`
-- Function declarations, function expressions and methods, including the `async` modifier, generators (`function*`, `yield`, `yield*`, `.next`/`.throw`/`.return`) and async generators (`async function*`, `for await...of`)
+- Function declarations, function expressions and methods, including the `async` modifier, generators (`function*`, `yield`, `yield*`, `.next`/`.throw`/`.return`) and async generators (`async function*`, `for await...of`). A `yield` with no operand is an expression too: `yield` followed by `,`, a closing bracket/brace/paren, `;` or a line break yields `undefined`, which is how a minified generator is written (`yield, doThing(), yield`)
 - `class` declarations / class expressions (constructor, fields, methods, `static`, `static { ... }` blocks, `extends`)
 - `if` / `else`
 - `while`, `do...while`
@@ -57,3 +57,4 @@ Module syntax (`import` / `export`, import attributes) and the driver-level bund
 ## ASI
 
 - Automatic Semicolon Insertion, based on `precededByLineBreak` / `}` / EOF.
+

@@ -232,58 +232,89 @@ std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLin
   }
 
   int fragment_output = 0;
+  /* One source statement can declare several names (`uniform sampler2D a, b;`,
+   * `uniform float uNear, uFar;`). The scanner records one site per declarator
+   * but they share the statement's span, so the replacements must be emitted
+   * once per *statement*, joined together: a rewritten sampler declaration owns
+   * a single binding, so each declarator becomes its own statement. */
+  struct DeclGroup {
+    size_t begin = 0;
+    size_t end = 0;
+    std::vector<const GlslDeclSite *> sites;
+  };
+  std::vector<DeclGroup> groups;
+  std::unordered_map<size_t, size_t> group_of_begin;
   for (const GlslDeclSite &site : info.sites) {
-    Edit edit;
-    edit.begin = site.begin;
-    edit.end = site.end;
-    edit.order = 3;
-    switch (site.kind) {
-      case GlslDeclSite::Uniform:
-        edit.text.clear();
-        break;
-      case GlslDeclSite::Sampler: {
-        int binding = 0;
-        auto found = layout.samplers.find(site.decl.name);
-        if (found != layout.samplers.end()) binding = found->second;
-        edit.text = "layout(set = ";
-        edit.text += fragment ? "2" : "0";
-        edit.text += ", binding = ";
-        edit.text += std::to_string(binding);
-        edit.text += ") uniform ";
-        edit.text += qualified_declarator_text(site.decl);
-        edit.text += ";";
-        break;
-      }
-      case GlslDeclSite::Attribute:
-      case GlslDeclSite::Varying:
-      case GlslDeclSite::FragmentOut: {
-        int location = site.existing_location;
-        if (location < 0) {
-          if (site.kind == GlslDeclSite::Attribute) {
-            auto found = layout.attributes.find(site.decl.name);
-            if (found != layout.attributes.end()) location = found->second;
-          } else if (site.kind == GlslDeclSite::Varying) {
-            auto found = layout.varyings.find(site.decl.name);
-            if (found != layout.varyings.end()) location = found->second;
-          } else if (site.kind == GlslDeclSite::FragmentOut) {
-            location = fragment_output;
+    auto found = group_of_begin.find(site.begin);
+    if (found == group_of_begin.end()) {
+      DeclGroup group;
+      group.begin = site.begin;
+      group.end = site.end;
+      group.sites.push_back(&site);
+      group_of_begin.emplace(site.begin, groups.size());
+      groups.push_back(std::move(group));
+    } else {
+      groups[found->second].sites.push_back(&site);
+    }
+  }
+  for (const DeclGroup &group : groups) {
+    std::string text;
+    for (const GlslDeclSite *site : group.sites) {
+      switch (site->kind) {
+        case GlslDeclSite::Uniform:
+          /* The members moved into the generated block. */
+          continue;
+        case GlslDeclSite::Sampler: {
+          int binding = 0;
+          auto found = layout.samplers.find(site->decl.name);
+          if (found != layout.samplers.end()) binding = found->second;
+          if (!text.empty()) text += "\n";
+          text += "layout(set = ";
+          text += fragment ? "2" : "0";
+          text += ", binding = ";
+          text += std::to_string(binding);
+          text += ") uniform ";
+          text += qualified_declarator_text(site->decl);
+          text += ";";
+          break;
+        }
+        case GlslDeclSite::Attribute:
+        case GlslDeclSite::Varying:
+        case GlslDeclSite::FragmentOut: {
+          int location = site->existing_location;
+          if (location < 0) {
+            if (site->kind == GlslDeclSite::Attribute) {
+              auto found = layout.attributes.find(site->decl.name);
+              if (found != layout.attributes.end()) location = found->second;
+            } else if (site->kind == GlslDeclSite::Varying) {
+              auto found = layout.varyings.find(site->decl.name);
+              if (found != layout.varyings.end()) location = found->second;
+            } else if (site->kind == GlslDeclSite::FragmentOut) {
+              location = fragment_output;
+            }
           }
+          if (location < 0) location = 0;
+          if (site->kind == GlslDeclSite::FragmentOut) {
+            fragment_output = location + 1;
+          }
+          const char *direction = "in";
+          if (site->kind == GlslDeclSite::Varying) direction = fragment ? "in" : "out";
+          if (site->kind == GlslDeclSite::FragmentOut) direction = "out";
+          if (!text.empty()) text += "\n";
+          text += "layout(location = " + std::to_string(location) + ") ";
+          text += direction;
+          text += " ";
+          text += qualified_declarator_text(site->decl);
+          text += ";";
+          break;
         }
-        if (location < 0) location = 0;
-        if (site.kind == GlslDeclSite::FragmentOut) {
-          fragment_output = location + 1;
-        }
-        const char *direction = "in";
-        if (site.kind == GlslDeclSite::Varying) direction = fragment ? "in" : "out";
-        if (site.kind == GlslDeclSite::FragmentOut) direction = "out";
-        edit.text = "layout(location = " + std::to_string(location) + ") ";
-        edit.text += direction;
-        edit.text += " ";
-        edit.text += qualified_declarator_text(site.decl);
-        edit.text += ";";
-        break;
       }
     }
+    Edit edit;
+    edit.begin = group.begin;
+    edit.end = group.end;
+    edit.text = text;
+    edit.order = 3;
     edits.push_back(edit);
   }
 

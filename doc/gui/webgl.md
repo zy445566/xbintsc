@@ -148,11 +148,13 @@ The translator (`runtime/ext_gui/webgl_glsl*.cpp`) handles GLSL ES 1.00 and
 
 Non-sampler uniforms are merged across both stages and emitted as one block in
 each stage (set 1 for the vertex shader, set 3 for the fragment shader), which
-matches SDL_GPU's Vulkan descriptor layout. On Metal the same declarations
-become `[[buffer(0)]]` and `[[texture(N)]]`/`[[sampler(N)]]`, the slots SDL_GPU's
-Metal backend binds. `uniformMatrix4fv` writes column-major floats into the
-reflected offsets; `uniform1i` on a sampler stores the texture unit. The block
-is pushed with the dynamic uniform-buffer API on every draw.
+matches SDL_GPU's Vulkan descriptor layout. A declaration that names several
+variables (`uniform sampler2D a, b;`, `uniform vec3 tint, fill;`) is rewritten
+one declarator at a time: each sampler gets its own binding, because a GLSL
+declaration shares one `layout(...)` across all of its declarators, and each
+non-sampler becomes its own block member. `uniformMatrix4fv` writes column-major
+floats into the reflected offsets; `uniform1i` on a sampler stores the texture
+unit. The block is pushed with the dynamic uniform-buffer API on every draw.
 
 Limits of the translator: struct-typed uniforms, user uniform blocks, uniform
 arrays whose size is not resolved by the preprocessor, and a sampler array

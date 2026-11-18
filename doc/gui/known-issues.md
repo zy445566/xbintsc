@@ -5,6 +5,19 @@
 
 ## Known issues
 
+- **Web Audio has no `MediaStream`/capture pipeline, and two node behaviours are
+  approximations.** `createMediaElementSource` and `createMediaStreamSource`
+  return valid, *silent* nodes: the engine has no microphone/camera capture and
+  does not route a media element's own playback through the graph, so a page
+  that feeds either into a graph gets silence instead of an error.
+  `WaveShaperNode.oversample` averages the curve at 2 or 4 sub-sample points
+  rather than band-limiting the input, which softens but does not remove the
+  aliasing a hard curve introduces. `PannerNode.panningModel = "HRTF"` is
+  accepted but uses the equal-power path — no HRIR data set is shipped, so the
+  result is a stereo pan with distance/cone attenuation, not a binaural filter.
+  `ConvolverNode` normalizes by energy (the response is scaled so a white-noise
+  input keeps its level); it is close to, but not bit-identical with, the
+  browser's normalization.
 - **WebGL 1.0 and 2.0 run on the GPU, with a subset of each.**
   `canvas.getContext("webgl")` / `"webgl2"` return real GPU contexts (see
   [WebGL](./webgl.md)): GLSL ES shaders are translated to SPIR-V by the bundled

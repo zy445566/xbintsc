@@ -9,6 +9,8 @@
 #include "audio_mixer.h"
 
 #include "audio_effects.h"
+#include "audio_extra.h"
+#include "audio_fft.h"
 
 #include <algorithm>
 #include <cmath>
@@ -109,6 +111,35 @@ uint64_t AudioMixer::create_node(AudioNodeKind kind) {
       node->param_count = 1;
       node->params[0].reset(0.0);
       break;
+    case kAudioWaveShaper:
+    case kAudioConvolver:
+    case kAudioAnalyser:
+    case kAudioMediaSource:
+      node->param_count = 0;
+      break;
+    case kAudioPanner:
+      /* positionX/Y/Z (0,0,0) and orientationX/Y/Z (1,0,0), all automatable. */
+      node->param_count = 6;
+      node->params[0].reset(0.0);
+      node->params[1].reset(0.0);
+      node->params[2].reset(0.0);
+      node->params[3].reset(1.0);
+      node->params[4].reset(0.0);
+      node->params[5].reset(0.0);
+      break;
+    case kAudioListener:
+      /* position (0,0,0), forward (0,0,-1) and up (0,1,0). */
+      node->param_count = 9;
+      node->params[0].reset(0.0);
+      node->params[1].reset(0.0);
+      node->params[2].reset(0.0);
+      node->params[3].reset(0.0);
+      node->params[4].reset(0.0);
+      node->params[5].reset(-1.0);
+      node->params[6].reset(0.0);
+      node->params[7].reset(1.0);
+      node->params[8].reset(0.0);
+      break;
     case kAudioDestination:
     default:
       node->param_count = 0;
@@ -116,8 +147,10 @@ uint64_t AudioMixer::create_node(AudioNodeKind kind) {
   }
   nodes_[node->id] = node;
   if (kind == kAudioDestination) destination_id_ = node->id;
+  if (kind == kAudioListener) listener_id_ = node->id;
   return node->id;
 }
+
 
 void AudioMixer::connect(uint64_t source, uint64_t target) {
   std::lock_guard<std::mutex> lock(mutex_);
@@ -339,7 +372,9 @@ const float *AudioMixer::pull_locked(AudioNode *node) {
 
   if (node->kind == kAudioDestination || node->kind == kAudioGain ||
       node->kind == kAudioBiquad || node->kind == kAudioCompressor ||
-      node->kind == kAudioStereoPanner || node->kind == kAudioDelay) {
+      node->kind == kAudioStereoPanner || node->kind == kAudioDelay ||
+      node->kind == kAudioWaveShaper || node->kind == kAudioConvolver ||
+      node->kind == kAudioAnalyser || node->kind == kAudioPanner) {
     float input[kSamples];
     std::memset(input, 0, sizeof(input));
     for (uint64_t id : node->inputs) {
@@ -355,6 +390,16 @@ const float *AudioMixer::pull_locked(AudioNode *node) {
         node->quantum[frame * 2] = static_cast<float>(input[frame * 2] * gain);
         node->quantum[frame * 2 + 1] = static_cast<float>(input[frame * 2 + 1] * gain);
       }
+    } else if (node->kind == kAudioWaveShaper) {
+      render_waveshaper(node, input);
+    } else if (node->kind == kAudioConvolver) {
+      render_convolver(node, input);
+    } else if (node->kind == kAudioAnalyser) {
+      render_analyser(node, input);
+    } else if (node->kind == kAudioPanner) {
+      AudioListenerState listener;
+      listener_state_at(node_locked(listener_id_), quantum_start, &listener);
+      render_panner(node, input, quantum_start, &listener);
     } else if (node->kind == kAudioStereoPanner) {
       for (int frame = 0; frame < kAudioQuantum; frame++) {
         double pan = clamp_value(node->params[0].value_at(quantum_start + frame * step), -1.0, 1.0);

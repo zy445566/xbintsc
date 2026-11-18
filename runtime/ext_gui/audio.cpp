@@ -28,6 +28,7 @@
 #include "audio_decode.h"
 #include "audio_internal.h"
 #include "audio_mixer.h"
+#include "audio_nodes_internal.h"
 
 namespace {
 
@@ -239,8 +240,7 @@ xt_value node_type_set(xt_value self, xt_value env, int32_t argc, xt_value *argv
 }
 
 xt_value build_node(uint64_t context, AudioNodeKind kind, const char *type,
-                    const char *const *params, int param_count) {
-  std::shared_ptr<AudioMixer> mixer = audio_mixer_by_id(context);
+                    const char *const *params, int param_count) {  std::shared_ptr<AudioMixer> mixer = audio_mixer_by_id(context);
   if (!mixer) return XT_UNDEFINED;
   uint64_t id = mixer->create_node(kind);
   xt_value node = xt_object_new();
@@ -469,6 +469,14 @@ xt_value audio_proto() {
   set_method(built, "createStereoPanner", (void *)ctx_create_stereo_panner);
   set_method(built, "createConstantSource", (void *)ctx_create_constant_source);
   set_method(built, "createDelay", (void *)ctx_create_delay);
+  set_method(built, "createWaveShaper", (void *)ctx_create_waveshaper);
+  set_method(built, "createConvolver", (void *)ctx_create_convolver);
+  set_method(built, "createAnalyser", (void *)ctx_create_analyser);
+  set_method(built, "createPanner", (void *)ctx_create_panner);
+  set_method(built, "createMediaElementSource", (void *)ctx_create_media_element_source);
+  set_method(built, "createMediaStreamSource", (void *)ctx_create_media_stream_source);
+  xt_object_define_getter(built, xt_string_from_cstr("listener"),
+                          fn_of((void *)ctx_listener_get));
   set_method(built, "createBuffer", (void *)ctx_create_buffer);
   set_method(built, "decodeAudioData", (void *)ctx_decode_audio_data);
   set_method(built, "resume", (void *)ctx_resume);
@@ -494,6 +502,33 @@ std::shared_ptr<AudioMixer> audio_mixer_by_id(uint64_t id) {
 uint64_t audio_context_id(xt_value object) {
   xt_value value = xt_object_get_cstr(object, "__xt_audio_ctx");
   return XT_IS_NUMBER(value) ? static_cast<uint64_t>(xt_to_number(value)) : 0;
+}
+
+/* The helpers below forward to the file-local definitions above, so the node
+ * builders in `audio_nodes*.cpp` share one implementation of the value
+ * plumbing instead of duplicating it. */
+xt_value audio_fn_value(void *fn) { return fn_of(fn); }
+void audio_set_method(xt_value target, const char *name, void *fn) { set_method(target, name, fn); }
+void audio_set_number(xt_value target, const char *name, double value) {
+  set_number(target, name, value);
+}
+void audio_set_string(xt_value target, const char *name, const char *value) {
+  set_string(target, name, value);
+}
+double audio_number_prop(xt_value object, const char *name) { return number_prop(object, name); }
+std::shared_ptr<AudioMixer> audio_mixer_of(xt_value object) { return mixer_of(object); }
+
+bool audio_node_ref(xt_value object, uint64_t *context, uint64_t *node) {
+  NodeRef ref;
+  if (!node_ref(object, &ref)) return false;
+  if (context != nullptr) *context = audio_context_id(object);
+  if (node != nullptr) *node = ref.node;
+  return true;
+}
+
+xt_value audio_build_node(uint64_t context, AudioNodeKind kind, const char *type,
+                          const char *const *params, int param_count) {
+  return build_node(context, kind, type, params, param_count);
 }
 
 }  // namespace xtgui
@@ -540,7 +575,8 @@ xt_value xt_gui_audio_create(int32_t argc, xt_value *argv) {
                           fn_of((void *)ctx_current_time_get));
   xt_value destination = build_node(context, kAudioDestination, nullptr, nullptr, 0);
   set_prop(value, "destination", destination);
-  xt_value listener = xt_object_new();
+  xt_value listener = audio_listener_object(value);
+  set_prop(value, "__xt_listener_ref", listener);
   set_prop(value, "listener", listener);
   return value;
 }

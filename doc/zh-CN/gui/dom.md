@@ -160,6 +160,11 @@ console.log(box.offsetWidth, box.offsetHeight);   // 取整后的边框盒
 console.log(box.contains(inner));                 // 后代判断
 ```
 
+`element.hidden` 是反射的布尔属性：赋 `true` 会写入 `hidden` 属性（因此
+`hidden === true`、`getAttribute("hidden") === ""`），赋假值则移除它。UA 样式表把
+`[hidden]` 当作 `display: none`，与浏览器一致——作者样式里设置了 `display` 的规则仍然优先，
+所以页面通常先用 class 把 `opacity` 过渡掉，再设置 `hidden`。
+
 ### style 属性、dataset、计算样式与几何
 
 内联 `style` 对象是一个 CSSOM 声明块。以属性名赋值/读取的是与 `setProperty`

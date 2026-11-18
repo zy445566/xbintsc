@@ -177,6 +177,13 @@ console.log(box.offsetWidth, box.offsetHeight);   // rounded border box
 console.log(box.contains(inner));                 // descendant test
 ```
 
+`element.hidden` is a reflected boolean attribute: assigning `true` sets the
+`hidden` attribute (so `hidden === true` and `getAttribute("hidden") === ""`),
+assigning anything falsy removes it. The UA stylesheet treats `[hidden]` as
+`display: none`, exactly like a browser — an author rule that sets `display`
+still wins, which is why pages usually pair `hidden` with a class that animates
+`opacity` out first.
+
 ### Style properties, dataset, computed style and geometry
 
 The inline `style` object is a CSSOM declaration block. Named access reads and

@@ -61,6 +61,18 @@ METHOD(node_id_get) {
   return xt_string_from_cstr(value != nullptr ? value->c_str() : "");
 }
 
+/** `element.hidden`: the boolean `hidden` content attribute. A hidden element
+ * has no box, which is how the platform's `[hidden] { display: none }` UA rule
+ * behaves (author CSS can still override `display`). */
+METHOD(node_hidden_get) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xtgui::Node *node = resolve_node(self, nullptr);
+  if (node == nullptr || !node->isElement()) return XT_FALSE;
+  return node->attr("hidden") != nullptr ? XT_TRUE : XT_FALSE;
+}
+
 /** `namespaceURI`: the namespace passed to `createElementNS`, or the HTML
  * namespace for an ordinary element. */
 METHOD(node_namespace_uri_get) {
@@ -99,6 +111,23 @@ METHOD(node_id_set) {
   xtgui::Node *node = resolve_node(self, &win);
   if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
   set_attribute(win, node, "id", argc >= 1 ? to_string_value(xt_arg(argc, argv, 0)) : "");
+  return XT_UNDEFINED;
+}
+
+/** The `hidden` setter: true adds the attribute, false removes it (HTML
+ * reflects the boolean property as an empty attribute). */
+METHOD(node_hidden_set) {
+  (void)env;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || !node->isElement()) return XT_UNDEFINED;
+  bool hidden = argc >= 1 && xt_truthy(xt_arg(argc, argv, 0));
+  if (hidden) {
+    set_attribute(win, node, "hidden", "");
+  } else if (node->attr("hidden") != nullptr) {
+    remove_attribute_raw(node, "hidden");
+    mark_dirty(win);
+  }
   return XT_UNDEFINED;
 }
 

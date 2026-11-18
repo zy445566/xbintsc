@@ -174,6 +174,8 @@ METHOD(node_local_name_get);
 METHOD(node_prefix_get);
 METHOD(node_id_get);
 METHOD(node_id_set);
+METHOD(node_hidden_get);
+METHOD(node_hidden_set);
 METHOD(node_class_name_get);
 METHOD(node_class_name_set);
 METHOD(node_html_for_get);

@@ -16,8 +16,8 @@
 
 namespace {
 
-void *get(XtGuiWindow *win, const void *node, bool webgl2) {
-  return xt_gui_webgl_get(win, static_cast<const xtgui::Node *>(node), webgl2);
+void *get(XtGuiWindow *win, const void *node, bool webgl2, bool antialias) {
+  return xt_gui_webgl_get(win, static_cast<const xtgui::Node *>(node), webgl2, antialias);
 }
 
 void *find(XtGuiWindow *win, const void *node) {

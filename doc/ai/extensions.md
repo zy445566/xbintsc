@@ -148,7 +148,10 @@ a page that never calls `run()` still paints and then exits. **WebGL 1.0 and 2.0
 a bundled glslang — consumed by Vulkan, or cross-compiled to MSL by bundled
 SPIRV-Cross on Metal — and drawn through SDL_GPU; the page composites the colour
 texture without a CPU readback, and WebGL 2 adds VAOs, instancing, integer
-attributes, sampler objects, `texStorage2D` and buffer copies (see
+attributes, sampler objects, `texStorage2D` and buffer copies; `antialias`
+(browser default: true) gives a 4× multisampled drawing buffer on Vulkan, with
+`renderbufferStorageMultisample`, `texStorage2DMultisample` and
+`blitFramebuffer` colour resolves (Metal keeps the single-sampled path) (see
 [../gui/webgl.md](../gui/webgl.md)). **WebGPU is implemented** too:
 `navigator.gpu` and `getContext("webgpu")` expose the `GPU…` object model
 (buffers, textures, samplers, bind groups, render/compute pipelines, passes,

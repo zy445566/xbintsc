@@ -134,7 +134,10 @@ AudioParam 自动化，`decodeAudioData` 引擎内解码 WAV，压缩格式则�
 `"webgl2"` 返回 GPU 上下文，其 GLSL ES 着色器由内置 glslang 编译为 SPIR-V
 （Vulkan 直接消费，Metal 上由内置 SPIRV-Cross 转成 MSL），
 并通过 SDL_GPU 绘制；页面直接合成颜色纹理而无须 CPU 读回，WebGL 2 还增加
-VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷贝（见
+VAO、实例化、整数属性、采样器对象、`texStorage2D` 与缓冲拷贝；`antialias`
+（浏览器默认为 true）在 Vulkan 上提供 4× 多重采样绘图缓冲，并支持
+`renderbufferStorageMultisample`、`texStorage2DMultisample` 与
+`blitFramebuffer` 颜色解析（Metal 保持单采样路径）（见
 [../../zh-CN/gui/webgl.md](../../zh-CN/gui/webgl.md)）。**WebGPU 也已实现**：
 `navigator.gpu` 与 `getContext("webgpu")` 暴露整套 `GPU…` 对象模型（缓冲、纹理、
 采样器、bind group、render/compute pipeline、pass、拷贝与缓冲映射），位于可选的

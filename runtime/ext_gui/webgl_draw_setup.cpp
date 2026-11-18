@@ -223,6 +223,7 @@ void WebGLContext::draw_state_hash(uint64_t *first, uint64_t *second) const {
     mix((uint64_t)(uint32_t)state_.color_formats[i]);
   }
   mix((uint64_t)(uint32_t)state_.depth_format);
+  mix((uint64_t)(uint32_t)state_.sample_count);
 
   *first = h1;
   *second = h2;

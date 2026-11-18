@@ -190,6 +190,7 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   }
   if (state_.color_target_count == 0) state_.color_target_count = 1;
   state_.depth_format = target_depth_format();
+  state_.sample_count = target_samples();
 
   WebGLDrawKey key;
   key.program = current_program_;
@@ -325,8 +326,13 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
         texture_id = bound_array_textures_[unit];
       }
       WebGLTexture *sampled = texture(texture_id);
-      SDL_GPUTexture *gpu = sampled != nullptr ? ensure_texture_gpu(sampled, sampled->as_target)
-                                               : nullptr;
+      /* A multisampled texture is not sampleable: binding one makes the
+       * texture incomplete, which reads as the fallback texel, exactly like a
+       * browser's incomplete texture. */
+      SDL_GPUTexture *gpu =
+          sampled != nullptr && sampled->samples <= 1
+              ? ensure_texture_gpu(sampled, sampled->as_target)
+              : nullptr;
       WebGLSampler *sampler_object = this->sampler(bound_samplers_[unit]);
       SDL_GPUSampler *sampler = nullptr;
       if (sampler_object != nullptr) {

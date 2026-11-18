@@ -109,6 +109,12 @@ bool WebGLContext::tex_image_format(uint32_t id, int width, int height,
     set_error(GL_INVALID_VALUE);
     return false;
   }
+  if (record->samples > 1) {
+    /* `texImage2D` cannot redefine a multisampled texture; it is allocated by
+     * `texStorage2DMultisample` and is a render target only. */
+    set_error(GL_INVALID_OPERATION);
+    return false;
+  }
   end_pass();
   ensure_command();
   if (cmd_ == nullptr) return false;
@@ -126,11 +132,15 @@ bool WebGLContext::tex_image_format(uint32_t id, int width, int height,
     record->target = layer >= 0 ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
     record->compressed = false;
     record->has_mipmaps = false;
+    record->samples = 1;
     if (record->sampler != nullptr) {
       SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
       record->sampler = nullptr;
     }
   }
+  /* `texImage2D` always defines a single-sampled texture; a multisampled one
+   * can only be created by `texStorage2DMultisample`. */
+  record->samples = 1;
   if (ensure_texture_gpu(record, record->as_target || record->as_depth_target) == nullptr) {
     return false;
   }
@@ -151,6 +161,11 @@ bool WebGLContext::tex_sub_image_format(uint32_t id, int x, int y, int width, in
                                         const uint8_t *pixels, int layer) {
   WebGLTexture *record = texture(id);
   if (record == nullptr || !record->defined || record->gpu == nullptr) {
+    set_error(GL_INVALID_OPERATION);
+    return false;
+  }
+  if (record->samples > 1) {
+    /* A multisampled texture has no uploadable levels. */
     set_error(GL_INVALID_OPERATION);
     return false;
   }
@@ -196,32 +211,23 @@ bool WebGLContext::generate_mipmap(uint32_t id) {
 
 bool WebGLContext::read_pixels(int x, int y, int width, int height, uint8_t *out) {
   if (out == nullptr || width <= 0 || height <= 0) return false;
-  if (target_color_format() != (int)SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM) {
+  if (bound_framebuffer_ != 0 && framebuffer_samples(bound_framebuffer_) > 1) {
+    /* ES 3.0 §4.3.1: reading a multisampled framebuffer directly is an error.
+     * The page resolves it with `blitFramebuffer` first. The default
+     * framebuffer is exempt because its resolve target is always current. */
+    set_error(GL_INVALID_OPERATION);
+    return false;
+  }
+  int target_width = 0;
+  int target_height = 0;
+  int target_format = 0;
+  SDL_GPUTexture *target = read_color_texture(bound_framebuffer_, &target_width, &target_height,
+                                              &target_format);
+  if (target_format != (int)SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM) {
     /* The only readback this surface offers is RGBA8; a float/half colour
      * target is read by rendering it into an RGBA8 target instead. */
     set_error(GL_INVALID_OPERATION);
     return false;
-  }
-  SDL_GPUTexture *target = target_color();
-  if (bound_framebuffer_ != 0) {
-    WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
-    if (framebuffer != nullptr) {
-      int index = read_buffer_ - GL_COLOR_ATTACHMENT0;
-      if (index < 0 || index >= kWebGLMaxDrawBuffers ||
-          framebuffer->color_textures[index] == 0) {
-        index = 0;
-      }
-      WebGLTexture *read_texture = texture(framebuffer->color_textures[index]);
-      target = read_texture != nullptr ? ensure_texture_gpu(read_texture, true) : nullptr;
-    }
-  }
-  int target_width = bound_framebuffer_ == 0 ? width_ : 0;
-  int target_height = bound_framebuffer_ == 0 ? height_ : 0;
-  if (bound_framebuffer_ != 0) {
-    WebGLFramebuffer *framebuffer_ = framebuffer(bound_framebuffer_);
-    if (framebuffer_ == nullptr) return false;
-    target_width = framebuffer_->width;
-    target_height = framebuffer_->height;
   }
   if (target == nullptr || target_width <= 0 || target_height <= 0) return false;
   /* Clamp to the target; pixels outside are transparent black. */
@@ -310,12 +316,56 @@ bool WebGLContext::tex_storage_format(uint32_t id, int levels, int width, int he
   record->target = GL_TEXTURE_2D;
   record->compressed = false;
   record->has_mipmaps = false;
+  record->samples = 1;
   if (record->sampler != nullptr && guidev::g_device != nullptr) {
     SDL_ReleaseGPUSampler(guidev::g_device, record->sampler);
     record->sampler = nullptr;
   }
   record->defined = true;
   return ensure_texture_gpu(record, record->as_target || record->as_depth_target) != nullptr;
+}
+
+bool WebGLContext::tex_storage_2d_multisample(uint32_t id, int samples,
+                                              SDL_GPUTextureFormat format, int width,
+                                              int height) {
+  WebGLTexture *record = texture(id);
+  if (record == nullptr) return false;
+  if (samples < 2 || samples > kWebGLMaxSamples) {
+    set_error(GL_INVALID_VALUE);
+    return false;
+  }
+  int granted_samples = samples;
+  if (!multisample_supported_ ||
+      !SDL_GPUTextureSupportsSampleCount(guidev::g_device, format,
+                                         webgl_sample_count(samples))) {
+    /* A backend without MSAA cannot resolve a multisampled texture; allocate
+     * the single-sampled storage the page can still attach and resolve. */
+    granted_samples = 1;
+  }
+  if (width <= 0 || height <= 0) {
+    set_error(GL_INVALID_VALUE);
+    return false;
+  }
+  end_pass();
+  ensure_command();
+  if (record->gpu != nullptr) {
+    submit();
+    SDL_WaitForGPUIdle(guidev::g_device);
+    SDL_ReleaseGPUTexture(guidev::g_device, record->gpu);
+    record->gpu = nullptr;
+    record->usage = 0;
+  }
+  record->width = width;
+  record->height = height;
+  record->format = format;
+  record->layers = 1;
+  record->target = GL_TEXTURE_2D;
+  record->compressed = false;
+  record->has_mipmaps = false;
+  record->samples = granted_samples;
+  record->as_target = true;
+  record->defined = true;
+  return ensure_texture_gpu(record, true) != nullptr;
 }
 
 bool WebGLContext::tex_storage_2d(uint32_t id, int levels, int width, int height) {

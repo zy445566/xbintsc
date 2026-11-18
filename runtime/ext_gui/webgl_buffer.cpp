@@ -228,7 +228,15 @@ SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_t
           : (SDL_GPU_TEXTUREUSAGE_SAMPLER |
              (depth ? SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
                     : SDL_GPU_TEXTUREUSAGE_COLOR_TARGET));
-  if (record->gpu != nullptr && record->usage == wanted) {
+  const bool multisample = record->samples > 1;
+  /* A multisampled texture is a render target only: SDL_GPU cannot bind it to
+   * a sampler, and it has exactly one mip level. */
+  const uint32_t resolved_usage =
+      multisample
+          ? (depth ? SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET
+                   : SDL_GPU_TEXTUREUSAGE_COLOR_TARGET)
+          : wanted;
+  if (record->gpu != nullptr && record->usage == resolved_usage) {
     if (as_target) {
       if (depth) record->as_depth_target = true;
       else if (!record->compressed) record->as_target = true;
@@ -242,9 +250,10 @@ SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_t
   }
   record->as_target = as_target && !depth && !record->compressed;
   record->as_depth_target = as_target && depth;
-  record->usage = wanted;
-  record->levels =
-      (depth || record->compressed) ? 1 : mip_levels_for(record->width, record->height);
+  record->usage = resolved_usage;
+  record->levels = (depth || record->compressed || multisample)
+                       ? 1
+                       : mip_levels_for(record->width, record->height);
   SDL_GPUTextureType texture_type = SDL_GPU_TEXTURETYPE_2D;
   int layers = 1;
   if (record->target == GL_TEXTURE_CUBE_MAP) {
@@ -261,12 +270,12 @@ SDL_GPUTexture *WebGLContext::ensure_texture_gpu(WebGLTexture *record, bool as_t
   memset(&info, 0, sizeof(info));
   info.type = texture_type;
   info.format = record->format;
-  info.usage = wanted;
+  info.usage = record->usage;
   info.width = (Uint32)record->width;
   info.height = (Uint32)record->height;
   info.layer_count_or_depth = (Uint32)layers;
   info.num_levels = (Uint32)record->levels;
-  info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+  info.sample_count = webgl_sample_count(record->samples);
   record->gpu = SDL_CreateGPUTexture(guidev::g_device, &info);
   if (record->gpu == nullptr && depth) {
     /* Some backends cannot sample a depth-stencil format; an attachment-only
@@ -337,170 +346,6 @@ int WebGLContext::texture_height(uint32_t id) {
 int WebGLContext::texture_format(uint32_t id) {
   WebGLTexture *record = texture(id);
   return record != nullptr ? (int)record->format : 0;
-}
-
-/* -- framebuffers -------------------------------------------------------- */
-
-uint32_t WebGLContext::create_framebuffer() {
-  auto record = std::make_unique<WebGLFramebuffer>();
-  record->id = next_object_id_++;
-  const uint32_t id = record->id;
-  framebuffers_[id] = std::move(record);
-  return id;
-}
-
-void WebGLContext::delete_framebuffer(uint32_t id) {
-  auto found = framebuffers_.find(id);
-  if (found == framebuffers_.end()) return;
-  if (bound_framebuffer_ == id) bind_framebuffer(GL_FRAMEBUFFER, 0);
-  if (read_framebuffer_ == id) read_framebuffer_ = 0;
-  if (found->second->depth != nullptr && found->second->depth_renderbuffer == 0 &&
-      guidev::g_device != nullptr) {
-    submit(); SDL_WaitForGPUIdle(guidev::g_device);
-    SDL_ReleaseGPUTexture(guidev::g_device, found->second->depth);
-  }
-  framebuffers_.erase(found);
-}
-
-void WebGLContext::bind_framebuffer(int target, uint32_t id) {
-  if (id != 0 && framebuffers_.find(id) == framebuffers_.end()) return;
-  if (target == GL_READ_FRAMEBUFFER) {
-    read_framebuffer_ = id;
-    read_buffer_ = id == 0 ? GL_BACK : GL_COLOR_ATTACHMENT0;
-    return;
-  }
-  if (target != GL_FRAMEBUFFER && target != GL_DRAW_FRAMEBUFFER) return;
-  if (id != bound_framebuffer_) end_pass();
-  bound_framebuffer_ = id;
-  framebuffer_version_ += 1;
-  if (target == GL_FRAMEBUFFER) read_framebuffer_ = id;
-  read_buffer_ = id == 0 ? GL_BACK : GL_COLOR_ATTACHMENT0;
-}
-
-bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture_id,
-                                       int attachment) {
-  framebuffer_version_ += 1;
-  WebGLFramebuffer *record_framebuffer = framebuffer(framebuffer_id);
-  WebGLTexture *record = texture(texture_id);
-  if (record_framebuffer == nullptr) return false;
-  if (texture_id != 0 && record == nullptr) return false;
-  if (attachment == GL_DEPTH_ATTACHMENT || attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
-    record_framebuffer->depth_texture = texture_id;
-    record_framebuffer->depth_renderbuffer = 0;
-    if (record_framebuffer->depth != nullptr) {
-      submit(); SDL_WaitForGPUIdle(guidev::g_device);
-      SDL_ReleaseGPUTexture(guidev::g_device, record_framebuffer->depth);
-      record_framebuffer->depth = nullptr;
-    }
-    if (record != nullptr) {
-      record->as_depth_target = true;
-      ensure_texture_gpu(record, true);
-      if (record_framebuffer->width <= 0 || record_framebuffer->height <= 0) {
-        record_framebuffer->width = record->width;
-        record_framebuffer->height = record->height;
-      }
-    }
-    return true;
-  }
-  const int color_index = attachment - GL_COLOR_ATTACHMENT0;
-  if (color_index < 0 || color_index >= kWebGLMaxDrawBuffers) return false;
-  record_framebuffer->color_textures[color_index] = texture_id;
-  if (record != nullptr) {
-    record_framebuffer->width = record->width;
-    record_framebuffer->height = record->height;
-    ensure_texture_gpu(record, true);
-  }
-  return true;
-}
-
-bool WebGLContext::framebuffer_texture_layer(uint32_t framebuffer_id, uint32_t texture_id,
-                                             int attachment, int layer) {
-  if (!framebuffer_texture(framebuffer_id, texture_id, attachment)) return false;
-  const int index = attachment - GL_COLOR_ATTACHMENT0;
-  WebGLFramebuffer *record = framebuffer(framebuffer_id);
-  if (record != nullptr && index >= 0 && index < kWebGLMaxDrawBuffers) {
-    record->color_layers[index] = layer;
-  }
-  /* SDL_GPU 3.2 depth-stencil targets have no layer selector; the depth
-   * attachment still binds, without per-layer rendering. */
-  return true;
-}
-
-bool WebGLContext::framebuffer_status(uint32_t id) {
-  WebGLFramebuffer *framebuffer_ = framebuffer(id);
-  if (framebuffer_ == nullptr) return false;
-  bool attached = false;
-  for (uint32_t color : framebuffer_->color_textures) attached = attached || color != 0;
-  if (!attached) {
-    set_error(GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT);
-    return false;
-  }
-  if (framebuffer_->width <= 0 || framebuffer_->height <= 0) return false;
-  return true;
-}
-
-uint32_t WebGLContext::create_renderbuffer() {
-  auto record = std::make_unique<WebGLRenderbuffer>();
-  record->id = next_object_id_++;
-  const uint32_t id = record->id;
-  renderbuffers_[id] = std::move(record);
-  return id;
-}
-
-void WebGLContext::delete_renderbuffer(uint32_t id) {
-  auto found = renderbuffers_.find(id);
-  if (found == renderbuffers_.end()) return;
-  if (bound_renderbuffer_ == id) bound_renderbuffer_ = 0;
-  for (auto &entry : framebuffers_) {
-    if (entry.second->depth_renderbuffer == id) {
-      entry.second->depth_renderbuffer = 0;
-      entry.second->depth = nullptr;
-    }
-  }
-  if (found->second->depth != nullptr && guidev::g_device != nullptr) {
-    submit(); SDL_WaitForGPUIdle(guidev::g_device);
-    SDL_ReleaseGPUTexture(guidev::g_device, found->second->depth);
-  }
-  renderbuffers_.erase(found);
-}
-
-bool WebGLContext::renderbuffer_storage(uint32_t id, int width, int height, bool stencil) {
-  WebGLRenderbuffer *record = renderbuffer(id);
-  if (record == nullptr || width <= 0 || height <= 0) return false;
-  record->width = width;
-  record->height = height;
-  record->stencil = stencil;
-  if (record->depth != nullptr) {
-    submit(); SDL_WaitForGPUIdle(guidev::g_device);
-    SDL_ReleaseGPUTexture(guidev::g_device, record->depth);
-    record->depth = nullptr;
-  }
-  SDL_GPUTextureCreateInfo info;
-  memset(&info, 0, sizeof(info));
-  info.type = SDL_GPU_TEXTURETYPE_2D;
-  /* Every depth target uses the same depth-stencil format so one pipeline
-   * works with the default framebuffer and with render-to-texture targets;
-   * `stencil` only records whether the page asked for a stencil attachment. */
-  info.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
-  info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
-  info.width = (Uint32)width;
-  info.height = (Uint32)height;
-  info.layer_count_or_depth = 1;
-  info.num_levels = 1;
-  info.sample_count = SDL_GPU_SAMPLECOUNT_1;
-  record->depth = SDL_CreateGPUTexture(guidev::g_device, &info);
-  return record->depth != nullptr;
-}
-
-bool WebGLContext::framebuffer_renderbuffer(uint32_t framebuffer_id, uint32_t renderbuffer_id) {
-  framebuffer_version_ += 1;
-  WebGLFramebuffer *framebuffer_ = framebuffer(framebuffer_id);
-  WebGLRenderbuffer *record = renderbuffer(renderbuffer_id);
-  if (framebuffer_ == nullptr) return false;
-  if (renderbuffer_id != 0 && record == nullptr) return false;
-  framebuffer_->depth_renderbuffer = renderbuffer_id;
-  framebuffer_->depth = record != nullptr ? record->depth : nullptr;
-  return true;
 }
 
 /* -- lookups ------------------------------------------------------------- */

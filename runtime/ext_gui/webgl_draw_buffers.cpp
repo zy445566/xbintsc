@@ -17,16 +17,23 @@ SDL_GPUTexture *WebGLContext::draw_color_texture(int slot) {
   if (slot < 0 || slot >= kWebGLMaxDrawBuffers) return nullptr;
   if (bound_framebuffer_ == 0) {
     ensure_default_target();
-    return slot == 0 && default_draw_buffers_[0] == GL_BACK ? color_ : nullptr;
+    return slot == 0 && default_draw_buffers_[0] == GL_BACK ? color_msaa_ != nullptr ? color_msaa_ : color_
+                                                           : nullptr;
   }
   WebGLFramebuffer *framebuffer = this->framebuffer(bound_framebuffer_);
   if (framebuffer == nullptr) return nullptr;
   const int buffer = framebuffer->draw_buffers[slot];
   const int index = buffer - GL_COLOR_ATTACHMENT0;
   if (index < 0 || index >= kWebGLMaxDrawBuffers) return nullptr;
-  if (framebuffer->color_textures[index] == 0) return nullptr;
-  WebGLTexture *texture = this->texture(framebuffer->color_textures[index]);
-  return texture != nullptr ? ensure_texture_gpu(texture, true) : nullptr;
+  if (framebuffer->color_textures[index] != 0) {
+    WebGLTexture *texture = this->texture(framebuffer->color_textures[index]);
+    return texture != nullptr ? ensure_texture_gpu(texture, true) : nullptr;
+  }
+  if (framebuffer->color_renderbuffers[index] != 0) {
+    WebGLRenderbuffer *renderbuffer = this->renderbuffer(framebuffer->color_renderbuffers[index]);
+    return renderbuffer != nullptr ? renderbuffer->gpu : nullptr;
+  }
+  return nullptr;
 }
 
 int WebGLContext::draw_color_format(int slot) {
@@ -37,8 +44,16 @@ int WebGLContext::draw_color_format(int slot) {
   if (index < 0 || index >= kWebGLMaxDrawBuffers) {
     return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
   }
-  WebGLTexture *texture = this->texture(framebuffer->color_textures[index]);
-  return texture != nullptr ? (int)texture->format : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  if (framebuffer->color_textures[index] != 0) {
+    WebGLTexture *texture = this->texture(framebuffer->color_textures[index]);
+    return texture != nullptr ? (int)texture->format : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  }
+  if (framebuffer->color_renderbuffers[index] != 0) {
+    WebGLRenderbuffer *renderbuffer = this->renderbuffer(framebuffer->color_renderbuffers[index]);
+    return renderbuffer != nullptr ? (int)renderbuffer->format
+                                   : SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  }
+  return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 }
 
 int WebGLContext::draw_color_layer(int slot) {

@@ -50,7 +50,9 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2 blits", () => {
 
       win.on("ready", () => {
         const canvas: any = document.getElementById("c");
-        const gl: any = canvas.getContext("webgl2");
+        // blitFramebuffer cannot target a multisampled draw framebuffer
+        // (ES 3.0 4.3.2), so the canvas is created without antialiasing.
+        const gl: any = canvas.getContext("webgl2", { antialias: false });
         if (gl == null) {
           console.log("webgl2=false");
           win.close();
@@ -225,7 +227,9 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2 blits", () => {
 
       win.on("ready", () => {
         const canvas: any = document.getElementById("c");
-        const gl: any = canvas.getContext("webgl2");
+        // blitFramebuffer cannot target a multisampled draw framebuffer
+        // (ES 3.0 4.3.2), so the canvas is created without antialiasing.
+        const gl: any = canvas.getContext("webgl2", { antialias: false });
         if (gl == null) {
           console.log("webgl2=false");
           win.close();

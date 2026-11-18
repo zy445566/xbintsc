@@ -174,45 +174,52 @@ void WebGLContext::clear(int mask) {
   }
   if (color_bit) {
     SDL_GPUTexture *source = clear_color_texture();
-    SDL_GPUTexture *destination = target_color();
     int target_width = 0;
     int target_height = 0;
     framebuffer_size(bound_framebuffer_, &target_width, &target_height);
-    if (source != nullptr && destination != nullptr && target_width > 0 && target_height > 0) {
-      end_pass();
-      ensure_command();
-      if (cmd_ != nullptr) {
-        int x = std::max(0, scissor_box_[0]);
-        int y = std::max(0, scissor_box_[1]);
-        int w = scissor_box_[2];
-        int h = scissor_box_[3];
-        if (x + w > target_width) w = target_width - x;
-        if (y + h > target_height) h = target_height - y;
-        if (w > 0 && h > 0) {
-          SDL_GPUBlitRegion source_region;
-          memset(&source_region, 0, sizeof(source_region));
-          source_region.texture = source;
-          source_region.w = 1;
-          source_region.h = 1;
-                  SDL_GPUBlitRegion destination_region;
-          memset(&destination_region, 0, sizeof(destination_region));
-          destination_region.texture = destination;
-          destination_region.x = (Uint32)x;
-          destination_region.y = (Uint32)(target_height - (y + h));
-          destination_region.w = (Uint32)w;
-          destination_region.h = (Uint32)h;
-                  SDL_GPUBlitInfo info;
-          memset(&info, 0, sizeof(info));
-          info.source = source_region;
-          info.destination = destination_region;
-          /* The pixels outside the scissor rectangle must survive the clear, so
-           * the blit has to load the destination. DONT_CARE maps to Metal's
-           * MTLLoadActionDontCare, which discards the whole attachment before
-           * the blit writes its region and leaves the rest undefined (Vulkan
-           * happened to preserve it, which hid this in CI on Linux). */
-          info.load_op = SDL_GPU_LOADOP_LOAD;
-          info.filter = SDL_GPU_FILTER_NEAREST;
-          SDL_BlitGPUTexture(cmd_, &info);
+    if (source != nullptr && target_width > 0 && target_height > 0) {
+      int x = std::max(0, scissor_box_[0]);
+      int y = std::max(0, scissor_box_[1]);
+      int w = scissor_box_[2];
+      int h = scissor_box_[3];
+      if (x + w > target_width) w = target_width - x;
+      if (y + h > target_height) h = target_height - y;
+      if (w > 0 && h > 0) {
+        if (target_samples() > 1) {
+          /* A multisampled texture cannot be the destination of a GPU blit;
+           * the quad draws the same clear rectangle into the MSAA target. */
+          const int destination[4] = {x, y, x + w, y + h};
+          draw_color_quad(source, 1, 1, destination);
+        } else {
+          end_pass();
+          ensure_command();
+          if (cmd_ != nullptr) {
+            SDL_GPUBlitRegion source_region;
+            memset(&source_region, 0, sizeof(source_region));
+            source_region.texture = source;
+            source_region.w = 1;
+            source_region.h = 1;
+            SDL_GPUBlitRegion destination_region;
+            memset(&destination_region, 0, sizeof(destination_region));
+            destination_region.texture = target_color();
+            destination_region.x = (Uint32)x;
+            destination_region.y = (Uint32)(target_height - (y + h));
+            destination_region.w = (Uint32)w;
+            destination_region.h = (Uint32)h;
+            SDL_GPUBlitInfo info;
+            memset(&info, 0, sizeof(info));
+            info.source = source_region;
+            info.destination = destination_region;
+            /* The pixels outside the scissor rectangle must survive the clear,
+             * so the blit has to load the destination. DONT_CARE maps to
+             * Metal's MTLLoadActionDontCare, which discards the whole
+             * attachment before the blit writes its region and leaves the rest
+             * undefined (Vulkan happened to preserve it, which hid this in CI
+             * on Linux). */
+            info.load_op = SDL_GPU_LOADOP_LOAD;
+            info.filter = SDL_GPU_FILTER_NEAREST;
+            SDL_BlitGPUTexture(cmd_, &info);
+          }
         }
       }
     }

@@ -119,7 +119,15 @@ METHOD(node_get_context) {
       const bool cached_webgl2 = value_truthy(xt_object_get_cstr(cached, "__xt_gl_webgl2"));
       return cached_webgl2 == webgl2 ? cached : XT_NULL;
     }
-    void *context = webgl->get(win, node, webgl2);
+    /* WebGL's `antialias` creation attribute defaults to true; the engine only
+     * applies it when the context is created. */
+    bool webgl_antialias = true;
+    xt_value attributes = xt_arg(argc, argv, 1);
+    if (XT_IS_OBJECT(attributes)) {
+      xt_value value = xt_object_get_cstr(attributes, "antialias");
+      if (XT_IS_BOOL(value)) webgl_antialias = value_truthy(value);
+    }
+    void *context = webgl->get(win, node, webgl2, webgl_antialias);
     return webgl->handle(self, context);
   }
   if (mode != "2d") return XT_NULL;

@@ -44,7 +44,8 @@ xtgui::WebGLContext *xt_gui_webgl_find(XtGuiWindow *win, const xtgui::Node *node
   return entry == found->second.end() ? nullptr : entry->second.get();
 }
 
-xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node, bool webgl2) {
+xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node, bool webgl2,
+                                      bool antialias) {
   if (win == nullptr || !isCanvasElement(node)) return nullptr;
   xtgui::WebGLContext *existing = xt_gui_webgl_find(win, node);
   if (existing != nullptr) return existing->is_webgl2() == webgl2 ? existing : nullptr;
@@ -66,7 +67,7 @@ xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node,
   if (width_attr != nullptr) xtgui::xt_css_parse_number(*width_attr, &width);
   if (height_attr != nullptr) xtgui::xt_css_parse_number(*height_attr, &height);
   auto context = std::make_unique<xtgui::WebGLContext>(
-      next_webgl_id(), (int)(width + 0.5f), (int)(height + 0.5f), webgl2);
+      next_webgl_id(), (int)(width + 0.5f), (int)(height + 0.5f), webgl2, antialias);
   xtgui::WebGLContext *raw = context.get();
   g_webgl[win][node] = std::move(context);
   if (win->document != nullptr) {

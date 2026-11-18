@@ -295,7 +295,7 @@ SDL_GPUGraphicsPipeline *WebGLContext::create_pipeline(
   info.rasterizer_state.front_face =
       state_.front_face == GL_CW ? SDL_GPU_FRONTFACE_CLOCKWISE
                                  : SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
-  info.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+  info.multisample_state.sample_count = webgl_sample_count(state_.sample_count);
   info.depth_stencil_state.enable_depth_test = state_.depth_test;
   info.depth_stencil_state.enable_depth_write = state_.depth_write;
   info.depth_stencil_state.compare_op = compare_op(state_.depth_func);

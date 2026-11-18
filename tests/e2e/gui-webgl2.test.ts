@@ -114,7 +114,9 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2", () => {
         label("inst-0", probe(16, 32));
         label("inst-1", probe(32, 32));
         label("inst-2", probe(48, 32));
-        label("inst-background", probe(4, 32));
+        // Far enough from the leftmost instance's antialiased edge (x = 4.8)
+        // that the pixel is fully background.
+        label("inst-background", probe(2, 32));
 
         // Sampler objects and immutable texture storage.
         const sampler: any = gl.createSampler();

@@ -39,6 +39,9 @@ struct WebGLBuffer {
   int usage = GL_STATIC_DRAW;
 };
 
+/** Samples per texel of a texture or renderbuffer. 1 means single-sampled. */
+constexpr int kWebGLMaxSamples = 4;
+
 struct WebGLTexture {
   uint32_t id = 0;
   int width = 0;
@@ -70,19 +73,30 @@ struct WebGLTexture {
   int compare_func = GL_LEQUAL;
   bool dirty = false;
   bool defined = false;
+  /** >1 for a texture allocated with `texStorage2DMultisample`: it is a
+   * render target only (SDL_GPU cannot bind a multisampled texture to a
+   * sampler), and its contents are resolved with `blitFramebuffer`. */
+  int samples = 1;
 };
 
 struct WebGLRenderbuffer {
   uint32_t id = 0;
   int width = 0;
   int height = 0;
-  bool stencil = false;
-  SDL_GPUTexture *depth = nullptr;
+  /** The GL internal format the page asked for, reported back by
+   * `getRenderbufferParameter`. */
+  int internalformat = GL_RGBA8;
+  int samples = 1;
+  bool depth = false;
+  SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  SDL_GPUTexture *gpu = nullptr;
 };
 
 struct WebGLFramebuffer {
   uint32_t id = 0;
   uint32_t color_textures[kWebGLMaxDrawBuffers] = {};
+  /** Colour renderbuffer attached to `COLOR_ATTACHMENTi` (0 when a texture is). */
+  uint32_t color_renderbuffers[kWebGLMaxDrawBuffers] = {};
   /** Layer rendered to for an array/cube colour attachment. */
   int color_layers[kWebGLMaxDrawBuffers] = {};
   /** `COLOR_ATTACHMENTi` or `NONE` per draw-buffer slot. */

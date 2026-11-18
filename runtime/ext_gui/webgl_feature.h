@@ -13,9 +13,10 @@
 #include "webgl.h"
 
 /** The WebGL context of a `<canvas>`, creating it on first use. `webgl2`
- * selects the WebGL 2 API/prototype; a canvas keeps the first context kind it
- * asked for. */
-xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node, bool webgl2);
+ * selects the WebGL 2 API/prototype and `antialias` the context-creation
+ * attribute; a canvas keeps the first context kind it asked for. */
+xtgui::WebGLContext *xt_gui_webgl_get(XtGuiWindow *win, const xtgui::Node *node, bool webgl2,
+                                      bool antialias = true);
 /** The existing WebGL context of `node`, or null (no side effects). */
 xtgui::WebGLContext *xt_gui_webgl_find(XtGuiWindow *win, const xtgui::Node *node);
 /** Drop a node's WebGL context (called when its handle is forgotten). */

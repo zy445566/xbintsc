@@ -167,3 +167,43 @@ describe("async function expressions", () => {
     expect(expr.name.text).toBe("gen");
   });
 });
+
+describe("yield expressions", () => {
+  /** The statement list of the first generator in `source`. */
+  function generatorBody(source: string): any[] {
+    const { file, diagnostics } = parse(source);
+    expect(diagnostics).toHaveLength(0);
+    return (file.statements[0] as any).body.statements;
+  }
+
+  it("parses a bare `yield` before a comma as a sequence expression", () => {
+    /* A minified generator writes `yield, doThing(), yield`: the operand is
+     * optional, so a `,` ends the yield instead of starting its operand. */
+    const body = generatorBody("function* g() { let x = 1; yield, x, yield; }");
+    expect(body[0].kind).toBe(SyntaxKind.VariableStatement);
+    const sequence = body[1].expression;
+    expect(sequence.kind).toBe(SyntaxKind.SequenceExpression);
+    expect(sequence.expressions).toHaveLength(3);
+    expect(sequence.expressions[0].kind).toBe(SyntaxKind.YieldExpression);
+    expect(sequence.expressions[0].expression).toBeUndefined();
+    expect(sequence.expressions[2].kind).toBe(SyntaxKind.YieldExpression);
+    expect(sequence.expressions[2].expression).toBeUndefined();
+  });
+
+  it("keeps an operand when one follows", () => {
+    const body = generatorBody("function* g() { yield 1; yield* [2]; }");
+    expect(body[0].expression.kind).toBe(SyntaxKind.YieldExpression);
+    expect(body[0].expression.delegate).toBe(false);
+    expect(body[0].expression.expression.kind).toBe(SyntaxKind.NumericLiteral);
+    expect(body[1].expression.delegate).toBe(true);
+  });
+
+  it("ends a bare `yield` at a closing bracket", () => {
+    const { file, diagnostics } = parse("function* g() { const xs = [yield]; }");
+    expect(diagnostics).toHaveLength(0);
+    const statement = (file.statements[0] as any).body.statements[0];
+    const element = statement.declarationList.declarations[0].initializer.elements[0];
+    expect(element.kind).toBe(SyntaxKind.YieldExpression);
+    expect(element.expression).toBeUndefined();
+  });
+});

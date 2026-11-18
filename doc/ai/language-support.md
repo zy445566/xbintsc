@@ -63,7 +63,7 @@ Canonical detail (always current, much longer):
 | `#private` fields / methods / statics | ⚠️ | stored under a literal `#x` key; no access enforcement; parent/child name collisions may alias |
 | `enum` / `const enum` | ✅ | forward + reverse mapping |
 | `private` / `protected` / `public` / `readonly` / `abstract` / `implements` / `override` | — | erased, no access control |
-| Generators `function*`, `yield`, `yield*` | ✅ | sync and `async function*`; `for await...of` and `Symbol.asyncIterator` |
+| Generators `function*`, `yield`, `yield*` | ✅ | sync and `async function*`; `for await...of` and `Symbol.asyncIterator` | A bare `yield` (no operand, e.g. `yield, next())`) yields `undefined` |
 | `arguments` object | ✅ | implicit; arrows see their own parameters |
 | Argument-count validation | ⚠️ | direct calls to locally visible functions / `const` arrows are checked (`TS4004`); methods, imports, spread arguments and reassigned bindings are not. `--no-check` disables |
 
@@ -183,3 +183,4 @@ bundled with Visual Studio works) — see
    [troubleshooting.md](./troubleshooting.md).
 4. When exact Node behaviour matters, run the same program under Node and
    compare output; the project's own test suite does this differential check.
+

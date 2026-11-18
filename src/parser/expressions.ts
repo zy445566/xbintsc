@@ -32,7 +32,7 @@ import {
   binaryPrecedence,
   prefixUnaryOperator,
 } from "./operators.js";
-import { isAssignmentTarget } from "./helpers.js";
+import { endsExpression, isAssignmentTarget } from "./helpers.js";
 import { SpeculationError } from "./speculation.js";
 import type { Parser } from "./parser.js";
 
@@ -284,7 +284,7 @@ export const expressionMethods: ExpressionMethods = {
         this.nextToken();
         delegate = true;
       }
-      if (!this.canInsertSemicolon() && !this.at(TokenKind.Semicolon) && !this.at(TokenKind.CloseParen)) {
+      if (!this.canInsertSemicolon() && !endsExpression(this.token.kind)) {
         expression = this.parseAssignmentExpression();
       }
       return { kind: SyntaxKind.YieldExpression, expression, delegate, start: token.start, end: expression?.end ?? token.end };

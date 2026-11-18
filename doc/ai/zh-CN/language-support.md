@@ -60,7 +60,7 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
 | `#private` 字段/方法/静态成员 | ⚠️ | 以字面量 `#x` 键存储；不做访问控制；父子类同名可能互相覆盖 |
 | `enum`/`const enum` | ✅ | 正向 + 反向映射 |
 | `private`/`protected`/`public`/`readonly`/`abstract`/`implements`/`override` | — | 被擦除，无访问控制 |
-| 生成器 `function*`、`yield`、`yield*` | ✅ | 同步与 `async function*`；支持 `for await...of` 与 `Symbol.asyncIterator` |
+| 生成器 `function*`、`yield`、`yield*` | ✅ | 同步与 `async function*`；支持 `for await...of` 与 `Symbol.asyncIterator` |；不带操作数的 `yield`（如 `yield, next())`）产出 `undefined` |
 | `arguments` 对象 | ✅ | 隐式提供；箭头函数看到的是自己的参数 |
 | 参数个数校验 | ⚠️ | 对本地可见函数 / `const` 箭头函数的直接调用会检查（`TS4004`）；方法、导入、展开实参与重新赋值后的绑定不检查。`--no-check` 可关闭 |
 
@@ -176,3 +176,4 @@ xbintsc 编译 TypeScript 的一个**实用子集**。本页用来判断你能�
    [troubleshooting.md](./troubleshooting.md)。
 4. 需要精确对齐 Node 行为时，把同一程序在 Node 下跑一遍对比输出；项目自带测试套件
    就是这么做的差分验证。
+

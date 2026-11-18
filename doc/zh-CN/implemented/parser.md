@@ -9,7 +9,7 @@
 ## 语句
 
 - 变量声明：`var` / `let` / `const`，支持多声明符 `const a = 1, b = 2;`
-- 函数声明、函数表达式和方法，含 `async` 修饰、生成器（`function*`、`yield`、`yield*`、`.next`/`.throw`/`.return`）与异步生成器（`async function*`、`for await...of`）
+- 函数声明、函数表达式和方法，含 `async` 修饰、生成器（`function*`、`yield`、`yield*`、`.next`/`.throw`/`.return`）与异步生成器（`async function*`、`for await...of`）。不带操作数的 `yield` 同样是表达式：`yield` 后面紧跟 `,`、右括号/右花括号/右方括号、`;` 或换行时，产出 `undefined` —— 压缩后的生成器有时就这么写（`yield, doThing(), yield`）
 - `class` 声明 / 类表达式（构造函数、字段、方法、`static`、`static { ... }` 静态块、`extends`）
 - `if` / `else`
 - `while`、`do...while`
@@ -57,3 +57,4 @@
 ## ASI
 
 - 自动分号插入（Automatic Semicolon Insertion），依据 `precededByLineBreak` / `}` / EOF。
+

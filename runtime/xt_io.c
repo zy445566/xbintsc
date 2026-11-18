@@ -46,6 +46,7 @@
 #endif
 
 #include "xt_io/exception.inc"
+#include "xt_io/watchdog.inc"
 #include "xt_io/inspect.inc"
 #include "xt_io/console.inc"
 #include "xt_io/base64.inc"

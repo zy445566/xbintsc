@@ -169,6 +169,18 @@ Error: boom
 函数体因为会切换栈而不记录。原生致命信号会先打印 `xbintsc: fatal signal …`，
 再打印同一组帧，所以即使没有调试器也能看出崩溃时正在运行哪些 JS 函数。
 
+### 程序像是卡死了
+
+空转的程序什么都不打印，因此没有栈可读。用 `XT_STACK_WATCHDOG_MS=5000` 运行，
+采样线程会在连续五秒没有进入或退出任何函数时打印同一组帧：
+
+```bash
+XT_STACK_WATCHDOG_MS=5000 ./build/app      # Windows: $env:XT_STACK_WATCHDOG_MS=5000; .\build\app.exe
+```
+
+打印的块会指出正在空转的文件与行号；如果它说栈上没有 JavaScript 帧，问题就在阻塞
+的宿主调用或事件循环，而不是你的代码。只有设置了该变量才会启动线程。
+
 ## 用 gdb / lldb / WinDbg 调试
 
 `xbintsc build app.ts --debug` 会生成 LLVM 调试元数据，并把 `-g

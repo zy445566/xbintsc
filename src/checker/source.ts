@@ -42,6 +42,9 @@ export function isDependencyNode(sourceFile: SourceFileNode, node: Node): boolea
  * reported, but no type, arity or property diagnostic is produced.
  */
 export function isPlainJavaScriptNode(sourceFile: SourceFileNode, node: Node): boolean {
+  /* An inline `<script>` body in an HTML page (no `lang="ts"`): the bundler
+   * marks its nodes, because the origin file is the page, not a `.js` file. */
+  if (sourceFile.untypedNodes?.has(node)) return true;
   const origin = sourceFile.origins?.get(node) ?? sourceFile.fileName;
   return /\.(js|mjs|cjs|jsx)$/i.test(origin);
 }

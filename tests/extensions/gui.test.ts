@@ -73,6 +73,21 @@ describe("gui .html asset loader", () => {
     expect(json.moduleSource).toContain("application/json");
   });
 
+  it("marks an inline JavaScript body untyped, but not a lang=ts body", () => {
+    /* A page's `<script>` is JavaScript unless it opts into TypeScript, so the
+     * checker must treat its nodes like an external `.js` script. Only the
+     * untyped bodies record a range: a typed body needs no marker, and its
+     * origin already defaults to the page. */
+    const plain = loadHtmlAsset("page.html", `<script>const n = 1;</script>`);
+    expect(plain.sourceRanges).toEqual([
+      { start: expect.any(Number), end: expect.any(Number), file: "page.html", untyped: true },
+    ]);
+    const typed = loadHtmlAsset("page.html", `<script lang="ts">const n: number = 1;</script>`);
+    expect(typed.sourceRanges).toBeUndefined();
+    const moduleType = loadHtmlAsset("page.html", `<script type="text/typescript">let m = 1;</script>`);
+    expect(moduleType.sourceRanges).toBeUndefined();
+  });
+
   it("leaves URL src scripts and empty bodies untouched", () => {
     const src = loadHtmlAsset("a.html", `<script src="https://cdn.example/app.js"></script>`);
     expect(htmlOf(src.moduleSource)).toContain('src="https://cdn.example/app.js"');

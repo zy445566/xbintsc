@@ -110,6 +110,12 @@ export interface AssetSourceRange {
   readonly start: number;
   readonly end: number;
   readonly file: string;
+  /**
+   * The copied source is plain JavaScript even though `file` is not a `.js`
+   * file (an inline `<script>` body in an HTML page). Nodes inside the span
+   * then skip the type checker, exactly like an external `.js` script.
+   */
+  readonly untyped?: boolean;
 }
 
 /** Rewrites an imported file (selected by extension) into a TS module. */

@@ -24,6 +24,7 @@ import {
   type VariableDeclarationList,
 } from "../../ast/nodes.js";
 import { SymbolKind } from "../../binder/binder.js";
+import type { AssetSourceRange } from "../../extensions/registry.js";
 import {
   assignmentStatement,
   deferredAliasDeclarations,
@@ -78,17 +79,22 @@ export function concatenateModules(options: ConcatenateOptions): SourceFileNode 
    * src="app.js">` body, say. Nodes inside such a span keep that file, so a
    * diagnostic points at real source and a plain-`.js` script stays exempt
    * from the type checker. */
-  const originOf = (record: ModuleRecord, node: Node): string => {
+  const originOf = (record: ModuleRecord, node: Node): AssetSourceRange | undefined => {
     const ranges = record.originRanges;
-    if (ranges === undefined) return record.path;
+    if (ranges === undefined) return undefined;
     for (const range of ranges) {
-      if (node.start >= range.start && node.end <= range.end) return range.file;
+      if (node.start >= range.start && node.end <= range.end) return range;
     }
-    return record.path;
+    return undefined;
   };
+  /* Inline `<script>` bodies in an HTML page are JavaScript unless the tag says
+   * otherwise; the checker must not infer types from them. */
+  const untypedNodes = new Set<object>();
   const trackOrigin = (record: ModuleRecord, root: Node): void => {
     const visit = (node: Node): void => {
-      origins.set(node, originOf(record, node));
+      const range = originOf(record, node);
+      origins.set(node, range?.file ?? record.path);
+      if (range?.untyped) untypedNodes.add(node);
       const fields = node as unknown as Record<string, unknown>;
       for (const key of Object.keys(fields)) {
         if (key === "kind" || key === "start" || key === "end" || key === "text" || key === "value" || key === "raw") {
@@ -254,6 +260,7 @@ export function concatenateModules(options: ConcatenateOptions): SourceFileNode 
     statements: merged,
     fileName: first.path,
     origins,
+    ...(untypedNodes.size > 0 ? { untypedNodes } : {}),
     moduleTexts: new Map(records.map((record) => [record.path, record.text])),
     modulePrefixes: records.map((record) => record.prefix),
     text: records.map((record) => record.text).join("\n"),

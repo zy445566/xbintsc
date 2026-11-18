@@ -82,6 +82,22 @@ function isExecutable(type: string | undefined, lang: string | undefined): boole
   }
 }
 
+/**
+ * Whether an executable `<script>` is plain JavaScript rather than TypeScript.
+ *
+ * A browser page's script is JavaScript by default; only `lang="ts"` or a
+ * TypeScript MIME type opts into type checking. Untyped scripts skip the
+ * checker's inference (see `isPlainJavaScriptNode`), which is what keeps
+ * minified bundles — `Game.foo = …` installed after the literal, a closure
+ * variable initialized to `null`, calls that rely on default parameters — from
+ * failing on heuristics that a real browser never applies.
+ */
+function isPlainScript(type: string | undefined, lang: string | undefined): boolean {
+  if (lang !== undefined && /^(ts|tsx|typescript)$/i.test(lang)) return false;
+  if (type === undefined) return true;
+  return !/^(text\/typescript|application\/typescript)$/i.test(type);
+}
+
 /** Rewrite a relative import specifier so it resolves from the HTML file. */
 function rewriteSpecifier(htmlPath: string, scriptPath: string, specifier: string): string {
   if (!specifier.startsWith(".")) return specifier;
@@ -275,8 +291,9 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
   const page = new SourceFile(path, source).text;
   /* `file` is set for an external `<script src>`: its body keeps that file as
    * the origin of every node, so a `.js` script stays untyped and diagnostics
-   * name the script, not the HTML page. */
-  const scripts: Array<{ id: string; body: string; prelude: string[]; file?: string }> = [];
+   * name the script, not the HTML page. `untyped` marks an inline body that is
+   * JavaScript (the default) rather than `lang="ts"`. */
+  const scripts: Array<{ id: string; body: string; prelude: string[]; file?: string; untyped?: boolean }> = [];
   const imports: string[] = [];
   const lazyImports: string[] = [];
   const importedText = new Set<string>();
@@ -302,12 +319,18 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
       bound.add(name);
     }
   };
-  const register = (compiled: CompiledModule, file?: string): string => {
+  const register = (compiled: CompiledModule, options?: { file?: string; untyped?: boolean }): string => {
     /* Hash the wrapped body, prelude included: the engine keys the registry by
      * id, so two scripts with the same statements but different deferred
      * imports must not collapse into one entry. */
     const id = hashString([...compiled.prelude, compiled.body].join("\n"));
-    scripts.push({ id, body: compiled.body, prelude: compiled.prelude, ...(file ? { file } : {}) });
+    scripts.push({
+      id,
+      body: compiled.body,
+      prelude: compiled.prelude,
+      ...(options?.file ? { file: options.file } : {}),
+      ...(options?.untyped ? { untyped: true } : {}),
+    });
     return id;
   };
 
@@ -315,7 +338,9 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
    * would be dropped at runtime. Inline it (and its `@import`s) now. */
   const styles = inlineStylesheets(path, page);
   const html = styles.html.replace(SCRIPT_RE, (match, attributes: string, inlineBody: string) => {
-    if (!isExecutable(attribute(attributes, "type"), attribute(attributes, "lang"))) return match;
+    const lang = attribute(attributes, "lang");
+    const type = attribute(attributes, "type");
+    if (!isExecutable(type, lang)) return match;
     const src = attribute(attributes, "src");
 
     if (src !== undefined && !URL_SPEC.test(src) && !src.startsWith("//")) {
@@ -325,7 +350,7 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
       }
       const compiled = compileModuleSource(path, scriptPath, readSourceText(scriptPath), scripts.length);
       hoistImports(compiled, `<script src="${src}">`, `alias it in ${scriptPath}`);
-      const id = register(compiled, scriptPath);
+      const id = register(compiled, { file: scriptPath });
       return `<script data-xt-id="${id}"></script>`;
     }
 
@@ -340,7 +365,7 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
      * where codegen cannot link its binding (TS5001). */
     const compiled = compileModuleSource(path, path, inlineBody, scripts.length);
     hoistImports(compiled, "inline <script>", "alias it");
-    const id = register(compiled);
+    const id = register(compiled, { untyped: isPlainScript(type, lang) });
     return `<script data-xt-id="${id}"></script>`;
   });
 
@@ -349,14 +374,18 @@ export function loadHtmlAsset(path: string, source: string): AssetLoadResult {
   /* Offset of the next part once joined with "\n", so a body's span in the
    * generated module can be reported back as the file it was copied from. */
   let offset = parts.reduce((total, part) => total + part.length + 1, 0);
-  for (const { id, body, prelude, file } of scripts) {
+  for (const { id, body, prelude, file, untyped } of scripts) {
     const header = `function __xt_script_${id}(window: any, document: any): void {\n`;
     const preludeText = prelude.length > 0 ? `${prelude.join("\n")}\n` : "";
     const part =
       `${header}${preludeText}${body}\n}\n` + `__registerScript(${JSON.stringify(id)}, __xt_script_${id});`;
+    const bodyStart = offset + header.length + preludeText.length;
     if (file !== undefined) {
-      const bodyStart = offset + header.length + preludeText.length;
       sourceRanges.push({ start: bodyStart, end: bodyStart + body.length, file });
+    } else if (untyped) {
+      /* An inline JavaScript body: its origin is the page itself, and the
+       * checker must treat it as untyped JavaScript, not as TypeScript. */
+      sourceRanges.push({ start: bodyStart, end: bodyStart + body.length, file: path, untyped: true });
     }
     parts.push(part);
     offset += part.length + 1;

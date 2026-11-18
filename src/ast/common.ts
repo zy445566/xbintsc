@@ -234,4 +234,14 @@ export interface SourceFileNode extends Node {
    * `fail`, not `m1_fail`.
    */
   readonly modulePrefixes?: readonly string[];
+  /**
+   * For a bundled program: nodes whose source is plain JavaScript even though
+   * their origin file is not a `.js` file.
+   *
+   * An inline `<script>` body in an HTML page is JavaScript by default — only a
+   * `lang="ts"` / `type="text/typescript"` tag opts into TypeScript semantics —
+   * so the checker must treat its nodes the way it treats an external `.js`
+   * script rather than inferring types from unannotated code.
+   */
+  readonly untypedNodes?: ReadonlySet<object>;
 }

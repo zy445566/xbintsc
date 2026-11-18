@@ -105,6 +105,15 @@ other control flow does not.
 - Bundled sources under `node_modules` are not checked at all: the checker is a
   gate for the code you wrote, and failing on a dependency's internals would
   make the default-on checker unusable with packages.
+- Plain JavaScript sources are not type-checked either (TypeScript only reports
+  on them with `checkJs`): an external `.js`/`.mjs`/`.cjs`/`.jsx` script, and an
+  inline `<script>` body in an HTML page that does not say `lang="ts"`. Names
+  are still resolved and redeclarations are still reported — both are needed for
+  code generation — but no type, arity or property diagnostic is produced. That
+  is the browser rule as well: a page's script is JavaScript unless it opts in,
+  and minified bundles legitimately install methods on a state object after its
+  literal, initialize a "call it later" variable with `null`, and call functions
+  through default parameters.
 
 ## Behaviour without the checker
 

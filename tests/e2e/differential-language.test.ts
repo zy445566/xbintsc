@@ -97,6 +97,23 @@ for (const v of results) console.log(JSON.stringify(v));`,
   );
 
   diff(
+    "regexp escaped literals stay literal",
+    printAll([
+      /* An escaped metacharacter must not become syntax: three.js's
+       * `\[\s*i\s*\]` loop unroller depends on this. */
+      '"x[ i ]y".replace(/\\[\\s*i\\s*\\]/g, "Z")',
+      '"pointLights[ i ]".replace(/\\[\\s*i\\s*\\]/g, "[ 0 ]")',
+      '"[i]".match(/\\[i\\]/g)',
+      '"a.b".replace(/a\\.b/, "Z")',
+      '"(x)".replace(/\\(x\\)/, "Z")',
+      '"1+2".replace(/\\+/, "-")',
+      '"a*b".replace(/\\*/, "!")',
+      '"$5".replace(/\\$5/, "#")',
+      '"[ ]".replace(/\\[\\s\\]/, "Z")',
+    ]),
+  );
+
+  diff(
     "immutable array methods and Object statics",
     printAll([
       "[3, 1, 2].toSorted((x, y) => x - y)",

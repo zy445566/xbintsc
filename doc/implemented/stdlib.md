@@ -75,6 +75,7 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 
 - `RegExp` uses the runtime's self-contained POSIX-ERE-compatible matcher (`regcomp` / `regexec` style) on every host, so results do not depend on the platform's libc. Capture groups are exposed through `exec` / `match` / `replace` / `split` / `search`.
 - Quantifiers include `*`, `+`, `?` and the counted forms `{n}`, `{n,}` and `{n,m}` (with a lazy `?` suffix). Malformed brace groups such as `{x}` and `{,2}` stay literal, as in JavaScript; an inverted range such as `{2,1}` is also treated as literal instead of being rejected.
+- A JavaScript pattern is translated for the matcher first (`\d`/`\w`/`\s` → classes, `(?:` → a capturing group, control-character escapes → literals). Any other escape is a **literal character** and keeps its backslash, so `\[`, `\]`, `\(`, `\.`, `\+` match those characters and do not start syntax: `"x[ i ]y".replace(/\[\s*i\s*\]/g, …)` behaves like Node. three.js's `unrollLoops` depends on exactly that shape.
 - Matching is byte-oriented and `/g` / `/y` `lastIndex` is not honoured — see [Runtime deviations](../unimplemented/deviations.md).
 
 ## Symbol

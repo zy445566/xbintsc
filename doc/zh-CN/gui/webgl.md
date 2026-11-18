@@ -82,7 +82,7 @@ SDL_GPU 不能在运行时编译 GLSL，且每个后端只消费自己的格式�
 | `sampler2DShadow` / `samplerCubeShadow` / `sampler2DArrayShadow` | 保留；绑定为 SDL_GPU 比较采样器 |
 | 缺少 `#version` / `#version 100` | `#version 310 es` |
 
-实现限制：结构体 uniform、用户 uniform 块、预处理阶段无法确定长度的 uniform 数组，以及用非常量表达式索引的采样器数组会被拒绝（shader/link info log 会说明）。`#pragma unroll_loop_start` 循环会在改写前展开，因此 three.js 生成的 `sampler2D shadowMap[ NUM_DIR_LIGHT_SHADOWS ]` / `shadowMap[ i ]` 会变成常量索引。`#ifdef` 内的着色器代码可用；非采样器 uniform 声明会被移动到顶层，保证块保持无条件。两个阶段的非采样器 uniform 会合并成同一个块，并在每个阶段各声明一次（顶点 set 1、片元 set 3），与 SDL_GPU 的 Vulkan 描述符布局一致。在 Metal 上同一批声明会变成 `[[buffer(0)]]` 与 `[[texture(N)]]`/`[[sampler(N)]]`，正是 SDL_GPU Metal 后端绑定的槽位。`uniformMatrix4fv` 按列主序写入反射出的偏移；对采样器调用 `uniform1i` 时记录纹理单元。每次绘制都用动态 uniform 缓冲接口推送该块。
+实现限制：结构体 uniform、用户 uniform 块、预处理阶段无法确定长度的 uniform 数组，以及用非常量表达式索引的采样器数组会被拒绝（shader/link info log 会说明）。`#pragma unroll_loop_start` 循环会在改写前展开，因此 three.js 生成的 `sampler2D shadowMap[ NUM_DIR_LIGHT_SHADOWS ]` / `shadowMap[ i ]` 会变成常量索引。`#ifdef` 内的着色器代码可用；非采样器 uniform 声明会被移动到顶层，保证块保持无条件。两个阶段的非采样器 uniform 会合并成同一个块，并在每个阶段各声明一次（顶点 set 1、片元 set 3），与 SDL_GPU 的 Vulkan 描述符布局一致。一个声明里写多个变量时（`uniform sampler2D a, b;`、`uniform vec3 tint, fill;`）会按声明符逐个改写：每个采样器拿到自己的 binding（因为 GLSL 的一个声明只有一套 `layout(...)`），每个非采样器各自成为一个块成员。在 Metal 上同一批声明会变成 `[[buffer(0)]]` 与 `[[texture(N)]]`/`[[sampler(N)]]`，正是 SDL_GPU Metal 后端绑定的槽位。`uniformMatrix4fv` 按列主序写入反射出的偏移；对采样器调用 `uniform1i` 时记录纹理单元。每次绘制都用动态 uniform 缓冲接口推送该块。
 
 翻译器的限制：结构体 uniform、用户 uniform 块、预处理后仍无法确定长度的 uniform 数组、采样器数组与采样器类型不匹配的声明会被拒绝（着色器/链接日志会说明）。`#ifdef` 内的代码没问题；非采样器 uniform 声明会被移到外层顶层位置，保证块是无条件的。
 

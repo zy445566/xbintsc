@@ -375,6 +375,9 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_symbol_static(i64, i32, i64*)",
   "declare i64 @xt_symbol_get(i64)",
   "declare i64 @xt_get(i64, i64)",
+  "declare i64 @xt_get_element(i64, i64, i64*)",
+  "declare i64 @xt_set_element(i64, i64, i64)",
+  "declare double @llvm.trunc.f64(double)",
   "declare i64 @xt_get_ic(i64, i64, i64*)",
   "declare i64 @xt_set(i64, i64, i64)",
   "declare i64 @xt_box_new(i64)",
@@ -397,3 +400,4 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare void @xt_console_error(i32, i64*)",
   "declare i64 @xt_console_object(i32, i64*)",
 ];
+

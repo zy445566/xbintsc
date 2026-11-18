@@ -21,4 +21,6 @@
 #include "xt_containers/objects.inc"
 #include "xt_containers/arrays.inc"
 #include "xt_containers/access.inc"
+#include "xt_containers/method_cache.inc"
 #include "xt_containers/boxes.inc"
+

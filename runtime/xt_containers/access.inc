@@ -2,6 +2,20 @@
 /* Generic member access                                                     */
 /* ------------------------------------------------------------------------- */
 
+/* Whether `key` is a canonical array index (`0 .. 2^32-2`, integral). Returns
+ * 1 when it is, 0 for a non-numeric key and -1 for a numeric non-index
+ * (`1.5`, `-1`, `2^32`), which is an ordinary property name — `arr[1.5]` must
+ * not read element 1. */
+static int xt_index_key(xt_value key, uint32_t *index) {
+  if (!XT_IS_NUMBER(key)) return 0;
+  double raw = xt_to_double(key);
+  if (!(raw >= 0) || raw > 4294967294.0) return -1;
+  uint32_t truncated = (uint32_t)raw;
+  if ((double)truncated != raw) return -1;
+  *index = truncated;
+  return 1;
+}
+
 /* Inherited lookup for values whose representation is not an `xt_object`
  * property table (Map/Set/Date/RegExp/Promise/Symbol). `__proto__` returns the
  * prototype itself instead of invoking Object.prototype's getter with the
@@ -236,15 +250,27 @@ xt_value xt_get(xt_value target, xt_value key) {  if (target == XT_UNDEFINED || 
           uint32_t index = 0;
           if (xt_key_is_array_index(k, &index)) return xt_typed_array_read(target, index);
         } else if (XT_IS_NUMBER(key)) {
-          int32_t index = xt_to_int32(key);
-          if (index >= 0) return xt_typed_array_read(target, (uint32_t)index);
+          uint32_t index = 0;
+          if (xt_index_key(key, &index) > 0) return xt_typed_array_read(target, index);
+        }
+      }
+      /* An ArrayBuffer's `byteLength` and `slice` are not own properties: an
+       * ArrayBuffer has no enumerable keys, so `Object.keys(buffer)` is empty
+       * like on the platform. */
+      if (obj->header.kind == XT_OBJECT_KIND_ARRAY_BUFFER && XT_IS_STRING(key)) {
+        xt_string *k = xt_as_string(key);
+        if (k->length == 10 && memcmp(xt_string_bytes(k), "byteLength", 10) == 0) {
+          return xt_number((double)obj->buffer_length);
+        }
+        if (k->length == 5 && memcmp(xt_string_bytes(k), "slice", 5) == 0) {
+          return xt_array_buffer_slice_value();
         }
       }
       xt_value value = xt_object_get(target, key);
       if (value != XT_UNDEFINED) return value;
       xt_value method = xt_method_value(target, key);
       if (method != XT_UNDEFINED) return method;
-      if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+      if (!xt_kind_is_object(obj->header.kind)) {
         return xt_get_inherited(target, key);
       }
       return XT_UNDEFINED;
@@ -285,7 +311,7 @@ xt_value xt_get(xt_value target, xt_value key) {  if (target == XT_UNDEFINED || 
 xt_value xt_get_ic(xt_value target, xt_value key, int64_t *cache) {
   if (!cache || !XT_IS_OBJECT(target)) return xt_get(target, key);
   xt_object *obj = (xt_object *)XT_GET_PTR(target);
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+  if (!xt_kind_is_object(obj->header.kind)) {
     return xt_get(target, key);
   }
   /* A host view answers keys dynamically, outside the shape cache. */
@@ -319,8 +345,57 @@ xt_value xt_get_ic(xt_value target, xt_value key, int64_t *cache) {
   return xt_get(target, key);
 }
 
-xt_value xt_set(xt_value target, xt_value key, xt_value value) {
+/* ------------------------------------------------------------------------- */
+/* Element access (`obj[key]`)                                               */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * `obj[key]` is the hottest access in array/geometry code, and its receiver is
+ * almost always a typed array or a plain array. Those two shapes are answered
+ * here in a handful of instructions (a kind check, a numeric-key test and a
+ * bounds check) instead of walking the general `xt_get` dispatch and its
+ * per-kind branches. Everything else — string keys on objects, Map/Set, host
+ * views, out-of-range or negative keys — falls through to the ordinary
+ * `xt_get_ic` / `xt_set` paths, so semantics are unchanged.
+ */
+
+/* ------------------------------------------------------------------------- */
+/* Element access (`obj[key]`)                                               */
+/* ------------------------------------------------------------------------- */
+
+xt_value xt_get_element(xt_value target, xt_value key, int64_t *cache) {
+  uint32_t index = 0;
   if (XT_IS_ARRAY(target)) {
+    int isIndex = xt_index_key(key, &index);
+    if (isIndex > 0) return xt_array_get(target, key);
+  } else if (XT_IS_OBJECT(target)) {
+    xt_object *object = (xt_object *)XT_GET_PTR(target);
+    if (object->header.kind == XT_OBJECT_KIND_OBJECT && object->view_bytes != NULL &&
+        xt_index_key(key, &index) > 0) {
+      return xt_typed_array_read(target, index);
+    }
+  }
+  return xt_get_ic(target, key, cache);
+}
+
+xt_value xt_set_element(xt_value target, xt_value key, xt_value value) {
+  uint32_t index = 0;
+  if (XT_IS_ARRAY(target)) {
+    int isIndex = xt_index_key(key, &index);
+    if (isIndex > 0) return xt_array_set(target, key, value);
+  } else if (XT_IS_OBJECT(target)) {
+    xt_object *object = (xt_object *)XT_GET_PTR(target);
+    if (object->header.kind == XT_OBJECT_KIND_OBJECT && object->view_bytes != NULL &&
+        xt_index_key(key, &index) > 0) {
+      /* Out-of-range writes to a typed array are ignored, like the platform. */
+      xt_typed_array_write(target, index, value);
+      return value;
+    }
+  }
+  return xt_set(target, key, value);
+}
+
+xt_value xt_set(xt_value target, xt_value key, xt_value value) {  if (XT_IS_ARRAY(target)) {
     /* Assigning `arr.length` truncates or extends the array. */
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);
@@ -361,11 +436,9 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
       uint32_t index = 0;
       int isIndex = 0;
       if (XT_IS_NUMBER(key)) {
-        int32_t numeric = xt_to_int32(key);
-        if (numeric >= 0) {
-          index = (uint32_t)numeric;
-          isIndex = 1;
-        }
+        /* Only a canonical index names an element: `ta[1.5] = v` stores the
+         * property "1.5", exactly like the platform. */
+        isIndex = xt_index_key(key, &index) > 0;
       } else if (XT_IS_STRING(key)) {
         isIndex = xt_key_is_array_index(xt_as_string(key), &index);
       }
@@ -375,6 +448,12 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
         xt_typed_array_write(target, index, value);
         return value;
       }
+    }
+    if (((xt_object *)XT_GET_PTR(target))->header.kind == XT_OBJECT_KIND_ARRAY_BUFFER &&
+        XT_IS_STRING(key)) {
+      /* `byteLength` is read-only (it is not an own property, see `xt_get`). */
+      xt_string *k = xt_as_string(key);
+      if (k->length == 10 && memcmp(xt_string_bytes(k), "byteLength", 10) == 0) return value;
     }
     if (((xt_object *)XT_GET_PTR(target))->header.kind == XT_OBJECT_KIND_REGEXP &&
         XT_IS_STRING(key)) {
@@ -396,7 +475,7 @@ xt_value xt_set(xt_value target, xt_value key, xt_value value) {
 xt_value xt_object_set_hooks(xt_value value, const xt_object_hooks *hooks, void *data) {
   xt_object *obj = xt_as_object(value);
   if (!obj) return value;
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+  if (!xt_kind_is_object(obj->header.kind)) {
     return value;
   }
   obj->hooks = hooks;
@@ -468,7 +547,7 @@ xt_value xt_object_has_own(xt_value value, xt_value key) {
   if (!obj) return XT_FALSE;
   /* Map/Set/Date/RegExp/Promise/Symbol use their own struct layout and have no
    * property bag; interpreting them as `xt_object` would read past the end. */
-  if (obj->header.kind != XT_OBJECT_KIND_OBJECT && obj->header.kind != XT_OBJECT_KIND_ERROR) {
+  if (!xt_kind_is_object(obj->header.kind)) {
     return XT_FALSE;
   }
   xt_value propertyKey = xt_to_property_key(key);
@@ -507,3 +586,6 @@ xt_value xt_in(xt_value key, xt_value value) {
   }
   return XT_FALSE;
 }
+
+
+

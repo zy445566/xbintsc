@@ -42,6 +42,7 @@ static const char *xt_gc_kind_name(uint8_t kind) {
     case XT_OBJECT_KIND_WEAK_MAP: return "weakmap";
     case XT_OBJECT_KIND_WEAK_SET: return "weakset";
     case XT_OBJECT_KIND_WEAK_REF: return "weakref";
+    case XT_OBJECT_KIND_ARRAY_BUFFER: return "array-buffer";
     default: return "?";
   }
 }

@@ -515,3 +515,4 @@ xt_value xt_call_method(xt_value target, xt_value name, int32_t argc, xt_value *
   }
   xt_throw_no_method("value", method);
 }
+

@@ -47,8 +47,15 @@ int xt_typed_array_kind_of(xt_value value) {
   if (!XT_IS_OBJECT(value)) return -1;
   xt_object *object = (xt_object *)XT_GET_PTR(value);
   if (object->header.kind != XT_OBJECT_KIND_OBJECT) return -1;
+  /* The prototype lookup is memoized in `reserved2` (kind + 1): a typed array's
+   * kind never changes, and this is on the per-element path. `Object.setPrototypeOf`
+   * clears the slot, so a re-prototyped view falls back to the scan. */
+  if (object->reserved2 != 0) return (int)object->reserved2 - 1;
   for (int kind = 0; kind < XT_TA_KIND_COUNT; kind++) {
-    if (xt_ta_protos[kind] && object->prototype == xt_ta_protos[kind]) return kind;
+    if (xt_ta_protos[kind] && object->prototype == xt_ta_protos[kind]) {
+      object->reserved2 = (uint16_t)(kind + 1);
+      return kind;
+    }
   }
   return -1;
 }
@@ -105,20 +112,35 @@ uint32_t xt_typed_array_byte_offset_of(xt_value array) {
   return (uint32_t)xt_to_number(xt_object_get(array, xt_ta_offset_key()));
 }
 
+/* Views with no resolved byte block: a view over a zero-length buffer (reads are
+ * out of range) or a view built without a real ArrayBuffer, which keeps its
+ * elements as ordinary properties. */
+static xt_value xt_ta_read_unbacked(xt_value array, int kind, uint32_t index) {
+  (void)kind;
+  if (xt_is_array_buffer(xt_typed_array_buffer_of(array))) return XT_UNDEFINED;
+  char key[24];
+  snprintf(key, sizeof(key), "%u", index);
+  return xt_object_get_cstr(array, key);
+}
+
+static void xt_ta_write_unbacked(xt_value array, int kind, uint32_t index, xt_value value) {
+  if (xt_is_array_buffer(xt_typed_array_buffer_of(array))) return;
+  char key[24];
+  snprintf(key, sizeof(key), "%u", index);
+  xt_object_set(array, xt_string_from_cstr(key),
+                xt_number(xt_typed_array_coerce(kind, xt_to_number(value))));
+}
+
 xt_value xt_typed_array_read(xt_value array, uint32_t index) {
   int kind = xt_typed_array_kind_of(array);
   if (kind < 0) return XT_UNDEFINED;
-  xt_value buffer = xt_typed_array_buffer_of(array);
-  if (!xt_is_array_buffer(buffer)) {
-    char key[24];
-    snprintf(key, sizeof(key), "%u", index);
-    return xt_object_get_cstr(array, key);
-  }
   uint32_t width = (uint32_t)xt_ta_bytes[kind];
-  uint32_t offset = xt_typed_array_byte_offset_of(array) + index * width;
-  if (offset + width > xt_array_buffer_byte_length(buffer)) return XT_UNDEFINED;
-  uint8_t raw[8];
-  for (uint32_t i = 0; i < width; i++) raw[i] = xt_array_buffer_get_byte(buffer, offset + i);
+  xt_object *object = (xt_object *)XT_GET_PTR(array);
+  uint8_t *base = object->view_bytes;
+  if (base == NULL) return xt_ta_read_unbacked(array, kind, index);
+  uint32_t offset = index * width;
+  if (offset + width > object->view_length) return XT_UNDEFINED;
+  const uint8_t *raw = base + offset;
   switch (kind) {
     case XT_TA_U8:
       return xt_number((double)raw[0]);
@@ -162,20 +184,17 @@ xt_value xt_typed_array_read(xt_value array, uint32_t index) {
 void xt_typed_array_write(xt_value array, uint32_t index, xt_value value) {
   int kind = xt_typed_array_kind_of(array);
   if (kind < 0) return;
-  xt_value buffer = xt_typed_array_buffer_of(array);
-  if (!xt_is_array_buffer(buffer)) {
-    char key[24];
-    snprintf(key, sizeof(key), "%u", index);
-    xt_object_set(array, xt_string_from_cstr(key),
-                  xt_number(xt_typed_array_coerce(kind, xt_to_number(value))));
+  uint32_t width = (uint32_t)xt_ta_bytes[kind];
+  xt_object *object = (xt_object *)XT_GET_PTR(array);
+  uint8_t *base = object->view_bytes;
+  if (base == NULL) {
+    xt_ta_write_unbacked(array, kind, index, value);
     return;
   }
-  uint32_t width = (uint32_t)xt_ta_bytes[kind];
-  uint32_t offset = xt_typed_array_byte_offset_of(array) + index * width;
-  if (offset + width > xt_array_buffer_byte_length(buffer)) return;
+  uint32_t offset = index * width;
+  if (offset + width > object->view_length) return;
   double coerced = xt_typed_array_coerce(kind, xt_to_number(value));
-  uint8_t raw[8];
-  memset(raw, 0, sizeof(raw));
+  uint8_t *raw = base + offset;
   switch (kind) {
     case XT_TA_U8:
     case XT_TA_U8C:
@@ -215,7 +234,6 @@ void xt_typed_array_write(xt_value array, uint32_t index, xt_value value) {
       break;
     }
   }
-  for (uint32_t i = 0; i < width; i++) xt_array_buffer_set_byte(buffer, offset + i, raw[i]);
 }
 
 /* -- element storage ------------------------------------------------------ */

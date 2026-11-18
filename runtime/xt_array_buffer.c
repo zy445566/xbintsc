@@ -20,44 +20,48 @@
 #include <stdlib.h>
 #include <string.h>
 
-static xt_value xt_ab_data_key_value = XT_UNDEFINED;
-
-static xt_value xt_ab_data_key(void) {
-  /* A symbol key keeps the backing bytes out of Object.keys / JSON.stringify,
-   * like the platform's internal [[ArrayBufferData]] slot. */
-  if (!xt_is_symbol(xt_ab_data_key_value)) {
-    xt_ab_data_key_value = xt_symbol_new(xt_string_from_cstr("__arrayBufferData"));
-    xt_gc_add_root(&xt_ab_data_key_value);
-  }
-  return xt_ab_data_key_value;
-}
-
-static xt_value xt_ab_data(xt_value buffer) {  if (!XT_IS_OBJECT(buffer)) return XT_UNDEFINED;
-  return xt_object_get(buffer, xt_ab_data_key());
-}
+/*
+ * Storage: an ArrayBuffer is an ordinary object of kind
+ * `XT_OBJECT_KIND_ARRAY_BUFFER` whose bytes live in one `calloc`ed block
+ * (`buffer_bytes`). Typed arrays and DataViews index that block directly, so a
+ * geometry loop reads memory instead of paying a property lookup per byte.
+ *
+ * The block belongs to the buffer object and the collector frees it when the
+ * buffer is swept (see `xt_gc_release`). `byteLength` and `slice` are served by
+ * `xt_get` from this kind instead of being own properties, so an ArrayBuffer has
+ * no enumerable keys (`Object.keys(buffer)` is empty) like on the platform.
+ */
 
 static int xt_ab_is_buffer(xt_value value) {
-  return XT_IS_ARRAY(xt_ab_data(value));
+  return XT_IS_OBJECT(value) &&
+         ((xt_object *)XT_GET_PTR(value))->header.kind == XT_OBJECT_KIND_ARRAY_BUFFER;
 }
 
 static xt_value xt_ab_new(uint32_t length) {
   xt_value buffer = xt_object_new();
-  xt_object_set(buffer, xt_string_from_cstr("byteLength"), xt_number((double)length));
-  xt_value data = xt_array_new(0, NULL);
-  for (uint32_t i = 0; i < length; i++) xt_array_push(data, xt_number(0));
-  xt_object_set(buffer, xt_ab_data_key(), data);
+  xt_object *object = (xt_object *)XT_GET_PTR(buffer);
+  object->header.kind = (uint8_t)XT_OBJECT_KIND_ARRAY_BUFFER;
+  /* A zero-length buffer keeps a NULL block: nothing ever indexes it. */
+  object->buffer_bytes = length > 0 ? (uint8_t *)calloc(1, length) : NULL;
+  object->buffer_length = object->buffer_bytes != NULL ? length : 0;
   return buffer;
 }
 
 static xt_value xt_ab_slice(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv);
-static void xt_ab_install(xt_value object, const char *name, void *fn);
+
+/** The single `slice` method value `xt_get` hands out for an ArrayBuffer. */
+xt_value xt_array_buffer_slice_value(void) {
+  static xt_value cached = XT_UNDEFINED;
+  if (XT_IS_FUNCTION(cached)) return cached;
+  cached = xt_closure_new((void *)xt_ab_slice, 0, NULL);
+  xt_gc_add_root(&cached);
+  return cached;
+}
 
 xt_value xt_array_buffer_ctor(int32_t argc, xt_value *argv) {
   double length = xt_to_number(xt_arg_at(argc, argv, 0));
   if (!(length >= 0) || length > 4294967295.0) length = 0;
-  xt_value buffer = xt_ab_new((uint32_t)length);
-  xt_ab_install(buffer, "slice", (void *)xt_ab_slice);
-  return buffer;
+  return xt_ab_new((uint32_t)length);
 }
 
 xt_value xt_array_buffer_alloc(uint32_t byte_length) { return xt_ab_new(byte_length); }
@@ -65,55 +69,61 @@ xt_value xt_array_buffer_alloc(uint32_t byte_length) { return xt_ab_new(byte_len
 int xt_is_array_buffer(xt_value value) { return xt_ab_is_buffer(value); }
 
 uint32_t xt_array_buffer_byte_length(xt_value value) {
-  if (!xt_ab_is_buffer(value)) return 0;
-  return (uint32_t)xt_to_number(xt_get(value, xt_string_from_cstr("byteLength")));
+  if (!XT_IS_OBJECT(value)) return 0;
+  xt_object *object = (xt_object *)XT_GET_PTR(value);
+  if (object->header.kind != XT_OBJECT_KIND_ARRAY_BUFFER) return 0;
+  return object->buffer_length;
+}
+
+uint8_t *xt_array_buffer_bytes(xt_value buffer, uint32_t *byte_length) {
+  if (byte_length != NULL) *byte_length = 0;
+  if (!XT_IS_OBJECT(buffer)) return NULL;
+  xt_object *object = (xt_object *)XT_GET_PTR(buffer);
+  if (object->header.kind != XT_OBJECT_KIND_ARRAY_BUFFER) return NULL;
+  if (byte_length != NULL) *byte_length = object->buffer_length;
+  return object->buffer_bytes;
 }
 
 uint8_t xt_array_buffer_get_byte(xt_value buffer, uint32_t index) {
-  xt_value data = xt_ab_data(buffer);
-  if (!XT_IS_ARRAY(data)) return 0;
-  return (uint8_t)xt_to_int32(xt_get(data, xt_number((double)index)));
+  uint32_t length = 0;
+  uint8_t *bytes = xt_array_buffer_bytes(buffer, &length);
+  if (bytes == NULL || index >= length) return 0;
+  return bytes[index];
 }
 
 void xt_array_buffer_set_byte(xt_value buffer, uint32_t index, uint8_t value) {
-  xt_value data = xt_ab_data(buffer);
-  if (!XT_IS_ARRAY(data)) return;
-  xt_set(data, xt_number((double)index), xt_number((double)value));
+  uint32_t length = 0;
+  uint8_t *bytes = xt_array_buffer_bytes(buffer, &length);
+  if (bytes == NULL || index >= length) return;
+  bytes[index] = value;
 }
 
-/* Bulk byte access. A decoder (WAV, image, …) would otherwise pay one hidden
- * property read per byte, which is far too slow for a multi-megabyte file. The
- * backing store is an `xt_array` of numbers; reading its `items` directly is
- * the same representation `xt_ab_new` writes. */
+/* Bulk byte access for decoders and wasm memories. */
 uint32_t xt_array_buffer_copy_bytes_out(xt_value buffer, uint32_t offset, uint8_t *dst,
                                         uint32_t count) {
-  xt_array *data = xt_as_array(xt_ab_data(buffer));
-  if (data == NULL || dst == NULL) return 0;
-  if (offset >= data->length) return 0;
-  if (count > data->length - offset) count = data->length - offset;
-  for (uint32_t i = 0; i < count; i++) {
-    dst[i] = (uint8_t)(int32_t)xt_to_number(data->items[offset + i]);
-  }
+  uint32_t length = 0;
+  uint8_t *bytes = xt_array_buffer_bytes(buffer, &length);
+  if (bytes == NULL || dst == NULL) return 0;
+  if (offset >= length) return 0;
+  if (count > length - offset) count = length - offset;
+  memcpy(dst, bytes + offset, count);
   return count;
 }
 
 uint32_t xt_array_buffer_copy_bytes_in(xt_value buffer, uint32_t offset, const uint8_t *src,
                                        uint32_t count) {
-  xt_array *data = xt_as_array(xt_ab_data(buffer));
-  if (data == NULL || src == NULL) return 0;
-  if (offset >= data->length) return 0;
-  if (count > data->length - offset) count = data->length - offset;
-  for (uint32_t i = 0; i < count; i++) {
-    data->items[offset + i] = xt_number((double)src[i]);
-  }
+  uint32_t length = 0;
+  uint8_t *bytes = xt_array_buffer_bytes(buffer, &length);
+  if (bytes == NULL || src == NULL) return 0;
+  if (offset >= length) return 0;
+  if (count > length - offset) count = length - offset;
+  memcpy(bytes + offset, src, count);
   return count;
 }
 
 static xt_value xt_ab_slice(xt_value thisValue, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
-  xt_value data = xt_ab_data(thisValue);
-  if (!XT_IS_ARRAY(data)) return xt_ab_new(0);
-  int32_t length = xt_to_int32(xt_array_length(data));
+  int32_t length = (int32_t)xt_array_buffer_byte_length(thisValue);
   int32_t start = argc > 0 && argv[0] != XT_UNDEFINED ? xt_to_int32(argv[0]) : 0;
   int32_t end = argc > 1 && argv[1] != XT_UNDEFINED ? xt_to_int32(argv[1]) : length;
   if (start < 0) start += length;
@@ -121,16 +131,10 @@ static xt_value xt_ab_slice(xt_value thisValue, xt_value env, int32_t argc, xt_v
   if (start < 0) start = 0;
   if (end > length) end = length;
   if (end < start) end = start;
-  xt_value result = xt_ab_new(0);
-  xt_ab_install(result, "slice", (void *)xt_ab_slice);
-  xt_value source = xt_ab_data(result);
-  for (int32_t i = start; i < end; i++) xt_array_push(source, xt_get(data, xt_number((double)i)));
-  xt_object_set(result, xt_string_from_cstr("byteLength"), xt_number((double)(end - start)));
+  xt_value result = xt_ab_new((uint32_t)(end - start));
+  xt_array_buffer_copy_bytes_out(thisValue, (uint32_t)start,
+                                 xt_array_buffer_bytes(result, NULL), (uint32_t)(end - start));
   return result;
-}
-
-static void xt_ab_install(xt_value object, const char *name, void *fn) {
-  xt_object_set(object, xt_string_from_cstr(name), xt_closure_new(fn, 0, NULL));
 }
 
 xt_value xt_array_buffer_static(xt_value name, int32_t argc, xt_value *argv) {
@@ -182,8 +186,8 @@ static int xt_dv_signed(int kind) {
   return kind == XT_DV_I8 || kind == XT_DV_I16 || kind == XT_DV_I32;
 }
 
-static xt_value xt_dv_data(xt_value view) {
-  return xt_ab_data(xt_get(view, xt_string_from_cstr("buffer")));
+static xt_value xt_dv_buffer(xt_value view) {
+  return xt_get(view, xt_string_from_cstr("buffer"));
 }
 
 static uint32_t xt_dv_offset(xt_value view) {
@@ -207,23 +211,25 @@ static int xt_dv_check(xt_value view, xt_value indexValue, uint32_t width, uint3
 }
 
 static uint64_t xt_dv_read_bits(xt_value view, uint32_t offset, uint32_t width, int little) {
-  xt_value data = xt_dv_data(view);
+  uint32_t length = 0;
+  uint8_t *bytes = xt_array_buffer_bytes(xt_dv_buffer(view), &length);
   uint64_t value = 0;
+  if (bytes == NULL || offset + width > length) return 0;
   for (uint32_t i = 0; i < width; i++) {
     uint32_t index = little ? offset + width - 1 - i : offset + i;
-    uint64_t byte = (uint64_t)xt_to_number(xt_get(data, xt_number((double)index)));
-    value = (value << 8) | (byte & 0xff);
+    value = (value << 8) | (uint64_t)bytes[index];
   }
   return value;
 }
 
 static void xt_dv_write_bits(xt_value view, uint32_t offset, uint32_t width, uint64_t value,
                              int little) {
-  xt_value data = xt_dv_data(view);
+  uint32_t length = 0;
+  uint8_t *bytes = xt_array_buffer_bytes(xt_dv_buffer(view), &length);
+  if (bytes == NULL || offset + width > length) return;
   for (uint32_t i = 0; i < width; i++) {
     uint32_t shift = little ? i * 8 : (width - 1 - i) * 8;
-    uint32_t index = offset + i;
-    xt_set(data, xt_number((double)index), xt_number((double)((value >> shift) & 0xff)));
+    bytes[offset + i] = (uint8_t)((value >> shift) & 0xff);
   }
 }
 
@@ -312,3 +318,4 @@ xt_value xt_data_view_ctor(int32_t argc, xt_value *argv) {
   }
   return view;
 }
+

@@ -160,7 +160,6 @@ void *xt_alloc(size_t size, int kind) {
   header->kind = (uint8_t)kind;
   header->flags = 0;
   header->size = (uint32_t)size;
-  header->size = (uint32_t)size;
   xt_heap_link(header);
   return header;
 }
@@ -335,7 +334,8 @@ static void xt_gc_process(xt_header *header) {
       /* Numbers/bytes only: no references to follow. */
       return;
     case XT_OBJECT_KIND_OBJECT:
-    case XT_OBJECT_KIND_ERROR: {
+    case XT_OBJECT_KIND_ERROR:
+    case XT_OBJECT_KIND_ARRAY_BUFFER: {
       xt_object *object = (xt_object *)header;
       xt_gc_scan_region(base, payload);
       if (object->properties && object->count) {
@@ -412,6 +412,12 @@ static void xt_gc_release(xt_header *header) {
     case XT_OBJECT_KIND_ERROR:
       free(((xt_object *)header)->properties);
       break;
+    case XT_OBJECT_KIND_ARRAY_BUFFER: {
+      xt_object *object = (xt_object *)header;
+      free(object->buffer_bytes);
+      free(object->properties);
+      break;
+    }
     case XT_OBJECT_KIND_ARRAY:
       free(((xt_array *)header)->items);
       break;
@@ -558,3 +564,4 @@ void xt_gc_collect(void) {
     fprintf(stderr, "\n");
   }
 }
+

@@ -117,7 +117,7 @@ xt_value xt_object_rest(xt_value source, int32_t argc, xt_value *argv) {
   if (!XT_IS_OBJECT(source) && !XT_IS_FUNCTION(source)) return result;
   xt_object *object = xt_as_object(source);
   if (!object) return result;
-  if (object->header.kind != XT_OBJECT_KIND_OBJECT && object->header.kind != XT_OBJECT_KIND_ERROR) {
+  if (!xt_kind_is_object(object->header.kind)) {
     /* Map/Set/Date/RegExp/Promise have no own enumerable string properties. */
     return result;
   }
@@ -594,4 +594,5 @@ xt_value xt_function_set_metadata(xt_value value, xt_value name, int32_t arity) 
   }
   return value;
 }
+
 

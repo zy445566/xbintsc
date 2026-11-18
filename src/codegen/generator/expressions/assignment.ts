@@ -151,7 +151,7 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
         const access = target as ElementAccessExpression;
         const object = this.emitExpression(access.expression);
         const key = this.emitExpression(access.argumentExpression);
-        this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
+        this.emitElementWrite(object, key, value);
         return;
       }
       case SyntaxKind.ParenthesizedExpression:
@@ -244,3 +244,4 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
     }
   },
 };
+

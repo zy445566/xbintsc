@@ -37,4 +37,31 @@ describeE2E("typed array buffer views", (harness) => {
       console.log(JSON.stringify(new Uint8Array([1, 2])));
     `);
   });
+
+  it("keeps element semantics at the index boundaries", () => {
+    /* `obj[i]` takes a fast path that only accepts canonical array indices, so
+     * a negative, fractional or out-of-range key must still behave like the
+     * ordinary property access it falls back to. */
+    harness.expectSameOutputAsNode(`
+      const bytes = new Uint8Array([10, 20, 30, 40]);
+      console.log(bytes[0], bytes[3], bytes[4], bytes[-1], bytes[1.5]);
+      console.log(String(bytes[100]), String(bytes[-2]));
+
+      bytes[4] = 99;
+      bytes[-1] = 99;
+      console.log(bytes.length, bytes.join(","));
+
+      bytes[1] = 300;              // coerced to Uint8
+      console.log(bytes[1]);
+
+      const words = new Float32Array(2);
+      words[0] = 1.5;
+      words["1"] = 2.5;
+      console.log(words[0], words[1], words.join(","));
+
+      const view = new Uint8Array(bytes.buffer, 1, 2);
+      console.log(view.join(","), view[0], bytes.buffer.byteLength);
+      console.log(Object.keys(new ArrayBuffer(8)).join(","), new ArrayBuffer(3).byteLength);
+    `);
+  });
 });

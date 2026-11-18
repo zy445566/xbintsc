@@ -75,6 +75,23 @@ static char *xt_regexp_translate_js(const char *pattern, int *jsGroups, int *gro
           default: break;
         }
       }
+      if (!replacement && !literal && !consume) {
+        /* Any other escape is a literal (`\[`, `\]`, `\(`, `\.`, …). Copy the
+         * pair verbatim and skip the escaped character, so `\[` does not open a
+         * bracket expression and `\(` does not count as a group: the matcher
+         * reads `\[` as "a literal `[`", which is what the JavaScript pattern
+         * means. Dropping the backslash here used to turn `\[\s*i\s*\]` into a
+         * bracket expression and made three.js's unroll regex match nothing. */
+        if (written + 3 > capacity) {
+          capacity = capacity * 2 + 16;
+          out = (char *)realloc(out, capacity);
+          if (!out) abort();
+        }
+        out[written++] = '\\';
+        if (next != '\0') out[written++] = next;
+        i += next != '\0' ? 1 : 0;
+        continue;
+      }
     } else if (c == '[') {
       inClass = 1;
     } else if (c == ']') {

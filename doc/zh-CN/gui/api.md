@@ -98,6 +98,7 @@ requestAnimationFrame(frame);
 | --- | --- |
 | `window`、`self` | 最近打开的窗口句柄（若程序尚未创建窗口，会隐式打开一个），因此 `window.innerWidth`、`window.addEventListener`、`window.setTimeout`、`window.localStorage`、`window.location`、`window.devicePixelRatio`、`window.matchMedia` 都可用 |
 | `document` | 该窗口的 document 句柄 |
+| 裸 window 成员 | 浏览器的全局作用域其实就是 window，因此 `innerWidth`、`innerHeight`、`outerWidth`、`outerHeight`、`devicePixelRatio`、`location`、`screen`、`scrollX`/`scrollY`、`addEventListener`/`removeEventListener`/`dispatchEvent`、`setTimeout`/`clearTimeout`/`setInterval`/`clearInterval`、`queueMicrotask`、`focus`/`blur`、`scrollTo`/`scrollBy` 不带 `window.` 前缀也能用。每一项都是从 window 上实时读取成员（`xt_get(window, name)`；调用走 `xt_call_method`），所以 `innerWidth` 会跟随窗口尺寸变化，`location.href` 仍是真实对象。`screen` 描述的是显示器（`width`/`height`/`availWidth`/`availHeight`/`colorDepth`/`pixelDepth`/`orientation`），不是窗口 |
 | `navigator` | `userAgent`（以 `xbintsc` 结尾的桌面 Chrome 字符串）、`platform`、`vendor`、`language(s)`、`hardwareConcurrency`、`maxTouchPoints`、`onLine`、`vibrate()` |
 | `localStorage` | 内存中的 `getItem` / `setItem` / `removeItem` / `clear` / `key` / `length` |
 | `AudioContext`、`webkitAudioContext` | 带真实混音器与解码器的 Web Audio 图（见下） |
@@ -108,6 +109,7 @@ requestAnimationFrame(frame);
 | `ImageBitmap`、`createImageBitmap(source)` | 由已解码像素支撑的不可变位图（`<img>`、`<canvas>`、`<video>` 帧、`OffscreenCanvas` 与 `ImageData` 形状）；promise 立即 settle，`texImage2D` 可直接接受该对象 |
 | `OffscreenCanvas` | 真正的 2D 离屏位图，带 `getContext("2d")`、`width`/`height`、`transferToImageBitmap()` 与 `convertToBlob()`；`canvas.transferControlToOffscreen()` 会把元素位图交给它（见 [Canvas](./canvas.md)）。离屏 WebGL 上下文不提供。 |
 | `ImageData`、`XRWebGL*`、`Request`、`Headers`、`Response`、`DOMParser` | `typeof` 探测返回 `"undefined"`（没有 XR、DOM 解析器或流式后端），让页面走自己的“不支持”分支，而不是调用空壳。`fetch` 仍然可用，并返回 response 形状的对象，但没有 `Response` 构造函数，且 `response.arrayBuffer()` 目前返回字节数组而不是 `ArrayBuffer`；`ReadableStream` 等 Web Streams 类来自核心运行时。Three.js 页面在本后端上使用真实渲染器（见[已知问题](./known-issues.md)）。 |
+| `VideoFrame`、`OfflineAudioContext`、`Float16Array` | 媒体/three.js 特性探测所期望的名字。`VideoFrame` 是真实的构造函数值，因此 `frame instanceof VideoFrame` 安全地得到 `false`，而不是抛 `TypeError`；`OfflineAudioContext` 能构造出对象，但背后没有离线渲染器（离线渲染音频仍需 `AudioContext`）；`Float16Array` 是 `undefined`，因此 `typeof Float16Array < "u"` 会走降级分支（运行时没有 16 位浮点元素类型） |
 | `requestAnimationFrame` / `cancelAnimationFrame` | 排入窗口的动画帧列表，见[运行时集成](./runtime.md) |
 | `alert` / `confirm` / `prompt`、`matchMedia`、`getComputedStyle`、`escape` | 宿主实现。`matchMedia` 返回**实时**列表（按查询缓存）：`matches` 在窗口尺寸变化时重新求值，翻转时触发 `change` 监听器。`confirm`/`prompt` 仅在 `XT_GUI_DIALOGS=1` 时使用原生对话框，否则把消息写到 stderr 并返回文档化的默认值（Annex B `escape` 按 UTF-16 码元编码，与 `decodeURIComponent(escape(bytes))` 一致） |
 

@@ -129,13 +129,19 @@ function under [`doc/gui/`](../gui/)), and the scripting surface in
 [../gui/canvas.md](../gui/canvas.md) for the canvas API and its limits.
 
 Pages written for the browser also get the browser globals they reach for —
-`window`/`self`, `document`, `navigator`, `location`, `localStorage`,
+`window`/`self`, `document`, `navigator`, `localStorage`,
 `requestAnimationFrame`, `matchMedia`, `getComputedStyle`, `alert`/`prompt`,
 `escape`, the `Event` family and a working Web Audio implementation
 (`AudioContext` with gain, oscillator, buffer-source, biquad, compressor,
 stereo-panner, constant-source and delay nodes, a real 48 kHz mixer, per-sample
 AudioParam automation, and `decodeAudioData` for WAV in-engine plus compressed
-formats through the `media` feature) — plus a frame pump that
+formats through the `media` feature). A browser's global scope *is* the window,
+so the bare window members resolve too: `innerWidth`/`innerHeight`,
+`devicePixelRatio`, `location`, `screen`, `scrollX`/`scrollY`,
+`addEventListener`/`dispatchEvent`, `setTimeout` and friends — each one a live
+read of the window (see [../gui/api.md](../gui/api.md)). An inline `<script>`
+body is JavaScript unless it says `lang="ts"`, so a minified bundle dropped into
+a page is not type checked. There is also a frame pump that
 starts at `loadHTML` and re-arms only while animation-frame callbacks remain, so
 a page that never calls `run()` still paints and then exits. **WebGL 1.0 and 2.0 are implemented**: `canvas.getContext("webgl")` /
 `"webgl2"` return a GPU context whose GLSL ES shaders are compiled to SPIR-V by

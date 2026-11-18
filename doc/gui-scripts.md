@@ -64,7 +64,7 @@ run scripts is to **compile them ahead of time**.
 | 1 | **No page JS engine.** Behaviour is native TS. `<script>` bodies are *AOT-compiled* to native code by xbintsc and invoked through `xt_call_with_this` — there is still no interpreter. |
 | 8 | **Scripts are compile-time assets.** The HTML asset loader transforms inline `<script>` bodies into compiled modules and replaces them with `data-xt-id` markers; the runtime only *invokes* already-compiled functions. |
 | 9 | **The DOM is owned by the engine; handles are engine objects.** Handles use the same shared-prototype object model as window handles; hidden fields carry a window reference, a document generation and a node index. |
-| 10 | **`window`/`document` are injected as parameters**, not globals, so no global-object machinery is added to the compiler. |
+| 10 | **`window`/`document` are injected as parameters**, not globals, so no global-object machinery is added to the compiler. The *window members* a browser also exposes as bare globals (`innerWidth`, `location`, `addEventListener`, `screen`, …) are declared by the extension as member reads of the window value, so `innerWidth` lowers to `xt_get(window, "innerWidth")` and stays live. |
 | 11 | **A `<script>` is JavaScript unless it says `lang="ts"`.** That is the browser rule, and it is also what keeps a minified bundle (or any plain JS page) out of the type checker, whose inference is only sound for code that was written with annotations. Names and redeclarations are still checked, because code generation needs them. |
 
 ## Architecture

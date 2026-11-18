@@ -66,6 +66,12 @@ const hostTypes = [
   "HTMLImageElement",
   "HTMLVideoElement",
   "HTMLAudioElement",
+  /* Media-source and offline-rendering types. `VideoFrame` is a real
+   * constructor value so `frame instanceof VideoFrame` is a safe `false`
+   * instead of a `TypeError`; `OfflineAudioContext` renders through the same
+   * mixer as `AudioContext`. */
+  "VideoFrame",
+  "OfflineAudioContext",
   "HTMLElement",
   "Element",
   "Node",
@@ -145,7 +151,7 @@ const hostTypes = [
   "GPUDeviceLostInfo",
 ] as const;
 
-const browserGlobals: Record<string, { symbol: string; argument?: string }> = {
+const browserGlobals: Record<string, { symbol: string; argument?: string; member?: string }> = {
   window: { symbol: "xt_browser_window" },
   self: { symbol: "xt_browser_window" },
   document: { symbol: "xt_browser_document" },
@@ -154,8 +160,51 @@ const browserGlobals: Record<string, { symbol: string; argument?: string }> = {
    * by the SQLite `storage` link feature, so a page reaches them through core
    * rather than the engine's in-memory `window.localStorage` store. */
   __THREE_DEVTOOLS__: { symbol: "xt_browser_missing" },
+  /* Half-precision typed arrays exist in very new engines only, and the
+   * runtime has no 16-bit float element type. Answering `undefined` keeps
+   * feature probes (`typeof Float16Array < "u"`) on their fallback path instead
+   * of handing back a constructor that cannot hold data. */
+  Float16Array: { symbol: "xt_browser_missing" },
   createImageBitmap: { symbol: "xt_browser_create_image_bitmap" },
 };
+
+/**
+ * Window members that a browser also exposes as bare globals.
+ *
+ * In a browser the global scope *is* the window, so `innerWidth`,
+ * `location.reload()` and `addEventListener("resize", …)` work without a
+ * `window.` prefix — pages and libraries (three.js probes `innerWidth`) rely on
+ * that. xbintsc has no global object here, so each name is declared as a member
+ * read of the window value: the read lowers to `xt_get(window, name)` and a
+ * call to `xt_call_method(window, name, …)`, which keeps getter-backed members
+ * live instead of capturing a value at startup.
+ */
+const windowGlobals: readonly string[] = [
+  "innerWidth",
+  "innerHeight",
+  "outerWidth",
+  "outerHeight",
+  "devicePixelRatio",
+  "location",
+  "screen",
+  "scrollX",
+  "scrollY",
+  "addEventListener",
+  "removeEventListener",
+  "dispatchEvent",
+  "setTimeout",
+  "clearTimeout",
+  "setInterval",
+  "clearInterval",
+  "queueMicrotask",
+  "focus",
+  "blur",
+  "scrollTo",
+  "scrollBy",
+];
+for (const member of windowGlobals) {
+  browserGlobals[member] = { symbol: "xt_browser_window", member };
+}
 for (const type of hostTypes) {
   browserGlobals[type] = { symbol: "xt_browser_type", argument: type };
 }

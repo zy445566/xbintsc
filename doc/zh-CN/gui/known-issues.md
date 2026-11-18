@@ -15,6 +15,8 @@
   纹理、浮点/深度/压缩纹理、多渲染目标与 scissor 清除。`blitFramebuffer` 复制
   颜色与深度；transform feedback、MSAA 与模板 blit 尚未实现（SDL_GPU 没有
   transform feedback 阶段，其 Metal 多采样 resolve 不可靠，模板附件也无法采样）。
+  因此上下文上没有 `renderbufferStorageMultisample`：用 `typeof` 或 `try` 探测的
+  页面会走自己的非多重采样分支。
   在两种格式都不接受的 SDL_GPU 后端（Direct3D 12，需要 DXIL）上两种上下文都为
   `null`。`.js` 资源加载器现在只修补 three.js 的着色器循环展开；
   `WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。阴影贴图

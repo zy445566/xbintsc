@@ -14,7 +14,7 @@
   instancing, integer attributes, sampler objects, `texStorage2D`, buffer copies,
   uniform blocks, cube/3D/array textures, float/depth/compressed textures,
   multiple render targets and scissored clears. `blitFramebuffer` copies colour
-  and depth; transform feedback, MSAA and stencil blits are not implemented
+  and depth; transform feedback, MSAA and stencil blits are not implemented (so enderbufferStorageMultisample does not exist on the context: a page that probes for it with 	ypeof or a 	ry takes its non-multisampled path)
   (SDL_GPU has no transform-feedback stage, its Metal multisample resolve is
   unreliable, and a stencil attachment is not sampleable). On an SDL_GPU backend
   that accepts neither SPIR-V nor MSL (Direct3D 12, which would need DXIL) both

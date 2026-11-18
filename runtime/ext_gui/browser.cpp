@@ -156,6 +156,14 @@ xt_value win_location_get(xt_value self, xt_value env, int32_t argc, xt_value *a
   return g_location;
 }
 
+/** `screen`: the display the window is on (built in `browser_screen.cpp`). */
+xt_value win_screen_get(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return xt_gui_screen_object(self);
+}
+
 /** `matchMedia(query)` -> a live `MediaQueryList` evaluated against the current
  * viewport with the same evaluator as `@media` rules. The list is cached per
  * window and query, and `change` listeners fire when a resize flips it. */
@@ -460,6 +468,7 @@ void xt_browser_install_window(xt_value proto) {
   xt_object_define_getter(proto, xt_string_from_cstr("localStorage"),
                           fn_of((void *)win_local_storage_get));
   xt_object_define_getter(proto, xt_string_from_cstr("location"), fn_of((void *)win_location_get));
+  xt_object_define_getter(proto, xt_string_from_cstr("screen"), fn_of((void *)win_screen_get));
   set_method(proto, "setTimeout", (void *)win_set_timeout);
   set_method(proto, "clearTimeout", (void *)win_clear_timeout);
   set_method(proto, "setInterval", (void *)win_set_interval);

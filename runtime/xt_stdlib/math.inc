@@ -4,68 +4,121 @@
 
 xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
   const char *fn = xt_string_data(name);
+  if (!fn) return xt_number(NAN);
   double a = xt_to_number(xt_arg_at(argc, argv, 0));
   double b = xt_to_number(xt_arg_at(argc, argv, 1));
-  if (!fn) return xt_number(NAN);
-  if (strcmp(fn, "abs") == 0) return xt_number(fabs(a));
-  if (strcmp(fn, "floor") == 0) return xt_number(floor(a));
-  if (strcmp(fn, "ceil") == 0) return xt_number(ceil(a));
-  if (strcmp(fn, "round") == 0) return xt_number(floor(a + 0.5));
-  if (strcmp(fn, "trunc") == 0) return xt_number(trunc(a));
-  if (strcmp(fn, "sqrt") == 0) return xt_number(sqrt(a));
-  if (strcmp(fn, "cbrt") == 0) return xt_number(cbrt(a));
-  if (strcmp(fn, "pow") == 0) return xt_number(pow(a, b));
-  if (strcmp(fn, "exp") == 0) return xt_number(exp(a));
-  if (strcmp(fn, "log") == 0) return xt_number(log(a));
-  if (strcmp(fn, "log2") == 0) return xt_number(log2(a));
-  if (strcmp(fn, "log10") == 0) return xt_number(log10(a));
-  if (strcmp(fn, "log1p") == 0) return xt_number(log1p(a));
-  if (strcmp(fn, "expm1") == 0) return xt_number(expm1(a));
-  if (strcmp(fn, "sinh") == 0) return xt_number(sinh(a));
-  if (strcmp(fn, "cosh") == 0) return xt_number(cosh(a));
-  if (strcmp(fn, "tanh") == 0) return xt_number(tanh(a));
-  if (strcmp(fn, "asinh") == 0) return xt_number(asinh(a));
-  if (strcmp(fn, "acosh") == 0) return xt_number(acosh(a));
-  if (strcmp(fn, "atanh") == 0) return xt_number(atanh(a));
-  if (strcmp(fn, "fround") == 0) return xt_number((double)(float)a);
-  if (strcmp(fn, "imul") == 0) return xt_number((double)((int32_t)xt_to_int32(xt_arg_at(argc, argv, 0)) * (int32_t)xt_to_int32(xt_arg_at(argc, argv, 1))));
-  if (strcmp(fn, "clz32") == 0) {
-    uint32_t v = (uint32_t)xt_to_int32(xt_arg_at(argc, argv, 0));
-    int count = 0;
-    if (v == 0) count = 32;
-    else { while (!(v & 0x80000000u)) { v <<= 1; count++; } }
-    return xt_number((double)count);
-  }
-  if (strcmp(fn, "sin") == 0) return xt_number(sin(a));
-  if (strcmp(fn, "cos") == 0) return xt_number(cos(a));
-  if (strcmp(fn, "tan") == 0) return xt_number(tan(a));
-  if (strcmp(fn, "asin") == 0) return xt_number(asin(a));
-  if (strcmp(fn, "acos") == 0) return xt_number(acos(a));
-  if (strcmp(fn, "atan") == 0) return xt_number(atan(a));
-  if (strcmp(fn, "atan2") == 0) return xt_number(atan2(a, b));
-  if (strcmp(fn, "hypot") == 0) return xt_number(hypot(a, b));
-  if (strcmp(fn, "sign") == 0) {
-    if (isnan(a)) return xt_number(NAN);
-    return xt_number(a > 0 ? 1.0 : a < 0 ? -1.0 : a);
-  }
-  if (strcmp(fn, "random") == 0) return xt_number(xt_random_double());
-  if (strcmp(fn, "min") == 0) {
-    double result = INFINITY;
-    for (int32_t i = 0; i < argc; i++) {
-      double v = xt_to_number(argv[i]);
-      if (isnan(v)) return xt_number(NAN);
-      if (v < result) result = v;
-    }
-    return xt_number(result);
-  }
-  if (strcmp(fn, "max") == 0) {
-    double result = -INFINITY;
-    for (int32_t i = 0; i < argc; i++) {
-      double v = xt_to_number(argv[i]);
-      if (isnan(v)) return xt_number(NAN);
-      if (v > result) result = v;
-    }
-    return xt_number(result);
+  /* Dispatch on the first byte before comparing names. A flat chain over ~35
+   * names paid up to 35 `strcmp`s per call, and numeric code calls
+   * `Math.imul`/`floor`/`exp` hundreds of millions of times (procedural noise,
+   * geometry), so the difference is seconds of startup on a large page. */
+  switch (fn[0]) {
+    case 'a':
+      if (strcmp(fn, "abs") == 0) return xt_number(fabs(a));
+      if (strcmp(fn, "acos") == 0) return xt_number(acos(a));
+      if (strcmp(fn, "acosh") == 0) return xt_number(acosh(a));
+      if (strcmp(fn, "asin") == 0) return xt_number(asin(a));
+      if (strcmp(fn, "asinh") == 0) return xt_number(asinh(a));
+      if (strcmp(fn, "atan") == 0) return xt_number(atan(a));
+      if (strcmp(fn, "atan2") == 0) return xt_number(atan2(a, b));
+      if (strcmp(fn, "atanh") == 0) return xt_number(atanh(a));
+      break;
+    case 'c':
+      if (strcmp(fn, "cbrt") == 0) return xt_number(cbrt(a));
+      if (strcmp(fn, "ceil") == 0) return xt_number(ceil(a));
+      if (strcmp(fn, "clz32") == 0) {
+        uint32_t v = (uint32_t)xt_to_int32(xt_arg_at(argc, argv, 0));
+        int count = 0;
+        if (v == 0) count = 32;
+        else { while (!(v & 0x80000000u)) { v <<= 1; count++; } }
+        return xt_number((double)count);
+      }
+      if (strcmp(fn, "cos") == 0) return xt_number(cos(a));
+      if (strcmp(fn, "cosh") == 0) return xt_number(cosh(a));
+      break;
+    case 'e':
+      if (strcmp(fn, "exp") == 0) return xt_number(exp(a));
+      if (strcmp(fn, "expm1") == 0) return xt_number(expm1(a));
+      break;
+    case 'f':
+      if (strcmp(fn, "floor") == 0) return xt_number(floor(a));
+      if (strcmp(fn, "fround") == 0) return xt_number((double)(float)a);
+      break;
+    case 'h':
+      if (strcmp(fn, "hypot") == 0) {
+        /* `Math.hypot(...values)` takes any number of arguments (ECMA-262
+         * 21.3.2.18): every argument participates, NaN wins, and the sum is
+         * scaled by the largest magnitude so `hypot(1e308, 1e308)` does not
+         * overflow. */
+        double scale = 0.0;
+        for (int32_t i = 0; i < argc; i++) {
+          double v = fabs(xt_to_number(argv[i]));
+          if (isnan(v)) return xt_number(NAN);
+          if (v > scale) scale = v;
+        }
+        if (scale == INFINITY) return xt_number(INFINITY);
+        if (scale == 0.0) return xt_number(0.0);
+        double sum = 0.0;
+        for (int32_t i = 0; i < argc; i++) {
+          double v = xt_to_number(argv[i]) / scale;
+          sum += v * v;
+        }
+        return xt_number(scale * sqrt(sum));
+      }
+      break;
+    case 'i':
+      if (strcmp(fn, "imul") == 0)
+        return xt_number((double)((int32_t)xt_to_int32(xt_arg_at(argc, argv, 0)) *
+                                   (int32_t)xt_to_int32(xt_arg_at(argc, argv, 1))));
+      break;
+    case 'l':
+      if (strcmp(fn, "log") == 0) return xt_number(log(a));
+      if (strcmp(fn, "log10") == 0) return xt_number(log10(a));
+      if (strcmp(fn, "log1p") == 0) return xt_number(log1p(a));
+      if (strcmp(fn, "log2") == 0) return xt_number(log2(a));
+      break;
+    case 'm':
+      if (strcmp(fn, "max") == 0) {
+        double result = -INFINITY;
+        for (int32_t i = 0; i < argc; i++) {
+          double v = xt_to_number(argv[i]);
+          if (isnan(v)) return xt_number(NAN);
+          if (v > result) result = v;
+        }
+        return xt_number(result);
+      }
+      if (strcmp(fn, "min") == 0) {
+        double result = INFINITY;
+        for (int32_t i = 0; i < argc; i++) {
+          double v = xt_to_number(argv[i]);
+          if (isnan(v)) return xt_number(NAN);
+          if (v < result) result = v;
+        }
+        return xt_number(result);
+      }
+      break;
+    case 'p':
+      if (strcmp(fn, "pow") == 0) return xt_number(pow(a, b));
+      break;
+    case 'r':
+      if (strcmp(fn, "random") == 0) return xt_number(xt_random_double());
+      if (strcmp(fn, "round") == 0) return xt_number(floor(a + 0.5));
+      break;
+    case 's':
+      if (strcmp(fn, "sign") == 0) {
+        if (isnan(a)) return xt_number(NAN);
+        return xt_number(a > 0 ? 1.0 : a < 0 ? -1.0 : a);
+      }
+      if (strcmp(fn, "sin") == 0) return xt_number(sin(a));
+      if (strcmp(fn, "sinh") == 0) return xt_number(sinh(a));
+      if (strcmp(fn, "sqrt") == 0) return xt_number(sqrt(a));
+      break;
+    case 't':
+      if (strcmp(fn, "tan") == 0) return xt_number(tan(a));
+      if (strcmp(fn, "tanh") == 0) return xt_number(tanh(a));
+      if (strcmp(fn, "trunc") == 0) return xt_number(trunc(a));
+      break;
+    default:
+      break;
   }
   return xt_number(NAN);
 }

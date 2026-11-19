@@ -48,7 +48,8 @@
 
 - 数字格式化与强制转换与 Node 一致：`toFixed` / `toPrecision` / `toExponential`、十六 / 八 / 二进制解析，以及完整的 `+` / 关系运算 `ToPrimitive` 规则。这些由差分测试覆盖。
 - `BigInt` 字面量与值：任意精度算术、位运算与移位、比较、`toString(radix)`、`BigInt()`、`BigInt.asIntN` / `BigInt.asUintN`。
-- `Math`：完整函数与常量。
+- `Math`：完整函数与常量。`Math.hypot(...values)` 接受任意个参数（ECMA-262 21.3.2.18）：每个参数都参与计算，出现 `NaN` 即为 `NaN`，并按最大幅值缩放求和，因此 `hypot(1e308, 1e308)` 不会溢出。
+- `Math` 调用点先按成员名的首字节分派，再比较完整名字，因此数值循环里的 `Math.imul` / `floor` / `exp` 不再为一条线性 `strcmp` 链付费（程序化纹理与几何代码会调用它们数亿次；去掉这条链后，打包 three.js 页面的关卡初始化时间减半）。
 - `Math` 同时是一等对象：`const cos = Math.cos`、`[1, 2].map(Math.max)`、`const { sqrt, PI } = Math` 都能按值读取成员（`xt_math_object()` 为每个函数缓存一个原生闭包，读取开销仍然很低）。
 - `Number` 静态与 `Number()` 转换；`parseInt` / `parseFloat` / `isNaN` / `isFinite`。
 

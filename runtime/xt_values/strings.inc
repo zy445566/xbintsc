@@ -105,8 +105,10 @@ int xt_string_equals(xt_string *a, xt_string *b) {
   /* Interned literals (property names above all) are shared, so identity is the
    * common case and skips the length, flattening and byte comparison entirely. */
   if (a == b) return 1;
+  /* Length first: a property scan compares many different keys, and a cons
+   * string only materialises its bytes on the first `xt_string_bytes` call. */
+  if (a->length != b->length) return 0;
   const char *aBytes = xt_string_bytes(a);
   const char *bBytes = xt_string_bytes(b);
-  if (a->length != b->length) return 0;
   return memcmp(aBytes, bBytes, a->length) == 0;
 }

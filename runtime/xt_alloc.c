@@ -134,6 +134,7 @@ static void xt_heap_link(xt_header *header) {
 }
 
 void *xt_alloc(size_t size, int kind) {
+  XT_PROFILE_TICK(XT_PROFILE_ALLOC);
   if (!g_gc_initialised) xt_gc_init();
   if (xt_gc_worker_thread) {
     void *block = calloc(1, size);
@@ -152,7 +153,15 @@ void *xt_alloc(size_t size, int kind) {
    * the conservative stack scan. */
   if (g_gc_armed && !g_gc_running && g_heap_bytes >= g_gc_threshold) xt_gc_collect();
 
-  xt_header *header = (xt_header *)calloc(1, size);
+  xt_header *header = (xt_header *)xt_pool_alloc(size);
+  if (header != NULL) {
+    header->kind = (uint8_t)kind;
+    header->flags = XT_GC_POOLED;
+    header->size = (uint32_t)size;
+    xt_heap_link(header);
+    return header;
+  }
+  header = (xt_header *)calloc(1, size);
   if (!header) {
     fprintf(stderr, "xbintsc: out of memory allocating %zu bytes\n", size);
     abort();
@@ -180,6 +189,10 @@ void xt_gc_set_stack_base(void *base) {
 void xt_gc_init(void) {
   if (g_gc_initialised) return;
   g_gc_initialised = 1;
+  /* The generated `main` calls this first, before any module code, so the
+   * `performance.now()` origin is the start of the program. */
+  xt_time_init();
+  xt_profile_init();
   uintptr_t high = (uintptr_t)&high;
   /* `xt_gc_set_stack_base` normally installed a bound above the caller's frame
    * already; the helper keeps the higher of the two. */
@@ -401,6 +414,8 @@ static void xt_gc_process(xt_header *header) {
 /* Release                                                                   */
 /* ------------------------------------------------------------------------- */
 static void xt_gc_release(xt_header *header) {
+  const size_t block_size = (size_t)header->size;
+  const int pooled = (header->flags & XT_GC_POOLED) != 0;
   switch (header->kind) {
     case XT_OBJECT_KIND_STRING:
       free(((xt_string *)header)->flat);
@@ -410,16 +425,16 @@ static void xt_gc_release(xt_header *header) {
       break;
     case XT_OBJECT_KIND_OBJECT:
     case XT_OBJECT_KIND_ERROR:
-      free(((xt_object *)header)->properties);
+      xt_raw_free(((xt_object *)header)->properties);
       break;
     case XT_OBJECT_KIND_ARRAY_BUFFER: {
       xt_object *object = (xt_object *)header;
       free(object->buffer_bytes);
-      free(object->properties);
+      xt_raw_free(object->properties);
       break;
     }
     case XT_OBJECT_KIND_ARRAY:
-      free(((xt_array *)header)->items);
+      xt_raw_free(((xt_array *)header)->items);
       break;
     case XT_OBJECT_KIND_FUNCTION:
       free(((xt_function *)header)->environment);
@@ -450,7 +465,11 @@ static void xt_gc_release(xt_header *header) {
     default:
       break;
   }
-  free(header);
+  if (pooled) {
+    xt_pool_free_block(header, block_size);
+  } else {
+    free(header);
+  }
 }
 /* ------------------------------------------------------------------------- */
 /* Collection                                                                */
@@ -477,9 +496,11 @@ static void xt_gc_mark_roots(void) {
   }
 }
 void xt_gc_collect(void) {
+  XT_PROFILE_TICK(XT_PROFILE_GC);
   if (g_gc_running) return;
   if (!g_gc_initialised) xt_gc_init();
   g_gc_running = 1;
+  const double gc_started_ms = xt_monotonic_ms();
   const int trace = xt_gc_trace_enabled();
   const int leak = getenv("XT_GC_LEAK") != NULL;
   const size_t heap_before = g_heap_bytes;
@@ -552,9 +573,9 @@ void xt_gc_collect(void) {
   g_gc_collections++;
   if (trace) {
     fprintf(stderr,
-            "xt_gc: #%zu heap %zu -> %zu bytes, allocations %zu -> %zu, next trigger %zu\n",
+            "xt_gc: #%zu heap %zu -> %zu bytes, allocations %zu -> %zu, next trigger %zu, took %.1fms\n",
             g_gc_collections, heap_before, g_heap_bytes, allocations_before, g_heap_allocations,
-            g_gc_threshold);
+            g_gc_threshold, xt_monotonic_ms() - gc_started_ms);
     fprintf(stderr, "xt_gc:   live kinds");
     for (int i = 1; i < 16; i++) {
       if (live_by_kind[i] != 0) {

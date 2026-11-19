@@ -139,6 +139,27 @@ METHOD(node_matches) {
   return XT_FALSE;
 }
 
+/** `element.closest(selector)`: the element itself or its nearest ancestor that
+ * matches. A page's delegated click handler is usually
+ * `event.target.closest("button")`, so this is the one selector API a page uses
+ * without querying. */
+METHOD(node_closest) {
+  (void)env;
+  XtGuiWindow *win = nullptr;
+  xtgui::Node *node = resolve_node(self, &win);
+  if (node == nullptr || win == nullptr || argc < 1) return XT_NULL;
+  std::vector<xtgui::ComplexSelector> selectors =
+      xtgui::xt_css_parse_selector_list(to_string_value(xt_arg(argc, argv, 0)));
+  if (selectors.empty()) return XT_NULL;
+  for (const xtgui::Node *cursor = node; cursor != nullptr; cursor = cursor->parent) {
+    if (!cursor->isElement()) continue;
+    for (const xtgui::ComplexSelector &selector : selectors) {
+      if (xtgui::xt_css_match(cursor, selector)) return xt_gui_node_handle(win, cursor);
+    }
+  }
+  return XT_NULL;
+}
+
 METHOD(node_append_child) {
   (void)env;
   XtGuiWindow *win = nullptr;

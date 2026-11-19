@@ -344,6 +344,52 @@ static xt_value xt_url_method_entries(xt_value thisValue, xt_value env, int32_t 
   return result;
 }
 
+static xt_value xt_url_iterator_self(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return self;
+}
+
+/** One step of the `[Symbol.iterator]` walk: `{ value: [key, value], done }`. */
+static xt_value xt_url_iterator_next(xt_value self, xt_value env, int32_t argc,
+                                     xt_value *argv) {
+  (void)self;
+  (void)argc;
+  (void)argv;
+  xt_array *entries = xt_as_array(xt_closure_env(env, 0));
+  xt_value indexBox = xt_closure_env(env, 1);
+  int32_t index = (int32_t)xt_to_number(xt_get(indexBox, xt_number(0)));
+  xt_value result = xt_object_new();
+  if (entries == NULL || index < 0 || (uint32_t)index >= entries->length) {
+    xt_object_set(result, xt_string_from_cstr("value"), XT_UNDEFINED);
+    xt_object_set(result, xt_string_from_cstr("done"), XT_TRUE);
+    return result;
+  }
+  xt_object_set(result, xt_string_from_cstr("value"), entries->items[index]);
+  xt_object_set(result, xt_string_from_cstr("done"), XT_FALSE);
+  xt_set(indexBox, xt_number(0), xt_number(index + 1));
+  return result;
+}
+
+/* `URLSearchParams` is iterable — `[...params]`, `for (const [k, v] of params)`
+ * and `Object.fromEntries(params)` all rely on it. The iterator is itself
+ * iterable, as the iteration protocol requires. */
+static xt_value xt_url_iterator(xt_value thisValue, xt_value env, int32_t argc,
+                                xt_value *argv) {
+  (void)env;
+  (void)argc;
+  (void)argv;
+  xt_value captured[2] = {xt_url_entries(thisValue), xt_array_new(0, NULL)};
+  xt_array_push(captured[1], xt_number(0));
+  xt_value iterator = xt_object_new();
+  xt_object_set(iterator, xt_string_from_cstr("next"),
+                xt_closure_new((void *)xt_url_iterator_next, 2, captured));
+  xt_object_set(iterator, xt_symbol_well_known("iterator"),
+                xt_closure_new((void *)xt_url_iterator_self, 0, NULL));
+  return iterator;
+}
+
 static void xt_url_install(xt_value params, const char *name, void *fn) {
   xt_object_set(params, xt_string_from_cstr(name), xt_closure_new(fn, 0, NULL));
 }
@@ -364,6 +410,10 @@ xt_value xt_url_search_params_ctor(int32_t argc, xt_value *argv) {
   xt_url_install(params, "keys", (void *)xt_url_method_keys);
   xt_url_install(params, "values", (void *)xt_url_method_values);
   xt_url_install(params, "entries", (void *)xt_url_method_entries);
+  xt_url_install(params, "keys", (void *)xt_url_method_keys);
+  xt_url_install(params, "values", (void *)xt_url_method_values);
+  xt_object_set(params, xt_symbol_well_known("iterator"),
+                xt_closure_new((void *)xt_url_iterator, 0, NULL));
   xt_url_ctor_from_value(params, xt_arg_at(argc, argv, 0));
   return params;
 }

@@ -77,6 +77,9 @@
 } xt_header;
 
 #define XT_GC_MARK 0x01u
+/** Block came from the small-block pool (see `xt_alloc.c`); the collector
+ * returns it to its size class instead of `free`. */
+#define XT_GC_POOLED 0x02u
 
 /**
  * Whether an allocation kind is an ordinary object with a property bag — the
@@ -173,6 +176,14 @@ void xt_gc_arm(void);
 void xt_gc_collect(void);
 /* Override the automatic trigger threshold (bytes of live heap). */
 void xt_gc_set_threshold(size_t bytes);
+
+/* Small-block buffers allocated outside the collector (an object's property
+ * table, an array's items). `xt_raw_realloc` copies through a new block. */
+void *xt_pool_alloc(size_t size);
+void xt_pool_free_block(void *block, size_t size);
+void *xt_raw_alloc(size_t size);
+void xt_raw_free(void *pointer);
+void *xt_raw_realloc(void *pointer, size_t new_size);
 extern _Thread_local int xt_gc_worker_thread;
 void xt_gc_verify_payloads(void); /* XT_GC_VERIFY=1 */
 void xt_gc_debug_record_free(uintptr_t address, size_t size, int kind);
@@ -376,6 +387,12 @@ xt_value xt_iter_open(xt_value value);
 
 /* xbintsc clock helpers (xt_loop.c): monotonic milliseconds for
  * `performance.now`, wall-clock milliseconds for `Date`. */
+/** Snapshot the `performance.now()` time origin (the generated `main` calls
+ * this at startup through `xt_gc_init`). */
+void xt_time_init(void);
+
+/* Opt-in runtime call counters (`XT_PROFILE=1`, see xt_profile.c). */
+#include "rt_profile.h"
 double xt_monotonic_ms(void);
 double xt_wallclock_ms(void);
 

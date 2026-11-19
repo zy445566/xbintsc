@@ -132,6 +132,7 @@ static void xt_ta_write_unbacked(xt_value array, int kind, uint32_t index, xt_va
 }
 
 xt_value xt_typed_array_read(xt_value array, uint32_t index) {
+  XT_PROFILE_TICK(XT_PROFILE_TYPED_READ);
   int kind = xt_typed_array_kind_of(array);
   if (kind < 0) return XT_UNDEFINED;
   uint32_t width = (uint32_t)xt_ta_bytes[kind];
@@ -182,6 +183,7 @@ xt_value xt_typed_array_read(xt_value array, uint32_t index) {
 }
 
 void xt_typed_array_write(xt_value array, uint32_t index, xt_value value) {
+  XT_PROFILE_TICK(XT_PROFILE_TYPED_WRITE);
   int kind = xt_typed_array_kind_of(array);
   if (kind < 0) return;
   uint32_t width = (uint32_t)xt_ta_bytes[kind];

@@ -36,6 +36,40 @@ describeE2E("inline-cached property access", (harness) => {
     `);
   });
 
+  it("stores through the inline cache and refills after shape changes", () => {
+    harness.expectSameOutputAsNode(`
+      const o: any = { a: 1, b: 2 };
+      for (let i = 0; i < 5; i++) o.a = i;
+      o.c = 3;
+      for (let i = 0; i < 5; i++) o.b = i * 2;
+      delete o.a;
+      o.a = 42;
+      console.log(JSON.stringify(o), Object.keys(o).join(","));
+
+      const proto = { inherited: 1 };
+      const child: any = Object.create(proto);
+      for (let i = 0; i < 3; i++) child.inherited = i;
+      console.log(child.inherited, proto.inherited, Object.keys(child).join(","));
+
+      const accessor = {
+        _v: 0,
+        get value() { return this._v; },
+        set value(v: number) { this._v = v + 1; },
+      };
+      for (let i = 0; i < 3; i++) accessor.value = i;
+      console.log(accessor.value, accessor._v);
+
+      const frozen = Object.freeze({ a: 1 });
+      frozen.a = 2;
+      console.log(frozen.a);
+
+      class Field { value = 1; }
+      const field: any = new Field();
+      for (let i = 0; i < 3; i++) field.value = i;
+      console.log(field.value, Object.keys(field).join(","));
+    `);
+  });
+
   it("keeps getters, prototypes and function properties correct", () => {
     harness.expectSameOutputAsNode(`
       const proto = { inherited: 7 };

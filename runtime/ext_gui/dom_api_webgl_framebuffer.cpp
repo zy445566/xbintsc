@@ -27,6 +27,23 @@ uint32_t texture_argument(xt_value value) { return webgl_object_id(value, "__xt_
 
 /* -- framebuffers and renderbuffers -------------------------------------- */
 
+namespace domapi {
+namespace {
+
+/** `framebufferTexture2D`/`framebufferRenderbuffer` name a *target*: a
+ * `READ_FRAMEBUFFER` argument modifies the read framebuffer, everything else
+ * the draw framebuffer. Resolution code (three.js) binds the multisampled
+ * source as READ and the resolve destination as DRAW and then attaches to each
+ * in turn; ignoring the target attached the multisampled renderbuffer to the
+ * destination and left it multisampled, which the GPU cannot blit into. */
+uint32_t attachment_framebuffer(xtgui::WebGLContext *context, int target) {
+  return target == GL_READ_FRAMEBUFFER ? context->bound_read_framebuffer_id()
+                                       : context->bound_framebuffer_id();
+}
+
+}  // namespace
+}  // namespace domapi
+
 METHOD(webgl_create_framebuffer) {
   (void)env;
   (void)argc;
@@ -60,11 +77,13 @@ METHOD(webgl_framebuffer_texture_2d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
-    /* WebGL's first argument is the target (`FRAMEBUFFER`), not the object:
-     * the texture attaches to the currently bound framebuffer. */
-    context->framebuffer_texture(context->bound_framebuffer_id(),
-                                 texture_argument(xt_arg(argc, argv, 3)),
-                                 webgl_int(argc, argv, 1, GL_COLOR_ATTACHMENT0));
+    /* WebGL's first argument is the target (`FRAMEBUFFER`, `DRAW_FRAMEBUFFER`
+     * or `READ_FRAMEBUFFER`), not the object: the texture attaches to that
+     * framebuffer. */
+    context->framebuffer_texture(
+        domapi::attachment_framebuffer(context, webgl_int(argc, argv, 0, GL_FRAMEBUFFER)),
+        texture_argument(xt_arg(argc, argv, 3)),
+        webgl_int(argc, argv, 1, GL_COLOR_ATTACHMENT0));
   }
   return XT_UNDEFINED;
 }
@@ -73,7 +92,8 @@ METHOD(webgl_check_framebuffer_status) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return xt_number(GL_FRAMEBUFFER_COMPLETE);
-  const uint32_t framebuffer = context->bound_framebuffer_id();
+  const uint32_t framebuffer =
+      domapi::attachment_framebuffer(context, webgl_int(argc, argv, 0, GL_FRAMEBUFFER));
   if (framebuffer == 0) return xt_number(GL_FRAMEBUFFER_COMPLETE);
   return xt_number(context->framebuffer_status(framebuffer));
 }
@@ -135,7 +155,8 @@ METHOD(webgl_framebuffer_renderbuffer) {
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
     context->framebuffer_renderbuffer(
-        context->bound_framebuffer_id(), webgl_int(argc, argv, 1, GL_COLOR_ATTACHMENT0),
+        domapi::attachment_framebuffer(context, webgl_int(argc, argv, 0, GL_FRAMEBUFFER)),
+        webgl_int(argc, argv, 1, GL_COLOR_ATTACHMENT0),
         webgl_object_id(xt_arg(argc, argv, 3), "__xt_gl_renderbuffer"));
   }
   return XT_UNDEFINED;

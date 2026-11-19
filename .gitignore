@@ -17,6 +17,8 @@ coverage/
 .DS_Store
 scratch/
 runtime/lib/
+# Local diagnostic output (window captures, run logs) used while profiling.
+.artifacts/
 # Fetched third-party sources and build trees (`npm run vendor`, `npm run gui`,
 # `npm run media`, `npm run tls`). Nothing under vendor/ is committed.
 vendor/

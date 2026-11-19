@@ -28,4 +28,24 @@ describeE2E("URLSearchParams", (harness) => {
       console.log(collected.join("&"));
     `);
   });
+
+  it("is iterable and feeds Object.fromEntries, spread and for...of", () => {
+    /* The Saltline page reads its query string with
+     * `Object.fromEntries(new URLSearchParams(location.search))`. The params
+     * object had no `[Symbol.iterator]` and `fromEntries` only accepted an
+     * array, so that expression silently produced `{}` and every query switch
+     * (`?show=`, `?q=`, …) was ignored. */
+    harness.expectSameOutputAsNode(`
+      const params = new URLSearchParams("?show=render&q=low&x=1");
+      console.log(JSON.stringify(Object.fromEntries(params)));
+      console.log(JSON.stringify([...params]));
+      console.log(JSON.stringify(Array.from(params)));
+      console.log(JSON.stringify(Object.fromEntries([["b", 2]])));
+      console.log(JSON.stringify(Object.fromEntries(new Map([["a", 1]]))));
+      const seen: string[] = [];
+      for (const [key, value] of params) seen.push(key + "=" + value);
+      console.log(seen.join("&"));
+      console.log(JSON.stringify(Object.fromEntries([[undefined, "u"]])));
+    `);
+  });
 });

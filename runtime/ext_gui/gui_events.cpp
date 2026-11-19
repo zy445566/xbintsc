@@ -430,7 +430,9 @@ void xt_gui_render_window(XtGuiWindow *win) {
    * is picked up by this same frame. A page that asked for a frame expects it
    * to be presented even when its callback changed nothing visible. */
   if (!win->animation_frames.empty()) win->present_dirty = 1;
-  xt_gui_run_animation_frames(win, now);
+  /* The timestamp is a DOMHighResTimeStamp: the same clock as
+   * `performance.now()`, not SDL's machine-uptime tick. */
+  xt_gui_run_animation_frames(win, xt_monotonic_ms());
   /* A callback may have closed the window (directly or through the
    * auto-close guard): `xt_gui_quit_window` released the document and the GPU
    * geometry, so there is nothing left to lay out or paint. */
@@ -574,6 +576,9 @@ void xt_gui_render_window(XtGuiWindow *win) {
          * else dirtied the page, so keep the invalidation pending and present
          * it on the next frame — the paint, the uploads and the run list are
          * already built and retained, so the retry only re-records the draws. */
+        static int acquire_failure_reported = 0;
+        if (!acquire_failure_reported) fprintf(stderr, "xt_gui: swapchain acquire returned no image: %s\n", SDL_GetError());
+        acquire_failure_reported = 1;
         win->present_dirty = 1;
         win->present_deferred = 1;
         xtgui::g_perf_frame.starvedFrames += 1;

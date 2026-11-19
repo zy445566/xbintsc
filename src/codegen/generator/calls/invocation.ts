@@ -36,6 +36,51 @@ export interface InvocationCallMethods {
   emitArguments(this: Generator, args: readonly Expression[]): { argc: string; ptr: string };
 }
 
+/**
+ * Fixed-arity `Math.<fn>` calls lower to their own runtime entry point instead
+ * of `xt_math_call(name, argc, argv)`. The name and arity are known here, so
+ * the generated call passes the arguments in registers and the runtime skips
+ * the name dispatch and the argument array. A numeric kernel calls these
+ * hundreds of times per pixel (the Saltline terrain generator alone executes
+ * ~125 million `Math` calls), which made the generic ABI the dominant cost.
+ * `min`/`max` stay variadic and keep `xt_math_call`.
+ */
+const MATH_DIRECT: Record<string, { symbol: string; arity: number }> = {
+  abs: { symbol: "xt_math1_abs", arity: 1 },
+  floor: { symbol: "xt_math1_floor", arity: 1 },
+  ceil: { symbol: "xt_math1_ceil", arity: 1 },
+  round: { symbol: "xt_math1_round", arity: 1 },
+  trunc: { symbol: "xt_math1_trunc", arity: 1 },
+  sqrt: { symbol: "xt_math1_sqrt", arity: 1 },
+  cbrt: { symbol: "xt_math1_cbrt", arity: 1 },
+  exp: { symbol: "xt_math1_exp", arity: 1 },
+  log: { symbol: "xt_math1_log", arity: 1 },
+  log2: { symbol: "xt_math1_log2", arity: 1 },
+  log10: { symbol: "xt_math1_log10", arity: 1 },
+  log1p: { symbol: "xt_math1_log1p", arity: 1 },
+  expm1: { symbol: "xt_math1_expm1", arity: 1 },
+  sinh: { symbol: "xt_math1_sinh", arity: 1 },
+  cosh: { symbol: "xt_math1_cosh", arity: 1 },
+  tanh: { symbol: "xt_math1_tanh", arity: 1 },
+  asinh: { symbol: "xt_math1_asinh", arity: 1 },
+  acosh: { symbol: "xt_math1_acosh", arity: 1 },
+  atanh: { symbol: "xt_math1_atanh", arity: 1 },
+  fround: { symbol: "xt_math1_fround", arity: 1 },
+  clz32: { symbol: "xt_math1_clz32", arity: 1 },
+  sin: { symbol: "xt_math1_sin", arity: 1 },
+  cos: { symbol: "xt_math1_cos", arity: 1 },
+  tan: { symbol: "xt_math1_tan", arity: 1 },
+  asin: { symbol: "xt_math1_asin", arity: 1 },
+  acos: { symbol: "xt_math1_acos", arity: 1 },
+  atan: { symbol: "xt_math1_atan", arity: 1 },
+  sign: { symbol: "xt_math1_sign", arity: 1 },
+  pow: { symbol: "xt_math2_pow", arity: 2 },
+  atan2: { symbol: "xt_math2_atan2", arity: 2 },
+  hypot: { symbol: "xt_math2_hypot", arity: 2 },
+  imul: { symbol: "xt_math2_imul", arity: 2 },
+  random: { symbol: "xt_math0_random", arity: 0 },
+};
+
 export const invocationCallMethods: InvocationCallMethods = {
   emitCall(node: CallExpression): string {
     const callee = node.expression;
@@ -217,6 +262,20 @@ export const invocationCallMethods: InvocationCallMethods = {
 
     if (targetIdentifier && targetIdentifier.text === "Math" && !targetSymbol) {
       if (!MATH_FUNCTIONS.has(method)) return undefined;
+      const direct = MATH_DIRECT[method];
+      const hasSpread = node.arguments.some((argument) => argument.kind === SyntaxKind.SpreadElement);
+      if (direct && !hasSpread && node.arguments.length === direct.arity) {
+        const values = node.arguments.map((argument) => this.emitExpression(argument));
+        const parameterList = values.map(() => "i64").join(", ");
+        /* Numeric literals come back as bare bit patterns (`values.ts` leaves
+         * the type to the instruction that consumes them), so every operand is
+         * typed here explicitly. */
+        const operands = values.map((value) => `i64 ${value}`).join(", ");
+        this.extraDeclarations.add(`declare i64 @${direct.symbol}(${parameterList})`);
+        const result = this.reg();
+        this.emit(`  ${result} = call i64 @${direct.symbol}(${operands})`);
+        return result;
+      }
       const name = this.stringValue(method);
       const args = this.emitArguments(node.arguments);
       const result = this.reg();

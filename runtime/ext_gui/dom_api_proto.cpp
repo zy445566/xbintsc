@@ -131,6 +131,7 @@ xt_value node_proto() {
   define_method(proto, "querySelector", (void *)node_query_selector);
   define_method(proto, "querySelectorAll", (void *)node_query_selector_all);
   define_method(proto, "matches", (void *)node_matches);
+  define_method(proto, "closest", (void *)node_closest);
   define_method(proto, "appendChild", (void *)node_append_child);
   define_method(proto, "append", (void *)node_append);
   define_method(proto, "prepend", (void *)node_prepend);

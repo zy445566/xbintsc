@@ -92,7 +92,7 @@
 
 ## URLSearchParams
 
-- `URLSearchParams` 实现在 `runtime/xt_url.c`。
+- `URLSearchParams` 实现在 `runtime/xt_url.c`。它是可迭代的（`[Symbol.iterator]`，因此 `[...params]`、`for (const [k, v] of params)` 与 `Object.fromEntries(params)` 都可用）；`Object.fromEntries` 接受任意可迭代对象——键值对数组、`Map`、`URLSearchParams` 或生成器——而不再只接受数组。
 
 ## 错误
 

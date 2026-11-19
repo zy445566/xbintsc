@@ -248,6 +248,7 @@ METHOD(node_has_attribute);
 METHOD(node_query_selector);
 METHOD(node_query_selector_all);
 METHOD(node_matches);
+METHOD(node_closest);
 METHOD(node_append_child);
 METHOD(node_append);
 METHOD(node_prepend);

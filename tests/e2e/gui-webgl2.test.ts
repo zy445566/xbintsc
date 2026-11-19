@@ -302,4 +302,66 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2", () => {
     expect(value("error")).toBe("0");
     expect(stderr).not.toContain("pipeline creation failed");
   });
+
+  it("attaches to the framebuffer named by the target", () => {
+    /* `framebufferTexture2D`/`framebufferRenderbuffer` in WebGL 2 take a
+     * READ_FRAMEBUFFER/DRAW_FRAMEBUFFER target. three.js's multisample resolve
+     * binds the source as READ and the destination as DRAW and then re-attaches
+     * both; ignoring the target attached the color renderbuffer to the
+     * destination framebuffer instead. */
+    const { value } = harness.compileAndRun(
+      "webgl2-fb-target",
+      `
+      import { createWindow } from "gui";
+      import page from "./page.html";
+
+      const win = createWindow({ title: "fb-target", width: 160, height: 120 });
+      const label = (name: string, value: any): void => console.log(name + "=" + value);
+
+      win.on("ready", () => {
+        const canvas: any = document.getElementById("c");
+        const gl: any = canvas.getContext("webgl2", { antialias: false });
+        if (gl == null) {
+          label("webgl2", "false");
+          win.close();
+          return;
+        }
+        // The READ framebuffer starts without an attachment, so it is
+        // incomplete; the DRAW framebuffer is complete.
+        const readFbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, readFbo);
+        label("read-before", gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE);
+        const drawFbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, drawFbo);
+        const rb = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, 16, 16);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
+        label("draw", gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE);
+
+        gl.bindFramebuffer(gl.READ_FRAMEBUFFER, readFbo);
+        gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, drawFbo);
+        const color = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, color);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, 16, 16);
+        gl.framebufferRenderbuffer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, color);
+        label("read-after", gl.checkFramebufferStatus(gl.READ_FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE);
+        label("draw-after", gl.checkFramebufferStatus(gl.DRAW_FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE);
+        label("error", gl.getError());
+        win.close();
+      });
+      win.loadHTML(page);
+      `,
+      {
+        files: { "page.html": PAGE },
+        autocloseMs: 5000,
+      },
+    );
+
+    expect(value("read-before")).toBe("false");
+    expect(value("draw")).toBe("true");
+    expect(value("read-after")).toBe("true");
+    expect(value("draw-after")).toBe("true");
+    expect(value("error")).toBe("0");
+  });
 });

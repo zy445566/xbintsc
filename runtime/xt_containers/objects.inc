@@ -3,10 +3,12 @@
 /* ------------------------------------------------------------------------- */
 
 static void xt_object_reserve(xt_object *obj, uint32_t needed) {
+  XT_PROFILE_TICK(XT_PROFILE_OBJECT_RESERVE);
   if (needed <= obj->capacity) return;
   uint32_t capacity = obj->capacity ? obj->capacity * 2 : 8;
   while (capacity < needed) capacity *= 2;
-  obj->properties = (xt_property *)realloc(obj->properties, sizeof(xt_property) * capacity);
+  obj->properties =
+      (xt_property *)xt_raw_realloc(obj->properties, sizeof(xt_property) * capacity);
   if (!obj->properties) {
     fprintf(stderr, "xbintsc: out of memory growing object\n");
     abort();
@@ -195,6 +197,7 @@ xt_object *xt_as_object(xt_value value) {
 }
 
 static xt_property *xt_object_find(xt_object *obj, xt_value key) {
+  XT_PROFILE_TICK(XT_PROFILE_OBJECT_FIND);
   for (uint32_t i = 0; i < obj->count; i++) {
     if (xt_property_key_equals(obj->properties[i].key, key)) return &obj->properties[i];
   }
@@ -230,6 +233,7 @@ static int xt_key_is_array_index(xt_string *key, uint32_t *out) {
 /* Insert a new property for `key`, preserving JavaScript key order. Symbols
  * are not array indices and simply append in insertion order. */
 static xt_property *xt_object_insert_property(xt_object *obj, xt_value key) {
+  XT_PROFILE_TICK(XT_PROFILE_OBJECT_INSERT);
   uint32_t index = 0;
   uint32_t position = obj->count;
   if (XT_IS_STRING(key) && xt_key_is_array_index(xt_as_string(key), &index)) {
@@ -363,6 +367,7 @@ static xt_object *xt_object_prototype_of(xt_value prototype, xt_object *current)
 }
 
 xt_value xt_object_set(xt_value value, xt_value key, xt_value newValue) {
+  XT_PROFILE_TICK(XT_PROFILE_OBJECT_SET);
   if (XT_IS_FUNCTION(value) && xt_key_is_prototype(key)) {
     return xt_function_set_prototype(value, newValue);
   }
@@ -495,12 +500,22 @@ int xt_object_is_frozen(xt_value value) {
 
 xt_value xt_object_from_entries(xt_value entries) {
   xt_value result = xt_object_new();
-  xt_array *array = xt_as_array(entries);
-  if (!array) return result;
-  for (uint32_t i = 0; i < array->length; i++) {
-    xt_array *pair = xt_as_array(array->items[i]);
-    if (!pair || pair->length < 2) continue;
-    xt_object_set(result, pair->items[0], pair->items[1]);
+  /* `fromEntries` consumes *any* iterable (a `Map`, a `URLSearchParams`, a
+   * generator), not only an array: the shell-usage scan the Saltline page does
+   * with `Object.fromEntries(new URLSearchParams(location.search))` silently
+   * produced `{}` and the page fell back to its default boot path. */
+  xt_value iterator = xt_iter_open(entries);
+  xt_value index = xt_number(0);
+  while (xt_truthy(xt_iter_has(iterator, index))) {
+    xt_value item = xt_iter_value(iterator, index);
+    /* An entry is any object with `0`/`1` properties; arrays are a separate
+     * value tag, not `XT_IS_OBJECT` values. */
+    if (XT_IS_OBJECT(item) || XT_IS_ARRAY(item)) {
+      xt_value key = xt_get(item, xt_number(0));
+      xt_value value = xt_get(item, xt_number(1));
+      xt_object_set(result, key, value);
+    }
+    index = xt_number(xt_to_number(index) + 1.0);
   }
   return result;
 }
@@ -530,64 +545,6 @@ xt_value xt_object_own_property_symbols(xt_value value) {
     return result;
   for (uint32_t i = 0; i < obj->count; i++) {
     if (xt_is_symbol(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
-  }
-  return result;
-}
-
-xt_value xt_object_keys(xt_value value) {
-  xt_value result = xt_array_new(0, NULL);
-  /* A typed array's enumerable own keys are its indices; `length` and the
-   * buffer metadata are observable but not enumerable. */
-  int typed = xt_typed_array_kind_of(value);
-  if (typed >= 0) {
-    uint32_t length = (uint32_t)xt_to_number(xt_object_get_cstr(value, "length"));
-    for (uint32_t i = 0; i < length; i++) {
-      char buffer[32];
-      snprintf(buffer, sizeof(buffer), "%u", i);
-      xt_array_push(result, xt_string_from_cstr(buffer));
-    }
-    return result;
-  }
-  if (XT_IS_OBJECT(value)) {
-    xt_object *obj = (xt_object *)XT_GET_PTR(value);
-    /* Map/Set/Date/RegExp/Promise/Symbol use their own layout and have no
-     * property bag; reading `obj->count` there walked off the end of the
-     * allocation (`Object.getOwnPropertyNames(new Map())` crashed). */
-    if (!xt_kind_is_object(obj->header.kind)) {
-      return result;
-    }
-    for (uint32_t i = 0; i < obj->count; i++) {
-      if (XT_IS_STRING(obj->properties[i].key)) xt_array_push(result, obj->properties[i].key);
-    }
-    /* Dynamic keys of a host view (`element.dataset`, ...), appended without
-     * repeating a real property that was just pushed. */
-    xt_object_append_dynamic_keys(obj, value, result);
-    return result;
-  }
-  if (XT_IS_ARRAY(value)) {
-    xt_array *array = (xt_array *)XT_GET_PTR(value);
-    for (uint32_t i = 0; i < array->length; i++) {
-      char buffer[32];
-      snprintf(buffer, sizeof(buffer), "%u", i);
-      xt_array_push(result, xt_string_from_cstr(buffer));
-    }
-    if (XT_IS_OBJECT(array->extra)) {
-      xt_object *extra = (xt_object *)XT_GET_PTR(array->extra);
-      for (uint32_t i = 0; i < extra->count; i++) {
-        if (XT_IS_STRING(extra->properties[i].key)) xt_array_push(result, extra->properties[i].key);
-      }
-    }
-    return result;
-  }
-  if (XT_IS_STRING(value)) {
-    xt_string *s = xt_as_string(value);
-    uint32_t units = xt_string_utf16_length(s);
-    for (uint32_t i = 0; i < units; i++) {
-      char buffer[32];
-      snprintf(buffer, sizeof(buffer), "%u", i);
-      xt_array_push(result, xt_string_from_cstr(buffer));
-    }
-    return result;
   }
   return result;
 }

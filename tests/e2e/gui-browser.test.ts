@@ -99,8 +99,48 @@ describe.skipIf(!guiAvailable)("gui extension — browser globals", () => {
     expect(value("frames")).toBe("3");
   });
 
-  it("reports the real typeof for host globals", () => {
-    /* These names are callable before the fix but had no first-class value, so
+  it("restarts the frame pump for a request made after it drained", () => {
+    /* The pump stops as soon as no frame is queued, and it re-armed only for
+     * the *bare* `requestAnimationFrame` global. three.js's
+     * `setAnimationLoop` asks through the window method
+     * (`self.requestAnimationFrame`) after its boot — by then the pump had
+     * drained, so the renderer never received a frame: the Saltline page froze
+     * on its last boot image. The timestamp must also share the
+     * `performance.now()` clock, not machine uptime. */
+    const { value } = harness.compileAndRun(
+      "raf-after-drain",
+      `
+      import { createWindow } from "gui";
+      import page from "./page.html";
+
+      const win = createWindow({ title: "late raf", width: 320, height: 240 });
+      win.on("ready", () => {
+        const before = performance.now();
+        setTimeout(() => {
+          let frames = 0;
+          const step = (stamp: number) => {
+            frames += 1;
+            if (frames === 1) console.log("stamp=" + (Math.abs(stamp - before) < 60000));
+            if (frames < 4) {
+              self.requestAnimationFrame(step);
+              return;
+            }
+            console.log("late=" + frames);
+            win.close();
+          };
+          window.requestAnimationFrame(step);
+        }, 80);
+      });
+      win.loadHTML(page);
+      `,
+      { files: { "page.html": PAGE }, autocloseMs: 4000 },
+    );
+
+    expect(value("stamp")).toBe("true");
+    expect(value("late")).toBe("4");
+  });
+
+  it("reports the real typeof for host globals", () => {    /* These names are callable before the fix but had no first-class value, so
      * `typeof` lowered the operand as an undefined constant. */
     const { value } = harness.compileAndRun(
       "global-typeof",

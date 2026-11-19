@@ -399,10 +399,13 @@ xt_value xt_storage_indexed_db(int32_t argc, xt_value *argv) {
   (void)argc;
   (void)argv;
   if (!XT_IS_OBJECT(g_indexed_db)) {
+    /* Root the slot before allocating: `xt_storage_method` allocates, and a
+     * collection in between would sweep the object still reachable only from
+     * this static. */
+    xt_gc_add_root(&g_indexed_db);
     g_indexed_db = xt_object_new();
     xt_storage_method(g_indexed_db, "open", (void *)idb_open);
     xt_storage_method(g_indexed_db, "deleteDatabase", (void *)idb_delete_database);
-    xt_gc_add_root(&g_indexed_db);
   }
   return g_indexed_db;
 }

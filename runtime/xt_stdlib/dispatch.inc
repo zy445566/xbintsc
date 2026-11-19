@@ -335,9 +335,14 @@ static xt_value xt_function_has_instance(xt_value thisValue, xt_value env, int32
 xt_value xt_function_has_instance_method(void) {
   static xt_value cached = 0;
   if (cached == 0) {
+    /* Root the slot before the first allocation. A lazy getter that stores into
+     * a static and only registers it afterwards loses the value to a collection
+     * that runs while building it: the static is not on the stack, so the
+     * collector never sees the new method. Building it allocates its name
+     * string, which is exactly such a collection point. */
+    xt_gc_add_root(&cached);
     cached = xt_closure_new((void *)xt_function_has_instance, 0, NULL);
     xt_function_set_metadata(cached, xt_string_from_cstr("[Symbol.hasInstance]"), 1);
-    xt_gc_add_root(&cached);
   }
   return cached;
 }

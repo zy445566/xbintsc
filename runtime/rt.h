@@ -566,6 +566,11 @@ size_t xt_heap_allocations(void);
  * that lives outside the heap graph. The slot may be registered before it
  * holds a value; it is marked on every collection and registration is
  * idempotent. `xt_gc_add_root_range` registers `count` consecutive cells.
+ *
+ * A lazily built value must be registered *before* the allocations that build
+ * it. A static cell is outside the conservative stack scan, so a collection
+ * between storing the value and registering its slot would sweep an object the
+ * program still holds.
  */
 void xt_gc_add_root(xt_value *slot);
 void xt_gc_add_root_range(xt_value *base, size_t count);

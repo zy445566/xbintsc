@@ -175,6 +175,32 @@ describeE2E("garbage collector (stress: collect on every allocation)", (harness)
     );
   });
 
+  it("roots lazy builtin methods before the allocations that build them", () => {
+    // Building `Function.prototype[Symbol.hasInstance]` used to store the new
+    // method in a static slot and register that slot as a GC root only after
+    // allocating the method's name string. With a collection at that
+    // allocation, the method was reachable only from the (unregistered) static:
+    // a conservative stack scan could not see it, so it was swept and the stale
+    // root later corrupted the small-block free list. Reading a property off a
+    // function is what materialises `Function.prototype`, so do that first.
+    harness.expectSameOutputAsNode(
+      `
+      function greet(name: string): string { return "hi " + name; }
+      const missing = (greet as any).__missing;
+      const hasInstance = (greet as any)[Symbol.hasInstance];
+      const bound = greet.bind(undefined);
+      const math = Math.max(3, 7);
+      const json = JSON.stringify({ a: 1 });
+      const log = console.log !== undefined;
+      const sym = Symbol.for("k");
+      const arr = [1, 2, 3].map((value) => value * 2);
+      console.log(typeof missing, typeof hasInstance, typeof bound, math, json, log,
+                  Symbol.keyFor(sym), arr.join("-"));
+    `,
+      gc,
+    );
+  });
+
   it("keeps readdirSync Dirents alive while the walk sorts them", () => {
     // `readdirSync(path, { withFileTypes: true })` used to accumulate entries in
     // a raw buffer the collector cannot see, so a collection triggered by a

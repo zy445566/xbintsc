@@ -2,169 +2,126 @@
 /* Math                                                                      */
 /* ------------------------------------------------------------------------- */
 
-/*
- * Every `Math.<fn>` call reaches this one dispatcher, and a numeric kernel can
- * spend a large share of its time here (the Saltline terrain generator calls it
- * ~150 times per pixel). The name is a compile-time literal, so its interned
- * string address is stable; a small direct-mapped cache keyed by that address
- * turns the former chain of up to 35 `strcmp`s into one hash + pointer compare.
- * The cached name is re-checked with `strcmp` because a *dynamically* built
- * name may be collected and a different string allocated at the same address.
- */
-enum {
-  XT_MATH_ABS, XT_MATH_FLOOR, XT_MATH_CEIL, XT_MATH_ROUND, XT_MATH_TRUNC,
-  XT_MATH_SQRT, XT_MATH_CBRT, XT_MATH_POW, XT_MATH_EXP, XT_MATH_LOG,
-  XT_MATH_LOG2, XT_MATH_LOG10, XT_MATH_LOG1P, XT_MATH_EXPM1, XT_MATH_SINH,
-  XT_MATH_COSH, XT_MATH_TANH, XT_MATH_ASINH, XT_MATH_ACOSH, XT_MATH_ATANH,
-  XT_MATH_FROUND, XT_MATH_IMUL, XT_MATH_CLZ32, XT_MATH_SIN, XT_MATH_COS,
-  XT_MATH_TAN, XT_MATH_ASIN, XT_MATH_ACOS, XT_MATH_ATAN, XT_MATH_ATAN2,
-  XT_MATH_HYPOT, XT_MATH_SIGN, XT_MATH_RANDOM, XT_MATH_MIN, XT_MATH_MAX,
-  XT_MATH_UNKNOWN
-};
-
-static const char *const XT_MATH_NAMES[] = {
-    "abs",    "floor", "ceil",  "round", "trunc", "sqrt",  "cbrt",  "pow",
-    "exp",    "log",   "log2",  "log10", "log1p", "expm1", "sinh",  "cosh",
-    "tanh",   "asinh", "acosh", "atanh", "fround", "imul", "clz32", "sin",
-    "cos",    "tan",   "asin",  "acos",  "atan",  "atan2", "hypot", "sign",
-    "random", "min",   "max",
-};
-
-static int xt_math_parse(const char *fn) {
-  if (strcmp(fn, "abs") == 0) return XT_MATH_ABS;
-  if (strcmp(fn, "floor") == 0) return XT_MATH_FLOOR;
-  if (strcmp(fn, "ceil") == 0) return XT_MATH_CEIL;
-  if (strcmp(fn, "round") == 0) return XT_MATH_ROUND;
-  if (strcmp(fn, "trunc") == 0) return XT_MATH_TRUNC;
-  if (strcmp(fn, "sqrt") == 0) return XT_MATH_SQRT;
-  if (strcmp(fn, "cbrt") == 0) return XT_MATH_CBRT;
-  if (strcmp(fn, "pow") == 0) return XT_MATH_POW;
-  if (strcmp(fn, "exp") == 0) return XT_MATH_EXP;
-  if (strcmp(fn, "log") == 0) return XT_MATH_LOG;
-  if (strcmp(fn, "log2") == 0) return XT_MATH_LOG2;
-  if (strcmp(fn, "log10") == 0) return XT_MATH_LOG10;
-  if (strcmp(fn, "log1p") == 0) return XT_MATH_LOG1P;
-  if (strcmp(fn, "expm1") == 0) return XT_MATH_EXPM1;
-  if (strcmp(fn, "sinh") == 0) return XT_MATH_SINH;
-  if (strcmp(fn, "cosh") == 0) return XT_MATH_COSH;
-  if (strcmp(fn, "tanh") == 0) return XT_MATH_TANH;
-  if (strcmp(fn, "asinh") == 0) return XT_MATH_ASINH;
-  if (strcmp(fn, "acosh") == 0) return XT_MATH_ACOSH;
-  if (strcmp(fn, "atanh") == 0) return XT_MATH_ATANH;
-  if (strcmp(fn, "fround") == 0) return XT_MATH_FROUND;
-  if (strcmp(fn, "imul") == 0) return XT_MATH_IMUL;
-  if (strcmp(fn, "clz32") == 0) return XT_MATH_CLZ32;
-  if (strcmp(fn, "sin") == 0) return XT_MATH_SIN;
-  if (strcmp(fn, "cos") == 0) return XT_MATH_COS;
-  if (strcmp(fn, "tan") == 0) return XT_MATH_TAN;
-  if (strcmp(fn, "asin") == 0) return XT_MATH_ASIN;
-  if (strcmp(fn, "acos") == 0) return XT_MATH_ACOS;
-  if (strcmp(fn, "atan") == 0) return XT_MATH_ATAN;
-  if (strcmp(fn, "atan2") == 0) return XT_MATH_ATAN2;
-  if (strcmp(fn, "hypot") == 0) return XT_MATH_HYPOT;
-  if (strcmp(fn, "sign") == 0) return XT_MATH_SIGN;
-  if (strcmp(fn, "random") == 0) return XT_MATH_RANDOM;
-  if (strcmp(fn, "min") == 0) return XT_MATH_MIN;
-  if (strcmp(fn, "max") == 0) return XT_MATH_MAX;
-  return XT_MATH_UNKNOWN;
-}
-
-#define XT_MATH_CACHE_SLOTS 64
-static struct {
-  const char *name;
-  int op;
-} g_math_cache[XT_MATH_CACHE_SLOTS];
-
-static int xt_math_op_of(const char *fn) {
-  uintptr_t bits = (uintptr_t)fn;
-  unsigned slot = (unsigned)((bits >> 3) ^ (bits >> 9)) & (XT_MATH_CACHE_SLOTS - 1);
-  int op = g_math_cache[slot].op;
-  if (op >= 0 && op < XT_MATH_UNKNOWN && g_math_cache[slot].name == fn &&
-      strcmp(fn, XT_MATH_NAMES[op]) == 0) {
-    return op;
-  }
-  op = xt_math_parse(fn);
-  g_math_cache[slot].name = fn;
-  g_math_cache[slot].op = op;
-  return op;
-}
-
 xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
   XT_PROFILE_TICK(XT_PROFILE_MATH);
   const char *fn = xt_string_data(name);
   if (!fn) return xt_number(NAN);
   double a = xt_to_number(xt_arg_at(argc, argv, 0));
   double b = xt_to_number(xt_arg_at(argc, argv, 1));
-  switch (xt_math_op_of(fn)) {
-    case XT_MATH_ABS: return xt_number(fabs(a));
-    case XT_MATH_FLOOR: return xt_number(floor(a));
-    case XT_MATH_CEIL: return xt_number(ceil(a));
-    case XT_MATH_ROUND: return xt_number(floor(a + 0.5));
-    case XT_MATH_TRUNC: return xt_number(trunc(a));
-    case XT_MATH_SQRT: return xt_number(sqrt(a));
-    case XT_MATH_CBRT: return xt_number(cbrt(a));
-    case XT_MATH_POW: return xt_number(pow(a, b));
-    case XT_MATH_EXP: return xt_number(exp(a));
-    case XT_MATH_LOG: return xt_number(log(a));
-    case XT_MATH_LOG2: return xt_number(log2(a));
-    case XT_MATH_LOG10: return xt_number(log10(a));
-    case XT_MATH_LOG1P: return xt_number(log1p(a));
-    case XT_MATH_EXPM1: return xt_number(expm1(a));
-    case XT_MATH_SINH: return xt_number(sinh(a));
-    case XT_MATH_COSH: return xt_number(cosh(a));
-    case XT_MATH_TANH: return xt_number(tanh(a));
-    case XT_MATH_ASINH: return xt_number(asinh(a));
-    case XT_MATH_ACOSH: return xt_number(acosh(a));
-    case XT_MATH_ATANH: return xt_number(atanh(a));
-    case XT_MATH_FROUND: return xt_number((double)(float)a);
-    case XT_MATH_IMUL:
-      return xt_number((double)((int32_t)xt_to_int32(xt_arg_at(argc, argv, 0)) *
-                                 (int32_t)xt_to_int32(xt_arg_at(argc, argv, 1))));
-    case XT_MATH_CLZ32: {
-      uint32_t v = (uint32_t)xt_to_int32(xt_arg_at(argc, argv, 0));
-      int count = 0;
-      if (v == 0) {
-        count = 32;
-      } else {
-        while (!(v & 0x80000000u)) {
-          v <<= 1;
-          count++;
+  /* Dispatch on the first byte before comparing names. A flat chain over ~35
+   * names paid up to 35 `strcmp`s per call, and numeric code calls
+   * `Math.imul`/`floor`/`exp` hundreds of millions of times (procedural noise,
+   * geometry), so the difference is seconds of startup on a large page. */
+  switch (fn[0]) {
+    case 'a':
+      if (strcmp(fn, "abs") == 0) return xt_number(fabs(a));
+      if (strcmp(fn, "acos") == 0) return xt_number(acos(a));
+      if (strcmp(fn, "acosh") == 0) return xt_number(acosh(a));
+      if (strcmp(fn, "asin") == 0) return xt_number(asin(a));
+      if (strcmp(fn, "asinh") == 0) return xt_number(asinh(a));
+      if (strcmp(fn, "atan") == 0) return xt_number(atan(a));
+      if (strcmp(fn, "atan2") == 0) return xt_number(atan2(a, b));
+      if (strcmp(fn, "atanh") == 0) return xt_number(atanh(a));
+      break;
+    case 'c':
+      if (strcmp(fn, "cbrt") == 0) return xt_number(cbrt(a));
+      if (strcmp(fn, "ceil") == 0) return xt_number(ceil(a));
+      if (strcmp(fn, "clz32") == 0) {
+        uint32_t v = (uint32_t)xt_to_int32(xt_arg_at(argc, argv, 0));
+        int count = 0;
+        if (v == 0) count = 32;
+        else { while (!(v & 0x80000000u)) { v <<= 1; count++; } }
+        return xt_number((double)count);
+      }
+      if (strcmp(fn, "cos") == 0) return xt_number(cos(a));
+      if (strcmp(fn, "cosh") == 0) return xt_number(cosh(a));
+      break;
+    case 'e':
+      if (strcmp(fn, "exp") == 0) return xt_number(exp(a));
+      if (strcmp(fn, "expm1") == 0) return xt_number(expm1(a));
+      break;
+    case 'f':
+      if (strcmp(fn, "floor") == 0) return xt_number(floor(a));
+      if (strcmp(fn, "fround") == 0) return xt_number((double)(float)a);
+      break;
+    case 'h':
+      if (strcmp(fn, "hypot") == 0) {
+        /* `Math.hypot(...values)` takes any number of arguments (ECMA-262
+         * 21.3.2.18): every argument participates, NaN wins, and the sum is
+         * scaled by the largest magnitude so `hypot(1e308, 1e308)` does not
+         * overflow. */
+        double scale = 0.0;
+        for (int32_t i = 0; i < argc; i++) {
+          double v = fabs(xt_to_number(argv[i]));
+          if (isnan(v)) return xt_number(NAN);
+          if (v > scale) scale = v;
         }
+        if (scale == INFINITY) return xt_number(INFINITY);
+        if (scale == 0.0) return xt_number(0.0);
+        double sum = 0.0;
+        for (int32_t i = 0; i < argc; i++) {
+          double v = xt_to_number(argv[i]) / scale;
+          sum += v * v;
+        }
+        return xt_number(scale * sqrt(sum));
       }
-      return xt_number((double)count);
-    }
-    case XT_MATH_SIN: return xt_number(sin(a));
-    case XT_MATH_COS: return xt_number(cos(a));
-    case XT_MATH_TAN: return xt_number(tan(a));
-    case XT_MATH_ASIN: return xt_number(asin(a));
-    case XT_MATH_ACOS: return xt_number(acos(a));
-    case XT_MATH_ATAN: return xt_number(atan(a));
-    case XT_MATH_ATAN2: return xt_number(atan2(a, b));
-    case XT_MATH_HYPOT: return xt_number(hypot(a, b));
-    case XT_MATH_SIGN:
-      if (isnan(a)) return xt_number(NAN);
-      return xt_number(a > 0 ? 1.0 : a < 0 ? -1.0 : a);
-    case XT_MATH_RANDOM: return xt_number(xt_random_double());
-    case XT_MATH_MIN: {
-      double result = INFINITY;
-      for (int32_t i = 0; i < argc; i++) {
-        double v = xt_to_number(argv[i]);
-        if (isnan(v)) return xt_number(NAN);
-        if (v < result) result = v;
+      break;
+    case 'i':
+      if (strcmp(fn, "imul") == 0)
+        return xt_number((double)((int32_t)xt_to_int32(xt_arg_at(argc, argv, 0)) *
+                                   (int32_t)xt_to_int32(xt_arg_at(argc, argv, 1))));
+      break;
+    case 'l':
+      if (strcmp(fn, "log") == 0) return xt_number(log(a));
+      if (strcmp(fn, "log10") == 0) return xt_number(log10(a));
+      if (strcmp(fn, "log1p") == 0) return xt_number(log1p(a));
+      if (strcmp(fn, "log2") == 0) return xt_number(log2(a));
+      break;
+    case 'm':
+      if (strcmp(fn, "max") == 0) {
+        double result = -INFINITY;
+        for (int32_t i = 0; i < argc; i++) {
+          double v = xt_to_number(argv[i]);
+          if (isnan(v)) return xt_number(NAN);
+          if (v > result) result = v;
+        }
+        return xt_number(result);
       }
-      return xt_number(result);
-    }
-    case XT_MATH_MAX: {
-      double result = -INFINITY;
-      for (int32_t i = 0; i < argc; i++) {
-        double v = xt_to_number(argv[i]);
-        if (isnan(v)) return xt_number(NAN);
-        if (v > result) result = v;
+      if (strcmp(fn, "min") == 0) {
+        double result = INFINITY;
+        for (int32_t i = 0; i < argc; i++) {
+          double v = xt_to_number(argv[i]);
+          if (isnan(v)) return xt_number(NAN);
+          if (v < result) result = v;
+        }
+        return xt_number(result);
       }
-      return xt_number(result);
-    }
-    default: return xt_number(NAN);
+      break;
+    case 'p':
+      if (strcmp(fn, "pow") == 0) return xt_number(pow(a, b));
+      break;
+    case 'r':
+      if (strcmp(fn, "random") == 0) return xt_number(xt_random_double());
+      if (strcmp(fn, "round") == 0) return xt_number(floor(a + 0.5));
+      break;
+    case 's':
+      if (strcmp(fn, "sign") == 0) {
+        if (isnan(a)) return xt_number(NAN);
+        return xt_number(a > 0 ? 1.0 : a < 0 ? -1.0 : a);
+      }
+      if (strcmp(fn, "sin") == 0) return xt_number(sin(a));
+      if (strcmp(fn, "sinh") == 0) return xt_number(sinh(a));
+      if (strcmp(fn, "sqrt") == 0) return xt_number(sqrt(a));
+      break;
+    case 't':
+      if (strcmp(fn, "tan") == 0) return xt_number(tan(a));
+      if (strcmp(fn, "tanh") == 0) return xt_number(tanh(a));
+      if (strcmp(fn, "trunc") == 0) return xt_number(trunc(a));
+      break;
+    default:
+      break;
   }
+  return xt_number(NAN);
 }
 
 

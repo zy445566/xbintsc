@@ -84,6 +84,22 @@ describe("codegen", () => {
     expect(debug.ir).toContain("!DILocation(line: 2,");
   });
 
+  it("clamps debug columns that exceed the DWARF limit", () => {
+    /* A minified bundle keeps everything on one line, so statement columns run
+     * into the hundreds of thousands — far beyond the 16-bit `column` field of
+     * `!DILocation`. clang used to reject the whole module
+     * ("value for 'column' too large, limit is 65535"), which made
+     * `build --debug` fail on exactly the bundles it is most useful for. */
+    const wide = `const pad = "${"a".repeat(70000)}"; const value = 1;`;
+    const { ir } = compileToIr(wide, undefined, undefined, { debug: true });
+    const columns = [...ir.matchAll(/!DILocation\(line: \d+, column: (\d+)/g)].map((match) =>
+      Number(match[1]),
+    );
+    expect(columns.length).toBeGreaterThan(0);
+    expect(Math.max(...columns)).toBeLessThanOrEqual(65535);
+    expect(columns).toContain(65535);
+  });
+
   it("emits shadow-stack frames with readable function symbols", () => {
     const { ir } = compileToIr("function add(a: number, b: number) { return a + b; }\nadd(1, 2);");
     expect(ir).toMatch(/@xt_fn_\d+_add/);

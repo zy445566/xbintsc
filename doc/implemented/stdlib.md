@@ -56,7 +56,8 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 
 - Number formatting and coercion match Node: `toFixed` / `toPrecision` / `toExponential`, hex / octal / binary parsing, and the full `+` / relational `ToPrimitive` rules. These are covered by the differential tests.
 - `BigInt` literals and values: arbitrary precision arithmetic, bitwise and shift operators, comparisons, `toString(radix)`, `BigInt()`, `BigInt.asIntN` / `BigInt.asUintN`.
-- `Math`: the full function set and constants.
+- `Math`: the full function set and constants. `Math.hypot(...values)` accepts any number of arguments (ECMA-262 21.3.2.18): every argument participates, a `NaN` wins and the sum is scaled by the largest magnitude so `hypot(1e308, 1e308)` does not overflow.
+- `Math` call sites dispatch on the first byte of the member name before comparing the full name, so `Math.imul` / `floor` / `exp` in a numeric loop no longer pay for a linear `strcmp` chain (procedural texture and geometry code calls them hundreds of millions of times; removing the chain halved level setup on a bundled three.js page).
 - `Math` is also a first-class object: `const cos = Math.cos`, `[1, 2].map(Math.max)` and `const { sqrt, PI } = Math` read members as values (`xt_math_object()` caches one native closure per function, so reads stay cheap).
 - `Number` statics and `Number()` conversion; `parseInt` / `parseFloat` / `isNaN` / `isFinite`.
 

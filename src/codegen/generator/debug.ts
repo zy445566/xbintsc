@@ -40,6 +40,21 @@ function escapeMetadata(text: string): string {
 }
 
 /**
+ * DWARF/Verifier limits for `!DILocation`. The column is a 16-bit field, so a
+ * minified source line (`<script>` bundles are routinely 60–80k columns wide)
+ * makes the verifier reject the whole module. The line has its own, larger
+ * limit; clamp both rather than failing the build: a debug location is a
+ * best-effort hint, and a wrong-but-valid one still points at the statement.
+ */
+const MAX_DEBUG_LINE = 0xffffff;
+const MAX_DEBUG_COLUMN = 0xffff;
+
+function clampDebugPosition(value: number, limit: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.min(Math.floor(value), limit);
+}
+
+/**
  * Create the compile unit and module flags once. LLVM requires the `Debug Info
  * Version` flag for any `!dbg` attachment, and clang only emits DWARF/CodeView
  * for a module that declares a compile unit.
@@ -97,10 +112,11 @@ export const debugMethods: DebugMethods = {
       : fn.isConstructor && fn.classInfo
         ? `new ${this.displayNameOf(fn.classInfo.name)}`
         : this.displayNameOf(fn.name.length > 0 ? fn.name : "anonymous");
+    const line = clampDebugPosition(position.line, MAX_DEBUG_LINE);
     const subprogram = this.addMetadata(
       'distinct !DISubprogram(name: ' +
         `"${escapeMetadata(displayName)}", scope: ${this.debugUnit}, file: ${file}, ` +
-        `line: ${position.line}, type: ${this.debugSubroutineType}, scopeLine: ${position.line}, ` +
+        `line: ${line}, type: ${this.debugSubroutineType}, scopeLine: ${line}, ` +
         `spFlags: DISPFlagDefinition, unit: ${this.debugUnit})`,
     );
     this.debugSubprograms.set(fn.id, subprogram);
@@ -110,11 +126,13 @@ export const debugMethods: DebugMethods = {
   setDebugLocation(node) {
     if (!this.debug || this.current.debugSubprogram === undefined) return;
     const position = this.positionOf(node);
-    const key = `${this.current.debugSubprogram}:${position.line}:${position.column}`;
+    const line = clampDebugPosition(position.line, MAX_DEBUG_LINE);
+    const column = clampDebugPosition(position.column, MAX_DEBUG_COLUMN);
+    const key = `${this.current.debugSubprogram}:${line}:${column}`;
     let location = this.debugLocations.get(key);
     if (!location) {
       location = this.addMetadata(
-        `!DILocation(line: ${position.line}, column: ${position.column}, scope: ${this.current.debugSubprogram})`,
+        `!DILocation(line: ${line}, column: ${column}, scope: ${this.current.debugSubprogram})`,
       );
       this.debugLocations.set(key, location);
     }

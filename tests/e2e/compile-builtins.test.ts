@@ -127,6 +127,26 @@ describeE2E("end-to-end built-in library", (harness) => {
     );
   });
 
+  it("accepts any arity for Math.hypot", () => {
+    /* ECMA-262 21.3.2.18: every argument participates, a NaN wins, and a
+     * translation unit that only forwarded two arguments silently dropped the
+     * rest (`Math.hypot(3, 4, 12)` used to be 5). */
+    const source = `
+      console.log(Math.hypot(3, 4), Math.hypot(3, 4, 12), Math.hypot(6, 8, 24));
+      console.log(Math.hypot() === 0, Math.hypot(-5), Number.isNaN(Math.hypot(NaN, 1)));
+      console.log(Math.hypot(Infinity, 1) === Infinity, Math.hypot(1e308, 1e308) > 1.4e308);
+      console.log(Math.hypot(1, 2, 3).toFixed(6));
+      const hypot = Math.hypot;
+      console.log(hypot(6, 8), hypot(6, 8, 24));
+    `;
+    /* The scaled sum may differ from V8 in the last unit in the last place, so
+     * values that are not exactly representable are compared as ranges /
+     * rounded strings. */
+    expect(runProgram(source)).toBe(
+      ["5 13 26", "true 5 true", "true true", "3.741657", "10 26"].join("\n"),
+    );
+  });
+
   it("supports counted RegExp quantifiers ({n}, {n,}, {n,m})", () => {
     const source = `
       const login = /^[A-Za-z0-9_]{3,20}$/;

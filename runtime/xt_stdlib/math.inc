@@ -2,6 +2,81 @@
 /* Math                                                                      */
 /* ------------------------------------------------------------------------- */
 
+/*
+ * `Math.cbrt` uses fdlibm's cbrt instead of the host libm. The host result is
+ * not portable: glibc's algorithm has ~1 ulp of error and computes
+ * `cbrt(27) = 3.0000000000000004`, while macOS/Windows libm and Node return
+ * `3`. The differential suite caught that on Linux. V8 (and therefore Node)
+ * ships this exact fdlibm version in `src/base/ieee754.cc`, so borrowing it
+ * makes `Math.cbrt` bit-identical with Node on every host.
+ *
+ * The following is adapted from fdlibm (http://www.netlib.org/fdlibm).
+ *
+ * ====================================================
+ * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+ *
+ * Developed at SunSoft, a Sun Microsystems, Inc. business.
+ * Permission to use, copy, modify, and distribute this
+ * software is freely granted, provided that this notice
+ * is preserved.
+ * ====================================================
+ *
+ * V8 compiles its ieee754 code with `-ffp-contract=off`; the pragma keeps a
+ * compiler from fusing the polynomial's multiply-adds on FMA targets, which
+ * would change the low bits.
+ */
+#pragma STDC FP_CONTRACT OFF
+static double xt_math_cbrt(double x) {
+  /* |1/cbrt(x) - p(x)| < 2**-23.5 (~[-7.93e-8, 7.929e-8]). */
+  static const uint32_t B1 = 715094163u; /* (1023-1023/3-0.03306235651)*2**20 */
+  static const uint32_t B2 = 696219795u; /* (1023-1023/3-54/3-0.03306235651)*2**20 */
+  static const double P0 = 1.87595182427177009643;
+  static const double P1 = -1.88497979543377169875;
+  static const double P2 = 1.621429720105354466140;
+  static const double P3 = -0.758397934778766047437;
+  static const double P4 = 0.145996192886612446982;
+
+  uint64_t bits;
+  uint32_t hx, low, sign, high;
+  double r, s, t, w;
+
+  memcpy(&bits, &x, sizeof(bits));
+  hx = (uint32_t)(bits >> 32);
+  low = (uint32_t)bits;
+  sign = hx & 0x80000000u; /* sign= sign(x) */
+  hx ^= sign;
+  if (hx >= 0x7FF00000u) return x + x; /* cbrt(NaN,INF) is itself */
+
+  if (hx < 0x00100000u) {             /* zero or subnormal? */
+    if ((hx | low) == 0) return x;    /* cbrt(0) is itself */
+    t = 0x1p54 * x;                   /* scale the subnormal into the normal range */
+    memcpy(&bits, &t, sizeof(bits));
+    high = (uint32_t)(bits >> 32);
+    bits = (uint64_t)(sign | ((high & 0x7FFFFFFFu) / 3u + B2)) << 32;
+  } else {
+    bits = (uint64_t)(sign | (hx / 3u + B1)) << 32;
+  }
+  memcpy(&t, &bits, sizeof(t));
+
+  /* New cbrt to 23 bits: cbrt(x) ~= t*P(t**3/x), then one Newton step. */
+  r = (t * t) * (t / x);
+  t = t * ((P0 + r * (P1 + r * P2)) + ((r * r) * r) * (P3 + r * P4));
+
+  /* Round t away from zero to 23 bits so it is slightly above |cbrt(x)|. */
+  memcpy(&bits, &t, sizeof(bits));
+  bits = (bits + 0x80000000ull) & 0xFFFFFFFFC0000000ull;
+  memcpy(&t, &bits, sizeof(t));
+
+  /* One Newton iteration to 53 bits with error < 0.667 ulps. */
+  s = t * t;             /* t*t is exact */
+  r = x / s;             /* error <= 0.5 ulps; |r| < |t| */
+  w = t + t;             /* t+t is exact */
+  r = (r - t) / (w + r); /* r-t is exact; w+r ~= 3*t */
+  t = t + t * r;         /* error <= 0.5 + 0.5/3 + epsilon */
+  return t;
+}
+#pragma STDC FP_CONTRACT ON
+
 xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
   XT_PROFILE_TICK(XT_PROFILE_MATH);
   const char *fn = xt_string_data(name);
@@ -24,7 +99,7 @@ xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
       if (strcmp(fn, "atanh") == 0) return xt_number(atanh(a));
       break;
     case 'c':
-      if (strcmp(fn, "cbrt") == 0) return xt_number(cbrt(a));
+      if (strcmp(fn, "cbrt") == 0) return xt_number(xt_math_cbrt(a));
       if (strcmp(fn, "ceil") == 0) return xt_number(ceil(a));
       if (strcmp(fn, "clz32") == 0) {
         uint32_t v = (uint32_t)xt_to_int32(xt_arg_at(argc, argv, 0));
@@ -155,7 +230,7 @@ XT_MATH_UNARY(ceil, ceil(x))
 XT_MATH_UNARY(round, floor(x + 0.5))
 XT_MATH_UNARY(trunc, trunc(x))
 XT_MATH_UNARY(sqrt, sqrt(x))
-XT_MATH_UNARY(cbrt, cbrt(x))
+XT_MATH_UNARY(cbrt, xt_math_cbrt(x))
 XT_MATH_UNARY(exp, exp(x))
 XT_MATH_UNARY(log, log(x))
 XT_MATH_UNARY(log2, log2(x))

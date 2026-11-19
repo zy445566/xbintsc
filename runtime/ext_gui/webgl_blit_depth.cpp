@@ -155,16 +155,25 @@ bool WebGLContext::blit_depth(uint32_t source_framebuffer, uint32_t destination_
     return false;
   }
 
-  /* NDC rectangle and source UVs. Source V is flipped because GL's origin is
-   * bottom-left while SDL_GPU's render targets and uploads are top-down. */
+  /* Both rectangles are in GL window coordinates. `a_pos.y = 0` is the
+   * destination's GL bottom edge (dy0) and `a_pos.y = 1` its top edge (dy1);
+   * the source V follows the source's own storage convention, so the GL rows
+   * line up on both sides. `SDL_BlitGPUTexture` cannot flip, which is why the
+   * depth copy is a sampling pass in the first place. */
+  const bool source_top_down = webgl_target_top_down(source_framebuffer);
+  const bool destination_top_down = webgl_target_top_down(destination_framebuffer);
+  const int row_bottom = webgl_target_row(destination_top_down, destination_height, dy0);
+  const int row_top = webgl_target_row(destination_top_down, destination_height, dy1);
   double dst[4] = {(double)dx0 / (double)destination_width * 2.0 - 1.0,
-                   (double)dy0 / (double)destination_height * 2.0 - 1.0,
+                   1.0 - (double)row_bottom / (double)destination_height * 2.0,
                    (double)dx1 / (double)destination_width * 2.0 - 1.0,
-                   (double)dy1 / (double)destination_height * 2.0 - 1.0};
+                   1.0 - (double)row_top / (double)destination_height * 2.0};
+  const int source_row0 = webgl_target_row(source_top_down, source_height, sy0);
+  const int source_row1 = webgl_target_row(source_top_down, source_height, sy1);
   double uv[4] = {(double)sx0 / (double)source_width,
-                  1.0 - (double)sy0 / (double)source_height,
+                  (double)source_row0 / (double)source_height,
                   (double)sx1 / (double)source_width,
-                  1.0 - (double)sy1 / (double)source_height};
+                  (double)source_row1 / (double)source_height};
 
   const WebGLDrawState saved_state = state_;
   const uint32_t saved_program = current_program_;
@@ -227,7 +236,8 @@ bool WebGLContext::blit_depth(uint32_t source_framebuffer, uint32_t destination_
     scissor.h = destination_height;
     if (scissor_test_ && scissor_box_[2] > 0 && scissor_box_[3] > 0) {
       scissor.x = scissor_box_[0];
-      scissor.y = destination_height - (scissor_box_[1] + scissor_box_[3]);
+      scissor.y = webgl_target_rect_y(destination_top_down, destination_height,
+                                      scissor_box_[1], scissor_box_[3]);
       scissor.w = scissor_box_[2];
       scissor.h = scissor_box_[3];
     }

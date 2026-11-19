@@ -257,6 +257,7 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       bound_framebuffer_ != 0 ? framebuffer(bound_framebuffer_) : nullptr;
   const int target_width = framebuffer_ != nullptr ? framebuffer_->width : width_;
   const int target_height = framebuffer_ != nullptr ? framebuffer_->height : height_;
+  const bool top_down = webgl_target_top_down(bound_framebuffer_);
   /* A pipeline bakes in the attachment formats; float colour targets, MRT
    * layouts and depth textures therefore need their own pipeline variants. */
   state_.color_target_count = 0;
@@ -267,6 +268,16 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   if (state_.color_target_count == 0) state_.color_target_count = 1;
   state_.depth_format = target_depth_format();
   state_.sample_count = target_samples();
+
+  /* The viewport of a bottom-up target is flipped (see below), which also
+   * mirrors the winding the rasteriser sees. Flip the GL front-face comparison
+   * for such a target while its pipeline is prepared; the draw hash carries the
+   * effective value, so the two orientations get distinct pipelines, and the
+   * page's logical state is restored right after. */
+  const int requested_front_face = state_.front_face;
+  if (!top_down) {
+    state_.front_face = requested_front_face == GL_CW ? GL_CCW : GL_CW;
+  }
 
   WebGLDrawKey key;
   key.program = current_program_;
@@ -279,17 +290,31 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   draw_state_hash(&key.state_hash, &key.state_hash2);
 
   const WebGLDrawSetup *setup = prepare_draw(key);
+  state_.front_face = requested_front_face;
   if (setup == nullptr) return;
 
   begin_pass(false, false, false);
   if (pass_ == nullptr) return;
 
+  /* GL window y counts from the target's bottom edge while SDL_GPU's viewport
+   * is top-down. The composited drawing buffer stores GL top at row 0, so a
+   * positive-height viewport at `height - (y + h)` reproduces GL. A user
+   * framebuffer stores GL row y at storage row y (shaders sample it with v = 0
+   * at the bottom), which needs the opposite y direction: SDL's Vulkan backend
+   * negates a viewport height and Metal flips a negative one, so passing the
+   * viewport from `y + h` down to `y` renders GL rows in place. */
   SDL_GPUViewport viewport;
   memset(&viewport, 0, sizeof(viewport));
   viewport.x = (float)viewport_[0];
-  viewport.y = (float)(target_height - (viewport_[1] + viewport_[3]));
   viewport.w = (float)std::max(1, viewport_[2]);
-  viewport.h = (float)std::max(1, viewport_[3]);
+  const int viewport_h = std::max(1, viewport_[3]);
+  if (top_down) {
+    viewport.y = (float)webgl_target_rect_y(true, target_height, viewport_[1], viewport_h);
+    viewport.h = (float)viewport_h;
+  } else {
+    viewport.y = (float)(viewport_[1] + viewport_h);
+    viewport.h = (float)-viewport_h;
+  }
   viewport.min_depth = 0.0f;
   viewport.max_depth = 1.0f;
   SDL_SetGPUViewport(pass_, &viewport);
@@ -301,7 +326,7 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   scissor.h = target_height;
   if (scissor_test_ && scissor_box_[2] > 0 && scissor_box_[3] > 0) {
     scissor.x = scissor_box_[0];
-    scissor.y = target_height - (scissor_box_[1] + scissor_box_[3]);
+    scissor.y = webgl_target_rect_y(top_down, target_height, scissor_box_[1], scissor_box_[3]);
     scissor.w = scissor_box_[2];
     scissor.h = scissor_box_[3];
   }

@@ -134,6 +134,10 @@ void WebGLContext::release_gpu_resources() {
     SDL_ReleaseGPUSampler(guidev::g_device, blit_sampler_);
     blit_sampler_ = nullptr;
   }
+  if (blit_sampler_linear_ != nullptr) {
+    SDL_ReleaseGPUSampler(guidev::g_device, blit_sampler_linear_);
+    blit_sampler_linear_ = nullptr;
+  }
   if (color_ != nullptr) {
     SDL_ReleaseGPUTexture(guidev::g_device, color_);
     color_ = nullptr;

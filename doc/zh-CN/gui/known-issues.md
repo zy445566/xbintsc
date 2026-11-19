@@ -68,13 +68,6 @@
   `tests/e2e/gui-example-browser.test.ts` 中。
 - **`display: none -> flex` 的重排。** 通过类名切换让隐藏元素显示在 flex 容器上时，也曾观察
   到同样的崩溃；`examples/gui/pelican-bike` 改用 `opacity` 显示游戏结束遮罩。
-- **离屏渲染目标沿用 SDL_GPU 的自上而下方向。** 渲染到用户帧缓冲时，帧缓冲的顶部
-  写进纹理的第一行，之后着色器采样该纹理时会相对 WebGL（帧缓冲原点在左下）上下
-  颠倒。默认帧缓冲不受影响（由页面合成器呈现），但 render-to-texture 管线（three.js
-  WebGLRenderer 的后处理、任何合成 pass）会整体上下翻转。修正需要同时翻转离屏
-  viewport 以及内部的 resolve/blit 四边形（webgl_blit_color.cpp、
-  webgl_blit_depth.cpp、ead_pixels），使其采用同一约定；在此之前，
-  render-to-texture 的输出是镜像的，依赖深度的 pass 会看到翻转后的图像。
 - **CSS 覆盖范围是有意为之的子集。** 不支持的属性名、at-rule、选择器、函数、
   单位、特性（attribute）以及
   [DOM](./dom.md#不支持的特性会给出提示) 中列出的元素，会在 stderr 上报告一次，

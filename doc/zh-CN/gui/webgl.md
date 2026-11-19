@@ -23,7 +23,7 @@ if (gl == null) {
 - 每个上下文拥有一张离屏 `R8G8B8A8_UNORM` 颜色纹理（绘图缓冲）和一张 `D32_FLOAT` 深度纹理，尺寸取自 canvas 的 `width` / `height` 属性。`canvas.width = …` 会重建它们并丢弃内容，与 DOM 规则一致。启用 MSAA 时绘制进入 4× 颜色纹理，每个渲染 pass 结束都会解析到页面合成的颜色纹理（见 [多重采样抗锯齿（MSAA）](#多重采样抗锯齿msaa)）。
 - 上下文记录到自己的 SDL_GPU 命令缓冲。`clear`/`draw*` 保持一个渲染 pass 打开；只有缓冲区/纹理上传或切换 framebuffer 才会结束它，并以 `LOAD` 开始新 pass，因此绘图缓冲在多次绘制之间保留，和 WebGL 一样；没有上传的绘制不会中断 pass。
 - 每帧一次，在页面自己的渲染 pass 之前，引擎提交所有 WebGL 命令缓冲。随后图像管线把颜色纹理当作普通 `PaintImage` 采样，没有 CPU 拷贝。
-- WebGL 原点在左下，SDL_GPU 渲染目标原点在左上，因此帧缓冲按自上而下存储：转换 `viewport`/`scissor`，`readPixels` 再把行翻回去，合成器看到的是正立的纹理。
+- WebGL 原点在左下，SDL_GPU 渲染目标原点在左上，两类帧缓冲因此采用不同存储方向。默认绘图缓冲按**自上而下**存储，与合成器呈现方式一致（纹理第 0 行是图像顶部）：转换 `viewport`/`scissor`，`readPixels` 反转行序，绘制时使用正的、y 翻转的 viewport。用户帧缓冲则按**自下而上**存储，与纹理采样方式一致（`v = 0` 是它的底行），因此 `viewport`/`scissor`/`readPixels` 直接按 GL 行映射，绘制时用负高度的 viewport 完成翻转。该翻转同时镜像了光栅器看到的绕序，所以自下而上的目标会翻转 GL 的正面判定（该值属于管线键的一部分，两种方向各保留一条管线）。于是渲染目标采样回来就是 WebGL 的方向，深度纹理（阴影贴图）也与写入它的投影一致。两类目标之间的 `blitFramebuffer` 不能用 `SDL_BlitGPUTexture`（它的拷贝无法反转行序），因此改为一次采样 pass；同类目标之间的 blit 仍走 GPU blit。
 - 固定功能状态变化（`blendFunc`、`depthFunc`、`cullFace`、`colorMask` 等）会改变所需的 `SDL_GPUGraphicsPipeline`，因此管线惰性创建并缓存在程序上。键是这次绘制的**内容**：程序、图元模式、顶点布局的哈希（属性位置、格式、偏移、缓冲 pitch 与输入速率）、反射出的固定功能状态、附件格式。它刻意**不**包含上下文的单调版本计数器（`attribs_version_`、`framebuffer_version_`）与 GPU 缓冲句柄：这些值在每次绑定 VAO、切换帧缓冲或重建缓冲时都会前进，却不改变管线；用它们做键会让每帧绑定多个布局的场景（three.js 每帧为每个几何体绑定一个 VAO）每帧重建全部管线 —— 实测每帧 248 次 `SDL_CreateGPUGraphicsPipeline`，且程序级缓存无界增长。`tests/e2e/gui-webgl-pipeline-cache.test.ts` 固定了稳态：布局相同、缓冲不同的两次绘制在首帧之后不再创建管线。
 
 ## 性能

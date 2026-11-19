@@ -255,9 +255,12 @@ bool WebGLContext::read_pixels(int x, int y, int width, int height, uint8_t *out
   SDL_GPUTextureRegion region;
   memset(&region, 0, sizeof(region));
   region.texture = target;
-  /* The framebuffer is stored top-down; GL's y counts from the bottom. */
+  /* `readPixels`' y counts from GL's bottom edge; where that lands in storage
+   * depends on the target's convention (the drawing buffer is top-down, a user
+   * framebuffer is bottom-up). */
+  const bool top_down = webgl_target_top_down(bound_framebuffer_);
   region.x = (Uint32)px;
-  region.y = (Uint32)(target_height - (py + ph));
+  region.y = (Uint32)webgl_target_rect_y(top_down, target_height, py, ph);
   region.w = (Uint32)pw;
   region.h = (Uint32)ph;
   region.d = 1;
@@ -283,7 +286,10 @@ bool WebGLContext::read_pixels(int x, int y, int width, int height, uint8_t *out
     return false;
   }
   for (int row = 0; row < ph; row++) {
-    const uint8_t *source = mapped + (size_t)(ph - 1 - row) * pw * 4;
+    /* A top-down target stores GL's bottom row last, so the downloaded rows are
+     * reversed; a bottom-up user framebuffer is already in GL order. */
+    const int source_row = top_down ? ph - 1 - row : row;
+    const uint8_t *source = mapped + (size_t)source_row * pw * 4;
     uint8_t *line = out + ((size_t)(py - y + row) * width + (px - x)) * 4;
     memcpy(line, source, (size_t)pw * 4);
   }

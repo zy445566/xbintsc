@@ -43,6 +43,11 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
 
   const int source_samples = framebuffer_samples(read_framebuffer_);
   const int destination_samples = framebuffer_samples(bound_framebuffer_);
+  /* GL window rows map to SDL rows differently for the top-down composited
+   * drawing buffer and a bottom-up user framebuffer; a copy between the two
+   * needs the rows reversed. */
+  const bool source_top_down = webgl_target_top_down(read_framebuffer_);
+  const bool destination_top_down = webgl_target_top_down(bound_framebuffer_);
   if (trace_enabled()) {
     fprintf(stderr,
             "xt_gui: blit read=%u draw=%u mask=%d samples=%d->%d rects=%d,%d,%d,%d -> %d,%d,%d,%d\n",
@@ -140,16 +145,24 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
       source_format == SDL_GPU_TEXTUREFORMAT_R32G32_FLOAT ||
       source_format == SDL_GPU_TEXTUREFORMAT_R16_FLOAT ||
       source_format == SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
-  if (full_rect && float_format && source_samples > 1) {
-    if (draw_color_quad(source_texture, source_width, source_height, destination)) return true;
+  /* `SDL_BlitGPUTexture` copies rows in storage order and cannot invert them, so
+   * a blit between a top-down and a bottom-up target is a sampling pass that
+   * maps GL rows through each target's convention. The same pass copies a
+   * float-format multisampled resolve (see below). */
+  const int source_rect[4] = {sx0, sy0, sx1, sy1};
+  if (source_top_down != destination_top_down ||
+      (full_rect && float_format && source_samples > 1)) {
+    if (draw_color_quad(source_texture, source_top_down, source_rect, source_width,
+                        source_height, destination, filter == GL_LINEAR)) {
+      return true;
+    }
   }
 
   SDL_GPUBlitRegion source_region;
   memset(&source_region, 0, sizeof(source_region));
   source_region.texture = source_texture;
   source_region.x = (Uint32)sx0;
-  /* GL's origin is bottom-left; SDL's regions are top-down. */
-  source_region.y = (Uint32)(source_height - sy1);
+  source_region.y = (Uint32)webgl_target_rect_y(source_top_down, source_height, sy0, sy1 - sy0);
   source_region.w = (Uint32)(sx1 - sx0);
   source_region.h = (Uint32)(sy1 - sy0);
 
@@ -157,7 +170,8 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
   memset(&destination_region, 0, sizeof(destination_region));
   destination_region.texture = destination_texture;
   destination_region.x = (Uint32)dx0;
-  destination_region.y = (Uint32)(destination_height - dy1);
+  destination_region.y = (Uint32)webgl_target_rect_y(destination_top_down, destination_height,
+                                                     dy0, dy1 - dy0);
   destination_region.w = (Uint32)(dx1 - dx0);
   destination_region.h = (Uint32)(dy1 - dy0);
 

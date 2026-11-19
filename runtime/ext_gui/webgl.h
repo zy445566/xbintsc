@@ -8,9 +8,13 @@
  * blending all execute on the GPU.
  *
  * WebGL's origin is bottom-left while SDL_GPU render targets use a top-left
- * origin (its Vulkan backend flips the viewport), so the framebuffer is stored
- * top-down; `viewport`/`scissor` are converted and `readPixels` flips rows back
- * to the GL convention.
+ * origin (its Vulkan backend flips the viewport). The default drawing buffer is
+ * stored top-down, because the page compositor presents its texture with the
+ * origin at the top: its `viewport`/`scissor` are converted and `readPixels`
+ * flips rows back. A user framebuffer's attachments are stored bottom-up, the
+ * way a texture is sampled, so `v = 0` is its bottom row; blits between the two
+ * conventions go through a sampling pass (`SDL_BlitGPUTexture` cannot flip).
+ * See `webgl_target_top_down`.
  *
  * Shaders are translated to SPIR-V by `webgl_glsl.cpp` (glslang). Pipeline
  * objects depend on the vertex layout and fixed-function state, so they are
@@ -38,6 +42,31 @@
 #include "webgl_uniform_block.h"
 
 namespace xtgui {
+
+/** Whether framebuffer `id`'s attachments are stored top-down, with SDL_GPU's
+ * row 0 at the top, instead of WebGL's bottom-up texture convention.
+ *
+ * Only the default drawing buffer is top-down: the page compositor samples its
+ * texture with (0, 0) at the top-left, so its first row has to be the image's
+ * top. A user framebuffer's colour/depth texture is sampled by shaders, where
+ * `v = 0` is the framebuffer's bottom row, so those targets are stored
+ * bottom-up and a draw into one maps GL window y straight to a texture row. */
+inline bool webgl_target_top_down(uint32_t framebuffer_id) { return framebuffer_id == 0; }
+
+/** The SDL row boundary of GL window coordinate `y` inside a target of
+ * `height` rows, for the target's storage convention. GL's y counts from the
+ * bottom, so a top-down target maps it to `height - y`; a bottom-up target maps
+ * it straight through. */
+inline int webgl_target_row(bool top_down, int height, int y) {
+  return top_down ? height - y : y;
+}
+
+/** The first (top-most) SDL row covered by the GL window rectangle `[y, y + h)`
+ * — the origin an `SDL_GPUTextureRegion`, `SDL_GPUBlitRegion` or scissor rect
+ * needs. */
+inline int webgl_target_rect_y(bool top_down, int height, int y, int h) {
+  return top_down ? height - (y + h) : y;
+}
 
 struct WebGLShader {
   uint32_t id = 0;
@@ -379,11 +408,16 @@ class WebGLContext {
   /** Resolve `source` (multisampled) into `destination` (1×1-sampled) with a
    * render pass that draws nothing and resolves on store. */
   bool resolve_color_pass(SDL_GPUTexture *source, SDL_GPUTexture *destination);
-  /** Draw a textured quad from a single-sampled source into the bound target.
-   * Used for a scissored clear when the destination is multisampled and
-   * therefore cannot be the destination of `SDL_BlitGPUTexture`. */
-  bool draw_color_quad(SDL_GPUTexture *source, int source_width, int source_height,
-                       const int destination[4]);
+  /** Draw a textured quad from a GL rectangle of `source` into the bound
+   * framebuffer. `source_rect` and `destination` are GL window rectangles
+   * (`{x0, y0, x1, y1}`, bottom-left origin) and are mapped through each
+   * target's storage convention, so a copy between a top-down and a bottom-up
+   * target comes out the right way up. Used for a scissored clear into a
+   * multisampled target, a float-format resolve and a blit whose targets
+   * disagree on orientation (`SDL_BlitGPUTexture` cannot flip). */
+  bool draw_color_quad(SDL_GPUTexture *source, bool source_top_down,
+                       const int source_rect[4], int source_width, int source_height,
+                       const int destination[4], bool linear = false);
   /** Release every GPU handle this context owns, keeping the CPU-side object
    * table. Used by the destructor and by `lose_context`. */
   void release_gpu_resources();
@@ -479,6 +513,8 @@ class WebGLContext {
   uint32_t blit_program_ = 0;
   uint32_t blit_buffer_ = 0;
   SDL_GPUSampler *blit_sampler_ = nullptr;
+  /** The same sampler with linear filtering, for a scaled blit. */
+  SDL_GPUSampler *blit_sampler_linear_ = nullptr;
   /** Internal program for a colour blit into a multisampled target. */
   uint32_t blit_color_program_ = 0;
 

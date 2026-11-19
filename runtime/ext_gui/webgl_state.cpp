@@ -185,11 +185,12 @@ void WebGLContext::clear(int mask) {
       if (x + w > target_width) w = target_width - x;
       if (y + h > target_height) h = target_height - y;
       if (w > 0 && h > 0) {
+        const int destination[4] = {x, y, x + w, y + h};
         if (target_samples() > 1) {
           /* A multisampled texture cannot be the destination of a GPU blit;
            * the quad draws the same clear rectangle into the MSAA target. */
-          const int destination[4] = {x, y, x + w, y + h};
-          draw_color_quad(source, 1, 1, destination);
+          const int source_rect[4] = {0, 0, 1, 1};
+          draw_color_quad(source, true, source_rect, 1, 1, destination);
         } else {
           end_pass();
           ensure_command();
@@ -203,7 +204,8 @@ void WebGLContext::clear(int mask) {
             memset(&destination_region, 0, sizeof(destination_region));
             destination_region.texture = target_color();
             destination_region.x = (Uint32)x;
-            destination_region.y = (Uint32)(target_height - (y + h));
+            destination_region.y = (Uint32)webgl_target_rect_y(
+                webgl_target_top_down(bound_framebuffer_), target_height, y, h);
             destination_region.w = (Uint32)w;
             destination_region.h = (Uint32)h;
             SDL_GPUBlitInfo info;

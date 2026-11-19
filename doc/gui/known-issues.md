@@ -94,17 +94,6 @@
   *class change* on a flex container has also been observed to crash the same
   way; `examples/gui/pelican-bike` reveals its game-over overlay with `opacity`
   instead.
-- **Off-screen render targets keep SDL_GPU's top-down orientation.** A draw into
-  a user framebuffer writes with the framebuffer's top at the texture's first
-  row, so a shader that samples that texture afterwards reads it upside down
-  relative to WebGL (whose framebuffer origin is bottom-left). The default
-  framebuffer is unaffected because the page compositor presents it, but a
-  render-to-texture pipeline (three.js WebGLRenderer post-processing, any
-  composition pass) comes out vertically flipped. Fixing it needs the off-screen
-  viewport to be flipped *and* the internal resolve/blit quads
-  (webgl_blit_color.cpp, webgl_blit_depth.cpp, ead_pixels) to follow the
-  same convention in one change; until then, render-to-texture output is
-  mirrored and depth-dependent passes see the flipped image.
 - **CSS coverage is a deliberate subset.** Unsupported property names, at-rules,
   selectors, functions, units, attributes and elements (see
   [DOM](./dom.md#unsupported-features-are-reported)) are reported once on stderr

@@ -1,13 +1,16 @@
 /*
- * xbintsc GUI engine — colour quad into a multisampled target.
+ * xbintsc GUI engine — textured quad copies into a render target.
  *
  * `SDL_BlitGPUTexture` cannot target a multisampled texture (its helper
- * pipeline is single-sampled), so a scissored colour clear on an antialiased
- * drawing buffer is a textured quad drawn into the current pass instead. The
- * quad covers exactly the scissor rectangle and its edges fall on pixel
- * boundaries, so the MSAA rasteriser gives every covered pixel full coverage.
+ * pipeline is single-sampled) and cannot invert rows, so a scissored colour
+ * clear on an antialiased drawing buffer, a float-format resolve, and a copy
+ * between targets that disagree on storage orientation (the top-down composited
+ * drawing buffer versus a bottom-up user framebuffer) are all a textured quad
+ * drawn into the current pass instead. The quad covers exactly the destination
+ * rectangle and its edges fall on pixel boundaries, so the MSAA rasteriser
+ * gives every covered pixel full coverage.
  *
- * The internal program, quad buffer and sampler are ordinary engine objects and
+ * The internal program, quad buffer and samplers are ordinary engine objects and
  * live for the context's lifetime. The caller's GL state is saved/restored
  * around the draw.
  */
@@ -44,9 +47,11 @@ const char *kColorBlitFragmentShader =
 
 }  // namespace
 
-bool WebGLContext::draw_color_quad(SDL_GPUTexture *source, int source_width, int source_height,
-                                   const int destination[4]) {
-  if (guidev::g_device == nullptr || source == nullptr) return false;
+bool WebGLContext::draw_color_quad(SDL_GPUTexture *source, bool source_top_down,
+                                   const int source_rect[4], int source_width,
+                                   int source_height, const int destination[4],
+                                   bool linear) {
+  if (guidev::g_device == nullptr || source == nullptr || source_rect == nullptr) return false;
   if (source_width <= 0 || source_height <= 0) return false;
   int target_width = 0;
   int target_height = 0;
@@ -94,11 +99,24 @@ bool WebGLContext::draw_color_quad(SDL_GPUTexture *source, int source_width, int
     sampler_info.max_lod = 0.0f;
     blit_sampler_ = SDL_CreateGPUSampler(guidev::g_device, &sampler_info);
   }
+  if (linear && blit_sampler_linear_ == nullptr) {
+    SDL_GPUSamplerCreateInfo sampler_info;
+    memset(&sampler_info, 0, sizeof(sampler_info));
+    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.max_lod = 0.0f;
+    blit_sampler_linear_ = SDL_CreateGPUSampler(guidev::g_device, &sampler_info);
+  }
+  SDL_GPUSampler *sampler = linear ? blit_sampler_linear_ : blit_sampler_;
   WebGLProgram *program = this->program(blit_color_program_);
   WebGLBuffer *quad_buffer = buffer(blit_buffer_);
   SDL_GPUBuffer *quad_gpu = quad_buffer != nullptr ? ensure_buffer_gpu(quad_buffer) : nullptr;
   if (program == nullptr || program->vs_shader == nullptr || program->fs_shader == nullptr ||
-      quad_gpu == nullptr || blit_sampler_ == nullptr) {
+      quad_gpu == nullptr || sampler == nullptr) {
     return false;
   }
 
@@ -114,13 +132,31 @@ bool WebGLContext::draw_color_quad(SDL_GPUTexture *source, int source_width, int
   y1 = std::max(0, std::min(y1, target_height));
   if (x1 <= x0 || y1 <= y0) return true;
 
-  /* NDC rectangle and source UVs. Source V is flipped because GL's origin is
-   * bottom-left while SDL_GPU render targets and uploads are top-down. */
+  /* Both rectangles are in GL window coordinates. `a_pos.y = 0` is the
+   * destination rectangle's GL bottom edge (y0), whose SDL row depends on
+   * whether the bound framebuffer is stored top-down (the composited drawing
+   * buffer) or bottom-up (a user framebuffer sampled by shaders); `a_pos.y = 1`
+   * is its GL top edge (y1). The source V follows the source's own convention,
+   * so the GL rows line up on both sides and a copy between the two conventions
+   * comes out with the correct orientation. */
+  const bool destination_top_down = webgl_target_top_down(bound_framebuffer_);
+  const int row_bottom = webgl_target_row(destination_top_down, target_height, y0);
+  const int row_top = webgl_target_row(destination_top_down, target_height, y1);
   double dst[4] = {(double)x0 / (double)target_width * 2.0 - 1.0,
-                   (double)y0 / (double)target_height * 2.0 - 1.0,
+                   1.0 - (double)row_bottom / (double)target_height * 2.0,
                    (double)x1 / (double)target_width * 2.0 - 1.0,
-                   (double)y1 / (double)target_height * 2.0 - 1.0};
-  double uv[4] = {0.0, 1.0, 1.0, 0.0};
+                   1.0 - (double)row_top / (double)target_height * 2.0};
+  const int sx0 = std::max(0, std::min(source_rect[0], source_width));
+  const int sx1 = std::max(sx0, std::min(source_rect[2], source_width));
+  const int sy0 = std::max(0, std::min(source_rect[1], source_height));
+  const int sy1 = std::max(sy0, std::min(source_rect[3], source_height));
+  /* Source V at the rectangle's GL bottom edge (sy0) and top edge (sy1). */
+  const int source_row0 = webgl_target_row(source_top_down, source_height, sy0);
+  const int source_row1 = webgl_target_row(source_top_down, source_height, sy1);
+  double uv[4] = {(double)sx0 / (double)source_width,
+                  (double)source_row0 / (double)source_height,
+                  (double)sx1 / (double)source_width,
+                  (double)source_row1 / (double)source_height};
 
   const WebGLDrawState saved_state = state_;
   const uint32_t saved_program = current_program_;
@@ -183,7 +219,9 @@ bool WebGLContext::draw_color_quad(SDL_GPUTexture *source, int source_width, int
     SDL_SetGPUViewport(pass_, &viewport);
     SDL_Rect scissor;
     scissor.x = x0;
-    scissor.y = target_height - y1;
+    /* The rectangle covers the rows between the two corners; for a top-down
+     * target GL y0 is below y1, for a bottom-up target above it. */
+    scissor.y = std::min(row_bottom, row_top);
     scissor.w = x1 - x0;
     scissor.h = y1 - y0;
     SDL_SetGPUScissor(pass_, &scissor);
@@ -209,7 +247,7 @@ bool WebGLContext::draw_color_quad(SDL_GPUTexture *source, int source_width, int
     }
     SDL_GPUTextureSamplerBinding sampler_binding;
     sampler_binding.texture = source;
-    sampler_binding.sampler = blit_sampler_;
+    sampler_binding.sampler = sampler;
     SDL_BindGPUFragmentSamplers(pass_, 0, &sampler_binding, 1);
     SDL_DrawGPUPrimitives(pass_, 4, 1, 0, 0);
   }

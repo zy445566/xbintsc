@@ -46,8 +46,20 @@ reports the type as well.
   WebGL command buffer. The image pipeline then samples the colour texture as
   an ordinary `PaintImage`, with no CPU copy.
 - WebGL's origin is bottom-left while SDL_GPU render targets are top-left, so
-  the framebuffer is stored top-down: `viewport`/`scissor` are converted,
-  `readPixels` flips rows back, and the compositor sees an upright texture.
+  the two framebuffer kinds are stored differently. The default drawing buffer
+  is **top-down**, the way the compositor presents it (texture row 0 is the
+  image's top): its `viewport`/`scissor` are converted, `readPixels` reverses
+  rows and a draw uses a positive-height, y-flipped viewport. A user framebuffer
+  is **bottom-up**, the way a texture is sampled (`v = 0` is its bottom row), so
+  `viewport`/`scissor`/`readPixels` map GL rows straight through and a draw
+  flips the viewport with a negative height. That flip also mirrors the winding
+  the rasteriser sees, so the GL front-face comparison is flipped for a
+  bottom-up target (and is part of the pipeline key, so the two orientations
+  keep distinct pipelines). A render target therefore samples back in WebGL's
+  orientation, and a depth texture (shadow map) matches the projection that
+  wrote it. `blitFramebuffer` between the two kinds cannot use
+  `SDL_BlitGPUTexture` (its copy cannot reverse rows), so it draws a sampling
+  pass instead; a blit between two targets of the same kind keeps the GPU blit.
 - A fixed-function state change (`blendFunc`, `depthFunc`, `cullFace`,
   `colorMask`, …) changes which `SDL_GPUGraphicsPipeline` is needed, so
   pipelines are created lazily and cached on the program. The key is the

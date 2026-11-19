@@ -56,6 +56,17 @@ SDL_GPUTexture *WebGLContext::color_attachment(uint32_t id, int index, int *form
   if (framebuffer_->color_textures[index] != 0) {
     WebGLTexture *texture_ = texture(framebuffer_->color_textures[index]);
     if (texture_ == nullptr) return nullptr;
+    /* The attachment may have been bound before its storage was defined (three.js
+     * re-binds a render target's texture on every resize, then allocates it with
+     * `texImage2D`). Resolve the size from the attachment instead of the size
+     * cached when it was attached, or the framebuffer stays 0x0 and incomplete
+     * and every draw into it is silently dropped. */
+    if (texture_->width > 0 && texture_->height > 0) {
+      framebuffer_->width = texture_->width;
+      framebuffer_->height = texture_->height;
+      *width = texture_->width;
+      *height = texture_->height;
+    }
     *format = (int)texture_->format;
     *samples = texture_->samples;
     return ensure_texture_gpu(texture_, true);
@@ -63,6 +74,12 @@ SDL_GPUTexture *WebGLContext::color_attachment(uint32_t id, int index, int *form
   if (framebuffer_->color_renderbuffers[index] != 0) {
     WebGLRenderbuffer *renderbuffer_ = renderbuffer(framebuffer_->color_renderbuffers[index]);
     if (renderbuffer_ == nullptr) return nullptr;
+    if (renderbuffer_->width > 0 && renderbuffer_->height > 0) {
+      framebuffer_->width = renderbuffer_->width;
+      framebuffer_->height = renderbuffer_->height;
+      *width = renderbuffer_->width;
+      *height = renderbuffer_->height;
+    }
     *format = (int)renderbuffer_->format;
     *samples = renderbuffer_->samples;
     return renderbuffer_->gpu;
@@ -85,8 +102,34 @@ void WebGLContext::framebuffer_size(uint32_t id, int *width, int *height) {
     return;
   }
   WebGLFramebuffer *framebuffer_ = framebuffer(id);
-  *width = framebuffer_ != nullptr ? framebuffer_->width : 0;
-  *height = framebuffer_ != nullptr ? framebuffer_->height : 0;
+  if (framebuffer_ == nullptr) {
+    *width = 0;
+    *height = 0;
+    return;
+  }
+  /* Read the attachment's real size: a target re-bound after a resize only knows
+   * it once its storage exists, not from the size cached at attach time. This
+   * must not allocate anything, so it reads the records directly. */
+  for (int index = 0; index < kWebGLMaxDrawBuffers; index++) {
+    if (framebuffer_->color_textures[index] != 0) {
+      WebGLTexture *texture_ = texture(framebuffer_->color_textures[index]);
+      if (texture_ != nullptr && texture_->width > 0 && texture_->height > 0) {
+        framebuffer_->width = texture_->width;
+        framebuffer_->height = texture_->height;
+        break;
+      }
+    }
+    if (framebuffer_->color_renderbuffers[index] != 0) {
+      WebGLRenderbuffer *renderbuffer_ = renderbuffer(framebuffer_->color_renderbuffers[index]);
+      if (renderbuffer_ != nullptr && renderbuffer_->width > 0 && renderbuffer_->height > 0) {
+        framebuffer_->width = renderbuffer_->width;
+        framebuffer_->height = renderbuffer_->height;
+        break;
+      }
+    }
+  }
+  *width = framebuffer_->width;
+  *height = framebuffer_->height;
 }
 
 SDL_GPUTexture *WebGLContext::target_depth() {

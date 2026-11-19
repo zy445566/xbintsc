@@ -492,6 +492,8 @@ uint32_t WebGLContext::bound_texture(int unit) const {
   return bound_textures_[unit];
 }
 
+uint32_t WebGLContext::bound_texture() const { return bound_texture(active_unit_); }
+
 uint32_t WebGLContext::bound_cube_texture(int unit) const {
   if (unit < 0 || unit >= kWebGLMaxTextureUnits) return 0;
   return bound_cube_textures_[unit];

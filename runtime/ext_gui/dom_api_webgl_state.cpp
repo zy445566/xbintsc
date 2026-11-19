@@ -361,7 +361,7 @@ METHOD(webgl_get_parameter) {
                  : XT_NULL;
     }
     case GL_TEXTURE_BINDING_2D: {
-      const uint32_t texture = context->bound_texture(0);
+      const uint32_t texture = context->bound_texture();
       return texture != 0
                  ? webgl_make_object(self, "__xt_gl_texture", texture, "texture")
                  : XT_NULL;

@@ -23,7 +23,7 @@ METHOD(webgl2_tex_storage_2d_multisample) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
-  const uint32_t texture = context->bound_texture(0);
+  const uint32_t texture = context->bound_texture();
   const int internalformat = webgl_int(argc, argv, 2, 0x8058);  // GL_RGBA8
   context->tex_storage_2d_multisample(texture, webgl_int(argc, argv, 1, 0),
                                       xtgui::webgl_storage_format(internalformat),
@@ -36,7 +36,7 @@ METHOD(webgl2_tex_image_2d_multisample) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
-  const uint32_t texture = context->bound_texture(0);
+  const uint32_t texture = context->bound_texture();
   const int internalformat = webgl_int(argc, argv, 2, 0x8058);  // GL_RGBA8
   context->tex_storage_2d_multisample(texture, webgl_int(argc, argv, 1, 0),
                                       xtgui::webgl_storage_format(internalformat),

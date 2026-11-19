@@ -158,6 +158,7 @@ inner.addEventListener("click", (e) => console.log(e.target.id, e.currentTarget.
 inner.click();                          // 在该元素处合成一次点击
 console.log(box.offsetWidth, box.offsetHeight);   // 取整后的边框盒
 console.log(box.contains(inner));                 // 后代判断
+console.log(inner.closest("button, .card") != null); // 自身或最近祖先匹配
 ```
 
 `element.hidden` 是反射的布尔属性：赋 `true` 会写入 `hidden` 属性（因此

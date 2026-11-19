@@ -103,7 +103,11 @@ own pages: [Collections](./collections.md), [Typed arrays and binary data](./typ
 
 ## URLSearchParams
 
-- `URLSearchParams` is implemented in `runtime/xt_url.c`.
+- `URLSearchParams` is implemented in `runtime/xt_url.c`. It is iterable
+  (`[Symbol.iterator]`, so `[...params]`, `for (const [k, v] of params)` and
+  `Object.fromEntries(params)` work), and `Object.fromEntries` consumes any
+  iterable — an array of pairs, a `Map`, a `URLSearchParams` or a generator —
+  rather than only an array.
 
 ## Errors
 

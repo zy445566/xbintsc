@@ -345,6 +345,14 @@ static xt_value win_request_animation_frame(xt_value self, xt_value env, int32_t
   if (!XT_IS_FUNCTION(fn)) return xt_number(0);
   int id = win->next_animation_frame_id++;
   win->animation_frames.push_back(XtGuiAnimationFrame{id, fn});
+  /* The pump stops once a frame leaves the queue empty, so every request has
+   * to restart it — including one made through the *window method*, which is
+   * how three.js's `setAnimationLoop` asks (`self.requestAnimationFrame`).
+   * Only the bare global did this before, so a page that booted with no frame
+   * pending when the pump drained its queue never rendered again: the last
+   * presented frame stayed on screen (the Saltline page froze on its final
+   * "准备就绪" boot image). */
+  xt_browser_schedule_frame();
   return xt_number((double)id);
 }
 

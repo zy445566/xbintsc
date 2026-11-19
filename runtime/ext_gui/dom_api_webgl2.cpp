@@ -113,6 +113,13 @@ void define_method(xt_value proto, const char *name, void *fn) {
 
 xtgui::WebGLContext *context_of(xt_value self) { return webgl_live_context(self); }
 
+/** `f*` attachment calls name a target; READ_FRAMEBUFFER modifies the read
+ * framebuffer (see `dom_api_webgl_framebuffer.cpp`). */
+uint32_t attachment_framebuffer(xtgui::WebGLContext *context, int target) {
+  return target == GL_READ_FRAMEBUFFER ? context->bound_read_framebuffer_id()
+                                       : context->bound_framebuffer_id();
+}
+
 xt_value uint_array(const unsigned int *values, int count) {
   xt_value array = xt_array_new(0, nullptr);
   for (int i = 0; i < count; i++) xt_array_push(array, xt_number((double)values[i]));
@@ -293,7 +300,7 @@ METHOD(webgl2_framebuffer_texture_layer) {
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
   context->framebuffer_texture_layer(
-      context->bound_framebuffer_id(),
+      domapi::attachment_framebuffer(context, webgl_int(argc, argv, 0, GL_FRAMEBUFFER)),
       webgl_object_id(xt_arg(argc, argv, 2), "__xt_gl_texture"),
       webgl_int(argc, argv, 1, GL_COLOR_ATTACHMENT0), webgl_int(argc, argv, 4, 0));
   return XT_UNDEFINED;

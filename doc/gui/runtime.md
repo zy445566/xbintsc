@@ -55,6 +55,16 @@ that case with a single 16 ms `xt_set_timeout` tick:
   queued animation-frame callbacks before layout, so a page can stop itself),
 - it re-arms **only while callbacks remain**, so an idle page lets the event
   loop drain and the process exit — the browser-tab lifecycle;
+- **every** request restarts it, including one made through the *window
+  method* (`window.requestAnimationFrame` / `self.requestAnimationFrame`), not
+  just the bare global. three.js's `setAnimationLoop` asks through `self` long
+  after its boot, when the pump had already drained; missing that left the
+  renderer without a next frame, so a game page froze on its last presented
+  image (the Saltline page sat on "准备就绪" forever while its DOM said the boot
+  overlay was hidden — the hide was queued, the frame that would have painted it
+  never ran);
+- the callback receives a `DOMHighResTimeStamp` on the same clock as
+  `performance.now()`, not `SDL_GetTicks()` (machine uptime);
 - it schedules the next tick for *frame start + 16 ms*, not 16 ms after the
   frame finished: the frame's own duration is not added to the interval, so a
   10 ms frame runs at a 16 ms period instead of 26 ms, and a page slower than

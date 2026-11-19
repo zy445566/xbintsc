@@ -309,6 +309,7 @@ xt_value xt_get(xt_value target, xt_value key) {  if (target == XT_UNDEFINED || 
  * errors use the cache; arrays, functions, strings and containers fall back to
  * the generic path. */
 xt_value xt_get_ic(xt_value target, xt_value key, int64_t *cache) {
+  XT_PROFILE_TICK(XT_PROFILE_GET_IC);
   if (!cache || !XT_IS_OBJECT(target)) return xt_get(target, key);
   xt_object *obj = (xt_object *)XT_GET_PTR(target);
   if (!xt_kind_is_object(obj->header.kind)) {
@@ -395,7 +396,9 @@ xt_value xt_set_element(xt_value target, xt_value key, xt_value value) {
   return xt_set(target, key, value);
 }
 
-xt_value xt_set(xt_value target, xt_value key, xt_value value) {  if (XT_IS_ARRAY(target)) {
+xt_value xt_set(xt_value target, xt_value key, xt_value value) {
+  XT_PROFILE_TICK(XT_PROFILE_SET);
+  if (XT_IS_ARRAY(target)) {
     /* Assigning `arr.length` truncates or extends the array. */
     if (XT_IS_STRING(key)) {
       xt_string *k = xt_as_string(key);

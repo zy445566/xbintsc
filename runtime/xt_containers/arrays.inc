@@ -6,7 +6,7 @@ void xt_array_reserve(xt_array *array, uint32_t needed) {
   if (needed <= array->capacity) return;
   uint32_t capacity = array->capacity ? array->capacity * 2 : 8;
   while (capacity < needed) capacity *= 2;
-  array->items = (xt_value *)realloc(array->items, sizeof(xt_value) * capacity);
+  array->items = (xt_value *)xt_raw_realloc(array->items, sizeof(xt_value) * capacity);
   if (!array->items) {
     fprintf(stderr, "xbintsc: out of memory growing array\n");
     abort();
@@ -64,6 +64,7 @@ static xt_value xt_array_extra(xt_array *array, int create) {
 }
 
 xt_value xt_array_get(xt_value value, xt_value index) {
+  XT_PROFILE_TICK(XT_PROFILE_ARRAY_GET);
   if (!XT_IS_ARRAY(value)) return XT_UNDEFINED;
   xt_array *array = (xt_array *)XT_GET_PTR(value);
   int32_t i = xt_to_int32(index);

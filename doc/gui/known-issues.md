@@ -5,6 +5,29 @@
 
 ## Known issues
 
+- **A full collection is a visible pause for a three.js scene.** The non-moving
+  mark-sweep collector stops the world; a scene that keeps ~380k objects live
+  spends about **300 ms per collection**, and a title screen that allocates
+  ~450k objects between collections triggers one every ~1.2 s — the frame rate
+  drops to a few fps even though the frame itself takes only ~45 ms.
+  `XT_GC_TRACE=1` prints `took <ms>` per collection (plus heap, allocation and
+  live-kind counts), which is how this is measured. Raising the collector's
+  headroom, reducing per-frame allocation or making marking incremental is the
+  follow-up; the per-frame work itself is not the bottleneck at low quality.
+- **A three.js multisampled render-target resolve loses the Vulkan device.**
+  A `WebGLRenderTarget` with `samples > 0` makes three.js render into its
+  `__webglMultisampledFramebuffer` and then resolve with
+  `blitFramebuffer(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT)` into the target
+  texture. On this engine that sequence loses the Vulkan device
+  (`vkDeviceWaitIdle` / `vkGetFenceStatus` report `VK_ERROR_DEVICE_LOST`), so
+  the window stops presenting after the first frame; the Saltline game's title
+  screen freezes on its last presented image while the page itself keeps
+  running. Any quality preset that leaves `samples` at 0 renders and presents
+  normally (the Saltline page's `?q=low`), so the workaround is a
+  single-sampled post-processing target. The engine no longer reports this as a
+  silent freeze — `xt_gui` prints the SDL error once per run — and the faulty
+  command in the resolve chain is still being narrowed down.
+
 - **Web Audio has no `MediaStream`/capture pipeline, and two node behaviours are
   approximations.** `createMediaElementSource` and `createMediaStreamSource`
   return valid, *silent* nodes: the engine has no microphone/camera capture and

@@ -531,6 +531,10 @@ void xt_stack_push(const char *name, const char *file, int32_t line);
 void xt_stack_pop(void);
 /** Set the innermost frame's line (called just before `new Error(...)`). */
 void xt_stack_set_line(int32_t line);
+
+/** Milliseconds since the program's time origin — the clock behind
+ * `performance.now()` and the timestamp an animation-frame callback receives. */
+double xt_monotonic_ms(void);
 void xt_console_log(int32_t argc, xt_value *argv);
 void xt_console_info(int32_t argc, xt_value *argv);
 void xt_console_warn(int32_t argc, xt_value *argv);

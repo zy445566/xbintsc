@@ -223,10 +223,10 @@ bool WebGLContext::renderbuffer_storage(uint32_t id, int width, int height, int 
   const SDL_GPUTextureFormat format =
       depth ? SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT : webgl_storage_format(internalformat);
   int granted_samples = samples > 1 ? samples : 1;
-  if (samples > 1 &&
+  if (granted_samples > 1 &&
       (!multisample_supported_ ||
        !SDL_GPUTextureSupportsSampleCount(guidev::g_device, format,
-                                          webgl_sample_count(samples)))) {
+                                          webgl_sample_count(granted_samples)))) {
     /* The backend cannot multisample this target. Degrade to the same
      * single-sampled storage a plain `renderbufferStorage` would allocate, so a
      * page that asks for MSAA still renders (without antialiasing) instead of

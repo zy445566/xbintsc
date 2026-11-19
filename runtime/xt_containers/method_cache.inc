@@ -54,6 +54,7 @@ static void xt_method_cache_fill(int64_t *cache, xt_value target, xt_value name)
 
 xt_value xt_call_method_ic(xt_value target, xt_value name, int32_t argc, xt_value *argv,
                            int64_t *cache) {
+  XT_PROFILE_TICK(XT_PROFILE_METHOD_IC);
   if (cache != NULL && (cache[0] != 0 || cache[1] != 0) && XT_IS_OBJECT(target)) {
     xt_object *object = (xt_object *)XT_GET_PTR(target);
     if (object->header.kind == XT_OBJECT_KIND_OBJECT && object->hooks == NULL) {
@@ -80,4 +81,41 @@ xt_value xt_call_method_ic(xt_value target, xt_value name, int32_t argc, xt_valu
   xt_value result = xt_call_method(target, name, argc, argv);
   xt_method_cache_fill(cache, target, name);
   return result;
+}
+
+/* Inline-cached property write, the store counterpart of `xt_get_ic`. A store
+ * site in a hot loop (three.js's `this.x = x` in every constructor, the page's
+ * per-vertex writes) used to resolve the property on every assignment: an own
+ * property scan, a prototype-chain walk for inherited setters, then the insert
+ * path. The cache records the receiver's shape and the slot the key lives in;
+ * a hit is a shape compare, a key check and one field write.
+ *
+ * The cache is filled *after* the generic store, and only for an own data
+ * property, so an accessor, a frozen object or a host view keeps the generic
+ * semantics. A shape change (a new property, a delete) misses and refills. */
+xt_value xt_set_ic(xt_value target, xt_value key, xt_value value, int64_t *cache) {
+  XT_PROFILE_TICK(XT_PROFILE_SET);
+  if (cache != NULL && XT_IS_OBJECT(target)) {
+    xt_object *obj = (xt_object *)XT_GET_PTR(target);
+    if (obj->header.kind == XT_OBJECT_KIND_OBJECT && obj->hooks == NULL && !obj->frozen &&
+        obj->shape != NULL && (uintptr_t)cache[0] == (uintptr_t)obj->shape && cache[1] >= 0 &&
+        cache[1] < (int64_t)obj->count) {
+      xt_property *prop = &obj->properties[cache[1]];
+      if ((prop->key == key || xt_property_key_equals(prop->key, key)) &&
+          prop->getter == XT_UNDEFINED && prop->setter == XT_UNDEFINED) {
+        prop->value = value;
+        return value;
+      }
+    }
+    xt_value stored = xt_set(target, key, value);
+    if (obj->header.kind == XT_OBJECT_KIND_OBJECT && obj->hooks == NULL && !obj->frozen) {
+      xt_property *prop = xt_object_find(obj, xt_to_property_key(key));
+      if (prop != NULL && prop->getter == XT_UNDEFINED && prop->setter == XT_UNDEFINED) {
+        cache[0] = (int64_t)(uintptr_t)obj->shape;
+        cache[1] = (int64_t)(prop - obj->properties);
+      }
+    }
+    return stored;
+  }
+  return xt_set(target, key, value);
 }

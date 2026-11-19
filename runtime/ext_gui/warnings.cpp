@@ -115,7 +115,7 @@ const std::unordered_set<std::string> &unsupportedSvgElements() {
 const std::unordered_set<std::string> &unsupportedAttributes() {
   static const std::unordered_set<std::string> names = {
       "autofocus",    "clip-path", "contenteditable", "controls", "draggable",
-      "filter",       "hidden",    "href",            "marker-end", "marker-mid",
+      "filter",       "href",      "marker-end", "marker-mid",
       "marker-start", "mask",      "poster",          "sizes",    "srcset",
   };
   return names;

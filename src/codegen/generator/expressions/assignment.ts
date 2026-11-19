@@ -144,7 +144,15 @@ export const assignmentExpressionMethods: AssignmentExpressionMethods = {
         }
         const object = this.emitExpression(access.expression);
         const key = this.stringValue(access.name.text);
-        this.emit(`  call i64 @xt_set(i64 ${object}, i64 ${key}, i64 ${value})`);
+        /* A store site gets the same monomorphic inline cache a read site has:
+         * `obj.x = v` in a hot loop otherwise resolves the property (own scan,
+         * prototype-chain walk for setters) on every assignment. */
+        this.extraDeclarations.add("declare i64 @xt_set_ic(i64, i64, i64, i64*)");
+        const cache = `@st.${this.icCounter++}`;
+        this.globals.push(`${cache} = internal global [2 x i64] zeroinitializer`);
+        const slot = this.reg();
+        this.emit(`  ${slot} = getelementptr [2 x i64], [2 x i64]* ${cache}, i64 0, i64 0`);
+        this.emit(`  call i64 @xt_set_ic(i64 ${object}, i64 ${key}, i64 ${value}, i64* ${slot})`);
         return;
       }
       case SyntaxKind.ElementAccessExpression: {

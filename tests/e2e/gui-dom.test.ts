@@ -465,4 +465,48 @@ describe.skipIf(!guiAvailable)("gui extension — dom", () => {
     expect(value("cs")).toBe("50%:30px:rgb(255, 0, 0):10px:rgb(255, 0, 0):#abcdef");
     expect(value("before")).toBe('"hi":rgb(18, 52, 86)');
   });
+
+  it("resolves closest() from the target up the ancestor chain", () => {
+    /* `event.target.closest("button")` is how a page delegates clicks; the
+     * selector support existed (`matches`) but `closest` itself was missing, so
+     * a menu handler threw "object has no callable method 'closest'". */
+    const { value } = harness.compileAndRun(
+      "dom-closest",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><body>
+        <div id="outer" class="panel">
+          <button id="btn" class="action primary"><span id="inner">go</span></button>
+        </div>
+      </body></html>\`;
+
+      const win = createWindow({ title: "closest", width: 320, height: 200 });
+      win.on("ready", () => {
+        const doc: any = win.document;
+        const inner: any = doc.getElementById("inner");
+        const button: any = doc.getElementById("btn");
+        const outer: any = doc.getElementById("outer");
+        console.log("self=" + (inner.closest("#inner") === inner));
+        console.log("button=" + (inner.closest("button") === button));
+        console.log("class=" + (inner.closest(".panel") === outer));
+        console.log("none=" + (inner.closest(".missing") === null));
+        console.log("ancestor=" + (button.closest(".panel") === outer));
+        console.log("chain=" + (inner.closest("div button") === button));
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+      { console: true, autocloseMs: 2500 },
+    );
+
+    expect(value("self")).toBe("true");
+    expect(value("button")).toBe("true");
+    expect(value("class")).toBe("true");
+    expect(value("none")).toBe("true");
+    expect(value("ancestor")).toBe("true");
+    expect(value("chain")).toBe("true");
+  });
 });

@@ -3,6 +3,7 @@
 /* ------------------------------------------------------------------------- */
 
 xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
+  XT_PROFILE_TICK(XT_PROFILE_MATH);
   const char *fn = xt_string_data(name);
   if (!fn) return xt_number(NAN);
   double a = xt_to_number(xt_arg_at(argc, argv, 0));
@@ -123,6 +124,92 @@ xt_value xt_math_call(xt_value name, int32_t argc, xt_value *argv) {
   return xt_number(NAN);
 }
 
+
+/* -- direct call forms ----------------------------------------------------- */
+
+/*
+ * `Math.floor(x)` used to lower to `xt_math_call("floor", 1, &x)`: a name
+ * dispatch plus an argument array for a call whose arity and name the compiler
+ * already knows. A numeric kernel calls these hundreds of times per pixel, so
+ * codegen emits the fixed-arity form below instead — the arguments arrive in
+ * registers and there is no name to resolve. `min`/`max` stay variadic and keep
+ * `xt_math_call`. Semantics are identical: ToNumber first, then the platform
+ * operation.
+ */
+#define XT_MATH_UNARY(name, expression) \
+  xt_value xt_math1_##name(xt_value arg) { \
+    double x = xt_to_number(arg); \
+    return xt_number(expression); \
+  }
+
+#define XT_MATH_BINARY(name, expression) \
+  xt_value xt_math2_##name(xt_value left, xt_value right) { \
+    double x = xt_to_number(left); \
+    double y = xt_to_number(right); \
+    return xt_number(expression); \
+  }
+
+XT_MATH_UNARY(abs, fabs(x))
+XT_MATH_UNARY(floor, floor(x))
+XT_MATH_UNARY(ceil, ceil(x))
+XT_MATH_UNARY(round, floor(x + 0.5))
+XT_MATH_UNARY(trunc, trunc(x))
+XT_MATH_UNARY(sqrt, sqrt(x))
+XT_MATH_UNARY(cbrt, cbrt(x))
+XT_MATH_UNARY(exp, exp(x))
+XT_MATH_UNARY(log, log(x))
+XT_MATH_UNARY(log2, log2(x))
+XT_MATH_UNARY(log10, log10(x))
+XT_MATH_UNARY(log1p, log1p(x))
+XT_MATH_UNARY(expm1, expm1(x))
+XT_MATH_UNARY(sinh, sinh(x))
+XT_MATH_UNARY(cosh, cosh(x))
+XT_MATH_UNARY(tanh, tanh(x))
+XT_MATH_UNARY(asinh, asinh(x))
+XT_MATH_UNARY(acosh, acosh(x))
+XT_MATH_UNARY(atanh, atanh(x))
+XT_MATH_UNARY(fround, (double)(float)x)
+XT_MATH_UNARY(sin, sin(x))
+XT_MATH_UNARY(cos, cos(x))
+XT_MATH_UNARY(tan, tan(x))
+XT_MATH_UNARY(asin, asin(x))
+XT_MATH_UNARY(acos, acos(x))
+XT_MATH_UNARY(atan, atan(x))
+
+XT_MATH_BINARY(pow, pow(x, y))
+XT_MATH_BINARY(atan2, atan2(x, y))
+XT_MATH_BINARY(hypot, hypot(x, y))
+
+#undef XT_MATH_UNARY
+#undef XT_MATH_BINARY
+
+xt_value xt_math1_clz32(xt_value arg) {
+  uint32_t v = (uint32_t)xt_to_int32(arg);
+  int count = 0;
+  if (v == 0) {
+    count = 32;
+  } else {
+    while (!(v & 0x80000000u)) {
+      v <<= 1;
+      count++;
+    }
+  }
+  return xt_number((double)count);
+}
+
+xt_value xt_math1_sign(xt_value arg) {
+  double x = xt_to_number(arg);
+  if (isnan(x)) return xt_number(NAN);
+  return xt_number(x > 0 ? 1.0 : x < 0 ? -1.0 : x);
+}
+
+xt_value xt_math0_random(void) { return xt_number(xt_random_double()); }
+
+xt_value xt_math2_imul(xt_value left, xt_value right) {
+  int32_t a = (int32_t)xt_to_int32(left);
+  int32_t b = (int32_t)xt_to_int32(right);
+  return xt_number((double)(a * b));
+}
 
 /* -- first-class Math ------------------------------------------------------ */
 

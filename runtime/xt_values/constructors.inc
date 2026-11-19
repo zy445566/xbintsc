@@ -32,7 +32,10 @@ xt_value xt_string_new(const char *data, size_t len) {
   return XT_FROM_PTR(XT_TAG_STRING, s);
 }
 
-xt_value xt_string_from_cstr(const char *data) { return xt_string_new(data, strlen(data)); }
+xt_value xt_string_from_cstr(const char *data) {
+  XT_PROFILE_TICK(XT_PROFILE_STRING_CSTR);
+  return xt_string_new(data, strlen(data));
+}
 
 xt_string *xt_as_string(xt_value v);
 

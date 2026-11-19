@@ -92,9 +92,9 @@ static int64_t xt_loop_now_ms(void) {
 #endif
 }
 
-/* Fractional monotonic milliseconds for `performance.now()`. Kept separate from
- * xt_loop_now_ms(), which only needs whole milliseconds for timer deadlines. */
-double xt_monotonic_ms(void) {
+/* Raw fractional monotonic milliseconds: on Windows this is the QPC counter,
+ * which counts from machine boot, not from process start. */
+static double xt_raw_monotonic_ms(void) {
 #if defined(_WIN32)
   static LARGE_INTEGER frequency;
   if (frequency.QuadPart == 0) QueryPerformanceFrequency(&frequency);
@@ -106,6 +106,26 @@ double xt_monotonic_ms(void) {
   clock_gettime(CLOCK_MONOTONIC, &ts);
   return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
 #endif
+}
+
+/* `performance.now()` is relative to the program's own time origin, like a
+ * browser's (navigation start) or Node's (process start) — not to machine boot.
+ * Before the origin existed, a process started six days into an uptime reported
+ * `performance.now() == 521,000,000` on its first call: deltas were still right,
+ * so three.js kept working, but every absolute reading was nonsense and any
+ * `now() / 1000` (three.js's `clock.elapsedTime`) started at six days. */
+static double g_time_origin_ms = -1.0;
+
+void xt_time_init(void) {
+  if (g_time_origin_ms < 0.0) g_time_origin_ms = xt_raw_monotonic_ms();
+}
+
+/* Fractional monotonic milliseconds for `performance.now()`. Kept separate from
+ * xt_loop_now_ms(), which only needs whole milliseconds for timer deadlines. */
+double xt_monotonic_ms(void) {
+  if (g_time_origin_ms < 0.0) g_time_origin_ms = xt_raw_monotonic_ms();
+  double elapsed = xt_raw_monotonic_ms() - g_time_origin_ms;
+  return elapsed < 0.0 ? 0.0 : elapsed;
 }
 
 /* Wall-clock milliseconds since the Unix epoch, for `Date.now()` and

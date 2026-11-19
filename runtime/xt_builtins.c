@@ -421,6 +421,7 @@ xt_value xt_closure_new(void *fn, int32_t env_count, xt_value *env) {
 }
 
 xt_value xt_closure_call(xt_value value, int32_t argc, xt_value *argv) {
+  XT_PROFILE_TICK(XT_PROFILE_CLOSURE_CALL);
   return xt_call_with_this(value, XT_UNDEFINED, argc, argv);
 }
 

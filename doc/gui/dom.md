@@ -175,6 +175,7 @@ inner.addEventListener("click", (e) => console.log(e.target.id, e.currentTarget.
 inner.click();                          // synthesise a click at the element
 console.log(box.offsetWidth, box.offsetHeight);   // rounded border box
 console.log(box.contains(inner));                 // descendant test
+console.log(inner.closest("button, .card") != null); // nearest self/ancestor match
 ```
 
 `element.hidden` is a reflected boolean attribute: assigning `true` sets the

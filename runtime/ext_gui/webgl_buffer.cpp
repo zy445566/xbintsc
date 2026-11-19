@@ -10,6 +10,7 @@
 #include "webgl.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 #include "gui_internal.h"
@@ -121,6 +122,10 @@ void WebGLContext::delete_texture(uint32_t id) {
     if (cleared) {
       entry.second->width = 0;
       entry.second->height = 0;
+      if (SDL_getenv("XT_GUI_TRACE") != nullptr) {
+        fprintf(stderr, "xt_gui: delete texture %u clears framebuffer %u colour attachment\n", id,
+                entry.second->id);
+      }
     }
     if (entry.second->depth_texture == id) entry.second->depth_texture = 0;
   }

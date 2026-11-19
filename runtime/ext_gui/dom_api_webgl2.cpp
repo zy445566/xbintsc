@@ -265,7 +265,7 @@ METHOD(webgl2_tex_sub_image_3d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
-  const uint32_t texture = context->bound_texture(0);
+  const uint32_t texture = context->bound_texture();
   if (texture == 0 || webgl_int(argc, argv, 1, 0) != 0) return XT_UNDEFINED;
   const int x = webgl_int(argc, argv, 2, 0);
   const int y = webgl_int(argc, argv, 3, 0);
@@ -431,7 +431,7 @@ METHOD(webgl2_tex_storage_2d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
-    const uint32_t texture = context->bound_texture(0);
+    const uint32_t texture = context->bound_texture();
     const int internalformat = webgl_int(argc, argv, 2, 0x8058);  // GL_RGBA8
     context->tex_storage_format(texture, webgl_int(argc, argv, 1, 1),
                                 webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0),
@@ -446,7 +446,7 @@ METHOD(webgl2_tex_storage_3d) {
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
   const int internalformat = webgl_int(argc, argv, 2, 0x8058);  // GL_RGBA8
-  context->tex_storage_3d(context->bound_texture(0), webgl_int(argc, argv, 1, 1),
+  context->tex_storage_3d(context->bound_texture(), webgl_int(argc, argv, 1, 1),
                           webgl_int(argc, argv, 3, 0), webgl_int(argc, argv, 4, 0),
                           webgl_int(argc, argv, 5, 0),
                           xtgui::webgl_storage_format(internalformat),
@@ -458,7 +458,7 @@ METHOD(webgl2_tex_image_3d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
-  const uint32_t texture = context->bound_texture(0);
+  const uint32_t texture = context->bound_texture();
   if (texture == 0) return XT_UNDEFINED;
   if (webgl_int(argc, argv, 1, 0) != 0) return XT_UNDEFINED;
   const int internalformat = webgl_int(argc, argv, 2, GL_RGBA);

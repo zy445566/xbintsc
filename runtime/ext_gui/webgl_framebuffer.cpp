@@ -11,11 +11,25 @@
 
 #include "webgl.h"
 
+#include <cstdio>
 #include <cstring>
 
 #include "gui_internal.h"
 
 namespace xtgui {
+namespace {
+
+/** `XT_GUI_TRACE=1` explains an incomplete framebuffer. */
+bool trace_enabled() {
+  static int value = -1;
+  if (value < 0) {
+    const char *env = SDL_getenv("XT_GUI_TRACE");
+    value = (env != nullptr && env[0] != '\0' && env[0] != '0') ? 1 : 0;
+  }
+  return value != 0;
+}
+
+}  // namespace
 
 /* -- framebuffers -------------------------------------------------------- */
 
@@ -73,7 +87,9 @@ bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture
     if (record != nullptr) {
       record->as_depth_target = true;
       ensure_texture_gpu(record, true);
-      if (record_framebuffer->width <= 0 || record_framebuffer->height <= 0) {
+      /* Storage may not exist yet; color_attachment and framebuffer_size re-read
+       * the real size once it does, so never clobber a known size with 0. */
+      if (record->width > 0 && record->height > 0) {
         record_framebuffer->width = record->width;
         record_framebuffer->height = record->height;
       }
@@ -85,8 +101,10 @@ bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture
   record_framebuffer->color_textures[color_index] = texture_id;
   record_framebuffer->color_renderbuffers[color_index] = 0;
   if (record != nullptr) {
-    record_framebuffer->width = record->width;
-    record_framebuffer->height = record->height;
+    if (record->width > 0 && record->height > 0) {
+      record_framebuffer->width = record->width;
+      record_framebuffer->height = record->height;
+    }
     ensure_texture_gpu(record, true);
   }
   return true;
@@ -108,10 +126,34 @@ bool WebGLContext::framebuffer_texture_layer(uint32_t framebuffer_id, uint32_t t
 int WebGLContext::framebuffer_status(uint32_t id) {
   WebGLFramebuffer *framebuffer_ = framebuffer(id);
   if (framebuffer_ == nullptr) return GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT;
+  auto incomplete = [&](int status, const char *why, int slot, uint32_t attachment) {
+    if (trace_enabled()) {
+      WebGLTexture *attachment_texture = attachment != 0 ? texture(attachment) : nullptr;
+      fprintf(stderr,
+              "xt_gui: fb %u incomplete (%d): %s slot=%d attachment=%u texture=%p texsize=%dx%d "
+              "texgpu=%p fbsize=%dx%d\n",
+              id, status, why, slot, attachment, (void *)attachment_texture,
+              attachment_texture != nullptr ? attachment_texture->width : -1,
+              attachment_texture != nullptr ? attachment_texture->height : -1,
+              attachment_texture != nullptr ? (void *)attachment_texture->gpu : nullptr,
+              framebuffer_->width, framebuffer_->height);
+    }
+    return status;
+  };
   bool attached = false;
   int width = 0;
   int height = 0;
   int samples = 1;
+  if (trace_enabled()) {
+    fprintf(stderr,
+            "xt_gui: fb %u status: color=[%u,%u,%u,%u] rb=[%u,%u,%u,%u] depth=%u/%u size=%dx%d\n",
+            id, framebuffer_->color_textures[0], framebuffer_->color_textures[1],
+            framebuffer_->color_textures[2], framebuffer_->color_textures[3],
+            framebuffer_->color_renderbuffers[0], framebuffer_->color_renderbuffers[1],
+            framebuffer_->color_renderbuffers[2], framebuffer_->color_renderbuffers[3],
+            framebuffer_->depth_texture, framebuffer_->depth_renderbuffer, framebuffer_->width,
+            framebuffer_->height);
+  }
   for (int index = 0; index < kWebGLMaxDrawBuffers; index++) {
     if (framebuffer_->color_textures[index] == 0 &&
         framebuffer_->color_renderbuffers[index] == 0) {
@@ -123,7 +165,8 @@ int WebGLContext::framebuffer_status(uint32_t id) {
     int attachment_height = 0;
     if (color_attachment(id, index, &format, &attachment_samples, &attachment_width,
                          &attachment_height) == nullptr) {
-      return GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;
+      return incomplete(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT, "colour attachment unresolved",
+                        index, framebuffer_->color_textures[index]);
     }
     if (!attached) {
       attached = true;
@@ -283,7 +326,7 @@ bool WebGLContext::framebuffer_renderbuffer(uint32_t framebuffer_id, int attachm
       SDL_ReleaseGPUTexture(guidev::g_device, framebuffer_->depth);
       framebuffer_->depth = nullptr;
     }
-    if (record != nullptr) {
+    if (record != nullptr && record->width > 0 && record->height > 0) {
       framebuffer_->width = record->width;
       framebuffer_->height = record->height;
     }
@@ -293,7 +336,7 @@ bool WebGLContext::framebuffer_renderbuffer(uint32_t framebuffer_id, int attachm
   if (index < 0 || index >= kWebGLMaxDrawBuffers) return false;
   framebuffer_->color_renderbuffers[index] = renderbuffer_id;
   framebuffer_->color_textures[index] = 0;
-  if (record != nullptr) {
+  if (record != nullptr && record->width > 0 && record->height > 0) {
     framebuffer_->width = record->width;
     framebuffer_->height = record->height;
   }

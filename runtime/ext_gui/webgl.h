@@ -329,6 +329,9 @@ class WebGLContext {
   std::string string_parameter(int pname);
   uint32_t bound_buffer(int target) const;
   uint32_t bound_texture(int unit) const;
+  /** The texture bound to the *active* unit: `texImage2D`, `texParameteri` and
+   * `generateMipmap` mutate the binding of the active unit, not unit 0. */
+  uint32_t bound_texture() const;
   uint32_t bound_cube_texture(int unit) const;
   uint32_t bound_array_texture(int unit) const;
   uint32_t bound_3d_texture(int unit) const;

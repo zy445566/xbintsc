@@ -42,7 +42,7 @@ METHOD(webgl_compressed_tex_image_2d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
-  const uint32_t texture = context->bound_texture(0);
+  const uint32_t texture = context->bound_texture();
   if (texture == 0) return XT_UNDEFINED;
   const int level = webgl_int(argc, argv, 1, 0);
   if (level != 0) return XT_UNDEFINED;
@@ -64,7 +64,7 @@ METHOD(webgl_compressed_tex_sub_image_2d) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_UNDEFINED;
-  const uint32_t texture = context->bound_texture(0);
+  const uint32_t texture = context->bound_texture();
   if (texture == 0) return XT_UNDEFINED;
   const int internalformat = webgl_int(argc, argv, 6, 0);
   const SDL_GPUTextureFormat format = xtgui::webgl_compressed_format(internalformat);

@@ -265,7 +265,7 @@ METHOD(webgl_tex_parameteri) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
-    const uint32_t texture = context->bound_texture(0);
+    const uint32_t texture = context->bound_texture();
     context->tex_parameter(texture, webgl_int(argc, argv, 1, 0), webgl_int(argc, argv, 2, 0));
   }
   return XT_UNDEFINED;
@@ -275,7 +275,7 @@ METHOD(webgl_tex_parameterf) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context != nullptr) {
-    const uint32_t texture = context->bound_texture(0);
+    const uint32_t texture = context->bound_texture();
     context->tex_parameter(texture, webgl_int(argc, argv, 1, 0),
                            (int)webgl_number(argc, argv, 2, 0.0));
   }
@@ -286,7 +286,7 @@ METHOD(webgl_get_tex_parameter) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
   if (context == nullptr) return XT_NULL;
-  return xt_number(context->tex_parameter_value(context->bound_texture(0),
+  return xt_number(context->tex_parameter_value(context->bound_texture(),
                                                 webgl_int(argc, argv, 1, 0)));
 }
 
@@ -301,7 +301,7 @@ METHOD(webgl_tex_image_2d) {
   } else if (target != GL_TEXTURE_2D) {
     return XT_UNDEFINED;
   }
-  const uint32_t texture = context->bound_texture(0);
+  const uint32_t texture = context->bound_texture();
   if (texture == 0) {
     context->set_error(GL_INVALID_OPERATION);
     return XT_UNDEFINED;
@@ -410,7 +410,7 @@ METHOD(webgl_tex_sub_image_2d) {
   } else if (target != GL_TEXTURE_2D) {
     return XT_UNDEFINED;
   }
-  const uint32_t texture = context->bound_texture(0);
+  const uint32_t texture = context->bound_texture();
   if (texture == 0) return XT_UNDEFINED;
   const int level = webgl_int(argc, argv, 1, 0);
   if (level != 0) return XT_UNDEFINED;
@@ -478,7 +478,7 @@ METHOD(webgl_tex_sub_image_2d) {
 METHOD(webgl_generate_mipmap) {
   (void)env;
   xtgui::WebGLContext *context = context_of(self);
-  if (context != nullptr) context->generate_mipmap(context->bound_texture(0));
+  if (context != nullptr) context->generate_mipmap(context->bound_texture());
   return XT_UNDEFINED;
 }
 

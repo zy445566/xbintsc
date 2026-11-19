@@ -3,10 +3,9 @@
  *
  * The engine resolves a multisampled drawing buffer at the end of every render
  * pass into the single-sampled texture the page composites, and supports
- * multisampled renderbuffers/textures that `blitFramebuffer` resolves. SDL_GPU's
- * Metal resolve is unreliable, so the backend only enables MSAA on Vulkan;
- * every assertion below is conditional on `MAX_SAMPLES`, which `win.driver()`
- * makes observable.
+ * multisampled renderbuffers/textures that `blitFramebuffer` resolves. Both
+ * backends the engine runs on (Vulkan and Metal) enable it, so every assertion
+ * below is conditional on `MAX_SAMPLES` rather than on `win.driver()`.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -116,7 +115,7 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2 MSAA", () => {
 
     expect(["vulkan", "metal", "direct3d12"]).toContain(value("driver"));
     const maxSamples = Number(value("max-samples"));
-    if (value("driver") === "vulkan") {
+    if (maxSamples > 0) {
       expect(maxSamples).toBe(4);
       expect(value("aa-attrs")).toBe("true:4:1");
       expect(value("one-attrs")).toBe("false:0:0");
@@ -271,8 +270,9 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2 MSAA", () => {
       { files: { "page.html": PAGE }, autocloseMs: 15000 },
     );
 
-    if (value("driver") === "vulkan") {
-      expect(value("max-samples")).toBe("4");
+    const maxSamples = Number(value("max-samples"));
+    if (maxSamples > 0) {
+      expect(maxSamples).toBe(4);
       expect(value("internalformat-samples")).toBe("1:4");
       expect(value("rb")).toBe("32x32:4:" + String(0x8058));
       expect(value("complete")).toBe("true");
@@ -310,6 +310,7 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2 MSAA", () => {
           return;
         }
         label("driver", win.driver());
+        label("max-samples", gl.getParameter(gl.MAX_SAMPLES));
         if (gl.getParameter(gl.MAX_SAMPLES) === 0) {
           label("msaa", "unsupported");
           win.close();
@@ -347,7 +348,8 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL 2 MSAA", () => {
       { files: { "page.html": PAGE }, autocloseMs: 10000 },
     );
 
-    if (value("driver") === "vulkan") {
+    const maxSamples = Number(value("max-samples"));
+    if (maxSamples > 0) {
       expect(value("mixed")).toBe("true");
       expect(value("matched")).toBe("true");
       expect(value("read-error")).toBe("true");

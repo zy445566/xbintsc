@@ -355,11 +355,11 @@ engine were Rust.
     - `texStorage2D`, `copyBufferSubData`,
       `getBufferSubData` and `clearBuffer*` are implemented; query/fence/UBO and
       transform-feedback entry points exist and degrade gracefully.
-    - Vulkan contexts are 4× multisampled when the `antialias` attribute (default
-      true) allows it: every pass resolves the drawing buffer into the composited
-      texture, `renderbufferStorageMultisample`/`texStorage2DMultisample`
-      allocate multisampled render targets, and `blitFramebuffer` resolves
-      colour. See [WebGL](./gui/webgl.md); e2e in
+    - Vulkan and Metal contexts are 4× multisampled when the `antialias`
+      attribute (default true) allows it: every pass resolves the drawing buffer
+      into the composited texture, `renderbufferStorageMultisample`/
+      `texStorage2DMultisample` allocate multisampled render targets, and
+      `blitFramebuffer` resolves colour. See [WebGL](./gui/webgl.md); e2e in
       `tests/e2e/gui-webgl2.test.ts` and
       `tests/e2e/gui-example-webgl2.test.ts`, demo in
       `examples/gui/webgl2-cubes`.

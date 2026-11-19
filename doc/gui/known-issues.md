@@ -36,14 +36,14 @@
   shader unroller; `WebGLRenderer` runs on the real backend and there is no
   Canvas2D fallback. Shadow maps (comparative `sampler2DShadow` targeting depth
   textures), cube textures/environment maps and HDR render targets are supported.
-- **MSAA is Vulkan-only, and it changes what may be blitted where.** The
-  `antialias` attribute defaults to true; Vulkan contexts get a 4× drawing
-  buffer that resolves into the composited colour texture at the end of every
-  render pass, so `getParameter(SAMPLES)` is 4 and a partially covered edge
-  pixel is a blend. SDL_GPU's Metal resolve returns undefined pixels with
-  scissor tests and instanced draws, so macOS keeps the single-sampled path
-  (`antialias` false, `MAX_SAMPLES` 0, and multisample storage requests degrade
-  to single-sampled renderbuffers/textures with `SAMPLES` 0). As in a browser,
+- **MSAA is enabled on Vulkan and Metal, and it changes what may be blitted
+  where.** The `antialias` attribute defaults to true; a supported context gets
+  a 4× drawing buffer that resolves into the composited colour texture at the
+  end of every render pass, so `getParameter(SAMPLES)` is 4 and a partially
+  covered edge pixel is a blend. A device without 4× colour and depth support
+  keeps the single-sampled path (`antialias` false, `MAX_SAMPLES` 0, and
+  multisample storage requests degrade to single-sampled renderbuffers/textures
+  with `SAMPLES` 0). As in a browser,
   `blitFramebuffer` into the antialiased
   default framebuffer is `INVALID_OPERATION`: request
   `getContext("webgl2", { antialias: false })` when the page resolves its own

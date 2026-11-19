@@ -26,14 +26,15 @@ namespace {
 
 std::unordered_map<uint64_t, WebGLContext *> g_contexts;
 
-/** Whether the backend can allocate and resolve multisampled targets. SDL_GPU's
- * Metal resolve returns undefined pixels with scissor tests and instanced
- * draws, so MSAA is enabled on Vulkan only; the others keep the single-sampled
- * path the engine shipped before. */
+/** Whether the backend can allocate and resolve multisampled targets. The
+ * WebGL engine runs on Vulkan and Metal; both resolve a 4× colour attachment
+ * into the composited texture (including scissored clears and instanced
+ * draws), so ask the device rather than pinning MSAA to one driver. */
 bool probe_multisample() {
   if (guidev::g_device == nullptr) return false;
   const char *driver = xt_gui_driver();
-  if (driver == nullptr || strcmp(driver, "vulkan") != 0) return false;
+  if (driver == nullptr) return false;
+  if (strcmp(driver, "vulkan") != 0 && strcmp(driver, "metal") != 0) return false;
   return SDL_GPUTextureSupportsSampleCount(guidev::g_device,
                                            SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
                                            SDL_GPU_SAMPLECOUNT_4) &&

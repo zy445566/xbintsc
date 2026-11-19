@@ -29,12 +29,12 @@
   `WebGLRenderer` 直接运行在真实后端上，不再有 Canvas2D 回退。阴影贴图
   （比较型 `sampler2DShadow` 采样深度纹理）、立方体贴图/环境贴图与 HDR 渲染目标
   均已支持。
-- **MSAA 只在 Vulkan 上启用，并且改变了哪些 blit 合法。**
-  `antialias` 属性默认开启；Vulkan 上下文得到 4× 绘图缓冲，每个渲染 pass
+- **MSAA 在 Vulkan 与 Metal 上启用，并且改变了哪些 blit 合法。**
+  `antialias` 属性默认开启；受支持的上下文得到 4× 绘图缓冲，每个渲染 pass
   结束时解析到页面合成的颜色纹理，因此 `getParameter(SAMPLES)` 为 4，部分覆盖的
-  边缘像素会是混合色。SDL_GPU 的 Metal resolve 在 scissor 与实例化绘制下会返回
-  未定义像素，因此 macOS 保持单采样路径（`antialias` 为 false、`MAX_SAMPLES` 为 0，
-  多重采样存储请求会降级为单采样的 renderbuffer/纹理且 `SAMPLES` 为 0）。与浏览器一致，
+  边缘像素会是混合色。设备若不支持 4× 颜色与深度，则保持单采样路径
+  （`antialias` 为 false、`MAX_SAMPLES` 为 0，多重采样存储请求会降级为单采样的
+  renderbuffer/纹理且 `SAMPLES` 为 0）。与浏览器一致，
   blit 到抗锯齿的默认帧缓冲是 `INVALID_OPERATION`：页面若要自己把离屏目标解析到
   canvas，应传入 `getContext("webgl2", { antialias: false })`。多重采样颜色源只有在
   源/目标矩形完全相同、格式相同且过滤为 `NEAREST` 时才能解析；多重采样深度附件可以

@@ -275,8 +275,8 @@
     - 顶点数组对象保存/恢复属性表，实例化绘制使用 SDL 的按实例输入频率，采样器
       对象覆盖纹理单元的过滤/环绕状态。`texStorage2D`、`copyBufferSubData`、
       `getBufferSubData` 与 `clearBuffer*` 已实现；查询/栅栏/UBO 与 transform
-      feedback 入口存在并优雅降级。Vulkan 上下文在 `antialias` 属性（默认 true）
-      允许时是 4× 多重采样的：每个 pass 都把绘图缓冲解析到页面合成的纹理，
+      feedback 入口存在并优雅降级。Vulkan 与 Metal 上下文在 `antialias` 属性
+      （默认 true）允许时是 4× 多重采样的：每个 pass 都把绘图缓冲解析到页面合成的纹理，
       `renderbufferStorageMultisample`/`texStorage2DMultisample` 分配多重采样渲染
       目标，`blitFramebuffer` 解析颜色。见 [WebGL](./gui/webgl.md)；e2e 见
       `tests/e2e/gui-webgl2.test.ts` 与 `tests/e2e/gui-example-webgl2.test.ts`，

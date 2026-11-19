@@ -99,15 +99,15 @@ supported backend the drawing buffer is **4× multisampled**:
   is `INVALID_OPERATION`, and `readPixels` from a multisampled user framebuffer
   is `INVALID_OPERATION` too (resolve it first).
 
-SDL_GPU's Metal resolve returns undefined pixels with scissor tests and
-instanced draws, so **Metal keeps the single-sampled path**: `antialias` reports
-`false`, `MAX_SAMPLES` is `0`, and `renderbufferStorageMultisample` /
-`texStorage2DMultisample` degrade to single-sampled storage
-(`RENDERBUFFER_SAMPLES` reports `0`) so a page that still asks for MSAA keeps a
-working attachment. Vulkan (Windows/Linux) enables MSAA. Depth and stencil
-attachments cannot be resolved through SDL_GPU, so a multisampled depth blit is
-accepted and leaves the destination depth untouched (stencil bits were already
-unsupported).
+Both backends that can run WebGL enable MSAA: Vulkan (Windows/Linux) and Metal
+(macOS) resolve the 4× drawing buffer, including scissored clears and instanced
+draws. A device that cannot sample 4× RGBA8 and depth keeps the single-sampled
+path: `antialias` reports `false`, `MAX_SAMPLES` is `0`, and
+`renderbufferStorageMultisample` / `texStorage2DMultisample` degrade to
+single-sampled storage (`RENDERBUFFER_SAMPLES` reports `0`) so a page that still
+asks for MSAA keeps a working attachment. Depth and stencil attachments cannot
+be resolved through SDL_GPU, so a multisampled depth blit is accepted and leaves
+the destination depth untouched (stencil bits were already unsupported).
 
 ## Shaders: GLSL ES to SPIR-V (and on to MSL)
 
@@ -417,9 +417,9 @@ Canvas2D fallback is bundled any more**. Verified with three.js r160 through SDL
 
 Features outside this engine's subset still cannot be emulated: transform
 feedback and multisampled depth resolves. Depth textures, float render targets
-and compressed textures are available, MSAA colour resolves run on Vulkan, and
-comparative `sampler2DShadow` sampling is translated, so three.js shadow maps can
-use the hardware depth compare on both backends (see
+and compressed textures are available, MSAA colour resolves run on Vulkan and
+Metal, and comparative `sampler2DShadow` sampling is translated, so three.js
+shadow maps can use the hardware depth compare on both backends (see
 [known issues](./known-issues.md) for an Intel-Mac driver caveat). A scene that
 needs transform feedback will not render correctly; everything the previous
 Canvas2D fallback could show now goes through the GPU.

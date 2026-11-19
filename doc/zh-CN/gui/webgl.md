@@ -51,7 +51,7 @@ if (gl == null) {
 - `renderbufferStorageMultisample(target, samples, internalformat, width, height)` 分配 4× 颜色或深度（模板）renderbuffer；`texStorage2DMultisample` / `texImage2DMultisample` 对纹理做同样的事。把它们挂到 framebuffer 上就成为渲染目标；当颜色附件与深度附件的采样数不一致时，`checkFramebufferStatus` 返回 `FRAMEBUFFER_INCOMPLETE_MULTISAMPLE`。
 - 当源与目标矩形、颜色格式都相同且过滤为 `NEAREST` 时，`blitFramebuffer` 会把多重采样源解析到单采样目标——即 ES 3.0 的解析规则。半浮点（或浮点）颜色目标的解析使用**采样 pass**，而不是 `SDL_BlitGPUTexture`：SDL_GPU 的 blit 是 `vkCmdBlitImage`，而 Vulkan 不要求 16F/32F 图像支持 blit 源/目标，这条无效命令会让 three.js 的 `samples > 0` 渲染目标丢失 Vulkan 设备。采样拷贝适用于所有颜色格式（three.js 执行的全矩形解析可以精确映射）。blit 到多重采样的 draw framebuffer 是 `INVALID_OPERATION`；从用户的多重采样 framebuffer `readPixels` 同样是 `INVALID_OPERATION`（需先解析）。
 
-SDL_GPU 的 Metal resolve 在 scissor 与实例化绘制下会返回未定义像素，因此 **Metal 保持单采样路径**：`antialias` 报告 `false`，`MAX_SAMPLES` 为 `0`，`renderbufferStorageMultisample` / `texStorage2DMultisample` 会降级为单采样存储（`RENDERBUFFER_SAMPLES` 报告 `0`），仍请求 MSAA 的页面不会丢失附件。Vulkan（Windows/Linux）启用 MSAA。深度/模板附件无法通过 SDL_GPU 解析，因此多重采样的深度 blit 会被接受但不改动目标深度（模板位本来就不支持）。
+能运行 WebGL 的两个后端都启用 MSAA：Vulkan（Windows/Linux）与 Metal（macOS）都会解析 4× 绘图缓冲，scissor clear 与实例化绘制也包含在内。若设备无法采样 4× RGBA8 与深度，则保持单采样路径：`antialias` 报告 `false`，`MAX_SAMPLES` 为 `0`，`renderbufferStorageMultisample` / `texStorage2DMultisample` 会降级为单采样存储（`RENDERBUFFER_SAMPLES` 报告 `0`），仍请求 MSAA 的页面不会丢失附件。深度/模板附件无法通过 SDL_GPU 解析，因此多重采样的深度 blit 会被接受但不改动目标深度（模板位本来就不支持）。
 
 ## 着色器：GLSL ES 到 SPIR-V（再到 MSL）
 
@@ -154,4 +154,4 @@ transform feedback（入口为空操作：SDL_GPU 没有 transform feedback 阶�
 
 着色器改写器会把 three.js 的 `#pragma unroll_loop_start` 循环展开为常量索引（否则其采样器数组无法通过 Vulkan GLSL），`.js` 资源加载器则避免渲染器自带的展开器重复处理。`WebGLRenderer` 在本引擎真正的 WebGL 2 后端上原样运行，**不再打包 Canvas2D 回退**。已用 three.js r160 通过 SDL_GPU 验证：`MeshBasicMaterial`、`MeshStandardMaterial`、`MeshPhongMaterial`、`CanvasTexture`、线性雾、环境光/平行光/点光/聚光/半球光、`Sprite`、`Line`、`Points` 与 `InstancedMesh`。
 
-本引擎子集之外的能力仍无法模拟：transform feedback 与多重采样深度解析。立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标、压缩纹理、Vulkan 上的 MSAA 颜色解析与比较型 `sampler2DShadow` 采样都已可用（three.js 阴影贴图可在两个后端使用硬件深度比较，Intel Mac 上的驱动问题见[已知问题](./known-issues.md)）。需要 transform feedback 的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。
+本引擎子集之外的能力仍无法模拟：transform feedback 与多重采样深度解析。立方体贴图/环境贴图、深度纹理、HDR/浮点渲染目标、压缩纹理、Vulkan 与 Metal 上的 MSAA 颜色解析与比较型 `sampler2DShadow` 采样都已可用（three.js 阴影贴图可在两个后端使用硬件深度比较，Intel Mac 上的驱动问题见[已知问题](./known-issues.md)）。需要 transform feedback 的场景无法正确渲染；此前 Canvas2D 回退能显示的内容现在全部走 GPU。

@@ -135,6 +135,7 @@ static void xt_heap_link(xt_header *header) {
 
 void *xt_alloc(size_t size, int kind) {
   XT_PROFILE_TICK(XT_PROFILE_ALLOC);
+  if (xt_profile_on) xt_profile_note_alloc(kind);
   if (!g_gc_initialised) xt_gc_init();
   if (xt_gc_worker_thread) {
     void *block = calloc(1, size);
@@ -289,10 +290,12 @@ static void xt_gc_gray_push_checked(xt_header *header) {
 void xt_gc_mark_header(xt_header *header) { xt_gc_gray_push_checked(header); }
 
 void xt_gc_mark_value(xt_value value) {
-  if (XT_IS_STRING(value) || XT_IS_OBJECT(value) || XT_IS_ARRAY(value) || XT_IS_FUNCTION(value) ||
-      XT_IS_BIGINT(value)) {
-    xt_gc_gray_push((xt_header *)XT_GET_PTR(value));
-  }
+  /* One tag compare rejects every number (and undefined/null/booleans), which
+   * is most of a scene's property slots; the five individual `XT_IS_*` tests
+   * made marking a large live set spend most of its time in predictable
+   * branches. */
+  if ((value & XT_TAG_MASK) < XT_TAG_BIGINT) return;
+  xt_gc_gray_push((xt_header *)XT_GET_PTR(value));
 }
 int xt_gc_value_is_marked(xt_value value) {
   if (!(XT_IS_STRING(value) || XT_IS_OBJECT(value) || XT_IS_ARRAY(value) ||
@@ -349,40 +352,57 @@ static void xt_gc_process(xt_header *header) {
     case XT_OBJECT_KIND_OBJECT:
     case XT_OBJECT_KIND_ERROR:
     case XT_OBJECT_KIND_ARRAY_BUFFER: {
+      /* Precise trace: every reference in an ordinary object is an `xt_value`
+       * (a property key/value/accessor, the prototype and the captured error
+       * stack). The old conservative payload scan also looked up the raw
+       * `properties`/`shape`/`hooks` pointers and every number in the property
+       * table, which made marking a large scene spend most of its time in the
+       * heap address table. */
       xt_object *object = (xt_object *)header;
-      xt_gc_scan_region(base, payload);
-      if (object->properties && object->count) {
-        xt_gc_scan_region(object->properties, sizeof(xt_property) * (size_t)object->count);
+      xt_gc_mark_value(object->prototype);
+      xt_gc_mark_value(object->error_stack);
+      for (uint32_t i = 0; i < object->count; i++) {
+        xt_gc_mark_value(object->properties[i].key);
+        xt_gc_mark_value(object->properties[i].value);
+        xt_gc_mark_value(object->properties[i].getter);
+        xt_gc_mark_value(object->properties[i].setter);
       }
       return;
     }
     case XT_OBJECT_KIND_ARRAY: {
       xt_array *array = (xt_array *)header;
-      xt_gc_scan_region(base, payload);
-      if (array->items && array->length) {
-        xt_gc_scan_region(array->items, sizeof(xt_value) * (size_t)array->length);
-      }
+      xt_gc_mark_value(array->prototype);
+      xt_gc_mark_value(array->extra);
+      for (uint32_t i = 0; i < array->length; i++) xt_gc_mark_value(array->items[i]);
       return;
     }
     case XT_OBJECT_KIND_FUNCTION: {
       xt_function *function = (xt_function *)header;
-      xt_gc_scan_region(base, payload);
-      if (function->environment && function->environment_count > 0) {
-        xt_gc_scan_region(function->environment, sizeof(xt_value) * (size_t)function->environment_count);
+      if (function->name != NULL) xt_gc_gray_push_checked(&function->name->header);
+      if (function->properties != NULL) xt_gc_gray_push_checked(&function->properties->header);
+      xt_gc_mark_value(function->prototype);
+      for (int32_t i = 0; i < function->environment_count; i++) {
+        xt_gc_mark_value(function->environment[i]);
       }
       return;
     }
     case XT_OBJECT_KIND_MAP: {
       xt_map *map = (xt_map *)header;
-      xt_gc_scan_region(base, payload);
-      if (map->keys && map->count) xt_gc_scan_region(map->keys, sizeof(xt_value) * (size_t)map->count);
-      if (map->values && map->count) xt_gc_scan_region(map->values, sizeof(xt_value) * (size_t)map->count);
+      for (uint32_t i = 0; i < map->count; i++) {
+        xt_gc_mark_value(map->keys[i]);
+        xt_gc_mark_value(map->values[i]);
+      }
       return;
     }
     case XT_OBJECT_KIND_SET: {
       xt_set_object *set = (xt_set_object *)header;
-      xt_gc_scan_region(base, payload);
-      if (set->values && set->count) xt_gc_scan_region(set->values, sizeof(xt_value) * (size_t)set->count);
+      for (uint32_t i = 0; i < set->count; i++) xt_gc_mark_value(set->values[i]);
+      return;
+    }
+    case XT_OBJECT_KIND_REGEXP: {
+      xt_regexp *regexp = (xt_regexp *)header;
+      xt_gc_mark_value(regexp->source);
+      xt_gc_mark_value(regexp->flags);
       return;
     }
     case XT_OBJECT_KIND_PROMISE:
@@ -413,64 +433,6 @@ static void xt_gc_process(xt_header *header) {
 /* ------------------------------------------------------------------------- */
 /* Release                                                                   */
 /* ------------------------------------------------------------------------- */
-static void xt_gc_release(xt_header *header) {
-  const size_t block_size = (size_t)header->size;
-  const int pooled = (header->flags & XT_GC_POOLED) != 0;
-  switch (header->kind) {
-    case XT_OBJECT_KIND_STRING:
-      free(((xt_string *)header)->flat);
-      break;
-    case XT_OBJECT_KIND_BIGINT:
-      free(((xt_bigint *)header)->limbs);
-      break;
-    case XT_OBJECT_KIND_OBJECT:
-    case XT_OBJECT_KIND_ERROR:
-      xt_raw_free(((xt_object *)header)->properties);
-      break;
-    case XT_OBJECT_KIND_ARRAY_BUFFER: {
-      xt_object *object = (xt_object *)header;
-      free(object->buffer_bytes);
-      xt_raw_free(object->properties);
-      break;
-    }
-    case XT_OBJECT_KIND_ARRAY:
-      xt_raw_free(((xt_array *)header)->items);
-      break;
-    case XT_OBJECT_KIND_FUNCTION:
-      free(((xt_function *)header)->environment);
-      break;
-    case XT_OBJECT_KIND_MAP:
-      free(((xt_map *)header)->keys);
-      free(((xt_map *)header)->values);
-      break;
-    case XT_OBJECT_KIND_SET:
-      free(((xt_set_object *)header)->values);
-      break;
-    case XT_OBJECT_KIND_WEAK_MAP:
-      free(((xt_weak_map *)header)->keys);
-      free(((xt_weak_map *)header)->values);
-      break;
-    case XT_OBJECT_KIND_WEAK_SET:
-      free(((xt_weak_set *)header)->values);
-      break;
-    case XT_OBJECT_KIND_PROMISE:
-      xt_promise_gc_release(header);
-      break;
-    case XT_OBJECT_KIND_GENERATOR:
-      xt_generator_gc_release(header);
-      break;
-    case XT_OBJECT_KIND_ASYNC:
-      xt_async_gc_release(header);
-      break;
-    default:
-      break;
-  }
-  if (pooled) {
-    xt_pool_free_block(header, block_size);
-  } else {
-    free(header);
-  }
-}
 /* ------------------------------------------------------------------------- */
 /* Collection                                                                */
 /* ------------------------------------------------------------------------- */
@@ -506,7 +468,10 @@ void xt_gc_collect(void) {
   const size_t heap_before = g_heap_bytes;
   const size_t allocations_before = g_heap_allocations;
 
+  const double phase_started = xt_monotonic_ms();
   xt_gc_table_build();
+  const double phase_table = xt_monotonic_ms() - phase_started;
+  const double mark_started = xt_monotonic_ms();
   xt_gc_mark_roots();
   /* Ephemeron fixed point: a WeakMap value is reachable only when its key is
    * reachable. Marking a value can reach further keys, so repeat until a pass
@@ -522,6 +487,8 @@ void xt_gc_collect(void) {
   xt_weak_gc_clear();
   xt_weak_gc_compact();
   if (getenv("XT_GC_VERIFY") != NULL) xt_gc_verify_payloads();
+  const double phase_mark = xt_monotonic_ms() - mark_started;
+  const double sweep_started = xt_monotonic_ms();
 
   xt_header **link = &g_heap_head;
   xt_header *header = g_heap_head;
@@ -552,20 +519,19 @@ void xt_gc_collect(void) {
   }
 
   xt_gc_table_free();
+  const double phase_sweep = xt_monotonic_ms() - sweep_started;
   g_gc_running = 0;
 
   if (!g_gc_threshold_pinned) {
-    /* Follow the live set: twice the surviving heap is the headroom a
-     * mark-sweep wants between collections, and the floor keeps a tiny heap
-     * from collecting on nearly every allocation.
-     *
-     * The threshold must *shrink* again, not just ratchet upwards. A doubling
-     * threshold with a monotonic floor turns any transient growth of the live
-     * set into exponentially rarer collections: each sweep only reclaims the
-     * newly dead part of a larger heap, so the heap (and with it the resident
-     * set) grows without bound. A GUI program that keeps a few extra nodes
-     * alive for one frame is enough to start that spiral. */
-    size_t next = g_heap_bytes * 2;
+    /* Follow the live set: four times the surviving heap is the headroom a
+     * mark-sweep wants between collections for an interactive program. Two
+     * times collected too often: a three.js scene that keeps ~380k objects live
+     * spent a ~300 ms pause every ~1.2 s, and half of the frame budget went to
+     * collections. Four times halves that overhead at a bounded memory cost
+     * (the threshold still shrinks with the live set, so it cannot ratchet
+     * upwards). The floor keeps a tiny heap from collecting on nearly every
+     * allocation. */
+    size_t next = g_heap_bytes * 4;
     if (next < XT_GC_MIN_THRESHOLD) next = XT_GC_MIN_THRESHOLD;
     g_gc_threshold = next;
   }
@@ -573,9 +539,11 @@ void xt_gc_collect(void) {
   g_gc_collections++;
   if (trace) {
     fprintf(stderr,
-            "xt_gc: #%zu heap %zu -> %zu bytes, allocations %zu -> %zu, next trigger %zu, took %.1fms\n",
+            "xt_gc: #%zu heap %zu -> %zu bytes, allocations %zu -> %zu, next trigger %zu, took %.1fms"
+            " (table %.1f, mark %.1f, sweep %.1f)\n",
             g_gc_collections, heap_before, g_heap_bytes, allocations_before, g_heap_allocations,
-            g_gc_threshold, xt_monotonic_ms() - gc_started_ms);
+            g_gc_threshold, xt_monotonic_ms() - gc_started_ms, phase_table, phase_mark,
+            phase_sweep);
     fprintf(stderr, "xt_gc:   live kinds");
     for (int i = 1; i < 16; i++) {
       if (live_by_kind[i] != 0) {
@@ -585,4 +553,3 @@ void xt_gc_collect(void) {
     fprintf(stderr, "\n");
   }
 }
-

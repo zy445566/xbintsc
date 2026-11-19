@@ -6,23 +6,6 @@
 
 ## 已知问题
 
-- **完整回收对 three.js 场景是一次可见停顿。** 非移动标记-清扫会停止世界；常驻约
-  38 万个对象的场景每次回收约需 **300 ms**，而标题界面在两次回收之间分配约 45 万个
-  对象，因此约每 1.2 秒就触发一次——即使单帧本身只需约 45 ms，帧率也会掉到个位数。
-  `XT_GC_TRACE=1` 会为每次回收打印 `took <ms>`（以及堆、分配数与存活种类计数），上述
-  数据即由此测得。后续方向是提高回收器的余量、减少每帧分配，或把标记阶段增量
-  化；在低画质下逐帧工作本身并不是瓶颈。
-- **three.js 的多重采样渲染目标解析会丢失 Vulkan 设备。** `samples > 0` 的
-  `WebGLRenderTarget` 会让 three.js 先渲染到它的
-  `__webglMultisampledFramebuffer`，再用
-  `blitFramebuffer(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT)` 解析到目标纹理。在本引擎
-  上该序列会丢失 Vulkan 设备（`vkDeviceWaitIdle` / `vkGetFenceStatus` 返回
-  `VK_ERROR_DEVICE_LOST`），窗口在首帧之后就不再呈现；Saltline 的标题界面会停在
-  最后一张已呈现的画面上，而页面逻辑仍在运行。任何把 `samples` 保持为 0 的画质
-  预设都能正常渲染与呈现（Saltline 的 `?q=low`），因此临时方案是让后处理目标使用
-  单采样。引擎不再把它表现为静默卡死——`xt_gui` 每次运行会打印一次 SDL 错误——解析
-  链中具体哪条命令导致驱动丢失仍在定位。
-
 - **Web Audio 没有 `MediaStream`/采集管线，且两个节点的行为是近似实现。**
   `createMediaElementSource` 与 `createMediaStreamSource` 返回合法但**静音**的节点：引擎没有
   麦克风/摄像头采集，也不会把媒体元素自身的播放接入音频图，因此页面把二者接入图里得到的是静音，

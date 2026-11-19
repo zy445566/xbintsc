@@ -62,7 +62,11 @@ deferred` 才是页面自身造成的工作。调试"漏掉的失效"时可用
 - 当 `xt_gui_run_active()` 为真（程序自己调用了 `run()`）时它会让路，避免同一
   窗口每 tick 被渲染两次；
 - `XT_GUI_AUTOCLOSE_MS=n` 让帧泵在 `n` 毫秒后退出，测试用它来运行不会自行
-  关闭的页面。
+  关闭的页面；
+- `XT_GUI_TRACE=1` 会把 WebGL 的 resolve/blit/渲染 pass 序列（包括已提交命令缓冲
+  的最后一批绘制）打印到 stderr，`XT_GUI_VK_DEBUG=1` 让 SDL 以调试模式创建设备，
+  从而启用 Vulkan 的 Khronos 校验层——这两个开关就是定位“半浮点解析丢失设备”时
+  使用的。
 
 这使网络 I/O、定时器与 `await` 在 GUI 程序内部继续工作。
 

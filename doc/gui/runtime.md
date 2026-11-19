@@ -73,7 +73,12 @@ that case with a single 16 ms `xt_set_timeout` tick:
 - it stands aside while `xt_gui_run_active()` is set (the program called
   `run()`), so the same window is not rendered twice per tick;
 - `XT_GUI_AUTOCLOSE_MS=n` makes the pump quit after `n` milliseconds, which is
-  how the tests run a page that never closes itself.
+  how the tests run a page that never closes itself;
+- `XT_GUI_TRACE=1` prints the WebGL resolve/blit/render-pass sequence (including
+  the last draws of a submitted command buffer) to stderr, and
+  `XT_GUI_VK_DEBUG=1` asks SDL for a debug GPU device so the Vulkan backend
+  enables the Khronos validation layers — the two switches used to locate the
+  half-float resolve that lost the device.
 
 This keeps network I/O, timers and `await` working inside a GUI program.
 

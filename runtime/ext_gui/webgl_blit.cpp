@@ -19,6 +19,18 @@
 #include "gui_internal.h"
 
 namespace xtgui {
+namespace {
+
+bool trace_enabled() {
+  static int value = -1;
+  if (value < 0) {
+    const char *env = SDL_getenv("XT_GUI_TRACE");
+    value = (env != nullptr && env[0] != '\0' && env[0] != '0') ? 1 : 0;
+  }
+  return value != 0;
+}
+
+}  // namespace
 
 bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4], int mask,
                                     int filter) {
@@ -31,6 +43,13 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
 
   const int source_samples = framebuffer_samples(read_framebuffer_);
   const int destination_samples = framebuffer_samples(bound_framebuffer_);
+  if (trace_enabled()) {
+    fprintf(stderr,
+            "xt_gui: blit read=%u draw=%u mask=%d samples=%d->%d rects=%d,%d,%d,%d -> %d,%d,%d,%d\n",
+            read_framebuffer_, bound_framebuffer_, mask, source_samples, destination_samples,
+            source[0], source[1], source[2], source[3], destination[0], destination[1],
+            destination[2], destination[3]);
+  }
   if (destination_samples > 1) {
     /* ES 3.0 §4.3.2: an INVALID_OPERATION is generated when the draw
      * framebuffer is multisampled, so a page renders into its own resolve
@@ -104,6 +123,27 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
   dy1 = std::max(0, std::min(dy1, destination_height));
   if (sx1 <= sx0 || sy1 <= sy0 || dx1 <= dx0 || dy1 <= dy0) return true;
 
+  /* `SDL_BlitGPUTexture` is implemented with `vkCmdBlitImage`, which requires
+   * the source and destination formats to advertise BLIT_SRC/BLIT_DST. The
+   * half-float formats a three.js scene render target uses do not, and the
+   * invalid command loses the Vulkan device. Copy the resolved image with a
+   * sampling pass instead; a full-rectangle resolve is the common case (the
+   * ES 3.0 resolve path already requires identical source/destination
+   * rectangles). */
+  const bool full_rect = sx0 == 0 && sy0 == 0 && sx1 == source_width && sy1 == source_height &&
+                         dx0 == 0 && dy0 == 0 && dx1 == destination_width &&
+                         dy1 == destination_height;
+  const bool float_format =
+      source_format == SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT ||
+      source_format == SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT ||
+      source_format == SDL_GPU_TEXTUREFORMAT_R16G16_FLOAT ||
+      source_format == SDL_GPU_TEXTUREFORMAT_R32G32_FLOAT ||
+      source_format == SDL_GPU_TEXTUREFORMAT_R16_FLOAT ||
+      source_format == SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
+  if (full_rect && float_format && source_samples > 1) {
+    if (draw_color_quad(source_texture, source_width, source_height, destination)) return true;
+  }
+
   SDL_GPUBlitRegion source_region;
   memset(&source_region, 0, sizeof(source_region));
   source_region.texture = source_texture;
@@ -131,7 +171,15 @@ bool WebGLContext::blit_framebuffer(const int source[4], const int destination[4
    * those pixels undefined, so load it. */
   info.load_op = SDL_GPU_LOADOP_LOAD;
   info.filter = filter == GL_LINEAR ? SDL_GPU_FILTER_LINEAR : SDL_GPU_FILTER_NEAREST;
+  SDL_ClearError();
   SDL_BlitGPUTexture(cmd_, &info);
+  if (trace_enabled()) {
+    const char *error = SDL_GetError();
+    if (error != nullptr && error[0] != '\0') {
+      fprintf(stderr, "xt_gui: blit failed (%d -> %d, format %d -> %d): %s\n", source_samples,
+              destination_samples, source_format, destination_format, error);
+    }
+  }
   return true;
 }
 

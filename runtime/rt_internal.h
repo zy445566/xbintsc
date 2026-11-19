@@ -174,6 +174,8 @@ void xt_gc_set_stack_base(void *base);
 void xt_gc_arm(void);
 /* Run a full collection now. Re-entrant calls are ignored. */
 void xt_gc_collect(void);
+/* Release the payload and the block of a swept object (xt_gc_release.c). */
+void xt_gc_release(xt_header *header);
 /* Override the automatic trigger threshold (bytes of live heap). */
 void xt_gc_set_threshold(size_t bytes);
 

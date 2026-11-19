@@ -89,9 +89,15 @@ supported backend the drawing buffer is **4× multisampled**:
   attached colour and depth buffers disagree on the sample count.
 - `blitFramebuffer` resolves a multisampled source into a single-sampled
   destination when the source and destination rectangles and colour formats are
-  identical and the filter is `NEAREST` — the ES 3.0 resolve rules. Blitting into
-  a multisampled draw framebuffer is `INVALID_OPERATION`, and `readPixels` from a
-  multisampled user framebuffer is `INVALID_OPERATION` too (resolve it first).
+  identical and the filter is `NEAREST` — the ES 3.0 resolve rules. The resolve
+  of a half-float (or float) colour target is a **sampling pass**, not
+  `SDL_BlitGPUTexture`: SDL_GPU's blit is `vkCmdBlitImage`, and Vulkan does not
+  require 16F/32F images to support blit source/destination, so the invalid
+  command lost the Vulkan device on a three.js `samples > 0` render target.
+  A sampling pass copies every colour format (the full-rectangle resolve
+  three.js performs maps exactly). Blitting into a multisampled draw framebuffer
+  is `INVALID_OPERATION`, and `readPixels` from a multisampled user framebuffer
+  is `INVALID_OPERATION` too (resolve it first).
 
 SDL_GPU's Metal resolve returns undefined pixels with scissor tests and
 instanced draws, so **Metal keeps the single-sampled path**: `antialias` reports

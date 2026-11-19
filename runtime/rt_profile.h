@@ -31,6 +31,11 @@ enum {
 extern int xt_profile_on;
 extern unsigned long long xt_profile_calls[XT_PROFILE_COUNT];
 void xt_profile_init(void);
+/* Diagnostics for allocation pressure: how many blocks of each object kind are
+ * allocated, and which C-string property names are looked up most (the string
+ * created by `xt_object_get_cstr` is one allocation per lookup). */
+void xt_profile_note_alloc(int kind);
+void xt_profile_note_cstr(const char *key);
 
 #define XT_PROFILE_TICK(slot) \
   do {                         \

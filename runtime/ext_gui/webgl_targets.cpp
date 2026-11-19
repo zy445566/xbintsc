@@ -19,6 +19,21 @@
 
 namespace xtgui {
 
+namespace {
+
+/** `XT_GUI_TRACE=1` prints the WebGL resolve/blit/render-pass sequence and the
+ * SDL error of the first failing call, for diagnosing a lost Vulkan device. */
+bool trace_enabled() {
+  static int value = -1;
+  if (value < 0) {
+    const char *env = SDL_getenv("XT_GUI_TRACE");
+    value = (env != nullptr && env[0] != '\0' && env[0] != '0') ? 1 : 0;
+  }
+  return value != 0;
+}
+
+}  // namespace
+
 /* -- passes -------------------------------------------------------------- */
 
 SDL_GPUTexture *WebGLContext::target_color() { return draw_color_texture(0); }
@@ -230,6 +245,9 @@ bool WebGLContext::resolve_color_pass(SDL_GPUTexture *source, SDL_GPUTexture *de
   info.resolve_layer = 0;
   SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd_, &info, 1, nullptr);
   if (pass == nullptr) {
+    if (trace_enabled()) {
+      fprintf(stderr, "xt_gui: resolve pass failed: %s\n", SDL_GetError());
+    }
     set_error(GL_INVALID_OPERATION);
     return false;
   }
@@ -258,6 +276,11 @@ SDL_GPUTexture *WebGLContext::read_color_texture(uint32_t id, int *width, int *h
   int samples = 1;
   SDL_GPUTexture *attachment = color_attachment(id, index, format, &samples, width, height);
   if (attachment == nullptr) return nullptr;
+  if (trace_enabled()) {
+    fprintf(stderr,
+            "xt_gui: read_color fb=%u index=%d samples=%d format=%d %dx%d samples_fb=%d\n", id,
+            index, samples, *format, *width, *height, framebuffer_samples(id));
+  }
   if (samples <= 1) return attachment;
   SDL_GPUTexture *resolved =
       ensure_resolve_target(*width, *height, (SDL_GPUTextureFormat)*format);
@@ -357,10 +380,16 @@ void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_ste
 
   pass_ = SDL_BeginGPURenderPass(cmd_, color_infos, (Uint32)color_count,
                                  depth != nullptr ? &depth_info : nullptr);
-  if (pass_ != nullptr) {
-    g_perf_frame.webglPasses += 1;
-    pass_serial_ += 1;
+  if (pass_ == nullptr) {
+    if (trace_enabled()) {
+      fprintf(stderr, "xt_gui: begin_pass failed (fb=%u colors=%d samples=%d depth=%p): %s\n",
+              bound_framebuffer_, color_count, pass_samples, (void *)depth, SDL_GetError());
+    }
+    set_error(GL_INVALID_OPERATION);
+    return;
   }
+  g_perf_frame.webglPasses += 1;
+  pass_serial_ += 1;
   pass_targets_default_ = bound_framebuffer_ == 0;
   pass_framebuffer_ = bound_framebuffer_;
 }

@@ -25,6 +25,82 @@
 namespace xtgui {
 namespace {
 
+/** `XT_GUI_TRACE=1` records the last draws of each submitted command buffer, so
+ * the buffer a lost Vulkan device was executing can be inspected. */
+bool trace_enabled() {
+  static int value = -1;
+  if (value < 0) {
+    const char *env = SDL_getenv("XT_GUI_TRACE");
+    value = (env != nullptr && env[0] != '\0' && env[0] != '0') ? 1 : 0;
+  }
+  return value != 0;
+}
+
+struct DrawTrace {
+  uint32_t program;
+  uint32_t framebuffer;
+  int mode;
+  int first;
+  int count;
+  int instances;
+  int samples;
+  int color_format;
+  int depth_format;
+};
+
+constexpr int kTraceDraws = 64;
+DrawTrace g_draw_trace[kTraceDraws];
+int g_draw_trace_count = 0;
+DrawTrace g_submitted_trace[kTraceDraws];
+int g_submitted_trace_count = 0;
+
+void trace_draw(const WebGLContext *context, uint32_t program, int mode, int first, int count,
+                int instances, int samples, int color_format, int depth_format) {
+  if (!trace_enabled()) return;
+  if (g_draw_trace_count >= kTraceDraws) {
+    memmove(g_draw_trace, g_draw_trace + 1, sizeof(DrawTrace) * (kTraceDraws - 1));
+    g_draw_trace_count = kTraceDraws - 1;
+  }
+  DrawTrace &entry = g_draw_trace[g_draw_trace_count++];
+  entry.program = program;
+  entry.framebuffer = context != nullptr ? context->bound_framebuffer_id() : 0;
+  entry.mode = mode;
+  entry.first = first;
+  entry.count = count;
+  entry.instances = instances;
+  entry.samples = samples;
+  entry.color_format = color_format;
+  entry.depth_format = depth_format;
+  (void)context;
+}
+
+}  // namespace
+
+}  // namespace xtgui
+
+extern "C" void xt_gui_trace_submit(int submitted) {
+  if (!xtgui::trace_enabled()) return;
+  if (submitted) {
+    memcpy(xtgui::g_submitted_trace, xtgui::g_draw_trace,
+           sizeof(xtgui::DrawTrace) * (size_t)xtgui::g_draw_trace_count);
+    xtgui::g_submitted_trace_count = xtgui::g_draw_trace_count;
+    xtgui::g_draw_trace_count = 0;
+    return;
+  }
+  fprintf(stderr, "xt_gui: last submitted buffer had %d draws:\n",
+          xtgui::g_submitted_trace_count);
+  for (int i = 0; i < xtgui::g_submitted_trace_count; i++) {
+    const xtgui::DrawTrace &d = xtgui::g_submitted_trace[i];
+    fprintf(stderr,
+            "  draw prog=%u mode=%d first=%d count=%d inst=%d samples=%d fmt=%d dfmt=%d fbo=%u\n",
+            d.program, d.mode, d.first, d.count, d.instances, d.samples, d.color_format,
+            d.depth_format, d.framebuffer);
+  }
+}
+
+namespace xtgui {
+namespace {
+
 int type_size(int type) {
   switch (type) {
     case GL_BYTE:
@@ -361,9 +437,13 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   bind_samplers(program_->fs_sampler_uniforms, false);
 
   if (index_size > 0) {
+    trace_draw(this, current_program_, draw_mode, first, count, instances, state_.sample_count,
+               state_.color_target_count > 0 ? state_.color_formats[0] : 0, state_.depth_format);
     SDL_DrawGPUIndexedPrimitives(pass_, (Uint32)count, (Uint32)instances, (Uint32)first_index, 0,
                                  0);
   } else {
+    trace_draw(this, current_program_, draw_mode, first, count, instances, state_.sample_count,
+               state_.color_target_count > 0 ? state_.color_formats[0] : 0, state_.depth_format);
     SDL_DrawGPUPrimitives(pass_, (Uint32)count, (Uint32)instances, (Uint32)first, 0);
   }
 }

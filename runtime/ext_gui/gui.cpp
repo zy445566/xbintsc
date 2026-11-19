@@ -109,7 +109,12 @@ static void ensure_init(void) {
    * `renderer_shaders.h`. */
   SDL_GPUShaderFormat formats =
       SDL_GPU_SHADERFORMAT_MSL | SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL;
-  g_device = SDL_CreateGPUDevice(formats, false, NULL);
+  /* `XT_GUI_VK_DEBUG=1` asks SDL for a debug GPU device: the Vulkan backend
+   * then enables the Khronos validation layers, which is how an invalid command
+   * that loses the device is located. */
+  const char *debug_env = SDL_getenv("XT_GUI_VK_DEBUG");
+  const bool debug_device = debug_env != nullptr && debug_env[0] != '\0' && debug_env[0] != '0';
+  g_device = SDL_CreateGPUDevice(formats, debug_device, NULL);
   if (g_device == NULL) {
     fprintf(stderr, "xt_gui: SDL_CreateGPUDevice failed: %s\n", SDL_GetError());
     fprintf(stderr,

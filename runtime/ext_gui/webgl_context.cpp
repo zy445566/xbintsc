@@ -17,6 +17,10 @@
 #include "gui_internal.h"
 #include "perf.h"
 
+/* Optional draw-buffer tracing (`XT_GUI_TRACE=1`), implemented in
+ * `webgl_draw.cpp`. */
+extern "C" void xt_gui_trace_submit(int submitted);
+
 namespace xtgui {
 namespace {
 
@@ -338,7 +342,15 @@ void WebGLContext::resize(int width, int height) {
 void WebGLContext::submit() {
   end_pass();
   if (cmd_ != nullptr) {
-    SDL_SubmitGPUCommandBuffer(cmd_);
+    const bool submitted = SDL_SubmitGPUCommandBuffer(cmd_);
+    xt_gui_trace_submit(submitted ? 1 : 0);
+    if (!submitted) {
+      static int reported = 0;
+      if (!reported) {
+        reported = 1;
+        fprintf(stderr, "xt_gui: submit failed: %s\n", SDL_GetError());
+      }
+    }
     cmd_ = nullptr;
   }
 }

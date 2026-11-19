@@ -47,6 +47,7 @@ export const RUNTIME_SOURCES = [
   "xt_performance.c",
   "xt_profile.c",
   "xt_pool.c",
+  "xt_gc_release.c",
   "xt_random.c",
   "xt_crypto.c",
   "xt_text_codec.c",

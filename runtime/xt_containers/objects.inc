@@ -548,10 +548,3 @@ xt_value xt_object_own_property_symbols(xt_value value) {
   }
   return result;
 }
-
-/* Convenience used by codegen for `obj.prop`. */
-xt_value xt_object_get_cstr(xt_value value, const char *key) {
-  xt_value k = xt_string_from_cstr(key);
-  return xt_object_get(value, k);
-}
-

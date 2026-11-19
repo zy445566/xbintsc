@@ -534,6 +534,7 @@ void xt_gui_render_window(XtGuiWindow *win) {
     SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(g_device);
     if (cmd != NULL) {
       SDL_GPUTexture *swapchain = NULL;
+      SDL_ClearError();
       SDL_AcquireGPUSwapchainTexture(cmd, win->window, &swapchain, NULL, NULL);
       if (swapchain != NULL) {
         /* Attribute the present: a redraw the window system asked for, one a
@@ -569,16 +570,15 @@ void xt_gui_render_window(XtGuiWindow *win) {
         firstFrame = !win->ready;
         win->ready = 1;
       } else {
-        /* No swapchain image this frame: SDL's non-blocking acquire skips a
-         * frame (rather than blocking) when the GPU still holds the image, and
-         * a minimized or hidden window has none at all. Dropping the frame here
-         * would leave the window showing the previous frame until something
-         * else dirtied the page, so keep the invalidation pending and present
-         * it on the next frame — the paint, the uploads and the run list are
-         * already built and retained, so the retry only re-records the draws. */
+        /* No image this frame: SDL's non-blocking acquire skips when the GPU
+         * still holds it or the window is hidden. Keep the invalidation pending
+         * so the retained paint/upload work presents on the next frame. */
         static int acquire_failure_reported = 0;
-        if (!acquire_failure_reported) fprintf(stderr, "xt_gui: swapchain acquire returned no image: %s\n", SDL_GetError());
-        acquire_failure_reported = 1;
+        if (!acquire_failure_reported) {
+          const char *why = SDL_GetError();
+          fprintf(stderr, "xt_gui: swapchain acquire returned no image%s%s\n",
+                  why != NULL && why[0] != '\0' ? ": " : " (starved)", why ? why : "");
+        }        acquire_failure_reported = 1;
         win->present_dirty = 1;
         win->present_deferred = 1;
         xtgui::g_perf_frame.starvedFrames += 1;

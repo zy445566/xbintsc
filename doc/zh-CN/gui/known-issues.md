@@ -6,6 +6,12 @@
 
 ## 已知问题
 
+- **`MutationObserver` 存在但惰性。** 构造器与 `observe` / `disconnect` /
+  `takeRecords` 都是真的，但引擎不排队任何变更记录、也从不调用回调，因此*等待*记录的代码
+  （按插入节点触发的惰性 hydration、`innerHTML` 后处理等）什么也拿不到。但这个形状仍然重要：
+  打包器会无条件装上观察者——Vite 的 `modulepreload` polyfill 在页面启动时就执行
+  `new MutationObserver(…).observe(document, …)`——那里的 `TypeError` 会中止整个脚本，
+  所以名字必须能解析。
 - **Web Audio 没有 `MediaStream`/采集管线，且两个节点的行为是近似实现。**
   `createMediaElementSource` 与 `createMediaStreamSource` 返回合法但**静音**的节点：引擎没有
   麦克风/摄像头采集，也不会把媒体元素自身的播放接入音频图，因此页面把二者接入图里得到的是静音，

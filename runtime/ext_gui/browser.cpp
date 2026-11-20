@@ -328,6 +328,7 @@ xt_value host_type_construct(xt_value self, xt_value env, int32_t argc, xt_value
 xt_value type_proto(const std::string &name) {
   if (name == "AbortController") return domapi::abort_controller_proto();
   if (name == "AbortSignal") return domapi::abort_signal_proto();
+  if (name == "MutationObserver") return domapi::mutation_observer_proto();
   if (name == "Event" || name == "CustomEvent" || name == "ProgressEvent" ||
       name == "UIEvent" || name == "MouseEvent" || name == "PointerEvent" ||
       name == "WheelEvent" || name == "KeyboardEvent" || name == "FocusEvent" ||
@@ -426,6 +427,7 @@ void install_window_globals(xt_value win) {
   set_prop(win, "Audio", type_value("Audio"));
   set_prop(win, "Event", type_value("Event"));
   set_prop(win, "CustomEvent", type_value("CustomEvent"));
+  set_prop(win, "MutationObserver", type_value("MutationObserver"));
   set_prop(win, "WebGLRenderingContext", type_value("WebGLRenderingContext"));
   set_prop(win, "WebGL2RenderingContext", type_value("WebGL2RenderingContext"));
   set_prop(win, "isSecureContext", XT_TRUE);

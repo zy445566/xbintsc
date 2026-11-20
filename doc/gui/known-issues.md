@@ -5,6 +5,14 @@
 
 ## Known issues
 
+- **`MutationObserver` exists but is inert.** The constructor and `observe` /
+  `disconnect` / `takeRecords` are real, yet the engine queues no mutation
+  records and never calls the callback, so code that *waits* for records
+  (lazy hydration keyed on inserted nodes, `innerHTML` post-processing, …) gets
+  nothing. The shape still matters: bundlers install an observer
+  unconditionally — Vite's `modulepreload` polyfill runs
+  `new MutationObserver(…).observe(document, …)` as the page starts — and a
+  `TypeError` there aborts the whole script, which is why the name must resolve.
 - **Web Audio has no `MediaStream`/capture pipeline, and two node behaviours are
   approximations.** `createMediaElementSource` and `createMediaStreamSource`
   return valid, *silent* nodes: the engine has no microphone/camera capture and

@@ -89,6 +89,11 @@ const hostTypes = [
   "AbortController",
   "AbortSignal",
   "EventTarget",
+  /* An inert observer: bundlers build one unconditionally (Vite's
+   * `modulepreload` polyfill calls `new MutationObserver(…).observe(…)` at
+   * startup), so the name has to resolve and the methods have to exist. No
+   * callback ever fires — see `runtime/ext_gui/dom_api_mutation.cpp`. */
+  "MutationObserver",
   "DOMParser",
   "Request",
   "Headers",

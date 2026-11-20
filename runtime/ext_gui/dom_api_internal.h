@@ -78,6 +78,10 @@ xt_value abort_controller_proto();
 xt_value abort_signal_proto();
 xt_value abort_controller_new();
 xt_value abort_signal_new(bool aborted);
+/** `MutationObserver.prototype`: an inert observer (`observe` / `disconnect` /
+ * `takeRecords` exist, no callback ever fires). The constructor itself is the
+ * generic host type, so `new MutationObserver(…)` needs no runtime entry. */
+xt_value mutation_observer_proto();
 /** The prototype a WebGL object of `kind` inherits (`buffer`, `texture`, …),
  * so `buffer instanceof WebGLBuffer` holds. */
 xt_value webgl_object_proto(const std::string &kind);

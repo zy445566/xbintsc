@@ -144,15 +144,21 @@ export const referenceMethods: ReferenceMethods = {
           clauses: { expression?: Expression; statements: Statement[] }[];
         };
         this.bindNode(statement.expression, scope);
-        /* Every `case` body shares the switch's block scope, so the
-         * declarations they contain have to be pre-declared before any clause
-         * is bound. Without this a `const` declared directly in a `case`
-         * clause had no symbol and later phases crashed on it. */
+        /* A switch body is a block scope of its own, so all `case` bodies
+         * share one scope *below* the enclosing one: a `let`/`const` written
+         * directly in a clause shadows an outer binding
+         * (`function f(t) { switch (…) { case 1: let t = … } }` is legal, and
+         * minified output relies on it) while two clauses declaring the same
+         * name still collide. The declarations have to be pre-declared before
+         * any clause is bound; without that a `const` declared directly in a
+         * `case` clause had no symbol and later phases crashed on it. */
+        const switchScope = this.createScope(ScopeKind.Block, node, scope);
+        this.scopes.set(node, switchScope);
         for (const clause of statement.clauses) {
-          this.bindNode(clause.expression, scope);
-          this.predeclareStatements(clause.statements, scope);
+          this.bindNode(clause.expression, switchScope);
+          this.predeclareStatements(clause.statements, switchScope);
         }
-        for (const clause of statement.clauses) this.bindStatements(clause.statements, scope);
+        for (const clause of statement.clauses) this.bindStatements(clause.statements, switchScope);
         return;
       }
       case SyntaxKind.BreakStatement:

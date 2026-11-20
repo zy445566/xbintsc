@@ -113,16 +113,40 @@ describe("binder", () => {
 });
 
 describe("binder: switch clauses and static blocks", () => {
-  it("pre-declares names declared directly in a case clause", () => {
+  it("pre-declares names declared directly in a case clause, in the switch's own scope", () => {
     const { result } = bindSource(`
       switch (1) {
         case 1: const inCase = 1; break;
         default: let inDefault = 2;
       }
     `);
-    const moduleScope = result.moduleFunction.scope;
-    expect(moduleScope.symbols.get("inCase")?.kind).toBe(SymbolKind.Const);
-    expect(moduleScope.symbols.get("inDefault")?.kind).toBe(SymbolKind.Let);
+    const switchNode = [...result.scopes.keys()].find(
+      (node) => node.kind === SyntaxKind.SwitchStatement,
+    )!;
+    const switchScope = result.scopes.get(switchNode)!;
+    expect(switchScope.symbols.get("inCase")?.kind).toBe(SymbolKind.Const);
+    expect(switchScope.symbols.get("inDefault")?.kind).toBe(SymbolKind.Let);
+    /* The enclosing scope keeps the enclosing bindings: a clause-level `let`
+     * shadows it instead of being merged into it. */
+    expect(result.moduleFunction.scope.symbols.get("inCase")).toBeUndefined();
+    expect(result.moduleFunction.scope.symbols.get("inDefault")).toBeUndefined();
+  });
+
+  it("shadows a parameter from a case clause instead of conflicting with it", () => {
+    /* The shape minified bundles emit: `function (e, t, n, r) { switch (…) {
+     * case "x": let t = e.count; … } }`. In JavaScript the switch body is its
+     * own block, so the clause-level `t` is a fresh binding, not a redeclaration
+     * of the parameter. */
+    const { result } = bindSource(`
+      function f(e, t, n, r) {
+        switch (e.type) {
+          case "a": let t = e.count; break;
+          case "b": let n = e.matrix; break;
+          default: break;
+        }
+      }
+    `);
+    expect(result.conflicts).toEqual([]);
   });
 
   it("hoists a `var` declared in a nested block into the function scope", () => {

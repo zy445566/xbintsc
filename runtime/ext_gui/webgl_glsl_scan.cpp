@@ -359,6 +359,20 @@ ConditionValue evaluate_condition(const std::string &directive,
 
 }  // namespace
 
+int glsl_array_size(const std::string &array) {
+  int size = 0;
+  bool numeric = true;
+  for (char ch : array) {
+    if (ch == ' ' || ch == '\t' || ch == '[' || ch == ']') continue;
+    if (ch < '0' || ch > '9') {
+      numeric = false;
+      break;
+    }
+    size = size * 10 + (ch - '0');
+  }
+  return numeric && size > 0 ? size : 1;
+}
+
 void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info) {
   *info = GlslShaderInfo();
   const std::vector<Token> tokens = tokenize(source);

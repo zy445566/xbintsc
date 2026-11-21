@@ -81,15 +81,6 @@ void xt_gui_scroll_to(XtGuiWindow *win, float x, float y) {
   xt_gui_emit(win, "scroll");
 }
 
-static XtGuiWindow *xt_gui_find_by_window_id(SDL_WindowID id) {
-  SDL_Window *window = SDL_GetWindowFromID(id);
-  if (window == NULL) return NULL;
-  for (int i = 0; i < g_window_count; i++) {
-    if (g_windows[i].window == window) return &g_windows[i];
-  }
-  return NULL;
-}
-
 /* -- input events --------------------------------------------------------- */
 
 /** Deepest element under (x, y), or NULL. */
@@ -120,9 +111,12 @@ static void xt_gui_update_hover(XtGuiWindow *win, const xtgui::Node *node) {
 }
 
 /** Pointer payload. `node` is the hit-test result the caller already resolved,
- * so one event does not walk the layout tree three times. */
+ * so one event does not walk the layout tree three times. `movement_x`/
+ * `movement_y` are the raw deltas (`movementX`/`movementY`): zero for button
+ * events, SDL's `xrel`/`yrel` for motion. */
 static xt_value xt_gui_pointer_payload(const char *type, XtGuiWindow *win, float x, float y,
-                                       int button, int clicks, const xtgui::Node *node) {
+                                       int button, int clicks, const xtgui::Node *node,
+                                       float movement_x, float movement_y) {
   (void)win;
   xt_value payload = xt_object_new();
   xt_object_set(payload, xt_string_from_cstr("type"), xt_string_from_cstr(type));
@@ -130,6 +124,8 @@ static xt_value xt_gui_pointer_payload(const char *type, XtGuiWindow *win, float
   xt_object_set(payload, xt_string_from_cstr("y"), xt_number(y));
   xt_object_set(payload, xt_string_from_cstr("clientX"), xt_number(x));
   xt_object_set(payload, xt_string_from_cstr("clientY"), xt_number(y));
+  xt_object_set(payload, xt_string_from_cstr("movementX"), xt_number(movement_x));
+  xt_object_set(payload, xt_string_from_cstr("movementY"), xt_number(movement_y));
   xt_object_set(payload, xt_string_from_cstr("button"), xt_number(button));
   xt_object_set(payload, xt_string_from_cstr("clicks"), xt_number(clicks));
   if (node != nullptr) {
@@ -143,11 +139,16 @@ static xt_value xt_gui_pointer_payload(const char *type, XtGuiWindow *win, float
 }
 
 void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float y, int button,
-                             int clicks) {
+                             int clicks, float movement_x, float movement_y) {
   if (win == NULL || !win->open) return;
-  const xtgui::Node *node = xt_gui_hit_node(win, x, y);
+  /* While the pointer is locked every pointer event targets the locked element
+   * and the cursor no longer hits new elements: the only thing that moves is
+   * the raw delta. Hovering is frozen too, so the page does not restyle under a
+   * hidden cursor. */
+  const bool locked = win->pointer_lock_node != nullptr;
+  const xtgui::Node *node = locked ? win->pointer_lock_node : xt_gui_hit_node(win, x, y);
   xtgui::Node *target = const_cast<xtgui::Node *>(node);
-  xt_gui_update_hover(win, node);
+  if (!locked) xt_gui_update_hover(win, node);
   bool prevented = false;
   if (win->document != nullptr) {
     if (strcmp(type, "mousedown") == 0) {
@@ -179,7 +180,8 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
       }
     }
   }
-  xt_value payload = xt_gui_pointer_payload(type, win, x, y, button, clicks, node);
+  xt_value payload = xt_gui_pointer_payload(type, win, x, y, button, clicks, node, movement_x,
+                                             movement_y);
   if (node != nullptr) prevented = xt_gui_emit_dom_event(win, type, node, payload);
   xt_gui_emit_payload(win, type, payload);
   if (!prevented && node != nullptr && strcmp(type, "click") == 0) {
@@ -190,7 +192,7 @@ void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float 
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y) {
   if (win == NULL || !win->open) return;
   const xtgui::Node *node = xt_gui_hit_node(win, x, y);
-  xt_value payload = xt_gui_pointer_payload("wheel", win, x, y, -1, 0, node);
+  xt_value payload = xt_gui_pointer_payload("wheel", win, x, y, -1, 0, node, 0.0f, 0.0f);
   xt_object_set(payload, xt_string_from_cstr("deltaX"), xt_number(delta_x));
   xt_object_set(payload, xt_string_from_cstr("deltaY"), xt_number(delta_y));
   if (node != nullptr) xt_gui_emit_dom_event(win, "wheel", node, payload);
@@ -288,108 +290,6 @@ void xt_gui_dispatch_physical_key(XtGuiWindow *win, const char *type, int scanco
   xt_object_set(payload, xt_string_from_cstr("__xt_gui_physical"), XT_TRUE);
   xt_gui_dispatch_key_payload(win, type, payload);
 }
-
-namespace guidev {
-
-void handle_event(const SDL_Event *event) {
-  if (event->type == SDL_EVENT_QUIT) {
-    g_quit = 1;
-    return;
-  }
-  if (event->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->window.windowID);
-    if (win != NULL && win->open) xt_gui_quit_window(win);
-    return;
-  }
-  if (event->type == SDL_EVENT_WINDOW_RESIZED) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->window.windowID);
-    if (win == NULL || !win->open) return;
-    /* `setSize` already applied and emitted the change synchronously; the
-     * queued backend event must not deliver the same resize twice. */
-    if (win->width == event->window.data1 && win->height == event->window.data2) return;
-    win->width = event->window.data1;
-    win->height = event->window.data2;
-    if (win->document != NULL) win->document->restyle((float)win->width, (float)win->height);
-    win->geometry.dirty = 1;
-    win->present_dirty = 1;
-    /* Web 'resize', so a document can re-measure on a window change in every
-     * host (a browser already fires one). */
-    xt_gui_emit(win, "resize");
-    xt_gui_media_lists_notify(win);
-    return;
-  }
-  /* A window the compositor revealed (uncovered, restored, shown) must be
-   * redrawn even though nothing in the document changed: the frame loop only
-   * presents on demand. The request is charged to `exposes` (below) so
-   * `stats()` can separate it from a present the page caused. */
-  if (event->type == SDL_EVENT_WINDOW_EXPOSED || event->type == SDL_EVENT_WINDOW_SHOWN ||
-      event->type == SDL_EVENT_WINDOW_RESTORED) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->window.windowID);
-    if (win != NULL) {
-      win->present_dirty = 1;
-      win->expose_pending = 1;
-    }
-    return;
-  }
-
-  if (event->type == SDL_EVENT_TEXT_INPUT) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->text.windowID);
-    if (win == NULL || !win->open) return;
-    xt_gui_text_input(win, event->text.text);
-    return;
-  }
-  if (event->type == SDL_EVENT_TEXT_EDITING) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->edit.windowID);
-    if (win == NULL || !win->open) return;
-    xt_gui_text_editing(win, event->edit.text, event->edit.start, event->edit.length);
-    return;
-  }
-
-  if (event->type == SDL_EVENT_MOUSE_MOTION) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->motion.windowID);
-    xt_gui_dispatch_pointer(win, "mousemove", event->motion.x, event->motion.y, -1, 0);
-    return;
-  }
-  if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->button.windowID);
-    /* SDL numbers buttons 1/2/3 (left/middle/right); DOM uses 0/1/2. */
-    xt_gui_dispatch_pointer(win, "mousedown", event->button.x, event->button.y,
-                            (int)event->button.button - 1, event->button.clicks);
-    return;
-  }
-  if (event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->button.windowID);
-    if (win == NULL || !win->open) return;
-    int button = (int)event->button.button - 1;
-    xt_gui_dispatch_pointer(win, "mouseup", event->button.x, event->button.y, button,
-                            event->button.clicks);
-    if (button == 0) {
-      xt_gui_dispatch_pointer(win, "click", event->button.x, event->button.y, button,
-                              event->button.clicks);
-    }
-    return;
-  }
-  if (event->type == SDL_EVENT_MOUSE_WHEEL) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->wheel.windowID);
-    /* DOM `deltaY` grows downwards; SDL's grows away from the user. */
-    xt_gui_dispatch_wheel(win, event->wheel.mouse_x, event->wheel.mouse_y, event->wheel.x,
-                          -event->wheel.y);
-    return;
-  }
-  if (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_KEY_UP) {
-    XtGuiWindow *win = xt_gui_find_by_window_id(event->key.windowID);
-    if (win == NULL || !win->open) return;
-    const char *type = event->type == SDL_EVENT_KEY_DOWN ? "keydown" : "keyup";
-    xt_gui_dispatch_physical_key(
-        win, type, static_cast<int>(event->key.scancode), static_cast<int>(event->key.key),
-        event->key.repeat, (event->key.mod & SDL_KMOD_CTRL) != 0,
-        (event->key.mod & SDL_KMOD_SHIFT) != 0, (event->key.mod & SDL_KMOD_ALT) != 0,
-        (event->key.mod & SDL_KMOD_GUI) != 0, (event->key.mod & SDL_KMOD_CAPS) != 0);
-    return;
-  }
-}
-
-}  // namespace guidev
 
 /* -- rendering ------------------------------------------------------------ */
 

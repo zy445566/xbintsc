@@ -170,6 +170,7 @@ void xt_gui_quit_window(XtGuiWindow *win) {
   win->media_lists.clear();
   win->media_lists_by_query.clear();
   win->window_listeners.clear();
+  xt_gui_pointer_lock_release(win);
   xt_gui_media_shutdown(win);
   xt_gui_canvas_shutdown(win);
   xt_gui_handles_reset(win);
@@ -240,6 +241,7 @@ static XtGuiWindow *create_window_record(const char *title, int width, int heigh
   record->expose_pending = 0;
   record->present_deferred = 0;
   record->sync_dirty = 1;
+  record->pointer_lock_node = nullptr;
   record->width = width;
   record->height = height;
   record->html.clear();

@@ -26,7 +26,8 @@ static xt_value make_dom_event(XtGuiWindow *win, const char *type, const xtgui::
   xt_object_set(event, xt_string_from_cstr("timeStamp"), xt_number((double)SDL_GetTicks()));
   if (XT_IS_OBJECT(legacy)) {
     static const char *const fields[] = {
-        "x",       "y",       "clientX", "clientY", "button",  "clicks",
+        "x",       "y",       "clientX", "clientY", "movementX", "movementY",
+        "button",  "clicks",
         "deltaX",  "deltaY",  "key",     "code",    "repeat",  "ctrl",
         "shift",   "alt",     "meta",    "ctrlKey", "shiftKey", "altKey",
         "metaKey", "data",    "inputType", "isComposing", "value", "charCode",

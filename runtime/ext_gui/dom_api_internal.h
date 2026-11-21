@@ -169,6 +169,9 @@ METHOD(doc_body_get);
 METHOD(doc_head_get);
 METHOD(doc_document_element_get);
 METHOD(doc_active_element_get);
+/* Pointer Lock (`pointer_lock.cpp`). */
+METHOD(doc_exit_pointer_lock);
+METHOD(doc_pointer_lock_element_get);
 
 /* node getters */
 METHOD(node_tag_name_get);
@@ -273,6 +276,7 @@ METHOD(node_click);
 METHOD(node_add_event_listener);
 METHOD(node_remove_event_listener);
 METHOD(node_dispatch_event);
+METHOD(node_request_pointer_lock);
 
 /* event construction (a detached `Event`/`CustomEvent` handle) */
 xt_value event_construct(xt_value type, xt_value init);

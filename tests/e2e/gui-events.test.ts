@@ -296,4 +296,104 @@ describe.skipIf(!guiAvailable)("gui extension — events", () => {
     expect(value("body")).toBe("4");
     expect(value("window")).toBe("KeyP:p");
   });
+
+  it("carries raw pointer movement for first-person games", () => {
+    const { value } = harness.compileAndRun(
+      "pointer-motion",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "motion", width: 300, height: 200 });
+      win.on("ready", () => {
+        const seen = [];
+        const view: any = document.getElementById("view");
+        // The element listener hears the event first, then the window one.
+        view.addEventListener("mousemove", (e: any) => {
+          seen.push("dom=" + e.movementX + "," + e.movementY + ":" + e.clientX + "," + e.clientY);
+        });
+        win.addEventListener("mousemove", (e: any) => {
+          seen.push("win=" + e.movementX + "," + e.movementY);
+        });
+        win.sendEvent("mousemove", { x: 10, y: 20, movementX: 7, movementY: -3 });
+        console.log("motion=" + seen.join("|"));
+        const mouse: any = new MouseEvent("mousemove", { movementX: 4, movementY: 5 });
+        console.log("ctor=" + mouse.movementX + "," + mouse.movementY);
+        win.close();
+      });
+      win.loadHTML(
+        '<html><body style="margin:0">' +
+        '<canvas id="view" style="width:300px;height:200px"></canvas>' +
+        '</body></html>'
+      );
+      run();
+      `,
+    );
+
+    expect(value("motion")).toBe("dom=7,-3:10,20|win=7,-3");
+    expect(value("ctor")).toBe("4,5");
+  });
+
+  it("implements the Pointer Lock API", () => {
+    const { value } = harness.compileAndRun(
+      "pointer-lock",
+      `
+      import { createWindow, run } from "gui";
+
+      const win = createWindow({ title: "lock", width: 320, height: 240 });
+      win.on("ready", () => {
+        const view: any = document.getElementById("view");
+        const changes = [];
+        let moved = "";
+        view.addEventListener("mousemove", (e: any) => {
+          moved = e.movementX + "," + e.movementY + ":" + e.target.id;
+        });
+        document.addEventListener("pointerlockchange", () => {
+          changes.push(document.pointerLockElement === view ? "locked" : "unlocked");
+        });
+        document.addEventListener("pointerlockerror", () => { changes.push("error"); });
+
+        console.log("api=" + typeof view.requestPointerLock + "," +
+                    typeof document.exitPointerLock + "," +
+                    (document.pointerLockElement === null));
+        const request = view.requestPointerLock();
+        console.log("promise=" + (request != null && typeof request.then === "function"));
+        request.then(() => {
+          console.log("lock=ok");
+          console.log("locked=" + (document.pointerLockElement === view));
+          // With the pointer locked every motion targets the locked element
+          // and reports the raw delta, whatever the cursor coordinates are.
+          win.sendEvent("mousemove", { x: 1, y: 1, movementX: 2, movementY: 3 });
+          console.log("moved=" + moved);
+          document.exitPointerLock();
+          win.setTimeout(() => {
+            console.log("after=" + (document.pointerLockElement === null));
+            console.log("changes=" + changes.join(","));
+            win.close();
+          }, 20);
+        }).catch(() => {
+          console.log("lock=error");
+          console.log("changes=" + changes.join(","));
+          win.close();
+        });
+      });
+      win.loadHTML(
+        '<html><body style="margin:0">' +
+        '<canvas id="view" style="width:320px;height:240px"></canvas>' +
+        '</body></html>'
+      );
+      run();
+      `,
+      { autocloseMs: 1000 },
+    );
+
+    expect(value("api")).toBe("function,function,true");
+    expect(value("promise")).toBe("true");
+    // The suite runs on Cocoa/X11, where SDL supports relative mouse mode; a
+    // backend without it would surface as lock=error here, not silently pass.
+    expect(value("lock")).toBe("ok");
+    expect(value("locked")).toBe("true");
+    expect(value("moved")).toBe("2,3:view");
+    expect(value("after")).toBe("true");
+    expect(value("changes")).toBe("locked,unlocked");
+  });
 });

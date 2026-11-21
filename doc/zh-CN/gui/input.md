@@ -12,6 +12,13 @@
 
 - SDL 指针/滚轮/键盘事件会被路由到所属窗口，进行命中测试，并投递给用 `on`
   注册的处理器。`mousedown` 还会移动焦点，并在文本框中放置光标。
+- 指针锁定（Pointer Lock）遵循浏览器 API：`element.requestPointerLock()`（返回
+  Promise）、`document.pointerLockElement`、`document.exitPointerLock()`，以及
+  `document` 与 `window` 上的 `pointerlockchange`/`pointerlockerror` 事件。锁定时
+  SDL 进入相对鼠标模式（隐藏并捕获光标）：`mousemove` 以被锁定元素为目标、跳过
+  命中测试与 `:hover`，并在 `movementX`/`movementY` 中携带原始位移，因此第一人称
+  游戏用 `e.movementX` 而不是光标坐标来瞄准。按下 `Escape` 或窗口失焦会释放锁定，
+  与浏览器一致。
 - 键盘事件同时走 DOM 路径：目标为聚焦元素（没有焦点时为 `<body>`），事件沿祖先
   冒泡到 `document`，最后到达 `window` 监听器。因此按浏览器写的
   `document.addEventListener("keydown", …)` 可以直接工作。负载使用浏览器

@@ -47,6 +47,12 @@ API 编写的文档可以原样运行。
 `compositionstart` / `compositionupdate` / `compositionend`、`beforeinput`、
 `input`、`change`、`submit` 与 `reset`。
 
+指针锁定通过 SDL 的相对鼠标模式实现：`element.requestPointerLock()` 返回
+Promise，在锁定生效（并已触发 `pointerlockchange`）后 resolve；
+`document.pointerLockElement` 是被锁定元素，`document.exitPointerLock()` 释放
+锁定；宿主无法满足的请求会 reject 并触发 `pointerlockerror`。按下 `Escape` 或
+窗口失焦会释放锁定。
+
 由引擎调用的代码（元素/窗口监听器、定时器、动画帧、媒体事件）抛出的异常会被
 当作页面错误，而不是终止进程：引擎在回调边界捕获它，并对齐浏览器接口。
 `window.onerror` 收到 `(message, source, line, column, error)`，
@@ -193,6 +199,7 @@ win.on("keydown", (e) => console.log(e.key, e.code, e.ctrlKey, e.shiftKey));
 | 字段 | 事件 | 含义 |
 | --- | --- | --- |
 | `x`、`y` / `clientX`、`clientY` | pointer、wheel | 相对于视口的逻辑像素 |
+| `movementX`、`movementY` | pointer | 距上一次事件的原始位移（指针锁定瞄准用）；按键事件为 `0` |
 | `button` | pointer | `0` 左键、`1` 中键、`2` 右键（移动时为 `-1`） |
 | `clicks` | pointer | 操作系统报告的点击次数 |
 | `deltaX`、`deltaY` | wheel | 滚动量（`deltaY` 为正表示向下） |

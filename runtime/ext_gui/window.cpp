@@ -24,6 +24,7 @@ static xt_value g_window_proto = XT_UNDEFINED;
 xt_value xt_gui_window_set_background(xt_value self, xt_value env, int32_t argc, xt_value *argv);
 xt_value xt_gui_window_paint_list(xt_value self, xt_value env, int32_t argc, xt_value *argv);
 xt_value xt_gui_window_paint_count(xt_value self, xt_value env, int32_t argc, xt_value *argv);
+xt_value xt_gui_window_send_event(xt_value self, xt_value env, int32_t argc, xt_value *argv);
 
 /* -- methods -------------------------------------------------------------- */
 
@@ -83,6 +84,7 @@ static xt_value win_load_html(xt_value self, xt_value env, int32_t argc, xt_valu
     win->scroll_y = 0.0f;
     /* Fresh document: invalidate every previously handed-out handle, and drop
      * the decoders that belonged to the old tree. */
+    xt_gui_pointer_lock_release(win);
     xt_gui_handles_reset(win);
     xt_gui_media_shutdown(win);
     xt_gui_canvas_shutdown(win);
@@ -373,10 +375,6 @@ static xt_value win_cancel_animation_frame(xt_value self, xt_value env, int32_t 
 
 /* -- input diagnostics ---------------------------------------------------- */
 
-static double xt_gui_number_or(xt_value value, double fallback) {
-  return XT_IS_NUMBER(value) ? xt_to_number(value) : fallback;
-}
-
 /** Test/debug hook: CSS-like descriptor of the deepest element at (x, y). */
 static xt_value win_hit_test(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
   (void)env;
@@ -387,84 +385,6 @@ static xt_value win_hit_test(xt_value self, xt_value env, int32_t argc, xt_value
   float y = (float)xt_to_number(xt_arg(argc, argv, 1));
   std::string target = xt_gui_hit_test(win, x, y);
   return xt_string_from_cstr(target.c_str());
-}
-
-/** Test/debug hook: synthesise an input event and deliver it to handlers.
- * `win.sendEvent("click", { x, y, button, clicks })`,
- * `win.sendEvent("wheel", { x, y, deltaX, deltaY })` or
- * `win.sendEvent("keydown", { key, code })`. A key event may instead name the
- * SDL `scancode`/`keycode` plus modifiers to exercise a real-keyboard path. */
-static xt_value win_send_event(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
-  (void)env;
-  XtGuiWindow *win = xt_gui_window_from_this(self);
-  if (win == nullptr || argc < 1) return XT_FALSE;
-  const char *type = xt_string_data(xt_to_string(xt_arg(argc, argv, 0)));
-  if (type == nullptr) return XT_FALSE;
-  xt_value options = xt_arg(argc, argv, 1);
-  double x = 0;
-  double y = 0;
-  if (XT_IS_OBJECT(options)) {
-    x = xt_gui_number_or(xt_object_get_cstr(options, "x"), 0);
-    y = xt_gui_number_or(xt_object_get_cstr(options, "y"), 0);
-  }
-  std::string name(type);
-  if (name == "textInput") {
-    std::string text;
-    if (XT_IS_OBJECT(options)) {
-      xt_value value = xt_object_get_cstr(options, "text");
-      if (XT_IS_STRING(value)) text = std::string(xt_string_data(value));
-    }
-    xt_gui_text_input(win, text.c_str());
-    return XT_TRUE;
-  }
-  if (name == "compositionstart" || name == "compositionupdate" || name == "compositionend") {
-    std::string data;
-    if (XT_IS_OBJECT(options)) {
-      xt_value value = xt_object_get_cstr(options, "data");
-      if (XT_IS_STRING(value)) data = std::string(xt_string_data(value));
-    }
-    xt_gui_composition_event(win, name.c_str(), data.c_str());
-    return XT_TRUE;
-  }
-  if (name == "wheel") {
-    double delta_x = 0;
-    double delta_y = 0;
-    if (XT_IS_OBJECT(options)) {
-      delta_x = xt_gui_number_or(xt_object_get_cstr(options, "deltaX"), 0);
-      delta_y = xt_gui_number_or(xt_object_get_cstr(options, "deltaY"), 0);
-    }
-    xt_gui_dispatch_wheel(win, (float)x, (float)y, (float)delta_x, (float)delta_y);
-    return XT_TRUE;
-  }
-  if (name == "keydown" || name == "keyup") {
-    auto flag = [options](const char *key) { return xt_truthy(xt_object_get_cstr(options, key)); };
-    if (XT_IS_OBJECT(options) && XT_IS_NUMBER(xt_object_get_cstr(options, "scancode"))) {
-      int scancode = (int)xt_gui_number_or(xt_object_get_cstr(options, "scancode"), 0);
-      int keycode = (int)xt_gui_number_or(xt_object_get_cstr(options, "keycode"), 0);
-      xt_gui_dispatch_physical_key(win, type, scancode, keycode, flag("repeat"), flag("ctrl"),
-                                   flag("shift"), flag("alt"), flag("meta"), flag("caps"));
-      return XT_TRUE;
-    }
-    const char *key = "";
-    const char *code = "";
-    if (XT_IS_OBJECT(options)) {
-      xt_value key_value = xt_object_get_cstr(options, "key");
-      xt_value code_value = xt_object_get_cstr(options, "code");
-      if (XT_IS_STRING(key_value)) key = xt_string_data(key_value);
-      if (XT_IS_STRING(code_value)) code = xt_string_data(code_value);
-    }
-    xt_gui_dispatch_key_with_modifiers(win, type, key, code, flag("repeat"), flag("ctrl"),
-                                       flag("shift"), flag("alt"), flag("meta"));
-    return XT_TRUE;
-  }
-  int button = -1;
-  int clicks = 0;
-  if (XT_IS_OBJECT(options)) {
-    button = (int)xt_gui_number_or(xt_object_get_cstr(options, "button"), -1);
-    clicks = (int)xt_gui_number_or(xt_object_get_cstr(options, "clicks"), 0);
-  }
-  xt_gui_dispatch_pointer(win, type, (float)x, (float)y, button, clicks);
-  return XT_TRUE;
 }
 
 /** Diagnostic/test hook: engine counters as one object. `heapBytes` and
@@ -588,7 +508,7 @@ xt_value xt_gui_window_proto(void) {
    * `window_events.cpp`. */
   xt_gui_install_window_events(proto);
   define_method(proto, "hitTest", (void *)win_hit_test);
-  define_method(proto, "sendEvent", (void *)win_send_event);
+  define_method(proto, "sendEvent", (void *)xt_gui_window_send_event);
   define_method(proto, "stats", (void *)win_stats);
   /* The browser surface a page written for a real page expects (`innerWidth`,
    * `setTimeout`, `navigator`, `matchMedia`, …) lives in `browser.cpp`. */

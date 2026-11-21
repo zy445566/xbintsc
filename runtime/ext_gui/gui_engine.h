@@ -180,6 +180,11 @@ struct XtGuiWindow {
   float scroll_y = 0;
   /** `document.hasFocus()` state, toggled by `window.focus()` / `blur()`. */
   int focused = 0;
+  /** Element holding the Pointer Lock (`Element.requestPointerLock`), or null
+   * when the pointer is free. While set, SDL is in relative mouse mode, the
+   * cursor is hidden and `mousemove` targets this element with the raw motion
+   * in `movementX`/`movementY` — the shape a first-person game listens for. */
+  const xtgui::Node *pointer_lock_node = nullptr;
   /** Live `matchMedia` lists for this window (one per query string). */
   std::vector<xt_value> media_lists;
   std::unordered_map<std::string, xt_value> media_lists_by_query;
@@ -322,9 +327,20 @@ xt_value xt_browser_prompt(XtGuiWindow *win, int32_t argc, xt_value *argv);
 void xt_browser_install_window_navigation(xt_value proto);
 /** CSS-like descriptor of the deepest element at (x, y), or `""` (test/debug). */
 std::string xt_gui_hit_test(XtGuiWindow *win, float x, float y);
-/** Synthesise a pointer event (`mousemove`/`mousedown`/`mouseup`/`click`). */
+/** Synthesise a pointer event (`mousemove`/`mousedown`/`mouseup`/`click`).
+ * `movement_x`/`movement_y` are the raw deltas carried by `movementX`/
+ * `movementY`; real motion passes SDL's `xrel`/`yrel`. */
 void xt_gui_dispatch_pointer(XtGuiWindow *win, const char *type, float x, float y, int button,
-                             int clicks);
+                             int clicks, float movement_x = 0.0f, float movement_y = 0.0f);
+/** Enter pointer lock on `node`, or leave it when `node` is null. Returns
+ * false when SDL cannot enable relative mouse mode. Fires `pointerlockchange`
+ * on a state change. */
+bool xt_gui_set_pointer_lock(XtGuiWindow *win, const xtgui::Node *node);
+/** Leave pointer lock without firing an event (window close, document
+ * replacement, or the locked element leaving the document). */
+void xt_gui_pointer_lock_release(XtGuiWindow *win);
+/** Fire `pointerlockerror` at `document` and `window` (the request failed). */
+void xt_gui_pointer_lock_error(XtGuiWindow *win);
 /** Synthesise a wheel event. */
 void xt_gui_dispatch_wheel(XtGuiWindow *win, float x, float y, float delta_x, float delta_y);
 /** Synthesise a key event (`keydown`/`keyup`). */

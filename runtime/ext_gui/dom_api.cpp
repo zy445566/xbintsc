@@ -198,6 +198,10 @@ xt_value xt_gui_node_handle(XtGuiWindow *win, const xtgui::Node *node) {
 
 void xt_gui_node_handle_forget(XtGuiWindow *win, const xtgui::Node *node) {
   if (win == nullptr || node == nullptr) return;
+  /* Removing the locked element ends the Pointer Lock, as in the DOM. Release
+   * silently here: the removal is mid-mutation, so running page code for a
+   * `pointerlockchange` now could re-enter the tree being torn down. */
+  if (win->pointer_lock_node == node) xt_gui_pointer_lock_release(win);
   /* The node is about to be destroyed (a removal, or `innerHTML = …` dropping
    * the old children). Drop its slot as well as its handle: the slot is what
    * `resolve_node` reads, and leaving a freed pointer there is a

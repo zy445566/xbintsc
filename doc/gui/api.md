@@ -49,6 +49,13 @@ and hit testing follow it), and `scrollX` / `scrollY` / `pageXOffset` /
 `compositionstart` / `compositionupdate` / `compositionend`, `beforeinput`,
 `input`, `change`, `submit` and `reset`.
 
+Pointer Lock is implemented through SDL's relative mouse mode:
+`element.requestPointerLock()` returns a promise that resolves once the lock is
+active (and `pointerlockchange` has fired), `document.pointerLockElement` is the
+locked element, `document.exitPointerLock()` releases it, and a request the host
+cannot honour rejects and fires `pointerlockerror`. `Escape` and losing window
+focus release the lock.
+
 Exceptions thrown by code the engine invokes (an element or window listener, a
 timer, an animation frame, a media event) are page errors, not process
 termination: the engine catches them at its callback boundary and mirrors the
@@ -217,6 +224,7 @@ bubbles from the focused element or `<body>`, before the window listeners run.
 | Field | Events | Meaning |
 | --- | --- | --- |
 | `x`, `y` / `clientX`, `clientY` | pointer, wheel | viewport-relative logical pixels |
+| `movementX`, `movementY` | pointer | raw motion since the previous event (pointer-lock aiming); `0` on button events |
 | `button` | pointer | `0` left, `1` middle, `2` right (`-1` for move) |
 | `clicks` | pointer | click count reported by the OS |
 | `deltaX`, `deltaY` | wheel | scroll amount (`deltaY` positive = down) |

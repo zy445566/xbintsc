@@ -155,6 +155,7 @@ xt_value node_proto() {
   define_method(proto, "addEventListener", (void *)node_add_event_listener);
   define_method(proto, "removeEventListener", (void *)node_remove_event_listener);
   define_method(proto, "dispatchEvent", (void *)node_dispatch_event);
+  define_method(proto, "requestPointerLock", (void *)node_request_pointer_lock);
   define_method(proto, "play", (void *)node_play);
   define_method(proto, "pause", (void *)node_pause);
   define_method(proto, "load", (void *)node_load);
@@ -193,6 +194,8 @@ xt_value document_proto() {
   define_method(proto, "addEventListener", (void *)node_add_event_listener);
   define_method(proto, "removeEventListener", (void *)node_remove_event_listener);
   define_method(proto, "dispatchEvent", (void *)node_dispatch_event);
+  define_method(proto, "exitPointerLock", (void *)doc_exit_pointer_lock);
+  define_getter(proto, "pointerLockElement", (void *)doc_pointer_lock_element_get);
   g_document_proto = proto;
   return proto;
 }

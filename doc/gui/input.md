@@ -14,6 +14,14 @@ follows the artwork, not the box flow left behind.
 - SDL pointer/wheel/key events are routed to the owning window, hit tested, and
   delivered to the handlers registered with `on`. `mousedown` also moves focus
   and places the caret in a text field.
+- Pointer Lock is the browser API: `element.requestPointerLock()` (a promise),
+  `document.pointerLockElement`, `document.exitPointerLock()` and the
+  `pointerlockchange` / `pointerlockerror` events on `document` and `window`.
+  While locked, SDL runs in relative mouse mode (the cursor is hidden and
+  captured): `mousemove` targets the locked element, skips hit testing and
+  `:hover`, and carries the raw delta in `movementX`/`movementY`, so a
+  first-person game aims from `e.movementX` instead of the cursor position.
+  `Escape` and losing window focus release the lock, as in a browser.
 - Keyboard events also follow the DOM path: the target is the focused element (or
   `<body>` when nothing is focused), the event bubbles through its ancestors to
   `document`, and finally reaches `window` listeners. This is what lets a page

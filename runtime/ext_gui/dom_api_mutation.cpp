@@ -154,6 +154,55 @@ METHOD(node_insert_adjacent_html) {
   return XT_UNDEFINED;
 }
 
+/* -- MutationObserver ----------------------------------------------------- */
+
+/* The engine keeps no mutation queue to report on, so an observer is *inert*:
+ * `observe` records nothing and the callback never fires (see
+ * doc/gui/known-issues.md). It exists as a real constructor because pages and
+ * bundlers build one unconditionally — Vite's `modulepreload` polyfill does
+ * `new MutationObserver(…).observe(document, …)` before the page runs — and a
+ * `TypeError` there aborts the whole script. Code that only *installs* an
+ * observer therefore runs unchanged; code that waits for records has nothing
+ * to receive yet. */
+
+METHOD(observer_observe) {
+  (void)self;
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return XT_UNDEFINED;
+}
+
+METHOD(observer_disconnect) {
+  (void)self;
+  (void)env;
+  (void)argc;
+  (void)argv;
+  return XT_UNDEFINED;
+}
+
+/** `takeRecords()`: an inert observer has no queued records. */
+METHOD(observer_take_records) {
+  (void)argc;
+  (void)argv;
+  (void)env;
+  return xt_array_new(0, nullptr);
+}
+
 #undef METHOD
+
+xt_value mutation_observer_proto() {
+  static xt_value proto = XT_UNDEFINED;
+  if (XT_IS_OBJECT(proto)) return proto;
+  proto = xt_object_new();
+  xt_gc_add_root(&proto);
+  xt_object_set(proto, xt_string_from_cstr("observe"),
+                xt_closure_new((void *)observer_observe, 0, nullptr));
+  xt_object_set(proto, xt_string_from_cstr("disconnect"),
+                xt_closure_new((void *)observer_disconnect, 0, nullptr));
+  xt_object_set(proto, xt_string_from_cstr("takeRecords"),
+                xt_closure_new((void *)observer_take_records, 0, nullptr));
+  return proto;
+}
 
 }  // namespace domapi

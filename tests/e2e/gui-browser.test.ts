@@ -99,6 +99,43 @@ describe.skipIf(!guiAvailable)("gui extension — browser globals", () => {
     expect(value("frames")).toBe("3");
   });
 
+  it("serves an inert MutationObserver so a bundler's polyfill can install one", () => {
+    /* Vite's `modulepreload` polyfill builds one at startup:
+     * `new MutationObserver(cb).observe(document, { childList: true, subtree: true })`.
+     * The engine queues no records, but the constructor and the three methods
+     * have to exist — otherwise the page aborts before its first frame. */
+    const { value } = harness.compileAndRun(
+      "mutation-observer",
+      `
+      import { createWindow } from "gui";
+      import page from "./page.html";
+
+      console.log("kind=" + typeof MutationObserver);
+      const early = new MutationObserver((list) => console.log("records=" + list.length));
+      early.observe(document, { childList: true, subtree: true });
+      console.log("methods=" + typeof early.observe + ":" + typeof early.disconnect + ":" + typeof early.takeRecords);
+
+      const win = createWindow({ title: "observer", width: 320, height: 240 });
+      win.on("ready", () => {
+        console.log("window=" + typeof window.MutationObserver + ":" + (early instanceof MutationObserver));
+        const box = document.getElementById("box");
+        const observer = new MutationObserver(() => {});
+        observer.observe(box, { childList: true });
+        box.appendChild(document.createElement("span"));
+        console.log("take=" + observer.takeRecords().length + ":" + (observer.disconnect() === undefined));
+        win.close();
+      });
+      win.loadHTML(page);
+      `,
+      { files: { "page.html": PAGE }, autocloseMs: 4000 },
+    );
+
+    expect(value("kind")).toBe("function");
+    expect(value("methods")).toBe("function:function:function");
+    expect(value("window")).toBe("function:true");
+    expect(value("take")).toBe("0:true");
+  });
+
   it("restarts the frame pump for a request made after it drained", () => {
     /* The pump stops as soon as no frame is queued, and it re-armed only for
      * the *bare* `requestAnimationFrame` global. three.js's

@@ -355,4 +355,21 @@ describe("checker: declarations inside switch clauses", () => {
     `);
     expect(diagnostics).toEqual([]);
   });
+
+  it("lets a `case`-clause declaration shadow an enclosing parameter", () => {
+    /* The switch body is its own block scope: `let t` in a clause shadows the
+     * parameter `t` instead of redeclaring it. Minified bundles (three.js in
+     * particular) are full of this shape. */
+    const diagnostics = check(`
+      function load(e, t, n, r) {
+        switch (e.type) {
+          case "count": let t = e.count; console.log(t); break;
+          case "matrix": let n = e.matrix; console.log(n); break;
+          default: console.log(r); break;
+        }
+      }
+      load({ type: "count", count: 1 }, 2, 3, 4);
+    `);
+    expect(diagnostics).toEqual([]);
+  });
 });

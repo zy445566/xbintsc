@@ -452,6 +452,7 @@ bool WebGLContext::link_program(uint32_t id) {
       uniform.compare = compare;
       uniform.unit = 0;
       uniform.layout.gl_type = gl_type_of(decl.type);
+      if (!decl.array.empty()) { uniform.layout.is_array = true; uniform.layout.array_size = glsl_array_size(decl.array); }
       index = (int)program->uniforms.size();
       program->uniform_index[decl.name] = index;
       program->uniforms.push_back(uniform);
@@ -460,7 +461,6 @@ bool WebGLContext::link_program(uint32_t id) {
   };
   for (const GlslUniformDecl &decl : vs_info.samplers) add_sampler(record, &record->vs_sampler_uniforms, decl);
   for (const GlslUniformDecl &decl : fs_info.samplers) add_sampler(record, &record->fs_sampler_uniforms, decl);
-
   webgl_detail::build_uniform_blocks(record, vs_info.blocks, fs_info.blocks, members);
 
   /* (Re)create the SDL shaders. */

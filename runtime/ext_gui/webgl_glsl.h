@@ -132,6 +132,10 @@ std::string unroll_glsl_pragmas(const std::string &source);
 /** Scan `source` for the declarations WebGL needs to know about. */
 void scan_glsl(const std::string &source, bool fragment, GlslShaderInfo *info);
 
+/** Element count of a declaration's array suffix (`"[4]"`, `"[N]"`); arrays
+ * whose size is a macro cannot be counted here, so they report one. */
+int glsl_array_size(const std::string &array);
+
 /** Rewrite `source` into Vulkan GLSL ES 3.10 (`layout` added everywhere). */
 std::string rewrite_glsl(const std::string &source, bool fragment, const GlslLinkLayout &layout,
                          const GlslShaderInfo &info);

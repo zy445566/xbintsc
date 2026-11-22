@@ -64,6 +64,8 @@ struct WebGLTexture {
   bool has_mipmaps = false;
   int min_filter = 0;
   int mag_filter = 0;
+  /** `TEXTURE_MAX_ANISOTROPY_EXT`; 1 disables anisotropic filtering. */
+  int anisotropy = 1;
   int wrap_s = 0;
   int wrap_t = 0;
   SDL_GPUSampler *sampler = nullptr;

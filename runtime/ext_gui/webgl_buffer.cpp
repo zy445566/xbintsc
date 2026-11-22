@@ -186,6 +186,9 @@ bool WebGLContext::tex_parameter(uint32_t id, int pname, int value) {
   if (record == nullptr) return false;
   if (pname == GL_TEXTURE_MIN_FILTER) record->min_filter = value;
   else if (pname == GL_TEXTURE_MAG_FILTER) record->mag_filter = value;
+  else if (pname == 0x84FE) {  // TEXTURE_MAX_ANISOTROPY_EXT
+    record->anisotropy = value < 1 ? 1 : (value > 16 ? 16 : value);
+  }
   else if (pname == GL_TEXTURE_WRAP_S) record->wrap_s = value;
   else if (pname == GL_TEXTURE_WRAP_T) record->wrap_t = value;
   else if (pname == GL_TEXTURE_COMPARE_MODE) {
@@ -213,6 +216,7 @@ int WebGLContext::tex_parameter_value(uint32_t id, int pname) {
   if (pname == GL_TEXTURE_COMPARE_FUNC) return record->compare_func;
   if (pname == GL_TEXTURE_MIN_FILTER) return record->min_filter;
   if (pname == GL_TEXTURE_MAG_FILTER) return record->mag_filter;
+  if (pname == 0x84FE) return record->anisotropy;  // TEXTURE_MAX_ANISOTROPY_EXT
   if (pname == GL_TEXTURE_WRAP_S) return record->wrap_s;
   if (pname == GL_TEXTURE_WRAP_T) return record->wrap_t;
   return 0;
@@ -307,6 +311,8 @@ SDL_GPUSampler *WebGLContext::sampler_for(WebGLTexture *record) {
   info.address_mode_w = address_of(record->wrap_t);
   info.min_lod = 0.0f;
   info.max_lod = record->has_mipmaps ? 1000.0f : 0.0f;
+  info.max_anisotropy = (float)record->anisotropy;
+  info.enable_anisotropy = record->anisotropy > 1;
   if (record->depth) {
     /* Depth formats are sampled unfiltered; a depth value has no meaning once
      * interpolated across a texel boundary. */

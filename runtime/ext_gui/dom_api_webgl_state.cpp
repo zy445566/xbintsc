@@ -429,6 +429,7 @@ METHOD(webgl_get_supported_extensions) {
   xt_array_push(list, xt_string_from_cstr("EXT_color_buffer_float"));
   xt_array_push(list, xt_string_from_cstr("EXT_color_buffer_half_float"));
   xt_array_push(list, xt_string_from_cstr("WEBGL_lose_context"));
+  xt_array_push(list, xt_string_from_cstr("EXT_texture_filter_anisotropic"));
   xtgui::WebGLContext *context = webgl_from_context(self);
   if (context != nullptr && context->supports_texture_format(0x83F1)) {
     xt_array_push(list, xt_string_from_cstr("WEBGL_compressed_texture_s3tc"));
@@ -454,6 +455,12 @@ METHOD(webgl_get_extension) {
       name == "WEBGL_depth_texture" || name == "EXT_color_buffer_float" ||
       name == "EXT_color_buffer_half_float") {
     return xt_object_new();
+  }
+  if (name == "EXT_texture_filter_anisotropic") {
+    xt_value e = xt_object_new();
+    xt_object_set(e, xt_string_from_cstr("MAX_TEXTURE_MAX_ANISOTROPY_EXT"), xt_number(0x84FF));
+    xt_object_set(e, xt_string_from_cstr("TEXTURE_MAX_ANISOTROPY_EXT"), xt_number(0x84FE));
+    return e;
   }
   if (name == "WEBGL_lose_context") {
     xt_value object = xt_object_new();

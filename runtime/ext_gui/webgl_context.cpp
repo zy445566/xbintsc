@@ -386,6 +386,8 @@ double WebGLContext::parameter(int pname) {
       return 8192;
     case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
       return 8192;
+    case 0x84FF:  // MAX_TEXTURE_MAX_ANISOTROPY_EXT
+      return 16;
     case GL_SAMPLES: {
       const int samples = bound_framebuffer_ == 0 ? default_samples_
                                                   : framebuffer_samples(bound_framebuffer_);

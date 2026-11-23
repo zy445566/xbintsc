@@ -60,6 +60,14 @@ reports the type as well.
   wrote it. `blitFramebuffer` between the two kinds cannot use
   `SDL_BlitGPUTexture` (its copy cannot reverse rows), so it draws a sampling
   pass instead; a blit between two targets of the same kind keeps the GPU blit.
+- A user framebuffer's depth attachment starts **cleared to 1.0** (stencil 0),
+  as WebGL specifies, even if the page never calls `clear`. The first
+  render pass that uses a fresh depth renderbuffer, depth texture or the
+  auto-created depth buffer, clears it; a depth-tested draw into a render
+  target the page did not clear therefore passes. three.js's
+  `PMREMGenerator` relies on this for its scene, cube-UV and blur passes —
+  without it every environment map comes out black, and so does every
+  surface lit only by the environment.
 - A fixed-function state change (`blendFunc`, `depthFunc`, `cullFace`,
   `colorMask`, …) changes which `SDL_GPUGraphicsPipeline` is needed, so
   pipelines are created lazily and cached on the program. The key is the
@@ -222,7 +230,9 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   `getAttribLocation`, `bindAttribLocation`.
 - **Uniforms**: `uniform1f`…`uniform4f`, `uniform1i`…`uniform4i`,
   `uniform1fv`…`uniform4fv`, `uniform1iv`…`uniform4iv`,
-  `uniformMatrix2fv`/`3fv`/`4fv`, `getUniform`.
+  `uniformMatrix2fv`/`3fv`/`4fv`, `getUniform`. The vector and matrix setters
+  accept both typed arrays and plain JavaScript arrays, like WebGL's
+  `sequence` arguments.
 - **Buffers and attributes**: `createBuffer`, `bindBuffer`, `bufferData`,
   `bufferSubData`, `deleteBuffer`, `getBufferParameter`,
   `enableVertexAttribArray`, `disableVertexAttribArray`,
@@ -390,6 +400,10 @@ SPIRV-Cross, nor any `webgl_*` member (see [Link features](./build.md#link-featu
 - `tests/e2e/gui-webgl2-blit.test.ts` covers scissored colour/depth clears,
   framebuffer blits, and the pixels around a partial blit that must survive
   (a destination load-op that discards them fails there on Metal).
+- `tests/e2e/gui-webgl-depth-init.test.ts` covers a depth-tested draw into a
+  render target the page never depth-cleared, and `uniform1fv` with a plain
+  JavaScript array — the two WebGL behaviours three.js's `PMREMGenerator`
+  needs for a non-black environment map.
 - `tests/e2e/gui-media.test.ts` also uploads the latest decoded `<video>` frame
   as a texture and reads it back.
 - `tests/e2e/gui-webgl2-3d.test.ts` covers 2D-array and 3D texture layer

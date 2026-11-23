@@ -490,6 +490,8 @@ class WebGLContext {
 
   SDL_GPUTexture *color_ = nullptr;
   SDL_GPUTexture *depth_ = nullptr;
+  /** A fresh drawing buffer's depth attachment still needs its initial clear. */
+  bool default_depth_clear_pending_ = false;
   /** The multisampled colour target the default framebuffer draws into; every
    * pass resolves it into `color_`, which the page composites. */
   SDL_GPUTexture *color_msaa_ = nullptr;

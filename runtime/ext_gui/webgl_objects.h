@@ -116,6 +116,13 @@ struct WebGLFramebuffer {
   int width = 0;
   int height = 0;
   SDL_GPUTexture *depth = nullptr;  // owned when no renderbuffer/texture supplies one
+  /** The depth attachment has no WebGL-visible contents yet. A WebGL depth
+   * buffer starts cleared to 1, and a browser therefore renders depth-tested
+   * geometry into a fresh render target without the page clearing it first —
+   * three.js's PMREMGenerator relies on exactly that. The GPU attachment's
+   * contents are undefined (often 0), so the first pass that uses this
+   * framebuffer must clear depth even when the page did not ask for a clear. */
+  bool depth_clear_pending = false;
 };
 
 /** Per-attribute array state. */

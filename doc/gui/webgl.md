@@ -210,6 +210,9 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   `STENCIL_BITS` is 8). `WEBGL_lose_context`'s `loseContext`/`restoreContext`
   really drop and rebuild the context (every object becomes invalid) and
   dispatch `webglcontextlost`/`webglcontextrestored`.
+  `KHR_parallel_shader_compile` is published with `COMPLETION_STATUS_KHR`;
+  shaders and programs are translated synchronously, so the completion query
+  is always `true` (a `compileAsync` poller finishes on its first tick).
 - **Shaders and programs**: `createShader`, `shaderSource`, `compileShader`,
   `getShaderParameter`, `getShaderInfoLog`, `getShaderSource`, `deleteShader`,
   `createProgram`, `attachShader`, `detachShader`, `linkProgram`,

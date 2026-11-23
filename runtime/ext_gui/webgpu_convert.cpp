@@ -134,9 +134,12 @@ bool Convert::texture_format(const std::string &name, SDL_GPUTextureFormat *out)
       /* WebGPU's `depth24plus` is a promise format: the implementation picks a
        * depth of at least 24 bits. Metal has no 24-bit-only depth format (its
        * `D24_UNORM` is `MTLPixelFormatInvalid`), so use 32-bit float, which is
-       * ≥24 bits and supported by every backend (matching Dawn on Metal). */
+       * ≥24 bits and supported by every backend (matching Dawn on Metal). The
+       * stencil variant has the same promise, and Metal's 24-bit stencil
+       * format is not available on every device (Apple GPUs reject it), so it
+       * also uses the 32-bit float + stencil8 format. */
       {"depth24plus", SDL_GPU_TEXTUREFORMAT_D32_FLOAT},
-      {"depth24plus-stencil8", SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT},
+      {"depth24plus-stencil8", SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT},
       {"depth32float", SDL_GPU_TEXTUREFORMAT_D32_FLOAT},
       {"depth32float-stencil8", SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT},
   };
@@ -159,7 +162,9 @@ const char *Convert::texture_format_name(SDL_GPUTextureFormat format) {
     case SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT: return "rgba32float";
     case SDL_GPU_TEXTUREFORMAT_D16_UNORM: return "depth16unorm";
     case SDL_GPU_TEXTUREFORMAT_D24_UNORM: return "depth24plus";
+    case SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT: return "depth24plus-stencil8";
     case SDL_GPU_TEXTUREFORMAT_D32_FLOAT: return "depth32float";
+    case SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT: return "depth32float-stencil8";
     default: return "rgba8unorm";
   }
 }

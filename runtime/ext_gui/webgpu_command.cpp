@@ -186,11 +186,12 @@ xt_value begin_render_pass(Object &object, int argc, xt_value *argv) {
       xt_value view = prop_object(item, "view");
       const uint32_t view_id = (uint32_t)value_id(view);
       std::shared_ptr<Object> view_object = get_object(view_id, Kind::TextureView);
+      Texture *native = nullptr;
       if (view_object != nullptr) {
         std::shared_ptr<Object> texture_object =
             get_object(static_cast<TextureView *>(view_object.get())->texture, Kind::Texture);
         if (texture_object != nullptr) {
-          Texture *native = static_cast<Texture *>(texture_object.get());
+          native = static_cast<Texture *>(texture_object.get());
           target.texture = native->gpu;
           if (target_width == 0) {
             target_width = native->width;
@@ -203,8 +204,18 @@ xt_value begin_render_pass(Object &object, int argc, xt_value *argv) {
       target.clear_color.g = (float)prop_number(clear, "g", 0.0);
       target.clear_color.b = (float)prop_number(clear, "b", 0.0);
       target.clear_color.a = (float)prop_number(clear, "a", 1.0);
-      target.load_op = prop_string(item, "loadOp") == "load" ? SDL_GPU_LOADOP_LOAD
-                                                              : SDL_GPU_LOADOP_CLEAR;
+      bool load = prop_string(item, "loadOp") == "load";
+      /* WebGPU initialises every resource to zero, so the first pass that
+       * LOADs a colour texture nobody has written sees transparent black,
+       * not whatever the driver left in the allocation. */
+      if (load && native != nullptr && !native->initialized) {
+        load = false;
+        target.clear_color.r = 0.0f;
+        target.clear_color.g = 0.0f;
+        target.clear_color.b = 0.0f;
+        target.clear_color.a = 0.0f;
+      }
+      target.load_op = load ? SDL_GPU_LOADOP_LOAD : SDL_GPU_LOADOP_CLEAR;
       target.store_op = prop_string(item, "storeOp") == "discard" ? SDL_GPU_STOREOP_DONT_CARE
                                                                   : SDL_GPU_STOREOP_STORE;
       xt_value resolve = prop_object(item, "resolveTarget");
@@ -220,7 +231,13 @@ xt_value begin_render_pass(Object &object, int argc, xt_value *argv) {
           }
         }
       }
-      target.cycle = true;
+      /* The pass defines the texture's contents from now on: it either clears
+       * it or loads contents that were already defined. */
+      if (native != nullptr) native->initialized = true;
+      /* SDL discards a cycled texture's contents (it rotates to another
+       * internal allocation), which is only legal when no load op is LOAD —
+       * cycling a LOAD target would silently throw the previous pass away. */
+      target.cycle = !load;
       targets.push_back(target);
     }
   }
@@ -230,24 +247,43 @@ xt_value begin_render_pass(Object &object, int argc, xt_value *argv) {
   if (XT_IS_OBJECT(depth_value)) {
     xt_value view = prop_object(depth_value, "view");
     std::shared_ptr<Object> view_object = get_object((uint32_t)value_id(view), Kind::TextureView);
+    Texture *native = nullptr;
     if (view_object != nullptr) {
       std::shared_ptr<Object> texture_object =
           get_object(static_cast<TextureView *>(view_object.get())->texture, Kind::Texture);
       if (texture_object != nullptr) {
-        depth.texture = static_cast<Texture *>(texture_object.get())->gpu;
+        native = static_cast<Texture *>(texture_object.get());
+        depth.texture = native->gpu;
         has_depth = true;
       }
     }
     depth.clear_depth = (float)prop_number(depth_value, "depthClearValue", 1.0);
-    depth.load_op = prop_string(depth_value, "depthLoadOp") == "load" ? SDL_GPU_LOADOP_LOAD
-                                                                      : SDL_GPU_LOADOP_CLEAR;
+    depth.clear_stencil = (Uint8)prop_u64(depth_value, "stencilClearValue", 0);
+    bool depth_load = prop_string(depth_value, "depthLoadOp") == "load";
+    bool stencil_load = prop_string(depth_value, "stencilLoadOp") == "load";
+    /* WebGPU zero-initialises resources: a first pass that LOADs a depth or
+     * stencil texture must see 0 (not the driver's leftovers), because zero is
+     * what the specification's initial contents are. */
+    const bool fresh = native != nullptr && !native->initialized;
+    if (depth_load && fresh) {
+      depth_load = false;
+      depth.clear_depth = 0.0f;
+    }
+    if (stencil_load && fresh) {
+      stencil_load = false;
+      depth.clear_stencil = 0;
+    }
+    depth.load_op = depth_load ? SDL_GPU_LOADOP_LOAD : SDL_GPU_LOADOP_CLEAR;
+    depth.stencil_load_op = stencil_load ? SDL_GPU_LOADOP_LOAD : SDL_GPU_LOADOP_CLEAR;
     depth.store_op = prop_string(depth_value, "depthStoreOp") == "discard"
                          ? SDL_GPU_STOREOP_DONT_CARE
                          : SDL_GPU_STOREOP_STORE;
-    depth.clear_stencil = (Uint8)prop_u64(depth_value, "stencilClearValue", 0);
-    depth.stencil_load_op = SDL_GPU_LOADOP_CLEAR;
-    depth.stencil_store_op = SDL_GPU_STOREOP_STORE;
-    depth.cycle = true;
+    depth.stencil_store_op = prop_string(depth_value, "stencilStoreOp") == "discard"
+                                 ? SDL_GPU_STOREOP_DONT_CARE
+                                 : SDL_GPU_STOREOP_STORE;
+    if (native != nullptr) native->initialized = true;
+    /* SDL refuses to cycle a target with a LOAD load op for either aspect. */
+    depth.cycle = !depth_load && !stencil_load;
   }
   SDL_GPUCommandBuffer *cmd = encoder_cmd(encoder);
   SDL_GPURenderPass *pass =
@@ -355,6 +391,8 @@ xt_value copy_buffer_to_texture(Object &object, int argc, xt_value *argv) {
                       (uint32_t)prop_u64(origin, "x", 0), (uint32_t)prop_u64(origin, "y", 0),
                       (uint32_t)prop_u64(origin, "z", 0), width, height, depth, stride, data,
                       source_offset);
+  /* Copies count as writes: a later LOAD must keep them. */
+  texture->initialized = true;
   return XT_UNDEFINED;
 }
 
@@ -413,6 +451,8 @@ xt_value copy_texture_to_texture(Object &object, int argc, xt_value *argv) {
                               (Uint32)prop_u64(size, "height", 1),
                               (Uint32)prop_u64(size, "depthOrArrayLayers", 1), true);
   SDL_EndGPUCopyPass(pass);
+  /* The destination now holds defined texels; a later LOAD keeps them. */
+  to->initialized = true;
   return XT_UNDEFINED;
 }
 

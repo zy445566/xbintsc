@@ -100,6 +100,10 @@ struct Buffer : Object {
 struct Texture : Object {
   SDL_GPUTexture *gpu = nullptr;
   SDL_GPUTextureFormat format = SDL_GPU_TEXTUREFORMAT_INVALID;
+  /** The WebGPU format string the page asked for. Promise formats such as
+   * `depth24plus-stencil8` do not round-trip through the SDL format, and
+   * `texture.format` must keep reporting the name the page used. */
+  std::string format_name;
   uint32_t width = 0;
   uint32_t height = 0;
   uint32_t depth = 1;
@@ -109,6 +113,12 @@ struct Texture : Object {
   std::string dimension = "2d";
   /** Non-zero for a `<canvas>` backbuffer: the compositor samples this. */
   uint64_t canvas_id = 0;
+  /** WebGPU conceptually initialises every resource to zero. A texture that no
+   * pass or copy has written yet therefore reads as zeros, and the first pass
+   * that LOADs it clears it in `beginRenderPass` (depth 0, stencil 0,
+   * transparent black) instead of exposing uninitialised GPU memory. Tracked
+   * for the whole texture: the engine ignores view subresources. */
+  bool initialized = false;
   bool external = false;
   bool destroyed = false;
 };

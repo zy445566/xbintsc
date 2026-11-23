@@ -186,6 +186,9 @@ xt_value queue_write_texture(Object &object, int argc, xt_value *argv) {
   SDL_EndGPUCopyPass(pass);
   SDL_SubmitGPUCommandBuffer(cmd);
   SDL_ReleaseGPUTransferBuffer(gpu_device(), transfer);
+  /* The texture holds defined texels now, so a later LOAD keeps them instead
+   * of zero-initialising the whole texture. */
+  texture.initialized = true;
   return XT_UNDEFINED;
 }
 

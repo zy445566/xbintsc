@@ -207,7 +207,9 @@ xt_value texture_dimension(Object &object) {
 }
 
 xt_value texture_format(Object &object) {
-  return xt_string_from_cstr(Convert::texture_format_name(static_cast<Texture &>(object).format));
+  const Texture &texture = static_cast<Texture &>(object);
+  if (!texture.format_name.empty()) return xt_string_from_cstr(texture.format_name.c_str());
+  return xt_string_from_cstr(Convert::texture_format_name(texture.format));
 }
 
 xt_value texture_usage(Object &object) {

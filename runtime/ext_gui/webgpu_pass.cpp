@@ -23,6 +23,17 @@ SDL_GPUTexture *texture_of(uint32_t texture_id) {
   return static_cast<Texture *>(object.get())->gpu;
 }
 
+/* A writable storage binding may `textureStore` into the texture, so the
+ * texture no longer counts as untouched: a later pass that LOADs it must keep
+ * what the shader stored instead of zero-initialising the whole texture. */
+void mark_storage_texture_written(uint32_t view_id) {
+  std::shared_ptr<Object> view = get_object(view_id, Kind::TextureView);
+  if (view == nullptr) return;
+  std::shared_ptr<Object> texture =
+      get_object(static_cast<TextureView *>(view.get())->texture, Kind::Texture);
+  if (texture != nullptr) static_cast<Texture *>(texture.get())->initialized = true;
+}
+
 SDL_GPUBuffer *buffer_of(uint32_t buffer_id) {
   std::shared_ptr<Object> object = get_object(buffer_id, Kind::Buffer);
   if (object == nullptr) return nullptr;
@@ -218,6 +229,7 @@ bool bind_compute_resources(ComputePassEncoder &pass, ComputePipeline &pipeline,
       /* Keep the previous contents: a WebGPU storage texture may be read too. */
       texture.cycle = false;
       textures.push_back(texture);
+      if (entry != nullptr) mark_storage_texture_written(entry->view);
     }
     std::vector<SDL_GPUStorageBufferReadWriteBinding> buffers;
     for (const wgsl::Binding &binding : pipeline.stage.code.write_storage_buffers) {

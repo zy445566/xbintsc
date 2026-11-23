@@ -355,6 +355,61 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL", () => {
     expect(stderr).not.toContain("pipeline creation failed");
   });
 
+  it("publishes KHR_parallel_shader_compile with a synchronous completion status", () => {
+    const { value } = harness.compileAndRun(
+      "webgl-parallel-compile",
+      `
+      import { createWindow } from "gui";
+      import page from "./page.html";
+
+      const win = createWindow({ title: "parallel-compile", width: 320, height: 240 });
+      const label = (name: string, value: any): void => console.log(name + "=" + value);
+
+      win.on("ready", () => {
+        const canvas: any = document.getElementById("c");
+        const gl: any = canvas.getContext("webgl");
+        const ext: any = gl.getExtension("KHR_parallel_shader_compile");
+        label("ext", ext != null);
+        label("supported",
+          gl.getSupportedExtensions().indexOf("KHR_parallel_shader_compile") >= 0);
+        label("completion-pname", ext.COMPLETION_STATUS_KHR);
+
+        const vs: any = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, "attribute vec2 a_pos;" +
+          "void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }");
+        gl.compileShader(vs);
+        label("shader-complete",
+          gl.getShaderParameter(vs, ext.COMPLETION_STATUS_KHR) === true);
+
+        const fs: any = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, "precision mediump float;" +
+          "void main() { gl_FragColor = vec4(1.0); }");
+        gl.compileShader(fs);
+        const program: any = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+        label("linked", gl.getProgramParameter(program, gl.LINK_STATUS));
+        label("program-complete",
+          gl.getProgramParameter(program, ext.COMPLETION_STATUS_KHR) === true);
+        label("error", gl.getError());
+        win.close();
+      });
+
+      win.loadHTML(page);
+      `,
+      { files: { "page.html": PAGE } },
+    );
+
+    expect(value("ext")).toBe("true");
+    expect(value("supported")).toBe("true");
+    expect(value("completion-pname")).toBe("37297"); // 0x91B1
+    expect(value("shader-complete")).toBe("true");
+    expect(value("linked")).toBe("true");
+    expect(value("program-complete")).toBe("true");
+    expect(value("error")).toBe("0");
+  });
+
   it("samples a cube map face by direction", () => {
     const { value, stderr } = harness.compileAndRun(
       "webgl-cube-map",

@@ -26,6 +26,14 @@ constexpr int kWebGLMaxAttribs = 16;
 constexpr int kWebGLMaxTextureUnits = 16;
 constexpr int kWebGLMaxDrawBuffers = 4;
 
+/** `KHR_parallel_shader_compile`'s `COMPLETION_STATUS_KHR`: the pname
+ * `getShaderParameter` and `getProgramParameter` accept to ask whether the
+ * translation finished. Shader compilation and linking are synchronous in this
+ * engine (see `WebGLContext::compile_shader`/`link_program`), so the answer is
+ * always `true` and the extension is only advertised to stop capability probes
+ * from warning. */
+constexpr int kWebGLCompletionStatusKHR = 0x91B1;
+
 struct WebGLBuffer {
   uint32_t id = 0;
   std::vector<uint8_t> data;

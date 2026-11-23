@@ -98,6 +98,10 @@ METHOD(webgl_get_shader_parameter) {
   if (record == nullptr) return XT_NULL;
   if (pname == GL_COMPILE_STATUS) return xt_bool(context->shader_compiled(shader));
   if (pname == GL_DELETE_STATUS) return XT_FALSE;
+  if (pname == xtgui::kWebGLCompletionStatusKHR) {
+    /* `KHR_parallel_shader_compile`: no compilation is ever pending. */
+    return XT_TRUE;
+  }
   if (pname == GL_SHADER_TYPE) return xt_number(record->type);
   return XT_NULL;
 }
@@ -182,6 +186,11 @@ METHOD(webgl_get_program_parameter) {
   if (pname == GL_LINK_STATUS) return xt_bool(context->program_linked(program));
   if (pname == GL_VALIDATE_STATUS) return xt_bool(context->program_linked(program));
   if (pname == GL_DELETE_STATUS) return XT_FALSE;
+  if (pname == xtgui::kWebGLCompletionStatusKHR) {
+    /* `KHR_parallel_shader_compile`: linking is synchronous, so a `compileAsync`
+     * poller that waits on this pname finishes on its first tick. */
+    return xt_bool(context->program(program) != nullptr);
+  }
   if (pname == GL_ATTACHED_SHADERS) {
     return xt_number((double)context->attached_shaders(program).size());
   }

@@ -9,11 +9,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
-
 namespace xtgui {
 
 /* -- small helpers -------------------------------------------------------- */
-
 static void setEdge(Edges *edges, const std::string &side, Length value) {
   if (side == "top") edges->top = value;
   else if (side == "right") edges->right = value;
@@ -448,9 +446,12 @@ bool xt_style_apply_declaration(XtStyle *style, const std::string &rawProperty,
     if (parseEnum(value, names, 6, &index)) style->align_content = (AlignContent)index;
     return true;
   }
-  if (property == "gap") {
-    assignLength(&style->gap, value);
-    style->row_gap = style->column_gap = style->gap;
+  if (property == "gap") { /* `gap: <row> <column>`; one value means both axes. */
+    std::vector<std::string> parts = splitEdgeTokens(value);
+    const std::string &first = parts.empty() ? value : parts[0];
+    assignLength(&style->row_gap, first);
+    assignLength(&style->column_gap, parts.size() > 1 ? parts[1] : first);
+    style->gap = style->row_gap;
     return true;
   }
   if (property == "row-gap") { assignLength(&style->row_gap, value); return true; }

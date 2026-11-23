@@ -87,7 +87,7 @@ same property set, shadow lists and `transform` identity filling.
 (`translate`/`translate3d`/`translateX`/`translateY`,
 `scale`/`scale3d`/`scaleX`/`scaleY`, `rotate`/`rotateZ`, `matrix`; the `3d`
 spellings' `z` argument is parsed and dropped, since the engine is 2D;
-`deg`/`rad`/`grad`/`turn`; `%`, `px`, `em`, `rem`, `vw`, `vh`). Layout
+`deg`/`rad`/`grad`/`turn`; `%`, `px`, `em`, `rem`, `vw`, `vh`, `ch`). Layout
 is not affected: geometry stays where flow put it, and only the painted result
 moves, so a size, a scroll position or a sibling's position never depends on an
 animation frame. See [Layout](./layout.md#transforms-m15) for the composition

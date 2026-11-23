@@ -26,6 +26,10 @@ enum class Unit {
   Rem,
   Vw,
   Vh,
+  /** `ch`: the advance width of "0" in the element's font. Resolved as half an
+   * `em`, the usual measure for a digit in the proportional faces the engine
+   * loads; see `doc/gui/known-issues.md` for that approximation. */
+  Ch,
   Number,
   Clamp,
   Min,

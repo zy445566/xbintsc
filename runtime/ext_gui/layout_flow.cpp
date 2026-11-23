@@ -165,7 +165,24 @@ void Layouter::setContainingBlock(LayoutBox *box, const LayoutBox *ancestor) con
 
 void Layouter::publishContainingBlock(LayoutBox *box) const {
   if (!establishesContainingBlock(box)) return;
-  for (const std::unique_ptr<LayoutBox> &child : box->children) setContainingBlock(child.get(), box);
+  refreshContainingBlocks(box, box);
+}
+
+void Layouter::refreshContainingBlocks(LayoutBox *box, const LayoutBox *ancestor) const {
+  for (const std::unique_ptr<LayoutBox> &child : box->children) {
+    setContainingBlock(child.get(), ancestor);
+    Position position = child->style != nullptr ? child->style->position : Position::Static;
+    if (position == Position::Absolute || position == Position::Fixed) {
+      /* Idempotent: the target is recomputed from the containing block, so a
+       * second call after the block's real height is known moves the box to its
+       * final inset instead of leaving the mid-layout guess. */
+      applyPosition(child.get());
+    } else if (position == Position::Static) {
+      /* A static box does not establish a containing block: keep descending. A
+       * relative one does, and publishes for its own subtree when it finishes. */
+      refreshContainingBlocks(child.get(), ancestor);
+    }
+  }
 }
 
 void Layouter::applyPosition(LayoutBox *box) const {
@@ -330,6 +347,12 @@ float Layouter::layoutBlock(LayoutBox *box, float x, float y, float availableWid
     if (definiteHeight < 0) definiteHeight = 0;
   }
 
+  /* A definite height is already the final content height, so publish it before
+   * the children are laid out: an absolutely positioned descendant nested under
+   * a *static* wrapper resolves its insets against this box, and reading the
+   * still-zero `content_height` would put `bottom: 0` at `-height` (the
+   * cinematic bars are the case that exposed it). */
+  if (definiteHeight >= 0) box->content_height = definiteHeight;
   float contentHeight;
   if (box->is_control) {
     /* Controls are leaves with an intrinsic content height (a line, a textarea's

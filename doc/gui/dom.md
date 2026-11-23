@@ -31,7 +31,8 @@ combinators (descendant, child, adjacent and general sibling), the pseudo-classe
 (the focused element and its ancestors) and `:active` (see
 [Input](./input.md)), and the pseudo-elements `::before`/`::after`
 (legacy `:before`/`:after` too). Values: lengths (`px`, `%`, `em`, `rem`, `vw`,
-`vh`, `pt`, `pc`, `in`, `cm`, `mm`, `q`), colors (hex, `rgb()`/`rgba()`, a named
+`vh`, `ch` — half an `em`, the advance of "0" approximated without the face's
+glyph metrics — `pt`, `pc`, `in`, `cm`, `mm`, `q`), colors (hex, `rgb()`/`rgba()`, a named
 subset), numbers, keywords and shorthands (`margin`/`padding`/`border`/`flex`/
 `font`/`outline`). `display: inline-flex`/`inline-grid` make a flex/grid
 container inline-level; `grid-area`, `aspect-ratio`, `letter-spacing`,
@@ -108,7 +109,7 @@ or a cell repeated on every row appears once. The parser/cascade path reports:
   `draggable`, `autofocus`, `hidden`, and the SVG
   `filter`/`mask`/`clip-path`/`marker-*` attributes.
 - **CSS properties** outside the subset, and **length units** the parser does
-  not implement (`ch`, `ex`, `vmin`, `dvh`, …). A recognised property with an
+  not implement (`ex`, `vmin`, `dvh`, …). A recognised property with an
   unparsable value is not reported as unsupported; only the property name is
   checked.
 - **CSS at-rules** other than `@media`, `@font-face` and `@keyframes` (including

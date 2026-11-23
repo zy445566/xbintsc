@@ -27,7 +27,8 @@ doctype 跳过，实体解码（命名 + 十进制/十六进制），空元素�
 （聚焦元素及其祖先）与 `:active`
 （见[输入](./input.md)），以及伪元素
 `::before`/`::after`（也接受旧式 `:before`/`:after`）。值：长度
-（`px`、`%`、`em`、`rem`、`vw`、`vh`、`pt`、`pc`、`in`、`cm`、`mm`、`q`）、
+（`px`、`%`、`em`、`rem`、`vw`、`vh`、`ch`——按半个 `em` 解析，即在不读取字形
+度量的情况下近似“0”的前进宽度——以及 `pt`、`pc`、`in`、`cm`、`mm`、`q`）、
 颜色（十六进制、`rgb()`/`rgba()`、一个命名子集）、数字、关键字与简写
 （`margin`/`padding`/`border`/`flex`/`font`/`outline`）。
 `display: inline-flex`/`inline-grid` 生成行内级 flex/grid 容器；`grid-area`、
@@ -96,7 +97,7 @@ xt_gui: warning: unsupported CSS unit 'vmin'; the value is ignored
   `srcset`、`sizes`、`poster`、`controls`、`contenteditable`、`draggable`、
   `autofocus`、`hidden`，以及 SVG 的
   `filter`/`mask`/`clip-path`/`marker-*` 特性。
-- **CSS 属性**：子集之外的属性名；以及解析器未实现的长度单位（`ch`、`ex`、
+- **CSS 属性**：子集之外的属性名；以及解析器未实现的长度单位（`ex`、
   `vmin`、`dvh` 等）。已支持属性上的非法值不会按“不支持”报告——只检查属性的
   *名字*。
 - **CSS at-rule**：`@media`、`@font-face`、`@keyframes`（含厂商前缀拼写）之外的

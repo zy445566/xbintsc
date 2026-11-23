@@ -53,6 +53,8 @@ static std::string formatLength(const Length &length) {
       return formatNumber(length.value) + "vw";
     case Unit::Vh:
       return formatNumber(length.value) + "vh";
+    case Unit::Ch:
+      return formatNumber(length.value) + "ch";
     case Unit::Clamp:
     case Unit::Min:
     case Unit::Max: {
@@ -356,7 +358,11 @@ std::string xt_style_property_to_string(const XtStyle &style, const std::string 
   if (property == "justify-content") return justifyNames[(int)style.justify_content];
   if (property == "align-items") return alignNames[(int)style.align_items];
   if (property == "align-content") return alignContentNames[(int)style.align_content];
-  if (property == "gap") return formatLength(style.gap);
+  if (property == "gap") {
+    std::string row = formatLength(style.row_gap);
+    std::string column = formatLength(style.column_gap);
+    return row == column ? row : row + " " + column;
+  }
   if (property == "row-gap") return formatLength(style.row_gap);
   if (property == "column-gap") return formatLength(style.column_gap);
   if (property == "float") return floatNames[(int)style.float_side];

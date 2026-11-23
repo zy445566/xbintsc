@@ -62,6 +62,101 @@ describe.skipIf(!guiAvailable)("gui extension — layout", () => {
     expect(wrap[3]).toBeCloseTo(2 * Number(value("lh")), 1);
   });
 
+  it("resolves bottom/right through a static wrapper", () => {
+    const { value } = harness.compileAndRun(
+      "absolute-stack",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; }
+        #menu { position: absolute; inset: 0; }
+        #wrap { }
+        #bar { position: absolute; left: 0; right: 0; bottom: 0; height: 20px; background: #000; }
+        #badge { position: absolute; right: 0; top: 0; width: 20px; height: 20px; }
+      </style></head><body>
+        <div id="menu"><div id="wrap"><div id="bar"></div></div><div id="badge"></div></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "absolute", width: 800, height: 600 });
+      win.on("ready", () => {
+        const rect = (selector) => {
+          const r = win.getBoundingClientRect(selector);
+          return r.x + "," + r.y + "," + r.width + "," + r.height;
+        };
+        console.log("menu=" + rect("#menu"));
+        console.log("bar=" + rect("#bar"));
+        console.log("badge=" + rect("#badge"));
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    expect(value("menu")).toBe("0,0,800,600");
+    // The static wrapper is zero-height, but the bar resolves against the
+    // positioned ancestor's final padding box, not the wrapper.
+    expect(value("bar")).toBe("0,580,800,20");
+    expect(value("badge")).toBe("780,0,20,20");
+  });
+
+  it("stretches single-line flex items and splits a two-value gap", () => {
+    const { value } = harness.compileAndRun(
+      "flex-gap-stretch",
+      `
+      import { createWindow, run } from "gui";
+
+      const HTML = \`
+      <html><head><style>
+        body { margin: 0; font-size: 20px; }
+        #row { display: flex; gap: 20px 40px; width: 600px; }
+        #row .a { width: 50px; height: 20px; }
+        #row .b { width: 50px; height: 60px; }
+        #row .c { width: 50px; }
+        #wrap { display: flex; flex-wrap: wrap; gap: 20px 40px; width: 100px; }
+        #wrap .w { width: 50px; height: 30px; }
+        #ch { position: absolute; top: 0; left: 500px; width: 10ch; height: 10px; }
+      </style></head><body>
+        <div id="row"><div class="a" id="a"></div><div class="b" id="b"></div><div class="c" id="c"></div></div>
+        <div id="wrap"><div class="w" id="wa"></div><div class="w" id="wb"></div><div class="w" id="wc"></div></div>
+        <div id="ch"></div>
+      </body></html>
+      \`;
+
+      const win = createWindow({ title: "gap", width: 800, height: 600 });
+      win.on("ready", () => {
+        const rect = (selector) => {
+          const r = win.getBoundingClientRect(selector);
+          return r.x + "," + r.y + "," + r.width + "," + r.height;
+        };
+        for (const id of ["a", "b", "c", "wa", "wb", "wc", "ch"]) console.log(id + "=" + rect("#" + id));
+        console.log("gap=" + win.computedStyle("#row", "gap"));
+        win.close();
+      });
+      win.loadHTML(HTML);
+      run();
+      `,
+    );
+
+    // The column gap (40px) separates the row items; the row gap does not.
+    expect(value("a")).toBe("0,0,50,20");
+    expect(value("b")).toBe("90,0,50,60");
+    // `align-items` defaults to stretch and the line's cross size comes from the
+    // tallest item, so the auto-height item fills 60px even though the container
+    // itself has no definite height.
+    expect(value("c")).toBe("180,0,50,60");
+    // A wrapping row with one 50px item per line uses the 20px row gap.
+    expect(value("wa")).toBe("0,60,50,30");
+    expect(value("wb")).toBe("0,110,50,30");
+    expect(value("wc")).toBe("0,160,50,30");
+    // `ch` is half an em: 10ch at 20px is 100px.
+    expect(value("ch")).toBe("500,0,100,10");
+    expect(value("gap")).toBe("20px 40px");
+  });
+
   it("positions boxes with `position` and its offsets", () => {
     const { value } = harness.compileAndRun(
       "position",

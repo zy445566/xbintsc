@@ -73,6 +73,10 @@ float xt_style_resolve_absolute(const Length &length, float base, float em, floa
       return vw * length.value / 100.0f;
     case Unit::Vh:
       return vh * length.value / 100.0f;
+    /* `ch` is the advance of "0". Without the font's glyph metrics here, half an
+     * em is the conventional approximation for a proportional face. */
+    case Unit::Ch:
+      return em * length.value * 0.5f;
     default:
       return 0.0f;
   }

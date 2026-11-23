@@ -34,9 +34,12 @@ with absolute (viewport-relative) geometry:
   largest prefix the remaining line can hold. `text-decoration` parses its
   line/style/colour components and paints underline, overline and line-through
   as solid rules (dashed/dotted/wavy are reported computed but painted solid).
-- **Flexbox** — `row`/`column` (and the `-reverse` variants) with `gap`,
+- **Flexbox** — `row`/`column` (and the `-reverse` variants) with `gap` (one
+  value, or `<row> <column>`),
   `flex-basis`/`flex-grow`/`flex-shrink`, `justify-content` and `align-items`
-  (including `stretch` when the cross size is definite). On both axes the main
+  (including `stretch` when the cross size is definite, and on a single-line
+  auto-height container where the line takes its tallest item's cross size). On
+  both axes the main
   size comes from `flex-basis` (or the measured size when it is `auto`), positive
   free space is split by `flex-grow` and a deficit by `flex-shrink`, and an
   item's `align-self` overrides the container's `align-items`. `flex-wrap: wrap`
@@ -91,7 +94,10 @@ with absolute (viewport-relative) geometry:
   positioned ancestor — the viewport when there is none. An `auto` inset keeps
   the static position on that axis, an `auto` width is shrink-to-fit unless both
   `left` and `right` are set (then it fills the space between them), and
-  percentages resolve against the containing block. Stacking is approximated by
+  percentages resolve against the containing block. Static boxes in between do
+  not change the containing block, and its insets are applied again once the
+  ancestor's height is final, so `bottom: 0` inside a wrapper is not placed
+  against the wrapper's zero height. Stacking is approximated by
   sorting each parent's children by `z-index` (negative → `auto` → positive)
   before painting; this is a single level, not a full stacking context, so a
   child cannot escape its parent's level.

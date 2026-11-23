@@ -79,7 +79,7 @@ transition 的属性时，会记录一个正在运行的 transition，并在每�
 （`translate`/`translate3d`/`translateX`/`translateY`、
 `scale`/`scale3d`/`scaleX`/`scaleY`、`rotate`/`rotateZ`、`matrix`；`3d` 拼写的
 `z` 参数会被解析后丢弃，因为引擎是 2D 的；`deg`/`rad`/`grad`/`turn`；`%`、
-`px`、`em`、`rem`、`vw`、`vh`）。布局不受影响：几何仍是流式布局放下的位置，只有绘制结果移动，
+`px`、`em`、`rem`、`vw`、`vh`、`ch`）。布局不受影响：几何仍是流式布局放下的位置，只有绘制结果移动，
 因此尺寸、滚动位置或兄弟节点的位置从不依赖某一动画帧。合成规则见
 [布局](./layout.md#变换m15)，如何到达 GPU 见[绘制](./rendering.md)。
 

@@ -61,6 +61,9 @@ bool mediaLength(const std::string &raw, float vw, float vh, float *out) {
     case Unit::Rem:
       *out = length.value * 16.0f;
       return true;
+    case Unit::Ch:
+      *out = length.value * 8.0f;
+      return true;
     case Unit::Vw:
       *out = vw * length.value / 100.0f;
       return true;

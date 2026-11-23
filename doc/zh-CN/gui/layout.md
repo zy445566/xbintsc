@@ -29,9 +29,10 @@
   （以及 `word-wrap` 别名）会在放不下时按当前行剩余空间的最长前缀拆分单词。
   `text-decoration` 会解析 line/style/color 分量，并把 underline、overline 与
   line-through 绘制为实线（dashed/dotted/wavy 会出现在计算样式中，但按实线绘制）。
-- **Flexbox** —— `row`/`column`（以及 `-reverse` 变体），支持 `gap`、
-  `flex-basis`/`flex-grow`/`flex-shrink`、`justify-content` 与 `align-items`
-  （当交叉轴尺寸确定时包括 `stretch`）。两个方向的主轴尺寸都先取
+- **Flexbox** —— `row`/`column`（以及 `-reverse` 变体），支持 `gap`（一个值，
+  或 `<行> <列>`）、`flex-basis`/`flex-grow`/`flex-shrink`、`justify-content` 与
+  `align-items`（当交叉轴尺寸确定时包括 `stretch`；单行且容器高度为 auto 时，
+  该行取最高项的高度，各项同样会拉伸）。两个方向的主轴尺寸都先取
   `flex-basis`（为 `auto` 时用测量尺寸）：有剩余空间按 `flex-grow` 分配，
   空间不足按 `flex-shrink` 收缩；单个项的 `align-self` 可覆盖容器的
   `align-items`。`flex-wrap: wrap` 会把项断成多行，
@@ -73,7 +74,9 @@
   的 `fixed`）使其脱离文档流，并相对最近的已定位祖先的 padding box 定位（没有
   这样的祖先时则相对视口）。`auto` 的 inset 在该轴上保留静态位置；宽度 `auto`
   时使用 shrink-to-fit，除非 `left` 与 `right` 同时给出（此时填满两者之间的空间）；
-  百分比相对包含块解析。层叠通过绘制前按 `z-index` 对每个父元素的子元素排序
+  百分比相对包含块解析。中间的静态盒子不会改变包含块；祖先高度最终确定后，inset
+  会再次应用，因此包裹在静态 wrapper 里的 `bottom: 0` 不会按 wrapper 的零高度定位。
+  层叠通过绘制前按 `z-index` 对每个父元素的子元素排序
   （负值 → `auto` → 正值）来近似实现；这只是一个层级，并非完整的层叠上下文，
   因此子元素无法脱离父元素的层级。
   注意该 shrink-to-fit 规则的后果：一个 `width: auto` 且没有显式尺寸的绝对定位

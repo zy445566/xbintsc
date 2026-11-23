@@ -128,6 +128,7 @@ static Length makeScalarLength(double number, const std::string &rawUnit) {
   else if (unit == "rem") length.unit = Unit::Rem;
   else if (unit == "vw") length.unit = Unit::Vw;
   else if (unit == "vh") length.unit = Unit::Vh;
+  else if (unit == "ch") length.unit = Unit::Ch;
   else if (unit == "pt") { length.value = (float)number * (96.0f / 72.0f); length.unit = Unit::Px; }
   else if (unit == "pc") { length.value = (float)number * 16.0f; length.unit = Unit::Px; }
   else if (unit == "in") { length.value = (float)number * 96.0f; length.unit = Unit::Px; }

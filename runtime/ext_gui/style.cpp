@@ -155,6 +155,7 @@ void finalizeStyle(XtStyle *style, const ApplyContext &context) {
     case Unit::Rem:
     case Unit::Vw:
     case Unit::Vh:
+    case Unit::Ch:
     case Unit::Clamp:
     case Unit::Min:
     case Unit::Max:

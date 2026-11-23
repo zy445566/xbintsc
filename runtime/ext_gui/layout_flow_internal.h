@@ -168,6 +168,8 @@ inline float toPx(const Length &length, float base, float em, float root, float 
       return vw * length.value / 100.0f;
     case Unit::Vh:
       return vh * length.value / 100.0f;
+    case Unit::Ch:
+      return em * length.value * 0.5f;
     default:
       return fallback;
   }
@@ -270,9 +272,16 @@ struct Layouter {
   /** Nearest ancestor (or `box` itself) that is a containing block, else null. */
   const LayoutBox *containingBlockAncestor(const LayoutBox *box) const;
 
-  /** Re-publish the containing block of `box`'s children once `box` has its own
-   * final size (an absolute child resolves `bottom`/`right` against it). */
+  /** Re-publish the containing block of `box`'s descendants once `box` has its
+   * own final size (an absolute child resolves `bottom`/`right` against it).
+   * Walks through static boxes too, so an out-of-flow box nested under a static
+   * wrapper still sees the final padding box, not the wrapper's zero height. */
   void publishContainingBlock(LayoutBox *box) const;
+
+  /** Recursive half of `publishContainingBlock`: re-point `ancestor` as the
+   * containing block of every descendant that does not establish its own, and
+   * re-apply the insets of the absolute boxes among them. */
+  void refreshContainingBlocks(LayoutBox *box, const LayoutBox *ancestor) const;
 
   /** Publish `box`'s padding box as the containing block for absolute
    * descendants of the nearest positioned ancestor (null means the viewport). */

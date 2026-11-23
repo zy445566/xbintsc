@@ -220,8 +220,11 @@ float Layouter::layoutFlexRow(LayoutBox *container, const std::vector<LayoutBox 
       size_t i = reverse ? line[line.size() - 1 - k] : line[k];
       AlignItems align = items[i]->style->has_align_self ? items[i]->style->align_self
                                                          : containerStyle.align_items;
-      bool stretch = align == AlignItems::Stretch && isAuto(items[i]->style->height) &&
-                     (definiteHeight >= 0 || lines.size() > 1);
+      /* Stretch fills the line's cross size, whether that size came from a
+       * definite container height or from the tallest item on an auto-height
+       * line (a single-line auto container's line cross size is the largest
+       * item, so all auto-height items still become equally tall). */
+      bool stretch = align == AlignItems::Stretch && isAuto(items[i]->style->height);
       if (stretch) {
         float contentH = lineCross[li] - verticalEdges(items[i]);
         if (contentH < 0) contentH = 0;

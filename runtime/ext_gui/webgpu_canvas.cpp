@@ -73,6 +73,7 @@ uint32_t ensure_backbuffer(CanvasContext &context) {
   texture->device_id = context.device;
   texture->gpu = gpu;
   texture->format = context.format;
+  texture->format_name = context.format_name;
   texture->width = context.width;
   texture->height = context.height;
   texture->depth = 1;

@@ -105,6 +105,7 @@ xt_value device_create_texture(Object &object, int argc, xt_value *argv) {
   texture->kind = Kind::Texture;
   texture->device_id = dev.id;
   texture->format = format;
+  texture->format_name = format_name;
   texture->width = width;
   texture->height = height;
   texture->depth = depth;

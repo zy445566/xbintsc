@@ -36,6 +36,20 @@ const module = device.createShaderModule({ code: WGSL });
   `SDL_Push…UniformData` 接收 uniform 数据而非绑定缓冲；`writeBuffer`
   同时更新镜像与（有 GPU 用途时的）SDL 缓冲。
 
+## Pass 附件
+
+`loadOp`、`depthLoadOp`、`stencilLoadOp` 保持 WebGPU 的语义：`"load"` 保留上一
+个 pass 写入的内容，同时关闭 SDL_GPU 的纹理循环（cycling）——否则该 pass 会拿到
+另一份内部分配，悄悄丢掉之前的内容。`stencilLoadOp` / `stencilStoreOp`（含
+`"discard"`）同样生效。
+
+WebGPU 把所有资源都视为初始化为零，因此任何从未被 pass 或拷贝写入过的纹理，在
+第一次作为附件使用时按零初始化：`load` 它的 pass 读到深度 0、模板 0 和全透明
+黑，而不是未初始化的显存。这与 WebGL 相反——WebGL 的全新深度缓冲从 1 开始。
+WebGPU 页面若 `load` 一张从未写过的深度纹理并用 `less` 测试，在浏览器里同样什么
+都画不出来，所以 WebGL 的隐式深度清除行为（以及 `PMREMGenerator` 对它的依赖）
+不会延续到 WebGPU。
+
 ## WGSL
 
 WGSL 先翻译为 Vulkan 方言的 GLSL，再交给与 WebGL 相同的内置 glslang 编译；
@@ -109,3 +123,7 @@ Windows 上 GUI 引擎在可用时选择 Vulkan（与 WebGL 相同的规则）�
 `tests/e2e/gui-webgpu.test.ts` 用 WGSL 顶点/片元着色器绘制带纹理的三角形，
 通过 `copyTextureToBuffer` 回读画布，对存储缓冲运行 compute shader，并检查
 错误作用域与着色器编译消息。示例：`examples/gui/webgpu-triangle`。
+
+`tests/e2e/gui-webgpu-attachment.test.ts` 对离屏的 color/depth/stencil 纹理渲染
+两个 pass：第二个 pass `load` 第一个 pass 写入的内容；而首个 pass 若 `load` 一张
+从未写过的纹理，会读到 WebGPU 规定的零。

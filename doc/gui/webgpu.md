@@ -40,6 +40,22 @@ takes its fallback path.
   data through `SDL_Push…UniformData`, not a bound buffer. `writeBuffer`
   updates both the mirror and (when the buffer has GPU usage) the SDL buffer.
 
+## Pass attachments
+
+`loadOp`, `depthLoadOp` and `stencilLoadOp` keep WebGPU's meaning: `"load"`
+preserves what an earlier pass stored, and it also disables SDL_GPU's texture
+cycling, which would otherwise hand the pass a different internal allocation
+and silently drop the previous contents. `stencilLoadOp` / `stencilStoreOp`
+(including `"discard"`) are honoured.
+
+WebGPU initialises every resource to zero, so a texture that no pass or copy
+has written yet is zero-initialised on its first attachment: a pass that loads
+it sees depth 0, stencil 0 and transparent black instead of uninitialised GPU
+memory. This is the opposite of WebGL, where a fresh depth buffer starts at 1;
+a WebGPU page that loads a never-written depth texture and tests `less` draws
+nothing in a browser either, so WebGL's implicit-depth-clear behaviour (and the
+`PMREMGenerator` dependency on it) does not carry over.
+
 ## WGSL
 
 WGSL is translated to Vulkan-dialect GLSL, then compiled by the same bundled
@@ -119,3 +135,7 @@ available (the same rule as WebGL).
 vertex/fragment pair, reads the canvas back through `copyTextureToBuffer`,
 runs a compute shader over a storage buffer and checks an error scope and a
 shader compilation message. Demo: `examples/gui/webgpu-triangle`.
+
+`tests/e2e/gui-webgpu-attachment.test.ts` renders two passes into offscreen
+colour/depth/stencil textures: the second pass loads what the first stored, and
+a first pass that loads a never-written texture reads WebGPU's zeroes.

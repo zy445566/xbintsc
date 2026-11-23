@@ -140,7 +140,14 @@ describe.skipIf(!guiAvailable)("gui extension — WebGL depth init and array uni
     expect(value("red-link")).toBe("true");
     expect(value("green-link")).toBe("true");
     expect(value("depth")).toBe("255,0,0,255");
-    expect(value("array")).toBe("64,127,191,255");
+    /* The blur weights are float math rounded to 8-bit colour, so a GPU may
+     * land one step off the exact byte (127 vs 128); what the test guards is
+     * that the array reached the shader at all instead of staying all-zero. */
+    const blur = value("array").split(",").map(Number);
+    const expectedBlur = [64, 127, 191, 255];
+    for (let i = 0; i < 4; i++) {
+      expect(Math.abs((blur[i] as number) - (expectedBlur[i] as number))).toBeLessThanOrEqual(1);
+    }
     expect(value("error")).toBe("0");
   });
 });

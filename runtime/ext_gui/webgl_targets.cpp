@@ -168,6 +168,7 @@ SDL_GPUTexture *WebGLContext::framebuffer_depth(uint32_t id) {
      * the render pass is invalid. */
     info.sample_count = webgl_sample_count(framebuffer_samples(id));
     framebuffer->depth = SDL_CreateGPUTexture(guidev::g_device, &info);
+    if (framebuffer->depth != nullptr) framebuffer->depth_clear_pending = true;
   }
   return framebuffer->depth;
 }
@@ -341,15 +342,27 @@ void WebGLContext::end_pass() {
 
 void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_stencil) {
   if (guidev::g_device == nullptr) return;
+  /* A framebuffer whose depth attachment has never been used needs a depth
+   * clear even if the page asked for none; see
+   * `WebGLFramebuffer::depth_clear_pending`. */
+  auto depth_pending = [this]() {
+    if (bound_framebuffer_ == 0) return default_depth_clear_pending_;
+    WebGLFramebuffer *framebuffer_ = framebuffer(bound_framebuffer_);
+    return framebuffer_ != nullptr && framebuffer_->depth_clear_pending;
+  };
   if (pass_ != nullptr && pass_targets_default_ == (bound_framebuffer_ == 0) &&
       pass_framebuffer_ == bound_framebuffer_ && !clear_color && !clear_depth &&
-      !clear_stencil) {
+      !clear_stencil && !depth_pending()) {
     return;
   }
   end_pass();
   ensure_command();
   if (cmd_ == nullptr) return;
   SDL_GPUTexture *depth = target_depth();
+  /* `target_depth` may have just created the auto depth buffer, which sets the
+   * pending flag; read it after that call. */
+  const bool pending_depth_clear = depth != nullptr && depth_pending();
+  const bool clear_depth_now = clear_depth || pending_depth_clear;
   SDL_GPUColorTargetInfo color_infos[kWebGLMaxDrawBuffers];
   int color_count = 0;
   int pass_samples = 1;
@@ -412,13 +425,16 @@ void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_ste
   SDL_GPUDepthStencilTargetInfo depth_info;
   memset(&depth_info, 0, sizeof(depth_info));
   depth_info.texture = depth;
-  depth_info.clear_depth = clear_depth_;
-  depth_info.load_op = (clear_depth && depth != nullptr) ? SDL_GPU_LOADOP_CLEAR
-                                                         : SDL_GPU_LOADOP_LOAD;
+  /* A fresh depth attachment is cleared to WebGL's initial value (1, stencil
+   * 0) even when the page renders without asking for a clear. */
+  depth_info.clear_depth = clear_depth ? clear_depth_ : 1.0f;
+  depth_info.load_op = (clear_depth_now && depth != nullptr) ? SDL_GPU_LOADOP_CLEAR
+                                                             : SDL_GPU_LOADOP_LOAD;
   depth_info.store_op = SDL_GPU_STOREOP_STORE;
-  depth_info.clear_stencil = (Uint8)(clear_stencil_ & 0xFF);
-  depth_info.stencil_load_op = (clear_stencil && depth != nullptr) ? SDL_GPU_LOADOP_CLEAR
-                                                                  : SDL_GPU_LOADOP_LOAD;
+  depth_info.clear_stencil = (Uint8)(clear_stencil ? clear_stencil_ : 0);
+  depth_info.stencil_load_op = ((clear_stencil || pending_depth_clear) && depth != nullptr)
+                                   ? SDL_GPU_LOADOP_CLEAR
+                                   : SDL_GPU_LOADOP_LOAD;
   depth_info.stencil_store_op = SDL_GPU_STOREOP_STORE;
 
   pass_ = SDL_BeginGPURenderPass(cmd_, color_infos, (Uint32)color_count,
@@ -430,6 +446,14 @@ void WebGLContext::begin_pass(bool clear_color, bool clear_depth, bool clear_ste
     }
     set_error(GL_INVALID_OPERATION);
     return;
+  }
+  if (pending_depth_clear) {
+    /* The attachment now holds defined contents; later passes may LOAD it. */
+    if (bound_framebuffer_ == 0) {
+      default_depth_clear_pending_ = false;
+    } else if (WebGLFramebuffer *framebuffer_ = framebuffer(bound_framebuffer_)) {
+      framebuffer_->depth_clear_pending = false;
+    }
   }
   g_perf_frame.webglPasses += 1;
   pass_serial_ += 1;

@@ -281,6 +281,7 @@ void WebGLContext::ensure_default_target() {
     if (default_samples_ <= 1) info.usage |= SDL_GPU_TEXTUREUSAGE_SAMPLER;
     info.sample_count = webgl_sample_count(default_samples_);
     depth_ = SDL_CreateGPUTexture(guidev::g_device, &info);
+    if (depth_ != nullptr) default_depth_clear_pending_ = true;
     if (depth_ == nullptr && default_samples_ > 1) {
       /* Do not mix a multisampled colour target with a depth-less pass: fall
        * back to the single-sampled drawing buffer instead. */
@@ -290,6 +291,7 @@ void WebGLContext::ensure_default_target() {
       info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
       info.sample_count = SDL_GPU_SAMPLECOUNT_1;
       depth_ = SDL_CreateGPUTexture(guidev::g_device, &info);
+      if (depth_ != nullptr) default_depth_clear_pending_ = true;
     }
     if (depth_ == nullptr) {
       set_error(GL_OUT_OF_MEMORY);

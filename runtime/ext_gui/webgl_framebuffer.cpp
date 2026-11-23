@@ -84,6 +84,10 @@ bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture
       SDL_ReleaseGPUTexture(guidev::g_device, record_framebuffer->depth);
       record_framebuffer->depth = nullptr;
     }
+    /* A never-allocated depth texture starts at undefined contents; its first
+     * pass must clear it to WebGL's 1. An existing texture keeps its contents,
+     * like a browser. */
+    const bool fresh_depth = record != nullptr && record->gpu == nullptr;
     if (record != nullptr) {
       record->as_depth_target = true;
       ensure_texture_gpu(record, true);
@@ -94,6 +98,7 @@ bool WebGLContext::framebuffer_texture(uint32_t framebuffer_id, uint32_t texture
         record_framebuffer->height = record->height;
       }
     }
+    record_framebuffer->depth_clear_pending = fresh_depth;
     return true;
   }
   const int color_index = attachment - GL_COLOR_ATTACHMENT0;
@@ -330,6 +335,9 @@ bool WebGLContext::framebuffer_renderbuffer(uint32_t framebuffer_id, int attachm
       framebuffer_->width = record->width;
       framebuffer_->height = record->height;
     }
+    /* A depth renderbuffer has undefined contents until cleared; WebGL starts
+     * it at 1, so the first pass that uses it clears depth. */
+    framebuffer_->depth_clear_pending = record != nullptr && record->depth;
     return true;
   }
   const int index = attachment - GL_COLOR_ATTACHMENT0;

@@ -306,8 +306,14 @@ std::string webgl_string(int32_t argc, xt_value *argv, int32_t index) {
 
 std::vector<double> webgl_numbers(xt_value value) {
   std::vector<double> out;
-  if (!XT_IS_OBJECT(value)) return out;
-  const int kind = xt_typed_array_kind_of(value);
+  /* A WebGL numeric argument may be a typed array *or* a plain JavaScript
+   * array: the spec's IDL accepts `sequence<GLfloat>`, and three.js relies on
+   * it (`uniform1fv` is handed the plain `weights` array of the PMREM blur
+   * shader without a `Float32Array` conversion). Arrays carry `XT_TAG_ARRAY`,
+   * not `XT_TAG_OBJECT`, so both tags have to be accepted here. */
+  const bool is_array = XT_IS_ARRAY(value);
+  if (!XT_IS_OBJECT(value) && !is_array) return out;
+  const int kind = is_array ? -1 : xt_typed_array_kind_of(value);
   const double length = xt_to_number(xt_get(value, xt_string_from_cstr("length")));
   if (!(length > 0.0) || length > 100000000.0) return out;
   out.reserve((size_t)length);

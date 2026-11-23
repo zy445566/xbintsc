@@ -66,5 +66,33 @@ describeE2E("end-to-end method call cache", (harness) => {
       ].join("\n"),
     );
   });
+
+  it("observes an own method added after the site warmed on a prototype method", () => {
+    /* three.js gives every `Euler` an own `_onChangeCallback` from its
+     * `Object3D` constructor, while thousands of other Eulers already warmed
+     * the `this._onChangeCallback()` call site with the prototype's empty
+     * method. The cache used to keep calling the prototype method, so
+     * `rotation.set(...)` never synced the quaternion: mouse input changed the
+     * camera's Euler angles but the rendered 3D scene stayed still. */
+    const source = `
+      class Euler {
+        x = 0;
+        _onChangeCallback(): void {}
+        set(x: number): Euler { this.x = x; this._onChangeCallback(); return this; }
+      }
+      const plain: Euler[] = [];
+      for (let i = 0; i < 2000; i++) {
+        const e = new Euler();
+        plain.push(e);
+        e.set(i);
+      }
+      let fired = -1;
+      const e = new Euler();
+      (e as any)._onChangeCallback = () => { fired = e.x; };
+      e.set(42);
+      console.log("fired=" + fired + " plain=" + plain.length);
+    `;
+    expect(runProgram(source)).toBe("fired=42 plain=2000");
+  });
 });
 

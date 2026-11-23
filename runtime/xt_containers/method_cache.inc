@@ -19,6 +19,11 @@
  *   - `cache[1]` is the holder's shape pointer and `cache[2]` the property
  *     index. The slot's key is compared on every hit, so a slot whose contents
  *     were deleted and reused cannot mis-dispatch;
+ *   - `cache[3]` is the receiver's shape when a prototype method was cached.
+ *     Adding an own property shadows the prototype method and transitions that
+ *     shape, so the hit must miss rather than call the prototype method the
+ *     receiver no longer inherits (three.js installs `_onChangeCallback` as an
+ *     own property on `Euler` after other Eulers already warmed the site);
  *   - the *value* is re-read rather than cached, so reassigning the method
  *     (`obj.f = other`) is observed immediately — exactly like the property IC.
  *
@@ -47,9 +52,13 @@ static void xt_method_cache_fill(int64_t *cache, xt_value target, xt_value name)
   }
   if (prop == NULL) return;
   if (!XT_IS_FUNCTION(prop->value) || prop->getter != XT_UNDEFINED) return;
+  /* A prototype hit is guarded by the receiver's shape; without one (a
+   * dictionary-mode object) an own shadowing property would be invisible. */
+  if (holderValue != XT_UNDEFINED && object->shape == NULL) return;
   cache[0] = (int64_t)holderValue;
   cache[1] = (int64_t)(uintptr_t)holder->shape;
   cache[2] = (int64_t)(prop - holder->properties);
+  cache[3] = (int64_t)(uintptr_t)object->shape;
 }
 
 xt_value xt_call_method_ic(xt_value target, xt_value name, int32_t argc, xt_value *argv,
@@ -72,7 +81,15 @@ xt_value xt_call_method_ic(xt_value target, xt_value name, int32_t argc, xt_valu
           xt_property *prop = &holder->properties[slot];
           if (prop->getter == XT_UNDEFINED && XT_IS_FUNCTION(prop->value) &&
               (prop->key == name || xt_property_key_equals(prop->key, name))) {
-            return xt_call_with_this(prop->value, target, argc, argv);
+            /* A cached prototype method only still applies while the receiver
+             * has the shape it had when the cache was filled. Adding an own
+             * method (three.js's Euler `_onChangeCallback`) or any other own
+             * property transitions it, and the prototype method is shadowed. */
+            if (holder != object &&
+                object->shape != (xt_shape *)(uintptr_t)cache[3]) {
+              holder = NULL;
+            }
+            if (holder != NULL) return xt_call_with_this(prop->value, target, argc, argv);
           }
         }
       }

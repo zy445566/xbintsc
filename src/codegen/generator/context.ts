@@ -331,18 +331,18 @@ export class GeneratorContext {
   }
 
   /**
-   * Allocate a two-word inline cache for one property-access site and return
-   * the `i64*` the runtime fills with (shape, property index). The global is
-   * zero-initialised, which the runtime treats as an empty cache.
+   * Allocate a four-entry inline cache for one property access and return the
+   * `i64*` the runtime fills with (shape, property index) pairs. One entry made
+   * the cache monomorphic: generic call sites read a field across several
+   * layouts and missed nearly every time. Zero-initialised means empty.
    */
   icCachePointer(): string {
     const name = `@ic.${this.icCounter++}`;
-    this.globals.push(`${name} = internal global [2 x i64] zeroinitializer`);
+    this.globals.push(`${name} = internal global [8 x i64] zeroinitializer`);
     const ptr = this.reg();
-    this.emit(`  ${ptr} = getelementptr [2 x i64], [2 x i64]* ${name}, i64 0, i64 0`);
+    this.emit(`  ${ptr} = getelementptr [8 x i64], [8 x i64]* ${name}, i64 0, i64 0`);
     return ptr;
   }
-
   /** Lay already-computed values out as a contiguous `i64*` argument buffer. */
   emitValueArguments(values: readonly string[]): { argc: string; ptr: string } {
     if (values.length === 0) return { argc: "0", ptr: "null" };

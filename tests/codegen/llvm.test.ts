@@ -20,7 +20,7 @@ describe("codegen", () => {
       }
       read({ value: 1 }, 3);
     `);
-    expect(ir).toContain("@ic.0 = internal global [2 x i64] zeroinitializer");
+    expect(ir).toContain("@ic.0 = internal global [8 x i64] zeroinitializer");
     expect(ir).toContain("call i64 @xt_get_ic");
     expect(ir).toContain("fcmp olt double");
     // The loop condition is a comparison, so its truthiness is a tag compare.

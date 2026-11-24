@@ -115,21 +115,35 @@ xt_value xt_set_ic(xt_value target, xt_value key, xt_value value, int64_t *cache
   if (cache != NULL && XT_IS_OBJECT(target)) {
     xt_object *obj = (xt_object *)XT_GET_PTR(target);
     if (obj->header.kind == XT_OBJECT_KIND_OBJECT && obj->hooks == NULL && !obj->frozen &&
-        obj->shape != NULL && (uintptr_t)cache[0] == (uintptr_t)obj->shape && cache[1] >= 0 &&
-        cache[1] < (int64_t)obj->count) {
-      xt_property *prop = &obj->properties[cache[1]];
-      if ((prop->key == key || xt_property_key_equals(prop->key, key)) &&
-          prop->getter == XT_UNDEFINED && prop->setter == XT_UNDEFINED) {
-        prop->value = value;
-        return value;
+        obj->shape != NULL) {
+      /* Four entries, newest last: a hot store site in generic code writes
+       * fields of several layouts (three.js's Euler/Vector/Matrix helpers),
+       * which a single entry could not cache. */
+      for (int slot = 3; slot >= 0; slot--) {
+        if ((xt_shape *)(uintptr_t)cache[slot * 2] != obj->shape) continue;
+        int64_t at = cache[slot * 2 + 1];
+        if (at < 0 || at >= (int64_t)obj->count) continue;
+        xt_property *prop = &obj->properties[at];
+        if ((prop->key == key || xt_property_key_equals(prop->key, key)) &&
+            prop->getter == XT_UNDEFINED && prop->setter == XT_UNDEFINED) {
+          prop->value = value;
+          return value;
+        }
       }
     }
     xt_value stored = xt_set(target, key, value);
-    if (obj->header.kind == XT_OBJECT_KIND_OBJECT && obj->hooks == NULL && !obj->frozen) {
+    if (obj->header.kind == XT_OBJECT_KIND_OBJECT && obj->hooks == NULL && !obj->frozen &&
+        obj->shape != NULL) {
       xt_property *prop = xt_object_find(obj, xt_to_property_key(key));
       if (prop != NULL && prop->getter == XT_UNDEFINED && prop->setter == XT_UNDEFINED) {
-        cache[0] = (int64_t)(uintptr_t)obj->shape;
-        cache[1] = (int64_t)(prop - obj->properties);
+        cache[0] = cache[2];
+        cache[1] = cache[3];
+        cache[2] = cache[4];
+        cache[3] = cache[5];
+        cache[4] = cache[6];
+        cache[5] = cache[7];
+        cache[6] = (int64_t)(uintptr_t)obj->shape;
+        cache[7] = (int64_t)(prop - obj->properties);
       }
     }
     return stored;

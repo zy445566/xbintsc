@@ -26,12 +26,18 @@ typedef struct {
  * (parent, key) transition and never freed, so an object's shape pointer is a
  * stable layout identity. Shape keys are rooted by a collector provider in
  * xt_containers/shapes.inc. */
+struct xt_shape_index;
 typedef struct xt_shape {
   xt_value key;
   uint32_t count;
   struct xt_shape *parent;
   struct xt_shape *next;     /* hash-bucket chain */
   struct xt_shape *all_next; /* every shape, for the GC root provider */
+  /* Lazily built key -> property-index table for this layout (see
+   * `xt_shape_lookup`). NULL until the shape is first looked up in a
+   * property-heavy object. The chain order and the object's property order are
+   * the same by construction, so the index is a property position too. */
+  struct xt_shape_index *index;
 } xt_shape;
 
 typedef struct {

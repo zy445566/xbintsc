@@ -202,6 +202,84 @@ xt_shape *xt_shape_transition(xt_shape *parent, xt_value key) {
   return shape;
 }
 
+/* -- property index -------------------------------------------------------
+ *
+ * A linear property scan was the dominant cost of a three.js-sized program:
+ * the one-entry inline cache is polymorphic on real pages (one call site reads
+ * several object layouts), so a large fraction of `obj.prop` reads fell back to
+ * walking the whole property array. The shape already describes the layout
+ * exactly — chain order *is* property order — so an interned shape can carry a
+ * key -> index table built once and shared by every object with that layout.
+ * Small objects keep the scan (building a table for 3 properties costs more
+ * than the scan); the table is created lazily for layouts with >= 8 keys.
+ */
+
+typedef struct {
+  xt_value key;
+  uint32_t index;
+  uint32_t used;
+} xt_shape_slot;
+
+typedef struct xt_shape_index {
+  uint32_t capacity;  /* power of two */
+  xt_shape_slot slots[]; /* C99 flexible array member */
+} xt_shape_index;
+
+#define XT_SHAPE_INDEX_MIN 8
+
+static xt_shape_index *xt_shape_build_index(xt_shape *shape) {
+  uint32_t capacity = 8;
+  while (capacity < shape->count * 2) capacity <<= 1;
+  xt_shape_index *index = (xt_shape_index *)calloc(
+      1, sizeof(xt_shape_index) + sizeof(xt_shape_slot) * (size_t)capacity);
+  if (!index) abort();
+  index->capacity = capacity;
+  uint32_t position = shape->count;
+  for (xt_shape *node = shape; node != NULL && node->parent != NULL && position > 0;
+       node = node->parent) {
+    position -= 1;
+    xt_shape_slot slot;
+    slot.key = node->key;
+    slot.index = position;
+    slot.used = 1;
+    size_t at = (size_t)xt_shape_key_hash(slot.key) & (size_t)(capacity - 1);
+    while (index->slots[at].used) at = (at + 1) & (size_t)(capacity - 1);
+    index->slots[at] = slot;
+  }
+  return index;
+}
+
+/** Find `key` in `shape`'s layout and return its property index. */
+int xt_shape_lookup(xt_shape *shape, xt_value key, uint32_t *out) {
+  if (shape == NULL || out == NULL) return 0;
+  if (shape->count < XT_SHAPE_INDEX_MIN) {
+    uint32_t position = shape->count;
+    for (xt_shape *node = shape; node != NULL && node->parent != NULL && position > 0;
+         node = node->parent) {
+      position -= 1;
+      if (node->key == key || xt_property_key_equals(node->key, key)) {
+        *out = position;
+        return 1;
+      }
+    }
+    return 0;
+  }
+  if (shape->index == NULL) shape->index = xt_shape_build_index(shape);
+  xt_shape_index *index = shape->index;
+  const size_t mask = (size_t)(index->capacity - 1);
+  size_t at = (size_t)xt_shape_key_hash(key) & mask;
+  for (uint32_t probe = 0; probe < index->capacity; probe++) {
+    xt_shape_slot *slot = &index->slots[at];
+    if (!slot->used) return 0;
+    if (slot->key == key || xt_property_key_equals(slot->key, key)) {
+      *out = slot->index;
+      return 1;
+    }
+    at = (at + 1) & mask;
+  }
+  return 0;
+}
+
 void xt_object_shape_changed(xt_object *obj) {
   g_shape_rebuilds++;
   xt_shape *shape = xt_shape_empty();

@@ -23,6 +23,7 @@
 #include "xt_containers/object_keys.inc"
 #include "xt_containers/arrays.inc"
 #include "xt_containers/access.inc"
+#include "xt_containers/ic_get.inc"
 #include "xt_containers/method_cache.inc"
 #include "xt_containers/boxes.inc"
 

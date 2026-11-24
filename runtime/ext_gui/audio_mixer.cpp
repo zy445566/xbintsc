@@ -14,7 +14,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+
+#include <SDL3/SDL.h>
 
 namespace xtgui {
 
@@ -54,6 +58,11 @@ double waveform(AudioOscType type, double phase) {
 
 AudioMixer::AudioMixer(bool offline) : offline_(offline) {
   pending_.reserve(kSamples);
+  const char *silent = std::getenv("XT_GUI_AUDIO_SILENT");
+  silent_ = silent != NULL && silent[0] != '\0' && silent[0] != '0';
+  const char *profile = std::getenv("XT_AUDIO_PROFILE");
+  profile_ = profile != NULL && profile[0] != '\0' && profile[0] != '0';
+  start_ns_ = SDL_GetTicksNS();
 }
 
 AudioMixer::~AudioMixer() { close_device(); }
@@ -64,9 +73,8 @@ AudioNode *AudioMixer::node_locked(uint64_t id) {
 }
 
 uint64_t AudioMixer::create_node(AudioNodeKind kind) {
-  std::lock_guard<std::mutex> lock(mutex_);
   auto node = std::make_shared<AudioNode>();
-  node->id = next_node_id_++;
+  node->id = next_node_id_.fetch_add(1, std::memory_order_relaxed);
   node->kind = kind;
   node->quantum.assign(kSamples, 0.0f);
   switch (kind) {
@@ -145,165 +153,28 @@ uint64_t AudioMixer::create_node(AudioNodeKind kind) {
       node->param_count = 0;
       break;
   }
-  nodes_[node->id] = node;
-  if (kind == kAudioDestination) destination_id_ = node->id;
-  if (kind == kAudioListener) listener_id_ = node->id;
+  {
+    std::lock_guard<std::mutex> pending_lock(pending_mutex_);
+    pending_nodes_[node->id] = node;
+  }
+  post_command([this, node]() {
+    const uint64_t id = node->id;
+    nodes_[id] = node;
+    if (node->kind == kAudioDestination) destination_id_ = id;
+    if (node->kind == kAudioListener) listener_id_ = id;
+    std::lock_guard<std::mutex> pending_lock(pending_mutex_);
+    pending_nodes_.erase(id);
+  });
   return node->id;
 }
 
-
-void AudioMixer::connect(uint64_t source, uint64_t target) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *from = node_locked(source);
-  AudioNode *to = node_locked(target);
-  if (from == nullptr || to == nullptr) return;
-  for (uint64_t id : to->inputs) {
-    if (id == source) return;
-  }
-  to->inputs.push_back(source);
-}
-
-void AudioMixer::disconnect(uint64_t source, uint64_t target) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *to = node_locked(target);
-  if (to == nullptr) return;
-  to->inputs.erase(std::remove(to->inputs.begin(), to->inputs.end(), source), to->inputs.end());
-}
-
-void AudioMixer::disconnect_all(uint64_t source) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  for (auto &entry : nodes_) {
-    std::vector<uint64_t> &inputs = entry.second->inputs;
-    inputs.erase(std::remove(inputs.begin(), inputs.end(), source), inputs.end());
-  }
-}
-
-void AudioMixer::set_osc_type(uint64_t node, AudioOscType type) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target != nullptr) target->osc_type = type;
-}
-
-void AudioMixer::set_biquad_type(uint64_t node, AudioBiquadType type) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target != nullptr) target->biquad_type = type;
-}
-
-void AudioMixer::set_delay_max(uint64_t node, double seconds) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target == nullptr) return;
-  seconds = clamp_value(seconds, 0.001, 60.0);
-  target->delay_max = seconds;
-  target->delay_size = static_cast<size_t>(seconds * kAudioMixRate) + 2;
-  target->delay_write = 0;
-  for (int channel = 0; channel < kAudioMixChannels; channel++) {
-    target->delay[channel].assign(target->delay_size, 0.0f);
-  }
-}
-
-void AudioMixer::set_buffer(uint64_t node, std::shared_ptr<AudioClip> clip, bool loop,
-                            double loop_start, double loop_end) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target == nullptr) return;
-  target->clip = std::move(clip);
-  target->loop = loop;
-  target->loop_start = loop_start;
-  target->loop_end = loop_end;
-}
-
-void AudioMixer::start_source(uint64_t node, double when, double offset, double duration) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target == nullptr) return;
-  double now = static_cast<double>(frames_rendered_) / kAudioMixRate;
-  target->started = true;
-  target->began = false;
-  target->ended = false;
-  target->start_time = when > now ? when : now;
-  target->stop_time = -1.0;
-  target->clip_offset = offset > 0.0 ? offset : 0.0;
-  target->clip_duration = duration;
-  target->clip_pos = target->clip_offset * (target->clip ? target->clip->sample_rate
-                                                         : kAudioMixRate);
-}
-
-void AudioMixer::stop_source(uint64_t node, double when) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target == nullptr) return;
-  double now = static_cast<double>(frames_rendered_) / kAudioMixRate;
-  target->stop_time = when > now ? when : now;
-}
-
-/* -- AudioMixer: parameters ----------------------------------------------- */
-
-double AudioMixer::param_value(uint64_t node, int index) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target == nullptr || index < 0 || index >= target->param_count) return 0.0;
-  double now = static_cast<double>(frames_rendered_) / kAudioMixRate;
-  return target->params[index].value_at(now);
-}
-
-void AudioMixer::param_set(uint64_t node, int index, double value) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target == nullptr || index < 0 || index >= target->param_count) return;
-  double now = static_cast<double>(frames_rendered_) / kAudioMixRate;
-  target->params[index].set_value(value, now);
-}
-
-void AudioMixer::param_set_at(uint64_t node, int index, double value, double time) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target != nullptr && index >= 0 && index < target->param_count) {
-    target->params[index].set_value_at_time(value, time);
-  }
-}
-
-void AudioMixer::param_linear_ramp(uint64_t node, int index, double value, double time) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target != nullptr && index >= 0 && index < target->param_count) {
-    target->params[index].linear_ramp(value, time);
-  }
-}
-
-void AudioMixer::param_exponential_ramp(uint64_t node, int index, double value, double time) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target != nullptr && index >= 0 && index < target->param_count) {
-    target->params[index].exponential_ramp(value, time);
-  }
-}
-
-void AudioMixer::param_set_target(uint64_t node, int index, double value, double time,
-                                  double time_constant) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target != nullptr && index >= 0 && index < target->param_count) {
-    target->params[index].set_target(value, time, time_constant);
-  }
-}
-
-void AudioMixer::param_cancel(uint64_t node, int index, double time, bool hold) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  AudioNode *target = node_locked(node);
-  if (target != nullptr && index >= 0 && index < target->param_count) {
-    if (hold) {
-      target->params[index].cancel_and_hold(time);
-    } else {
-      target->params[index].cancel_scheduled(time);
-    }
-  }
-}
+/* Graph mutations (`connect`, `start`, the per-node setup calls) live in
+ * `audio_graph_commands.cpp`; they queue a command instead of taking the
+ * render mutex. */
 
 /* -- AudioMixer: clock ---------------------------------------------------- */
 
-double AudioMixer::current_time() {
+double AudioMixer::current_time() const {
   /* Lock-free: the audio thread holds `mutex_` while it renders a quantum, and
    * a page schedules sounds from `currentTime` on every frame. Waiting for that
    * lock here was measurable main-thread time with a convolver send running. */
@@ -313,8 +184,25 @@ double AudioMixer::current_time() {
 void AudioMixer::shutdown() {
   close_device();
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   nodes_.clear();
   destination_id_ = 0;
+  {
+    std::lock_guard<std::mutex> pending_lock(pending_mutex_);
+    pending_nodes_.clear();
+  }
+  if (profile_) {
+    const double wall_ms = static_cast<double>(SDL_GetTicksNS() - start_ns_) / 1000000.0;
+    const double wait_ms = static_cast<double>(lock_wait_ns_.load()) / 1000000.0;
+    const double render_ms = static_cast<double>(render_ns_.load()) / 1000000.0;
+    const double max_ms = static_cast<double>(max_render_ns_.load()) / 1000000.0;
+    std::fprintf(stderr,
+                 "xt_audio: wall=%.1fms lockWait=%.1fms render=%.1fms (%.1f%%) "
+                 "quanta=%llu maxQuantum=%.3fms silent=%d\n",
+                 wall_ms, wait_ms, render_ms,
+                 wall_ms > 0.0 ? render_ms * 100.0 / wall_ms : 0.0,
+                 (unsigned long long)render_quanta_.load(), max_ms, silent_ ? 1 : 0);
+  }
 }
 
 /* -- AudioMixer: render --------------------------------------------------- */
@@ -347,8 +235,21 @@ void AudioMixer::render(float *out, int frames) {
   while (done < frames) {
     int chunk = frames - done;
     if (chunk > kAudioQuantum) chunk = kAudioQuantum;
-    std::lock_guard<std::mutex> lock(mutex_);
+    const uint64_t wait_start = profile_ ? SDL_GetTicksNS() : 0;
+    std::unique_lock<std::mutex> lock(mutex_);
+    const uint64_t locked_at = profile_ ? SDL_GetTicksNS() : 0;
     render_locked(out + static_cast<size_t>(done) * kAudioMixChannels, chunk);
+    if (profile_) {
+      const uint64_t end = SDL_GetTicksNS();
+      lock_wait_ns_.fetch_add(locked_at - wait_start, std::memory_order_relaxed);
+      render_ns_.fetch_add(end - locked_at, std::memory_order_relaxed);
+      render_quanta_.fetch_add(1, std::memory_order_relaxed);
+      uint64_t longest = max_render_ns_.load(std::memory_order_relaxed);
+      const uint64_t took = end - locked_at;
+      while (took > longest &&
+             !max_render_ns_.compare_exchange_weak(longest, took, std::memory_order_relaxed)) {
+      }
+    }
     done += chunk;
   }
 }
@@ -360,13 +261,19 @@ void AudioMixer::render_offline(float *out, int frames) {
 }
 
 void AudioMixer::render_quantum_locked() {
+  /* Apply whatever the page queued since the previous quantum. The callbacks
+   * assume `mutex_` is held; they never block the main thread because the
+   * setters only touch the command queue. */
+  drain_commands_locked();
   serial_++;
   pending_.assign(kSamples, 0.0f);
   pending_offset_ = 0;
-  AudioNode *destination = node_locked(destination_id_);
-  if (destination != nullptr) {
-    const float *mixed = pull_locked(destination);
-    if (mixed != nullptr) std::memcpy(pending_.data(), mixed, sizeof(float) * kSamples);
+  if (!silent_) {
+    AudioNode *destination = node_locked(destination_id_);
+    if (destination != nullptr) {
+      const float *mixed = pull_locked(destination);
+      if (mixed != nullptr) std::memcpy(pending_.data(), mixed, sizeof(float) * kSamples);
+    }
   }
   frames_rendered_ += kAudioQuantum;
 }

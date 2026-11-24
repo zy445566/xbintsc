@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -284,7 +285,7 @@ class AudioMixer {
   void param_cancel(uint64_t node, int index, double time, bool hold);
 
   /* -- clock and device -------------------------------------------------- */
-  double current_time();
+  double current_time() const;
   /** Best effort: a headless host has no device and playback stays silent. */
   bool start_device();
   void suspend_device();
@@ -305,10 +306,26 @@ class AudioMixer {
   const float *pull_locked(AudioNode *node);
   void render_quantum_locked();
   void render_locked(float *out, int frames);
+  /** Queue a graph/parameter mutation for the audio thread; the command runs
+   * with `mutex_` held at the next quantum boundary. Parameter scheduling goes
+   * through here so a page's per-frame Web Audio calls never wait for a
+   * convolver block to finish (the mixer holds `mutex_` for its whole DSP
+   * pass). */
+  void post_command(std::function<void()> command);
+  /** Apply queued mutations now (for a getter that must observe them). */
+  void drain_commands_locked();
 
   std::mutex mutex_;
+  std::mutex command_mutex_;
+  std::vector<std::function<void()>> commands_;
   std::unordered_map<uint64_t, std::shared_ptr<AudioNode>> nodes_;
-  uint64_t next_node_id_ = 1;
+  /** Nodes created by the page but not yet inserted by the audio thread. The
+   * constructor runs on the main thread and `param_value` reads a pending
+   * node's defaults there, so creating a node never waits for the render lock;
+   * insertion is queued like every other graph mutation. */
+  std::unordered_map<uint64_t, std::shared_ptr<AudioNode>> pending_nodes_;
+  std::mutex pending_mutex_;
+  std::atomic<uint64_t> next_node_id_{1};
   uint64_t destination_id_ = 0;
   uint64_t listener_id_ = 0;
   uint64_t serial_ = 0;
@@ -323,6 +340,18 @@ class AudioMixer {
   bool running_ = true;
   SDL_AudioStream *stream_ = nullptr;
   bool device_tried_ = false;
+
+  /* Audio-path diagnostics. `XT_GUI_AUDIO_SILENT=1` renders silence while
+   * keeping the clock and the locking, which separates the mixer's DSP cost
+   * from the page's main-thread Web Audio calls. `XT_AUDIO_PROFILE=1`
+   * accumulates the render/lock times and dumps them at shutdown. */
+  bool silent_ = false;
+  bool profile_ = false;
+  uint64_t start_ns_ = 0;
+  std::atomic<uint64_t> lock_wait_ns_{0};
+  std::atomic<uint64_t> render_ns_{0};
+  std::atomic<uint64_t> render_quanta_{0};
+  std::atomic<uint64_t> max_render_ns_{0};
 };
 
 }  // namespace xtgui

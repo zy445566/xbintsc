@@ -173,6 +173,23 @@ runs the same equal-power path (no HRIR data set is shipped). The two media
 sources are valid nodes with no signal — the engine has no media-capture or
 element-audio pipeline, so they are silent rather than absent.
 
+Graph mutations (`connect`, `start`/`stop`, the effect setup calls) and every
+`AudioParam` schedule are **queued** instead of taking the mixer's render lock.
+The page appends a command to a FIFO and the audio thread applies the batch at
+the next quantum boundary, with the mutex already held. A convolver send makes a
+single 128-frame quantum take a few milliseconds, so taking that lock from the
+page made a per-frame `gain.value = …` wait for the current quantum — on a
+scene that schedules sound every frame that was the largest main-thread audio
+cost. Ordering is preserved (one FIFO for parameter updates and graph changes);
+`AudioContext.currentTime` is an atomic read, and `AudioParam.value` drains the
+queue first so a getter observes a just-written value.
+
+Two environment variables separate the audio costs while profiling:
+`XT_GUI_AUDIO_SILENT=1` renders silence but keeps the clock and the locking
+(isolates the mixer's DSP cost from the page's Web Audio calls), and
+`XT_AUDIO_PROFILE=1` prints the audio thread's wall time, lock wait, render duty
+and worst quantum at shutdown (`xt_audio: …` on stderr).
+
 Every `AudioParam` has a live `value` plus `setValueAtTime` /
 `linearRampToValueAtTime` / `exponentialRampToValueAtTime` / `setTargetAtTime` /
 `cancelScheduledValues` / `cancelAndHoldAtTime`. The automation timeline is

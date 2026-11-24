@@ -153,6 +153,17 @@ requestAnimationFrame(frame);
 `panningModel = "HRTF"` 会被接受但走同一条等功率路径（引擎不带 HRIR 数据集）。
 两个媒体源是**合法的静音节点**——引擎没有采集或媒体元素音频管线，所以它们静音而不是缺失。
 
+图变更（`connect`、`start`/`stop`、效果节点设置）以及所有 `AudioParam` 调度现在都改为
+**排队**，不再直接获取 mixer 的渲染锁：页面把命令追加到 FIFO，音频线程在下一个量子边界
+持锁批量应用。一次卷积混响会让单个 128 帧量子耗时数毫秒，因此页面若直接取锁，每帧的
+`gain.value = …` 都要等当前量子渲染完——在每帧都调度声音的场景里，这是主线程音频开销的
+最大来源。命令顺序保持不变（参数更新与图变更共用一个 FIFO）；`AudioContext.currentTime`
+是原子读取，`AudioParam.value` 读取前会先清空队列，因此 getter 能看到刚写入的值。
+
+性能分析时可用两个环境变量把音频开销拆开：`XT_GUI_AUDIO_SILENT=1` 渲染静音但保留时钟与
+锁（用于区分 mixer 的 DSP 开销与页面的 Web Audio 调用），`XT_AUDIO_PROFILE=1` 在退出时
+打印音频线程的墙钟时间、取锁等待、渲染占比与最坏量子（stderr 上的 `xt_audio: …`）。
+
 每个 `AudioParam` 都有实时 `value`，以及 `setValueAtTime` / `linearRampToValueAtTime` /
 `exponentialRampToValueAtTime` / `setTargetAtTime` / `cancelScheduledValues` /
 `cancelAndHoldAtTime`。自动化时间线**逐采样**求值，因此页面空闲时斜坡仍会继续推进；

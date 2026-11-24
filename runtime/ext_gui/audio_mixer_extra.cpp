@@ -11,6 +11,7 @@ namespace xtgui {
 
 void AudioMixer::set_shaper_curve(uint64_t node, const std::vector<float> &curve, int oversample) {
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   AudioNode *target = node_locked(node);
   if (target == nullptr) return;
   /* A one-entry curve is a DC curve on the platform; keep the same length
@@ -21,6 +22,7 @@ void AudioMixer::set_shaper_curve(uint64_t node, const std::vector<float> &curve
 
 void AudioMixer::set_shaper_oversample(uint64_t node, int oversample) {
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   AudioNode *target = node_locked(node);
   if (target != nullptr) target->shaper_oversample = oversample > 1 ? oversample : 1;
 }
@@ -28,6 +30,7 @@ void AudioMixer::set_shaper_oversample(uint64_t node, int oversample) {
 void AudioMixer::set_convolver_impulse(uint64_t node, std::shared_ptr<AudioClip> clip,
                                        bool normalize) {
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   AudioNode *target = node_locked(node);
   if (target == nullptr) return;
   prepare_convolver(target, clip, normalize);
@@ -35,6 +38,7 @@ void AudioMixer::set_convolver_impulse(uint64_t node, std::shared_ptr<AudioClip>
 
 void AudioMixer::set_analyser_fft(uint64_t node, int fft_size) {
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   AudioNode *target = node_locked(node);
   if (target == nullptr) return;
   if (fft_size < 32) fft_size = 32;
@@ -46,6 +50,7 @@ void AudioMixer::set_analyser_fft(uint64_t node, int fft_size) {
 
 void AudioMixer::set_analyser_smoothing(uint64_t node, float smoothing) {
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   AudioNode *target = node_locked(node);
   if (target == nullptr) return;
   if (smoothing < 0.0f) smoothing = 0.0f;
@@ -55,6 +60,7 @@ void AudioMixer::set_analyser_smoothing(uint64_t node, float smoothing) {
 
 bool AudioMixer::analyser_time_domain(uint64_t node, int count, std::vector<float> *out) {
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   AudioNode *target = node_locked(node);
   if (target == nullptr || out == nullptr) return false;
   const size_t size = target->analyser_ring.size();
@@ -70,6 +76,7 @@ bool AudioMixer::analyser_time_domain(uint64_t node, int count, std::vector<floa
 
 bool AudioMixer::analyser_spectrum(uint64_t node, std::vector<float> *out) {
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   AudioNode *target = node_locked(node);
   if (target == nullptr || out == nullptr) return false;
   const size_t size = target->analyser_ring.size();
@@ -111,6 +118,7 @@ void AudioMixer::set_panner(uint64_t node, int distance_model, double ref_distan
                             double max_distance, double rolloff, double cone_inner,
                             double cone_outer, double cone_gain, int panning_model) {
   std::lock_guard<std::mutex> lock(mutex_);
+  drain_commands_locked();
   AudioNode *target = node_locked(node);
   if (target == nullptr) return;
   target->distance_model = distance_model;

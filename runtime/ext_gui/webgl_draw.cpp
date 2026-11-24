@@ -328,8 +328,8 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     viewport.y = (float)(viewport_[1] + viewport_h);
     viewport.h = (float)-viewport_h;
   }
-  viewport.min_depth = 0.0f;
-  viewport.max_depth = 1.0f;
+  viewport.min_depth = depth_range_near_;
+  viewport.max_depth = depth_range_far_;
   /* Dynamic state is per pass: a pass split loses it, so the comparison is
    * scoped by `pass_serial_`. Repeating the same value is otherwise a no-op
    * command that a multi-hundred-draw frame records once per draw. */

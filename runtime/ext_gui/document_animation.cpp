@@ -423,6 +423,13 @@ bool XtDocument::advance(double delta_ms) {
     if (previous < end && clock_ms_ >= end) just_finished = true;
   }
   if (!running && !just_finished) return false;
+  /* A pending restyle is about to call `updateDisplay()` again with the clock
+   * we just advanced. Rebuilding the displayed styles here too meant a full
+   * per-node style copy and a full layout twice on every dirty frame of an
+   * animating page — the Saltline HUD mutates a transform every frame while a
+   * transition is running, so that was the normal path. The restyle's
+   * `updateDisplay()` produces exactly the same result. */
+  if (dirty_) return false;
   updateDisplay();
   return true;
 }

@@ -39,6 +39,7 @@
 #include "webgl_draw_state.h"
 #include "webgl_glsl.h"
 #include "webgl_objects.h"
+#include "webgl_program.h"
 #include "webgl_uniform_block.h"
 
 namespace xtgui {
@@ -76,44 +77,6 @@ struct WebGLShader {
   bool compiled = false;
   bool delete_requested = false;
   int attachments = 0;
-};
-
-/** One active uniform of a linked program, with its std140 home. */
-struct WebGLUniform {
-  std::string name;
-  GlslBlockMember layout;
-  bool sampler = false;
-  /** `sampler2DShadow`/`samplerCubeShadow`/`sampler2DArrayShadow`: SDL_GPU
-   * binds a comparison sampler, and the GLSL `texture()` call performs the
-   * hardware depth compare. */
-  bool compare = false;
-  int unit = -1;
-};
-
-struct WebGLProgram {
-  uint32_t id = 0;
-  uint32_t vs = 0;
-  uint32_t fs = 0;
-  bool linked = false;
-  std::string log;
-  std::vector<WebGLUniform> uniforms;
-  std::vector<WebGLUniformBlock> blocks;
-  std::vector<GlslUniformDecl> attribs;
-  std::vector<WebGLDrawAttribPlan> draw_attribs;
-  std::unordered_map<std::string, int> attrib_locations;  // name -> location
-  std::unordered_map<std::string, int> attrib_bindings;   // bindAttribLocation overrides
-  std::unordered_map<std::string, int> uniform_index;     // name -> uniforms[] index
-  std::vector<int> vs_sampler_uniforms;  // local binding -> uniforms[] index
-  std::vector<int> fs_sampler_uniforms;
-  std::vector<uint8_t> block;  // std140 uniform data
-  int block_size = 0;
-  bool block_dirty = true;
-  bool vs_has_block = false;
-  bool fs_has_block = false;
-  SDL_GPUShader *vs_shader = nullptr;
-  SDL_GPUShader *fs_shader = nullptr;
-  std::vector<SDL_GPUGraphicsPipeline *> pipelines;
-  std::unordered_map<WebGLDrawKey, SDL_GPUGraphicsPipeline *, WebGLDrawKeyHash> pipeline_cache;
 };
 
 class WebGLContext {
@@ -216,11 +179,16 @@ class WebGLContext {
   int attrib_location(uint32_t program, const std::string &name);
   void bind_attrib_location(uint32_t program, int index, const std::string &name);
 
-  /* Uniform uploads; `location` indexes the program's uniform table. */
+  /* Uniform uploads; `location` indexes the program's uniform table. The `_raw`
+   * variants take the `Float32Array` bytes directly, skipping the per-element
+   * conversion through `double` that `uniform*{f,mat}` need for plain arrays. */
   void uniform_floats(uint32_t program, int location, int components, const double *values,
                       int count);
+  void uniform_floats_raw(uint32_t program, int location, int components, const float *values,
+                          int count);
   void uniform_ints(uint32_t program, int location, int components, const int *values, int count);
   void uniform_matrix(uint32_t program, int location, int dimensions, const double *values);
+  void uniform_matrix_raw(uint32_t program, int location, int dimensions, const float *values);
   bool uniform_values(uint32_t program, int location, std::vector<double> *out);
 
   /* -- buffers and vertex attributes ------------------------------------ */
@@ -452,6 +420,10 @@ class WebGLContext {
   void draw(int mode, int first, int count, int index_type, int offset, int instances);
   void save_vertex_array();
   void load_vertex_array(const WebGLVertexArray *array);
+  /** Bump the layout version the prepared-draw cache depends on. A named VAO
+   * owns a revision of its own (see `WebGLVertexArray::revision`); the default
+   * VAO falls back to the context-wide counter. */
+  void note_attrib_state_change();
   SDL_GPUSampler *sampler_gpu(WebGLSampler *sampler);
   uint32_t buffer_for_target(int target) const;
   void release_program_pipelines(WebGLProgram *program);
@@ -487,6 +459,20 @@ class WebGLContext {
   std::unordered_map<std::string, SDL_GPUGraphicsPipeline *> internal_pipelines_;
   /** Scratch for the sampler bindings of one draw. */
   std::vector<SDL_GPUTextureSamplerBinding> sampler_bindings_;
+  /* The dynamic state last recorded into a render pass. Repeat draws skip the
+   * corresponding SDL command while the pass is the same; a pass split (an
+   * upload, a target change) invalidates everything because these bindings do
+   * not survive the new pass. */
+  uint64_t last_viewport_pass_ = 0;
+  SDL_GPUViewport last_viewport_{};
+  uint64_t last_scissor_pass_ = 0;
+  SDL_Rect last_scissor_{};
+  uint64_t last_blend_pass_ = 0;
+  SDL_FColor last_blend_{};
+  uint64_t last_vertex_sampler_pass_ = 0;
+  uint64_t last_fragment_sampler_pass_ = 0;
+  std::vector<SDL_GPUTextureSamplerBinding> last_vertex_samplers_;
+  std::vector<SDL_GPUTextureSamplerBinding> last_fragment_samplers_;
 
   SDL_GPUTexture *color_ = nullptr;
   SDL_GPUTexture *depth_ = nullptr;

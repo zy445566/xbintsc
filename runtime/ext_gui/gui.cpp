@@ -403,6 +403,85 @@ extern "C" void xt_gui_pump_events(void) {
   while (SDL_PollEvent(&event)) handle_event(&event);
 }
 
+namespace {
+
+/** True while at least one window is still open (the loop's exit condition). */
+bool any_window_open() {
+  for (int i = 0; i < g_window_count; i++) {
+    if (g_windows[i].open) return true;
+  }
+  return false;
+}
+
+/**
+ * The frame period `run()` paces to, in milliseconds; 0 means "uncapped" and
+ * restores the old busy loop.
+ *
+ * `XT_GUI_FRAME_MS` overrides: `0` disables pacing (tests/benchmarks that want
+ * the historical behaviour), a positive value fixes the period. Otherwise the
+ * loop follows the display refresh rate of the newest open window, falling back
+ * to 60 Hz when the backend cannot report a mode. Cached on first use: the
+ * period is a property of the session, not of a frame.
+ */
+double run_frame_period_ms() {
+  static double cached = -1.0;
+  if (cached >= 0.0) return cached;
+  const char *env = SDL_getenv("XT_GUI_FRAME_MS");
+  if (env != NULL && env[0] != '\0') {
+    const double requested = SDL_atof(env);
+    if (!(requested > 0.0)) {
+      cached = 0.0;
+    } else if (requested < 1.0) {
+      cached = 1.0;
+    } else if (requested > 1000.0) {
+      cached = 1000.0;
+    } else {
+      cached = requested;
+    }
+    return cached;
+  }
+  float refresh = 0.0f;
+  for (int i = g_window_count - 1; i >= 0; i--) {
+    if (!g_windows[i].open || g_windows[i].window == NULL) continue;
+    const SDL_DisplayMode *mode =
+        SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(g_windows[i].window));
+    if (mode != NULL && mode->refresh_rate > refresh) refresh = mode->refresh_rate;
+  }
+  cached = refresh > 0.0f ? 1000.0 / (double)refresh : 1000.0 / 60.0;
+  return cached;
+}
+
+/**
+ * Block until `deadline_ns`, still dispatching SDL events and servicing the
+ * runtime's timers/microtasks.
+ *
+ * The old loop ran `SDL_Delay(1)` between frames and drained rAF callbacks on
+ * every iteration: a page that drives itself ran its logic, WebGL recording and
+ * DOM updates hundreds of times per second (and the GPU was asked to render
+ * frames the compositor never showed). This wait makes the loop behave like a
+ * browser's vsync tick: the page gets one frame per display refresh, and the
+ * CPU sleeps instead of spinning. Slices cap the timer/input latency at 4 ms.
+ */
+void wait_for_frame(uint64_t deadline_ns) {
+  for (;;) {
+    if (g_quit || !any_window_open()) return;
+    const uint64_t now = SDL_GetTicksNS();
+    if (now >= deadline_ns) return;
+    uint64_t remaining_ms = (deadline_ns - now) / 1000000ull;
+    if (remaining_ms > 4) remaining_ms = 4;
+    SDL_Event event;
+    if (SDL_WaitEventTimeout(&event, (Sint32)remaining_ms)) {
+      handle_event(&event);
+      while (SDL_PollEvent(&event)) handle_event(&event);
+    }
+    xt_loop_poll(0);
+    xt_drain_microtasks();
+    xt_promise_report_unhandled();
+  }
+}
+
+}  // namespace
+
 extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
   (void)argc;
   (void)argv;
@@ -413,7 +492,17 @@ extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
     deadline = SDL_GetTicks() + (Uint64)SDL_atoi(autoclose);
   }
   g_run_active = 1;
+  const double period_ms = run_frame_period_ms();
+  uint64_t next_frame_ns = 0;
   while (!g_quit) {
+    /* Wait for the display refresh before starting the next frame. The first
+     * frame runs immediately. A frame that overran its slot does not make the
+     * next one wait: `next_frame_ns` is clamped to now below. */
+    if (period_ms > 0.0 && next_frame_ns != 0) {
+      wait_for_frame(next_frame_ns);
+      if (g_quit) break;
+    }
+    const uint64_t frame_start_ns = SDL_GetTicksNS();
     SDL_Event event;
     int had_event = 0;
     while (SDL_PollEvent(&event)) {
@@ -438,7 +527,17 @@ extern "C" xt_value xt_gui_run(int32_t argc, xt_value *argv) {
     xt_promise_report_unhandled();
 
     if (deadline != 0 && SDL_GetTicks() >= deadline) break;
-    if (!had_event) SDL_Delay(1);
+    if (period_ms > 0.0) {
+      const uint64_t period_ns = (uint64_t)(period_ms * 1000000.0);
+      next_frame_ns = frame_start_ns + period_ns;
+      const uint64_t now = SDL_GetTicksNS();
+      /* Behind schedule: run the next frame now instead of accumulating a
+       * growing debt (this is the "as fast as it can" path for a page slower
+       * than the refresh rate). */
+      if (next_frame_ns < now) next_frame_ns = now;
+    } else if (!had_event) {
+      SDL_Delay(1);
+    }
   }
 
   g_run_active = 0;

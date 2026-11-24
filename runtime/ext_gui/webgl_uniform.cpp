@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "webgl_program_internal.h"
+#include "perf.h"
 
 namespace xtgui {
 namespace webgl_detail {
@@ -33,6 +34,7 @@ int member_bytes(const GlslBlockMember &member) {
 
 void WebGLContext::uniform_floats(uint32_t id, int location, int components, const double *values,
                                   int count) {
+  PerfScopeActive perf_scope(&g_perf_frame_ms.webgl_uniform);
   WebGLProgram *record = program(id);
   if (record == nullptr || location < 0 || location >= (int)record->uniforms.size()) {
     set_error(GL_INVALID_OPERATION);
@@ -73,8 +75,58 @@ void WebGLContext::uniform_floats(uint32_t id, int location, int components, con
   record->block_dirty = true;
 }
 
+/** `Float32Array`-backed variant of `uniform_floats`: the caller already has
+ * the elements as single-precision floats, so this skips the `double` staging
+ * vector (and the per-element `xt_to_number`) the plain-array path needs. */
+void WebGLContext::uniform_floats_raw(uint32_t id, int location, int components,
+                                      const float *values, int count) {
+  PerfScopeActive perf_scope(&g_perf_frame_ms.webgl_uniform);
+  WebGLProgram *record = program(id);
+  if (record == nullptr || location < 0 || location >= (int)record->uniforms.size()) {
+    set_error(GL_INVALID_OPERATION);
+    return;
+  }
+  WebGLUniform &uniform = record->uniforms[location];
+  if (uniform.sampler) {
+    uniform.unit = (int)values[0];
+    return;
+  }
+  const GlslBlockMember &member = uniform.layout;
+  if (record->block_size <= 0 ||
+      member.offset + webgl_detail::member_bytes(member) > record->block_size) {
+    return;
+  }
+  if (count <= 0) count = 1;
+  if (member.is_matrix) {
+    for (int element = 0; element < count; element++) {
+      const int base = member.offset + element * member.array_stride;
+      for (int column = 0; column < member.columns; column++) {
+        for (int row = 0; row < member.rows; row++) {
+          const float value = values[(element * member.columns + column) * member.rows + row];
+          const int at = base + column * member.matrix_stride + row * 4;
+          if (at + 4 <= (int)record->block.size()) memcpy(&record->block[at], &value, 4);
+        }
+      }
+    }
+    record->block_dirty = true;
+    return;
+  }
+  const int components_to_write = std::min(components, member.components);
+  for (int element = 0; element < count; element++) {
+    const int base = member.offset + element * (member.array_stride > 0 ? member.array_stride
+                                                                       : member.components * 4);
+    for (int component = 0; component < components_to_write; component++) {
+      const float value = values[(size_t)element * components + component];
+      const int at = base + component * 4;
+      if (at + 4 <= (int)record->block.size()) memcpy(&record->block[at], &value, 4);
+    }
+  }
+  record->block_dirty = true;
+}
+
 void WebGLContext::uniform_ints(uint32_t id, int location, int components, const int *values,
                                 int count) {
+  PerfScopeActive perf_scope(&g_perf_frame_ms.webgl_uniform);
   WebGLProgram *record = program(id);
   if (record == nullptr || location < 0 || location >= (int)record->uniforms.size()) {
     set_error(GL_INVALID_OPERATION);
@@ -103,6 +155,7 @@ void WebGLContext::uniform_ints(uint32_t id, int location, int components, const
 }
 
 void WebGLContext::uniform_matrix(uint32_t id, int location, int dimensions, const double *values) {
+  PerfScopeActive perf_scope(&g_perf_frame_ms.webgl_uniform);
   WebGLProgram *record = program(id);
   if (record == nullptr || location < 0 || location >= (int)record->uniforms.size()) {
     set_error(GL_INVALID_OPERATION);
@@ -118,6 +171,31 @@ void WebGLContext::uniform_matrix(uint32_t id, int location, int dimensions, con
   for (int column = 0; column < member.columns; column++) {
     for (int row = 0; row < member.rows; row++) {
       const float value = (float)values[(size_t)column * member.rows + row];
+      const int at = base + column * member.matrix_stride + row * 4;
+      if (at + 4 <= (int)record->block.size()) memcpy(&record->block[at], &value, 4);
+    }
+  }
+  record->block_dirty = true;
+}
+
+void WebGLContext::uniform_matrix_raw(uint32_t id, int location, int dimensions,
+                                      const float *values) {
+  PerfScopeActive perf_scope(&g_perf_frame_ms.webgl_uniform);
+  WebGLProgram *record = program(id);
+  if (record == nullptr || location < 0 || location >= (int)record->uniforms.size()) {
+    set_error(GL_INVALID_OPERATION);
+    return;
+  }
+  WebGLUniform &uniform = record->uniforms[location];
+  const GlslBlockMember &member = uniform.layout;
+  if (!member.is_matrix) {
+    uniform_floats_raw(id, location, dimensions * dimensions, values, 1);
+    return;
+  }
+  const int base = member.offset;
+  for (int column = 0; column < member.columns; column++) {
+    for (int row = 0; row < member.rows; row++) {
+      const float value = values[(size_t)column * member.rows + row];
       const int at = base + column * member.matrix_stride + row * 4;
       if (at + 4 <= (int)record->block.size()) memcpy(&record->block[at], &value, 4);
     }

@@ -150,6 +150,10 @@ struct WebGLVertexArray {
   uint32_t id = 0;
   WebGLAttribState attribs[kWebGLMaxAttribs];
   uint32_t element_buffer = 0;
+  /** Bumped whenever an attribute of this VAO changes while it is bound. The
+   * prepared-draw cache keys on it, so binding the same VAO on a later frame is
+   * a cache hit even though the context's global attrib counter keeps moving. */
+  uint64_t revision = 0;
 };
 
 /** A WebGL 2 sampler object, bound to a texture unit with `bindSampler`. */

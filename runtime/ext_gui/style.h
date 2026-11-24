@@ -247,12 +247,21 @@ struct Edges {
   void set(Length value) { top = right = bottom = left = value; }
 };
 
+/** CSS custom properties (`--name`) an element inherits.
+ *
+ * The map is shared by every style that inherits the same set: a token-heavy
+ * `:root` block (the common design-system pattern) was otherwise deep-copied
+ * into every element on every restyle, which dominated the cascade on such
+ * pages. A node that declares its own custom property copies the map once
+ * (copy-on-write); readers only ever see a const reference. */
+using StyleVariables = std::shared_ptr<std::unordered_map<std::string, std::string>>;
+
 struct XtStyle {
   Display display = Display::Inline;
   BoxSizing box_sizing = BoxSizing::ContentBox;
   /* CSS custom properties (`--name`) are inherited and substituted into the
    * values of the other declarations during the cascade. */
-  std::unordered_map<std::string, std::string> variables;
+  StyleVariables variables;
   Position position = Position::Static;
   Edges margin;
   /** Which margins were explicitly declared `auto` (the `Edges` default unit is

@@ -20,6 +20,8 @@
 
 #include <cstdint>
 
+#include <SDL3/SDL.h>
+
 namespace xtgui {
 
 /** Counters for one frame; the same layout is reused for cumulative totals. */
@@ -76,16 +78,28 @@ struct PerfCounters {
   uint64_t webglPasses = 0;
   uint64_t webglPipelineMisses = 0;
   uint64_t webglBufferUploadBytes = 0;
+  /* Prepared-draw cache misses, sampler-set binds and dynamic-state binds. A
+   * steady scene should miss only on the first frame and bind samplers only
+   * when the texture/uniform set actually changes. */
+  uint64_t webglSetupMisses = 0;
+  uint64_t webglSamplerBinds = 0;
+  uint64_t webglStateBinds = 0;
 };
 
 /** Wall-clock phase timings in milliseconds. */
 struct PerfTimings {
   double frame = 0;
+  /** Time spent inside `requestAnimationFrame` callbacks (the page's own AOT
+   * code plus any WebGL command recording it does). */
+  double script = 0;
   double restyle = 0;
   double layout = 0;
   double paint = 0;
   double upload = 0;
   double draw = 0;
+  /** WebGL draw recording and uniform uploads; both happen inside `script`. */
+  double webgl_draw = 0;
+  double webgl_uniform = 0;
 };
 
 /** The frame being recorded; reset by `xt_perf_frame_begin`. */
@@ -116,6 +130,29 @@ class PerfScope {
   ~PerfScope();
   PerfScope(const PerfScope &) = delete;
   PerfScope &operator=(const PerfScope &) = delete;
+
+ private:
+  double *slot_ = nullptr;
+  uint64_t start_ = 0;
+};
+
+/** A `PerfScope` that only reads the clock while profiling is armed. Use it in
+ * paths that run thousands of times per frame (one draw, one uniform call): an
+ * always-on pair of `SDL_GetPerformanceCounter` reads would itself be measurable
+ * there. `win.stats()` therefore reports these two timings only for a frame
+ * captured with `XT_GUI_PERF` set. */
+class PerfScopeActive {
+ public:
+  explicit PerfScopeActive(double *slot) {
+    if (!xt_perf_active()) return;
+    slot_ = slot;
+    start_ = SDL_GetPerformanceCounter();
+  }
+  ~PerfScopeActive() {
+    if (slot_ != nullptr) *slot_ += xt_perf_ms_since(start_);
+  }
+  PerfScopeActive(const PerfScopeActive &) = delete;
+  PerfScopeActive &operator=(const PerfScopeActive &) = delete;
 
  private:
   double *slot_ = nullptr;

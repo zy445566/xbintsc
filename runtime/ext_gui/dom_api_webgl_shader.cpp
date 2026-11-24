@@ -326,8 +326,18 @@ void uniform_vectors(xt_value self, int32_t argc, xt_value *argv, int components
   uint32_t program = 0;
   int location = 0;
   if (!location_of(xt_arg(argc, argv, 0), &program, &location)) return;
-  const std::vector<double> numbers =
-      webgl_numbers(argc > 1 ? xt_arg(argc, argv, 1) : XT_UNDEFINED);
+  const xt_value source = argc > 1 ? xt_arg(argc, argv, 1) : XT_UNDEFINED;
+  /* A `Float32Array` is the normal argument; reading its bytes once is much
+   * cheaper than a `double` vector built with one runtime call per element. */
+  if (!integer) {
+    std::vector<float> floats;
+    if (webgl_float_elements(source, &floats) && !floats.empty()) {
+      const int count = (int)(floats.size() / (size_t)components);
+      context->uniform_floats_raw(program, location, components, floats.data(), count);
+      return;
+    }
+  }
+  const std::vector<double> numbers = webgl_numbers(source);
   if (numbers.empty()) return;
   const int count = (int)(numbers.size() / components);
   if (integer) {
@@ -414,8 +424,13 @@ void uniform_matrix(xt_value self, int32_t argc, xt_value *argv, int dimensions)
   uint32_t program = 0;
   int location = 0;
   if (!location_of(xt_arg(argc, argv, 0), &program, &location)) return;
-  const std::vector<double> values =
-      webgl_numbers(argc > 2 ? xt_arg(argc, argv, 2) : XT_UNDEFINED);
+  const xt_value source = argc > 2 ? xt_arg(argc, argv, 2) : XT_UNDEFINED;
+  std::vector<float> floats;
+  if (webgl_float_elements(source, &floats) && !floats.empty()) {
+    context->uniform_matrix_raw(program, location, dimensions, floats.data());
+    return;
+  }
+  const std::vector<double> values = webgl_numbers(source);
   if (values.empty()) return;
   context->uniform_matrix(program, location, dimensions, values.data());
 }

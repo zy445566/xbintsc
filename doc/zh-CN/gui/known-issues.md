@@ -135,7 +135,7 @@
   且只接受 TrueType 轮廓（不支持 CFF/OTF 或可变字体）；彩色 emoji 也不会以彩色
   渲染。这是 DOM-only 二进制约 3 MiB 的代价；可选的 `shaping` 特性会重新链接
   HarfBuzz + FreeType，恢复完整整形。
-- **链接特性检测是静态的。** `media`/`gpu`/`images`/`shaping`/`webgl` 从打包后的 HTML/CSS/TS（包括导入的
+- **链接特性检测是静态的。** `media`/`gpu`/`images`/`shaping`/`webfonts`/`webgl` 从打包后的 HTML/CSS/TS（包括导入的
   `.html` 与其内联 CSS）里选择。用运行时数据（`fetch`、`readFileSync`、函数返回值）
   拼 HTML/CSS 的页面无法被看到；扫描器在能证明 sink 是动态时会保守地启用可选特性，
   但对于它无法分类的不透明值，需要显式 `--feature media`/`gpu`/`images`/`shaping`/`webgl`（或 `all`）。

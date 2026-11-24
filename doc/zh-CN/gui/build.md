@@ -6,22 +6,27 @@
 
 - 源码位于 `runtime/ext_gui/`（C/C++），外加 `vendor/` 下的 vendored 库
   （被 gitignore；按需获取）。`npm run vendor` 获取固定版本的 stb/NanoSVG 头文件
-  （以及链接特性要编译的 miniz/SQLite 源码）；`npm run gui` 只获取它需要的两组
-  头文件。媒体解码位于 `runtime/xt_media/`，单独构建。
+  （以及链接特性要编译的 miniz/SQLite 源码）；`npm run gui` 获取它要编译的
+  vendored 源码（stb、NanoSVG、miniz，以及 `webfonts` 用的 Brotli 与 woff2）。
+  媒体解码位于 `runtime/xt_media/`，单独构建。
 - `npm run gui`（`scripts/build-gui.ts`）获取固定版本的 SDL3（`SDL3_TAG`，
   默认 `release-3.2.10`），构建静态 SDL3，获取并构建静态 **FreeType**
   （`FREETYPE_VERSION`，默认 `2.13.3`）与 **HarfBuzz**（`HARFBUZZ_VERSION`，
   默认 `10.1.0`）供可选的 `shaping` 特性使用，并获取、构建静态
   **glslang**（`GLSLANG_VERSION`，默认 `16.6.0`）、固定版本的 SPIR-V 头文件
   （`SPIRV_HEADERS_VERSION`）以及——**仅 macOS**——**SPIRV-Cross**
-  （`SPIRV_CROSS_VERSION`，默认 `vulkan-sdk-1.4.313.0`）。glslang 是 WebGL
+  （`SPIRV_CROSS_VERSION`，默认 `vulkan-sdk-1.4.313.0`）。它还会获取 **Brotli**
+  源码（`BROTLI_VERSION`，默认 `1.1.0`）和 **woff2** 参考解码器
+  （`WOFF2_VERSION`，默认 `1.0.2`），并把这两者加上 miniz 的 inflate 一起编译进
+  归档，供可选的 `webfonts` 特性使用。glslang 是 WebGL
   背后的运行时 GLSL ES 编译器，SPIRV-Cross 把它的 SPIR-V 转成 Metal 后端使用的
   MSL（见 [WebGL](./webgl.md)），两者都与其他库一样合并进归档。Metal 是唯一消费
   MSL 的 SDL_GPU 后端，因此 Windows/Linux 上脚本既不获取也不合并 SPIRV-Cross：
   那里的 `webgl_msl.cpp` 编译为空，合并进来只会多出约 2.5 MiB 不可达代码。
   默认文本路径使用内置的 **stb_truetype**（`vendor/stb/stb_truetype.h`）；
-  HarfBuzz/FreeType 只在 `shaping` 特性启用时被取出。
-  每个库（SDL3、FreeType、HarfBuzz、glslang、SPIRV-Cross 与引擎）都用
+  HarfBuzz/FreeType 只在 `shaping` 特性启用时被取出，miniz/Brotli/woff2 只在
+  `webfonts` 启用时被取出。
+  每个库（SDL3、FreeType、HarfBuzz、glslang、SPIRV-Cross、Brotli、woff2 与引擎）都用
   `-ffunction-sections -fdata-sections` 编译；SDL 关闭引擎从不调用的子系统
   （`SDL_JOYSTICK`、`SDL_HAPTIC`、`SDL_SENSOR`、`SDL_CAMERA`、`SDL_RENDER`、
   `SDL_OPENGL`/`SDL_OPENGLES`、`SDL_OFFSCREEN`、`SDL_HIDAPI`）；HarfBuzz 关闭
@@ -114,6 +119,7 @@
 | `gpu` | `gpu_bridge.c`（实现本身已在 `gui.a`） | `getContext("webgl"/"webgl2"/"experimental-webgl")`（或运行时决定的 kind）、任意 `webgl` 字符串、`mix-blend-mode`/`mixBlendMode`，或运行时拼出的 HTML |
 | `images` | `image_bridge.c`（实现本身已在 `gui.a`） | `<img>`、内联 `<svg>`、`background-image`/`url(...)`、`.svg` 路径、`drawImage`/`createImageBitmap`/`Image`，或运行时拼出的 HTML |
 | `shaping` | `text_bridge.c`（实现本身已在 `gui.a`） | 非 ASCII 文本（CJK/西里尔/希腊文等）、转义或实体码点、作者的 `@font-face` 规则（自定义字体可能是 CFF/OTF），或运行时拼出的 HTML |
+| `webfonts` | `webfont_bridge.c`（实现本身已在 `gui.a`） | 程序的 HTML/CSS 里的 `.woff`/`.woff2` 来源，或运行时拼出的 HTML |
 | `webgl` | `webgl_bridge.c`（实现本身已在 `gui.a`，依赖 `gpu`） | WebGL 的 `getContext(...)`、`webgl` 字符串，或运行时拼出的 HTML |
 
 driver 会扫描打包后的 AST（`src/driver/usage.ts`）：所有字符串字面量（包括导入的
@@ -134,6 +140,10 @@ markup 会让程序按“动态 markup”保守处理，启用可选特性。
 - `shaping` → `runtime/ext_gui/text_bridge.c`；构造函数通过 `text_hb.cpp` 安装
   `TextApi`，其引用取出 HarfBuzz 与 FreeType。没有它时引擎使用内置 stb_truetype，
   纯拉丁页面两个库都不链接。
+- `webfonts` → `runtime/ext_gui/webfont_bridge.c`；构造函数通过 `text_webfont.cpp`
+  安装 WOFF/WOFF2 解码器，其引用取出 miniz 的 inflater、Brotli 与 woff2 参考
+  解码器。没有它时字体加载只接受普通 sfnt 文件，因此只用 `.ttf`/`.otf` 字面的
+  页面三个库都不链接，压缩来源会被跳过并打印 warning。
 - `webgl` → `runtime/ext_gui/webgl_bridge.c`；构造函数通过 `webgl_feature.cpp` 安装
   `XtWebglApi`，其引用取出 WebGL context 与 DOM 绑定。core 的 `getContext`、
   canvas 宽高 setter、`createImageBitmap`、host type 与 renderer 都走这张表，因此
@@ -142,7 +152,7 @@ markup 会让程序按“动态 markup”保守处理，启用可选特性。
 bridge 就是让链接器搜索归档的“强引用”；没有 bridge 时引擎的表保持 null，
 实现成员永不被取出。因此大库可以留在现有归档里，不需要新的包布局。
 
-覆盖方式：`--feature media,gpu,images,shaping,webgl`（或 `all`）强制开启；
+覆盖方式：`--feature media,gpu,images,shaping,webfonts,webgl`（或 `all`）强制开启；
 `--no-feature media` 即使检测到也不链接。`webgl` 依赖 `gpu`，resolver 会一起
 激活；配置应用图标会强制 `images`，因为图标走同一条解码管线。`--ext media` 是
 `--ext gui --feature media` 的弃用别名。
@@ -164,7 +174,10 @@ stb_truetype 而不是 HarfBuzz + FreeType。剩余重量主要是静态 CRT、l
 `-dead_strip`），数字会有差异，但相对排序相同。
 
 WebGL 与图片/SVG 是链接特性（约 0.4 MiB 的 WebGL context/DOM 代码与 0.23 MiB 的
-stb_image/NanoSVG，DOM-only 页面不链接）。Canvas2D、Web Audio 与
+stb_image/NanoSVG，DOM-only 页面不链接）。WOFF/WOFF2 解压也是（约 0.45 MiB：
+Brotli 解码器及其约 120 KiB 静态字典、woff2 表重建代码与 miniz inflater）。字体是
+系统字体或 `.ttf`/`.otf` 文件的页面完全不链接它，而使用 `.woff2` 来源的页面会
+加上这些体积。Canvas2D、Web Audio 与
 `mix-blend-mode` 合成器尚未按需化；不使用它们的程序仍要付出其 API 面积（每项大约
 0.1–0.2 MiB）。
 

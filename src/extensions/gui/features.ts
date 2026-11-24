@@ -1,8 +1,8 @@
 /**
  * Optional link features of the `gui` extension.
  *
- * The GUI engine itself is always linked with `--ext gui`; these are the two
- * heavy halves a program may never touch:
+ * The GUI engine itself is always linked with `--ext gui`; these are the heavy
+ * halves a program may never touch:
  *
  *   - `media` — the FFmpeg decoder backend (`runtime/xt_media/`, `media.a`).
  *     The DOM media surface lives in `gui.a`; only decoding is optional, and an
@@ -11,12 +11,16 @@
  *     by WebGL *and* by the `mix-blend-mode` / `backdrop-filter` offscreen
  *     compositor. The engine's own shaders are precompiled, so a DOM page
  *     never needs it.
+ *   - `webfonts` — WOFF/WOFF2 decompression (miniz + Brotli + the woff2
+ *     reference decoder) for author `@font-face` sources. A page that only
+ *     names local sfnt faces never pays for it.
  *
  * Detection is static: the compiler sees imported `.html`/`.css` assets and all
- * bundled modules, so it can recognise `<video>`/`<audio>`, `getContext("webgl")`
- * and `mix-blend-mode`/`backdrop-filter`. When markup can be built at run time
- * the usage collector sets `dynamicMarkup`, which conservatively enables both
- * features; users who know better can shrink the binary with `--no-feature`.
+ * bundled modules, so it can recognise `<video>`/`<audio>`, `getContext("webgl")`,
+ * `mix-blend-mode`/`backdrop-filter` and `.woff`/`.woff2` sources. When markup
+ * can be built at run time the usage collector sets `dynamicMarkup`, which
+ * conservatively enables the optional features; users who know better can
+ * shrink the binary with `--no-feature`.
  */
 
 import { join } from "node:path";
@@ -28,6 +32,10 @@ import { findRuntimeLibrary, runtimeLibDir } from "../../driver/runtime-lib.js";
 const MEDIA_TAG = /<(?:video|audio)\b/i;
 /** A literal tag name handed to `createElement("video")`. */
 const MEDIA_TAG_NAME = /^(?:video|audio)$/i;
+/** A `.woff`/`.woff2` source anywhere in the program's strings. An imported
+ * `.css` asset is bundled as a string, so an author `@font-face` rule that
+ * names a compressed font is visible here. */
+const WEBFONT_TOKEN = /\bwoff2?\b/i;
 /** Anything that needs the GLSL translator. */
 const GPU_TOKEN = /webgl|mix-blend-mode|mixBlendMode|backdrop-filter|backdropFilter/i;
 
@@ -90,6 +98,14 @@ export function hasShapingUsage(usage: ProgramUsage): boolean {
     }
     return /\\u\{[0-9a-fA-F]+\}|\\u[0-9a-fA-F]{4}|&#(?:x[0-9a-fA-F]+|\d+);/.test(value);
   });
+}
+
+/** True when the program may load a compressed webfont. WOFF/WOFF2 `@font-face`
+ * sources need a decompressor (miniz + Brotli/woff2) that a page with plain
+ * sfnt files never pays for. */
+export function hasWebfontUsage(usage: ProgramUsage): boolean {
+  if (usage.dynamicMarkup) return true;
+  return usage.strings.some((value) => WEBFONT_TOKEN.test(value));
 }
 
 /** Absolute path to the per-platform prebuilt media archive. */
@@ -162,6 +178,18 @@ export const guiLinkFeatures: readonly LinkFeature[] = [
      */
     runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "text_bridge.c")],
     used: hasShapingUsage,
+  },
+  {
+    name: "webfonts",
+    description: "WOFF/WOFF2 decompression for author @font-face sources",
+    /**
+     * `webfont_bridge.c` installs the decoder and references `text_webfont.cpp`,
+     * pulling miniz (zlib inflate), Brotli and the woff2 reference decoder out
+     * of `gui.a`. A page whose fonts are plain sfnt files — the common case for
+     * system faces — links none of them.
+     */
+    runtimeSources: () => [join(findRuntimeDir(), "ext_gui", "webfont_bridge.c")],
+    used: hasWebfontUsage,
   },
   {
     name: "webgpu",

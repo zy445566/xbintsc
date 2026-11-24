@@ -178,6 +178,22 @@ void warnSelectorOnce(const std::string &selector) {
                truncated(selector, 80).c_str());
 }
 
+void warnWebfontUnlinkedOnce(const std::string &path) {
+  static SeenNames seen;
+  if (!firstUse(&seen, path)) return;
+  std::fprintf(stderr,
+               "xt_gui: warning: '%s' is a WOFF/WOFF2 font and this program was built without "
+               "the 'webfonts' link feature; rebuild with --feature webfonts\n",
+               truncated(path, 120).c_str());
+}
+
+void warnWebfontInvalidOnce(const std::string &path) {
+  static SeenNames seen;
+  if (!firstUse(&seen, path)) return;
+  std::fprintf(stderr, "xt_gui: warning: cannot decode the WOFF/WOFF2 font '%s'; it is ignored\n",
+               truncated(path, 120).c_str());
+}
+
 void warnPseudoClassOnce(const std::string &name) {
   static SeenNames seen;
   if (!firstUse(&seen, name)) return;
@@ -268,6 +284,16 @@ void xt_warn_unsupported_selector(const std::string &selector) {
   const std::string text = selector;
   if (text.empty()) return;
   warnSelectorOnce(text);
+}
+
+void xt_warn_webfont_unlinked(const std::string &path) {
+  if (warningsSuppressed() || path.empty()) return;
+  warnWebfontUnlinkedOnce(path);
+}
+
+void xt_warn_webfont_invalid(const std::string &path) {
+  if (warningsSuppressed() || path.empty()) return;
+  warnWebfontInvalidOnce(path);
 }
 
 void xt_warn_unsupported_pseudo_class(const std::string &name) {

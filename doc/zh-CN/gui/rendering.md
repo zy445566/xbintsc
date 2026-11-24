@@ -157,9 +157,10 @@ shader 合成到场景上。全部十六种 CSS 模式（`multiply`、`screen`�
 **stb_truetype**（`text_stb.cpp`、`vendor/stb/stb_truetype.h`）。可选的
 **`shaping`** 链接特性会安装 `text_hb.cpp`（HarfBuzz + FreeType 后端），非 ASCII
 文本或作者的 `@font-face` 规则会自动选中它。两个后端共享 `text_font_db.cpp` 中的
-字体数据库（发现与索引）、`text_fonts.cpp` 中的 CSS 匹配器和
-`text_font_sfnt.cpp` 中的 sfnt 元数据读取器，因此同一个 CSS 样式无论链接哪个整形
-后端都会解析到同一个真实字面。
+字体数据库（发现与索引）、`text_fonts.cpp` 中的 CSS 匹配器、
+`text_font_bytes.cpp` 中的字体字节缓存（通过可选的 **`webfonts`** 链接特性解压
+WOFF/WOFF2）以及 `text_font_sfnt.cpp` 中的 sfnt 元数据读取器，因此同一个 CSS 样式
+无论链接哪个整形后端都会解析到同一个真实字面。
 
 - 字体从已安装的系统字面解析。`font-family` 列表按大小写不敏感匹配；
   `sans-serif`、`serif`、`monospace`（以及 `system-ui`/`ui-*` 别名）映射到平台
@@ -168,13 +169,21 @@ shader 合成到场景上。全部十六种 CSS 模式（`multiply`、`screen`�
   缺少对应字重时选择最接近的字面，族没有斜体字面时使用其直立字面——不做合成
   粗体或斜体。字面按 `(文件, 集合索引, 字号)` 缓存。`XT_GUI_FONT` /
   `XT_GUI_FONT_MONO` 仍可覆盖通用族的默认值。
-- 支持作者 **`@font-face`**：加载本地 sfnt 字面（`.ttf`、`.ttc`、`.otf`、
-  `.otc`）。`src` 列表从左到右尝试；`local(...)`、远程 URL 和 `data:` 条目会被
+- 支持作者 **`@font-face`**：加载引擎认识的所有容器中的本地字体文件——sfnt 字面
+  （`.ttf`、`.ttc`、`.otf`、`.otc`）直接读取，压缩 Web 字体格式（`.woff`、
+  `.woff2`）通过可选的 **`webfonts`** 链接特性在任何人（元数据读取器或文本后端）
+  读取之前先解压成普通 sfnt。当程序的 HTML/CSS 中出现 `.woff`/`.woff2` 来源（或
+  markup 在运行时拼出）时会自动选中该特性；`--no-feature webfonts` 会把它排除在外，
+  此时压缩来源会被跳过并打印 warning，而不是无声回退。元数据读取和字形加载使用
+  同一份解码后的字节，因此 WOFF2 字面的度量与它的 `.ttf` 原件完全一致。
+  `src` 列表从左到右尝试；`local(...)`、远程 URL 和 `data:` 条目会被
   跳过。相对 URL 按本地 `file:` 路径处理，相对进程工作目录解析（与图片资源的
   策略一致）；也接受 `file://` URL（包括百分号编码路径）。`font-weight` /
   `font-style` 描述符选择字面，支持 `font-weight: 100 900` 这类范围；同族同
   描述符的后一条规则覆盖前一条。CSS 匹配声明中的族名，即使它与字体文件内部的
-  族名不同。所有来源都不可读时，该族会继续回退到 CSS 列表中的下一个族。
+  族名不同。`format(...)` 提示仅供参考：容器按文件签名探测，所以标签写错但字节
+  是引擎能解码的格式时仍会加载。所有来源都不可读时，该族会继续回退到 CSS 列表
+  中的下一个族。
 - 默认候选优先选择 **CJK 覆盖的 TrueType/TTC** 字面（Windows 的 Microsoft
   YaHei、macOS 的 PingFang/STHeiti、Linux 的 Noto Sans CJK/WenQuanYi），
   再是纯拉丁字面。同一族的字重/样式变体会跨文件解析；stb_truetype 无法解析的

@@ -7,8 +7,11 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
+
+#include "text_font_bytes.h"
 
 namespace xtgui {
 namespace {
@@ -25,32 +28,14 @@ constexpr uint32_t kTagOs2 = tagOf('O', 'S', '/', '2');
 constexpr uint32_t kTagHead = tagOf('h', 'e', 'a', 'd');
 constexpr uint32_t kTagPost = tagOf('p', 'o', 's', 't');
 
-class FileReader {
+/** Random access to an sfnt container. A plain font file is read on demand (a
+ * large CJK face is never held in memory just to match its family name), while
+ * a decompressed WOFF/WOFF2 container is already a byte vector. */
+class Reader {
  public:
-  FileReader() = default;
-  ~FileReader() {
-    if (file_ != nullptr) std::fclose(file_);
-  }
-  FileReader(const FileReader &) = delete;
-  FileReader &operator=(const FileReader &) = delete;
-
-  bool open(const std::string &path) {
-    file_ = std::fopen(path.c_str(), "rb");
-    if (file_ == nullptr) return false;
-    if (std::fseek(file_, 0, SEEK_END) != 0) return false;
-    const long length = std::ftell(file_);
-    if (length <= 0) return false;
-    size_ = (uint64_t)length;
-    return true;
-  }
-
-  uint64_t size() const { return size_; }
-
-  bool read(uint64_t offset, void *destination, size_t length) const {
-    if (offset > size_ || length > size_ - offset) return false;
-    if (std::fseek(file_, (long)offset, SEEK_SET) != 0) return false;
-    return std::fread(destination, 1, length, file_) == length;
-  }
+  virtual ~Reader() = default;
+  virtual uint64_t size() const = 0;
+  virtual bool read(uint64_t offset, void *destination, size_t length) const = 0;
 
   bool u16(uint64_t offset, uint16_t *out) const {
     unsigned char bytes[2];
@@ -66,9 +51,54 @@ class FileReader {
            (uint32_t)bytes[3];
     return true;
   }
+};
+
+class FileReader : public Reader {
+ public:
+  FileReader() = default;
+  ~FileReader() override {
+    if (file_ != nullptr) std::fclose(file_);
+  }
+  FileReader(const FileReader &) = delete;
+  FileReader &operator=(const FileReader &) = delete;
+
+  bool open(const std::string &path) {
+    file_ = std::fopen(path.c_str(), "rb");
+    if (file_ == nullptr) return false;
+    if (std::fseek(file_, 0, SEEK_END) != 0) return false;
+    const long length = std::ftell(file_);
+    if (length <= 0) return false;
+    size_ = (uint64_t)length;
+    return true;
+  }
+
+  uint64_t size() const override { return size_; }
+
+  bool read(uint64_t offset, void *destination, size_t length) const override {
+    if (offset > size_ || length > size_ - offset) return false;
+    if (std::fseek(file_, (long)offset, SEEK_SET) != 0) return false;
+    return std::fread(destination, 1, length, file_) == length;
+  }
 
  private:
   FILE *file_ = nullptr;
+  uint64_t size_ = 0;
+};
+
+class MemoryReader : public Reader {
+ public:
+  MemoryReader(const std::vector<unsigned char> &bytes) : data_(bytes.data()), size_(bytes.size()) {}
+
+  uint64_t size() const override { return size_; }
+
+  bool read(uint64_t offset, void *destination, size_t length) const override {
+    if (offset > size_ || length > size_ - offset) return false;
+    std::copy(data_ + offset, data_ + offset + length, static_cast<unsigned char *>(destination));
+    return true;
+  }
+
+ private:
+  const unsigned char *data_ = nullptr;
   uint64_t size_ = 0;
 };
 
@@ -78,7 +108,7 @@ struct TableRecord {
   uint32_t length = 0;
 };
 
-bool readTableRecords(const FileReader &reader, uint64_t face_offset, uint32_t *sfnt_tag,
+bool readTableRecords(const Reader &reader, uint64_t face_offset, uint32_t *sfnt_tag,
                       std::vector<TableRecord> *tables) {
   if (!reader.u32(face_offset, sfnt_tag)) return false;
   uint16_t count = 0;
@@ -216,7 +246,7 @@ int namePriority(uint16_t platform, uint16_t encoding, uint16_t language) {
   return 5;
 }
 
-bool readNames(const FileReader &reader, const TableRecord &table, NameSet *names) {
+bool readNames(const Reader &reader, const TableRecord &table, NameSet *names) {
   uint16_t format = 0;
   uint16_t count = 0;
   uint16_t string_offset = 0;
@@ -303,7 +333,7 @@ std::vector<std::string> uniqueNames(const std::vector<std::string> &names) {
   return out;
 }
 
-bool parseFace(const FileReader &reader, uint64_t face_offset, int face_index, SfntFace *face) {
+bool parseFace(const Reader &reader, uint64_t face_offset, int face_index, SfntFace *face) {
   uint32_t sfnt_tag = 0;
   std::vector<TableRecord> tables;
   if (!readTableRecords(reader, face_offset, &sfnt_tag, &tables)) return false;
@@ -364,11 +394,8 @@ bool parseFace(const FileReader &reader, uint64_t face_offset, int face_index, S
   return true;
 }
 
-}  // namespace
-
-bool xt_sfnt_read_faces(const std::string &path, std::vector<SfntFace> &out) {
-  FileReader reader;
-  if (!reader.open(path)) return false;
+/** Append every face of one sfnt container (single face or collection). */
+bool readFaces(const Reader &reader, std::vector<SfntFace> &out) {
   uint32_t first_tag = 0;
   if (!reader.u32(0, &first_tag)) return false;
   if (first_tag != kTagTtcf) {
@@ -391,6 +418,26 @@ bool xt_sfnt_read_faces(const std::string &path, std::vector<SfntFace> &out) {
     any = true;
   }
   return any;
+}
+
+}  // namespace
+
+bool xt_sfnt_read_faces(const std::string &path, std::vector<SfntFace> &out) {
+  uint32_t first_tag = 0;
+  {
+    FileReader probe;
+    if (!probe.open(path) || !probe.u32(0, &first_tag)) return false;
+    /* A plain font file is parsed straight from disk, without loading it. */
+    if (first_tag != kWebfontWoffTag && first_tag != kWebfontWoff2Tag) {
+      return readFaces(probe, out);
+    }
+  }
+  /* A WOFF/WOFF2 file has no sfnt table directory of its own: decode it once
+   * (the same bytes the text backend will draw from) and parse that. */
+  const std::shared_ptr<const std::vector<unsigned char>> bytes = xt_font_file_bytes(path);
+  if (bytes == nullptr || bytes->size() < 12) return false;
+  MemoryReader reader(*bytes);
+  return readFaces(reader, out);
 }
 
 }  // namespace xtgui

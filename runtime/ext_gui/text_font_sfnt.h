@@ -4,7 +4,9 @@
  * `text_font_sfnt.cpp` reads only the tables needed to match a CSS family and
  * weight: `name` (family/style names), `OS/2` (usWeightClass/fsSelection),
  * `head` (macStyle) and `post` (isFixedPitch). It does not decode outlines or
- * shape text, and it accepts both single faces and collections (`.ttc`/`.otc`).
+ * shape text, and it accepts single faces, collections (`.ttc`/`.otc`) and —
+ * through the optional `webfonts` link feature — `.woff`/`.woff2` sources,
+ * which are decompressed first (`text_font_bytes.h`).
  *
  * The reader is deliberately dependency-free: the default text backend links
  * stb_truetype and the optional `shaping` backend links FreeType/HarfBuzz, but
@@ -36,7 +38,8 @@ struct SfntFace {
 
 /** Read every face in `path`, appending them to `out` in collection order.
  * Returns false when the file cannot be opened or is not an sfnt container;
- * `out` may still contain the faces read before an error. */
+ * `out` may still contain the faces read before an error. A WOFF/WOFF2 file is
+ * decompressed first, so its metadata is read exactly like a plain sfnt's. */
 bool xt_sfnt_read_faces(const std::string &path, std::vector<SfntFace> &out);
 
 }  // namespace xtgui

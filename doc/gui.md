@@ -142,18 +142,22 @@ with `nativeObjects()`, `linkerFlags()` and `modules()`.
 | Window + input + multi-window | **SDL3** | cross-platform windows, HiDPI, IME, clipboard, DnD, close/hide events |
 | GPU | **SDL_GPU** (SDL3) | one render path over Metal / Vulkan / D3D12; avoids three backends |
 | Text shaping | **stb_truetype** simple shaper; optional **`shaping`** feature links HarfBuzz + FreeType | default keeps the DOM-only binary near 3 MiB; `shaping` restores ligatures and complex-script shaping |
+| Webfont decoding | **miniz** + **Brotli** + the **woff2** reference decoder (vendored; optional **`webfonts`** feature) | `@font-face` sources in WOFF/WOFF2 decompress to sfnt once at load, so both text backends read the same bytes; plain-sfnt pages link none of it |
 | Glyph raster | **stb_truetype**; FreeType only under `shaping` | TrueType outlines → grayscale atlas by default |
 | Images | **stb_image** (vendored header) for bitmaps, **NanoSVG** (vendored headers) for SVG | single headers to start; SVG files rasterise on demand |
 | Video + audio | **FFmpeg** (statically vendored, minimal build, optional `media` link feature) | decodes the common container/codec set; no WebView or platform media framework |
 
 Pinned versions: SDL3 `release-3.2.10`, FreeType `2.13.3`, HarfBuzz `10.1.0`
 (for the optional `shaping` feature), glslang `16.6.0`, SPIRV-Cross
-`vulkan-sdk-1.4.313.0`, FFmpeg `7.1` for the optional `media` archive
+`vulkan-sdk-1.4.313.0`, Brotli `1.1.0` and woff2 `1.0.2` (for the optional
+`webfonts` feature), FFmpeg `7.1` for the optional `media` archive
 (overridable with `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` /
-`GLSLANG_VERSION` / `SPIRV_CROSS_VERSION` / `FFMPEG_VERSION`). The default text
+`GLSLANG_VERSION` / `SPIRV_CROSS_VERSION` / `BROTLI_VERSION` / `WOFF2_VERSION` /
+`FFMPEG_VERSION`). The default text
 backend is the bundled `vendor/stb/stb_truetype.h`; it accepts TrueType outlines (not
 CFF/OTF or variable fonts). The `shaping` feature swaps in HarfBuzz + FreeType
-for full OpenType shaping.
+for full OpenType shaping, and the `webfonts` feature decompresses author
+`.woff`/`.woff2` sources before either backend reads them.
 
 Alternative if SDL3 is rejected: **GLFW + OpenGL 3.3** (simpler, but OpenGL is
 deprecated on macOS and gives no modern GPU abstraction). **wgpu-native** if the
@@ -186,7 +190,8 @@ engine were Rust.
      (`measureText`/`fontMetrics`); the CSS family list, weight and italic style
      select real installed faces, and author `@font-face` rules load local font
      files (relative URLs resolve as `file:` paths against the process working
-     directory). Originally HarfBuzz + FreeType, now the bundled stb_truetype.
+     directory), including WOFF/WOFF2 sources through the `webfonts` link
+     feature. Originally HarfBuzz + FreeType, now the bundled stb_truetype.
    - **M4b-2 — glyph rendering** ✅ stb_truetype rasterisation, a shared shelf-packed
      glyph atlas, textured text quads in the display list and HiDPI-aware raster
      scaling. Gradients remain.

@@ -90,17 +90,21 @@
 | 窗口 + 输入 + 多窗口 | **SDL3** | 跨平台窗口、HiDPI、IME、剪贴板、拖放、关闭/隐藏事件 |
 | GPU | **SDL_GPU**（SDL3） | 一条覆盖 Metal / Vulkan / D3D12 的渲染路径；避免三套后端 |
 | 文本整形 | **stb_truetype** 简单整形；可选 **`shaping`** 特性链接 HarfBuzz + FreeType | 默认让 DOM-only 二进制约 3 MiB；`shaping` 恢复连字/复杂文种整形 |
+| Web 字体解码 | **miniz** + **Brotli** + **woff2** 参考解码器（vendored；可选 **`webfonts`** 特性） | WOFF/WOFF2 的 `@font-face` 来源在加载时解压成 sfnt，两个文本后端读同一份字节；纯 sfnt 页面不链接它 |
 | 字形光栅化 | **stb_truetype**；仅 `shaping` 下用 FreeType | 默认 TrueType 轮廓 → 灰度图集 |
 | 图像 | 位图用 **stb_image**（vendored 头文件），SVG 用 **NanoSVG**（vendored 头文件） | 起步阶段用单头文件；SVG 文件按需光栅化 |
 | 视频 + 音频 | **FFmpeg**（静态 vendored，最小化构建，可选 `media` 链接特性） | 解码常用容器/编码；不依赖 WebView 或平台媒体框架 |
 
 固定版本：SDL3 `release-3.2.10`、FreeType `2.13.3`、HarfBuzz `10.1.0`
 （供可选的 `shaping` 特性使用）、glslang `16.6.0`、SPIRV-Cross
-`vulkan-sdk-1.4.313.0`、FFmpeg `7.1`（供可选的 `media` 归档使用；可用
+`vulkan-sdk-1.4.313.0`、Brotli `1.1.0` 与 woff2 `1.0.2`（供可选的 `webfonts`
+特性使用）、FFmpeg `7.1`（供可选的 `media` 归档使用；可用
 `SDL3_TAG` / `FREETYPE_VERSION` / `HARFBUZZ_VERSION` / `GLSLANG_VERSION` /
-`SPIRV_CROSS_VERSION` / `FFMPEG_VERSION` 覆盖）。默认文本后端是内置的
+`SPIRV_CROSS_VERSION` / `BROTLI_VERSION` / `WOFF2_VERSION` / `FFMPEG_VERSION` 覆盖）。
+默认文本后端是内置的
 `vendor/stb/stb_truetype.h`；它只接受 TrueType 轮廓（不支持 CFF/OTF 或可变字体）。
-`shaping` 特性会换成 HarfBuzz + FreeType，提供完整 OpenType 整形。
+`shaping` 特性会换成 HarfBuzz + FreeType，提供完整 OpenType 整形；`webfonts`
+特性会在任一后端读取之前解压作者的 `.woff`/`.woff2` 来源。
 
 如果否决 SDL3，备选是 **GLFW + OpenGL 3.3**（更简单，但 OpenGL 在 macOS 上
 已弃用，且不提供现代 GPU 抽象）。如果引擎用 Rust 编写，则用 **wgpu-native**。
@@ -129,8 +133,9 @@
    - **M4b-1 — 文本技术栈 + 度量** ✅ 文本模块（`text.*`）与字体解析/缓存、
      供布局使用的基于整形的文本度量（`measureText`/`fontMetrics`）；CSS 族名列表、
      字重和斜体样式会选择真实安装的字面，作者的 `@font-face` 规则会加载本地字体
-     文件（相对 URL 按 `file:` 路径相对进程工作目录解析）。最初用 HarfBuzz +
-     FreeType，现在用内置 stb_truetype。
+     文件（相对 URL 按 `file:` 路径相对进程工作目录解析），包括通过 `webfonts`
+     链接特性加载 WOFF/WOFF2 来源。最初用 HarfBuzz + FreeType，现在用内置
+     stb_truetype。
    - **M4b-2 — 字形渲染** ✅ stb_truetype 光栅化、共享的 shelf 打包字形图集、
      显示列表中的带纹理文本四边形与感知 HiDPI 的光栅缩放。渐变仍待完成。
 5. **M5 — 输入 + 事件** ✅

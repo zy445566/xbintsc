@@ -181,7 +181,7 @@
   rendered as colour. This is the price of the ~3 MiB DOM-only binary; the
   optional `shaping` feature restores HarfBuzz + FreeType (and full
   complex-script shaping).
-- **Link-feature detection is static.** `media`/`gpu`/`images`/`shaping`/`webgl` are selected from the
+- **Link-feature detection is static.** `media`/`gpu`/`images`/`shaping`/`webfonts`/`webgl` are selected from the
   bundled HTML/CSS/TS (including imported `.html` and the CSS inlined from it).
   A page that builds markup or CSS from runtime data (`fetch`, `readFileSync`,
   a value returned by a function) cannot be seen; the scanner falls back to

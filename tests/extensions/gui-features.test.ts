@@ -21,6 +21,7 @@ import {
   hasImageUsage,
   hasMediaUsage,
   hasShapingUsage,
+  hasWebfontUsage,
   hasWebglUsage,
   hasWebgpuUsage,
 } from "../../src/extensions/gui/features.js";
@@ -47,17 +48,19 @@ const media = guiLinkFeatures.find((feature) => feature.name === "media")!;
 const gpu = guiLinkFeatures.find((feature) => feature.name === "gpu")!;
 const images = guiLinkFeatures.find((feature) => feature.name === "images")!;
 const shaping = guiLinkFeatures.find((feature) => feature.name === "shaping")!;
+const webfonts = guiLinkFeatures.find((feature) => feature.name === "webfonts")!;
 const webgpu = guiLinkFeatures.find((feature) => feature.name === "webgpu")!;
 const webgl = guiLinkFeatures.find((feature) => feature.name === "webgl")!;
 
 describe("gui link features", () => {
-  it("declares media, gpu, images, shaping and webgl as optional halves of gui", () => {
+  it("declares media, gpu, images, shaping, webfonts and webgl as optional halves of gui", () => {
     expect(guiExtension.linkFeatures?.()).toBe(guiLinkFeatures);
     expect(guiLinkFeatures.map((feature) => feature.name)).toEqual([
       "media",
       "gpu",
       "images",
       "shaping",
+      "webfonts",
       "webgpu",
       "webgl",
     ]);
@@ -65,6 +68,7 @@ describe("gui link features", () => {
     expect(gpu.description).toMatch(/glslang|GLSL/);
     expect(images.description).toMatch(/stb_image|NanoSVG/);
     expect(shaping.description).toMatch(/HarfBuzz|FreeType/);
+    expect(webfonts.description).toMatch(/WOFF/);
     expect(webgpu.requires).toEqual(["gpu"]);
     expect(webgl.requires).toEqual(["gpu"]);
   });
@@ -89,6 +93,13 @@ describe("gui link features", () => {
   it("links the shaping bridge without an archive", () => {
     expect(shaping.runtimeSources?.()).toEqual([join("/tmp/runtime", "ext_gui", "text_bridge.c")]);
     expect(shaping.nativeObjects?.()).toBeUndefined();
+  });
+
+  it("links the webfonts bridge without an archive", () => {
+    expect(webfonts.runtimeSources?.()).toEqual([
+      join("/tmp/runtime", "ext_gui", "webfont_bridge.c"),
+    ]);
+    expect(webfonts.nativeObjects?.()).toBeUndefined();
   });
 
   it("links the webgpu bridge without an archive", () => {
@@ -223,6 +234,33 @@ describe("shaping usage detection", () => {
 
   it("turns on for dynamic markup", () => {
     expect(hasShapingUsage(usage({ dynamicMarkup: true }))).toBe(true);
+  });
+});
+
+describe("webfont usage detection", () => {
+  it("turns on for a .woff/.woff2 source in HTML or CSS", () => {
+    expect(
+      hasWebfontUsage(
+        usage({
+          strings: ['@font-face { font-family: "X"; src: url("./x.woff2") format("woff2"); }'],
+        }),
+      ),
+    ).toBe(true);
+    expect(hasWebfontUsage(usage({ strings: ["url(fonts/legacy.woff)"] }))).toBe(true);
+    expect(hasWebfontUsage(usage({ strings: ['src: url("x.woff2")'] }))).toBe(true);
+  });
+
+  it("stays off for plain sfnt sources and text-only pages", () => {
+    expect(
+      hasWebfontUsage(
+        usage({ strings: ['@font-face { font-family: "X"; src: url("./x.ttf"); }'] }),
+      ),
+    ).toBe(false);
+    expect(hasWebfontUsage(usage({ strings: ["<div>Hello</div>"] }))).toBe(false);
+  });
+
+  it("turns on for dynamic markup", () => {
+    expect(hasWebfontUsage(usage({ dynamicMarkup: true }))).toBe(true);
   });
 });
 

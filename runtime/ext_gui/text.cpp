@@ -11,6 +11,7 @@
 #include "text_api.h"
 
 #include "perf.h"
+#include "text_font_bytes.h"
 #include "text_fonts.h"
 
 namespace xtgui {
@@ -65,6 +66,9 @@ void xt_text_shutdown() {
   xt_text_glyph_cache_clear();
   xt_text_api()->shutdown();
   xt_font_db_shutdown();
+  /* The decoded font bytes are shared by the database and the backend faces,
+   * so they are the last thing released. */
+  xt_font_bytes_shutdown();
 }
 
 }  // namespace xtgui

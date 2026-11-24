@@ -65,8 +65,9 @@ std::string computed_value(const xtgui::XtStyle *style, const std::string &rawNa
   std::string property = xtgui::xt_css_lower(xtgui::xt_css_trim(mapped));
   if (property.empty()) return std::string();
   if (property.size() > 2 && property[0] == '-' && property[1] == '-') {
-    auto found = style->variables.find(property);
-    return found == style->variables.end() ? std::string() : found->second;
+    if (!style->variables) return std::string();
+    auto found = style->variables->find(property);
+    return found == style->variables->end() ? std::string() : found->second;
   }
   return xtgui::xt_style_property_to_string(*style, property);
 }

@@ -39,6 +39,10 @@ int webgl_int(int32_t argc, xt_value *argv, int32_t index, int fallback);
 std::string webgl_string(int32_t argc, xt_value *argv, int32_t index);
 /** Read an array/typed array of numbers. */
 std::vector<double> webgl_numbers(xt_value value);
+/** Fast path: copy a 32-bit typed array's elements as floats. Returns false for
+ * a plain array or a non-32-bit view (the caller falls back to
+ * `webgl_numbers`). */
+bool webgl_float_elements(xt_value value, std::vector<float> *out);
 /** Read the raw bytes of a typed array / ArrayBuffer (or a byte array). */
 std::vector<uint8_t> webgl_bytes(xt_value value);
 /** Store `count` bytes into a typed array / array handle. */

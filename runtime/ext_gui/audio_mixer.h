@@ -21,6 +21,7 @@
 #ifndef XT_GUI_AUDIO_MIXER_H
 #define XT_GUI_AUDIO_MIXER_H
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -311,7 +312,10 @@ class AudioMixer {
   uint64_t destination_id_ = 0;
   uint64_t listener_id_ = 0;
   uint64_t serial_ = 0;
-  uint64_t frames_rendered_ = 0;
+  /** Read by the page (`AudioContext.currentTime`, `AudioParam` scheduling)
+   * while the audio thread advances it; atomic so a read never waits for a
+   * quantum render. Updated under `mutex_`, which still orders graph state. */
+  std::atomic<uint64_t> frames_rendered_{0};
   std::vector<float> pending_;
   size_t pending_offset_ = 0;
 

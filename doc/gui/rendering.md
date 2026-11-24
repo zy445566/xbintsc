@@ -282,8 +282,11 @@ lays it out, rebuilds the display list and uploads vertex arrays; a frame that
 changes nothing does no CPU or GPU work. A document with thousands of elements
 is kept interactive by budgeting each stage, and every stage is measured. Set
 `XT_GUI_PERF=1` to print one line per frame (or `XT_GUI_PERF=<N>` for an
-aggregated line every N frames); `win.stats()` returns the same counters, which
-is what `tests/e2e/gui-perf.test.ts` asserts on.
+aggregated line every N frames); the line separates the page's own callback time
+(`script`), the WebGL recording inside it (`gldraw`, `gluni`) and the retained
+pipeline stages, and includes `setupMiss`/`samplerBinds`/`stateBinds` for the
+WebGL draw path. `win.stats()` returns the same counters, which is what
+`tests/e2e/gui-perf.test.ts` asserts on.
 
 - **Cascade.** An `@media` prelude is evaluated **once per rule** per restyle
   (it used to be parsed once per rule *and* node, which was the largest cost on
@@ -291,6 +294,17 @@ is what `tests/e2e/gui-perf.test.ts` asserts on.
   content entirely, the declaration candidate list is reused across the
   depth-first walk instead of allocated per element, and `:hover`/`:focus` only
   restyle when the sheet actually has such a rule.
+- **Computed style allocation.** `computeNode` writes into the style map entry
+  in place instead of building a local style and copy-assigning it, and a style
+  inherits the parent's custom-property map by **shared pointer** (copy-on-write
+  only when the node declares its own `--x`). A token-heavy `:root` block
+  therefore no longer costs one deep property-map copy per element per restyle.
+- **One display update per frame.** When the document is already dirty,
+  `advance()` only moves the clock: the pending `restyle()` is about to call
+  `updateDisplay()` with the same time, so the old path rebuilt the displayed
+  style map (and the layout) twice on every dirty frame of an animating page —
+  the normal case for a HUD that rewrites a transform every frame while a
+  transition runs.
 - **Text.** Layout and paint share a bounded shaping cache (`text_cache.cpp`):
   `(face, text) -> glyphs + advance`. It uses two generations of up to 2 MiB of
   glyphs / 8,192 entries; when a generation is full the *spare* one is dropped
@@ -347,6 +361,15 @@ is what `tests/e2e/gui-perf.test.ts` asserts on.
   upload per frame, no steady-state pipeline creation, only the dirty bytes), so
   the wall-clock numbers stay informational and a software GPU in CI is not
   penalised.
+- **WebGL draw path.** A prepared draw is keyed by the bound VAO's identity and
+  its own revision, so binding the same geometry on a later frame keeps the
+  cached pipeline/layout (the key used to include the context-wide counter that
+  every VAO bind bumps, which rebuilt every prepared draw once per frame).
+  Viewport, scissor, blend constants and the sampler set are only re-recorded
+  when they actually change in the current pass, and a `Float32Array` uniform is
+  copied as raw bytes instead of being expanded into a `double` vector one
+  runtime call per element. `setupMiss`/`samplerBinds`/`stateBinds` in the perf
+  line report what is left.
 
 Known limits: a mutation still restyles and relayouts the **whole** document
 (there is no incremental subtree invalidation), and a paint-only change (for

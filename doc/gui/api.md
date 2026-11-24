@@ -279,13 +279,15 @@ program has done in total, which is how rendering cost is measured (see
 
 | Field | Meaning |
 | --- | --- |
-| `frameMs`, `restyleMs`, `layoutMs`, `paintMs`, `uploadMs`, `drawMs` | phase timings of the last frame (milliseconds) |
+| `frameMs`, `scriptMs`, `restyleMs`, `layoutMs`, `paintMs`, `uploadMs`, `drawMs` | phase timings of the last frame (milliseconds). `scriptMs` is the time inside `requestAnimationFrame` callbacks — the page's own AOT code plus the WebGL command recording it does — so `frameMs - scriptMs - restyleMs - paintMs - uploadMs - drawMs` is the loop's own overhead |
+| `webglDrawMs`, `webglUniformMs` | WebGL draw recording and uniform uploads (both are part of `scriptMs`; recorded only while `XT_GUI_PERF` is set) |
 | `frames`, `presents`, `exposes`, `deferred`, `skippedFrames`, `starvedFrames`, `transitionFrames` | frame loop activity: `presents` counts swapchain frames, `exposes` the presents the window system asked for with an expose/shown/restore event, `deferred` the presents a starved frame postponed, `skippedFrames` the frames nothing needed and `starvedFrames` the frames that asked to present and got no drawable target |
 | `restyles`, `restyleNodes`, `rulesEvaluated`, `mediaEvaluated`, `layouts`, `layoutBoxes` | cascade and layout work |
 | `textShapeCalls`, `textShapeHits`, `textCacheBytes`, `textCacheEntries` | shaping cache misses/hits and its occupancy |
 | `paints`, `paintOps`, `drawRuns`, `drawCalls`, `uploadSubmits`, `vertices`, `syncNodes` | display-list, draw-call and upload work |
 | `canvasDraws`, `canvasUploads`, `canvasUploadBytes` | Canvas 2D draw calls, texture uploads and the bytes copied (a partial redraw uploads only its dirty rectangle) |
 | `webglDraws`, `webglPasses`, `webglPipelineMisses`, `webglBufferUploadBytes` | WebGL draw calls, render passes opened, pipelines created and buffer bytes copied |
+| `webglSetupMisses`, `webglSamplerBinds`, `webglStateBinds` | prepared-draw cache misses, sampler-set binds and dynamic-state binds; a steady scene misses only on layouts it has not seen and binds samplers when the texture/uniform set actually changes |
 
 Every field except the `*Ms` timings is cumulative, so subtract two snapshots to
 get one frame. `restyleMs` covers the cascade **and** the layout pass it
@@ -296,7 +298,17 @@ at a time the window server chooses, and a deferred present replays work an
 earlier frame built when no swapchain image was available (`starvedFrames` counts
 those frames — a climbing value means the window is not being updated at all).
 `XT_GUI_PERF=1` prints the same numbers on stderr (one line per frame;
-`XT_GUI_PERF=<N>` averages over N frames).
+`XT_GUI_PERF=<N>` averages over N frames), including `script=`, `gldraw=` and
+`gluni=` for the page's own work.
+
+Two environment variables shape how a program is driven. `XT_GUI_URL` supplies
+the page's initial `location`: a bare `?query`, a `#hash`, or
+`path?query#hash` (the origin stays `xbintsc://localhost`). A compiled program
+has no address bar, so this is how a browser build's `?bench=1`, `?q=low` or
+`#shot` entry points stay reachable. `XT_GUI_FRAME_MS` overrides the `run()`
+frame period: unset follows the display refresh rate, a positive value fixes the
+period and `0` restores the historical uncapped loop (for benchmarks and tests
+that want the old timing).
 
 They are used by `tests/e2e/gui-*.test.ts` to assert parsing, selector matching,
 specificity, inheritance, `!important` and layout geometry. They will stay useful

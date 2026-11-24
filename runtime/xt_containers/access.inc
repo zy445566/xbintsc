@@ -302,49 +302,8 @@ xt_value xt_get(xt_value target, xt_value key) {  if (target == XT_UNDEFINED || 
   return XT_UNDEFINED;
 }
 
-/* Inline-cached property read. The generated code gives every source-level
- * property access two zeroed i64 words; the first stores the receiver's shape
- * and the second the property index. A shape hit is a pointer compare plus one
- * key check, which avoids the linear property scan. Only ordinary objects and
- * errors use the cache; arrays, functions, strings and containers fall back to
- * the generic path. */
-xt_value xt_get_ic(xt_value target, xt_value key, int64_t *cache) {
-  XT_PROFILE_TICK(XT_PROFILE_GET_IC);
-  if (!cache || !XT_IS_OBJECT(target)) return xt_get(target, key);
-  xt_object *obj = (xt_object *)XT_GET_PTR(target);
-  if (!xt_kind_is_object(obj->header.kind)) {
-    return xt_get(target, key);
-  }
-  /* A host view answers keys dynamically, outside the shape cache. */
-  if (obj->hooks != NULL) return xt_get(target, key);
-  if (!XT_IS_STRING(key) && !xt_is_symbol(key)) return xt_get(target, key);
-  xt_shape *shape = obj->shape;
-  uintptr_t cachedShape = (uintptr_t)cache[0];
-  int64_t cachedIndex = cache[1];
-  if (shape && cachedShape == (uintptr_t)shape && cachedIndex >= 0 &&
-      cachedIndex < (int64_t)obj->count) {
-    xt_property *prop = &obj->properties[cachedIndex];
-    if (prop->key == key || xt_property_key_equals(prop->key, key)) {
-      if (prop->getter != XT_UNDEFINED && XT_IS_FUNCTION(prop->getter)) {
-        return xt_call_with_this(prop->getter, target, 0, NULL);
-      }
-      if (prop->getter != XT_UNDEFINED) return XT_UNDEFINED;
-      return prop->value;
-    }
-  }
-  xt_value propertyKey = xt_to_property_key(key);
-  xt_property *prop = xt_object_find_property(obj, propertyKey);
-  if (prop) {
-    cache[0] = (int64_t)(uintptr_t)shape;
-    cache[1] = (int64_t)(prop - obj->properties);
-    if (prop->getter != XT_UNDEFINED && XT_IS_FUNCTION(prop->getter)) {
-      return xt_call_with_this(prop->getter, target, 0, NULL);
-    }
-    if (prop->getter != XT_UNDEFINED) return XT_UNDEFINED;
-    return prop->value;
-  }
-  return xt_get(target, key);
-}
+/* The property-read inline cache (`xt_get_ic`) lives in `ic_get.inc`; `rt.h`
+ * declares it, so the element path below can call it. */
 
 /* ------------------------------------------------------------------------- */
 /* Element access (`obj[key]`)                                               */
@@ -359,10 +318,6 @@ xt_value xt_get_ic(xt_value target, xt_value key, int64_t *cache) {
  * views, out-of-range or negative keys — falls through to the ordinary
  * `xt_get_ic` / `xt_set` paths, so semantics are unchanged.
  */
-
-/* ------------------------------------------------------------------------- */
-/* Element access (`obj[key]`)                                               */
-/* ------------------------------------------------------------------------- */
 
 xt_value xt_get_element(xt_value target, xt_value key, int64_t *cache) {
   uint32_t index = 0;

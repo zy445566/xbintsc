@@ -327,6 +327,37 @@ std::vector<double> webgl_numbers(xt_value value) {
   return out;
 }
 
+/**
+ * Copy a 32-bit typed array's elements as `float` in one memcpy.
+ *
+ * A `Float32Array` passed to `uniformMatrix4fv` is the hot WebGL call of every
+ * three.js frame; the generic `webgl_numbers` path allocated a `double` vector
+ * and made one runtime call per element. The element width is inferred from
+ * `byteLength == length * 4`, which is exactly the set of views a float uniform
+ * accepts (Float32Array, and the invalid-but-tolerated Int32/Uint32). Plain
+ * arrays and other views return false and keep the old path.
+ */
+bool webgl_float_elements(xt_value value, std::vector<float> *out) {
+  out->clear();
+  if (!XT_IS_OBJECT(value) || xt_typed_array_kind_of(value) < 0) return false;
+  const double length = xt_to_number(xt_get(value, xt_string_from_cstr("length")));
+  const double bytes = xt_to_number(xt_get(value, xt_string_from_cstr("byteLength")));
+  if (!(length >= 0.0) || bytes != length * 4.0) return false;
+  xt_value buffer = xt_typed_array_buffer_of(value);
+  if (!xt_is_array_buffer(buffer)) return false;
+  const uint32_t offset = xt_typed_array_byte_offset_of(value);
+  out->resize((size_t)length);
+  if (length > 0.0) {
+    const uint32_t byte_length = (uint32_t)(length * 4.0);
+    auto *bytes = reinterpret_cast<uint8_t *>(out->data());
+    if (xt_array_buffer_copy_bytes_out(buffer, offset, bytes, byte_length) != byte_length) {
+      out->clear();
+      return false;
+    }
+  }
+  return true;
+}
+
 std::vector<uint8_t> webgl_bytes(xt_value value) {
   std::vector<uint8_t> out;
   if (!XT_IS_OBJECT(value)) return out;

@@ -25,6 +25,11 @@
 #include <string>
 #include <unordered_map>
 
+/* Defined in browser_location.cpp, which keeps this unit inside the file-length
+ * budget. Declared outside the anonymous namespace so it keeps external
+ * linkage. */
+xt_value xt_gui_location_build(void);
+
 namespace {
 
 xt_value g_navigator = XT_UNDEFINED;
@@ -235,24 +240,6 @@ xt_value navigator_build(void) {
   return nav;
 }
 
-xt_value location_build(void) {
-  xt_value location = xt_object_new();
-  set_prop(location, "href", string_of("xbintsc://localhost/"));
-  set_prop(location, "protocol", string_of("xbintsc:"));
-  set_prop(location, "host", string_of("localhost"));
-  set_prop(location, "hostname", string_of("localhost"));
-  set_prop(location, "port", string_of(""));
-  set_prop(location, "pathname", string_of("/"));
-  set_prop(location, "search", string_of(""));
-  set_prop(location, "hash", string_of(""));
-  set_prop(location, "origin", string_of("xbintsc://localhost"));
-  set_method(location, "reload", (void *)noop);
-  set_method(location, "assign", (void *)noop);
-  set_method(location, "replace", (void *)noop);
-  set_prop(location, "toString", fn_of((void *)noop));
-  return location;
-}
-
 /* -- localStorage --------------------------------------------------------- */
 
 xt_value storage_get_item(xt_value self, xt_value env, int32_t argc, xt_value *argv) {
@@ -446,7 +433,7 @@ void ensure_singletons(void) {
     xt_gc_add_root(&g_local_storage);
   }
   if (!XT_IS_OBJECT(g_location)) {
-    g_location = location_build();
+    g_location = xt_gui_location_build();
     xt_gc_add_root(&g_location);
   }
 }

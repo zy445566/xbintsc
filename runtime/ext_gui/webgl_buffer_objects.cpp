@@ -287,13 +287,23 @@ uint32_t WebGLContext::buffer_size(uint32_t id) {
 
 /* -- vertex attributes --------------------------------------------------- */
 
+void WebGLContext::note_attrib_state_change() {
+  attribs_version_ += 1;
+  /* A named VAO's layout is what the prepared-draw cache keys on, so bump the
+   * revision of the *bound* array. The default VAO uses `attribs_version_`. */
+  if (bound_vertex_array_ != 0) {
+    WebGLVertexArray *array = vertex_array(bound_vertex_array_);
+    if (array != nullptr) array->revision += 1;
+  }
+}
+
 void WebGLContext::enable_attrib(int index, bool enabled) {
   if (index < 0 || index >= kWebGLMaxAttribs) {
     set_error(GL_INVALID_VALUE);
     return;
   }
   attribs_[index].enabled = enabled;
-  attribs_version_ += 1;
+  note_attrib_state_change();
 }
 
 bool WebGLContext::attrib_enabled(int index) const {
@@ -314,7 +324,7 @@ void WebGLContext::attrib_pointer(int index, int size, int type, bool normalized
   attrib.integer = false;
   attrib.stride = stride > 0 ? stride : 0;
   attrib.offset = offset;
-  attribs_version_ += 1;
+  note_attrib_state_change();
 }
 
 void WebGLContext::attrib_ipointer(int index, int size, int type, int stride, int offset) {
@@ -330,7 +340,7 @@ void WebGLContext::attrib_ipointer(int index, int size, int type, int stride, in
   attrib.integer = true;
   attrib.stride = stride > 0 ? stride : 0;
   attrib.offset = offset;
-  attribs_version_ += 1;
+  note_attrib_state_change();
 }
 
 void WebGLContext::attrib_divisor(int index, int divisor) {
@@ -342,7 +352,7 @@ void WebGLContext::attrib_divisor(int index, int divisor) {
    * rates WebGL programs use — per vertex (0) and per instance (1) — map onto
    * the backend. A larger divisor is clamped. */
   attribs_[index].divisor = divisor > 0 ? 1 : 0;
-  attribs_version_ += 1;
+  note_attrib_state_change();
 }
 
 void WebGLContext::attrib_value(int index, int components, const float *values) {
@@ -350,7 +360,11 @@ void WebGLContext::attrib_value(int index, int components, const float *values) 
   for (int i = 0; i < 4; i++) attribs_[index].current[i] = i < components ? values[i] : 0.0f;
   if (components < 4) attribs_[index].current[3] = 1.0f;
   attribs_[index].constant_dirty = true;
-  attribs_version_ += 1;
+  /* The constant-attribute buffer is shared by every VAO that inherits this
+   * attribute state, and it is recreated on upload, so a prepared draw holding
+   * the old pointer must be invalidated too. */
+  gpu_version_ += 1;
+  note_attrib_state_change();
 }
 
 void WebGLContext::attrib_state(int index, int *size, int *type, int *stride, bool *normalized,

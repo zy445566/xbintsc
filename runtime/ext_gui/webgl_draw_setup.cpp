@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "gui_internal.h"
+#include "perf.h"
 
 namespace xtgui {
 namespace {
@@ -239,14 +240,17 @@ void WebGLContext::clear_draw_cache() {
 const WebGLDrawSetup *WebGLContext::prepare_draw(const WebGLDrawKey &key) {
   auto found = draw_setups_.find(key);
   if (found != draw_setups_.end()) return &found->second;
+  g_perf_frame.webglSetupMisses += 1;
   WebGLProgram *program_ = program(key.program);
   if (program_ == nullptr) {
     set_error(GL_INVALID_OPERATION);
     return nullptr;
   }
   /* A page that cycles through many states would otherwise grow the table
-   * without bound; clearing only costs one rebuild per live state. */
-  if (draw_setups_.size() >= 256) clear_draw_cache();
+   * without bound; clearing only costs one rebuild per live state. The keys are
+   * stable across frames now (VAO identity + revision), so this is a safety
+   * valve rather than a per-frame event. */
+  if (draw_setups_.size() >= 4096) clear_draw_cache();
 
   WebGLDrawSetup setup;
   setup.attributes.reserve(program_->draw_attribs.size());
@@ -342,6 +346,8 @@ const WebGLDrawSetup *WebGLContext::prepare_draw(const WebGLDrawKey &key) {
   WebGLDrawKey pipeline_key = key;
   pipeline_key.gpu_version = 0;
   pipeline_key.element_buffer = 0;
+  pipeline_key.attribs_vao = 0;
+  pipeline_key.attribs_revision = 0;
   pipeline_key.attribs_version = vertex_layout_hash(setup.attributes, setup.buffers);
   pipeline_key.framebuffer_version = 0;
   auto cached = program_->pipeline_cache.find(pipeline_key);

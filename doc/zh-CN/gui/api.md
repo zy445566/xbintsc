@@ -250,13 +250,15 @@ win.stats()                            // 引擎/运行时计数器（内存排�
 
 | 字段 | 含义 |
 | --- | --- |
-| `frameMs`、`restyleMs`、`layoutMs`、`paintMs`、`uploadMs`、`drawMs` | 上一帧各阶段耗时（毫秒） |
+| `frameMs`、`scriptMs`、`restyleMs`、`layoutMs`、`paintMs`、`uploadMs`、`drawMs` | 上一帧各阶段耗时（毫秒）。`scriptMs` 是 `requestAnimationFrame` 回调内部的时间——页面自身的 AOT 代码加上它执行的 WebGL 命令录制——因此 `frameMs - scriptMs - restyleMs - paintMs - uploadMs - drawMs` 是循环自身的开销 |
+| `webglDrawMs`、`webglUniformMs` | WebGL 绘制录制与 uniform 上传耗时（都属于 `scriptMs`；仅在设置 `XT_GUI_PERF` 时记录） |
 | `frames`、`presents`、`exposes`、`deferred`、`skippedFrames`、`starvedFrames`、`transitionFrames` | 帧循环活动：`presents` 是提交呈现的帧数，`exposes` 是窗口系统用 expose/shown/restore 事件要求的呈现帧数，`deferred` 是取不到可绘制目标而被推迟的呈现帧数，`skippedFrames` 是无需提交的帧数，`starvedFrames` 是要求呈现却拿不到可绘制目标的帧数 |
 | `restyles`、`restyleNodes`、`rulesEvaluated`、`mediaEvaluated`、`layouts`、`layoutBoxes` | 层叠与布局的工作量 |
 | `textShapeCalls`、`textShapeHits`、`textCacheBytes`、`textCacheEntries` | 整形缓存的未命中/命中与占用 |
 | `paints`、`paintOps`、`drawRuns`、`drawCalls`、`uploadSubmits`、`vertices`、`syncNodes` | 显示列表、绘制调用与上传的工作量 |
 | `canvasDraws`、`canvasUploads`、`canvasUploadBytes` | Canvas 2D 绘制次数、纹理上传次数与拷贝字节数（局部重绘只上传脏矩形） |
 | `webglDraws`、`webglPasses`、`webglPipelineMisses`、`webglBufferUploadBytes` | WebGL 绘制次数、打开的渲染 pass 数、新建管线数与缓冲拷贝字节数 |
+| `webglSetupMisses`、`webglSamplerBinds`、`webglStateBinds` | 预构建绘制缓存的未命中数、sampler 集合绑定次数与动态状态绑定次数；稳定场景只会在没见过的布局上未命中，并且只在纹理/uniform 集合真正变化时重绑 sampler |
 
 除 `*Ms` 时间外，所有字段都是累计值，因此两次快照相减即得到一帧的工作量。
 `restyleMs` 覆盖层叠**以及**它触发的布局过程（布局过程本身也单独报告为
@@ -265,7 +267,14 @@ expose/shown/restore 事件表示窗口内容已丢失、必须重绘，而具�
 决定；deferred 呈现则是重放某一帧在取不到交换链图像时已经构建好的内容，
 `starvedFrames` 统计这些帧（该值持续增长说明窗口完全没有被更新）。
 `XT_GUI_PERF=1` 会把同样的数字打印到 stderr（逐帧一行；`XT_GUI_PERF=<N>` 则每
-N 帧取平均）。
+N 帧取平均），其中也包含页面自身工作的 `script=`、`gldraw=` 与 `gluni=`。
+
+两个环境变量决定程序的驱动方式。`XT_GUI_URL` 提供页面的初始 `location`：可以是
+裸 `?query`、`#hash`，或 `path?query#hash`（origin 始终是
+`xbintsc://localhost`）。编译后的程序没有地址栏，这是浏览器版本的
+`?bench=1`、`?q=low`、`#shot` 等入口在原生版仍然可达的方式。`XT_GUI_FRAME_MS`
+覆盖 `run()` 的帧周期：未设置时跟随显示器刷新率，正数固定周期，`0` 恢复历史上
+不节流的循环（供基准与测试保留旧时序）。
 
 它们被 `tests/e2e/gui-*.test.ts` 用来断言解析、选择器匹配、特异性、继承、
 `!important` 与布局几何。它们在之后仍可用于调试。

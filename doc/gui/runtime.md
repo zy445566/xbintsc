@@ -39,6 +39,19 @@ swapchain image was available) is counted as `deferred`, and
 prints what each frame did (see
 [Performance](./rendering.md#performance-m20)).
 
+`run()` also paces the loop to the display refresh rate (the mode of the
+window's display; 60 Hz when the backend cannot report one). Before starting the
+next frame it blocks on an `SDL_WaitEventTimeout` slice, dispatching events and
+servicing the runtime's timers/microtasks while it waits, instead of draining
+the `requestAnimationFrame` queue on every idle loop iteration — the old loop
+ran a page's logic, WebGL recording and DOM updates hundreds of times per
+second and asked the GPU for frames the compositor never showed. A frame that
+overruns its slot starts the next one immediately (the deadline is clamped to
+now, so a page slower than the display still runs as fast as it can).
+`XT_GUI_FRAME_MS` overrides the period: unset follows the refresh rate, a
+positive value fixes it and `0` restores the historical uncapped loop (tests and
+benchmarks that want the old timing).
+
 The `xt_loop_set_main` hook remains available for hosts that want to own the
 loop themselves.
 

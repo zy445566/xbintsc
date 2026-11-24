@@ -177,8 +177,10 @@ void inheritFrom(XtStyle *style, const XtStyle *parent) {
   style->visible = parent->visible;
   style->pointer_events = parent->pointer_events;
   /* Most documents define no custom properties; copying the (empty) map for
-   * every element is pure overhead. */
-  if (!parent->variables.empty()) style->variables = parent->variables;
+   * every element is pure overhead. When they do, the map is shared: an
+   * inherited style only bumps a reference count, and a node that declares its
+   * own `--x` copies it once. */
+  if (parent->variables) style->variables = parent->variables;
   style->font_size = parent->font_size;
   style->font_weight = parent->font_weight;
   style->font_family = parent->font_family;
@@ -205,14 +207,25 @@ void applyCandidates(XtStyle *style, std::vector<Candidate> *candidates,
    * then available to every normal declaration on this element. */
   for (const Candidate &candidate : *candidates) {
     if (isCustomProperty(candidate.declaration->property)) {
-      style->variables[candidate.declaration->property] = candidate.declaration->value;
+      /* Copy-on-write: the inherited map is shared with the parent (and every
+       * sibling that inherits it), so the first declaration on this node forks
+       * it instead of mutating the parent's set. */
+      if (!style->variables || style->variables.use_count() > 1) {
+        auto forked = std::make_shared<std::unordered_map<std::string, std::string>>();
+        if (style->variables) *forked = *style->variables;
+        style->variables = std::move(forked);
+      }
+      (*style->variables)[candidate.declaration->property] = candidate.declaration->value;
     }
   }
+  static const std::unordered_map<std::string, std::string> kEmptyVariables;
   auto resolvedValue = [&](const Candidate &candidate, std::string *out) {
     *out = candidate.declaration->value;
     if (out->find("var(") != std::string::npos) {
+      const std::unordered_map<std::string, std::string> &variables =
+          style->variables ? *style->variables : kEmptyVariables;
       std::string resolved;
-      if (!substituteVariables(*out, style->variables, 0, &resolved)) return false;
+      if (!substituteVariables(*out, variables, 0, &resolved)) return false;
       *out = resolved;
     }
     return true;
@@ -473,7 +486,14 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
                  ComputeScratch *scratch) {
   const XtStyle *childParent = parent;
   if (node->isElement() && !node->is_pseudo) {
-    XtStyle style = xt_style_initial();
+    /* Compute into the map entry directly. Copying the finished style into
+     * `out[node]` duplicated every vector/string/map it owns — on a HUD-sized
+     * document that was one full XtStyle copy per element per restyle, for a
+     * value that is immediately overwritten again on the next restyle.
+     * `unordered_map` references stay valid across rehash (node-based), which
+     * is what `box->style` pointers rely on. */
+    XtStyle &style = out[node];
+    style = xt_style_initial();
     if (parent != nullptr) {
       inheritFrom(&style, parent);
     } else {
@@ -513,11 +533,8 @@ void computeNode(const Node *node, const XtStyle *parent, const StyleSheet &shee
     if (!style.transitions.empty()) scratch->has_transitions = true;
     if (!style.animations.empty()) scratch->has_animations = true;
 
-    /* `emplace` keeps the address of an existing entry stable, which is what
-     * `box->style` pointers rely on. */
-    out[node] = style;
-    childParent = &out[node];
-    const XtStyle &computed = out[node];
+    childParent = &style;
+    const XtStyle &computed = style;
     if (pseudos != nullptr && sheet.has_pseudo_elements) {
       computePseudo(node, PseudoElement::Before, computed, sheet, applies, out, context, state,
                     pseudos, scratch);

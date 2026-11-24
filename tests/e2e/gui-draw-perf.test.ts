@@ -373,6 +373,9 @@ describe.skipIf(!guiAvailable)("gui extension — immediate-mode draw performanc
           " draws=" + (end.webglDraws - start.webglDraws) +
           " passes=" + (end.webglPasses - start.webglPasses) +
           " misses=" + (end.webglPipelineMisses - start.webglPipelineMisses) +
+          " setupMiss=" + (end.webglSetupMisses - start.webglSetupMisses) +
+          " samplerBinds=" + (end.webglSamplerBinds - start.webglSamplerBinds) +
+          " stateBinds=" + (end.webglStateBinds - start.webglStateBinds) +
           " bytes=" + (end.webglBufferUploadBytes - start.webglBufferUploadBytes) +
           " frames=" + frames);
         win.close();
@@ -421,6 +424,12 @@ describe.skipIf(!guiAvailable)("gui extension — immediate-mode draw performanc
     expect(field(benches, "webgl", "passes")).toBeLessThanOrEqual(2 * frames);
     /* Only the patched range is re-uploaded, not the whole 4 MiB buffer. */
     expect(field(benches, "webgl", "bytes")).toBeLessThanOrEqual(65536 * frames + 4 * frames);
+    /* The prepared draw (VAO + program + state) survives across frames: after
+     * the warm-up frame, 2,000 identical draws must not rebuild setups, and the
+     * unchanged sampler set must not be re-bound per draw. */
+    expect(field(benches, "webgl", "setupMiss")).toBeLessThanOrEqual(8);
+    expect(field(benches, "webgl", "samplerBinds")).toBeLessThanOrEqual(4 * frames);
+    expect(field(benches, "webgl", "stateBinds")).toBeLessThanOrEqual(8 * frames);
 
     const budget = strictMs();
     if (budget > 0) expect(field(benches, "webgl", "ms")).toBeLessThan(budget);

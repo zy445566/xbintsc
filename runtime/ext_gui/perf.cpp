@@ -67,29 +67,38 @@ void addCounters(PerfCounters *target, const PerfCounters &value) {
   target->webglPasses += value.webglPasses;
   target->webglPipelineMisses += value.webglPipelineMisses;
   target->webglBufferUploadBytes += value.webglBufferUploadBytes;
+  target->webglSetupMisses += value.webglSetupMisses;
+  target->webglSamplerBinds += value.webglSamplerBinds;
+  target->webglStateBinds += value.webglStateBinds;
 }
 
 void addTimings(PerfTimings *target, const PerfTimings &value) {
   target->frame += value.frame;
+  target->script += value.script;
   target->restyle += value.restyle;
   target->layout += value.layout;
   target->paint += value.paint;
   target->upload += value.upload;
   target->draw += value.draw;
+  target->webgl_draw += value.webgl_draw;
+  target->webgl_uniform += value.webgl_uniform;
 }
 
 void printLine(uint64_t frames, const PerfTimings &ms, const PerfCounters &counters) {
   double divisor = frames > 0 ? (double)frames : 1.0;
   std::fprintf(stderr,
-               "xt_gui perf frames=%llu ms=%.3f restyle=%.3f layout=%.3f paint=%.3f "
-               "upload=%.3f draw=%.3f restyles=%llu nodes=%llu rules=%llu media=%llu "
+               "xt_gui perf frames=%llu ms=%.3f script=%.3f restyle=%.3f layout=%.3f "
+               "paint=%.3f upload=%.3f draw=%.3f gldraw=%.3f gluni=%.3f "
+               "restyles=%llu nodes=%llu rules=%llu media=%llu "
                "layouts=%llu boxes=%llu text=%llu textHit=%llu ops=%llu runs=%llu "
                "draws=%llu uploads=%llu verts=%llu sync=%llu presents=%llu exposes=%llu "
                "deferred=%llu starved=%llu skip=%llu "
-               "cdraw=%llu cups=%llu cbytes=%llu gldraw=%llu passes=%llu gmiss=%llu "
-               "gbytes=%llu\n",
-               (unsigned long long)frames, ms.frame / divisor, ms.restyle / divisor,
+               "cdraw=%llu cups=%llu cbytes=%llu gldraws=%llu passes=%llu gmiss=%llu "
+               "gbytes=%llu setupMiss=%llu samplerBinds=%llu stateBinds=%llu\n",
+               (unsigned long long)frames, ms.frame / divisor, ms.script / divisor,
+               ms.restyle / divisor,
                ms.layout / divisor, ms.paint / divisor, ms.upload / divisor, ms.draw / divisor,
+               ms.webgl_draw / divisor, ms.webgl_uniform / divisor,
                (unsigned long long)counters.restyles, (unsigned long long)counters.restyleNodes,
                (unsigned long long)counters.rulesEvaluated,
                (unsigned long long)counters.mediaEvaluated, (unsigned long long)counters.layouts,
@@ -109,7 +118,10 @@ void printLine(uint64_t frames, const PerfTimings &ms, const PerfCounters &count
                (unsigned long long)counters.webglDraws,
                (unsigned long long)counters.webglPasses,
                (unsigned long long)counters.webglPipelineMisses,
-               (unsigned long long)counters.webglBufferUploadBytes);
+               (unsigned long long)counters.webglBufferUploadBytes,
+               (unsigned long long)counters.webglSetupMisses,
+               (unsigned long long)counters.webglSamplerBinds,
+               (unsigned long long)counters.webglStateBinds);
 }
 
 }  // namespace

@@ -304,8 +304,10 @@ void AudioMixer::param_cancel(uint64_t node, int index, double time, bool hold) 
 /* -- AudioMixer: clock ---------------------------------------------------- */
 
 double AudioMixer::current_time() {
-  std::lock_guard<std::mutex> lock(mutex_);
-  return static_cast<double>(frames_rendered_) / kAudioMixRate;
+  /* Lock-free: the audio thread holds `mutex_` while it renders a quantum, and
+   * a page schedules sounds from `currentTime` on every frame. Waiting for that
+   * lock here was measurable main-thread time with a convolver send running. */
+  return static_cast<double>(frames_rendered_.load(std::memory_order_relaxed)) / kAudioMixRate;
 }
 
 void AudioMixer::shutdown() {
@@ -335,8 +337,20 @@ void AudioMixer::render_locked(float *out, int frames) {
 }
 
 void AudioMixer::render(float *out, int frames) {
-  std::lock_guard<std::mutex> lock(mutex_);
-  render_locked(out, frames);
+  /* SDL may ask for many quanta in one callback (its stream buffer is tens of
+   * milliseconds). Rendering the whole callback under one lock made a page's
+   * audio-parameter update wait for all of it — with a convolver send that can
+   * be several milliseconds — showing up as main-thread frame time. Hold the
+   * graph lock for one quantum at a time instead; the mixer stays real-time and
+   * a setter never waits for more than a quantum. */
+  int done = 0;
+  while (done < frames) {
+    int chunk = frames - done;
+    if (chunk > kAudioQuantum) chunk = kAudioQuantum;
+    std::lock_guard<std::mutex> lock(mutex_);
+    render_locked(out + static_cast<size_t>(done) * kAudioMixChannels, chunk);
+    done += chunk;
+  }
 }
 
 void AudioMixer::render_offline(float *out, int frames) {

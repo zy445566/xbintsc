@@ -70,6 +70,14 @@ struct WebGLDrawKey {
   int mode = 0;                // GL primitive mode
   int index_size = 0;          // 0 = drawArrays, otherwise index element bytes
   uint32_t element_buffer = 0; // bound GL_ELEMENT_ARRAY_BUFFER, 0 = none
+  /** Identity of the vertex layout: the bound VAO plus that VAO's revision
+   * (bumped only when its attribute state actually changes), so the prepared
+   * draw survives across frames. For the default VAO (`attribs_vao == 0`) the
+   * revision is the context's global attrib counter. */
+  uint32_t attribs_vao = 0;
+  uint64_t attribs_revision = 0;
+  /** Content hash of the resolved vertex layout. Only the pipeline cache uses
+   * it (a pipeline depends on the layout, not on which VAO supplies it). */
   uint64_t attribs_version = 0;
   uint64_t gpu_version = 0;
   uint64_t framebuffer_version = 0;
@@ -78,8 +86,9 @@ struct WebGLDrawKey {
 
   bool operator==(const WebGLDrawKey &other) const {
     return program == other.program && mode == other.mode && index_size == other.index_size &&
-           element_buffer == other.element_buffer && attribs_version == other.attribs_version &&
-           gpu_version == other.gpu_version &&
+           element_buffer == other.element_buffer && attribs_vao == other.attribs_vao &&
+           attribs_revision == other.attribs_revision &&
+           attribs_version == other.attribs_version && gpu_version == other.gpu_version &&
            framebuffer_version == other.framebuffer_version && state_hash == other.state_hash &&
            state_hash2 == other.state_hash2;
   }
@@ -97,6 +106,8 @@ struct WebGLDrawKeyHash {
     mix((uint64_t)(uint32_t)key.mode);
     mix((uint64_t)(uint32_t)key.index_size);
     mix(key.element_buffer);
+    mix(key.attribs_vao);
+    mix(key.attribs_revision);
     mix(key.attribs_version);
     mix(key.gpu_version);
     mix(key.framebuffer_version);

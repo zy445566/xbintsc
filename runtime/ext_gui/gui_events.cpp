@@ -331,8 +331,14 @@ void xt_gui_render_window(XtGuiWindow *win) {
    * to be presented even when its callback changed nothing visible. */
   if (!win->animation_frames.empty()) win->present_dirty = 1;
   /* The timestamp is a DOMHighResTimeStamp: the same clock as
-   * `performance.now()`, not SDL's machine-uptime tick. */
-  xt_gui_run_animation_frames(win, xt_monotonic_ms());
+   * `performance.now()`, not SDL's machine-uptime tick. This is the page's own
+   * code (AOT-compiled `<script>`/rAF callbacks, including any WebGL command
+   * recording it does), so it gets its own phase: without it a script-heavy
+   * frame looked like unexplained time in `frame`. */
+  {
+    xtgui::PerfScope scope(&xtgui::g_perf_frame_ms.script);
+    xt_gui_run_animation_frames(win, xt_monotonic_ms());
+  }
   /* A callback may have closed the window (directly or through the
    * auto-close guard): `xt_gui_quit_window` released the document and the GPU
    * geometry, so there is nothing left to lay out or paint. */

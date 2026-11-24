@@ -198,6 +198,16 @@ xt_object *xt_as_object(xt_value value) {
 
 static xt_property *xt_object_find(xt_object *obj, xt_value key) {
   XT_PROFILE_TICK(XT_PROFILE_OBJECT_FIND);
+  if (obj == NULL) return NULL;
+  /* The shape is the authoritative layout: chain order and property order are
+   * the same by construction, and `xt_shape_lookup` is an O(1) hash for a
+   * layout with enough keys. Only a shape-less object (interning limit reached)
+   * falls back to the scan. */
+  if (obj->shape != NULL) {
+    uint32_t index = 0;
+    if (!xt_shape_lookup(obj->shape, key, &index) || index >= obj->count) return NULL;
+    return &obj->properties[index];
+  }
   for (uint32_t i = 0; i < obj->count; i++) {
     if (xt_property_key_equals(obj->properties[i].key, key)) return &obj->properties[i];
   }
@@ -280,8 +290,9 @@ xt_value xt_to_property_key(xt_value key) {
 /* Two property keys are equal when they are the same symbol, or equal
  * strings. */
 int xt_property_key_equals(xt_value a, xt_value b) {
+  if (a == b) return 1;
   if (XT_IS_STRING(a) && XT_IS_STRING(b)) return xt_string_equals(xt_as_string(a), xt_as_string(b));
-  return a == b;
+  return 0;
 }
 
 static int xt_key_is_prototype(xt_value key) {

@@ -25,6 +25,12 @@ enum {
   XT_PROFILE_STRING_CSTR,
   XT_PROFILE_TYPED_READ,
   XT_PROFILE_TYPED_WRITE,
+  /* Prepared inline-cache outcome: a hit skips the property lookup, an early
+   * out is a receiver/key the cache cannot describe (arrays, host views,
+   * symbol arithmetic), a miss performs the lookup and refills. */
+  XT_PROFILE_IC_HIT,
+  XT_PROFILE_IC_EARLY,
+  XT_PROFILE_IC_MISS,
   XT_PROFILE_COUNT
 };
 

@@ -423,11 +423,14 @@ static xt_value win_stats(xt_value self, xt_value env, int32_t argc, xt_value *a
    * cumulative (diff two calls to get the work one frame did). */
   const xtgui::PerfTimings &ms = xtgui::g_perf_last;
   xt_object_set(object, xt_string_from_cstr("frameMs"), xt_number(ms.frame));
+  xt_object_set(object, xt_string_from_cstr("scriptMs"), xt_number(ms.script));
   xt_object_set(object, xt_string_from_cstr("restyleMs"), xt_number(ms.restyle));
   xt_object_set(object, xt_string_from_cstr("layoutMs"), xt_number(ms.layout));
   xt_object_set(object, xt_string_from_cstr("paintMs"), xt_number(ms.paint));
   xt_object_set(object, xt_string_from_cstr("uploadMs"), xt_number(ms.upload));
   xt_object_set(object, xt_string_from_cstr("drawMs"), xt_number(ms.draw));
+  xt_object_set(object, xt_string_from_cstr("webglDrawMs"), xt_number(ms.webgl_draw));
+  xt_object_set(object, xt_string_from_cstr("webglUniformMs"), xt_number(ms.webgl_uniform));
   const xtgui::PerfCounters &counters = xtgui::g_perf_total;
   auto setCounter = [&object](const char *name, uint64_t value) {
     xt_object_set(object, xt_string_from_cstr(name), xt_number((double)value));
@@ -463,6 +466,9 @@ static xt_value win_stats(xt_value self, xt_value env, int32_t argc, xt_value *a
   setCounter("webglPasses", counters.webglPasses);
   setCounter("webglPipelineMisses", counters.webglPipelineMisses);
   setCounter("webglBufferUploadBytes", counters.webglBufferUploadBytes);
+  setCounter("webglSetupMisses", counters.webglSetupMisses);
+  setCounter("webglSamplerBinds", counters.webglSamplerBinds);
+  setCounter("webglStateBinds", counters.webglStateBinds);
   return object;
 }
 

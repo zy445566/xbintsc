@@ -85,6 +85,9 @@ static const char *const xt_profile_names[XT_PROFILE_COUNT] = {
     "string-cstr",
     "typed-read",
     "typed-write",
+    "ic-hit",
+    "ic-early",
+    "ic-miss",
 };
 
 static void xt_profile_dump(void) {

@@ -167,6 +167,7 @@ void WebGLContext::draw_range_elements(int mode, int start, int end, int count, 
 void WebGLContext::draw(int mode, int first, int count, int index_type, int offset,
                         int instances) {
   if (count <= 0) return;
+  PerfScopeActive perf_scope(&g_perf_frame_ms.webgl_draw);
   g_perf_frame.webglDraws += 1;
   WebGLProgram *program_ = program(current_program_);
   if (program_ == nullptr || !program_->linked || program_->vs_shader == nullptr) {
@@ -284,9 +285,21 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   key.mode = draw_mode;
   key.index_size = index_size;
   key.element_buffer = !needs_expand && index_size > 0 ? bound_element_ : 0;
-  key.attribs_version = attribs_version_;
+  /* The vertex layout is identified by the bound VAO and its revision, not by
+   * the context-wide counter that every VAO bind and framebuffer switch moves.
+   * Keying on the counter rebuilt every prepared draw once per frame (three.js
+   * binds a VAO per geometry), which was the dominant per-draw cost. */
+  key.attribs_vao = bound_vertex_array_;
+  const WebGLVertexArray *bound_vao =
+      bound_vertex_array_ != 0 ? vertex_array(bound_vertex_array_) : nullptr;
+  key.attribs_revision = bound_vao != nullptr ? bound_vao->revision : attribs_version_;
   key.gpu_version = gpu_version_;
-  key.framebuffer_version = framebuffer_version_;
+  /* `framebuffer_version_` is a monotonic counter bumped by every framebuffer
+   * switch, not a content hash. Keying the prepared-draw cache on it rebuilt
+   * every setup every frame in a multi-pass scene (the attachment formats it
+   * stood in for are already part of `state_hash`, and the bindings do not
+   * depend on the target), so the setup identity ignores it. */
+  key.framebuffer_version = 0;
   draw_state_hash(&key.state_hash, &key.state_hash2);
 
   const WebGLDrawSetup *setup = prepare_draw(key);
@@ -317,7 +330,18 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   }
   viewport.min_depth = 0.0f;
   viewport.max_depth = 1.0f;
-  SDL_SetGPUViewport(pass_, &viewport);
+  /* Dynamic state is per pass: a pass split loses it, so the comparison is
+   * scoped by `pass_serial_`. Repeating the same value is otherwise a no-op
+   * command that a multi-hundred-draw frame records once per draw. */
+  if (last_viewport_pass_ != pass_serial_ || last_viewport_.x != viewport.x ||
+      last_viewport_.y != viewport.y || last_viewport_.w != viewport.w ||
+      last_viewport_.h != viewport.h || last_viewport_.min_depth != viewport.min_depth ||
+      last_viewport_.max_depth != viewport.max_depth) {
+    SDL_SetGPUViewport(pass_, &viewport);
+    last_viewport_ = viewport;
+    last_viewport_pass_ = pass_serial_;
+    g_perf_frame.webglStateBinds += 1;
+  }
 
   SDL_Rect scissor;
   scissor.x = 0;
@@ -342,7 +366,14 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
   if (scissor.y + scissor.h > target_height) scissor.h = target_height - scissor.y;
   if (scissor.w < 0) scissor.w = 0;
   if (scissor.h < 0) scissor.h = 0;
-  SDL_SetGPUScissor(pass_, &scissor);
+  if (last_scissor_pass_ != pass_serial_ || last_scissor_.x != scissor.x ||
+      last_scissor_.y != scissor.y || last_scissor_.w != scissor.w ||
+      last_scissor_.h != scissor.h) {
+    SDL_SetGPUScissor(pass_, &scissor);
+    last_scissor_ = scissor;
+    last_scissor_pass_ = pass_serial_;
+    g_perf_frame.webglStateBinds += 1;
+  }
 
   /* Bindings belong to the render pass, so a setup reused across an upload (a
    * new pass) must be bound again even though nothing about it changed. */
@@ -376,7 +407,14 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
     constants.g = blend_color_[1];
     constants.b = blend_color_[2];
     constants.a = blend_color_[3];
-    SDL_SetGPUBlendConstants(pass_, constants);
+    if (last_blend_pass_ != pass_serial_ || last_blend_.r != constants.r ||
+        last_blend_.g != constants.g || last_blend_.b != constants.b ||
+        last_blend_.a != constants.a) {
+      SDL_SetGPUBlendConstants(pass_, constants);
+      last_blend_ = constants;
+      last_blend_pass_ = pass_serial_;
+      g_perf_frame.webglStateBinds += 1;
+    }
   }
   /* User uniform blocks live in the same std140 block; refresh their members
    * from the CPU-side buffer bound to each block's binding point. */
@@ -450,12 +488,34 @@ void WebGLContext::draw(int mode, int first, int count, int index_type, int offs
       texture_binding.sampler = sampler;
       sampler_bindings_.push_back(texture_binding);
     }
-    if (vertex_stage) {
-      SDL_BindGPUVertexSamplers(pass_, 0, sampler_bindings_.data(),
-                                (Uint32)sampler_bindings_.size());
-    } else {
-      SDL_BindGPUFragmentSamplers(pass_, 0, sampler_bindings_.data(),
+    /* A sampler set only has to be re-bound when it changes or the pass was
+     * split (bindings do not survive a new pass). three.js repeats the same
+     * material/texture set across many objects, so this removes one descriptor
+     * write per draw in the common case. */
+    uint64_t &bound_pass = vertex_stage ? last_vertex_sampler_pass_ : last_fragment_sampler_pass_;
+    std::vector<SDL_GPUTextureSamplerBinding> &cached =
+        vertex_stage ? last_vertex_samplers_ : last_fragment_samplers_;
+    bool unchanged = bound_pass == pass_serial_ && cached.size() == sampler_bindings_.size();
+    if (unchanged) {
+      for (size_t i = 0; i < cached.size(); i++) {
+        if (cached[i].texture != sampler_bindings_[i].texture ||
+            cached[i].sampler != sampler_bindings_[i].sampler) {
+          unchanged = false;
+          break;
+        }
+      }
+    }
+    if (!unchanged) {
+      if (vertex_stage) {
+        SDL_BindGPUVertexSamplers(pass_, 0, sampler_bindings_.data(),
                                   (Uint32)sampler_bindings_.size());
+      } else {
+        SDL_BindGPUFragmentSamplers(pass_, 0, sampler_bindings_.data(),
+                                    (Uint32)sampler_bindings_.size());
+      }
+      cached = sampler_bindings_;
+      bound_pass = pass_serial_;
+      g_perf_frame.webglSamplerBinds += 1;
     }
   };
   bind_samplers(program_->vs_sampler_uniforms, true);

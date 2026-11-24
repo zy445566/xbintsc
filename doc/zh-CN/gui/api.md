@@ -159,6 +159,9 @@ requestAnimationFrame(frame);
 `gain.value = …` 都要等当前量子渲染完——在每帧都调度声音的场景里，这是主线程音频开销的
 最大来源。命令顺序保持不变（参数更新与图变更共用一个 FIFO）；`AudioContext.currentTime`
 是原子读取，`AudioParam.value` 读取前会先清空队列，因此 getter 能看到刚写入的值。
+音频线程尚未插入的节点是例外：对它的参数写入直接作用于 pending 节点（`AudioParam.value`
+正是读取这张表），因为在没有音频设备的宿主上——无头 CI，或在第一次 `start()` 之前就
+建好图的程序——没有任何线程会去清空这个 FIFO。
 
 性能分析时可用两个环境变量把音频开销拆开：`XT_GUI_AUDIO_SILENT=1` 渲染静音但保留时钟与
 锁（用于区分 mixer 的 DSP 开销与页面的 Web Audio 调用），`XT_AUDIO_PROFILE=1` 在退出时

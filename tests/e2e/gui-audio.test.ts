@@ -137,6 +137,36 @@ describe.skipIf(!guiAvailable)("gui extension — Web Audio", () => {
     expect(value("close")).toBe("closed:true");
   });
 
+  it("makes a pending node's AudioParam writes readable before the device starts", () => {
+    /* A graph is normally built *before* the first `start()` opens a device, and
+     * an offline context never opens one at all, so the mixer's audio thread has
+     * not inserted these nodes yet. The write must land on the pending node
+     * itself: queueing it for the audio thread left `value` answering the
+     * untouched default until something drained the FIFO — forever on a headless
+     * host, which is how CI read `48000:running:1` instead of `…:0.5`. */
+    const { value } = harness.compileAndRun(
+      "audio-pending-param",
+      `
+      const ctx = new AudioContext({ __offline: true });
+      const gain = ctx.createGain();
+      console.log("before=" + gain.gain.value + ":" + gain.gain.defaultValue);
+      gain.gain.value = 0.5;
+      console.log("after=" + gain.gain.value);
+      gain.gain.setValueAtTime(0.25, 0);
+      console.log("scheduled=" + gain.gain.value);
+      const constant = ctx.createConstantSource();
+      constant.offset.value = 0.75;
+      console.log("second=" + constant.offset.value);
+      `,
+      { console: true },
+    );
+
+    expect(value("before")).toBe("1:1");
+    expect(value("after")).toBe("0.5");
+    expect(value("scheduled")).toBe("0.25");
+    expect(value("second")).toBe("0.75");
+  });
+
   it("renders constant sources, stereo panners and delays", () => {
     const { value } = harness.compileAndRun(
       "audio-nodes",

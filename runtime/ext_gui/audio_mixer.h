@@ -314,6 +314,29 @@ class AudioMixer {
   void post_command(std::function<void()> command);
   /** Apply queued mutations now (for a getter that must observe them). */
   void drain_commands_locked();
+  /** Apply a parameter mutation straight to a node the audio thread has not
+   * inserted yet, under the pending table's lock, and return true. Return false
+   * when the node is already in the graph so the caller queues the mutation in
+   * the FIFO instead.
+   *
+   * A pending node's parameters are not rendered yet, so touching them here is
+   * safe: the queued insertion erases the entry from `pending_nodes_` under this
+   * same lock, so a direct write either completes before the audio thread can
+   * render the node or is not attempted at all. Without this, a
+   * `gain.value = 0.5` right after `createGain()` was only *queued* while
+   * `param_value` answered from the pending node's untouched default — a getter
+   * read `1` back until something drained the FIFO. On a host with no audio
+   * device (a headless CI runner, or a program that builds its graph before the
+   * first `start()`) nothing drains it, so the write was never observable. */
+  template <typename Mutate>
+  bool mutate_pending_param(uint64_t node, int index, Mutate mutate) {
+    std::lock_guard<std::mutex> lock(pending_mutex_);
+    auto found = pending_nodes_.find(node);
+    if (found == pending_nodes_.end()) return false;
+    AudioNode &target = *found->second;
+    if (index >= 0 && index < target.param_count) mutate(target.params[index]);
+    return true;
+  }
 
   std::mutex mutex_;
   std::mutex command_mutex_;

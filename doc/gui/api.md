@@ -182,7 +182,11 @@ page made a per-frame `gain.value = …` wait for the current quantum — on a
 scene that schedules sound every frame that was the largest main-thread audio
 cost. Ordering is preserved (one FIFO for parameter updates and graph changes);
 `AudioContext.currentTime` is an atomic read, and `AudioParam.value` drains the
-queue first so a getter observes a just-written value.
+queue first so a getter observes a just-written value. A node the audio thread
+has not inserted yet is a special case: writes to it are applied directly to the
+pending node (which `AudioParam.value` reads), because on a host with no audio
+device — a headless runner, or any program that builds its graph before the
+first `start()` — nothing would ever drain the FIFO.
 
 Two environment variables separate the audio costs while profiling:
 `XT_GUI_AUDIO_SILENT=1` renders silence but keeps the clock and the locking

@@ -12,6 +12,16 @@
  * applies queued commands at the next quantum boundary, in FIFO order, with the
  * mutex already held. `param_value` flushes first because a getter must observe
  * a just-written value; ordering between queued commands is preserved.
+ *
+ * A node the audio thread has not inserted yet is the exception: the FIFO runs
+ * on the audio thread, so a write to a node that is still in `pending_nodes_`
+ * would not be observable before the next quantum — and not at all when no
+ * audio thread exists (a headless host, or a graph built before the first
+ * `start()`). Such writes are applied directly to the pending node instead
+ * (`mutate_pending_param`); `param_value` already reads that table, so the
+ * getter observes them. Ordering is unaffected: the insertion command erases
+ * the pending entry under the same lock, so every direct write happens before
+ * the node can be rendered, and every later write for it goes through the FIFO.
  */
 
 #include "audio_mixer.h"
@@ -44,8 +54,9 @@ double audio_now(const AudioMixer &mixer) {
 
 double AudioMixer::param_value(uint64_t node, int index) {
   /* A node created on this thread is not in `nodes_` until the audio thread
-   * inserts it; read its defaults from the pending table instead of flushing
-   * the queue (which would wait for the render lock). */
+   * inserts it; read its values from the pending table instead of flushing the
+   * queue (which would wait for the render lock). Parameter writes for a
+   * pending node were applied directly there, so this is not a stale default. */
   {
     std::lock_guard<std::mutex> pending_lock(pending_mutex_);
     auto found = pending_nodes_.find(node);
@@ -63,6 +74,11 @@ double AudioMixer::param_value(uint64_t node, int index) {
 }
 
 void AudioMixer::param_set(uint64_t node, int index, double value) {
+  const double now = audio_now(*this);
+  if (mutate_pending_param(node, index,
+                           [&](AudioParamState &param) { param.set_value(value, now); })) {
+    return;
+  }
   post_command([this, node, index, value]() {
     AudioNode *target = node_locked(node);
     if (target == nullptr || index < 0 || index >= target->param_count) return;
@@ -71,6 +87,10 @@ void AudioMixer::param_set(uint64_t node, int index, double value) {
 }
 
 void AudioMixer::param_set_at(uint64_t node, int index, double value, double time) {
+  if (mutate_pending_param(node, index,
+                           [&](AudioParamState &param) { param.set_value_at_time(value, time); })) {
+    return;
+  }
   post_command([this, node, index, value, time]() {
     AudioNode *target = node_locked(node);
     if (target == nullptr || index < 0 || index >= target->param_count) return;
@@ -79,6 +99,10 @@ void AudioMixer::param_set_at(uint64_t node, int index, double value, double tim
 }
 
 void AudioMixer::param_linear_ramp(uint64_t node, int index, double value, double time) {
+  if (mutate_pending_param(node, index,
+                           [&](AudioParamState &param) { param.linear_ramp(value, time); })) {
+    return;
+  }
   post_command([this, node, index, value, time]() {
     AudioNode *target = node_locked(node);
     if (target == nullptr || index < 0 || index >= target->param_count) return;
@@ -87,6 +111,10 @@ void AudioMixer::param_linear_ramp(uint64_t node, int index, double value, doubl
 }
 
 void AudioMixer::param_exponential_ramp(uint64_t node, int index, double value, double time) {
+  if (mutate_pending_param(node, index,
+                           [&](AudioParamState &param) { param.exponential_ramp(value, time); })) {
+    return;
+  }
   post_command([this, node, index, value, time]() {
     AudioNode *target = node_locked(node);
     if (target == nullptr || index < 0 || index >= target->param_count) return;
@@ -96,6 +124,11 @@ void AudioMixer::param_exponential_ramp(uint64_t node, int index, double value, 
 
 void AudioMixer::param_set_target(uint64_t node, int index, double value, double time,
                                   double time_constant) {
+  if (mutate_pending_param(node, index, [&](AudioParamState &param) {
+        param.set_target(value, time, time_constant);
+      })) {
+    return;
+  }
   post_command([this, node, index, value, time, time_constant]() {
     AudioNode *target = node_locked(node);
     if (target == nullptr || index < 0 || index >= target->param_count) return;
@@ -104,6 +137,15 @@ void AudioMixer::param_set_target(uint64_t node, int index, double value, double
 }
 
 void AudioMixer::param_cancel(uint64_t node, int index, double time, bool hold) {
+  if (mutate_pending_param(node, index, [&](AudioParamState &param) {
+        if (hold) {
+          param.cancel_and_hold(time);
+        } else {
+          param.cancel_scheduled(time);
+        }
+      })) {
+    return;
+  }
   post_command([this, node, index, time, hold]() {
     AudioNode *target = node_locked(node);
     if (target == nullptr || index < 0 || index >= target->param_count) return;

@@ -284,7 +284,7 @@ available from GLSL ES 3.00, which is what the instanced example uses.
   clears only the scissor rectangle, for colour, depth and stencil), `blendColor`,
   `blendFunc`/`blendFuncSeparate`,
   `blendEquation`/`blendEquationSeparate`, `depthFunc`,
-  `depthMask`, `colorMask`, `stencilFunc`/`stencilFuncSeparate`,
+  `depthMask`, `depthRange`, `colorMask`, `stencilFunc`/`stencilFuncSeparate`,
   `stencilOp`/`stencilOpSeparate`, `stencilMask`/`stencilMaskSeparate`,
   `cullFace`, `frontFace`, `viewport`, `scissor`,
   `pixelStorei`, `finish`. The stencil test takes part in rasterisation and
@@ -344,7 +344,12 @@ buffer. A vertex shader can sample textures just like a fragment shader:
 `MAX_VERTEX_TEXTURE_IMAGE_UNITS` reports 16, vertex samplers live in set 0 and
 are bound with `SDL_BindGPUVertexSamplers` on every draw. Depth values use the
 backend's `[0, 1]` clip space rather than GL's `[-1, 1] → [0, 1]` remap:
-`gl_Position.z = 0.5` stores depth `0.5` (real WebGL stores `0.75`).
+`gl_Position.z = 0.5` stores depth `0.5` (real WebGL stores `0.75`). `depthRange`
+narrows that space through the SDL_GPU viewport's depth bounds, which apply to
+the depth test and the depth write alike: after rendering the world at the
+default range, a first-person renderer draws its view model with
+`depthRange(0, 0.05)` and it lands in the first 5% of the buffer, in front of
+everything the world wrote.
 
 ## Not implemented
 
@@ -404,6 +409,10 @@ SPIRV-Cross, nor any `webgl_*` member (see [Link features](./build.md#link-featu
   render target the page never depth-cleared, and `uniform1fv` with a plain
   JavaScript array — the two WebGL behaviours three.js's `PMREMGenerator`
   needs for a non-black environment map.
+- `tests/e2e/gui-webgl-depth-range.test.ts` covers `depthRange`: the default
+  range leaves the depth order alone, a narrowed range pulls a farther fragment
+  in front, the range also rewrites the depth a fragment writes, and
+  `getParameter(DEPTH_RANGE)` reports the live values.
 - `tests/e2e/gui-media.test.ts` also uploads the latest decoded `<video>` frame
   as a texture and reads it back.
 - `tests/e2e/gui-webgl2-3d.test.ts` covers 2D-array and 3D texture layer

@@ -114,8 +114,11 @@ METHOD(webgl_depth_mask) {
 
 METHOD(webgl_depth_range) {
   (void)env;
-  (void)argc;
-  (void)argv;
+  xtgui::WebGLContext *context = context_of(self);
+  if (context != nullptr) {
+    context->depth_range((float)webgl_number(argc, argv, 0, 0.0),
+                         (float)webgl_number(argc, argv, 1, 1.0));
+  }
   return XT_UNDEFINED;
 }
 
@@ -319,7 +322,7 @@ METHOD(webgl_get_parameter) {
       return number_array(values, 4);
     }
     case GL_DEPTH_RANGE: {
-      const double values[2] = {0, 1};
+      const double values[2] = {context->depth_range_near(), context->depth_range_far()};
       return number_array(values, 2);
     }
     case GL_BLEND_COLOR: {

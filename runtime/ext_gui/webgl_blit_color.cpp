@@ -217,6 +217,11 @@ bool WebGLContext::draw_color_quad(SDL_GPUTexture *source, bool source_top_down,
     viewport.min_depth = 0.0f;
     viewport.max_depth = 1.0f;
     SDL_SetGPUViewport(pass_, &viewport);
+    /* This helper replaces the pass's viewport without going through the draw
+     * path's cache, so record what the pass now has: the next user draw has to
+     * re-record its own depth range instead of trusting a stale "unchanged". */
+    last_viewport_ = viewport;
+    last_viewport_pass_ = pass_serial_;
     SDL_Rect scissor;
     scissor.x = x0;
     /* The rectangle covers the rows between the two corners; for a top-down

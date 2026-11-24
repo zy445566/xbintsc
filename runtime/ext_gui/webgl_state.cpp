@@ -162,6 +162,13 @@ void WebGLContext::scissor(int x, int y, int w, int h) {
   scissor_box_[3] = h;
 }
 
+void WebGLContext::depth_range(float near, float far) {
+  /* GL clamps both ends into [0, 1] and keeps a reversed range (`near > far`)
+   * as given; only the mapping changes, so no validation error is raised. */
+  depth_range_near_ = std::clamp(near, 0.0f, 1.0f);
+  depth_range_far_ = std::clamp(far, 0.0f, 1.0f);
+}
+
 void WebGLContext::clear(int mask) {
   if (guidev::g_device == nullptr) return;
   const bool color_bit = (mask & GL_COLOR_BUFFER_BIT) != 0;

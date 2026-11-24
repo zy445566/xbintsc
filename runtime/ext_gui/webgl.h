@@ -131,6 +131,12 @@ class WebGLContext {
   void color_mask(bool r, bool g, bool b, bool a);
   void depth_mask(bool write) { state_.depth_write = write; }
   void depth_func(int func) { state_.depth_func = func; }
+  /** `glDepthRange`: maps clip-space depth into `[near, far]` of the depth
+   * buffer for the test and the write alike. Not pipeline state — the draw path
+   * applies it through the SDL_GPU viewport's depth bounds. */
+  void depth_range(float near, float far);
+  float depth_range_near() const { return depth_range_near_; }
+  float depth_range_far() const { return depth_range_far_; }
   void stencil_func(int func, int ref, uint32_t mask);
   void stencil_func_separate(int face, int func, int ref, uint32_t mask);
   void stencil_op(int fail, int zfail, int zpass);
@@ -516,6 +522,9 @@ class WebGLContext {
   int viewport_[4] = {0, 0, 0, 0};
   int scissor_box_[4] = {0, 0, 0, 0};
   bool scissor_test_ = false;
+  /** Depth range (`glDepthRange`); see `depth_range`. */
+  float depth_range_near_ = 0.0f;
+  float depth_range_far_ = 1.0f;
 
   std::unordered_map<uint32_t, std::unique_ptr<WebGLShader>> shaders_;
   std::unordered_map<uint32_t, std::unique_ptr<WebGLProgram>> programs_;

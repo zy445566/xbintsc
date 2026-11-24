@@ -6,8 +6,9 @@
 - Sources live in `runtime/ext_gui/` (C/C++) plus vendored libs under `vendor/`
   (gitignored; fetched on demand). `npm run vendor` fetches the pinned
   stb/NanoSVG headers (and the miniz/SQLite sources the link features compile);
-  `npm run gui` fetches just the two header sets it needs. Media decoding lives
-  in `runtime/xt_media/` and is built separately.
+  `npm run gui` fetches the vendored sources it compiles (stb, NanoSVG, miniz,
+  plus Brotli and woff2 for `webfonts`).
+  Media decoding lives in `runtime/xt_media/` and is built separately.
 - `npm run gui` (`scripts/build-gui.ts`) fetches a pinned SDL3 (`SDL3_TAG`,
   default `release-3.2.10`), builds a static SDL3, fetches and builds static
   **FreeType** (`FREETYPE_VERSION`, default `2.13.3`) and **HarfBuzz**
@@ -15,16 +16,21 @@
   and fetches and builds static **glslang** (`GLSLANG_VERSION`, default
   `16.6.0`) against the pinned SPIR-V headers (`SPIRV_HEADERS_VERSION`), and —
   **on macOS only** — **SPIRV-Cross** (`SPIRV_CROSS_VERSION`, default
-  `vulkan-sdk-1.4.313.0`). glslang is the runtime GLSL ES compiler behind WebGL
-  and SPIRV-Cross turns its SPIR-V into MSL for the Metal backend (see
-  [WebGL](./webgl.md)); both are merged into the archive like the other
-  libraries. Metal is the only SDL_GPU backend that consumes MSL, so on
-  Windows/Linux the script neither fetches nor merges SPIRV-Cross:
+  `vulkan-sdk-1.4.313.0`). It also fetches the **Brotli** sources
+  (`BROTLI_VERSION`, default `1.1.0`) and the **woff2** reference decoder
+  (`WOFF2_VERSION`, default `1.0.2`) and compiles both — plus miniz's inflater —
+  into the archive for the optional `webfonts` feature. glslang is the runtime
+  GLSL ES compiler behind WebGL and SPIRV-Cross turns its SPIR-V into MSL for
+  the Metal backend (see [WebGL](./webgl.md)); both are merged into the archive
+  like the other libraries. Metal is the only SDL_GPU backend that consumes MSL,
+  so on Windows/Linux the script neither fetches nor merges SPIRV-Cross:
   `webgl_msl.cpp` compiles to nothing there and the ~2.5 MiB it contributes
   would be unreachable. The default text path uses the bundled
   **stb_truetype** (`vendor/stb/stb_truetype.h`); HarfBuzz + FreeType are
-  only extracted when the `shaping` feature is active.
-  Every library (SDL3, FreeType, HarfBuzz, glslang, SPIRV-Cross and the engine)
+  only extracted when the `shaping` feature is active, and miniz/Brotli/woff2
+  only when `webfonts` is.
+  Every library (SDL3, FreeType, HarfBuzz, glslang, SPIRV-Cross, Brotli, woff2
+  and the engine)
   is compiled with `-ffunction-sections -fdata-sections`, and SDL is configured
   without the subsystems the engine never calls (`SDL_JOYSTICK`, `SDL_HAPTIC`,
   `SDL_SENSOR`, `SDL_CAMERA`, `SDL_RENDER`, `SDL_OPENGL`/`SDL_OPENGLES`,
@@ -57,11 +63,14 @@
 - `src/extensions/gui/index.ts` exposes the engine archive through
   `nativeObjects()` (via `findRuntimeLibrary`, so `.a`/`.lib` both work) and the
   OS frameworks through `linkerFlags()`. Its `linkFeatures()` (in
-  `src/extensions/gui/features.ts`) declares `media`, `gpu`, `images`, `shaping` and `webgl`; the driver
-  compiles their bridges only when a feature is active.
+  `src/extensions/gui/features.ts`) declares `media`, `gpu`, `images`, `shaping`,
+  `webfonts` and `webgl`; the driver compiles their bridges only when a feature
+  is active.
 - glslang (and SPIRV-Cross on macOS) is merged into `gui.a` like SDL3, but the
   engine reaches it only through the `gpu` feature's dispatch table. A program
-  that never compiles GLSL does not extract those archive members.
+  that never compiles GLSL does not extract those archive members. The same
+  holds for the miniz/Brotli/woff2 objects: they answer only the `webfonts`
+  decoder table.
 - `scripts/build-gui.ts` compiles with the *same* clang the driver resolves
   (`src/driver/toolchain-provider.ts`); on Windows that is the MSVC-targeting
   LLVM bundled with Visual Studio, and its sibling `clang++`/`llvm-ar` are used
@@ -129,8 +138,8 @@
 
 ## Link features
 
-`gui` is the only user-facing extension, but two heavy halves are **optional link
-features** selected per program:
+`gui` is the only user-facing extension, but several heavy halves are **optional
+link features** selected per program:
 
 | Feature | What it links | Selected when the program may use it |
 | --- | --- | --- |
@@ -138,6 +147,7 @@ features** selected per program:
 | `gpu` | `gpu_bridge.c` (the implementation is already in `gui.a`) | a `getContext("webgl"/"webgl2"/"experimental-webgl")` (or a kind decided at run time), any `webgl` string, `mix-blend-mode`/`mixBlendMode`, or runtime-built markup |
 | `images` | `image_bridge.c` (the implementation is already in `gui.a`) | `<img>`, inline `<svg>`, `background-image`/`url(...)`, a `.svg` path, `drawImage`/`createImageBitmap`/`Image`, or runtime-built markup |
 | `shaping` | `text_bridge.c` (the implementation is already in `gui.a`) | non-ASCII text (CJK/Cyrillic/Greek/…), an escaped/entity codepoint, an author `@font-face` rule (custom fonts may be CFF/OTF), or runtime-built markup |
+| `webfonts` | `webfont_bridge.c` (the implementation is already in `gui.a`) | a `.woff`/`.woff2` source in the program's HTML/CSS, or runtime-built markup |
 | `webgl` | `webgl_bridge.c` (the implementation is already in `gui.a`; requires `gpu`) | a WebGL `getContext(...)`, a `webgl` string, or runtime-built markup |
 
 The driver scans the bundled AST (`src/driver/usage.ts`): every string literal
@@ -165,6 +175,11 @@ build** and links it before `gui.a`:
   `TextApi` via `text_hb.cpp`, which references HarfBuzz and FreeType. Without
   it the engine uses the built-in stb_truetype backend, so a Latin-only page
   links neither library.
+- `webfonts` → `runtime/ext_gui/webfont_bridge.c`; its constructor installs the
+  WOFF/WOFF2 decoder via `text_webfont.cpp`, which references miniz's inflater,
+  Brotli and the woff2 reference decoder. Without it the font loader returns
+  only plain sfnt files, so a page that names `.ttf`/`.otf` faces links none of
+  the three and a compressed source is skipped with a warning.
 - `webgl` → `runtime/ext_gui/webgl_bridge.c`; its constructor installs
   `XtWebglApi` via `webgl_feature.cpp`, which references the WebGL context and
   DOM bindings. The core reaches `getContext`, the canvas width/height setters,
@@ -176,7 +191,7 @@ no bridge, the engine's table stays null and the implementation members are neve
 extracted. That is why the large libraries can stay in the existing archives
 without a new package layout.
 
-Overrides: `--feature media,gpu,images,shaping,webgl` (or `all`) forces a
+Overrides: `--feature media,gpu,images,shaping,webfonts,webgl` (or `all`) forces a
 feature on; `--no-feature media` keeps it out even when detection finds a use.
 `webgl` requires `gpu`, and the resolver activates both together. An app icon
 forces `images` because the icon is decoded through the same pipeline. `--ext media`
@@ -203,6 +218,10 @@ relative ranking is the same.
 
 WebGL and images/SVG are link features (roughly 0.4 MiB of WebGL context/DOM
 code and 0.23 MiB of stb_image/NanoSVG that a DOM-only page does not link).
+WOFF/WOFF2 decompression is one too (roughly 0.45 MiB: Brotli's decoder and its
+~120 KiB static dictionary, the woff2 table reconstruction, and miniz's
+inflater). A page whose fonts are system or `.ttf`/`.otf` files never links it,
+while a `.woff2` source adds that much to the binary.
 Canvas2D, Web Audio and the `mix-blend-mode` compositor are not gated yet; a
 program that uses none of them still pays for their API surface (roughly
 0.1–0.2 MiB each).

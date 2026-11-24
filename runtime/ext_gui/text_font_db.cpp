@@ -9,6 +9,7 @@
 
 #include "text_fonts_internal.h"
 
+#include "text_font_bytes.h"
 #include "text_font_paths.h"
 #include "text_font_sfnt.h"
 
@@ -130,6 +131,10 @@ bool hasFontExtension(const std::string &path) {
   const size_t dot = path.find_last_of('.');
   if (dot == std::string::npos) return false;
   const std::string ext = lowerAscii(path.substr(dot));
+  /* `.woff`/`.woff2` are only indexed when the `webfonts` feature can decode
+   * them: without it a scan would report every compressed file it met, while an
+   * author rule over an undecodable source still gets its own diagnostic. */
+  if (ext == ".woff" || ext == ".woff2") return xt_font_webfont_available();
   return ext == ".ttf" || ext == ".ttc" || ext == ".otf" || ext == ".otc";
 }
 

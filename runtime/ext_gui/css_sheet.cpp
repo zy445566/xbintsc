@@ -208,8 +208,10 @@ bool functionArgument(const std::string &text, size_t open_paren, std::string *o
 }
 
 /** Parse the `src` descriptor: keep every `url(...)` source in order and drop
- * `local(...)`. The `format(...)` hint is retained for diagnostics/future
- * format selection; the runtime simply tries the sources in order. */
+ * `local(...)`. The `format(...)` hint is kept but is advisory only: the runtime
+ * tries each source and detects the container from the file's signature, so a
+ * mislabelled entry still loads and an unknown format falls through to the
+ * next source. */
 void parseFontFaceSources(const std::string &value, FontFaceRule *rule) {
   rule->sources.clear();
   for (const std::string &part : xt_css_split_commas(value)) {

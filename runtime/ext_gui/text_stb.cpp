@@ -17,6 +17,7 @@
  */
 
 #include "text_api.h"
+#include "text_font_bytes.h"
 #include "text_fonts.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -51,7 +52,6 @@ struct Font {
 namespace {
 
 struct Engine {
-  std::unordered_map<std::string, std::shared_ptr<const std::vector<unsigned char>>> data;
   std::unordered_map<std::string, std::unique_ptr<Font>> cache;  // key -> face (may be null)
   std::unordered_map<std::string, std::vector<Font *>> fallbacks;  // face+size -> faces
   std::unordered_map<std::string, Font *> primary;  // spec -> face (may be null)
@@ -100,35 +100,11 @@ uint32_t decodeUtf8(const std::string &text, size_t &index) {
   return code_point;
 }
 
-/* Read a font file once and share the bytes across every pixel size. */
-std::shared_ptr<const std::vector<unsigned char>> fontData(const std::string &path) {
-  Engine &e = engine();
-  auto found = e.data.find(path);
-  if (found != e.data.end()) return found->second;
-
-  FILE *file = fopen(path.c_str(), "rb");
-  if (file == nullptr) return nullptr;
-  if (fseek(file, 0, SEEK_END) != 0) {
-    fclose(file);
-    return nullptr;
-  }
-  long length = ftell(file);
-  if (length <= 0 || fseek(file, 0, SEEK_SET) != 0) {
-    fclose(file);
-    return nullptr;
-  }
-  auto bytes = std::make_shared<std::vector<unsigned char>>((size_t)length);
-  size_t read = fread(bytes->data(), 1, bytes->size(), file);
-  fclose(file);
-  if (read != bytes->size()) return nullptr;
-  std::shared_ptr<const std::vector<unsigned char>> shared = bytes;
-  e.data.emplace(path, shared);
-  return shared;
-}
-
 std::unique_ptr<Font> createFont(const std::string &path, int face_index, float pixel_size) {
   if (path.empty()) return nullptr;
-  std::shared_ptr<const std::vector<unsigned char>> data = fontData(path);
+  /* The shared cache decompresses a WOFF/WOFF2 source and returns the sfnt
+   * bytes; stbtt keeps pointers into them, so `Font` holds the buffer. */
+  std::shared_ptr<const std::vector<unsigned char>> data = xt_font_file_bytes(path);
   if (data == nullptr || data->empty()) return nullptr;
 
   const int offset = stbtt_GetFontOffsetForIndex(data->data(), face_index);
@@ -342,11 +318,12 @@ bool xt_text_stb_ready() {
 
 void xt_text_stb_shutdown() {
   Engine &e = engine();
-  /* Cached shaped runs point at faces, so drop them before the faces go. */
+  /* Cached shaped runs point at faces, so drop them before the faces go. The
+   * font bytes outlive this call; they are released by `xt_font_bytes_shutdown`
+   * after both backends dropped their faces. */
   e.primary.clear();
   e.fallbacks.clear();
   e.cache.clear();
-  e.data.clear();
 }
 
 }  // namespace xtgui

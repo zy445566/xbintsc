@@ -5,16 +5,28 @@
  * `src: url("./fonts/…")` exercises the documented `file:` resolution. The same
  * measurements run once with the default (auto-selected) shaping backend and
  * once with `--no-feature shaping`, because custom files may be TrueType (both
- * backends) or CFF (shaping only).
+ * backends) or CFF (shaping only). A second group loads one face in three
+ * containers (`.ttf`, `.woff`, `.woff2`) and requires identical metrics, which
+ * is what proves the WOFF/WOFF2 decompression ran.
  */
 
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createGuiHarness, guiAvailable } from "./gui-helpers.js";
 
 const harness = createGuiHarness();
+
+/**
+ * The webfont fixture is one hand-built face stored in three containers
+ * (`.ttf`, `.woff`, `.woff2`; see `fixtures/README.md`), so a run through each
+ * source must produce exactly the same metrics.
+ */
+const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+function fixture(name: string): Buffer {
+  return Buffer.from(readFileSync(join(fixtureDir, name), "utf8").trim(), "base64");
+}
 
 interface CustomFonts {
   regular: string;
@@ -150,13 +162,98 @@ function expectCustomFonts(result: ReturnType<typeof measure>): void {
   expect(result.missing).toBeCloseTo(result.control, 3);
 }
 
+/** One face in three containers plus a generic control. The fixture's `m`
+ * advance is a full em, so a resolved family is much wider than the control
+ * and a source that failed to load falls back to it. */
+function webfontHtml(): string {
+  return `<html><head><style>
+    body { margin: 0; }
+    .sample { display: inline-block; white-space: nowrap; font-size: 40px; }
+    @font-face { font-family: "Xt Ttf"; src: url("./fonts/fixture.ttf") format("truetype"); }
+    @font-face { font-family: "Xt Woff"; src: url("./fonts/fixture.woff") format("woff"); }
+    @font-face { font-family: "Xt Woff2"; src: url("./fonts/fixture.woff2") format("woff2"); }
+    #ttf { font-family: "Xt Ttf"; }
+    #woff { font-family: "Xt Woff"; }
+    #woff2 { font-family: "Xt Woff2"; }
+    #control { font-family: sans-serif; }
+  </style></head><body>
+    <div id="ttf" class="sample">mmmmmmmmmm</div>
+    <div id="woff" class="sample">mmmmmmmmmm</div>
+    <div id="woff2" class="sample">mmmmmmmmmm</div>
+    <div id="control" class="sample">mmmmmmmmmm</div>
+  </body></html>`;
+}
+
+interface WebfontWidths {
+  ttf: number;
+  woff: number;
+  woff2: number;
+  control: number;
+}
+
+function measureWebfonts(
+  name: string,
+  options: { features?: readonly string[]; noFeatures?: readonly string[] } = {},
+): { widths: WebfontWidths; stderr: string } {
+  const html = webfontHtml();
+  const { value, stderr } = harness.compileAndRun(
+    name,
+    `
+    import { createWindow, run } from "gui";
+    const HTML = ${JSON.stringify(html)};
+    const win = createWindow({ title: "webfonts", width: 900, height: 500 });
+    win.on("ready", () => {
+      console.log("ttf=" + win.getBoundingClientRect("#ttf").width);
+      console.log("woff=" + win.getBoundingClientRect("#woff").width);
+      console.log("woff2=" + win.getBoundingClientRect("#woff2").width);
+      console.log("control=" + win.getBoundingClientRect("#control").width);
+      win.close();
+    });
+    win.loadHTML(HTML);
+    run();
+    `,
+    {
+      cwd: harness.workdir,
+      autocloseMs: 4000,
+      ...(options.features !== undefined ? { features: options.features } : {}),
+      ...(options.noFeatures !== undefined ? { noFeatures: options.noFeatures } : {}),
+    },
+  );
+  return {
+    widths: {
+      ttf: Number(value("ttf")),
+      woff: Number(value("woff")),
+      woff2: Number(value("woff2")),
+      control: Number(value("control")),
+    },
+    stderr,
+  };
+}
+
+/** A WOFF/WOFF2 source must resolve to the same face as the `.ttf` it was
+ * compressed from, whichever shaper is linked. */
+function expectWebfonts(result: ReturnType<typeof measureWebfonts>): void {
+  const { ttf, woff, woff2, control } = result.widths;
+  expect(ttf).toBeGreaterThan(0);
+  expect(Math.abs(ttf - control)).toBeGreaterThan(1);
+  expect(woff).toBeCloseTo(ttf, 3);
+  expect(woff2).toBeCloseTo(ttf, 3);
+}
+
 describe.skipIf(!guiAvailable)("gui extension — author @font-face", () => {
   beforeAll(() => {
     harness.setup();
+    const fontsDir = join(harness.workdir, "fonts");
+    mkdirSync(fontsDir, { recursive: true });
     if (customFonts !== undefined) {
-      mkdirSync(join(harness.workdir, "fonts"), { recursive: true });
-      copyFileSync(customFonts.regular, join(harness.workdir, "fonts", "custom-regular.ttf"));
-      copyFileSync(customFonts.bold, join(harness.workdir, "fonts", "custom-bold.ttf"));
+      copyFileSync(customFonts.regular, join(fontsDir, "custom-regular.ttf"));
+      copyFileSync(customFonts.bold, join(fontsDir, "custom-bold.ttf"));
+    }
+    for (const extension of ["ttf", "woff", "woff2"]) {
+      writeFileSync(
+        join(fontsDir, `fixture.${extension}`),
+        fixture(`webfont-fixture.${extension}.b64`),
+      );
     }
   });
   afterAll(() => harness.cleanup());
@@ -167,5 +264,24 @@ describe.skipIf(!guiAvailable)("gui extension — author @font-face", () => {
 
   it.skipIf(customFonts === undefined)("loads the same sources through the shaping backend", () => {
     expectCustomFonts(measure({ name: "font-face-shaping", features: ["shaping"] }));
+  });
+
+  it("decompresses WOFF and WOFF2 sources with the stb_truetype backend", () => {
+    expectWebfonts(measureWebfonts("webfont-stb", { noFeatures: ["shaping"] }));
+  });
+
+  it("decompresses WOFF and WOFF2 sources with the shaping backend", () => {
+    expectWebfonts(measureWebfonts("webfont-shaping", { features: ["shaping"] }));
+  });
+
+  it("names the missing feature when a compressed source is built without webfonts", () => {
+    const result = measureWebfonts("webfont-unlinked", { noFeatures: ["webfonts"] });
+    // The `.ttf` source still loads; the compressed ones are skipped and the
+    // family falls through to the generic control.
+    expect(Math.abs(result.widths.ttf - result.widths.control)).toBeGreaterThan(1);
+    expect(result.widths.woff).toBeCloseTo(result.widths.control, 3);
+    expect(result.widths.woff2).toBeCloseTo(result.widths.control, 3);
+    expect(result.stderr).toContain("webfonts");
+    expect(result.stderr).toContain("--feature webfonts");
   });
 });

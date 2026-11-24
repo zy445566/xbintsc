@@ -200,8 +200,10 @@ backend table. The default backend is the bundled **stb_truetype**
 (`text_stb.cpp`, `vendor/stb/stb_truetype.h`). The optional **`shaping`**
 link feature installs `text_hb.cpp`, a HarfBuzz + FreeType backend, and is
 selected automatically for non-ASCII text or an author `@font-face` rule. Both
-backends share the font database in `text_font_db.cpp` (discovery and indexing)
-and the CSS matcher in `text_fonts.cpp`, plus the sfnt metadata reader in
+backends share the font database in `text_font_db.cpp` (discovery and indexing),
+the CSS matcher in `text_fonts.cpp`, the font-bytes cache in
+`text_font_bytes.cpp` (which decompresses WOFF/WOFF2 through the optional
+**`webfonts`** link feature) and the sfnt metadata reader in
 `text_font_sfnt.cpp`, so a CSS style resolves to the same real face whichever
 shaper is linked.
 
@@ -214,16 +216,28 @@ shaper is linked.
   family without an italic face uses its upright face — there is no synthetic
   bold or oblique. Faces are cached per `(file, collection index, size)`.
   `XT_GUI_FONT` / `XT_GUI_FONT_MONO` still override the generic defaults.
-- Author **`@font-face`** rules load local sfnt faces (`.ttf`, `.ttc`, `.otf`,
-  `.otc`). The `src` list is tried from left to right; `local(...)`, remote and
+- Author **`@font-face`** rules load local font files in every container the
+  engine understands: sfnt faces (`.ttf`, `.ttc`, `.otf`, `.otc`) directly, and
+  the compressed webfont formats (`.woff`, `.woff2`) through the optional
+  **`webfonts`** link feature, which decompresses the file to a plain sfnt
+  before either backend — or the metadata reader — sees it. The feature is
+  selected automatically when the program's HTML/CSS names a `.woff`/`.woff2`
+  source (or the markup is runtime-built); `--no-feature webfonts` keeps it out,
+  and a compressed source is then skipped with a warning instead of silently
+  falling through. Both the metadata read and the glyph load use the same
+  decoded bytes, so a WOFF2 face has exactly the metrics of its `.ttf` original.
+  The `src` list is tried from left to right; `local(...)`, remote and
   `data:` entries are skipped. A relative URL is a local `file:` path resolved
   against the process working directory — the same policy as image sources — and
   `file://` URLs (including percent-encoded paths) are accepted. The
   `font-weight`/`font-style` descriptors select the face; a weight range
   (`font-weight: 100 900`) is honoured, and later rules with the same family and
   descriptors replace earlier ones. CSS matches the declared family name even
-  when it differs from the font file's internal name. When no source is
-  readable the family simply falls through to the next family in the CSS list.
+  when it differs from the font file's internal name. The `format(...)` hint is
+  advisory: the container is detected from the file's signature, so a mislabelled
+  source still loads when its bytes are a format the engine can decode. When no
+  source is readable the family simply falls through to the next family in the
+  CSS list.
 - The default candidates prefer a **CJK-capable TrueType/TTC** face (Microsoft
   YaHei on Windows, PingFang/STHeiti on macOS, Noto Sans CJK/WenQuanYi on Linux)
   before the Latin-only ones. A family's weight/style variants are resolved

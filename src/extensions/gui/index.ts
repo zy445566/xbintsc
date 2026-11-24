@@ -311,9 +311,9 @@ export const guiExtension: Extension = {
   /** Rewrite imported `.html` assets and patch three.js's shader unroller. */
   assetLoaders: () => ({ ".html": loadHtmlAsset, ".js": loadScriptAsset, ".mjs": loadScriptAsset }),
   /**
-   * FFmpeg and glslang are optional halves of the engine, selected from the
-   * program (see `features.ts`). A program that only renders HTML/CSS never
-   * links either.
+   * FFmpeg, glslang and the WOFF/WOFF2 decompressors are optional halves of the
+   * engine, selected from the program (see `features.ts`). A program that only
+   * renders HTML/CSS never links them.
    */
   linkFeatures: () => guiLinkFeatures,
 };

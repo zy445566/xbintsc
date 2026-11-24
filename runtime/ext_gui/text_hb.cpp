@@ -22,6 +22,7 @@
  */
 
 #include "text_api.h"
+#include "text_font_bytes.h"
 #include "text_fonts.h"
 
 #include <ft2build.h>
@@ -46,6 +47,9 @@ namespace xtgui {
 struct HbFont {
   FT_Face ft_face = nullptr;
   hb_font_t *hb_font = nullptr;
+  /** FreeType and HarfBuzz keep pointers into these bytes (a WOFF/WOFF2 source
+   * arrives here already decompressed), so the face owns the buffer. */
+  std::shared_ptr<const std::vector<unsigned char>> data;
   std::string path;
   int face_index = 0;
   float pixel_size = 16.0f;
@@ -128,14 +132,24 @@ void ensureInitialized() {
   e.ft_ok = true;
 }
 
-hb_face_t *hbFaceForPath(const std::string &path, int face_index) {
+hb_face_t *hbFaceForPath(const std::string &path, int face_index,
+                         const std::shared_ptr<const std::vector<unsigned char>> &bytes) {
   Engine &e = engine();
   std::string key = path;
   key += '#';
   key += std::to_string(face_index);
   auto it = e.hb_faces.find(key);
   if (it != e.hb_faces.end()) return it->second;
-  hb_blob_t *blob = hb_blob_create_from_file(path.c_str());
+  /* A decoded WOFF/WOFF2 source is a process-wide buffer that outlives every
+   * `hb_face_t` (it is only dropped after this backend's shutdown), so a
+   * read-only, reference-counted blob is enough — nothing is copied. A plain
+   * sfnt file keeps the old file blob, so a large unused fallback face is never
+   * pulled into memory. */
+  hb_blob_t *blob = bytes != nullptr
+                        ? hb_blob_create(reinterpret_cast<const char *>(bytes->data()),
+                                         (unsigned)bytes->size(), HB_MEMORY_MODE_READONLY, nullptr,
+                                         nullptr)
+                        : hb_blob_create_from_file(path.c_str());
   hb_face_t *face = nullptr;
   if (blob != nullptr && hb_blob_get_length(blob) > 0) {
     face = hb_face_create(blob, (unsigned)face_index);
@@ -149,12 +163,25 @@ std::unique_ptr<HbFont> createFont(const std::string &path, int face_index, floa
   Engine &e = engine();
   if (!e.ft_ok || path.empty()) return nullptr;
 
+  /* A compressed source has to be decoded into memory, which both FreeType and
+   * HarfBuzz then read from; a plain sfnt file is opened by path so its bytes
+   * are demand-paged rather than copied. */
+  std::shared_ptr<const std::vector<unsigned char>> bytes;
   FT_Face face = nullptr;
-  if (FT_New_Face(e.ft, path.c_str(), face_index, &face) != 0) return nullptr;
+  if (xt_font_file_is_compressed(path)) {
+    bytes = xt_font_file_bytes(path);
+    if (bytes == nullptr || bytes->empty()) return nullptr;
+    if (FT_New_Memory_Face(e.ft, bytes->data(), (FT_Long)bytes->size(), face_index, &face) != 0) {
+      return nullptr;
+    }
+  } else if (FT_New_Face(e.ft, path.c_str(), face_index, &face) != 0) {
+    return nullptr;
+  }
   FT_Set_Pixel_Sizes(face, 0, (FT_UInt)(pixel_size + 0.5f));
 
   auto font = std::make_unique<HbFont>();
   font->ft_face = face;
+  font->data = bytes;
   font->path = path;
   font->face_index = face_index;
   font->pixel_size = pixel_size;
@@ -164,7 +191,7 @@ std::unique_ptr<HbFont> createFont(const std::string &path, int face_index, floa
   font->descent = -metrics.descender / 64.0f;
   font->line_height = metrics.height / 64.0f;
 
-  hb_face_t *hb_face = hbFaceForPath(path, face_index);
+  hb_face_t *hb_face = hbFaceForPath(path, face_index, bytes);
   if (hb_face != nullptr) {
     font->hb_font = hb_font_create(hb_face);
     hb_ot_font_set_funcs(font->hb_font);
@@ -373,7 +400,9 @@ bool xt_text_hb_ready() {
 
 void xt_text_hb_shutdown() {
   Engine &e = engine();
-  /* Cached shaped runs point at faces, so drop them before the faces go. */
+  /* Cached shaped runs point at faces, so drop them before the faces go. The
+   * HarfBuzz faces and FreeType faces reference the cached font bytes, which
+   * `xt_font_bytes_shutdown` releases last. */
   e.primary.clear();
   e.fallbacks.clear();
   e.cache.clear();

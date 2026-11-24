@@ -36,6 +36,14 @@ void xt_warn_unsupported_at_rule(const std::string &name);
 /** Report an ignored `@font-face` descriptor once per descriptor name. */
 void xt_warn_unsupported_descriptor(const std::string &name);
 
+/** Report a `.woff`/`.woff2` source that cannot be decoded because the program
+ * was built without the `webfonts` link feature, once per path. */
+void xt_warn_webfont_unlinked(const std::string &path);
+
+/** Report a `.woff`/`.woff2` source whose container cannot be decoded, once per
+ * path. The source is skipped like an unreadable file. */
+void xt_warn_webfont_invalid(const std::string &path);
+
 /** Report a selector the parser had to drop. */
 void xt_warn_unsupported_selector(const std::string &selector);
 

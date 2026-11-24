@@ -192,12 +192,17 @@ HTML/CSS/TS（导入的 `.html` 与内联 CSS 都属于 bundle），按程序自
 - **`shaping`** —— HarfBuzz + FreeType 提供的完整 OpenType 整形（连字、复杂文种）
   与 CFF/OTF/可变字体支持。非 ASCII 文本（或转义/实体码点）或作者的
   `@font-face` 规则会自动选中；纯拉丁页面保持 stb_truetype 后端，两个库都不链接。
+- **`webfonts`** —— 供作者 `@font-face` 的 `.woff`/`.woff2` 来源使用的 miniz +
+  Brotli + woff2 参考解码器。程序的 HTML/CSS 出现压缩字体时会自动选中；文件会
+  一次性解压成普通 sfnt，因此两个文本后端与该字体的元数据读取的是同一份字节。
+  字体是系统字体或 `.ttf`/`.otf` 文件的页面完全不会链接它。
 - **`webgl`** —— WebGL context 与 DOM 绑定。由 WebGL 的 `getContext(...)` 或
   `webgl` 字符串触发；它依赖 `gpu`，两者一起激活。不用 WebGL 的页面两者都不链接。
 
-用 `--feature media,gpu,images,shaping,webgl`（或 `all`）覆盖扫描，用 `--no-feature media`
-强制不链接。`--verbose` 会打印选中的集合。只渲染 HTML/CSS/2D canvas 的程序既不链接
-FFmpeg、glslang，也不链接图片解码器、HarfBuzz/FreeType 或 WebGL context；用运行时数据拼 HTML/CSS 的
+用 `--feature media,gpu,images,shaping,webfonts,webgl`（或 `all`）覆盖扫描，用
+`--no-feature media` 强制不链接。`--verbose` 会打印选中的集合。只渲染
+HTML/CSS/2D canvas 的程序既不链接 FFmpeg、glslang，也不链接图片解码器、
+HarfBuzz/FreeType、Web 字体解压器或 WebGL context；用运行时数据拼 HTML/CSS 的
 页面应传 `--feature all`，因为扫描看不到它。
 自动检测到的特性归档缺失时构建打印 warning，能力在运行时降级（媒体元素触发
 `error`）；显式强制的特性则报错。

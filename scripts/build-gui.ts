@@ -14,6 +14,7 @@
  *   2. build `libSDL3.a` with CMake,
  *   2a. fetch + build static HarfBuzz/FreeType (optional `shaping`) and
  *       glslang/SPIRV-Cross (GLSL ES -> SPIR-V -> Metal Shading Language),
+ *       and fetch the Brotli + woff2 sources the `webfonts` feature compiles,
  *   3. compile the engine translation units,
  *   4. merge everything into `gui.a` (libtool on macOS, `ar -M` elsewhere;
  *      `gui.lib` on Windows, built from MSVC-compatible COFF objects).
@@ -31,6 +32,8 @@
  *   FREETYPE_VERSION  FreeType version (default: 2.13.3)
  *   HARFBUZZ_VERSION  HarfBuzz version (default: 10.1.0)
  *   SPIRV_CROSS_VERSION  SPIRV-Cross tag (default: vulkan-sdk-1.4.313.0)
+ *   BROTLI_VERSION    Brotli version (default: 1.1.0)
+ *   WOFF2_VERSION     woff2 reference decoder tag (default: 1.0.2)
  *
  * The C/C++ compiler is the same clang the driver resolves (see
  * `src/driver/toolchain-provider.ts`), so the archive always matches the ABI of
@@ -39,7 +42,7 @@
  * `gui.lib`.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,13 +52,15 @@ import { isMsvcTarget, probeClang, realRunner } from "../src/driver/toolchain.js
 import { resolveToolchain } from "../src/driver/toolchain-provider.js";
 import {
   cmakeToolchainArgs,
-  cxxCompileFlags,
   HB_LEAN_DEFINES,
   LEAN_SDL_OPTIONS,
   SECTION_CMAKE_FLAGS,
   SECTION_FLAGS,
 } from "./gui-build-options.js";
 import { ensureDeploymentTarget } from "./gui-build-cache.js";
+import { buildEngineObjects } from "./gui-engine-build.js";
+import { buildWebfontObjects, fetchWebfontSources, webfontIncludeFlags } from "./gui-webfont-build.js";
+import { ensureTarballSource } from "./gui-vendor-source.js";
 import { ensureVendoredSources } from "./fetch-vendored.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -102,8 +107,9 @@ const output = join(outDir, isWindows ? "gui.lib" : "gui.a");
  * oldest supported macOS, not the build machine's version. */
 applyMacosDeploymentTarget();
 
-/* Fetch the stb/NanoSVG headers the engine's default text/image paths include. */
-ensureVendoredSources(["stb", "nanosvg"]);
+/* Fetch the stb/NanoSVG headers the engine's default text/image paths include,
+ * plus the miniz sources the webfont decoder compiles. */
+ensureVendoredSources(["stb", "nanosvg", "miniz"]);
 
 const SDL_TAG = process.env.SDL3_TAG || "release-3.2.10";
 const FREETYPE_VERSION = process.env.FREETYPE_VERSION || "2.13.3";
@@ -140,6 +146,13 @@ function run(
   }
   return result;
 }
+
+/** Fetching/extracting a vendored tarball, bound to this script's runner. */
+const vendor = {
+  vendorDir,
+  run: (command: string, args: readonly string[]): void => void run(command, args),
+  fail,
+};
 
 function isRunnable(candidate: string): boolean {
   return !spawnSync(candidate, ["--version"], { encoding: "utf8" }).error;
@@ -396,8 +409,8 @@ if (!existingSdlArchive) {
 
 /* -- 2a. HarfBuzz + FreeType (optional `shaping` feature) ---------------- */
 
-ensureTarballSource("freetype", FREETYPE_URL, `freetype-${FREETYPE_VERSION}`);
-ensureTarballSource("harfbuzz", HARFBUZZ_URL, `harfbuzz-${HARFBUZZ_VERSION}`);
+ensureTarballSource(vendor, "freetype", FREETYPE_URL, `freetype-${FREETYPE_VERSION}`);
+ensureTarballSource(vendor, "harfbuzz", HARFBUZZ_URL, `harfbuzz-${HARFBUZZ_VERSION}`);
 
 ensureDeploymentTarget("FreeType", freetypeBuild);
 if (!existsSync(freetypeArchive() ?? "")) {
@@ -439,30 +452,10 @@ if (!existsSync(harfbuzzArchive() ?? "")) {
   console.log(`xbintsc: reusing existing ${harfbuzzArchive()}`);
 }
 
-/** Download a release tarball into `vendor/` and extract it under `name`.
- * Release tarballs are used (not git clones) because they ship generated
- * sources, so no ragel/autotools step is needed. `marker` is a file that only
- * exists once the tarball has been extracted (e.g. `CMakeLists.txt`). */
-function ensureTarballSource(name: string, url: string, extractedName: string, marker = "CMakeLists.txt"): string {
-  const destination = join(vendorDir, name);
-  if (existsSync(join(destination, marker))) return destination;
-  const tarball = join(vendorDir, `${name}.tar.xz`);
-  console.log(`xbintsc: fetching ${name} from ${url}`);
-  mkdirSync(vendorDir, { recursive: true });
-  run("curl", ["-sL", "--fail", "-o", tarball, url]);
-  run("tar", ["-xf", tarball, "-C", vendorDir]);
-  const extracted = join(vendorDir, extractedName);
-  if (!existsSync(extracted)) fail(`expected ${extractedName} after extracting ${name}`);
-  rmSync(destination, { recursive: true, force: true });
-  renameSync(extracted, destination);
-  rmSync(tarball, { force: true });
-  return destination;
-}
-
 /* -- 2b. glslang (WebGL GLSL ES -> SPIR-V) -------------------------------- */
 
-ensureTarballSource("glslang", GLSLANG_URL, `glslang-${GLSLANG_VERSION}`);
-ensureTarballSource(join("glslang", "External", "spirv-headers"), SPIRV_HEADERS_URL,
+ensureTarballSource(vendor, "glslang", GLSLANG_URL, `glslang-${GLSLANG_VERSION}`);
+ensureTarballSource(vendor, join("glslang", "External", "spirv-headers"), SPIRV_HEADERS_URL,
   `SPIRV-Headers-${SPIRV_HEADERS_VERSION}`);
 
 ensureDeploymentTarget("glslang", glslangBuild);
@@ -492,7 +485,7 @@ if (!existsSync(glslangArchive() ?? "")) {
 const metalBackend = process.platform === "darwin";
 
 if (metalBackend) {
-  ensureTarballSource("spirv-cross", SPIRV_CROSS_URL, `SPIRV-Cross-${SPIRV_CROSS_VERSION}`);
+  ensureTarballSource(vendor, "spirv-cross", SPIRV_CROSS_URL, `SPIRV-Cross-${SPIRV_CROSS_VERSION}`);
 
   ensureDeploymentTarget("SPIRV-Cross", spirvCrossBuild);
   if (!existsSync(spirvCrossArchive("spirv-cross-msl") ?? "")) {
@@ -519,10 +512,17 @@ if (metalBackend) {
 /* -- 3. engine objects ---------------------------------------------------- */
 
 mkdirSync(objDir, { recursive: true });
+const fetchSource = (name: string, url: string, extractedName: string): void => {
+  ensureTarballSource(vendor, name, url, extractedName);
+};
+/* The webfont headers are included by an engine translation unit, so the
+ * Brotli/woff2 sources must be extracted before the engine compile starts. */
+fetchWebfontSources(fetchSource);
 const includeFlags = [
   "-I", runtimeDir,
   "-I", join(vendorDir, "stb"),
   "-I", join(vendorDir, "nanosvg"),
+  ...webfontIncludeFlags(vendorDir),
   "-I", join(sdlSrc, "include"),
   "-I", join(freetypeSrc, "include"),
   "-I", join(freetypeBuild, "include"),
@@ -531,26 +531,20 @@ const includeFlags = [
   "-I", join(spirvHeadersSrc, "include"),
   ...(metalBackend ? ["-I", spirvCrossSrc] : []),
 ];
-const sources = readdirSync(engineDir)
-  .filter((entry) => entry.endsWith(".cpp"))
-  .sort();
-
-const objects: string[] = [];
-const cxxFlags = cxxCompileFlags(toolchain.sdkRoot, includeFlags);
-/* The engine is C++ and the MSVC C++ runtime must match the static C CRT that
- * clang links by default, so let every engine object record `libcpmt` as a
- * default library. The extension itself only contributes the DLL import library
- * (`-lmsvcprt`, `src/extensions/gui/index.ts`), which is inconsistent with that
- * CRT and makes the final link fail with `LNK2038`/unresolved `__imp_*`. */
-if (isWindows) cxxFlags.push("-Xclang", "--dependent-lib=libcpmt");
-/* The MSVC ABI rejects `-fPIC`; position independence is the default elsewhere. */
-if (!isWindows) cxxFlags.splice(3, 0, "-fPIC");
-for (const source of sources) {
-  const object = join(objDir, source.replace(/\.cpp$/, objectSuffix));
-  console.log(`xbintsc: compiling ${source}`);
-  run(clangxx, [...cxxFlags, "-c", join(engineDir, source), "-o", object]);
-  objects.push(object);
-}
+const objects = buildEngineObjects({
+  engineDir, objDir, objectSuffix, clangxx, includeFlags,
+  sdkRoot: toolchain.sdkRoot, msvc: isWindows,
+  run: (command, args) => void run(command, args),
+});
+/* The WOFF/WOFF2 decompression objects for the `webfonts` link feature. They
+ * are reachable only through that feature's bridge, so the linker drops them
+ * from a program that never loads a compressed font. */
+objects.push(...buildWebfontObjects({
+  vendorDir, objDir, objectSuffix, clang, clangxx, includeFlags,
+  sdkRoot: toolchain.sdkRoot, msvc: isWindows,
+  run: (command, args) => void run(command, args),
+  fetchSource,
+}));
 
 /* -- 4. merge into gui.a / gui.lib ---------------------------------------- */
 

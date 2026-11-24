@@ -214,14 +214,20 @@ extension flag:
   non-ASCII text (or an escaped/entity codepoint) or an author `@font-face`
   rule; a Latin-only page keeps the stb_truetype backend and links neither
   library.
+- **`webfonts`** — miniz + Brotli + the woff2 reference decoder for author
+  `@font-face` sources in `.woff`/`.woff2`. Selected automatically when the
+  program's HTML/CSS names a compressed font; the file is decompressed to a
+  plain sfnt once, so both text backends and the font's metadata read the same
+  bytes. A page whose fonts are system or `.ttf`/`.otf` files links none of it.
 - **`webgl`** — the WebGL context and DOM bindings. Selected by a WebGL
   `getContext(...)` or a `webgl` string; it requires `gpu`, so both activate
   together. A page that never asks for WebGL links neither.
 
-Override the scan with `--feature media,gpu,images,shaping,webgl` (or `all`) and keep a
-feature out with `--no-feature media`. `--verbose` prints the selected set. A
-program that only renders HTML/CSS/2D canvas links no FFmpeg, glslang, image
-decoder, HarfBuzz/FreeType or WebGL context; a page that
+Override the scan with `--feature media,gpu,images,shaping,webfonts,webgl` (or
+`all`) and keep a feature out with `--no-feature media`. `--verbose` prints the
+selected set. A program that only renders HTML/CSS/2D canvas links no FFmpeg,
+glslang, image decoder, HarfBuzz/FreeType, webfont decompressor or WebGL
+context; a page that
 builds HTML/CSS from runtime data should pass `--feature all` because the scan
 cannot see it. If an auto-detected feature's archive is missing, the build warns
 and the capability degrades at run time (media elements fire `error`); a forced

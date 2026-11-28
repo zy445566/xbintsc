@@ -21,7 +21,6 @@
 | 异步生成器清理 | `for await...of` 提前退出时不会调用迭代器的 `return()`。异步生成器中的 `yield*` 只委托同步可迭代对象。在挂起的 `yield` 处调用 `.return()` 会直接完成而不执行 `finally`（与同步生成器相同的限制） |
 | `super` | `super.x` / `super[x]` 从当前执行类的父级持有者读取（实例方法中是父原型，`static` 方法或静态块中是父构造函数），因此任意继承深度都正确 |
 | `Error.stack` | 仅函数级帧：每帧为 `at 名称 (文件:行)`，行号取自函数声明（最内层帧会更新为错误构造处）；没有列号，生成器 / `async` 函数体不产生帧（它们会切换栈） |
-| `for` 头部中的 `let` | 每个循环只有一个绑定，而非每次迭代一个：循环体内创建的闭包都会看到最终值（`for (let i = 0; i < 3; i++) fns.push(() => i)` 得到 `3,3,3`） |
 | 模块实时绑定 | 命名空间导入与导入绑定为快照（见[模块系统](./modules.md)） |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`，由可执行文件路径解析 |
 | Worker | worker 是独立的**进程**而不是线程：值通过结构化克隆复制、从不共享，`postMessage` 的 transfer 列表按复制处理，worker 脚本就是当前二进制（`import.meta.filename` 加 `isMainThread`） |

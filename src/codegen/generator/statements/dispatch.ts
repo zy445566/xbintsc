@@ -51,9 +51,12 @@ export const statementDispatchMethods: StatementDispatchMethods = {
       case SyntaxKind.VariableStatement:
         this.emitVariableStatement(statement as VariableStatement);
         return;
-      case SyntaxKind.Block:
-        this.emitStatements((statement as Block).statements);
+      case SyntaxKind.Block: {
+        const block = statement as Block;
+        this.refreshBlockBindings(block.statements);
+        this.emitStatements(block.statements);
         return;
+      }
       case SyntaxKind.EmptyStatement:
       case SyntaxKind.DebuggerStatement:
       case SyntaxKind.FunctionDeclaration:

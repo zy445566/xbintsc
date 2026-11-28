@@ -173,6 +173,7 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
     this.startBlock(tryLabel);
     this.current.tryFrames.push(frameSlot);
     if (finallyContext) this.current.finallyStack.push(finallyContext);
+    this.refreshBlockBindings(statement.tryBlock.statements);
     this.emitStatements(statement.tryBlock.statements);
     if (finallyContext) this.current.finallyStack.pop();
     this.current.tryFrames.pop();
@@ -192,6 +193,7 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
       this.emit(`  call void @xt_try_leave(i8* ${currentFrame})`);
       this.bindCatchVariable(statement.catchClause!.variable, exception);
       if (finallyContext) this.current.finallyStack.push(finallyContext);
+      this.refreshBlockBindings(statement.catchClause!.block.statements);
       this.emitStatements(statement.catchClause!.block.statements);
       if (finallyContext) this.current.finallyStack.pop();
       if (!this.current.terminated) this.terminate(`br label %${finallyLabel ?? endLabel}`);
@@ -211,6 +213,7 @@ export const controlFlowStatementMethods: ControlFlowStatementMethods = {
 
     if (finallyLabel) {
       this.startBlock(finallyLabel);
+      this.refreshBlockBindings(statement.finallyBlock!.statements);
       this.emitStatements(statement.finallyBlock!.statements);
       if (!this.current.terminated) {
         if (hasCatch) {

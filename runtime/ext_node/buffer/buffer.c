@@ -28,3 +28,4 @@ static xt_value xt_buffer_proto(void);
 #include "parts/search.inc"
 #include "parts/integer-io.inc"
 #include "parts/prototype.inc"
+#include "parts/ctor-value.inc"

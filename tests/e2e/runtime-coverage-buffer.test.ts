@@ -130,6 +130,29 @@ describeE2E(
         "44010 true",
       ]);
     });
+    /* `Buffer` is a value, not only a name in `Buffer.from(...)`: undici reads
+     * `Buffer[Symbol.species]` at module initialisation and keeps the result. */
+    it("exposes Buffer as a first-class constructor value", () => {
+      const source = `
+        const B: any = Buffer;
+        console.log(typeof Buffer, B.name, B.length);
+        console.log(B.from("hi").toString(), B.alloc(2, 65).toString());
+        console.log(B[Symbol.species] === B, new (B[Symbol.species])("xy").toString());
+        const made = new B("hey");
+        console.log(made.toString(), Buffer.isBuffer(made));
+        console.log(Object.getPrototypeOf(B.from("a")) === B.prototype);
+        console.log(Buffer === B);
+      `;
+      const stdout = h.runProgram(source, { extensions: true, timeout: TIMEOUT });
+      expect(stdout.split("\n")).toEqual([
+        "function Buffer 2",
+        "hi AA",
+        "true xy",
+        "hey true",
+        "true",
+        "true",
+      ]);
+    });
   },
   { tmpPrefix: "xbintsc-runtime-coverage-" },
 );

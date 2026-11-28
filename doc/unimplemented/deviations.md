@@ -21,7 +21,6 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | Async generator cleanup | `for await...of` does not call the iterator's `return()` when the loop exits early. `yield*` inside an async generator delegates to synchronous iterables only. `.return()` at a suspended `yield` completes without running `finally` (the same limitation as synchronous generators) |
 | `super` | `super.x` / `super[x]` read from the parent holder of the class whose body is running (in an instance method: the parent prototype; in a `static` method or static block: the parent constructor), so any inheritance depth is correct |
 | `Error.stack` | Function-level frames only: each frame is `at name (file:line)` with the function's declaration line (updated to the construction line for the innermost frame); no column numbers and no frames for generator / `async` bodies (they switch stacks) |
-| `let` in a `for` loop header | One binding per loop, not one per iteration: closures created inside the body all observe the final value (`for (let i = 0; i < 3; i++) fns.push(() => i)` gives `3,3,3`) |
 | Module live bindings | Namespace imports and imported bindings are snapshots (see [Module system](./modules.md)) |
 | `import.meta` | ✓ `import.meta.url` / `.dirname` / `.filename`, resolved from the executable path |
 | Workers | A worker is a separate **process**, not a thread: values are structured-cloned and never shared, `postMessage` transfer lists copy, and the worker script is the current binary (`import.meta.filename` plus `isMainThread`) |

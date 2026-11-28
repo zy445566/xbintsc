@@ -4,15 +4,18 @@
 
 import {
   SyntaxKind,
+  type BindingName,
   type DoStatement,
   type Expression,
   type ForInStatement,
   type ForOfStatement,
   type ForStatement,
+  type Statement,
   type VariableDeclarationList,
+  type VariableStatement,
   type WhileStatement,
 } from "../../../ast/nodes.js";
-import { i64, numberLiteral, XT_TRUE } from "../../values.js";
+import { i64, numberLiteral, XT_TRUE, XT_UNDEFINED } from "../../values.js";
 import type { Generator } from "../generator.js";
 import type { LoopLabels } from "../state.js";
 
@@ -22,6 +25,8 @@ export interface LoopStatementMethods {
   emitFor(this: Generator, statement: ForStatement): void;
   emitForOf(this: Generator, statement: ForOfStatement | ForInStatement): void;
   bindLoopVariable(this: Generator, initializer: VariableDeclarationList | Expression, value: string): void;
+  refreshLoopBinding(this: Generator, name: BindingName, copy?: boolean): void;
+  refreshBlockBindings(this: Generator, statements: readonly Statement[]): void;
   takePendingLabels(this: Generator): string[];
   findLoop(this: Generator, label: string | undefined): LoopLabels | undefined;
 }
@@ -110,6 +115,17 @@ export const loopStatementMethods: LoopStatementMethods = {
     if (!this.current.terminated) this.terminate(`br label %${updateLabel}`);
 
     this.startBlock(updateLabel);
+    /* A `let` / `const` in the `for` header is one binding per iteration. The
+     * body's closures must keep the value the body observed, so the copy for
+     * the next iteration is made here, before the incrementor mutates it (and
+     * `continue` reaches this point too). Only captured bindings are boxed, so
+     * `refreshLoopBinding` is a no-op for the rest. */
+    if (statement.initializer && statement.initializer.kind === SyntaxKind.VariableDeclarationList) {
+      const list = statement.initializer;
+      if (list.declarationKind !== "var") {
+        for (const declaration of list.declarations) this.refreshLoopBinding(declaration.name);
+      }
+    }
     if (statement.incrementor) this.emitExpression(statement.incrementor);
     this.terminate(`br label %${condLabel}`);
     this.startBlock(endLabel);
@@ -205,16 +221,61 @@ export const loopStatementMethods: LoopStatementMethods = {
     this.startBlock(endLabel);
   },
 
+  /* A captured `let` / `const` loop binding gets a fresh box per iteration, so
+   * closures created in the body keep the value of their own iteration
+   * (`for (const [k, v] of entries) fns.push(() => v)`). The slot holds the box
+   * pointer; replacing it before the body re-binds every closure this
+   * iteration creates, while earlier closures keep the old box. */
+  refreshLoopBinding(name: BindingName, copy = true): void {
+    if (name.kind === SyntaxKind.Identifier) {
+      const symbol = this.binding.symbolOfDeclaration.get(name);
+      if (!symbol || !symbol.boxed) return;
+      const slot = this.current.slots.get(symbol.id);
+      if (!slot) return;
+      let value = i64(XT_UNDEFINED);
+      if (copy) {
+        const current = this.reg();
+        this.emit(`  ${current} = load i64, i64* ${slot.ptr}`);
+        const unboxed = this.reg();
+        this.emit(`  ${unboxed} = call i64 @xt_box_get(i64 ${current})`);
+        value = unboxed;
+      }
+      const box = this.reg();
+      this.emit(`  ${box} = call i64 @xt_box_new(i64 ${value})`);
+      this.emit(`  store i64 ${box}, i64* ${slot.ptr}`);
+      return;
+    }
+    for (const element of name.elements) {
+      if (element) this.refreshLoopBinding(element.name, copy);
+    }
+  },
+
+  /* Entering a block creates a fresh environment for its captured `let` /
+   * `const` bindings. Without this, a closure created in a loop body's
+   * `const j = ...` kept the last iteration's box (chalk's style table relied
+   * on per-iteration loop bindings the same way). */
+  refreshBlockBindings(statements: readonly Statement[]): void {
+    for (const statement of statements) {
+      if (statement.kind !== SyntaxKind.VariableStatement) continue;
+      const list = (statement as VariableStatement).declarationList;
+      if (list.declarationKind === "var") continue;
+      for (const declaration of list.declarations) this.refreshLoopBinding(declaration.name, false);
+    }
+  },
+
   bindLoopVariable(initializer: VariableDeclarationList | Expression, value: string): void {
     if (initializer.kind === SyntaxKind.VariableDeclarationList) {
       const declaration = initializer.declarations[0];
       if (!declaration) return;
+      const perIteration = initializer.declarationKind !== "var";
       if (declaration.name.kind !== SyntaxKind.Identifier) {
+        if (perIteration) this.refreshLoopBinding(declaration.name);
         this.emitBindingPattern(declaration.name, value);
         return;
       }
       const symbol = this.binding.symbolOfDeclaration.get(declaration) ?? this.binding.symbolOfDeclaration.get(declaration.name);
       if (symbol) {
+        if (perIteration) this.refreshLoopBinding(declaration.name);
         if (this.current.slots.has(symbol.id)) this.writeSlot(symbol, value);
         else this.declareSlot(symbol, value);
       }

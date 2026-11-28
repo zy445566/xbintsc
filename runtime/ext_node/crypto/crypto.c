@@ -392,3 +392,16 @@ xt_value xt_crypto_create_hash(int32_t argc, xt_value *argv) {
   xt_set(hash, xt_string_from_cstr("read"), xt_closure_new((void *)xt_hash_read, 0, NULL));
   return hash;
 }
+
+/* `crypto.getHashes()`: the digest names this runtime implements. undici calls
+ * it once while initialising its subresource-integrity support and keeps the
+ * SRI algorithms the result contains (sha384/sha512 are not implemented, so
+ * they are filtered out instead of failing later in createHash). */
+xt_value xt_crypto_get_hashes(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  xt_value result = xt_array_new(0, NULL);
+  xt_array_push(result, xt_string_from_cstr("sha1"));
+  xt_array_push(result, xt_string_from_cstr("sha256"));
+  return result;
+}

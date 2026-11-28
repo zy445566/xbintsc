@@ -152,4 +152,17 @@ describeE2E("node:crypto random", (harness) => {
       ].join("\n"),
     );
   });
+
+  // undici calls this once while initialising its subresource-integrity
+  // support and keeps the SRI algorithms the list contains.
+  it("lists the digest names the runtime implements", () => {
+    const source = `
+      import { createHash, getHashes } from "node:crypto";
+      const hashes = getHashes();
+      console.log(hashes.includes("sha256"), hashes.includes("sha1"), hashes.includes("sha512"));
+      const digest = createHash("sha256").update("abc").digest("hex");
+      console.log(digest.length, hashes.indexOf("sha256") !== -1);
+    `;
+    expect(runProgram(source, { extensions: true })).toBe("true true false\n64 true");
+  });
 });

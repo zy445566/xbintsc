@@ -121,4 +121,11 @@ export const nodeExtension: Extension = {
     return exposed;
   },
   linkFeatures: () => [compressionFeature, nodeTlsFeature, http2Feature],
+  // `Buffer` is a Node global as well as a constructor value: `Buffer.from()`
+  // is resolved by the static dispatcher, but `const B = Buffer` and
+  // `Buffer[Symbol.species]` read the identifier. The getter materialises the
+  // first-class constructor (and its statics) in the buffer runtime.
+  globalValues: () => ({
+    Buffer: { symbol: "xt_buffer_global_value" },
+  }),
 };

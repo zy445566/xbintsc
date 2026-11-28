@@ -16,6 +16,15 @@ bytes across modules; `xt_node_buffer_bytes` copies through
 `xt_array_buffer_copy_bytes_out`, so the fs module does not pay one lookup per
 byte.
 
+`Buffer` is also a first-class value, not only a name in `Buffer.from(...)`:
+`const B = Buffer; B.from(...)`, `typeof Buffer`, `new Buffer(...)`,
+`Buffer.prototype`, and `Buffer[Symbol.species]` all work. The value is a cached
+constructor closure with the statics installed as own properties and
+`Buffer[Symbol.species]` returning the constructor itself (xbintsc has a single
+Buffer shape, so there is no separate `FastBuffer` subclass). undici reads
+`Buffer[Symbol.species]` at module initialisation, which is how this gap
+surfaced.
+
 | Static method | Notes |
 | --- | --- |
 | `Buffer.from(value[, encoding])` | construct from a string (hex / base64 / utf8), array or Buffer |

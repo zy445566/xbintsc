@@ -11,6 +11,7 @@ import type { SourceFileNode } from "../../ast/nodes.js";
 import type { DiagnosticBag } from "../../diagnostics/diagnostic.js";
 import { bind } from "../../binder/binder.js";
 import { checkProgram } from "../../checker/checker.js";
+import { reportMissingExtensionGlobals } from "../../checker/undefined.js";
 import { GeneratorContext } from "./context.js";
 import { hardenLookupTables } from "./lookup-tables.js";
 import { moduleMethods, type ModuleMethods } from "./module.js";
@@ -57,7 +58,10 @@ export function generate(
     checkProgram(sourceFile, binding, diagnostics, {
       builtins: options.builtins ?? {},
       globalValues: options.globalValues ?? {},
+      globalHints: options.globalHints ?? {},
     });
+  } else {
+    reportMissingExtensionGlobals(sourceFile, binding, diagnostics, options.globalHints ?? {});
   }
   const generator = new Generator(sourceFile, diagnostics, options, binding);
   return { ir: generator.run(), binding: generator.binding };

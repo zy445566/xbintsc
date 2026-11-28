@@ -104,6 +104,7 @@ export function compileString(
     globalValues: registry.globalValues(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
+    globalHints: registry.globalHints(),
     debug: options.debug === true,
     check: options.check !== false,
   });
@@ -128,6 +129,7 @@ export function compileEntry(
     globalValues: registry.globalValues(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
+    globalHints: registry.globalHints(),
     debug: options.debug === true,
     check: options.check !== false,
   });

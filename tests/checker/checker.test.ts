@@ -35,6 +35,17 @@ describe("checker: unresolved names", () => {
     expect(diagnostics[0]!.message).toContain("nope");
   });
 
+  it("reports a global from a disabled extension with the enabling flag", () => {
+    const diagnostics = codes(
+      check("const environment = process.env;", { globalHints: { process: "node" } }),
+      DiagnosticCode.ModuleNotFound,
+    );
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.message).toBe(
+      "global 'process' is provided by the 'node' extension; pass --ext node",
+    );
+  });
+
   it("accepts runtime globals, namespaces and extension builtins", () => {
     const source = [
       "console.log(Math.PI, JSON.stringify({}), parseInt('1'), new Map(), new Uint8Array(1));",

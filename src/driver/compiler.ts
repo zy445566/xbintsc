@@ -237,6 +237,7 @@ export function build(entryPath: string, options: BuildOptions = {}): BuildResul
     globalValues: registry.globalValues(),
     modules: registry.modules(),
     moduleHints: registry.moduleHints(),
+    globalHints: registry.globalHints(),
     debug: options.debug === true,
     check: options.check !== false,
   });

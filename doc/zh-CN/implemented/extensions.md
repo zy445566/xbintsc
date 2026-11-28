@@ -4,8 +4,8 @@
 
 实现位置：`src/extensions/registry.ts`、`src/extensions/node/`、`src/extensions/wasm.ts`、`src/extensions/link-feature.ts`、`runtime/xt_wasm/`、`src/driver/usage.ts`、`src/driver/link-features.ts`
 
-- 扩展是普通对象：`runtimeSources()`（额外 C 源）、`linkerFlags()`（额外链接参数）、`builtins()`（全局标识符 → 运行时符号，统一 `(argc, argv)` ABI）、`modules()`（导入说明符 → 命名导出 / 命名空间）与 `linkFeatures()`（可选的重型能力）。
-- `ExtensionRegistry`：注册 / 注销 / 查询 / 汇总 builtins、modules、runtime 源、链接参数与链接特性。
+- 扩展是普通对象：`runtimeSources()`（额外 C 源）、`linkerFlags()`（额外链接参数）、`builtins()`（全局标识符 → 运行时符号，统一 `(argc, argv)` ABI）、`globalValues()`（全局标识符 → 运行时值 getter）、`globalNames()`（该扩展提供的全局名，仅用于扩展未启用时的诊断）、`modules()`（导入说明符 → 命名导出 / 命名空间）与 `linkFeatures()`（可选的重型能力）。
+- `ExtensionRegistry`：注册 / 注销 / 查询 / 汇总 builtins、global values、modules、runtime 源、链接参数与链接特性。`hintExtension()` 会记录一个**未启用**扩展的模块与 `globalNames()`；使用这些名称时会报 `TS6001 … pass --ext <name>`，而不是读到 `undefined` 或在链接阶段才因为未定义的 `xt_*` 符号失败（例如 `node` 的 `process` / `Buffer`、`gui` 的 `document`、`webworker` 的 `Worker`）。已启用扩展提供的名称不会再提示；核心运行时已实现的名称（`AbortController`、`setTimeout`）也不会误报为某个扩展的全局。
 - **可选链接特性**（`media`、`gpu`、`images`、`shaping`、`webgl`、`storage`、`wasm`）：
   - 特性声明 `runtimeSources()`（只在启用时编译的 C bridge）、`nativeObjects()`（只在启用时链接的归档）、`linkerFlags()`、可选的 `requires`（依赖的另一个特性）、可选的 `required`（源不可用时构建报错而不是 warning）与 `used(usage)`。
   - driver 从打包后的 AST 构造 `ProgramUsage`（`src/driver/usage.ts` 的 `collectUsage`）：字符串字面量（含导入 HTML 与内联 CSS）、标识符/属性名、`getContext(...)` 的 kind，以及 markup 是否可能在运行时拼出。简单的 `const` 别名会被解析；无法解析的 markup 让程序走保守回退。

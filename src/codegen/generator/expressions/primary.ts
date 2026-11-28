@@ -369,7 +369,7 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
         /* The checker runs before code generation and owns this diagnostic
          * (including the "is it a runtime global?" decision). Keeping the
          * fallback for `--no-check` avoids reporting the same name twice. */
-        if (!this.check) {
+        if (!this.check && !Object.hasOwn(this.globalHints, identifier.text)) {
           this.diagnostics.error(
             DiagnosticCode.CannotFindName,
             `Cannot find name '${identifier.text}'`,

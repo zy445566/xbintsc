@@ -10,6 +10,10 @@ one subdirectory per Node module, pairing the TypeScript exports with the C
 implementation. Adding a module does not change the core compiler; the extension
 contract is described in [Extension mechanism](./extensions.md).
 
+Using a Node-only global without the extension is a compile error with the
+enabling flag: `global 'process' is provided by the 'node' extension; pass
+--ext node` (`Buffer`, `EventEmitter`, `path`, `stream`, … report the same).
+
 Every module has its own page so a change to one module does not collide with
 work on another. Missing or different behaviour is recorded under
 [Node extension: unimplemented](../unimplemented/node.md).

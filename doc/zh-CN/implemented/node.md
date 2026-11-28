@@ -9,6 +9,10 @@
 TypeScript 导出与 C 实现一一对应。新增模块不需要改动核心编译器；扩展契约见
 [扩展机制](./extensions.md)。
 
+未启用扩展就使用 Node 专属全局对象时，编译期会给出带开关的提示：
+`global 'process' is provided by the 'node' extension; pass --ext node`
+（`Buffer`、`EventEmitter`、`path`、`stream` 等同理）。
+
 每个模块有独立页面，改动一个模块不会和另一个模块的工作冲突。缺失或行为不同之处
 记录在[Node 扩展：未实现](../../unimplemented/node.md)。
 

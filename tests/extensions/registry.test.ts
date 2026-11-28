@@ -117,6 +117,36 @@ describe("ExtensionRegistry", () => {
     expect(hints["node:http"]).toBe("node");
   });
 
+  it("hints unregistered extensions by their globals", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension);
+    const hints = registry.globalHints();
+    expect(hints["process"]).toBe("node");
+    expect(hints["Buffer"]).toBe("node");
+    expect(hints["EventEmitter"]).toBe("node");
+  });
+
+  it("drops global hints once the extension is registered", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension).register(nodeExtension);
+    expect(registry.globalHints()["process"]).toBeUndefined();
+    expect(registry.globalHints()["Buffer"]).toBeUndefined();
+  });
+
+  it("keeps a hinted global accepted when another enabled extension provides it", () => {
+    const first: Extension = {
+      name: "first",
+      globalNames: () => ["shared", "onlyFirst"],
+      globalValues: () => ({ onlyFirst: { symbol: "xt_only_first" } }),
+    };
+    const second: Extension = { name: "second", globalNames: () => ["shared"] };
+    const registry = createDefaultRegistry().hintExtension(first).hintExtension(second);
+    expect(registry.globalHints()["shared"]).toBe("second");
+    expect(registry.globalHints()["onlyFirst"]).toBe("first");
+    registry.register(first);
+    // `first` now provides `shared`, so the remaining hint is irrelevant.
+    expect(registry.globalHints()["shared"]).toBeUndefined();
+    expect(registry.globalHints()["onlyFirst"]).toBeUndefined();
+  });
+
   it("drops hints once the extension is registered", () => {
     const registry = createDefaultRegistry().hintExtension(nodeExtension).register(nodeExtension);
     expect(registry.moduleHints()["fs"]).toBeUndefined();

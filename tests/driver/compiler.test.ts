@@ -68,6 +68,45 @@ describe("compileString", () => {
     );
   });
 
+  it("hints the enabling flag for a global from an unregistered extension", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension);
+    const { diagnostics } = compileString(
+      "const environment = process.env;\nconsole.log(environment.TERM);",
+      "process.ts",
+      registry,
+    );
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.code).toBe(DiagnosticCode.ModuleNotFound);
+    expect(errors[0]!.message).toBe(
+      "global 'process' is provided by the 'node' extension; pass --ext node",
+    );
+  });
+
+  it("reports an extension global even with --no-check", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension);
+    const { diagnostics } = compileString(
+      "const pending = Buffer.alloc(4);\nconsole.log(pending.length);",
+      "buffer.ts",
+      registry,
+      { check: false },
+    );
+    const errors = diagnostics.filter((d) => d.category === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.code).toBe(DiagnosticCode.ModuleNotFound);
+    expect(errors[0]!.message).toContain("global 'Buffer' is provided by the 'node' extension");
+  });
+
+  it("does not hint globals whose extension is registered", () => {
+    const registry = createDefaultRegistry().hintExtension(nodeExtension).register(nodeExtension);
+    const { diagnostics } = compileString(
+      "const environment = process.env;\nconsole.log(environment.TERM);",
+      "process.ts",
+      registry,
+    );
+    expect(diagnostics.filter((d) => d.category === "error")).toHaveLength(0);
+  });
+
   it("does not hint modules whose extension is registered", () => {
     const registry = createDefaultRegistry().hintExtension(nodeExtension).register(nodeExtension);
     const { diagnostics } = compileString(

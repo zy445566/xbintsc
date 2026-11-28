@@ -22,6 +22,7 @@
  */
 
 import { join } from "node:path";
+import { isImplementedGlobalName } from "../../checker/globals.js";
 import type { Extension, ExtensionModule } from "../registry.js";
 import { platformSlug } from "../../driver/paths.js";
 import { findRuntimeLibrary, runtimeLibDir } from "../../driver/runtime-lib.js";
@@ -308,6 +309,22 @@ export const guiExtension: Extension = {
   }),
   /** Browser globals (`window`, `document`, the DOM type names). */
   globalValues: () => browserGlobals,
+  /**
+   * Globals whose runtime lives in `gui.a`. Core names that a browser also
+   * exposes as window members (`setTimeout`, `queueMicrotask`, ...) are
+   * excluded: they work without the GUI extension. The deliberately-missing
+   * feature probes (`Float16Array`, `__THREE_DEVTOOLS__`) are omitted too.
+   */
+  globalNames: () =>
+    [
+      "window",
+      "self",
+      "document",
+      "navigator",
+      "createImageBitmap",
+      ...hostTypes,
+      ...windowGlobals,
+    ].filter((name) => !isImplementedGlobalName(name)),
   /** Rewrite imported `.html` assets and patch three.js's shader unroller. */
   assetLoaders: () => ({ ".html": loadHtmlAsset, ".js": loadScriptAsset, ".mjs": loadScriptAsset }),
   /**

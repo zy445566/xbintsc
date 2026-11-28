@@ -33,7 +33,7 @@
 | 生成器（`function*`、`yield`、`yield*`、`next`/`throw`/`return`） | ✓ 基于有栈协程实现；支持 `for...of`、展开与委托；`async function*`、`for await...of` 与 `Symbol.asyncIterator` 也已支持 |
 | 定时器与微任务 | ✓ 核心事件循环提供 `setTimeout` / `clearTimeout` / `setInterval` / `clearInterval` / `setImmediate` / `clearImmediate` / `queueMicrotask` 与 `performance.now`（返回数字 id，无 `Timeout` / `Immediate` 对象）。定时器 settle 的 promise 可以被 await：async 函数体在 pending promise 上挂起，定时器触发时恢复 |
 | I/O / 进程等宿主 API | 仅通过扩展（如 Node `fs`）提供 |
-| Web 平台全局对象（`Reflect`、`Intl`、`FormData`、`Blob`、`Request`、`EventTarget`） | ✗ 已识别（可类型检查并降级为 `undefined`），但尚无运行时实现。`AbortController` / `AbortSignal` / `Headers` / `Response` 已实现，`globalThis` / `global` 是普通属性袋（见[已实现：标准库](../implemented/stdlib.md#web-平台全局对象)） |
+| Web 平台全局对象（`Intl`、`FormData`、`Blob`、`Request`、`EventTarget`） | ✗ 已识别（可类型检查并降级为 `undefined`），但尚无运行时实现。`AbortController` / `AbortSignal` / `Headers` / `Response` 已实现，`globalThis` / `global` 是普通属性袋（见[已实现：标准库](../implemented/stdlib.md#web-平台全局对象)） |
 | `Proxy` | ✓ 对象 target，支持 `get` / `set` / `has` / `deleteProperty` / `ownKeys`（见[已实现：Proxy](../implemented/stdlib.md#proxy)）。✗ 函数 target（`apply`/`construct`）、`Proxy.revocable`、原型与属性描述符类 trap、不变量校验 |
 | Web Streams（`ReadableStream`、`WritableStream`、`TransformStream`、读写器、文本流） | ✓ 已作为核心全局实现，见 [Web Streams](../implemented/streams.md)。BYOB 字节流与压缩流尚未实现 |
 

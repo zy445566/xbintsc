@@ -306,6 +306,7 @@ export const RUNTIME_DECLARATIONS: readonly string[] = [
   "declare i64 @xt_object_rest(i64, i32, i64*)",
   "declare i64 @xt_call_method(i64, i64, i32, i64*)",
   "declare i64 @xt_math_call(i64, i32, i64*)",
+  "declare i64 @xt_reflect_call(i64, i32, i64*)",
   "declare i64 @xt_parse_int(i32, i64*)",
   "declare i64 @xt_parse_float(i32, i64*)",
   "declare i64 @xt_is_nan(i32, i64*)",

@@ -24,6 +24,7 @@
 #include "xt_stdlib2/strings.inc"
 #include "xt_stdlib2/numbers.inc"
 #include "xt_stdlib2/objects.inc"
+#include "xt_stdlib2/reflect.inc"
 #include "xt_stdlib2/array-statics.inc"
 #include "xt_stdlib2/number-string-statics.inc"
 #include "xt_stdlib2/json.inc"

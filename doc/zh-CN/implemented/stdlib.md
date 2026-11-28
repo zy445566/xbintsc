@@ -157,6 +157,10 @@
   `arrayBuffer()` 解析为真正的 `ArrayBuffer`，`bytes()` 为 `Uint8Array`。
 - `DOMException(message?, name?)`：`name` / `message` / `code`（恒为 `0`）以及真实的
   原型，因此 `class X extends DOMException` 可用。它和平台一样不是 `Error` 的子类。
+- `Reflect`：`get`、`set`、`has`、`deleteProperty`、`getPrototypeOf`、
+  `setPrototypeOf`、`defineProperty`、`getOwnPropertyDescriptor`、`ownKeys`、
+  `apply`、`construct`、`isExtensible` 与 `preventExtensions`，也可作为一等值使用
+  （`const { get } = Reflect`）。TUI 的代理正是用 `Reflect.get` 转发方法调用。
 - `JSON`、`ArrayBuffer`、`DataView` 也是值（`const s = JSON.stringify`、
   `ArrayBuffer.prototype`、`new DataView(buffer)`）；`JSON` 保留专用调用降级，同时
   支持作为对象读取。

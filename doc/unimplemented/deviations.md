@@ -11,6 +11,7 @@ These features **compile and run**, but the result does not fully match ECMAScri
 | `URL` parser | Read-only WHATWG subset: no path percent-encoding, IDNA, setters or live `searchParams`; a reference with no scheme resolves against the working directory as a `file:` URL |
 | String `normalize` | Not implemented |
 | First-class built-in methods | Implemented as unbound method values (see [Functions](./functions.md)); `fn.toString()` returns a placeholder rather than source text |
+| `Function(...)` / `new Function(...)` | Throws, because xbintsc has no dynamic code evaluation. Feature detection written as `try { new Function("...")() } catch {}` takes its non-eval path, as in a CSP-restricted environment; previously it silently produced an empty function |
 | `for...in` | Enumerates own keys of objects / arrays / strings; does not include prototype-chain properties |
 | Array out-of-bounds / sparse | Out-of-bounds access returns `undefined`; assigning `arr.length` truncates / extends, but sparse holes are not tracked distinctly |
 | Memory management | Non-moving mark-sweep collector behind `xt_alloc`: explicit roots, subsystem root providers and a conservative C-stack scan. Single-threaded and stop-the-world; no moving/compaction or generational mode |

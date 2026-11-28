@@ -356,6 +356,7 @@ export const CTOR_FUNCTIONS: Record<string, string> = {
   TextDecoderStream: "xt_text_decoder_stream_ctor",
   ArrayBuffer: "xt_array_buffer_ctor",
   DataView: "xt_data_view_ctor",
+  DOMException: "xt_dom_exception_ctor",
   AbortController: "xt_abort_controller_ctor",
   AbortSignal: "xt_abort_signal_ctor",
   Headers: "xt_headers_ctor",
@@ -404,7 +405,7 @@ export const FIRST_CLASS_CONSTRUCTORS = new Set<string>([
   "Response",
   "ArrayBuffer",
   "DataView",
-  "Proxy",
+  "DOMException", "Proxy",
 ]);
 
 export const BUILTIN_METHODS = new Set<string>([

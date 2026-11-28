@@ -155,6 +155,8 @@
 - `Response`：`new Response(body?, init?)`，含 `status` / `statusText` / `headers`
   以及 `text()` / `json()` / `arrayBuffer()` / `bytes()` / `clone()`。
   `arrayBuffer()` 解析为真正的 `ArrayBuffer`，`bytes()` 为 `Uint8Array`。
+- `DOMException(message?, name?)`：`name` / `message` / `code`（恒为 `0`）以及真实的
+  原型，因此 `class X extends DOMException` 可用。它和平台一样不是 `Error` 的子类。
 - `JSON`、`ArrayBuffer`、`DataView` 也是值（`const s = JSON.stringify`、
   `ArrayBuffer.prototype`、`new DataView(buffer)`）；`JSON` 保留专用调用降级，同时
   支持作为对象读取。

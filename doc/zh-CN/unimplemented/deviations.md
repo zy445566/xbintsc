@@ -11,6 +11,7 @@
 | `URL` 解析器 | 只读 WHATWG 子集：未实现路径百分号编码、IDNA、setter 与 `searchParams` 实时联动；无协议引用按工作目录解析为 `file:` URL |
 | `String.normalize` | 未实现 |
 | 内置方法一等公民 | 以未绑定方法值实现（见[函数](./functions.md)）；`fn.toString()` 返回占位字符串而非源码文本 |
+| `Function(...)` / `new Function(...)` | 会抛出异常，因为 xbintsc 没有动态代码求值。写成 `try { new Function("...")() } catch {}` 的特性检测会走非 eval 分支，与受 CSP 限制的环境一致；此前会静默返回空函数 |
 | `for...in` | 枚举对象 / 数组 / 字符串的自身键；不含原型链属性 |
 | 数组越界 / 稀疏 | 越界访问返回 `undefined`；对 `arr.length` 赋值会截断 / 扩展，但不区分稀疏空洞 |
 | 内存管理 | 非移动标记-清扫回收器（在 `xt_alloc` 之后）：显式根、子系统根提供者与保守 C 栈扫描。单线程、stop-the-world；无移动/压缩与分代 |

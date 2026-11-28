@@ -120,6 +120,7 @@ typedef struct {
   X(Response, 2, XT_PROTO_RESPONSE)                                        \
   X(ArrayBuffer, 1, XT_PROTO_PLAIN)                                        \
   X(DataView, 1, XT_PROTO_PLAIN)                                           \
+  X(DOMException, 2, XT_PROTO_PLAIN)                                       \
   X(Proxy, 2, XT_PROTO_PLAIN)
 
 #define XT_CTOR_ENUM(name, arity, proto) XT_CTOR_##name,
@@ -196,16 +197,21 @@ xt_value xt_object_ctor(int32_t argc, xt_value *argv) {
   return value;
 }
 
-/* `Function()` / `new Function()`: source evaluation is not supported, so the
- * constructor gives an empty function (declared functions get their metadata
- * from the codegen; this body simply does nothing). */
-static xt_value xt_function_ctor_body(xt_value thisValue, xt_value env, int32_t argc,
-                                      xt_value *argv) {
-  (void)thisValue;
-  (void)env;
-  (void)argc;
-  (void)argv;
-  return XT_UNDEFINED;
+/* `DOMException(message, name)`: the web-platform exception every `fetch` /
+ * WebSocket rejection uses. It is not an Error subclass in the platform, but
+ * it carries `name`, `message` and the legacy numeric `code`. Libraries extend
+ * it (`class WebSocketError extends DOMException`), so it is a first-class
+ * constructor with a real prototype. */
+xt_value xt_dom_exception_ctor(int32_t argc, xt_value *argv) {
+  xt_value ctor = xt_builtin_constructor(xt_string_from_cstr("DOMException"));
+  xt_value proto = ctor != XT_UNDEFINED ? xt_function_get_prototype(ctor) : XT_UNDEFINED;
+  xt_value object = proto != XT_UNDEFINED ? xt_object_new_with_proto(proto) : xt_object_new();
+  xt_value message = argc > 0 && argv[0] != XT_UNDEFINED ? xt_to_string(argv[0]) : xt_string_from_cstr("");
+  xt_value name = argc > 1 && argv[1] != XT_UNDEFINED ? xt_to_string(argv[1]) : xt_string_from_cstr("Error");
+  xt_object_set(object, xt_string_from_cstr("message"), message);
+  xt_object_set(object, xt_string_from_cstr("name"), name);
+  xt_object_set(object, xt_string_from_cstr("code"), xt_number(0));
+  return object;
 }
 
 static xt_value xt_builtin_ctor_call(const char *name, int32_t argc, xt_value *argv) {
@@ -213,7 +219,16 @@ static xt_value xt_builtin_ctor_call(const char *name, int32_t argc, xt_value *a
   if (strcmp(name, "Array") == 0) return xt_array_ctor(argc, argv);
   if (strcmp(name, "Object") == 0) return xt_object_ctor(argc, argv);
   if (strcmp(name, "Function") == 0) {
-    return xt_closure_new((void *)xt_function_ctor_body, 0, NULL);
+    /* xbintsc has no dynamic code evaluation, and returning an empty closure
+     * silently is worse than failing: libraries detect an eval-capable
+     * environment with `try { new Function("return 1")() } catch`, then
+     * generate a validator from source and call the result. TypeBox does
+     * exactly that (undici -> typebox), and the empty function left its
+     * generated check `undefined`. Throwing makes the detection take its
+     * non-eval path. */
+    xt_throw(xt_error_from_message(
+        "Error: the Function constructor is not supported (dynamic code evaluation is unavailable)"));
+    return XT_UNDEFINED;
   }
   if (strcmp(name, "Map") == 0) return xt_map_ctor(argc, argv);
   if (strcmp(name, "Set") == 0) return xt_set_ctor(argc, argv);
@@ -242,6 +257,7 @@ static xt_value xt_builtin_ctor_call(const char *name, int32_t argc, xt_value *a
   if (strcmp(name, "Response") == 0) return xt_response_ctor(argc, argv);
   if (strcmp(name, "ArrayBuffer") == 0) return xt_array_buffer_ctor(argc, argv);
   if (strcmp(name, "DataView") == 0) return xt_data_view_ctor(argc, argv);
+  if (strcmp(name, "DOMException") == 0) return xt_dom_exception_ctor(argc, argv);
   if (strcmp(name, "Proxy") == 0) return xt_proxy_ctor(argc, argv);
   if (xt_ctor_is_typed_array(name)) return xt_typed_array_ctor_by_name(nameValue, argc, argv);
   if (xt_ctor_is_error(name)) return xt_error_ctor_by_name(nameValue, argc, argv);

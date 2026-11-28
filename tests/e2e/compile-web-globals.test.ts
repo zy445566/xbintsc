@@ -119,4 +119,19 @@ describeE2E("end-to-end compilation (web platform globals)", (harness) => {
     `;
     expect(runProgram(source)).toBe("AbortError boom 0 true\ntrue tagged function");
   });
+
+  // The TUI keeps a stable Proxy around its renderer and forwards every call
+  // through `Reflect.get`; an undefined Reflect aborted interactive startup.
+  it("provides Reflect as a namespace and a first-class object", () => {
+    const source = `
+      const target: any = { a: 1 };
+      console.log(Reflect.get(target, "a"), Reflect.has(target, "a"), Reflect.set(target, "b", 2), target.b);
+      console.log(Reflect.getPrototypeOf(target) === Object.prototype, Reflect.ownKeys(target).sort().join(","));
+      const proxy: any = new Proxy({}, { get: (_t: any, key: any) => "x" + String(key) });
+      console.log(Reflect.get(proxy, "k"));
+      const { get } = Reflect as any;
+      console.log(get(target, "a"));
+    `;
+    expect(runProgram(source)).toBe("1 true true 2\ntrue a,b\nxk\n1");
+  });
 });

@@ -252,6 +252,7 @@ export const NAMESPACE_STATICS: Record<string, string> = {
   crypto: "xt_crypto_static",
   WebAssembly: "xt_webassembly_static",
   Promise: "xt_promise_static",
+  Reflect: "xt_reflect_call",
   ArrayBuffer: "xt_array_buffer_static",
   path: "xt_path_static",
   os: "xt_os_static",
@@ -299,14 +300,13 @@ export const NAMESPACE_VALUES: Record<string, string> = {
   JSON: "xt_json_object",
   crypto: "xt_crypto_object",
   WebAssembly: "xt_webassembly_object",
-  Intl: "xt_intl_object",
+  Intl: "xt_intl_object", Reflect: "xt_reflect_object",
 };
 
 /** Web-platform globals recognized for type checking but not implemented: they
  *  lower to `undefined` and fail at run time, not as an unknown name. */
 export const WEB_GLOBALS: ReadonlySet<string> = new Set<string>([
   "globalThis",
-  "Reflect",
   "FormData",
   "Blob",
   "Request",

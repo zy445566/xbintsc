@@ -129,7 +129,13 @@ static xt_value xt_object_define_property(xt_value target, xt_value key, xt_valu
     if (setter != XT_UNDEFINED) xt_object_define_setter(target, key, setter);
     return target;
   }
-  if (xt_object_has_own(descriptor, xt_string_from_cstr("value"))) {
+  /* `xt_object_has_own` returns an xt_value; XT_FALSE is a non-zero
+   * NaN-boxed word, so it must go through `xt_truthy` like every other
+   * runtime predicate. Testing the raw value treated every descriptor as a
+   * data descriptor, which turned `Object.defineProperty(o, "x", {})` into
+   * `o.x = undefined` through an existing setter (undici installs its
+   * WebSocket accessors this way). */
+  if (xt_truthy(xt_object_has_own(descriptor, xt_string_from_cstr("value")))) {
     xt_set(target, key, xt_object_get(descriptor, xt_string_from_cstr("value")));
   }
   return target;

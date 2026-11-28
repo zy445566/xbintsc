@@ -261,6 +261,12 @@ export const primaryExpressionMethods: PrimaryExpressionMethods = {
           this.emit(`  ${result} = call i64 @${defaultExport.valueSymbol}(i32 0, i64* null)`);
           return result;
         }
+        /* A default import whose target is a runtime function/constructor
+         * (`import events from "node:events"`, which is what a CommonJS
+         * `require("node:events")` lowers to): wrap it as a closure value. */
+        if (defaultExport?.symbol || (defaultExport?.namespace && defaultExport?.method)) {
+          return this.emitModuleExportValue(defaultExport);
+        }
         // A function/method import used as a value (`const a = assert`,
         // `import { strictEqual } from "assert"`) wraps the runtime symbol in a
         // closure through a generic trampoline.

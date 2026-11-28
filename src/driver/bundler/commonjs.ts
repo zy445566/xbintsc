@@ -450,8 +450,16 @@ function defaultImport(name: string, specifier: string, anchor: number): ImportD
  * Rewrite `var x = require("<external>")` into an ESM import so that the
  * extension / built-in module can be used as a first-class value:
  *
- *   const os  = require("node:os")          -> import * as os from "node:os"
+ *   const os  = require("node:os")          -> import os from "node:os"
  *   const { join } = require("node:path")   -> import { join } from "node:path"
+ *
+ * The identifier form is a *default* import, which is CommonJS's
+ * `module.exports` shape: a built-in such as `events` exports the
+ * EventEmitter constructor as its default, so `class X extends
+ * require("node:events")` must chain onto that function rather than onto a
+ * namespace object. Modules without a default export (fs, path, os, ...)
+ * still resolve to the namespace object, matching Node's plain-object
+ * module.exports.
  *
  * Only simple identifier / object-literal bindings at the top level are
  * handled; a require nested inside an expression falls back to the default
@@ -487,7 +495,7 @@ function hoistExternalNamespaceRequires(
       const finalName = symbol ? record.finalNames.get(symbol.id) : undefined;
       if (!symbol || !finalName) continue;
       renameReferences(symbol, finalName);
-      statements[index] = namespaceImport(finalName, specifier, anchor);
+      statements[index] = defaultImport(finalName, specifier, anchor);
       continue;
     }
 
@@ -530,16 +538,6 @@ function hoistObjectBinding(
   }
   if (specifiers.length === 0) return undefined;
   const namedBindings: NamedImports = { kind: SyntaxKind.NamedImports, elements: specifiers, start: anchor, end: anchor };
-  return importDeclaration(namedBindings, specifier, anchor);
-}
-
-function namespaceImport(name: string, specifier: string, anchor: number): ImportDeclaration {
-  const namedBindings = {
-    kind: SyntaxKind.NamespaceImport as const,
-    name: identifier(name, anchor),
-    start: anchor,
-    end: anchor,
-  };
   return importDeclaration(namedBindings, specifier, anchor);
 }
 

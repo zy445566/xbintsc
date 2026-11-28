@@ -127,4 +127,20 @@ describeE2E("node_modules packages", (harness) => {
     };
     expectSameOutputAsNode(source, { files, name: "cjs-builtin", extensions: true });
   });
+
+  // Node's `events` module exports the EventEmitter constructor itself, so a
+  // CommonJS `require("node:events")` is callable and usable as a base class.
+  // Treating it as a namespace object broke undici's `class Agent extends
+  // require("node:events")`.
+  it("binds require of a callable built-in to its default export", () => {
+    const source = 'import probe from "eventprobe";\nconsole.log(probe.kind, probe.instance, probe.method);';
+    const files = {
+      "node_modules/eventprobe/package.json": '{ "name": "eventprobe", "main": "index.js" }',
+      "node_modules/eventprobe/index.js":
+        'const EE = require("node:events");\nclass Emitter extends EE {}\n' +
+        'const emitter = new Emitter();\n' +
+        'module.exports = { kind: typeof EE, instance: emitter instanceof EE, method: typeof emitter.setMaxListeners };',
+    };
+    expectSameOutputAsNode(source, { files, name: "cjs-builtin-default", extensions: true });
+  });
 });

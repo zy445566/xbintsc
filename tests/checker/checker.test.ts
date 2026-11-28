@@ -26,6 +26,15 @@ describe("checker: unresolved names", () => {
     expect(diagnostics[0]!.message).toContain("missing");
   });
 
+  /* A class method used to bind its parameter patterns without visiting the
+   * defaults nested in them, so `nope` was invisible to the checker and
+   * codegen lowered the read to `undefined`. */
+  it("sees defaults nested in a class method's destructuring parameter", () => {
+    const diagnostics = codes(check("class A { m({ x = nope }: any = {}) {} }"), DiagnosticCode.CannotFindName);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]!.message).toContain("nope");
+  });
+
   it("accepts runtime globals, namespaces and extension builtins", () => {
     const source = [
       "console.log(Math.PI, JSON.stringify({}), parseInt('1'), new Map(), new Uint8Array(1));",

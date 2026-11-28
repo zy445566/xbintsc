@@ -509,6 +509,10 @@ export const referenceMethods: ReferenceMethods = {
       const paramSymbol = this.declareBinding(parameter.name, SymbolKind.Parameter, parameter, scope, true);
       if (paramSymbol) params.push(paramSymbol);
       if (parameter.initializer) this.bindNode(parameter.initializer, scope);
+      /* Defaults nested inside a destructuring pattern (`{ a = outer }`) are
+       * expressions of their own. A class method used to skip them, leaving
+       * `outer` unbound and silently lowering it to `undefined`. */
+      this.bindBindingPattern(parameter.name, scope);
     }
     (fn as { params: SymbolInfo[] }).params = params;
 

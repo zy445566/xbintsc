@@ -32,4 +32,20 @@ describeE2E("end-to-end compilation (module attribution)", (harness) => {
     expect(result.stderr).toContain("Cannot read properties of undefined");
     expect(result.stderr).not.toContain("module: ");
   });
+
+  // The diagnostic itself used to throw first: formatting the symbol key with
+  // the implicit `xt_to_string` raised "Cannot convert a Symbol value to a
+  // string" instead of the nullish-property TypeError.
+  it("formats a symbol property key in a nullish read error", () => {
+    const source = `
+      try {
+        (undefined as unknown as Record<symbol, number>)[Symbol.iterator];
+      } catch (error) {
+        console.log(String(error));
+      }
+    `;
+    expect(harness.runProgram(source)).toBe(
+      "TypeError: Cannot read properties of undefined (reading 'Symbol(Symbol.iterator)')",
+    );
+  });
 });

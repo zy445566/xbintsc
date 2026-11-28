@@ -39,7 +39,11 @@ static xt_value xt_get_inherited(xt_value target, xt_value key) {
 static void xt_throw_read_of_nullish(xt_value target, xt_value key) {
   const char *base = target == XT_NULL ? "null" : "undefined";
   char keybuf[128];
-  xt_string *k = XT_IS_STRING(key) ? xt_as_string(key) : xt_as_string(xt_to_string(key));
+  /* A symbol key must format as `Symbol(desc)`: `xt_to_string` deliberately
+   * throws for symbols (implicit conversion), which would replace the
+   * nullish-property TypeError with an unrelated one. */
+  xt_value keyText = xt_is_symbol(key) ? xt_symbol_to_string(key) : xt_to_string(key);
+  xt_string *k = XT_IS_STRING(key) ? xt_as_string(key) : xt_as_string(keyText);
   uint32_t n = k->length < sizeof(keybuf) - 1 ? k->length : (uint32_t)(sizeof(keybuf) - 1);
   memcpy(keybuf, xt_string_bytes(k), n);
   keybuf[n] = 0;

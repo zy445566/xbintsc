@@ -11,6 +11,13 @@
 `NAMESPACE_PROPERTIES` / `NAMESPACE_PROPERTY_SETTERS`）。通过
 `import process from "process"` 导入后使用。
 
+`process` 同时是一个一等对象值：`const { env } = process`、
+`const p = process; p.stdout`、或把 `process` 传给辅助函数都可用。全局
+`process` 与 `node:process` 的默认导出是同一个带钩子的对象：属性读取回退到
+`xt_process_get`，方法被缓存为调用 `xt_process_call` 的闭包，对 `exitCode` /
+`title` 的写入走 `xt_process_set`。chalk 的 supports-color 正是靠它解构
+`{ env }`。
+
 | 方法 / 属性 | 说明 |
 | --- | --- |
 | `process.cwd()` | 当前工作目录 |

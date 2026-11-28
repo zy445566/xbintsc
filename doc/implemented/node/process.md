@@ -11,6 +11,14 @@ Method calls lower to `xt_process_call(<name>, argc, argv)`, property reads to
 in `src/codegen/generator/tables.ts`). Import the object
 (`import process from "process"`) to reach these.
 
+`process` is also a first-class object value: `const { env } = process`,
+`const p = process; p.stdout`, and passing it to a helper all work. The global
+and the default export of `node:process` are the same hook-backed object, whose
+property reads fall back to `xt_process_get` and whose methods are cached
+closures over `xt_process_call`; writes to `exitCode` / `title` go through
+`xt_process_set`. This is what lets libraries such as chalk's supports-color
+destructure `{ env }`.
+
 | Method / property | Notes |
 | --- | --- |
 | `process.cwd()` | current working directory |

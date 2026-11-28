@@ -37,9 +37,13 @@ const methods = [
   "nextTick",
 ] as const;
 
-const exports: ModuleExports = Object.fromEntries(
-  methods.map((method) => [method, { namespace: "process", method }]),
-);
+const exports: ModuleExports = {
+  ...Object.fromEntries(methods.map((method) => [method, { namespace: "process", method }])),
+  // Node's `node:process` default export is the process object itself, so
+  // `import process from "node:process"` (chalk's supports-color) can
+  // destructure `{ env }`, read `stdout`, and so on.
+  default: { valueSymbol: "xt_process_object" },
+};
 
 export const processModule: NodeModule = {
   name: "process",

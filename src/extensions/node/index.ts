@@ -125,7 +125,11 @@ export const nodeExtension: Extension = {
   // is resolved by the static dispatcher, but `const B = Buffer` and
   // `Buffer[Symbol.species]` read the identifier. The getter materialises the
   // first-class constructor (and its statics) in the buffer runtime.
+  // `process` needs the same treatment: `process.x` lowers to the namespace
+  // getter, but destructuring the object (`const { env } = process`, used by
+  // chalk) and passing it as a value read the identifier itself.
   globalValues: () => ({
     Buffer: { symbol: "xt_buffer_global_value" },
+    process: { symbol: "xt_process_object" },
   }),
 };

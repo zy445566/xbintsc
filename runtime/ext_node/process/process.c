@@ -269,3 +269,105 @@ xt_value xt_process_get(xt_value name) {
   if (strcmp(key, "title") == 0) return xt_string_from_cstr(xt_process_title_value);
   return xt_undefined();
 }
+
+/* -- first-class value ---------------------------------------------------- */
+
+/*
+ * `process` is also an ordinary object value: `const { env } = process`,
+ * `const p = process; p.stdout`, or passing it to a helper. Property access on
+ * the bare global is lowered straight to `xt_process_get`, but a value read
+ * needs something to hold. A hook-backed view answers the same surface, so the
+ * destructuring path and the member path agree. Destructuring `process.env`
+ * reads the environment through `xt_process_get("env")`; the snapshot object
+ * it returns is enough for the common `const { env } = process` pattern (and
+ * is what `process.env` has always returned here).
+ */
+
+static xt_value xt_process_object_value = 0;
+
+static const char *const XT_PROCESS_METHODS[] = {
+    "on", "once", "addListener", "prependListener", "off", "removeListener",
+    "removeAllListeners", "emit", "nextTick", "cwd", "exit", "uptime",
+    "hrtime", "getuid",
+};
+
+static int xt_process_is_method(const char *name) {
+  for (size_t i = 0; i < sizeof(XT_PROCESS_METHODS) / sizeof(XT_PROCESS_METHODS[0]); i++) {
+    if (strcmp(name, XT_PROCESS_METHODS[i]) == 0) return 1;
+  }
+  return 0;
+}
+
+static xt_value xt_process_method_invoke(xt_value thisValue, xt_value env, int32_t argc,
+                                         xt_value *argv) {
+  (void)thisValue;
+  return xt_process_call(xt_closure_env(env, 0), argc, argv);
+}
+
+static xt_value xt_process_object_get(xt_value self, xt_value key, void *data) {
+  (void)data;
+  const char *name = xt_string_data(key);
+  if (!name) return xt_undefined();
+  xt_value value = xt_process_get(key);
+  if (value != xt_undefined()) return value;
+  if (!xt_process_is_method(name)) return xt_undefined();
+  xt_value env[1] = {key};
+  xt_value method = xt_closure_new((void *)xt_process_method_invoke, 1, env);
+  xt_function_set_metadata(method, key, 0);
+  /* Cache the closure as a real property; later reads take the normal path. */
+  xt_object_set(self, key, method);
+  return method;
+}
+
+static int xt_process_object_set(xt_value self, xt_value key, xt_value value, void *data) {
+  (void)self;
+  (void)data;
+  const char *name = xt_string_data(key);
+  if (name && (strcmp(name, "exitCode") == 0 || strcmp(name, "title") == 0)) {
+    xt_process_set(key, value);
+    return 1;
+  }
+  return 0;
+}
+
+static int xt_process_object_has(xt_value self, xt_value key, void *data) {
+  (void)self;
+  (void)data;
+  const char *name = xt_string_data(key);
+  if (!name) return 0;
+  if (xt_process_get(key) != xt_undefined()) return 1;
+  return xt_process_is_method(name);
+}
+
+static xt_value xt_process_object_keys(xt_value self, void *data) {
+  (void)self;
+  (void)data;
+  static const char *const properties[] = {
+      "stdout", "stderr", "stdin", "versions", "exitCode", "execPath", "platform",
+      "arch", "pid", "ppid", "version", "argv", "env", "title",
+  };
+  xt_value keys = xt_array_new(0, NULL);
+  for (size_t i = 0; i < sizeof(properties) / sizeof(properties[0]); i++) {
+    xt_array_push(keys, xt_string_from_cstr(properties[i]));
+  }
+  for (size_t i = 0; i < sizeof(XT_PROCESS_METHODS) / sizeof(XT_PROCESS_METHODS[0]); i++) {
+    xt_array_push(keys, xt_string_from_cstr(XT_PROCESS_METHODS[i]));
+  }
+  return keys;
+}
+
+static const xt_object_hooks xt_process_object_hooks = {
+    xt_process_object_get, xt_process_object_set, xt_process_object_has, NULL,
+    xt_process_object_keys,
+};
+
+xt_value xt_process_object(int32_t argc, xt_value *argv) {
+  (void)argc;
+  (void)argv;
+  xt_gc_add_root(&xt_process_object_value);
+  if (xt_process_object_value != 0) return xt_process_object_value;
+  xt_value object = xt_object_new();
+  xt_object_set_hooks(object, &xt_process_object_hooks, NULL);
+  xt_process_object_value = object;
+  return object;
+}

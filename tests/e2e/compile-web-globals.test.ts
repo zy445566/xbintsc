@@ -106,4 +106,17 @@ describeE2E("end-to-end compilation (web platform globals)", (harness) => {
       ["json function {\"a\":1} 2", "arraybuffer object 4", "dataview object", "u8 true 3"].join("\n"),
     );
   });
+
+  it("provides DOMException as an extensible constructor", () => {
+    const source = `
+      const error: any = new DOMException("boom", "AbortError");
+      console.log(error.name, error.message, error.code, error instanceof DOMException);
+      class Tagged extends DOMException {
+        get reason(): string { return "tagged"; }
+      }
+      const tagged: any = new Tagged("x");
+      console.log(tagged instanceof DOMException, tagged.reason, typeof DOMException);
+    `;
+    expect(runProgram(source)).toBe("AbortError boom 0 true\ntrue tagged function");
+  });
 });

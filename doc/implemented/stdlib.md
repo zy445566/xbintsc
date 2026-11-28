@@ -174,6 +174,9 @@ Implemented in `runtime/xt_web_abort.c` (aborts) and `runtime/xt_fetch/webapi.in
 - `Response`: `new Response(body?, init?)` with `status` / `statusText` /
   `headers`, and `text()` / `json()` / `arrayBuffer()` / `bytes()` / `clone()`.
   `arrayBuffer()` resolves to a real `ArrayBuffer`, `bytes()` to a `Uint8Array`.
+- `DOMException(message?, name?)`: `name` / `message` / `code` (always `0`) and a
+  real prototype, so `class X extends DOMException` works. It is not an `Error`
+  subclass, matching the platform.
 - `JSON`, `ArrayBuffer` and `DataView` are values too (`const s = JSON.stringify`,
   `ArrayBuffer.prototype`, `new DataView(buffer)`); `JSON` keeps its dedicated
   call lowering and also works when read as an object.

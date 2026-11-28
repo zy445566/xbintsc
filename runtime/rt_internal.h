@@ -553,6 +553,8 @@ xt_value xt_error_from_message(const char *message);
 xt_value xt_aggregate_error_ctor(int32_t argc, xt_value *argv);
 xt_value xt_ext_container_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
 xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt_value *argv, int *handled);
+/** `finally(handler)` built from the `then` machinery. */
+xt_value xt_promise_finally(xt_value target, xt_value handler);
 
 /* JSON helpers used by Promise / Map immutability checks. */
 int xt_value_equals(xt_value a, xt_value b);

@@ -50,6 +50,7 @@ export const webworkerExtension: Extension = {
   name: "webworker",
   description: "Web Worker API (Worker, self, MessageChannel) backed by process-isolated workers",
   globalValues: () => globals,
+  globalNames: () => [...Object.keys(globals), "postMessage"],
   builtins: () => ({
     /** Bare `postMessage(data)` inside a worker, as browser scripts use it. */
     postMessage: { symbol: "xt_webworker_post_message" },

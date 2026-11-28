@@ -28,6 +28,8 @@ export interface CheckOptions {
   readonly builtins?: Readonly<Record<string, unknown>>;
   /** Global values supplied by the registered extensions (`window`, `document`). */
   readonly globalValues?: Readonly<Record<string, unknown>>;
+  /** Global identifier -> extension name for known-but-disabled extensions. */
+  readonly globalHints?: Readonly<Record<string, string>>;
 }
 
 export function checkProgram(
@@ -40,7 +42,7 @@ export function checkProgram(
     ...Object.keys(options.builtins ?? {}),
     ...Object.keys(options.globalValues ?? {}),
   ]);
-  checkUnresolvedNames(sourceFile, binding, diagnostics, builtinNames);
+  checkUnresolvedNames(sourceFile, binding, diagnostics, builtinNames, options.globalHints);
   reportDeclarationConflicts(sourceFile, binding, diagnostics);
   checkCallArity(sourceFile, binding, diagnostics);
   checkTypes(sourceFile, binding, diagnostics);

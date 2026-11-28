@@ -44,3 +44,12 @@ const KNOWN_GLOBALS: ReadonlySet<string> = new Set<string>([
 export function isKnownGlobalName(name: string, extensionBuiltins?: ReadonlySet<string>): boolean {
   return KNOWN_GLOBALS.has(name) || (extensionBuiltins?.has(name) ?? false);
 }
+
+/**
+ * True when the core runtime (not an extension) implements `name`. A `WEB_GLOBALS`
+ * entry only type-checks and lowers to `undefined`, so a host extension can
+ * still provide a real implementation for it (`Blob`, `Request`).
+ */
+export function isImplementedGlobalName(name: string): boolean {
+  return KNOWN_GLOBALS.has(name) && !WEB_GLOBALS.has(name);
+}

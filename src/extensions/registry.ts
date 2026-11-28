@@ -176,6 +176,14 @@ export interface Extension {
    * and are not callable-by-name: reading the identifier calls the getter.
    */
   globalValues?(): Readonly<Record<string, GlobalValue>>;
+  /**
+   * Global identifiers this extension *would* provide when enabled. Only used
+   * for diagnostics: when the extension is registered these names come from
+   * `builtins` / `globalValues`; when it is merely hinted the compiler turns a
+   * use of one into "pass --ext <name>" instead of an unresolved symbol at
+   * link time (`process` / `Buffer` without the node extension).
+   */
+  globalNames?(): readonly string[];
   /** Modules importable as `import ... from "<specifier>"`. */
   modules?(): Readonly<Record<string, ExtensionModule>>;
   /**
@@ -219,6 +227,8 @@ export class ExtensionRegistry {
    * (`pass --ext node`) instead of a confusing downstream error.
    */
   private readonly hints = new Map<string, string>();
+  /** Global identifier -> extension name for hinted (unregistered) extensions. */
+  private readonly globalNameHints = new Map<string, string>();
 
   register(extension: Extension): this {
     if (this.extensions.has(extension.name)) {
@@ -237,6 +247,9 @@ export class ExtensionRegistry {
     for (const specifier of Object.keys(extension.modules?.() ?? {})) {
       this.hints.set(specifier, extension.name);
     }
+    for (const name of extension.globalNames?.() ?? []) {
+      this.globalNameHints.set(name, extension.name);
+    }
     return this;
   }
 
@@ -245,6 +258,31 @@ export class ExtensionRegistry {
     const hints: Record<string, string> = {};
     for (const [specifier, name] of this.hints) {
       if (!this.extensions.has(name)) hints[specifier] = name;
+    }
+    return hints;
+  }
+
+  /**
+   * Global identifiers provided by an enabled extension. A name that is both
+   * hinted by a disabled extension and provided by an enabled one (gui and
+   * webworker both define `self`) must stay accepted.
+   */
+  private enabledGlobalNames(): Set<string> {
+    const names = new Set<string>();
+    for (const extension of this.extensions.values()) {
+      for (const name of Object.keys(extension.globalValues?.() ?? {})) names.add(name);
+      for (const name of Object.keys(extension.builtins?.() ?? {})) names.add(name);
+      for (const name of extension.globalNames?.() ?? []) names.add(name);
+    }
+    return names;
+  }
+
+  /** Global identifier -> extension name hints for unregistered extensions. */
+  globalHints(): Readonly<Record<string, string>> {
+    const hints: Record<string, string> = lookupTable<string>();
+    const provided = this.enabledGlobalNames();
+    for (const [name, extension] of this.globalNameHints) {
+      if (!this.extensions.has(extension) && !provided.has(name)) hints[name] = extension;
     }
     return hints;
   }

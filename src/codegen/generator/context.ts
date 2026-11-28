@@ -30,7 +30,7 @@ export class GeneratorContext {
   readonly globalValues: Readonly<Record<string, GlobalValue>>;
   readonly modules: Readonly<Record<string, ExtensionModule>>;
   /** Module specifier -> extension name for known but unregistered extensions. */
-  readonly moduleHints: Readonly<Record<string, string>>;
+  readonly moduleHints: Readonly<Record<string, string>>; readonly globalHints: Readonly<Record<string, string>>;
   /**
    * Imported symbols whose providing module was already reported as missing
    * (hint emitted). Referencing them is skipped so the actionable hint is the
@@ -109,7 +109,7 @@ export class GeneratorContext {
     this.builtins = options.builtins ?? {};
     this.globalValues = options.globalValues ?? {};
     this.modules = options.modules ?? {};
-    this.moduleHints = options.moduleHints ?? {};
+    this.moduleHints = options.moduleHints ?? {}; this.globalHints = options.globalHints ?? {};
     this.target = options.target ?? { platform: process.platform, arch: process.arch };
     this.debug = options.debug === true;
     this.check = options.check !== false;

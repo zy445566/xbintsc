@@ -81,6 +81,8 @@ export interface CodegenOptions {
    * enabling the extension.
    */
   readonly moduleHints?: Readonly<Record<string, string>>;
+  /** Global identifier -> extension name for known-but-disabled extensions. */
+  readonly globalHints?: Readonly<Record<string, string>>;
   /**
    * Host the IR is generated for. xbintsc builds for its own host, so this
    * defaults to the running process; it is overridable for tests.

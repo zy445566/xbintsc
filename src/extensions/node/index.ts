@@ -132,4 +132,31 @@ export const nodeExtension: Extension = {
     Buffer: { symbol: "xt_buffer_global_value" },
     process: { symbol: "xt_process_object" },
   }),
+  // The code generator recognises these names in its core tables, but their
+  // runtime symbols live in `runtime/ext_node/`. Listing them here lets the
+  // checker say "pass --ext node" instead of silently reading `undefined` or
+  // failing at link time with an unresolved `xt_*` symbol.
+  globalNames: () => [
+    "process",
+    "Buffer",
+    "path",
+    "os",
+    "stream",
+    "Readable",
+    "Writable",
+    "Duplex",
+    "Transform",
+    "PassThrough",
+    "net",
+    "Socket",
+    "Server",
+    "dgram",
+    "http",
+    "events",
+    "EventEmitter",
+    "util",
+    "querystring",
+    "assert",
+    "diagnostics_channel",
+  ],
 };

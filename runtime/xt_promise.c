@@ -244,8 +244,21 @@ static xt_value xt_promise_run_reactions(void) {
     if (XT_IS_FUNCTION(handler)) {
       xt_value arg = promise->value;
       xt_value out;
-      out = xt_closure_call(handler, 1, &arg);
-      xt_promise_resolve_into(reaction->result, out);
+      /* A `.then` / `.catch` / `.finally` callback that throws must reject the
+       * derived promise, not escape the microtask queue. Example: a `.catch`
+       * handler that rethrows an AbortError (coding-agent's
+       * queueAvailabilityRefresh) used to terminate the whole program with
+       * "Uncaught Error: This operation was aborted". */
+      void *frame = xt_try_enter();
+      if (xt_try_setjmp(frame) == 0) {
+        out = xt_closure_call(handler, 1, &arg);
+        xt_try_leave(frame);
+        xt_promise_resolve_into(reaction->result, out);
+      } else {
+        xt_value error = xt_try_exception(frame);
+        xt_try_leave(frame);
+        xt_promise_settle(reaction->result, XT_PROMISE_REJECTED, error);
+      }
     } else if (promise->state == XT_PROMISE_FULFILLED) {
       xt_promise_settle(reaction->result, XT_PROMISE_FULFILLED, promise->value);
     } else {
@@ -506,10 +519,7 @@ xt_value xt_promise_method(xt_value target, const char *method, int32_t argc, xt
     return xt_promise_method(target, "then", 2, args, handled);
   }
   if (strcmp(method, "finally") == 0) {
-    xt_value fn = xt_arg_at(argc, argv, 0);
-    /* Approximate: run the handler, then propagate the original value. */
-    if (XT_IS_FUNCTION(fn)) xt_closure_call(fn, 0, NULL);
-    return target;
+    return xt_promise_finally(target, xt_arg_at(argc, argv, 0));
   }
   *handled = 0;
   return XT_UNDEFINED;
